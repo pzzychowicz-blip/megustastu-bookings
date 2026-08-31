@@ -65,7 +65,7 @@ export function WalkinForm({
   draft, setDraft,
   error,
   liveBookings, bookings, tableBlocks, autoOptimizer,
-  walkinNum, isMobile, nowMins = 0,
+  walkinNum, isMobile, nowMins = 0, today = "",
   onSave, onClose, onAddToWaitlist
 }) {
   const wf = draft;
@@ -100,7 +100,7 @@ export function WalkinForm({
       // (their live end == now); occupancyEnd extends it to nowMins+1 so getBusy/
       // findBest don't offer an occupied table to a walk-in starting now. Keyed on
       // nowMins (not wS) so a future-dated walk-in time stays free. See booking-logic.
-      e: occupancyEnd(b, nowMins)
+      e: occupancyEnd(b, nowMins, today)
     }))
     .concat(getBlockSlots(tableBlocks, wDate));
   const wBusy = getBusy(wOther, wS, wE);

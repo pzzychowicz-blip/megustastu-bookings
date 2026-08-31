@@ -22,11 +22,16 @@ import {
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
+  liveBarDur, seatedElapsed, occupancyEnd, pastCloseMins,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
+import { todayStr } from "../src/lib/day.js";
+import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
-const today = new Date().toISOString().slice(0, 10);
+// v17.16.2: same source as the app. Derived with toISOString() this drifted
+// one day from the code under test between 00:00 and 01:00 every summer.
+const today = todayStr();
 
 function mk(o) {
   return Object.assign({
@@ -134,7 +139,7 @@ describe("diffBooking", () => {
 describe("lateState / lateMins", () => {
   const cfg = { lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
   it("lateMins = now − start", () => {
-    expect(lateMins({ time: "13:00" }, 810)).toBe(30);
+    expect(lateMins({ date: D, time: "13:00" }, 810, D)).toBe(30);
   });
   it("confirmed/pending today cross warn then noshow thresholds", () => {
     const b = mk({ date: D, time: "13:00", status: "confirmed" });
@@ -470,7 +475,7 @@ describe("verifyClean / findConflicts", () => {
 describe("applySeatedShift", () => {
   it("shifts start to now and pins the original end", () => {
     const b = mk({ time: "13:00", duration: 90, tables: ["7"] }); // scheduled 13:00–14:30
-    const r = applySeatedShift(b, 795, [b]); // now 13:15
+    const r = applySeatedShift(b, 795, [b], D); // now 13:15
     expect(r).toBeTruthy();
     expect(r.newTime).toBe("13:15");
     expect(r.newDuration).toBe(75);       // 870 − 795
@@ -1119,5 +1124,169 @@ describe("sanitizeBlock / sanitizeBlocks", () => {
     const slots = getBlockSlots(out, "2026-08-26");
     expect(slots).toHaveLength(1);
     expect(slots[0].tables).toEqual(["3"]);
+  });
+});
+
+// ── v17.16.2 · one time axis (CT-2B-01 / CT-2B-02) ───────────────────────────
+//
+// Every function here used to subtract `toMins(b.time)` — minutes since midnight
+// of the BOOKING's date — from `nowMins`, minutes since midnight of TODAY. The
+// two agree only while the booking is today's, which is why none of this was
+// visible in eight years of daytime use and all of it is wrong after midnight.
+//
+// These need a past-midnight close (24/25) to be reachable, which Settings
+// permits and Me Gustas Tú does not currently use. The hours are set directly
+// and MUST be restored — the TURN_BUFFER precedent above, same reason: a leaked
+// close would silently change every later test in the file.
+describe("v17.16.2 — now and a booking on one axis", () => {
+  const YDAY = "2099-06-15";   // = D, the fixture date
+  const TMRW = "2099-06-16";   // "today" while yesterday's party is still seated
+  const lateClose = { open: 13, close: 25 };  // closes at 01:00
+
+  function withClose25(fn) {
+    const week = { 0: lateClose, 1: lateClose, 2: lateClose, 3: lateClose, 4: lateClose, 5: lateClose, 6: lateClose };
+    setWeekHours(week);
+    try { return fn(); } finally { setWeekHours(DEFAULT_WEEK_HOURS); }
+  }
+
+  // A party seated 23:30, an hour into their meal at 00:30 the next day.
+  const seated2330 = () => mk({ date: YDAY, time: "23:30", duration: 60, status: "seated", tables: ["7"] });
+
+  describe("liveBarDur", () => {
+    it("draws an hour as an hour, not as the 15-minute floor", () => {
+      withClose25(() => {
+        // 30 = 00:30 on TMRW. Projected onto YDAY that is minute 1470.
+        expect(liveBarDur(seated2330(), 30, TMRW)).toBe(60);
+        // What it returned before: max(15, 30 − 1410) = 15.
+        expect(Math.max(15, 30 - toMins("23:30"))).toBe(15);
+      });
+    });
+    it("is unchanged for a booking on today", () => {
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, status: "seated" });
+      expect(liveBarDur(b, 840, YDAY)).toBe(60);        // 14:00, one hour in
+      expect(liveBarDur(b, 790, YDAY)).toBe(15);        // 13:10 → the floor
+    });
+    it("returns the stored duration for a booking that is not seated", () => {
+      expect(liveBarDur(mk({ date: YDAY, duration: 90 }), 840, YDAY)).toBe(90);
+    });
+  });
+
+  describe("seatedElapsed — the cap that replaces the old date filter", () => {
+    it("caps at the booking's own close instead of rising forever", () => {
+      // Three weeks on, a booking left seated reads its day's service once and
+      // stops. Uncapped this is 30240 minutes and climbing, and syncLiveDurations
+      // would write it to the database as the party's duration.
+      const stale = mk({ date: YDAY, time: "13:00", status: "seated" });
+      expect(seatedElapsed(stale, "2099-07-06", 600)).toBe(22 * 60 - 13 * 60); // 540
+    });
+    it("agrees with auto-complete at the boundary rather than stepping", () => {
+      // auto-complete freezes duration at closeMins − start; the live figure must
+      // arrive at the same number, or the block jumps at closing time.
+      const b = mk({ date: YDAY, time: "21:00", status: "seated" });
+      const atClose = seatedElapsed(b, YDAY, 22 * 60);
+      const afterClose = seatedElapsed(b, YDAY, 23 * 60);
+      expect(atClose).toBe(60);
+      expect(afterClose).toBe(60);
+    });
+  });
+
+  describe("occupancyEnd — the table that read FREE while someone sat at it", () => {
+    it("holds the table through an overstay that began yesterday", () => {
+      withClose25(() => {
+        const b = seated2330();               // ends 00:30, i.e. minute 1470
+        // At 00:45 the party has overstayed. On the shared axis now is 1485,
+        // so the slot must extend past it and read BUSY.
+        expect(occupancyEnd(b, 45, TMRW)).toBeGreaterThan(1485);
+        // The old reading: e(1470) > nowM(45), so the overstay branch never
+        // fired and getBusy saw the table as free for a walk-in.
+        expect(1470 > 45).toBe(true);
+      });
+    });
+    it("leaves a future query alone — the guest is expected to have left", () => {
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, status: "seated" });
+      expect(occupancyEnd(b, 600, YDAY)).toBe(toMins("13:00") + 90); // 10:00, before it starts
+    });
+  });
+
+  describe("applySeatedShift — CT-2B-01, the one that reached the database", () => {
+    it("no longer writes a 24-hour booking", () => {
+      withClose25(() => {
+        const b = seated2330();
+        const r = applySeatedShift(b, 30, [b], TMRW); // seated at 00:30
+        // Now IS the scheduled end on the shared axis, so there is nothing to
+        // shift. Before: newDuration = 1470 − 30 = 1440.
+        expect(r).toBe(null);
+      });
+    });
+    it("refuses a shift it could not represent, rather than moving the booking a day back", () => {
+      withClose25(() => {
+        // Seated at 00:15 off a 23:30 booking that runs to 01:00. There IS room
+        // to shift, but the new start would be minute 1455 of YDAY, and a start
+        // is stored as HH:MM against its own date — toTime wraps to "00:15",
+        // which on YDAY is 24 hours in the past.
+        const b = mk({ date: YDAY, time: "23:30", duration: 90, status: "seated", tables: ["7"] });
+        expect(applySeatedShift(b, 15, [b], TMRW)).toBe(null);
+      });
+    });
+    it("still shifts normally within a single day", () => {
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, tables: ["7"] });
+      const r = applySeatedShift(b, 795, [b], YDAY);
+      expect(r.newTime).toBe("13:15");
+      expect(r.newDuration).toBe(75);
+      expect(r.direction).toBe("late");
+    });
+    it("refuses a duration the schedule cannot mean (the second line of defence)", () => {
+      // The axis fix makes this unreachable; it guards the one point that writes.
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, tables: ["7"] });
+      expect(applySeatedShift(b, NaN, [b], YDAY)).toBe(null);
+    });
+  });
+
+  describe("syncLiveDurations / freeingSoon across midnight", () => {
+    it("keeps accruing a party seated before midnight", () => {
+      withClose25(() => {
+        const b = seated2330();
+        const out = syncLiveDurations([b], TMRW, 45); // 00:45 — 75 min in
+        expect(out[0].duration).toBe(75);
+        // Before, the `b.date === today` filter made this a no-op forever.
+        expect(syncLiveDurations([b], TMRW, 45)[0].duration).not.toBe(60);
+      });
+    });
+    it("offers a table freeing at 00:45 to the freeing-soon list", () => {
+      withClose25(() => {
+        const b = mk({ date: YDAY, time: "23:30", duration: 75, status: "seated", tables: ["7"] });
+        // 00:35 → 10 minutes before their 00:45 end.
+        const out = freeingSoon([b], TMRW, 35, 15);
+        expect(out.map((x) => x.inMin)).toEqual([10]);
+      });
+    });
+    it("still ignores a booking whose end is long past", () => {
+      expect(freeingSoon([mk({ date: YDAY, time: "13:00", status: "seated" })], "2099-07-06", 600, 15)).toEqual([]);
+    });
+  });
+
+  describe("pastCloseMins — now public, and the same answers as before", () => {
+    it("reports the close once it has passed, and null before", () => {
+      expect(pastCloseMins(YDAY, YDAY, 22 * 60)).toBe(1320);
+      expect(pastCloseMins(YDAY, YDAY, 21 * 60)).toBe(null);
+    });
+    it("is null for a future date, whose close cannot have passed", () => {
+      expect(pastCloseMins(TMRW, YDAY, 600)).toBe(null);
+    });
+    it("fires for yesterday once its own close is reached", () => {
+      withClose25(() => {
+        expect(pastCloseMins(YDAY, TMRW, 30)).toBe(null);   // 00:30, close is 01:00
+        expect(pastCloseMins(YDAY, TMRW, 75)).toBe(1500);   // 01:15, passed
+      });
+    });
+  });
+
+  describe("lateMins", () => {
+    it("measures against the booking's own midnight", () => {
+      withClose25(() => {
+        // A 23:45 booking, nobody arrived, now 00:15 the next day → 30 min late.
+        expect(lateMins({ date: YDAY, time: "23:45" }, 15, TMRW)).toBe(30);
+      });
+    });
   });
 });

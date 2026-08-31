@@ -41,7 +41,8 @@ import {
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo
+  undoSnapshots, applyUndo,
+  seatedElapsed
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
@@ -922,6 +923,11 @@ function BookingApp({uid}){
   // current-time read, and the dep arrays of usePersistence + useReminders.
   // Phase D3 (v14.1.10). See ./hooks/useNowMins.js.
   const { nowMins } = useNowMins();
+  // v17.16.2: TODAY, once per render, for everything that has to put `nowMins`
+  // and a booking on one axis (liveBarDur / occupancyEnd / applySeatedShift /
+  // lateMins all take it now). A plain string, so passing it into a React.memo'd
+  // view compares by value and cannot churn the memo.
+  const today = todayStr();
   // ── Optimizer thermostat hook ───────────────────────────────────────────────
   // Auto-off at 15:00 for today's shift; auto-on at new-day-start (before 15:00).
   // Daily-reset refs (autoFlippedRef / autoOnRef) keyed by today's ISO date so
@@ -1897,7 +1903,7 @@ function BookingApp({uid}){
         if(seatingNow&&timeUntouched){
           // Use live-synced bookings so overstaying seated guests' tables are
           // correctly treated as occupied when the overlap guard runs.
-          seatedShift=applySeatedShift(orig,nowMins,liveBookings);
+          seatedShift=applySeatedShift(orig,nowMins,liveBookings,today);
         }
         const needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
         const prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
@@ -1910,7 +1916,12 @@ function BookingApp({uid}){
         // v16.2.0: truncate to the actual span ONLY when the booking was SEATED
         // before this save. A direct Confirmed → Completed edit keeps the form's
         // scheduled duration (mirrors the updateStatus quick-action gate).
-        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        // v17.16.2 (CT-2B-02): was `nowMinsLocal - toMins(f.time)`, which mixes
+        // an axis measured from TODAY's midnight with one measured from the
+        // BOOKING's — so completing a booking dated anything but today clamped to
+        // the 15-minute floor. seatedElapsed projects and caps at that day's
+        // close, so this agrees with what auto-complete would have written.
+        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const actualDur=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(now),now.getHours()*60+now.getMinutes()));saveDur=actualDur;saveCustDur=actualDur;}
         // v17.6.0: record how long they ACTUALLY stayed, so the List card can
         // show it after the visit (booking-logic's stayedMins). Computed for
         // EVERY seated→completed save, including the `f.customDur` case the
@@ -1920,7 +1931,9 @@ function BookingApp({uid}){
         let saveStayed=orig?(Number(orig.stayedMin)||0):0;
         if(f.status==="completed"&&orig&&orig.status==="seated"){
           const nowD=new Date();
-          saveStayed=Math.max(15,(nowD.getHours()*60+nowD.getMinutes())-toMins(f.time));
+          // Same axis fix as the truncation above — the register's "completing
+          // records stayedMin = 15".
+          saveStayed=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(nowD),nowD.getHours()*60+nowD.getMinutes()));
         }
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
@@ -2164,7 +2177,7 @@ function BookingApp({uid}){
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -2273,14 +2286,14 @@ function BookingApp({uid}){
     if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
     const size=src.size||2;
     const s=toMins(src.time);
-    const e=Math.max(occupancyEnd(src,nowMins),s+1);
+    const e=Math.max(occupancyEnd(src,nowMins,today),s+1);
     const blockSlots=getBlockSlots(tableBlocks,src.date);
     const busyBlocked=getBusy(blockSlots,s,e);
     if(busyBlocked.has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
     // Day's other active bookings (completed = free, the v16.0.0 rule) + the
     // tables held by SEATED parties over the span — those are immovable.
     const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
-    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));};
+    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins,today));};
     const seatedOn=new Set();
     dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
     // 1. Candidate table sets at the target, in PURE optimizer order (round 4,
@@ -2333,8 +2346,8 @@ function BookingApp({uid}){
       const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
       const otherSize=other.size||2;
       if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
-        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
-        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
+        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
+        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(blockSlots);
         if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
           // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
           // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
@@ -2582,8 +2595,9 @@ function BookingApp({uid}){
         // scheduled duration unchanged — otherwise the block balloons to hours
         // on the timeline (e.g. completing a 13:00 booking at 21:00 → 8h block).
         if(status==="completed"&&x.status==="seated"){
-          const startMins=toMins(x.time);
-          const actualDur=Math.max(15,nowM-startMins);
+          // v17.16.2 (CT-2B-02): `nowM - toMins(x.time)` mixed axes. A party
+          // seated before midnight and completed after it recorded 15 minutes.
+          const actualDur=Math.max(15,seatedElapsed(x,today,nowM));
           extra.duration=actualDur;
           extra.customDur=actualDur;
           // v17.6.0: stamp the real stay so the List card can show it after the
@@ -2592,7 +2606,7 @@ function BookingApp({uid}){
           extra.stayedMin=actualDur;
         }
         if(status==="seated"&&x.status!=="seated"){
-          const shift=applySeatedShift(x,nowM,b);
+          const shift=applySeatedShift(x,nowM,b,today);
           if(shift){
             extra.time=shift.newTime;
             extra.duration=shift.newDuration;
@@ -3035,7 +3049,7 @@ function BookingApp({uid}){
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
     hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:LateIcon,
       title:"Running late",count:Object.keys(lateBannerMap).length,
-      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
+      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} today={today} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
     reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
       title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
@@ -3259,6 +3273,7 @@ function BookingApp({uid}){
   const timelineEl=<TimelineView
     bookings={bookings}
     date={viewDate}
+    today={today}
     onEdit={VA.onEdit}
     onManual={VA.onManual}
     onStatus={VA.onStatus}
@@ -3303,6 +3318,7 @@ function BookingApp({uid}){
   const listEl=<ListView
     bookings={bookings}
     date={viewDate}
+    today={today}
     onEdit={VA.onEdit}
     onStatus={VA.onStatus}
     onDelete={VA.onDelete}
@@ -3458,6 +3474,7 @@ function BookingApp({uid}){
     onClose={requestCloseManual} />:null}</ModalPresence>;
 
   const walkinModal=<ModalPresence show={showWalkin}>{showWalkin?<WalkinForm
+    today={today}
     draft={walkinForm}
     setDraft={setWalkinForm}
     error={walkinError}

@@ -16747,3 +16747,83 @@ reminder editor), console clean, and the reminder date field's `min` reading
 `2026-08-31` from the new helper. Build 335.17 kB / 91.36 kB gz (−1.25 kB raw:
 44 long expressions became one call). Lint back at the exact standing baseline,
 **71 problems, 0 errors**.
+
+### 7 · CT-2B-01 + CT-2B-02 — the shared axis (commit 3/4)
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `src/hooks/usePersistence.js`,
+`TimelineView`, `ListView`, `LateBanner`, `WalkinForm`,
+`tests/booking-logic.test.js` · **Behavioural change:** yes, after midnight and
+on any past date · **716 tests** (+18).
+
+Seven functions took a bare `nowMins` and compared it against `toMins(b.time)`.
+Four now take `today` as well (`liveBarDur`, `occupancyEnd`, `applySeatedShift`,
+`lateMins` — 14 call sites); three already had it and were using it as a FILTER
+rather than as an axis (`lateState`, `freeingSoon`, `syncLiveDurations`).
+
+`pastCloseMins` moved out of `usePersistence` into `booking-logic.js`, which is
+the point of the whole version: the one function that was already right stops
+being private to the one file no test can reach.
+
+**`lateState` deliberately keeps its `b.date !== today` filter.** The asymmetry
+with `freeingSoon`, which loses its, is principled: `freeingSoon` is
+SELF-BOUNDING (`0 < inMin <= win`), so a stale seated booking falls out on its
+own, while "late" is unbounded backwards and a booking from a fortnight ago would
+read "20160 min late" for ever. Widening it correctly means deciding how long
+lateness stays interesting, which is a product decision and not a bug fix.
+
+### 8 · The bound had to be a CAP, and a test is what said so
+
+The first version guarded `liveBarDur` and `syncLiveDurations` with
+`pastCloseMins(...) === null` — live only until that day's close. It made an
+existing test **time-dependent**: `a seated party past its duration is a change,
+not a no-op` passes before 22:00 and fails after it, and the suite was being run
+at 23:36.
+
+That is the right complaint. Skipping makes the figure jump back to the stored
+duration the instant close passes; **capping** at close matches auto-complete's
+own `closeMins - toMins(b.time)` exactly, so the live number and the frozen one
+meet instead of stepping. `seatedElapsed(b, today, nowM)` is that cap, and it is
+what makes dropping the old `b.date === today` filter safe — without it a booking
+left seated three weeks ago has a true elapsed time of 30240 minutes, which
+`syncLiveDurations` would have written to the database as the party's duration.
+
+### 9 · Three defects the diff did not contain
+
+- **`applySeatedShift` cannot represent a past-midnight start.** A start is
+  stored as `HH:MM` against the booking's own date and `toTime` wraps modulo 24,
+  so shifting a 23:30 booking to 00:15 would write "00:15" onto YESTERDAY — a
+  full day into the past. Fixing the axis alone would have replaced a 24-hour
+  duration with a 24-hour displacement. It refuses instead, keeping the scheduled
+  time, which is imprecise rather than false. The plan's `newDuration` clamp is
+  kept as the second line of defence at the one point this reaches the database.
+- **The auto-extend effect's dedupe key was narrower than its own pass.** The
+  pass now keys on the booking's close; the key still filtered `b.date===today`,
+  so under a 24/25 close a yesterday-only extension produced an EMPTY key that
+  never changed and every tick after the first was suppressed. The repo's own
+  v17.10.2 lesson, one file over.
+- **Three completion paths recorded a 15-minute visit.** `doSave`'s truncation,
+  `doSave`'s `stayedMin` stamp and `updateStatus`'s all computed
+  `now - toMins(b.time)` with no projection — the register's "completing records
+  `stayedMin = 15`". Found by seating a booking in DEV and watching what happened
+  next, not by reading the diff.
+
+`ListView`'s `elapsedMin` turned out to be `liveBarDur`'s seated branch **byte for
+byte**, so it reuses it rather than becoming a fourth copy of the same arithmetic
+(and inherits the cap for free). The file header's note that `liveDur` differs
+still holds — that is the end-time pinning on the next line, not this.
+
+Two parameters named `todayStr` in `booking-logic.js` were renamed to `today`:
+they shadow the newly-imported function of that name. Harmless as written, and
+exactly the shape that produced three crashes one commit earlier.
+
+### 10 · Verification
+
+18 new tests, all reachable only under a past-midnight close (24/25), which
+Settings permits and Me Gustas Tú does not currently use — the hours are set
+directly and restored, on the TURN_BUFFER precedent in the same file. Reverting
+the projections fails **7** of them across all five functions.
+
+Live on DEV: 505 bookings, both views render, six timeline blocks, no `NaN`
+anywhere in the document, console clean, and `lateMins` producing real figures
+(520 / 400 / 280 / 160) through the new prop. 716 tests, 0 lint errors,
+335.61 kB / 91.49 kB gz.

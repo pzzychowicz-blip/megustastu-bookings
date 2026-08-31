@@ -21,8 +21,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
-import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
-import { hoursFor } from "../lib/constants";
+import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError, onDbError } from "../lib/dbError";
 import { todayStr } from "../lib/day";
@@ -80,20 +79,6 @@ const RECONNECT_KICK_MAX_MS = 120000;
 // transport that can never work always will.
 const LOAD_TIMEOUT_MS = 15000;
 
-// v15.1.0: has `dateStr`'s closing moment already passed? Used by the
-// auto-extend effect (to skip) and the auto-complete effect (to trigger).
-// A booking's closing moment is its OWN date's per-weekday close (hoursFor —
-// may be 24/25, i.e. past midnight), expressed in minutes since that date's
-// midnight. "Now" on the same axis is dayDiff*1440 + nowMins (all-UTC date
-// strings, the app's date convention). Returns the close-in-minutes when it
-// has passed, else null (also null for future dates). hoursFor is called at
-// run time per the constants.js live-binding rule.
-function pastCloseMins(dateStr, todayStr, nowMins){
-  const dayDiff=Math.round((Date.parse(todayStr)-Date.parse(dateStr))/86400000);
-  if(dayDiff<0) return null; // future date — its close can't have passed
-  const closeMins=hoursFor(dateStr).close*60;
-  return (dayDiff*1440+nowMins)>=closeMins?closeMins:null;
-}
 
 // v15.5.0: content signature of a booking EXCLUDING its `updatedAt` stamp, so the
 // write-diff only flags bookings whose actual fields changed (not ones that merely
@@ -685,17 +670,22 @@ export function usePersistence({ autoOptimizer, nowMins }){
     const today=todayStr();
     let needsUpdate=false;
     const updated=bookings.map(function(b){
-      if(b.date!==today||b.status!=="seated") return b;
+      if(b.status!=="seated") return b;
       // v15.1.0: a seated booking past its date's close belongs to the
       // auto-complete effect below — skip it here so the same 15s tick
       // doesn't extend it and then immediately complete it (one write, not two).
       if(pastCloseMins(b.date,today,nowMins)!==null) return b;
-      const elapsed=nowMins-toMins(b.time);
+      const elapsed=seatedElapsed(b,today,nowMins);
       if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
       return b;
     });
     if(!needsUpdate) return;
-    const seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
+    // v17.16.2: this gate must cover exactly the set the pass above touches.
+    // It filtered on `b.date===today` while the pass now keys on the booking's
+    // own close, so under a 24/25 close a yesterday-only extension produced an
+    // EMPTY key that never changed — and the second tick onward was suppressed.
+    // The repo's own v17.10.2 lesson: a gate narrower than its pass.
+    const seated=bookings.filter(function(b){return b.status==="seated"&&pastCloseMins(b.date,today,nowMins)===null;});
     const key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
     if(key===lastExtend.current) return;
     lastExtend.current=key;
