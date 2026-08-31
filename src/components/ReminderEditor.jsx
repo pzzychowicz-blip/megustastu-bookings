@@ -36,6 +36,7 @@ import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
+import { todayStr } from "../lib/day";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -47,7 +48,7 @@ const DAY_LABELS = [
 export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   const err = validateReminderDraft(draft);
   const rec = draft.recurrence || {};
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   // The open/close animation, the scrim, the body-scroll lock, the dialog
   // semantics and the focus trap all come from `Overlay` now — it reads the
   // wrapping <ModalPresence> itself.
@@ -76,11 +77,11 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   function setType(t) {
     let newRec;
     if (t === "once") {
-      newRec = { type: "once", date: rec.date || todayStr, days: rec.days || [] };
+      newRec = { type: "once", date: rec.date || today, days: rec.days || [] };
     } else {
       newRec = {
         type: "weekly",
-        date: rec.date || todayStr,
+        date: rec.date || today,
         days: rec.days && rec.days.length ? rec.days : [new Date().getDay()]
       };
     }
@@ -241,7 +242,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               id={fid}
               type="date"
               value={rec.date || ""}
-              min={todayStr}
+              min={today}
               onChange={(e) => setDate(e.target.value)}
               className="mgt-hover-scale"
               style={mkInp()}

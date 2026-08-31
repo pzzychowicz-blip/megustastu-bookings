@@ -51,6 +51,7 @@ import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { WaitIcon, AlertIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { todayStr } from "../lib/day";
 
 // v17.8.0 review fix: hex literals ON PURPOSE — see the identical pair in
 // BookingFormModal. The kitchen-suggestion chip FILLS are hard-coded pale green
@@ -74,7 +75,7 @@ export function WalkinForm({
   // for parity with the original.
   const wTime = wf.time || nowTime();
   const wDur = wf.customDur || getDur(wSize);
-  const wDate = new Date().toISOString().slice(0, 10);
+  const wDate = todayStr();
   // v15.0.0: walk-ins are always for TODAY, so the time bounds + closed notice
   // read today's per-weekday hours (not the viewed day's).
   const th = hoursFor(wDate);

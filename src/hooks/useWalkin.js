@@ -54,6 +54,7 @@ import { sameDraft } from "../lib/drafts";
 import {
   getDur, genId, histEntry, nowTime, getKitchenLoad
 } from "../lib/booking-logic";
+import { todayStr } from "../lib/day";
 
 // v17.14.0: `showWalkin` is now OWNED BY APP and passed in — it is one entry in
 // the app's single modal stack, the same "legitimately shared" arrangement
@@ -79,7 +80,7 @@ export function useWalkin({
   // Re-evaluated on every render that calls it (it's not memoised) —
   // cheap because the bookings array is already a single linear scan.
   function getNextWalkinNum(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     let max=0;bookings.forEach(function(b){if(b.date===today&&b.name&&b.name.indexOf("Walk-in ")===0){const n=parseInt(b.name.slice(8));if(n>max) max=n;}});
     return max+1;
   }
@@ -124,12 +125,12 @@ export function useWalkin({
     const wf=walkinForm;
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
-    const nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:new Date().toISOString().slice(0,10),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
+    const nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:todayStr(),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
     saveBookings(function(prev){return prev.concat([nb]);});
     // Armed after the dispatch, on the line that closes the form — the
     // "Please assign tables first" return above leaves it READY.
     walkinGuardRef.current=DISPATCHED;
-    setShowWalkin(false);setViewDate(new Date().toISOString().slice(0,10));
+    setShowWalkin(false);setViewDate(todayStr());
   }
   // saveWalkin: kitchen-load guard. If adding this walk-in would push
   // simultaneous starts over KITCHEN_TABLE_LIMIT, raise the shared
@@ -144,7 +145,7 @@ export function useWalkin({
     if(!mayDispatch(walkinGuardRef.current)) return;
     const wf=walkinForm;
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
-    const wDate=new Date().toISOString().slice(0,10);
+    const wDate=todayStr();
     // v15.0.0: per-weekday hours — block a walk-in when today is marked Closed.
     if(hoursFor(wDate).closed){setWalkinError("Closed today — walk-ins can't be added. Open today in Settings → Opening hours if this is wrong.");return;}
     const load=getKitchenLoad(bookings,wDate,t,dur,null);

@@ -16691,3 +16691,59 @@ TZ-agnostic test would be testing nothing.
 Both halves proven against a sabotaged build rather than asserted: reverting
 `todayStr` to `toISOString().slice(0,10)` fails the two divergence cases, and
 dropping `nowOn`'s day term fails three including the CT-2B-01 reconstruction.
+
+### 5 · CT-2B-03 — the sweep (commit 2/4)
+
+**Files:** 17 (`src/App.jsx` ×19 sites, `useWalkin` ×4, `useReminders` ×3,
+`booking-logic` / `useWaitlist` / `usePersistence` / `useKeyboardShortcuts` /
+`useAutoOptimizer` ×2 each, and one apiece in `constants`, `reminders`,
+`useOperatingHours`, `TimelineView`, `PlanView`, `WalkinForm`, `WeekView`,
+`ReminderEditor`, `LayoutSettings`) · **Behavioural change:** "today" is now the
+LOCAL date everywhere it is derived from the current instant.
+
+`constants.js` gains its **first ever import** to do it. That is safe only
+because `day.js` imports nothing — the property was chosen for exactly this, and
+must not be given away later.
+
+Two sites the sweep's own regex could not see, both found by widening it
+afterwards rather than by trusting the count:
+
+- **`src/lib/reminders.js`** spelled it `var now=new Date();var todayStr=now.toISOString()…`,
+  and then read `now.getHours()` two lines below. A UTC date and a local clock
+  compared inside one function — CT-2B-03 in miniature, in the file the register
+  never named. A once-reminder for the true today skipped the past-times check
+  entirely for that hour.
+- **The 45th match was `day.js`'s own comment**, which quotes the expression it
+  replaced. The repo's recorded "prose that names the thing a regex hunts for is
+  indistinguishable from the thing" trap (`tests/csp.test.js`, v17.15.1), walked
+  into again by the commit that removes the thing.
+
+`useOperatingHours`'s `const TODAY = () => …` was left a bare alias by the sweep
+and is gone; its three call sites read `todayStr()` directly.
+
+### 6 · The sweep created three runtime crashes, and lint caught two
+
+`PlanView`, `ReminderEditor` and `App.jsx` each declared `const todayStr = <the
+old expression>`. Substituting the call produced **`const todayStr = todayStr();`**
+— a TDZ self-reference that throws `Cannot access 'todayStr' before
+initialization` the moment the component renders. `npm run build` passed, `npm
+test` passed (698), and the app was dead in two of its three views.
+
+`no-unused-vars` flagged the first two, because the shadowed import was then
+unused in those files. **It could not flag the third**: `App.jsx` uses the import
+at eighteen other sites, so the import was legitimately used and the self-
+reference was invisible to every gate the repo has. It was found by grepping for
+the shape (`(const|let|var) todayStr =`) after the first two appeared — the
+lesson being that two instances of a mechanical error mean you look for the
+third, rather than fixing the two the tool named.
+
+This is the documented "a `const` used above its declaration blanks the whole
+app, and lint and build both pass" gotcha, reached from a new direction: not by
+moving a declaration, but by a rename colliding with one.
+
+Verified live rather than argued: `npm run dev` on DEV Firebase, all three
+affected surfaces rendered (Timeline 505 bookings, Plan's floor grid, the New
+reminder editor), console clean, and the reminder date field's `min` reading
+`2026-08-31` from the new helper. Build 335.17 kB / 91.36 kB gz (−1.25 kB raw:
+44 long expressions became one call). Lint back at the exact standing baseline,
+**71 problems, 0 errors**.

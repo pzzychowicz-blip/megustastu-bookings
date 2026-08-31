@@ -29,6 +29,7 @@ import { daySummary, rangeStats } from "../lib/booking-logic";
 import { S, BTN, R, T, FW, IC } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
+import { todayStr } from "../lib/day";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
@@ -100,7 +101,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   const [mode, setMode] = useState("week");   // "week" | "month"
   const [ref, setRef] = useState(viewDate);    // a date inside the displayed period
   const [focus, setFocus] = useState(viewDate); // keyboard-highlighted day
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   const isWeek = mode === "week";
   const isStats = mode === "stats"; // v16.3.0: analytics over the month of `ref`
 

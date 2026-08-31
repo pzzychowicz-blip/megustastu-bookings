@@ -53,6 +53,7 @@ import { QuickStatusPopup } from "./QuickStatusPopup";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
+import { todayStr } from "../lib/day";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -1118,7 +1119,7 @@ export const TimelineView = memo(function TimelineView({
   const [quickStatus, setQuickStatus] = useState(null);
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
-  const isToday = date === new Date().toISOString().slice(0, 10);
+  const isToday = date === todayStr();
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
   // v16.0.0: px-per-minute estimate for the time-chip decision (gridW is a

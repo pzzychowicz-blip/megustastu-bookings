@@ -16,6 +16,7 @@ import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
 import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
+import { todayStr } from "../lib/day";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -145,7 +146,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   // removing or renaming a table that an active FUTURE booking references would
   // leave that booking pointing at a table that no longer exists. We don't migrate
   // stored bookings (out of scope) — we WARN, with the count, before committing.
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = todayStr();
   function orphanCount(id) {
     return bookings.filter(function (b) {
       return b && b.date >= todayISO && b.status !== "cancelled" && b.status !== "completed" &&

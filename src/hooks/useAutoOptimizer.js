@@ -40,6 +40,7 @@
 // ISO date.
 
 import { useState, useRef, useEffect } from "react";
+import { todayStr } from "../lib/day";
 
 export function useAutoOptimizer({ nowMins, cutoffMins, autoSwitch }){
   // Defaults reproduce the pre-v15 hard-coded behaviour when the optimizer
@@ -55,7 +56,7 @@ export function useAutoOptimizer({ nowMins, cutoffMins, autoSwitch }){
   useEffect(function(){
     if(!auto) return;
     if(nowMins<cutoff) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(autoFlippedRef.current===today) return;
     autoFlippedRef.current=today;
     setAutoOptimizer(false);
@@ -68,7 +69,7 @@ export function useAutoOptimizer({ nowMins, cutoffMins, autoSwitch }){
   useEffect(function(){
     if(!auto) return;
     if(nowMins>=cutoff) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(autoOnRef.current===today) return;
     autoOnRef.current=today;
     setAutoOptimizer(true);

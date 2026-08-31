@@ -39,6 +39,7 @@ import {
   pruneOldReminderFires,
   validateReminderDraft
 } from "../lib/reminders";
+import { todayStr } from "../lib/day";
 
 // v17.14.0: `reminderEditor` and `confirmReminderDel` are now OWNED BY APP and
 // passed in, because they are two entries in the app's one modal stack — the
@@ -138,7 +139,7 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
   // each time; we guard by only writing when the key set actually shrinks.
   useEffect(function(){
     if(!reminderFiresLoaded.current) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const pruned=pruneOldReminderFires(reminderFires,today);
     if(Object.keys(pruned).length!==Object.keys(reminderFires||{}).length){
       saveReminderFires(pruned);
@@ -174,7 +175,7 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
   const reminderDirty=!!reminderEditor&&!sameDraft(flatReminder(reminderEditor.draft),flatReminder(reminderBaseline));
 
   function openNewReminder(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const draft={text:"",times:["21:00"],recurrence:{type:"once",date:today,days:[]},active:true};
     setReminderBaseline(draft);
     setReminderEditor({id:"new",draft:draft});
@@ -223,7 +224,7 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
   // Uses TODAY (not viewDate) — reminders are operational, not tied to the
   // day being viewed. So a reminder fires at 21:00 regardless of whether
   // staff are looking at tomorrow's timeline.
-  const reminderTodayStr=new Date().toISOString().slice(0,10);
+  const reminderTodayStr=todayStr();
   const activeReminderBanners=getActiveReminderBanners(reminders,reminderFires,reminderTodayStr,nowMins);
   // One row per active fire slot, stacked vertically. Amber (distinct from the
   // green success toasts and red error banners), with Done + Snooze actions.

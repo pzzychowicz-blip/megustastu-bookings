@@ -27,6 +27,7 @@ import {
   DUR_TIERS,
   TURN_BUFFER
 } from "./constants";
+import { todayStr } from "./day";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -666,7 +667,7 @@ export function applyOpt(bookings,date,blocks){
 // When the auto-optimizer is OFF (after 15:00 today), we do not reshuffle other
 // bookings. We only find a free slot for the booking being added/edited.
 export function optimizerActiveFor(date,autoOptimizerState){
-  var today=new Date().toISOString().slice(0,10);
+  var today=todayStr();
   if(date===today&&autoOptimizerState===false) return false;
   return true;
 }
@@ -768,7 +769,7 @@ function sameBookings(a,b){
 // as immutable — none of them mutates it today (all read via map/filter/find),
 // and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
-  var today=new Date().toISOString().slice(0,10);
+  var today=todayStr();
   var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
   var synced=syncLiveDurations(updatedBks,today,nowM);
   var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);

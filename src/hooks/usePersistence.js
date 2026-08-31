@@ -25,6 +25,7 @@ import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry } f
 import { hoursFor } from "../lib/constants";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError, onDbError } from "../lib/dbError";
+import { todayStr } from "../lib/day";
 
 // v15.2.0: heartbeat-gap threshold for the freshness/resync gate. A foreground
 // tab ticks the heartbeat every 10s; a backgrounded tab's timers throttle to
@@ -681,7 +682,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   const lastExtend=useRef("");
   useEffect(function(){
     if(!bookingsLoaded.current) return; // no work to do until initial read lands
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     let needsUpdate=false;
     const updated=bookings.map(function(b){
       if(b.date!==today||b.status!=="seated") return b;
@@ -716,7 +717,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // at the midnight date rollover itself.
   useEffect(function(){
     if(!bookingsLoaded.current) return; // no work to do until initial read lands
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     let needsUpdate=false;
     const updated=bookings.map(function(b){
       if(b.status!=="seated") return b;

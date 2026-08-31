@@ -26,6 +26,8 @@
 //     can't generate (each {ids, cap}). Appended to the auto combos in order.
 // buildLayout(DEFAULT_LAYOUT) reproduces the pre-Phase-4 VALID_COMBOS (40, ordered)
 // + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
+import { todayStr } from "./day";
+
 export var DEFAULT_LAYOUT={
   tables:[
     {id:"1A",capacity:2,zone:"outdoor"},{id:"1B",capacity:2,zone:"outdoor"},
@@ -744,7 +746,7 @@ export var REVEAL_EXIT_MS = exitHold("reveal");
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that
 // still needs the same stamp written BACK to it, and is draft-only — doSave
 // consumes it and it is never persisted.
-export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
+export var EMPTY_FORM={name:"",phone:"+",date:todayStr(),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here

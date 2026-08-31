@@ -19,6 +19,7 @@ import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
 import { SETTINGS_TABS } from "../components/SettingsChrome";
+import { todayStr } from "../lib/day";
 
 // v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
 // NB: in List view with a booking focused, S marks it Seated (that check runs
@@ -330,7 +331,7 @@ export function useKeyboardShortcuts(ctx){
       if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
       if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
       if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
-      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
+      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(todayStr());return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
@@ -340,7 +341,7 @@ export function useKeyboardShortcuts(ctx){
       if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.goToDate(d2.toISOString().slice(0,10));return;}
       // ── Timeline-only shortcuts ──
       if(K.view==="timeline"){
-        const today=new Date().toISOString().slice(0,10);
+        const today=todayStr();
         const isToday=K.viewDate===today;
         if(k==="f"||k==="F"){
           if(isToday){
