@@ -16621,3 +16621,73 @@ npm run check:style OK
 
 Eleven rules tests fail against the pre-v17.16.1 rules file — the change is
 proven, not asserted.
+
+---
+
+## v17.16.2 — one time axis
+
+**Date:** 2026-08-31 · **Branch:** `fix/v17.16.2-time-axis-write-path` ·
+**Files:** `src/lib/day.js` (new), `tests/day.test.js` (new), `src/App.jsx`
+(version) · **Behavioural change:** none yet — this commit adds the primitives
+the following commits sweep onto.
+
+The third instalment of the v17.15.7 crash-test response, and the first that is
+not a fix in itself. Three of the eighteen open findings are one defect wearing
+three faces: **the app has no single answer to "what day is it", and none at all
+to "how do now and a booking share an axis".**
+
+`nowMins` is minutes since LOCAL midnight of today (`useNowMins`, via
+`getHours()*60+getMinutes()`). `toMins(b.time)` is minutes since midnight of
+**`b.date`**. They are the same number only while `b.date === today`, and every
+`nowMins - toMins(b.time)` in the codebase — there are many — silently assumed
+they always were.
+
+### 1 · `src/lib/day.js`
+
+Three functions, and the file imports **nothing**. That is structural rather than
+tidy: `constants.js` needs `todayStr()` for `EMPTY_FORM`, and `booking-logic.js`
+imports `constants.js`, so anything imported here could close that loop. A helper
+needing a live binding belongs in `booking-logic.js` instead.
+
+- **`todayStr(now?)`** — today in the LOCAL timezone, replacing 44 copies of
+  `new Date().toISOString().slice(0,10)`, which answers the question in **UTC**.
+- **`dayDiff(from, to)`** — whole days between two date-only strings.
+- **`nowOn(dateStr, today, nowMins)`** — now, in minutes since `dateStr`'s
+  midnight. The one axis on which it may be compared with `toMins(b.time)`.
+
+`nowOn` is not invented here. **Exactly one function in the repo already got this
+right** — `pastCloseMins`, module-private inside `usePersistence.js`, which
+projects with `dayDiff*1440 + nowMins`. It was private because the file it lives
+in has never been executed by a test, which is the same sentence as §7 of the
+crash-test hand-off. This makes the expression public; the later commits make the
+file testable.
+
+### 2 · Why the UTC/local split is seasonal, and why that matters
+
+Me Gustas Tú is in the Canaries: **WEST (UTC+1) from late March to late October,
+WET (UTC+0) the rest of the year.** So the app disagreed with the wall clock for
+the first hour of every local day for eight months a year, and agreed perfectly
+for the other four — the shape of a defect that survives years of use unreported.
+Measured on the dev machine at `GMT+0100`: at 23:05 local it agrees, and 55
+minutes later it would not have.
+
+### 3 · The distinction the sweep must not blur
+
+The app's other UTC date handling is **correct and stays**. A date-only string
+parses as UTC midnight, so `new Date(dateStr).getUTCDay()` is the real weekday
+(ten sites), and `Date.parse` on two such strings is an exact multiple of
+86400000 — which is precisely what makes `dayDiff` immune to DST, where local
+midnights would make one spring day 23 hours and round to zero. Pinned in both
+directions against the 2026 EU transitions. Only deriving today from the current
+**instant** was ever wrong.
+
+### 4 · Verification
+
+`tests/day.test.js`, **14 tests**, TZ-deterministic: they set `process.env.TZ`
+(Node honours it at runtime) rather than passing or failing by machine, because
+this whole class of defect exists only in certain zones in certain months, and a
+TZ-agnostic test would be testing nothing.
+
+Both halves proven against a sabotaged build rather than asserted: reverting
+`todayStr` to `toISOString().slice(0,10)` fails the two divergence cases, and
+dropping `nowOn`'s day term fails three including the CT-2B-01 reconstruction.
