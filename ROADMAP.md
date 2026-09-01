@@ -92,6 +92,22 @@ ONE structural change, not two fixes.
 CT-2B-01, CT-2B-02 and CT-2B-03, plus a DST date-navigation bug not in the
 register — the Next-day button was a no-op on the spring-forward day.)*
 
+- **The three view buttons share one accessible name (P3, measured v17.16.2).**
+  `ViewSwitcher.jsx:129` sets `title={gesturesOn ? "Right-click or hold to add to
+  a split view" : undefined}` on the Timeline / List / Plan buttons and no
+  `aria-label`. Read out of the LIVE accessibility tree, all three report that
+  same string as their name — so the app's primary navigation announces as three
+  identically-named controls describing a secondary GESTURE rather than the view
+  each one opens, and none is sayable by voice control. Same family as the
+  v17.15.4 Label-in-Name finding CLAUDE.md records, and the same "a static name
+  is not one name, it is N identical ones" shape as the `.map`-rendered controls.
+  Found while verifying something else (the `p` key had not switched views and
+  `find("Plan")` matched nothing, which is what exposed it) — not by the a11y
+  sweep, which is a static AST pass and cannot compute a name. **Worth checking
+  what the browser actually computes before choosing the fix**: the buttons do
+  have visible text, so `title` should only be a fallback, and the mechanism was
+  not pinned down.
+
 - **`EMPTY_FORM.date` is evaluated once at module load (P3, new in v17.16.2).**
   `constants.js` builds it at import, so an app left open across midnight holds
   yesterday's default. Not currently reachable in a saved booking: all three
