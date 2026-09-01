@@ -16995,3 +16995,120 @@ the duration stored cannot disagree.
 8 tests, both proven against a sabotaged build: restoring the upper-bound-only
 guard fails the future-booking case, dropping the liveness test fails the
 historical-write case. **760 tests**, 0 lint errors, 335.90 kB / 91.63 kB gz.
+
+## v17.16.3 — two findings that were not there
+
+**Date:** 2026-09-01 · **Branch:** `fix/v17.16.3-phone-plus-normalisation` ·
+**Files:** `ROADMAP.md`, `CLAUDE.md`, `src/App.jsx` (version) ·
+**Behavioural change:** none in this commit — it withdraws two register entries
+and records why.
+
+The fourth instalment of the v17.15.7 crash-test response, and the first whose
+opening move is to **delete** work rather than do it. Two findings were taken
+off the register because they were measured and are not defects. Both had been
+written up as verified, and both were verified against something other than the
+app.
+
+### 1 · The three view buttons do NOT share one accessible name
+
+The entry read: `ViewSwitcher.jsx:129` puts a `title` and no `aria-label` on the
+Timeline / List / Plan buttons, and "read out of the LIVE accessibility tree, all
+three report that same string as their name" — so the app's primary navigation
+announces as three identically-named controls describing a secondary gesture, and
+none is sayable by voice control. It carried its own caveat: *the buttons do have
+visible text, so `title` should only be a fallback, and the mechanism was not
+pinned down.*
+
+The caveat was the correct instinct. Chrome, asked through CDP
+`Accessibility.getPartialAXTree`:
+
+```
+#a  name= "Timeline"  from= contents  desc= "Right-click or hold to add to a split view"
+#b  name= "Plan"      from= contents  desc= "Right-click or hold to add to a split view"
+```
+
+The name comes from **contents** and the `title` lands in **description**,
+exactly as the accname spec requires — `title` is a name of last resort and loses
+to both contents and `aria-label`. Measured twice: on the button's `outerHTML`
+copied from the live DOM, then again with the whole of `src/index.css` loaded, in
+case a rule suppressed the text node. Same answer.
+
+What produced the finding is the browser-automation pane, whose tree prints
+`title` in the name position. A three-button control probe settles it without
+reference to this app at all:
+
+```
+<button title="PROBE_TITLE_A">PROBE_TEXT_A</button>   → pane: "PROBE_TITLE_A"
+                                                      → Chrome: "PROBE_TEXT_A"
+```
+
+`find("Timeline")` matching nothing is the same artifact, and it is what the
+original session read as corroboration.
+
+**Had this been "fixed", it would have introduced the defect it was filed
+against.** The natural fix is an `aria-label` per button — which REPLACES a
+working, visible-text-derived name with a paraphrase, i.e. the v17.15.4
+Label-in-Name finding, reintroduced by someone who believed they were fixing one.
+
+The same entry's incidental claim that the `p` key had not switched views is also
+wrong: pressed at top level it goes Timeline → Plan. `useKeyboardShortcuts.js:256`
+binds `p` to the preferred-tables picker **while a modal is open**, which is the
+state it was observed in.
+
+### 2 · CT-2C-02 — focus restoration works; StrictMode was being measured
+
+The entry read: focus restoration never works, on any modal, because "the opener
+sits inside a subtree marked `inert`, an inert element cannot take focus, and the
+call is a silent no-op", verified on "+ New" and Settings, with the fix being to
+restore focus after `inert` is lifted.
+
+**The stated mechanism does not survive a timestamp.** `inert` is lifted when the
+modal stack pops; `Overlay` unmounts one exit animation later, so the restore
+fires 263 ms after the attribute is gone, with no inert ancestor:
+
+```
+inert OFF  HEADER          t=12437.2
+focus()    BUTTON:+ New    t=12700.4   inertAnc=null   took=true
+```
+
+Setting `inert` on the header with the opener focused does not blur it in Chrome
+either — checked in isolation across a microtask, a task and a frame.
+
+With `<React.StrictMode>` removed from `main.jsx`, restoration **works** — "+ New",
+Settings warm, and Settings on a genuinely cold `React.lazy` chunk that mounted
+through its Suspense fallback (`node_modules/.vite` cleared and the server
+restarted, so `Settings.jsx` was absent from the resource list at open). 4/4.
+Restoring StrictMode brings the failure straight back, and prints its own cause:
+
+```
+focus DIV:New bookingC   ← mount 1 focuses the dialog
+focus BUTTON:+ New       ← mount 1 CLEANUP restores the opener — the mechanism works
+focus DIV:New bookingC   ← mount 2 re-focuses the dialog
+```
+
+`Overlay` stores `document.activeElement` on the way in. StrictMode's second
+setup re-reads it **after** the first pass has already focused the dialog, so the
+ref ends up holding the dialog rather than the opener; the dialog is detached at
+close, `document.contains(prev)` is false, and no restore is attempted at all —
+focus falls to `<body>`, which is indistinguishable on screen from a restore that
+ran and failed. StrictMode is dev-only, so production never runs that path.
+
+This was **not** confirmed against a production build: `npm run preview` points at
+PROD Firebase and is Patryk's to run. Removing StrictMode from the dev build is
+the correct proxy, since it is the only thing that differs in effect behaviour;
+`main.jsx` was reverted byte-for-byte afterwards.
+
+### What the two have in common
+
+Both were filed as *verified*, and in both the verification instrument was the
+thing that was wrong — a tool's summary of the accessibility tree in the first,
+a dev-only React mode in the second. The register's own confidence rating is what
+this argues about, not these two entries: a finding that names an observation
+("all three report the same name") is worth more than one that names a conclusion,
+because the observation is the part that can be re-run. Both traps are recorded as
+`CLAUDE.md` Gotchas rows, which is where they will be looked for.
+
+`ROADMAP.md`: both entries deleted, the register count corrected to fourteen open
+with CT-2C-02 marked withdrawn, and a line stating that a withdrawn finding is
+**deleted** from that file rather than annotated in it — it is a pending-work
+list, and "we checked and there is nothing here" is not pending work.
