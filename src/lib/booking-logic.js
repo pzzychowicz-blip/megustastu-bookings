@@ -299,7 +299,7 @@ export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var 
 //
 // Returns the SAME object when an id is already present, so a settled node keeps
 // its per-block references across snapshots.
-export function sanitizeBlock(bl){
+export function sanitizeBlock(bl,legacyId){
   if(!bl||typeof bl!=="object") return null;
   // /code-review: the mint goes in the SOURCE, not the target. As
   // `Object.assign({id:genId()},bl)` it was silently discarded whenever `bl`
@@ -310,7 +310,47 @@ export function sanitizeBlock(bl){
   // it would produce is this version's own bug back again: two blocks sharing a
   // falsy id make removeBlock's `bl.id !== block.id` drop BOTH, and BlockModal
   // and DaySheet key their rows on it.
-  return bl.id?bl:Object.assign({},bl,{id:genId()});
+  return bl.id?bl:Object.assign({},bl,{id:legacyId||genId()});
+}
+// v17.16.4 (CT-2B-06): the DETERMINISTIC seed `sanitizeBlocks` hands the mint
+// for a block read out of a legacy, id-less node.
+//
+// The defect a random mint produced: `genId()` answers "what read was this",
+// not "which block is this", so two reads of the SAME unchanged node disagreed
+// about every id in it. `removeBlock` filters on `bl.id!==block.id`, and
+// `BlockModal` holds the block object it was handed when it opened — so a
+// resync landing between opening the list and tapping Unblock left the modal
+// naming an id that no longer existed anywhere, and the removal silently did
+// nothing. Fails safe (a no-op, never the wrong block) and self-limiting (the
+// first successful `saveBlocks` persists ids and the node stops being legacy)
+// — which is why it is a P3 and not a fix to the identity itself.
+//
+// Deriving from CONTENT rather than from array position is the load-bearing
+// choice, and it is about what happens when the node is NOT frozen. An index
+// seed is stable only while nothing is inserted or removed; if a stale index
+// ever did resolve, it would resolve to a DIFFERENT block, turning a harmless
+// no-op into unblocking the wrong table. A content key cannot: it either finds
+// the same block or finds none.
+//
+// The `n` ordinal is what keeps two IDENTICAL blocks distinguishable, which is
+// the whole point of v17.15.3's ids and is pinned in the tests. It is the
+// v17.15.2 ordinal in a much narrower role — there it WAS the identity of every
+// block, here it only seeds the mint for a block that has no stored identity —
+// and the case it used to get wrong is now benign: when two blocks agree on
+// every field, "the wrong one" and "the right one" are the same block.
+//
+// The separator is an ASCII control character for `undoKey`'s reason — `reason`
+// is free staff-entered text — written as the escape and never the raw byte,
+// which is invisible in every editor, grep and diff. `genId()` output contains
+// no "_", so the `bl_` shape can never collide with a real minted id.
+var BLOCK_KEY_FIELDS=["tableId","date","allDay","from","to","reason"];
+function blockContentKey(bl){
+  return BLOCK_KEY_FIELDS.map(function(k){return String(bl[k]===undefined?"":bl[k]);}).join("\u001f");
+}
+function hash36(s){
+  var h=2166136261;
+  for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}
+  return (h>>>0).toString(36);
 }
 // RTDB hands back an array only for sequential integer keys, an object otherwise
 // (and null for an absent node) — both read sites passed through the same
@@ -318,7 +358,16 @@ export function sanitizeBlock(bl){
 export function sanitizeBlocks(val){
   if(!val) return [];
   var arr=Array.isArray(val)?val:Object.values(val);
-  return arr.map(sanitizeBlock).filter(Boolean);
+  // v17.16.4: `.map(sanitizeBlock)` is deliberately no longer point-free — the
+  // seed needs the whole array to count identical siblings, and passing map's
+  // (value,index,array) straight through would have made `index` the legacyId.
+  var seen=Object.create(null);
+  return arr.map(function(bl){
+    if(!bl||typeof bl!=="object"||bl.id) return sanitizeBlock(bl);
+    var k=blockContentKey(bl);
+    seen[k]=(seen[k]||0)+1;
+    return sanitizeBlock(bl,"bl_"+hash36(k)+"_"+seen[k]);
+  }).filter(Boolean);
 }
 
 // ── Table classification ──────────────────────────────────────────────────────

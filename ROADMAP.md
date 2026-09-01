@@ -56,7 +56,7 @@ CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
 CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
 seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
 reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
-thirteen; **v17.16.4 shipped CT-2B-09**, leaving twelve.
+thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06**, leaving eleven.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **A withdrawn finding is deleted from this file, not annotated in it** — this is
@@ -152,9 +152,6 @@ register — the Next-day button was a no-op on the spring-forward day.)*
   nothing enforces it. Also unrated: nothing checks for duplicate booking ids,
   and two sharing one collapse in the optimiser's assignment map (`genId`
   collision ≈ 1 in 1.7M, same millisecond).
-- **CT-2B-06** — on a legacy id-less `tableBlocks` node, `sanitizeBlock` mints a
-  fresh id on every read, so a resync between opening the block list and tapping
-  Unblock makes the removal a silent no-op. Self-limiting and fails safe.
 - **CT-2B-07** — the kitchen-busy chip fires at `starts >= KITCHEN_TABLE_LIMIT`
   while the confirm fires at `starts + 1 >= LIMIT`. With the limit at 3, at
   exactly two existing starts the dialog appears with no busy chip to explain it.

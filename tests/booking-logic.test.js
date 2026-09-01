@@ -1118,6 +1118,65 @@ describe("sanitizeBlock / sanitizeBlocks", () => {
     expect(sanitizeBlock("nope")).toBe(null);
   });
 
+  // ── v17.16.4 (CT-2B-06): the mint is deterministic for a LEGACY node ───────
+  // A random mint answers "what read was this", not "which block is this", so
+  // two reads of one unchanged node disagreed about every id — and removeBlock
+  // filters on an id BlockModal captured at open time. A resync in between made
+  // Unblock a silent no-op.
+  it("gives one unchanged legacy node the SAME ids on every read", () => {
+    const node = () => [Object.assign({}, base), Object.assign({}, base, { from: "18:00", to: "19:00" })];
+    const first = sanitizeBlocks(node()).map((b) => b.id);
+    const second = sanitizeBlocks(node()).map((b) => b.id);
+    expect(second).toEqual(first);
+  });
+
+  it("survives the round trip that used to no-op: open, resync, unblock", () => {
+    const node = () => [Object.assign({}, base), Object.assign({}, base, { from: "18:00", to: "19:00" })];
+    const captured = sanitizeBlocks(node())[0];        // BlockModal holds this
+    const afterResync = sanitizeBlocks(node());        // a fresh snapshot lands
+    const next = afterResync.filter((bl) => bl.id !== captured.id);  // removeBlock
+    expect(next).toHaveLength(1);
+    expect(next[0].from).toBe("18:00");
+  });
+
+  it("keys the seed on CONTENT, not on array position", () => {
+    // Position would be stable only while nothing is inserted. If a stale index
+    // ever resolved it would resolve to a DIFFERENT block — unblocking the
+    // wrong table, which is worse than the no-op it replaces. A content key
+    // either finds the same block or finds none.
+    const b1 = Object.assign({}, base);
+    const b2 = Object.assign({}, base, { tableId: "5A" });
+    const before = sanitizeBlocks([b1, b2]);
+    const after = sanitizeBlocks([b2, b1]);
+    expect(after.find((b) => b.tableId === "3").id).toBe(before.find((b) => b.tableId === "3").id);
+    expect(after.find((b) => b.tableId === "5A").id).toBe(before.find((b) => b.tableId === "5A").id);
+  });
+
+  it("distinguishes blocks that differ ONLY in reason", () => {
+    // `reason` is free staff-entered text and is in the key, which is why the
+    // separator is a control character rather than a printable one.
+    const out = sanitizeBlocks([
+      Object.assign({}, base, { reason: "deep clean" }),
+      Object.assign({}, base, { reason: "private party" }),
+    ]);
+    expect(out[0].id).not.toBe(out[1].id);
+  });
+
+  it("never collides with a genId() id, and leaves a real id alone", () => {
+    const minted = sanitizeBlocks([Object.assign({}, base)])[0].id;
+    expect(minted).toContain("_");          // genId() output contains no "_"
+    const real = sanitizeBlocks([Object.assign({ id: "abc123" }, base)])[0];
+    expect(real.id).toBe("abc123");
+  });
+
+  it("keeps the single-argument mint RANDOM — addBlock has nothing to derive from", () => {
+    // App's addBlock calls sanitizeBlock(block) directly on a brand-new block,
+    // which has no stored identity. Two new blocks that happen to be identical
+    // must still be two blocks.
+    expect(sanitizeBlock(Object.assign({}, base)).id)
+      .not.toBe(sanitizeBlock(Object.assign({}, base)).id);
+  });
+
   it("stays compatible with getBlockSlots", () => {
     // The consumer that matters: minted blocks must still produce slots.
     const out = sanitizeBlocks([Object.assign({}, base)]);

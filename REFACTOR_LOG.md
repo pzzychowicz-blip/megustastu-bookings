@@ -17235,3 +17235,57 @@ input by reference, and the write case still returns a new array — both
 directions, because identity that only holds one way silently drops a real write
 in a caller that gates on it. Proven against a sabotaged build (`return out;`),
 which fails the first and passes the second.
+
+### 2 · CT-2B-06 — a legacy block's id was a property of the READ
+
+`sanitizeBlock` mints an `id` on any table block that has none, at both read
+sites. The mint was `genId()`, which answers *what read was this*, not *which
+block is this* — so two reads of one **unchanged** legacy node disagreed about
+every id in it.
+
+`BlockModal` holds the block object it was handed when it opened; `removeBlock`
+filters on `bl.id !== block.id`. A resync landing between the two therefore left
+the modal naming an id that no longer existed anywhere, and Unblock silently did
+nothing. Nothing on screen distinguishes that from a slow write.
+
+The seed is now the block's own **content** — the field set plus an ordinal among
+identical siblings, `bl_<hash>_<n>` — so two reads of an unchanged node agree.
+Three things about the shape:
+
+- **Content, not array position.** An index seed is stable only while nothing is
+  inserted or removed, and this is the one place where the difference is not
+  academic: a stale index that *did* resolve would resolve to a DIFFERENT block,
+  turning a harmless no-op into unblocking the wrong table. A content key either
+  finds the same block or finds none. Pinned by a test that reverses the array.
+- **`addBlock` keeps `genId()`.** It calls `sanitizeBlock(block)` with one
+  argument on a brand-new block, which has no stored identity to derive from —
+  and two new blocks that happen to be identical must still be two blocks. The
+  seed is a second parameter for exactly that reason, and the single-argument
+  behaviour is pinned separately.
+- **The v17.15.2 ordinal is back, narrowly.** CLAUDE.md said "the ordinal
+  machinery is gone", and that is corrected rather than deleted: there it was the
+  IDENTITY of every block, which is what made it wrong; here it only seeds the
+  mint for a block that has no identity of its own. Its old failure mode is
+  benign in this role — when two blocks agree on every field, "the wrong one" and
+  "the right one" are the same block. `reason` is in the key (free staff text),
+  so the separator is an ASCII control character per `undoKey`'s rule, written as
+  the `\u001f` escape and never the raw byte.
+
+This does **not** heal a legacy node — it makes the race harmless instead. That
+matches the finding's own rating: it fails safe and is self-limiting, since the
+first successful `saveBlocks` persists the ids and the node stops being legacy. A
+write-back migration was considered and rejected as disproportionate: it would
+add a write to a read path in `usePersistence`, for a P3.
+
+It also corrects the reasoning CLAUDE.md gave for having no migration — "the
+first add or remove persists every id and the node self-heals". The **remove** is
+the operation a legacy node breaks, so healing depended on the one path that
+could not run.
+
+**Tests** (`tests/booking-logic.test.js`, +6): one unchanged node gives the same
+ids twice; the open-resync-unblock round trip removes the right block and leaves
+the other; a reversed array keeps each block's id; two blocks differing only in
+`reason` stay distinct; a minted id never looks like a `genId()` one and a real
+id is left alone; and the single-argument mint is still random. Four of the six
+fail against a build with the seed removed — the other two pin properties the fix
+must not break, which a random mint also satisfies.
