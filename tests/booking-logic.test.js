@@ -22,7 +22,7 @@ import {
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
-  liveBarDur, seatedElapsed, occupancyEnd, pastCloseMins,
+  liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -1287,6 +1287,62 @@ describe("v17.16.2 — now and a booking on one axis", () => {
         // A 23:45 booking, nobody arrived, now 00:15 the next day → 30 min late.
         expect(lateMins({ date: YDAY, time: "23:45" }, 15, TMRW)).toBe(30);
       });
+    });
+  });
+});
+
+// ── v17.16.2 /code-review — two regressions the axis fix introduced ──────────
+//
+// Both were found by reviewing the diff rather than by any failing test, and
+// both are the same shape: a guard that USED to hold for an incidental reason
+// stopped holding once `now` was projected. Worth pinning precisely because the
+// old code was safe by accident, so nothing pointed at either.
+describe("v17.16.2 /code-review — regressions of the axis fix", () => {
+  const D2 = "2099-06-15";
+  const YEST = "2099-06-14";
+  const LATER = "2099-07-06";
+
+  // Seating a booking dated in the FUTURE projects `now` NEGATIVE. The first
+  // guard only bounded the upper end, so every remaining test passed and
+  // toTime(-60) wrote "-1:00" as the booking's time.
+  it("refuses to shift a booking dated in the future, instead of writing a negative time", () => {
+    const b = mk({ date: D2, time: "13:00", duration: 90, tables: ["7"] });
+    // now = 23:00 on the day BEFORE the booking
+    expect(applySeatedShift(b, 1380, [b], YEST)).toBe(null);
+  });
+  it("still refuses past the other end of the day", () => {
+    const b = mk({ date: YEST, time: "23:30", duration: 90, status: "seated", tables: ["7"] });
+    expect(applySeatedShift(b, 15, [b], D2)).toBe(null);
+  });
+  it("and still shifts normally inside the booking's own day", () => {
+    const b = mk({ date: D2, time: "13:00", duration: 90, tables: ["7"] });
+    expect(applySeatedShift(b, 795, [b], D2).newTime).toBe("13:15");
+  });
+
+  // Dropping `b.date === today` let syncLiveDurations rewrite HISTORICAL
+  // records: the cap bounded the value (540 vs a stored 90) but never
+  // authorised the write.
+  it("leaves a booking left seated on a past day completely alone", () => {
+    const stale = mk({ date: D2, time: "13:00", status: "seated", duration: 90, tables: ["7"] });
+    const out = syncLiveDurations([stale], LATER, 600);
+    expect(out[0]).toBe(stale);            // same reference — no patch child
+    expect(out[0].duration).toBe(90);
+  });
+  it("still grows today's seated booking", () => {
+    const b = mk({ date: D2, time: "13:00", status: "seated", duration: 30, tables: ["7"] });
+    expect(syncLiveDurations([b], D2, 15 * 60)[0].duration).toBe(120);
+  });
+  it("draws the stored duration for a stale booking, so the bar and the write agree", () => {
+    const stale = mk({ date: D2, time: "13:00", status: "seated", duration: 90 });
+    expect(liveBarDur(stale, 600, LATER)).toBe(90);
+  });
+
+  describe("seatedIsLive", () => {
+    it("is true for today at any hour, because auto-complete owns the gap", () => {
+      expect(seatedIsLive(mk({ date: D2 }), D2, 23 * 60)).toBe(true);
+    });
+    it("is false for a past day whose close has gone", () => {
+      expect(seatedIsLive(mk({ date: D2 }), LATER, 600)).toBe(false);
     });
   });
 });

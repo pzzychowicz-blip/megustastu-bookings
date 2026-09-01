@@ -186,6 +186,21 @@ export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"
 // the frozen one agree at the boundary instead of stepping. A booking left
 // seated three weeks ago reads its own day's full service, once, and then stops
 // — not 30240 minutes and rising.
+// v17.16.2 (/code-review): is this seated booking still LIVE — i.e. may its
+// duration grow? Today's, always (auto-complete owns it after close, and the cap
+// below keeps the figure honest in the gap). Another day's, only while that day
+// is still open, which is what a 24/25 close means and what the midnight fix
+// exists for.
+//
+// Dropping `b.date === today` without this let `syncLiveDurations` rewrite
+// HISTORICAL records: a booking left seated three weeks ago has a capped elapsed
+// of 540 against a stored 90, so the next unrelated save emitted a patch child
+// for it. The cap bounds the VALUE; it never authorised the WRITE. It also grew
+// the atomic multi-path update, where one malformed historical booking can
+// reject an otherwise valid save.
+export function seatedIsLive(b,today,nowM){
+  return b.date===today||pastCloseMins(b.date,today,nowM)===null;
+}
 export function seatedElapsed(b,today,nowM){
   var closeMins=hoursFor(b.date).close*60;
   return Math.min(nowOn(b.date,today,nowM),closeMins)-toMins(b.time);
@@ -731,7 +746,7 @@ export function optimizerActiveFor(date,autoOptimizerState){
 // time is 30240 minutes and would otherwise be written as its duration.
 export function syncLiveDurations(bookings,today,nowM){
   return bookings.map(function(b){
-    if(b.status==="seated"){
+    if(b.status==="seated"&&seatedIsLive(b,today,nowM)){
       var elapsed=seatedElapsed(b,today,nowM);
       if(elapsed>(b.duration||90)) return Object.assign({},b,{duration:elapsed,customDur:elapsed});
     }
@@ -762,11 +777,19 @@ export function applySeatedShift(booking,nowM,allBookings,today){
   var scheduledEnd=scheduledStart+scheduledDur;
   var nm=nowOn(booking.date,today,nowM);
   // A start time is stored as HH:MM against the booking's own date, so a shift
-  // to a moment past that date's midnight cannot be REPRESENTED: toTime wraps
-  // modulo 24, and writing "00:15" onto yesterday's booking would move it a full
-  // day into the past. Refuse instead — the booking keeps its scheduled time,
-  // which is merely imprecise rather than false.
-  if(!Number.isFinite(nm)||nm>=1440) return null;
+  // to a moment OUTSIDE that date cannot be REPRESENTED: toTime wraps modulo 24,
+  // and `now` must therefore fall inside [0, 1440) of the booking's own day.
+  //
+  // BOTH ends are load-bearing (/code-review). Past the end: writing "00:15"
+  // onto yesterday's booking moves it a full day into the past. Before the
+  // start: seating a booking dated TOMORROW projects `now` NEGATIVE, and the
+  // first version of this guard only checked the upper bound — so seating a
+  // 13:00 booking on tomorrow's date at 23:00 today gave nm = -60, cleared
+  // every remaining guard (newDuration 930 is inside the clamp), and wrote
+  // `toTime(-60)` = **"-1:00"** as the booking's time. The pre-v17.16.2 code was
+  // safe here by accident: its `nowM >= scheduledEnd` test fired on the
+  // unprojected 1380, so the axis fix REMOVED that protection.
+  if(!Number.isFinite(nm)||nm<0||nm>=1440) return null;
   if(nm===scheduledStart) return null;
   if(nm>=scheduledEnd) return null;
   var myTables=booking.tables||[];
@@ -1090,7 +1113,10 @@ export function pct(mins){var totalMins=(GRID_CLOSE-OPEN)*60;return ((mins-OPEN*
 // booking shows its STORED duration, which auto-complete has already frozen at
 // the close, rather than growing without limit.
 export function liveBarDur(b,nowMins,today){
-  if(b&&b.status==="seated"){
+  // Same liveness test as syncLiveDurations, so the bar drawn and the duration
+  // stored can never disagree: a booking the writer will not touch shows the
+  // value the writer left.
+  if(b&&b.status==="seated"&&seatedIsLive(b,today,nowMins)){
     return Math.max(15,seatedElapsed(b,today,nowMins));
   }
   return b?b.duration:0;

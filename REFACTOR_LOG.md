@@ -16954,3 +16954,44 @@ bug). Header count four → seven of twenty-two.
 
 `DESIGN.md` and `GLOSSARY.md`: no change. Nothing visual, and no new
 user-visible surface or control to name.
+
+### 16 · `/code-review` — two regressions the axis fix introduced
+
+Both found by reading the diff, neither by a failing test, and **both the same
+shape: a guard that used to hold for an INCIDENTAL reason stopped holding once
+`now` was projected.** That is the risk this kind of change carries, and it is
+why the review mattered more than the 752 passing tests did.
+
+**1 · `applySeatedShift` wrote a negative time (data corruption).** The new guard
+bounded only the upper end (`nm >= 1440`). Seating a booking dated **tomorrow**
+projects `now` NEGATIVE: at 23:00 today, `nowOn(tomorrow, today, 1380)` = −60,
+which cleared `nm === scheduledStart`, cleared `nm >= scheduledEnd` (−60 >= 870
+is false) and produced `newDuration` 930, inside the clamp. `toTime(-60)` is
+**`"-1:00"`** — written to the database as the booking's time, where
+`toMins("-1:00")` is −60 and the block renders off-grid. Confirmed by direct
+call, not argued.
+
+The pre-v17.16.2 code was safe here **by accident**: its `nowM >= scheduledEnd`
+test fired on the UNPROJECTED 1380. So the axis fix removed a protection nothing
+in the file pointed at. The guard is now `nm < 0 || nm >= 1440` — a shift must
+land inside the booking's own day, because that is the only day its `HH:MM` can
+mean.
+
+**2 · `syncLiveDurations` rewrote historical records.** Dropping
+`b.date === today` was correct for the midnight case and wrong for every day
+before it: a booking left `seated` three weeks ago (a device offline at closing
+time) has a capped elapsed of 540 against a stored 90, so **the next unrelated
+save emitted a patch child for it** — `bookingsAfterAction` runs
+`syncLiveDurations` on EVERY save. It also grew the atomic multi-path `update()`,
+where one malformed historical booking can reject an otherwise valid save (the
+documented CT-2A-03 hazard).
+
+**The cap bounded the VALUE; it never authorised the WRITE** — that distinction
+is the fix. `seatedIsLive(b,today,nowM)` = today's booking, or another day's
+whose close has not passed, which is exactly what a 24/25 close means and all
+the midnight fix ever needed. `liveBarDur` shares the test, so the bar drawn and
+the duration stored cannot disagree.
+
+8 tests, both proven against a sabotaged build: restoring the upper-bound-only
+guard fails the future-booking case, dropping the liveness test fails the
+historical-write case. **760 tests**, 0 lint errors, 335.90 kB / 91.63 kB gz.
