@@ -17075,10 +17075,21 @@ focus()    BUTTON:+ New    t=12700.4   inertAnc=null   took=true
 Setting `inert` on the header with the opener focused does not blur it in Chrome
 either — checked in isolation across a microtask, a task and a frame.
 
-With `<React.StrictMode>` removed from `main.jsx`, restoration **works** — "+ New",
-Settings warm, and Settings on a genuinely cold `React.lazy` chunk that mounted
-through its Suspense fallback (`node_modules/.vite` cleared and the server
-restarted, so `Settings.jsx` was absent from the resource list at open). 4/4.
+With `<React.StrictMode>` removed from `main.jsx`, restoration **works in five of
+six attempts** — "+ New", Settings warm, Settings first-open after a reload,
+Settings on a genuinely cold `React.lazy` chunk that mounted through its Suspense
+fallback (`node_modules/.vite` cleared and the server restarted, so
+`Settings.jsx` was absent from the resource list at open), and a
+"+ New" → Settings sequence.
+
+**The sixth is recorded here because it is the only thing that could re-open
+this.** The first Settings open of that session DID fail — the restore targeted
+`<body>` — and it was not reproducible: four later attempts passed, including the
+deliberately cold one built to reproduce it. So the withdrawal rests on "five of
+six, and the mechanism the entry blamed is disproved", not on a clean sweep.
+Anyone who sees focus land on `<body>` after a modal closes in production should
+start from that unexplained run rather than from this entry's conclusion.
+
 Restoring StrictMode brings the failure straight back, and prints its own cause:
 
 ```
