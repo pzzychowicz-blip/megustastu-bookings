@@ -56,7 +56,7 @@ CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
 CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
 seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
 reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
-thirteen.
+thirteen; **v17.16.4 shipped CT-2B-09**, leaving twelve.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **A withdrawn finding is deleted from this file, not annotated in it** — this is
@@ -163,10 +163,6 @@ register — the Next-day button was a no-op on the spring-forward day.)*
   re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
   group of one while the operator believes the two were joined. Nothing on screen
   distinguishes this from success.
-- **CT-2B-09** — `stampGuestSeed` is an unconditional `.map`, so a no-op call
-  returns a fresh array: the exact shape v17.14.0 removed from
-  `bookingsAfterAction` and made a stated contract, in the same save path.
-  Harmless today because the write diff compares content.
 
 ### The recommendation that outlives the fixes — DONE in v17.16.2
 

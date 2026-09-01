@@ -17184,3 +17184,54 @@ tautology, since it holds trivially under the first. Verified in the browser
 against the module as Vite serves it: three spellings of one number
 (`"+34 600 123 456"`, `"(+34) 600 123 456"`, `"+34600123456"`) produce one
 `customerIndex` row with 3 visits, where the old rule produced 2 rows.
+
+---
+
+## v17.16.4 — the P3 tail
+
+**Date:** 2026-09-01 · **Branch:** `fix/v17.16.4-p3-cluster` ·
+**Files:** `src/App.jsx` (version), `src/lib/customers.js`,
+`tests/customers.test.js`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** none in this commit — `stampGuestSeed` returns the same
+CONTENT it always did; only the array's identity changed.
+
+The fifth instalment of the v17.15.7 crash-test response, clearing the register's
+P3 tail: two small fixes and one more withdrawal.
+
+### 1 · CT-2B-09 — a pass that stamps nothing returns a fresh array
+
+`stampGuestSeed(list, f)` is the back-stamp that writes a newly minted `guestId`
+onto the booking it was derived from. Its two early returns — no list, or a draft
+missing either key — already handed the input back. The `.map` below them did
+not, so the two cases that reach the list and change **none** of it returned a new
+array claiming something had happened:
+
+- the seed booking already carries a `guestId`. This is not an edge case, it is
+  **every retry** — the `!b.guestId` guard is precisely what makes a held or
+  replayed write safe to re-apply, so the common path through this function on
+  the recovery route was the one that lied;
+- `guestSeed` names a booking no longer in `prev` (a concurrent delete, or a
+  replay on data that no longer holds it).
+
+That is the exact shape v17.14.0 removed from `bookingsAfterAction` and made a
+stated contract — *a no-op returns its INPUT array, not a copy* — surviving in the
+same save path, one function along.
+
+**It was harmless today, and the reason is worth writing down rather than
+trusting.** Both call sites (`buildNext`, `applyBase` in `doSave`) feed the result
+straight into their own `.map`/`.filter`, which rebuild the array regardless, so
+the identity never reached `persist`; and `persist` diffs on CONTENT anyway. It is
+fixed because a helper that cannot answer "did I write anything" makes the next
+caller — one that *does* gate on identity, which is what the contract exists for —
+impossible to write correctly. The mitigation was two layers deep and neither was
+put there for this.
+
+`stamped` is a boolean flag rather than a content compare, unlike
+`bookingsAfterAction`'s `sameBookings`: this pass knows structurally whether it
+wrote, so there is nothing to diff.
+
+**Tests** (`tests/customers.test.js`, +2): the three no-write cases return the
+input by reference, and the write case still returns a new array — both
+directions, because identity that only holds one way silently drops a real write
+in a caller that gates on it. Proven against a sabotaged build (`return out;`),
+which fails the first and passes the second.
