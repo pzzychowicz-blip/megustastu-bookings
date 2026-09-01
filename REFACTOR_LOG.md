@@ -16999,9 +16999,10 @@ historical-write case. **760 tests**, 0 lint errors, 335.90 kB / 91.63 kB gz.
 ## v17.16.3 — two findings that were not there
 
 **Date:** 2026-09-01 · **Branch:** `fix/v17.16.3-phone-plus-normalisation` ·
-**Files:** `ROADMAP.md`, `CLAUDE.md`, `src/App.jsx` (version) ·
-**Behavioural change:** none in this commit — it withdraws two register entries
-and records why.
+**Files:** `ROADMAP.md`, `CLAUDE.md`, `src/App.jsx` (version),
+`src/lib/customers.js`, `tests/customers.test.js` · **Behavioural change:** two
+records that were one person now read as one customer (CT-2B-04) — a READ-side
+re-keying, with no write and no migration.
 
 The fourth instalment of the v17.15.7 crash-test response, and the first whose
 opening move is to **delete** work rather than do it. Two findings were taken
@@ -17112,3 +17113,63 @@ because the observation is the part that can be re-run. Both traps are recorded 
 with CT-2C-02 marked withdrawn, and a line stating that a withdrawn finding is
 **deleted** from that file rather than annotated in it — it is a pending-work
 list, and "we checked and there is nothing here" is not pending work.
+
+### 3 · CT-2B-04 — a bracketed country code was a second customer
+
+`normalizePhone` kept the `+` only when it sat at index 0:
+
+```js
+const hasPlus = s.charAt(0) === "+";
+```
+
+So `"(+34) 600 123 456"` normalised to `"34600123456"` while
+`"+34 600 123 456"` gave `"+34600123456"` — **two identities for one person**,
+which is a different customer everywhere identity is read: visits and no-show
+counts split between the halves, the repeat-no-show marker trips at 2 and so may
+never fire, the Regular chip needs 2 and may never show, and "Delete customer &
+all data" reaches only the half that was clicked. Every other kind of punctuation
+was already stripped correctly; only the plus's POSITION was wrong. A bracketed
+country code is an ordinary way to write a number, so this is reachable by
+someone simply typing it the way it is printed on a card.
+
+The `+` now counts wherever it sits **ahead of the digits**:
+
+```js
+const plusAt = s.indexOf("+");
+const firstDigit = s.search(/\d/);
+const hasPlus = plusAt !== -1 && (firstDigit === -1 || plusAt < firstDigit);
+```
+
+**There is no migration, and that is a property of the data model rather than a
+decision.** Nothing persists a normalised phone: `sanitize` stores
+`phone: b.phone || ""` and `cleanPhoneOf` (App.jsx) only blanks the placeholder,
+so a booking holds the string exactly as it was typed. Identity is DERIVED at
+read time — `identityKey` → `normalizePhone(b.phone)`, and `customerIndex` keys on
+that — so the fix re-keys on the next load, with no write, no rules change and no
+console step. The ROADMAP entry had recorded this as needing a decision because it
+"retroactively re-keys customers already split in PROD"; it does, and the re-keying
+is the fix rather than a cost of it.
+
+**A `+` AFTER a digit is still ignored, and that asymmetry is the safety
+argument.** A country-code marker precedes the number; a later `+` is an
+extension, a typo, or two numbers in one field. Because the new predicate is
+strictly WEAKER than the old one — `charAt(0) === "+"` implies `plusAt === 0`,
+which implies `plusAt < firstDigit` — the change can only ever ADD a plus, never
+drop one. So it can fuse two records that were always one customer, and **cannot
+split one customer into two**. That direction is what makes it safe to change a
+key every identity in the app is derived from, and it is pinned as its own test
+rather than left as an argument.
+
+The WA sandbox's `whatsapp.js` keeps its own copy of this primitive until the
+merge, at which point it must import from here (the v16.0.0 complementarity
+contract). The two are now one commit apart, so whoever does that merge should
+take this version, not the sandbox's.
+
+3 new tests (47 in `tests/customers.test.js`, **763** in the suite), proven
+against two sabotages: restoring `charAt(0) === "+"` fails the bracketed-code
+test, and forcing `hasPlus = false` fails **12** tests across the customer layer —
+the second is what makes the merge-not-split property a live guard rather than a
+tautology, since it holds trivially under the first. Verified in the browser
+against the module as Vite serves it: three spellings of one number
+(`"+34 600 123 456"`, `"(+34) 600 123 456"`, `"+34600123456"`) produce one
+`customerIndex` row with 3 visits, where the old rule produced 2 rows.

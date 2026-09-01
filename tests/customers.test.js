@@ -25,6 +25,41 @@ describe("normalizePhone / formatPhone / hasRealPhone", () => {
     expect(normalizePhone(null)).toBe("");
     expect(normalizePhone("+")).toBe("+");
   });
+  // CT-2B-04 (v17.16.3): the "+" counts wherever it sits ahead of the digits.
+  // Before this, only index 0 counted, so a bracketed country code produced a
+  // DIFFERENT identity from the same number written without brackets — one
+  // person as two customers, with visits, no-show count and history split
+  // between them.
+  it("keeps the + when punctuation precedes it (a bracketed country code)", () => {
+    expect(normalizePhone("(+34) 600 123 456")).toBe("+34600123456");
+    expect(normalizePhone("[+34] 600-123-456")).toBe("+34600123456");
+    expect(normalizePhone("tel: +34 600 123 456")).toBe("+34600123456");
+    // …and the same number written plainly still agrees with it, which is the
+    // whole point — these are one customer.
+    expect(normalizePhone("(+34) 600 123 456")).toBe(normalizePhone("+34 600 123 456"));
+  });
+  it("ignores a + that FOLLOWS a digit, and never removes one", () => {
+    // A country-code marker precedes the number; a later "+" is an extension,
+    // a typo, or two numbers in one field — not a reason to re-key anybody.
+    expect(normalizePhone("600 123 456+2")).toBe("6001234562");
+    expect(normalizePhone("600123456")).toBe("600123456");
+  });
+  it("can only ever ADD a +, never drop one (the merge-not-split property)", () => {
+    // This is what makes it safe to change a key every customer identity is
+    // derived from: the fix can fuse two records that were always one person,
+    // and cannot split one person into two. Old rule = charAt(0) === "+".
+    const cases = [
+      "+34600123456", "(+34) 600 123 456", "600123456", "", "+", "  +34 600  ",
+      "600+123", "tel: +34 600", "0034600123456", "+++34600",
+    ];
+    for (const c of cases) {
+      const oldHadPlus = String(c).trim().charAt(0) === "+";
+      const nowHasPlus = normalizePhone(c).charAt(0) === "+";
+      expect(!oldHadPlus || nowHasPlus).toBe(true);
+      // digits are untouched by the change
+      expect(normalizePhone(c).replace(/\D/g, "")).toBe(String(c).replace(/\D/g, ""));
+    }
+  });
   it("format inserts a space after the country code", () => {
     expect(formatPhone("+34600123456")).toBe("+34 600123456");
     expect(formatPhone("")).toBe("");

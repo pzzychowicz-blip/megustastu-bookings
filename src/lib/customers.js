@@ -16,7 +16,9 @@
 // (matchCustomerByPhone here is a strict SUPERSET: it adds noShowCount /
 // noShowBookings to the return object; existing WA consumers ignore them.)
 
-// Phone normalisation: strip all non-digits except a single leading +.
+// Phone normalisation: strip all non-digits, keeping a single + when it comes
+// ahead of them (v17.16.3 — "leading" used to mean index 0, which split
+// "(+34) 600…" from "+34 600…"; see the note on the function).
 // Used for matching customers across bookings (and WA conversations) — the
 // same normaliser must run everywhere so keys line up.
 // v17.4.0: findPhoneOverlaps (bottom of file) needs the interval + duration
@@ -27,8 +29,27 @@ import { overlaps, toMins, getDur } from "./booking-logic";
 export function normalizePhone(p) {
   if (!p) return "";
   const s = String(p).trim();
-  const hasPlus = s.charAt(0) === "+";
   const digits = s.replace(/[^\d]/g, "");
+  // v17.16.3 (CT-2B-04): the "+" counts wherever it sits AHEAD OF THE DIGITS,
+  // not only at index 0. It used to be `s.charAt(0) === "+"`, so
+  // "(+34) 600 123 456" normalised to "34600123456" while "+34 600 123 456"
+  // gave "+34600123456" — two identities for one person, splitting their
+  // visits, no-show count and history, and leaving "Delete customer & all
+  // data" reaching only the half you clicked. Every other kind of
+  // punctuation was already stripped correctly; only the plus's POSITION was
+  // wrong, so a bracketed country code — which is how a lot of people write
+  // one — was the whole of the bug.
+  //
+  // A "+" AFTER a digit is deliberately still ignored: a country-code marker
+  // precedes the number, and anything later is something else (an extension,
+  // a typo, two numbers in one field). So this only ever ADDS a "+" where the
+  // old code dropped one — never removes one — which means it can merge two
+  // records that were one customer and can never split a customer in two.
+  // That direction is what makes it safe to change a key everything is
+  // derived from; it is pinned in tests/customers.test.js.
+  const plusAt = s.indexOf("+");
+  const firstDigit = s.search(/\d/);
+  const hasPlus = plusAt !== -1 && (firstDigit === -1 || plusAt < firstDigit);
   return (hasPlus ? "+" : "") + digits;
 }
 

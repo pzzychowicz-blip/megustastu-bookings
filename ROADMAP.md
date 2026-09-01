@@ -54,8 +54,9 @@ The findings from the three adversarial QA sessions that are still open
 the full register and the reproductions). **v17.16.0 shipped CT-2C-01 and
 CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
 CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
-seven of twenty-two, and **v17.16.3 WITHDREW CT-2C-02** as not reproducible
-outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving fourteen.
+seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
+reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
+thirteen.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **A withdrawn finding is deleted from this file, not annotated in it** — this is
@@ -106,15 +107,6 @@ register — the Next-day button was a no-op on the spring-forward day.)*
   explicitly. Fixing it means making the default a getter or dropping `date` from
   the constant — worth doing when something else touches that object.
 
-- **CT-2B-04 (P2) — a parenthesised country code splits one customer in two, and
-  the fix re-keys existing records.** `normalizePhone` keeps `+` only as the
-  first character, so `"(+34) 600 123 456"` → `"34600123456"`, a different
-  identity from `"+34600123456"`. Visits, no-show counts and history split; the
-  repeat-no-show marker trips at 2 and may never fire; "Delete customer & all
-  data" reaches only the half you clicked. Punctuation and spacing normalise
-  correctly — only the plus's POSITION is wrong. **One line, but it
-  retroactively re-keys customers already split in PROD, so it needs a decision
-  rather than a quiet fix.**
 - **CT-2B-05 (P2) — a wrong guest join files one person's visits under another's
   number.** `customerIndex` keys as `phone || alias[guestId] || guestId`, so
   after a mis-join the phone-LESS bookings of the other person land under the
