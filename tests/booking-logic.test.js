@@ -1177,6 +1177,48 @@ describe("sanitizeBlock / sanitizeBlocks", () => {
       .not.toBe(sanitizeBlock(Object.assign({}, base)).id);
   });
 
+  // /code-review: the invariant removeBlock depends on is that every id in ONE
+  // result is distinct. A content hash alone does not give it, and both ways it
+  // can fail end in the v17.15.3 defect — one id for two blocks, so unblocking
+  // either drops BOTH.
+  it("never mints an id that COLLIDES with one the node already stores", () => {
+    // Reachable once a minted id has been persisted by saveBlocks and a
+    // pre-v17.15.3 client later writes an id-less block beside it. The first
+    // draft asserted this was impossible because genId() contains no "_" —
+    // true of genId() ids, false of a minted one that has since been stored.
+    const legacy = Object.assign({}, base);
+    const minted = sanitizeBlocks([Object.assign({}, legacy)])[0].id;
+    const out = sanitizeBlocks([Object.assign({ id: minted }, base), legacy]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).toBe(minted);
+    expect(out[1].id).not.toBe(minted);
+  });
+
+  it("gives two blocks whose content HASHES collide two different ids", () => {
+    // hash36 is 32-bit, so this is constructed rather than argued: these two
+    // reason strings on the same table and window hash identically. With the
+    // ordinal counting identical CONTENT keys, both took ordinal 1.
+    const A = Object.assign({}, base, { reason: "deep clean 149599" });
+    const B = Object.assign({}, base, { reason: "deep clean 312382" });
+    const out = sanitizeBlocks([A, B]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).not.toBe(out[1].id);
+    // ...and removing one leaves the other, which is the property that matters.
+    expect(out.filter((bl) => bl.id !== out[0].id)).toHaveLength(1);
+  });
+
+  it("keeps every id in one result distinct, mixed node included", () => {
+    const out = sanitizeBlocks([
+      Object.assign({ id: "real1" }, base),
+      Object.assign({}, base),
+      Object.assign({}, base),
+      Object.assign({}, base, { reason: "deep clean 149599" }),
+      Object.assign({}, base, { reason: "deep clean 312382" }),
+    ]);
+    const ids = out.map((b) => b.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("stays compatible with getBlockSlots", () => {
     // The consumer that matters: minted blocks must still produce slots.
     const out = sanitizeBlocks([Object.assign({}, base)]);

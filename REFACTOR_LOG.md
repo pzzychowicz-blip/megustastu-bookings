@@ -17339,7 +17339,39 @@ v17.16.2, and the rating lives in the §25 report rather than in this repo.
 
 **No code changed in this commit.**
 
-**Verification for the version:** `npm run build` + `npm test` (771 tests, 24
+### 4 · `/code-review` fix — the deterministic mint could still produce ONE id for TWO blocks
+
+Caught in review, in section 2's own fix. The invariant `removeBlock` depends on
+is that **every id in one `sanitizeBlocks` result is distinct**, and a content
+hash does not give it:
+
+- **`hash36` is 32-bit.** Two blocks with DIFFERENT content can share a hash —
+  constructed rather than argued: `reason` "deep clean 149599" and "deep clean
+  312382" on the same table and window both hash to `dqduwy`. The ordinal counted
+  identical CONTENT keys, so each took 1, and the two different blocks came out
+  as one id. That is the v17.15.3 defect — unblocking either drops BOTH —
+  reintroduced by the commit fixing its neighbour.
+- **A minted id can land on a stored one.** The first draft's comment claimed the
+  `bl_` shape "can never collide with a real minted id" because `genId()` output
+  contains no `_`. True of `genId()` ids and false of a `bl_…_n` that `saveBlocks`
+  has since persisted — which is what happens the first time a legacy node
+  heals. An id-less block written beside it later collides.
+
+Both close the same way: the ordinal is now **the first one not already taken**,
+against a `used` set seeded with the ids the node already stores. Identical
+siblings still get `_1`, `_2`, so the common path is unchanged, and determinism
+is untouched — the scan is left-to-right over a stable array.
+
+The general shape is worth keeping: **a derived id needs the distinctness
+invariant asserted directly, not inferred from the derivation.** The hash and the
+ordinal each looked sufficient; what the consumer needs is the property, and the
+only thing that guarantees it is checking.
+
+**Tests** (+3): a mint never collides with a stored id; the constructed hash-
+collision pair gets two ids and removing one leaves the other; and every id in a
+mixed node is distinct. All three fail against the pre-review logic.
+
+**Verification for the version:** `npm run build` + `npm test` (774 tests, 24
 files) + `npm run check:style` + `eslint` (0 errors) after every commit. Main
-bundle 335.97 → 336.40 kB (gzip 91.66 → 91.85, +0.19 kB) — the deterministic
+bundle 335.97 → 336.49 kB (gzip 91.66 → 91.87, +0.21 kB) — the deterministic
 seed and its comments.

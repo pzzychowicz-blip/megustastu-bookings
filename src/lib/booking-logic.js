@@ -341,8 +341,23 @@ export function sanitizeBlock(bl,legacyId){
 //
 // The separator is an ASCII control character for `undoKey`'s reason — `reason`
 // is free staff-entered text — written as the escape and never the raw byte,
-// which is invisible in every editor, grep and diff. `genId()` output contains
-// no "_", so the `bl_` shape can never collide with a real minted id.
+// which is invisible in every editor, grep and diff.
+//
+// /code-review: the invariant `removeBlock` actually depends on is that every id
+// in ONE `sanitizeBlocks` result is distinct, and a content hash alone does not
+// give it. `hash36` is 32-bit, so two blocks with DIFFERENT content can share a
+// hash — constructed, not argued: two `reason` strings on the same table and
+// window both hash to `dqduwy`, and since the ordinal counts identical CONTENT
+// keys each got ordinal 1, i.e. one id for two different blocks. That is
+// precisely the v17.15.3 defect this file exists to prevent, reintroduced by its
+// own fix. The first draft also claimed the `bl_` shape "can never collide with
+// a real minted id" on the grounds that `genId()` contains no "_" — true of
+// `genId()` ids and FALSE of a previously-minted `bl_…_n` that has since been
+// persisted by `saveBlocks`. Both paths close the same way: the ordinal is now
+// "first one not already taken", against a set seeded with the ids the node
+// already stores. Identical siblings still get _1, _2 — the common case is
+// unchanged — and determinism is untouched, since the scan is left-to-right
+// over a stable array.
 var BLOCK_KEY_FIELDS=["tableId","date","allDay","from","to","reason"];
 function blockContentKey(bl){
   return BLOCK_KEY_FIELDS.map(function(k){return String(bl[k]===undefined?"":bl[k]);}).join("\u001f");
@@ -359,14 +374,24 @@ export function sanitizeBlocks(val){
   if(!val) return [];
   var arr=Array.isArray(val)?val:Object.values(val);
   // v17.16.4: `.map(sanitizeBlock)` is deliberately no longer point-free — the
-  // seed needs the whole array to count identical siblings, and passing map's
-  // (value,index,array) straight through would have made `index` the legacyId.
-  var seen=Object.create(null);
+  // seed needs the whole array, and passing map's (value,index,array) straight
+  // through would have made `index` the legacyId.
+  //
+  // `used` is seeded with the ids the node ALREADY stores, then every minted id
+  // is added to it, so the result cannot contain a duplicate by either route —
+  // a 32-bit hash collision between two different blocks, or a mint landing on
+  // a real stored id. See the note above `blockContentKey` for why that is the
+  // invariant rather than the hash. `Object.create(null)` because a stored id is
+  // data and "__proto__" must be an ordinary key here.
+  var used=Object.create(null);
+  arr.forEach(function(bl){if(bl&&typeof bl==="object"&&bl.id) used[bl.id]=true;});
   return arr.map(function(bl){
     if(!bl||typeof bl!=="object"||bl.id) return sanitizeBlock(bl);
-    var k=blockContentKey(bl);
-    seen[k]=(seen[k]||0)+1;
-    return sanitizeBlock(bl,"bl_"+hash36(k)+"_"+seen[k]);
+    var base="bl_"+hash36(blockContentKey(bl));
+    var n=1;
+    while(used[base+"_"+n]) n++;
+    used[base+"_"+n]=true;
+    return sanitizeBlock(bl,base+"_"+n);
   }).filter(Boolean);
 }
 
