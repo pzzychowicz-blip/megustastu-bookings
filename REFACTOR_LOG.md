@@ -17289,3 +17289,57 @@ the other; a reversed array keeps each block's id; two blocks differing only in
 id is left alone; and the single-argument mint is still random. Four of the six
 fail against a build with the seed removed — the other two pin properties the fix
 must not break, which a random mint also satisfies.
+
+### 3 · CT-2B-07 withdrawn — both predicates are `starts + 1 >= LIMIT`
+
+The entry read: the kitchen-busy chip fires at `starts >= KITCHEN_TABLE_LIMIT`
+while the confirm fires at `starts + 1 >= LIMIT`, so with the limit at 3 and
+exactly two existing starts the dialog appears with no busy chip to explain it —
+on both the booking and the walk-in path.
+
+The `+ 1` is on the line above the comparison, on both surfaces:
+
+```
+BookingFormModal.jsx:474  const kitchenStarts = kitchenLoad ? kitchenLoad.starts + 1 : 1;
+BookingFormModal.jsx:475  const kitchenBusy   = kitchenLoad && kitchenStarts >= KITCHEN_TABLE_LIMIT;
+App.jsx:2203              if (load.starts + 1 >= KITCHEN_TABLE_LIMIT && !confirmKitchen)
+
+WalkinForm.jsx:193        const wKitchenStarts = wKitchenLoad.starts + 1;
+WalkinForm.jsx:195        const wKitchenBusy   = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
+useWalkin.js:152          if (load.starts + 1 >= KITCHEN_TABLE_LIMIT && !confirmKitchen)
+```
+
+The two are the same predicate, and their inputs are the same too — checked
+argument by argument rather than assumed, since a chip and a save handler
+computing the same thing from different data is the defect that would be left if
+they were not. Booking form: both `getKitchenLoad(bookings, <date>, <time>,
+customDur || getDur(size), editId)`. Walk-in: both `getKitchenLoad(bookings,
+todayStr(), wf.time || nowTime(), wf.customDur || getDur(size), null)`; the
+form's `wDate`/`wTime`/`wDur` at `WalkinForm.jsx:72-78` are the same three
+expressions the handler recomputes. The empty-time case agrees as well: the chip
+goes falsy on a null `kitchenLoad`, and `save()` returns to `doSave()` before
+reaching the kitchen branch.
+
+**The third withdrawal in two versions, and it has the same shape as the other
+two** — a finding that names a CONCLUSION rather than an observation. This one
+read one line of a two-line expression; v17.16.3's read a browser-automation
+tree that prints `title` where Chrome computes `contents`, and a dev build whose
+StrictMode double-invokes the effect being measured. In each case the claim was
+true of what was actually examined and false of the app.
+
+Against eight fixed, three withdrawn is a high enough rate that "confirmed" in
+the register is not a fact about the app. `ROADMAP.md`'s stale
+`### The recommendation that outlives the fixes — DONE in v17.16.2` — a shipped
+entry that survived only because it pointed at the crash test's 55% self-rating —
+is replaced in this commit by the pending job that observation implies: re-rate
+the ten remaining findings by the single observation that would settle each,
+before spending a version on any of them. The 55% rating's own condition (extract
+the pure core of `usePersistence.js` so its claims become testable) was met in
+v17.16.2, and the rating lives in the §25 report rather than in this repo.
+
+**No code changed in this commit.**
+
+**Verification for the version:** `npm run build` + `npm test` (771 tests, 24
+files) + `npm run check:style` + `eslint` (0 errors) after every commit. Main
+bundle 335.97 → 336.40 kB (gzip 91.66 → 91.85, +0.19 kB) — the deterministic
+seed and its comments.

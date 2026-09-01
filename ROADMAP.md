@@ -56,7 +56,9 @@ CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
 CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
 seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
 reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
-thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06**, leaving eleven.
+thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
+(both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
+leaving ten.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **A withdrawn finding is deleted from this file, not annotated in it** — this is
@@ -152,22 +154,43 @@ register — the Next-day button was a no-op on the spring-forward day.)*
   nothing enforces it. Also unrated: nothing checks for duplicate booking ids,
   and two sharing one collapse in the optimiser's assignment map (`genId`
   collision ≈ 1 in 1.7M, same millisecond).
-- **CT-2B-07** — the kitchen-busy chip fires at `starts >= KITCHEN_TABLE_LIMIT`
-  while the confirm fires at `starts + 1 >= LIMIT`. With the limit at 3, at
-  exactly two existing starts the dialog appears with no busy chip to explain it.
-  Both the booking and walk-in paths.
 - **CT-2B-08** — a second join naming an already-joined seed correctly refuses to
   re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
   group of one while the operator believes the two were joined. Nothing on screen
   distinguishes this from success.
 
-### The recommendation that outlives the fixes — DONE in v17.16.2
+### Re-rate the ten open findings before spending a version on any of them
 
-- ~~**Extract the pure core of `usePersistence.js`.**~~ Shipped as
-  `src/lib/write-path.js` + `tests/write-path.test.js` (31 tests). `pastCloseMins`
-  went to `booking-logic.js` in the same version. The crash test's **55%
-  confidence rating is now the thing to revisit** — that was the condition it set,
-  and it has been met. The rating lives in the §25 report, not in this repo.
+Three of the register's findings have now been measured and withdrawn — CT-2C-02
+and the view-button accessible name in v17.16.3, CT-2B-07 in v17.16.4 — against
+eight fixed. That is a high enough withdrawal rate that "confirmed" in the
+register is not a fact about the app. (The count is the register's: CT-2A-03 is
+carried as shipped, since v17.16.1 closed its server half, while its client half
+is still listed below as open work. The bullets here do not map 1:1 to findings —
+one covers CT-2A-04 and CT-2A-06 together, and `EMPTY_FORM.date` was never in the
+register at all.)
+
+**They share a shape.** A finding that names a CONCLUSION ("all three share one
+name", "focus restore never works, on any modal", "the chip and the confirm
+disagree") is worth less than one naming an OBSERVATION, because only the
+observation can be re-run. Each of the three was verified against something other
+than the running app: a browser-automation tree that prints `title` where Chrome
+computes `contents`; a dev build whose StrictMode double-invokes the effect being
+measured; one line of a two-line expression.
+
+**The job:** walk the ten open findings and, for each, write down the single
+observation that would settle it and how to make it — then rate them by that,
+not by their filed priority. Cheap, and it decides what the next versions are
+worth doing. The two P2s carrying open questions for Patryk (CT-2B-05's delete
+scope, CT-2A-05's tie-break at 2/1000) are the ones where this matters most,
+since each would otherwise start with a decision made on a rating nothing has
+checked.
+
+This replaces the entry that pointed at the crash test's own **55% self-rating**
+as the thing to revisit. That condition — extract the pure core of
+`usePersistence.js` so its claims become testable — was met in v17.16.2
+(`src/lib/write-path.js`, 31 tests), and the rating itself lives in the §25
+report rather than in this repo, so what is actionable HERE is the register.
 
 ## Designed, not implemented
 
