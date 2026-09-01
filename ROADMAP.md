@@ -54,8 +54,16 @@ The findings from the three adversarial QA sessions that are still open
 the full register and the reproductions). **v17.16.0 shipped CT-2C-01 and
 CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
 CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
-seven of twenty-two. Delete an entry as its fix lands; the detail then goes in
-`REFACTOR_LOG.md`.
+seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
+reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
+thirteen.
+Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
+
+**A withdrawn finding is deleted from this file, not annotated in it** — this is
+a pending-work list, and an entry saying "we checked and there is nothing here"
+is not pending work. The measurement goes in `REFACTOR_LOG.md` and any evergreen
+lesson in `CLAUDE.md`'s Gotchas, which is where the two v17.16.3 withdrawals
+went.
 
 **`database.rules.json` — what remains after v17.16.1.** The first two below are
 ONE structural change, not two fixes.
@@ -92,22 +100,6 @@ ONE structural change, not two fixes.
 CT-2B-01, CT-2B-02 and CT-2B-03, plus a DST date-navigation bug not in the
 register — the Next-day button was a no-op on the spring-forward day.)*
 
-- **The three view buttons share one accessible name (P3, measured v17.16.2).**
-  `ViewSwitcher.jsx:129` sets `title={gesturesOn ? "Right-click or hold to add to
-  a split view" : undefined}` on the Timeline / List / Plan buttons and no
-  `aria-label`. Read out of the LIVE accessibility tree, all three report that
-  same string as their name — so the app's primary navigation announces as three
-  identically-named controls describing a secondary GESTURE rather than the view
-  each one opens, and none is sayable by voice control. Same family as the
-  v17.15.4 Label-in-Name finding CLAUDE.md records, and the same "a static name
-  is not one name, it is N identical ones" shape as the `.map`-rendered controls.
-  Found while verifying something else (the `p` key had not switched views and
-  `find("Plan")` matched nothing, which is what exposed it) — not by the a11y
-  sweep, which is a static AST pass and cannot compute a name. **Worth checking
-  what the browser actually computes before choosing the fix**: the buttons do
-  have visible text, so `title` should only be a fallback, and the mechanism was
-  not pinned down.
-
 - **`EMPTY_FORM.date` is evaluated once at module load (P3, new in v17.16.2).**
   `constants.js` builds it at import, so an app left open across midnight holds
   yesterday's default. Not currently reachable in a saved booking: all three
@@ -115,23 +107,6 @@ register — the Next-day button was a no-op on the spring-forward day.)*
   explicitly. Fixing it means making the default a getter or dropping `date` from
   the constant — worth doing when something else touches that object.
 
-- **CT-2C-02 (P2) — focus restoration never works, on any modal.** `Overlay`'s
-  cleanup calls `prev.focus()` so the keyboard lands where it was — which is
-  exactly where it does not land: the opener sits inside a subtree marked
-  `inert`, an inert element cannot take focus, and the call is a silent no-op.
-  Verified on "+ New" and Settings; all four inert containers cover page content,
-  so there is no opener for which it works. Fix: restore focus **after** `inert`
-  is lifted, not before. Invisible to `tests/a11y.test.js`, which is a static AST
-  sweep.
-- **CT-2B-04 (P2) — a parenthesised country code splits one customer in two, and
-  the fix re-keys existing records.** `normalizePhone` keeps `+` only as the
-  first character, so `"(+34) 600 123 456"` → `"34600123456"`, a different
-  identity from `"+34600123456"`. Visits, no-show counts and history split; the
-  repeat-no-show marker trips at 2 and may never fire; "Delete customer & all
-  data" reaches only the half you clicked. Punctuation and spacing normalise
-  correctly — only the plus's POSITION is wrong. **One line, but it
-  retroactively re-keys customers already split in PROD, so it needs a decision
-  rather than a quiet fix.**
 - **CT-2B-05 (P2) — a wrong guest join files one person's visits under another's
   number.** `customerIndex` keys as `phone || alias[guestId] || guestId`, so
   after a mis-join the phone-LESS bookings of the other person land under the

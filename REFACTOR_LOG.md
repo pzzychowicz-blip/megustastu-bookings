@@ -16995,3 +16995,192 @@ the duration stored cannot disagree.
 8 tests, both proven against a sabotaged build: restoring the upper-bound-only
 guard fails the future-booking case, dropping the liveness test fails the
 historical-write case. **760 tests**, 0 lint errors, 335.90 kB / 91.63 kB gz.
+
+## v17.16.3 — two findings that were not there
+
+**Date:** 2026-09-01 · **Branch:** `fix/v17.16.3-phone-plus-normalisation` ·
+**Files:** `ROADMAP.md`, `CLAUDE.md`, `src/App.jsx` (version),
+`src/lib/customers.js`, `tests/customers.test.js` · **Behavioural change:** two
+records that were one person now read as one customer (CT-2B-04) — a READ-side
+re-keying, with no write and no migration.
+
+The fourth instalment of the v17.15.7 crash-test response, and the first whose
+opening move is to **delete** work rather than do it. Two findings were taken
+off the register because they were measured and are not defects. Both had been
+written up as verified, and both were verified against something other than the
+app.
+
+### 1 · The three view buttons do NOT share one accessible name
+
+The entry read: `ViewSwitcher.jsx:129` puts a `title` and no `aria-label` on the
+Timeline / List / Plan buttons, and "read out of the LIVE accessibility tree, all
+three report that same string as their name" — so the app's primary navigation
+announces as three identically-named controls describing a secondary gesture, and
+none is sayable by voice control. It carried its own caveat: *the buttons do have
+visible text, so `title` should only be a fallback, and the mechanism was not
+pinned down.*
+
+The caveat was the correct instinct. Chrome, asked through CDP
+`Accessibility.getPartialAXTree`:
+
+```
+#a  name= "Timeline"  from= contents  desc= "Right-click or hold to add to a split view"
+#b  name= "Plan"      from= contents  desc= "Right-click or hold to add to a split view"
+```
+
+The name comes from **contents** and the `title` lands in **description**,
+exactly as the accname spec requires — `title` is a name of last resort and loses
+to both contents and `aria-label`. Measured twice: on the button's `outerHTML`
+copied from the live DOM, then again with the whole of `src/index.css` loaded, in
+case a rule suppressed the text node. Same answer.
+
+What produced the finding is the browser-automation pane, whose tree prints
+`title` in the name position. A three-button control probe settles it without
+reference to this app at all:
+
+```
+<button title="PROBE_TITLE_A">PROBE_TEXT_A</button>   → pane: "PROBE_TITLE_A"
+                                                      → Chrome: "PROBE_TEXT_A"
+```
+
+`find("Timeline")` matching nothing is the same artifact, and it is what the
+original session read as corroboration.
+
+**Had this been "fixed", it would have introduced the defect it was filed
+against.** The natural fix is an `aria-label` per button — which REPLACES a
+working, visible-text-derived name with a paraphrase, i.e. the v17.15.4
+Label-in-Name finding, reintroduced by someone who believed they were fixing one.
+
+The same entry's incidental claim that the `p` key had not switched views is also
+wrong: pressed at top level it goes Timeline → Plan. `useKeyboardShortcuts.js:256`
+binds `p` to the preferred-tables picker **while a modal is open**, which is the
+state it was observed in.
+
+### 2 · CT-2C-02 — focus restoration works; StrictMode was being measured
+
+The entry read: focus restoration never works, on any modal, because "the opener
+sits inside a subtree marked `inert`, an inert element cannot take focus, and the
+call is a silent no-op", verified on "+ New" and Settings, with the fix being to
+restore focus after `inert` is lifted.
+
+**The stated mechanism does not survive a timestamp.** `inert` is lifted when the
+modal stack pops; `Overlay` unmounts one exit animation later, so the restore
+fires 263 ms after the attribute is gone, with no inert ancestor:
+
+```
+inert OFF  HEADER          t=12437.2
+focus()    BUTTON:+ New    t=12700.4   inertAnc=null   took=true
+```
+
+Setting `inert` on the header with the opener focused does not blur it in Chrome
+either — checked in isolation across a microtask, a task and a frame.
+
+With `<React.StrictMode>` removed from `main.jsx`, restoration **works in five of
+six attempts** — "+ New", Settings warm, Settings first-open after a reload,
+Settings on a genuinely cold `React.lazy` chunk that mounted through its Suspense
+fallback (`node_modules/.vite` cleared and the server restarted, so
+`Settings.jsx` was absent from the resource list at open), and a
+"+ New" → Settings sequence.
+
+**The sixth is recorded here because it is the only thing that could re-open
+this.** The first Settings open of that session DID fail — the restore targeted
+`<body>` — and it was not reproducible: four later attempts passed, including the
+deliberately cold one built to reproduce it. So the withdrawal rests on "five of
+six, and the mechanism the entry blamed is disproved", not on a clean sweep.
+Anyone who sees focus land on `<body>` after a modal closes in production should
+start from that unexplained run rather than from this entry's conclusion.
+
+Restoring StrictMode brings the failure straight back, and prints its own cause:
+
+```
+focus DIV:New bookingC   ← mount 1 focuses the dialog
+focus BUTTON:+ New       ← mount 1 CLEANUP restores the opener — the mechanism works
+focus DIV:New bookingC   ← mount 2 re-focuses the dialog
+```
+
+`Overlay` stores `document.activeElement` on the way in. StrictMode's second
+setup re-reads it **after** the first pass has already focused the dialog, so the
+ref ends up holding the dialog rather than the opener; the dialog is detached at
+close, `document.contains(prev)` is false, and no restore is attempted at all —
+focus falls to `<body>`, which is indistinguishable on screen from a restore that
+ran and failed. StrictMode is dev-only, so production never runs that path.
+
+This was **not** confirmed against a production build: `npm run preview` points at
+PROD Firebase and is Patryk's to run. Removing StrictMode from the dev build is
+the correct proxy, since it is the only thing that differs in effect behaviour;
+`main.jsx` was reverted byte-for-byte afterwards.
+
+### What the two have in common
+
+Both were filed as *verified*, and in both the verification instrument was the
+thing that was wrong — a tool's summary of the accessibility tree in the first,
+a dev-only React mode in the second. The register's own confidence rating is what
+this argues about, not these two entries: a finding that names an observation
+("all three report the same name") is worth more than one that names a conclusion,
+because the observation is the part that can be re-run. Both traps are recorded as
+`CLAUDE.md` Gotchas rows, which is where they will be looked for.
+
+`ROADMAP.md`: both entries deleted, the register count corrected to fourteen open
+with CT-2C-02 marked withdrawn, and a line stating that a withdrawn finding is
+**deleted** from that file rather than annotated in it — it is a pending-work
+list, and "we checked and there is nothing here" is not pending work.
+
+### 3 · CT-2B-04 — a bracketed country code was a second customer
+
+`normalizePhone` kept the `+` only when it sat at index 0:
+
+```js
+const hasPlus = s.charAt(0) === "+";
+```
+
+So `"(+34) 600 123 456"` normalised to `"34600123456"` while
+`"+34 600 123 456"` gave `"+34600123456"` — **two identities for one person**,
+which is a different customer everywhere identity is read: visits and no-show
+counts split between the halves, the repeat-no-show marker trips at 2 and so may
+never fire, the Regular chip needs 2 and may never show, and "Delete customer &
+all data" reaches only the half that was clicked. Every other kind of punctuation
+was already stripped correctly; only the plus's POSITION was wrong. A bracketed
+country code is an ordinary way to write a number, so this is reachable by
+someone simply typing it the way it is printed on a card.
+
+The `+` now counts wherever it sits **ahead of the digits**:
+
+```js
+const plusAt = s.indexOf("+");
+const firstDigit = s.search(/\d/);
+const hasPlus = plusAt !== -1 && (firstDigit === -1 || plusAt < firstDigit);
+```
+
+**There is no migration, and that is a property of the data model rather than a
+decision.** Nothing persists a normalised phone: `sanitize` stores
+`phone: b.phone || ""` and `cleanPhoneOf` (App.jsx) only blanks the placeholder,
+so a booking holds the string exactly as it was typed. Identity is DERIVED at
+read time — `identityKey` → `normalizePhone(b.phone)`, and `customerIndex` keys on
+that — so the fix re-keys on the next load, with no write, no rules change and no
+console step. The ROADMAP entry had recorded this as needing a decision because it
+"retroactively re-keys customers already split in PROD"; it does, and the re-keying
+is the fix rather than a cost of it.
+
+**A `+` AFTER a digit is still ignored, and that asymmetry is the safety
+argument.** A country-code marker precedes the number; a later `+` is an
+extension, a typo, or two numbers in one field. Because the new predicate is
+strictly WEAKER than the old one — `charAt(0) === "+"` implies `plusAt === 0`,
+which implies `plusAt < firstDigit` — the change can only ever ADD a plus, never
+drop one. So it can fuse two records that were always one customer, and **cannot
+split one customer into two**. That direction is what makes it safe to change a
+key every identity in the app is derived from, and it is pinned as its own test
+rather than left as an argument.
+
+The WA sandbox's `whatsapp.js` keeps its own copy of this primitive until the
+merge, at which point it must import from here (the v16.0.0 complementarity
+contract). The two are now one commit apart, so whoever does that merge should
+take this version, not the sandbox's.
+
+3 new tests (47 in `tests/customers.test.js`, **763** in the suite), proven
+against two sabotages: restoring `charAt(0) === "+"` fails the bracketed-code
+test, and forcing `hasPlus = false` fails **12** tests across the customer layer —
+the second is what makes the merge-not-split property a live guard rather than a
+tautology, since it holds trivially under the first. Verified in the browser
+against the module as Vite serves it: three spellings of one number
+(`"+34 600 123 456"`, `"(+34) 600 123 456"`, `"+34600123456"`) produce one
+`customerIndex` row with 3 visits, where the old rule produced 2 rows.
