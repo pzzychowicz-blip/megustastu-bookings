@@ -116,12 +116,30 @@ export function identityKey(b) {
 // `!b.guestId` is what makes a replay safe — a retry on fresh data finds the
 // stamp already there and leaves it alone — and it also means a booking already
 // belonging to another group is never silently re-homed.
+// v17.16.4 (CT-2B-09): a call that stamps NOTHING returns the array it was
+// given. Both early returns above already did; the `.map` did not, so the two
+// cases where the pass reaches the list and changes none of it — the seed
+// booking already carries a `guestId` (the replay-safety guard on the line
+// below, i.e. every retry), or `guestSeed` names a booking no longer in `prev`
+// — handed back a fresh array saying "something changed" when nothing had.
+// That is the exact shape v17.14.0 removed from `bookingsAfterAction` and made
+// a stated contract, in the same save path. Harmless today only because the
+// write diff compares CONTENT: `stampGuestSeed` runs inside doSave's
+// buildNext/applyBase, whose own `.map`/`.filter` rebuild the array regardless,
+// so the identity never reaches `persist`. It is fixed anyway because the next
+// caller may gate on identity — which is what the contract is for — and because
+// a helper that cannot answer "did I do anything" makes that caller impossible
+// to write correctly. `stamped` is a flag rather than a content compare because
+// this pass KNOWS structurally whether it wrote: there is nothing to diff.
 export function stampGuestSeed(list, f) {
   if (!Array.isArray(list) || !f || !f.guestSeed || !f.guestId) return list;
-  return list.map(function (b) {
+  var stamped = false;
+  var out = list.map(function (b) {
     if (!b || b.id !== f.guestSeed || b.guestId) return b;
+    stamped = true;
     return Object.assign({}, b, { guestId: f.guestId });
   });
+  return stamped ? out : list;
 }
 
 // isNoShow — did this booking end as a no-show?

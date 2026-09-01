@@ -476,4 +476,29 @@ describe("stampGuestSeed", () => {
     stampGuestSeed([src], draft);
     expect(src.guestId).toBeFalsy();
   });
+
+  // v17.16.4 (CT-2B-09): the no-op identity contract, the same one
+  // `bookingsAfterAction` states. The two early returns above always had it;
+  // these are the cases that reach the list and change nothing in it.
+  it("returns the INPUT array when it reaches the list and stamps nothing", () => {
+    // Already stamped — which is EVERY retry, since the replay-safety guard is
+    // what makes a held write safe to re-apply.
+    const done = [bk({ id: "b1", phone: "", guestId: "gb1" })];
+    expect(stampGuestSeed(done, draft)).toBe(done);
+    // Joined to someone else — left alone, so again nothing was written.
+    const other = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(stampGuestSeed(other, draft)).toBe(other);
+    // The seed booking is not in this list at all (a concurrent delete, or a
+    // replay on fresh data that no longer holds it).
+    const absent = [bk({ id: "b2", phone: "" })];
+    expect(stampGuestSeed(absent, draft)).toBe(absent);
+    expect(stampGuestSeed([], draft)).toEqual([]);
+  });
+
+  it("still returns a NEW array when it does stamp", () => {
+    // The other half of the contract: identity must mean something in both
+    // directions, or a caller gating on it silently drops a real write.
+    const list = [bk({ id: "b1", phone: "" })];
+    expect(stampGuestSeed(list, draft)).not.toBe(list);
+  });
 });

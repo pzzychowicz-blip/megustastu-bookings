@@ -1118,6 +1118,107 @@ describe("sanitizeBlock / sanitizeBlocks", () => {
     expect(sanitizeBlock("nope")).toBe(null);
   });
 
+  // ── v17.16.4 (CT-2B-06): the mint is deterministic for a LEGACY node ───────
+  // A random mint answers "what read was this", not "which block is this", so
+  // two reads of one unchanged node disagreed about every id — and removeBlock
+  // filters on an id BlockModal captured at open time. A resync in between made
+  // Unblock a silent no-op.
+  it("gives one unchanged legacy node the SAME ids on every read", () => {
+    const node = () => [Object.assign({}, base), Object.assign({}, base, { from: "18:00", to: "19:00" })];
+    const first = sanitizeBlocks(node()).map((b) => b.id);
+    const second = sanitizeBlocks(node()).map((b) => b.id);
+    expect(second).toEqual(first);
+  });
+
+  it("survives the round trip that used to no-op: open, resync, unblock", () => {
+    const node = () => [Object.assign({}, base), Object.assign({}, base, { from: "18:00", to: "19:00" })];
+    const captured = sanitizeBlocks(node())[0];        // BlockModal holds this
+    const afterResync = sanitizeBlocks(node());        // a fresh snapshot lands
+    const next = afterResync.filter((bl) => bl.id !== captured.id);  // removeBlock
+    expect(next).toHaveLength(1);
+    expect(next[0].from).toBe("18:00");
+  });
+
+  it("keys the seed on CONTENT, not on array position", () => {
+    // Position would be stable only while nothing is inserted. If a stale index
+    // ever resolved it would resolve to a DIFFERENT block — unblocking the
+    // wrong table, which is worse than the no-op it replaces. A content key
+    // either finds the same block or finds none.
+    const b1 = Object.assign({}, base);
+    const b2 = Object.assign({}, base, { tableId: "5A" });
+    const before = sanitizeBlocks([b1, b2]);
+    const after = sanitizeBlocks([b2, b1]);
+    expect(after.find((b) => b.tableId === "3").id).toBe(before.find((b) => b.tableId === "3").id);
+    expect(after.find((b) => b.tableId === "5A").id).toBe(before.find((b) => b.tableId === "5A").id);
+  });
+
+  it("distinguishes blocks that differ ONLY in reason", () => {
+    // `reason` is free staff-entered text and is in the key, which is why the
+    // separator is a control character rather than a printable one.
+    const out = sanitizeBlocks([
+      Object.assign({}, base, { reason: "deep clean" }),
+      Object.assign({}, base, { reason: "private party" }),
+    ]);
+    expect(out[0].id).not.toBe(out[1].id);
+  });
+
+  it("never collides with a genId() id, and leaves a real id alone", () => {
+    const minted = sanitizeBlocks([Object.assign({}, base)])[0].id;
+    expect(minted).toContain("_");          // genId() output contains no "_"
+    const real = sanitizeBlocks([Object.assign({ id: "abc123" }, base)])[0];
+    expect(real.id).toBe("abc123");
+  });
+
+  it("keeps the single-argument mint RANDOM — addBlock has nothing to derive from", () => {
+    // App's addBlock calls sanitizeBlock(block) directly on a brand-new block,
+    // which has no stored identity. Two new blocks that happen to be identical
+    // must still be two blocks.
+    expect(sanitizeBlock(Object.assign({}, base)).id)
+      .not.toBe(sanitizeBlock(Object.assign({}, base)).id);
+  });
+
+  // /code-review: the invariant removeBlock depends on is that every id in ONE
+  // result is distinct. A content hash alone does not give it, and both ways it
+  // can fail end in the v17.15.3 defect — one id for two blocks, so unblocking
+  // either drops BOTH.
+  it("never mints an id that COLLIDES with one the node already stores", () => {
+    // Reachable once a minted id has been persisted by saveBlocks and a
+    // pre-v17.15.3 client later writes an id-less block beside it. The first
+    // draft asserted this was impossible because genId() contains no "_" —
+    // true of genId() ids, false of a minted one that has since been stored.
+    const legacy = Object.assign({}, base);
+    const minted = sanitizeBlocks([Object.assign({}, legacy)])[0].id;
+    const out = sanitizeBlocks([Object.assign({ id: minted }, base), legacy]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).toBe(minted);
+    expect(out[1].id).not.toBe(minted);
+  });
+
+  it("gives two blocks whose content HASHES collide two different ids", () => {
+    // hash36 is 32-bit, so this is constructed rather than argued: these two
+    // reason strings on the same table and window hash identically. With the
+    // ordinal counting identical CONTENT keys, both took ordinal 1.
+    const A = Object.assign({}, base, { reason: "deep clean 149599" });
+    const B = Object.assign({}, base, { reason: "deep clean 312382" });
+    const out = sanitizeBlocks([A, B]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).not.toBe(out[1].id);
+    // ...and removing one leaves the other, which is the property that matters.
+    expect(out.filter((bl) => bl.id !== out[0].id)).toHaveLength(1);
+  });
+
+  it("keeps every id in one result distinct, mixed node included", () => {
+    const out = sanitizeBlocks([
+      Object.assign({ id: "real1" }, base),
+      Object.assign({}, base),
+      Object.assign({}, base),
+      Object.assign({}, base, { reason: "deep clean 149599" }),
+      Object.assign({}, base, { reason: "deep clean 312382" }),
+    ]);
+    const ids = out.map((b) => b.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("stays compatible with getBlockSlots", () => {
     // The consumer that matters: minted blocks must still produce slots.
     const out = sanitizeBlocks([Object.assign({}, base)]);

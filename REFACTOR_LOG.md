@@ -17184,3 +17184,194 @@ tautology, since it holds trivially under the first. Verified in the browser
 against the module as Vite serves it: three spellings of one number
 (`"+34 600 123 456"`, `"(+34) 600 123 456"`, `"+34600123456"`) produce one
 `customerIndex` row with 3 visits, where the old rule produced 2 rows.
+
+---
+
+## v17.16.4 — the P3 tail
+
+**Date:** 2026-09-01 · **Branch:** `fix/v17.16.4-p3-cluster` ·
+**Files:** `src/App.jsx` (version), `src/lib/customers.js`,
+`tests/customers.test.js`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** none in this commit — `stampGuestSeed` returns the same
+CONTENT it always did; only the array's identity changed.
+
+The fifth instalment of the v17.15.7 crash-test response, clearing the register's
+P3 tail: two small fixes and one more withdrawal.
+
+### 1 · CT-2B-09 — a pass that stamps nothing returns a fresh array
+
+`stampGuestSeed(list, f)` is the back-stamp that writes a newly minted `guestId`
+onto the booking it was derived from. Its two early returns — no list, or a draft
+missing either key — already handed the input back. The `.map` below them did
+not, so the two cases that reach the list and change **none** of it returned a new
+array claiming something had happened:
+
+- the seed booking already carries a `guestId`. This is not an edge case, it is
+  **every retry** — the `!b.guestId` guard is precisely what makes a held or
+  replayed write safe to re-apply, so the common path through this function on
+  the recovery route was the one that lied;
+- `guestSeed` names a booking no longer in `prev` (a concurrent delete, or a
+  replay on data that no longer holds it).
+
+That is the exact shape v17.14.0 removed from `bookingsAfterAction` and made a
+stated contract — *a no-op returns its INPUT array, not a copy* — surviving in the
+same save path, one function along.
+
+**It was harmless today, and the reason is worth writing down rather than
+trusting.** Both call sites (`buildNext`, `applyBase` in `doSave`) feed the result
+straight into their own `.map`/`.filter`, which rebuild the array regardless, so
+the identity never reached `persist`; and `persist` diffs on CONTENT anyway. It is
+fixed because a helper that cannot answer "did I write anything" makes the next
+caller — one that *does* gate on identity, which is what the contract exists for —
+impossible to write correctly. The mitigation was two layers deep and neither was
+put there for this.
+
+`stamped` is a boolean flag rather than a content compare, unlike
+`bookingsAfterAction`'s `sameBookings`: this pass knows structurally whether it
+wrote, so there is nothing to diff.
+
+**Tests** (`tests/customers.test.js`, +2): the three no-write cases return the
+input by reference, and the write case still returns a new array — both
+directions, because identity that only holds one way silently drops a real write
+in a caller that gates on it. Proven against a sabotaged build (`return out;`),
+which fails the first and passes the second.
+
+### 2 · CT-2B-06 — a legacy block's id was a property of the READ
+
+`sanitizeBlock` mints an `id` on any table block that has none, at both read
+sites. The mint was `genId()`, which answers *what read was this*, not *which
+block is this* — so two reads of one **unchanged** legacy node disagreed about
+every id in it.
+
+`BlockModal` holds the block object it was handed when it opened; `removeBlock`
+filters on `bl.id !== block.id`. A resync landing between the two therefore left
+the modal naming an id that no longer existed anywhere, and Unblock silently did
+nothing. Nothing on screen distinguishes that from a slow write.
+
+The seed is now the block's own **content** — the field set plus an ordinal among
+identical siblings, `bl_<hash>_<n>` — so two reads of an unchanged node agree.
+Three things about the shape:
+
+- **Content, not array position.** An index seed is stable only while nothing is
+  inserted or removed, and this is the one place where the difference is not
+  academic: a stale index that *did* resolve would resolve to a DIFFERENT block,
+  turning a harmless no-op into unblocking the wrong table. A content key either
+  finds the same block or finds none. Pinned by a test that reverses the array.
+- **`addBlock` keeps `genId()`.** It calls `sanitizeBlock(block)` with one
+  argument on a brand-new block, which has no stored identity to derive from —
+  and two new blocks that happen to be identical must still be two blocks. The
+  seed is a second parameter for exactly that reason, and the single-argument
+  behaviour is pinned separately.
+- **The v17.15.2 ordinal is back, narrowly.** CLAUDE.md said "the ordinal
+  machinery is gone", and that is corrected rather than deleted: there it was the
+  IDENTITY of every block, which is what made it wrong; here it only seeds the
+  mint for a block that has no identity of its own. Its old failure mode is
+  benign in this role — when two blocks agree on every field, "the wrong one" and
+  "the right one" are the same block. `reason` is in the key (free staff text),
+  so the separator is an ASCII control character per `undoKey`'s rule, written as
+  the `\u001f` escape and never the raw byte.
+
+This does **not** heal a legacy node — it makes the race harmless instead. That
+matches the finding's own rating: it fails safe and is self-limiting, since the
+first successful `saveBlocks` persists the ids and the node stops being legacy. A
+write-back migration was considered and rejected as disproportionate: it would
+add a write to a read path in `usePersistence`, for a P3.
+
+It also corrects the reasoning CLAUDE.md gave for having no migration — "the
+first add or remove persists every id and the node self-heals". The **remove** is
+the operation a legacy node breaks, so healing depended on the one path that
+could not run.
+
+**Tests** (`tests/booking-logic.test.js`, +6): one unchanged node gives the same
+ids twice; the open-resync-unblock round trip removes the right block and leaves
+the other; a reversed array keeps each block's id; two blocks differing only in
+`reason` stay distinct; a minted id never looks like a `genId()` one and a real
+id is left alone; and the single-argument mint is still random. Four of the six
+fail against a build with the seed removed — the other two pin properties the fix
+must not break, which a random mint also satisfies.
+
+### 3 · CT-2B-07 withdrawn — both predicates are `starts + 1 >= LIMIT`
+
+The entry read: the kitchen-busy chip fires at `starts >= KITCHEN_TABLE_LIMIT`
+while the confirm fires at `starts + 1 >= LIMIT`, so with the limit at 3 and
+exactly two existing starts the dialog appears with no busy chip to explain it —
+on both the booking and the walk-in path.
+
+The `+ 1` is on the line above the comparison, on both surfaces:
+
+```
+BookingFormModal.jsx:474  const kitchenStarts = kitchenLoad ? kitchenLoad.starts + 1 : 1;
+BookingFormModal.jsx:475  const kitchenBusy   = kitchenLoad && kitchenStarts >= KITCHEN_TABLE_LIMIT;
+App.jsx:2203              if (load.starts + 1 >= KITCHEN_TABLE_LIMIT && !confirmKitchen)
+
+WalkinForm.jsx:193        const wKitchenStarts = wKitchenLoad.starts + 1;
+WalkinForm.jsx:195        const wKitchenBusy   = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
+useWalkin.js:152          if (load.starts + 1 >= KITCHEN_TABLE_LIMIT && !confirmKitchen)
+```
+
+The two are the same predicate, and their inputs are the same too — checked
+argument by argument rather than assumed, since a chip and a save handler
+computing the same thing from different data is the defect that would be left if
+they were not. Booking form: both `getKitchenLoad(bookings, <date>, <time>,
+customDur || getDur(size), editId)`. Walk-in: both `getKitchenLoad(bookings,
+todayStr(), wf.time || nowTime(), wf.customDur || getDur(size), null)`; the
+form's `wDate`/`wTime`/`wDur` at `WalkinForm.jsx:72-78` are the same three
+expressions the handler recomputes. The empty-time case agrees as well: the chip
+goes falsy on a null `kitchenLoad`, and `save()` returns to `doSave()` before
+reaching the kitchen branch.
+
+**The third withdrawal in two versions, and it has the same shape as the other
+two** — a finding that names a CONCLUSION rather than an observation. This one
+read one line of a two-line expression; v17.16.3's read a browser-automation
+tree that prints `title` where Chrome computes `contents`, and a dev build whose
+StrictMode double-invokes the effect being measured. In each case the claim was
+true of what was actually examined and false of the app.
+
+Against eight fixed, three withdrawn is a high enough rate that "confirmed" in
+the register is not a fact about the app. `ROADMAP.md`'s stale
+`### The recommendation that outlives the fixes — DONE in v17.16.2` — a shipped
+entry that survived only because it pointed at the crash test's 55% self-rating —
+is replaced in this commit by the pending job that observation implies: re-rate
+the ten remaining findings by the single observation that would settle each,
+before spending a version on any of them. The 55% rating's own condition (extract
+the pure core of `usePersistence.js` so its claims become testable) was met in
+v17.16.2, and the rating lives in the §25 report rather than in this repo.
+
+**No code changed in this commit.**
+
+### 4 · `/code-review` fix — the deterministic mint could still produce ONE id for TWO blocks
+
+Caught in review, in section 2's own fix. The invariant `removeBlock` depends on
+is that **every id in one `sanitizeBlocks` result is distinct**, and a content
+hash does not give it:
+
+- **`hash36` is 32-bit.** Two blocks with DIFFERENT content can share a hash —
+  constructed rather than argued: `reason` "deep clean 149599" and "deep clean
+  312382" on the same table and window both hash to `dqduwy`. The ordinal counted
+  identical CONTENT keys, so each took 1, and the two different blocks came out
+  as one id. That is the v17.15.3 defect — unblocking either drops BOTH —
+  reintroduced by the commit fixing its neighbour.
+- **A minted id can land on a stored one.** The first draft's comment claimed the
+  `bl_` shape "can never collide with a real minted id" because `genId()` output
+  contains no `_`. True of `genId()` ids and false of a `bl_…_n` that `saveBlocks`
+  has since persisted — which is what happens the first time a legacy node
+  heals. An id-less block written beside it later collides.
+
+Both close the same way: the ordinal is now **the first one not already taken**,
+against a `used` set seeded with the ids the node already stores. Identical
+siblings still get `_1`, `_2`, so the common path is unchanged, and determinism
+is untouched — the scan is left-to-right over a stable array.
+
+The general shape is worth keeping: **a derived id needs the distinctness
+invariant asserted directly, not inferred from the derivation.** The hash and the
+ordinal each looked sufficient; what the consumer needs is the property, and the
+only thing that guarantees it is checking.
+
+**Tests** (+3): a mint never collides with a stored id; the constructed hash-
+collision pair gets two ids and removing one leaves the other; and every id in a
+mixed node is distinct. All three fail against the pre-review logic.
+
+**Verification for the version:** `npm run build` + `npm test` (774 tests, 24
+files) + `npm run check:style` + `eslint` (0 errors) after every commit. Main
+bundle 335.97 → 336.49 kB (gzip 91.66 → 91.87, +0.21 kB) — the deterministic
+seed and its comments.
