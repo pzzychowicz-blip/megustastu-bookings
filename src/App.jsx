@@ -41,7 +41,8 @@ import {
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo
+  undoSnapshots, applyUndo,
+  seatedElapsed
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
@@ -266,6 +267,7 @@ const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
+import { todayStr, addDays } from "./lib/day";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -275,7 +277,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"MGT Bookings",
-  version:"17.16.1",
+  version:"17.16.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -802,7 +804,7 @@ function BookingApp({uid}){
   },[setModal]);
   const blockTarget = modalOpen.block || null;
   const setBlockTarget = setModalFns.block;
-  const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
+  const [viewDate, setViewDate] = useState(todayStr());
   const showForm = !!modalOpen.form;
   const setShowForm = setModalFns.form;
   const [form, setForm] = useState(EMPTY_FORM);
@@ -921,6 +923,11 @@ function BookingApp({uid}){
   // current-time read, and the dep arrays of usePersistence + useReminders.
   // Phase D3 (v14.1.10). See ./hooks/useNowMins.js.
   const { nowMins } = useNowMins();
+  // v17.16.2: TODAY, once per render, for everything that has to put `nowMins`
+  // and a booking on one axis (liveBarDur / occupancyEnd / applySeatedShift /
+  // lateMins all take it now). A plain string, so passing it into a React.memo'd
+  // view compares by value and cannot churn the memo.
+  const today = todayStr();
   // ── Optimizer thermostat hook ───────────────────────────────────────────────
   // Auto-off at 15:00 for today's shift; auto-on at new-day-start (before 15:00).
   // Daily-reset refs (autoFlippedRef / autoOnRef) keyed by today's ISO date so
@@ -1066,7 +1073,7 @@ function BookingApp({uid}){
   // changed ref each render). Keyed on [bookings, nowMins]: recomputes on a data
   // change or the 15s tick, stays referentially stable across keystrokes/toggles.
   const liveBookings=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     return syncLiveDurations(bookings,today,nowMins);
   },[bookings,nowMins]);
   const winW=useWinW();
@@ -1423,7 +1430,7 @@ function BookingApp({uid}){
   // v17.1.0 perf: useMemo (was a per-render IIFE) — a fresh object every render
   // would defeat the React.memo on the views it feeds.
   const overlapWarnings=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
     const warnings={};
     const active=bookings.filter(function(b){return b.date===today&&b.status!=="cancelled"&&b.status!=="completed"&&(b.tables||[]).length>0;});
@@ -1455,7 +1462,7 @@ function BookingApp({uid}){
   // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
   // React.memo — cheapness was never the point, identity is).
   const lateMap=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
     const map={};
     bookings.forEach(function(b){
@@ -1495,7 +1502,7 @@ function BookingApp({uid}){
   // Today-only + recomputed per render (nowMins ticks every 15s) — the lateMap
   // pattern; trivially cheap.
   const freeingList=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return EMPTY_ARR;
     return freeingSoon(bookings,today,nowMins,bookingDefaults.freeSoonWindow||15);
   },[bookings,nowMins,viewDate,bookingDefaults]);
@@ -1524,7 +1531,7 @@ function BookingApp({uid}){
   // waits out the post-sleep stale window and re-runs once fresh data arrives.
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const dirty=dirtyDates(bookings,today);
     if(!dirty.length) return;
     let changed=false;
@@ -1562,7 +1569,7 @@ function BookingApp({uid}){
       blocks:tableBlocks,
       autoOptimizer:autoOptimizer,
       nowMins:nowMins,
-      todayStr:new Date().toISOString().slice(0,10),
+      todayStr:todayStr(),
       matchWin:generalSettings.waitMatchWin,
       prev:waitAvailRef.current
     });
@@ -1593,7 +1600,7 @@ function BookingApp({uid}){
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     if(!recurring.enabled||!recurring.rules.length) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const horizonDays=recurring.horizonWeeks*7;
     const existing={};
     bookings.forEach(function(b){ if(b.recurringId&&b.recurringDate) existing[b.recurringId+"|"+b.recurringDate]=true; });
@@ -1676,7 +1683,7 @@ function BookingApp({uid}){
       name:wf.name||"",
       phone:cleanPhoneOf(wf.phone),
       size:Number(wf.size)||2,
-      date:new Date().toISOString().slice(0,10),
+      date:todayStr(),
       prefTime:wf.time||null,
       notes:wf.notes||""
     });
@@ -1721,7 +1728,7 @@ function BookingApp({uid}){
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.href=url;
-      a.download="mgt-backup-"+new Date().toISOString().slice(0,10)+".json";
+      a.download="mgt-backup-"+todayStr()+".json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1896,7 +1903,7 @@ function BookingApp({uid}){
         if(seatingNow&&timeUntouched){
           // Use live-synced bookings so overstaying seated guests' tables are
           // correctly treated as occupied when the overlap guard runs.
-          seatedShift=applySeatedShift(orig,nowMins,liveBookings);
+          seatedShift=applySeatedShift(orig,nowMins,liveBookings,today);
         }
         const needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
         const prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
@@ -1909,7 +1916,12 @@ function BookingApp({uid}){
         // v16.2.0: truncate to the actual span ONLY when the booking was SEATED
         // before this save. A direct Confirmed → Completed edit keeps the form's
         // scheduled duration (mirrors the updateStatus quick-action gate).
-        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        // v17.16.2 (CT-2B-02): was `nowMinsLocal - toMins(f.time)`, which mixes
+        // an axis measured from TODAY's midnight with one measured from the
+        // BOOKING's — so completing a booking dated anything but today clamped to
+        // the 15-minute floor. seatedElapsed projects and caps at that day's
+        // close, so this agrees with what auto-complete would have written.
+        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const actualDur=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(now),now.getHours()*60+now.getMinutes()));saveDur=actualDur;saveCustDur=actualDur;}
         // v17.6.0: record how long they ACTUALLY stayed, so the List card can
         // show it after the visit (booking-logic's stayedMins). Computed for
         // EVERY seated→completed save, including the `f.customDur` case the
@@ -1919,7 +1931,9 @@ function BookingApp({uid}){
         let saveStayed=orig?(Number(orig.stayedMin)||0):0;
         if(f.status==="completed"&&orig&&orig.status==="seated"){
           const nowD=new Date();
-          saveStayed=Math.max(15,(nowD.getHours()*60+nowD.getMinutes())-toMins(f.time));
+          // Same axis fix as the truncation above — the register's "completing
+          // records stayedMin = 15".
+          saveStayed=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(nowD),nowD.getHours()*60+nowD.getMinutes()));
         }
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
@@ -2163,7 +2177,7 @@ function BookingApp({uid}){
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -2272,14 +2286,14 @@ function BookingApp({uid}){
     if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
     const size=src.size||2;
     const s=toMins(src.time);
-    const e=Math.max(occupancyEnd(src,nowMins),s+1);
+    const e=Math.max(occupancyEnd(src,nowMins,today),s+1);
     const blockSlots=getBlockSlots(tableBlocks,src.date);
     const busyBlocked=getBusy(blockSlots,s,e);
     if(busyBlocked.has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
     // Day's other active bookings (completed = free, the v16.0.0 rule) + the
     // tables held by SEATED parties over the span — those are immovable.
     const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
-    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));};
+    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins,today));};
     const seatedOn=new Set();
     dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
     // 1. Candidate table sets at the target, in PURE optimizer order (round 4,
@@ -2332,8 +2346,8 @@ function BookingApp({uid}){
       const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
       const otherSize=other.size||2;
       if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
-        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
-        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
+        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
+        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(blockSlots);
         if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
           // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
           // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
@@ -2581,8 +2595,9 @@ function BookingApp({uid}){
         // scheduled duration unchanged — otherwise the block balloons to hours
         // on the timeline (e.g. completing a 13:00 booking at 21:00 → 8h block).
         if(status==="completed"&&x.status==="seated"){
-          const startMins=toMins(x.time);
-          const actualDur=Math.max(15,nowM-startMins);
+          // v17.16.2 (CT-2B-02): `nowM - toMins(x.time)` mixed axes. A party
+          // seated before midnight and completed after it recorded 15 minutes.
+          const actualDur=Math.max(15,seatedElapsed(x,today,nowM));
           extra.duration=actualDur;
           extra.customDur=actualDur;
           // v17.6.0: stamp the real stay so the List card can show it after the
@@ -2591,7 +2606,7 @@ function BookingApp({uid}){
           extra.stayedMin=actualDur;
         }
         if(status==="seated"&&x.status!=="seated"){
-          const shift=applySeatedShift(x,nowM,b);
+          const shift=applySeatedShift(x,nowM,b,today);
           if(shift){
             extra.time=shift.newTime;
             extra.duration=shift.newDuration;
@@ -2653,8 +2668,8 @@ function BookingApp({uid}){
   // PREV side removes that false positive and keeps the delta bounded to what
   // the action actually moved.
   function undoDelta(prev,post){
-    const todayStr=new Date().toISOString().slice(0,10);
-    return undoSnapshots(syncLiveDurations(prev,todayStr,nowMins),post);
+    const today=todayStr();
+    return undoSnapshots(syncLiveDurations(prev,today,nowMins),post);
   }
   function armUndo(snapshots,primaryId,kind,noShow){
     if(!snapshots||!snapshots.length) return;
@@ -2685,7 +2700,7 @@ function BookingApp({uid}){
       // duration stays correct. If a booking created since the action now
       // collides, the v15.6.1 reconciliation effect resolves it — the same
       // path that handles offline merges.
-      const today=new Date().toISOString().slice(0,10);
+      const today=todayStr();
       return syncLiveDurations(applyUndo(b,snaps),today,nowMins);
     });
     if(ok){
@@ -2808,7 +2823,7 @@ function BookingApp({uid}){
   // currently fits (waitAvail) AND not ✕-dismissed this session. Today-only —
   // a future-date fit isn't operationally urgent (it stays in the panel + badge).
   const waitBannerEntries=useMemo(function(){
-    const todayStr2=new Date().toISOString().slice(0,10);
+    const todayStr2=todayStr();
     return (viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
       .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
@@ -2959,7 +2974,7 @@ function BookingApp({uid}){
   // declaration in a render body is a TDZ ReferenceError that blanks the app
   // while build and lint both pass — CLAUDE.md's gotcha, and this is the second
   // time in this one version that moving a line has been the fix.)
-  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
+  const isViewToday=viewDate===todayStr();
 
   // ── v17.11.0: naming the day, for the two sections that cross dates ────────
   // The strip sits DIRECTLY under the date navigator, so a bare time in it reads
@@ -3034,7 +3049,7 @@ function BookingApp({uid}){
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
     hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:LateIcon,
       title:"Running late",count:Object.keys(lateBannerMap).length,
-      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
+      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} today={today} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
     reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
       title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
@@ -3258,6 +3273,7 @@ function BookingApp({uid}){
   const timelineEl=<TimelineView
     bookings={bookings}
     date={viewDate}
+    today={today}
     onEdit={VA.onEdit}
     onManual={VA.onManual}
     onStatus={VA.onStatus}
@@ -3302,6 +3318,7 @@ function BookingApp({uid}){
   const listEl=<ListView
     bookings={bookings}
     date={viewDate}
+    today={today}
     onEdit={VA.onEdit}
     onStatus={VA.onStatus}
     onDelete={VA.onDelete}
@@ -3387,7 +3404,7 @@ function BookingApp({uid}){
     date={viewDate}
     splitHour={dayShifts.split}
     shiftsEnabled={dayShifts.enabled}
-    isToday={viewDate===new Date().toISOString().slice(0,10)}
+    isToday={viewDate===todayStr()}
     open={summaryOpen}
     freeing={freeingList}
     hoursSig={weekHours}
@@ -3457,6 +3474,7 @@ function BookingApp({uid}){
     onClose={requestCloseManual} />:null}</ModalPresence>;
 
   const walkinModal=<ModalPresence show={showWalkin}>{showWalkin?<WalkinForm
+    today={today}
     draft={walkinForm}
     setDraft={setWalkinForm}
     error={walkinError}
@@ -3574,13 +3592,13 @@ function BookingApp({uid}){
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
+              onClick={function(){goToDate(addDays(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
               ><ChevronLeftIcon size={IC.chrome} /></button><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
+              onClick={function(){goToDate(addDays(viewDate,1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
@@ -3591,8 +3609,8 @@ function BookingApp({uid}){
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
-              onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
+              onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
               Today is visible); the flex:1 Summary sibling absorbs the width change.
@@ -3718,7 +3736,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){setConfirmDel(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -3740,7 +3758,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

@@ -30,6 +30,7 @@ import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
+import { todayStr } from "../lib/day";
 
 export function useWaitlist({ setWriteWarning }){
   const waitlistLoaded=useRef(false);
@@ -69,7 +70,7 @@ export function useWaitlist({ setWriteWarning }){
   // stale ones in). Silent write — an auto-effect, per the write-guard contract.
   useEffect(function(){
     if(!waitlistLoaded.current) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const stale=waitlist.some(function(w){return w&&w.date&&w.date<today;});
     if(!stale) return;
     saveWaitlist(function(prev){return prev.filter(function(w){return w&&(!w.date||w.date>=today);});},true);
@@ -85,7 +86,7 @@ export function useWaitlist({ setWriteWarning }){
       name:name||"",
       phone:phone||"",
       size:Number(size)||2,
-      date:date||new Date().toISOString().slice(0,10),
+      date:date||todayStr(),
       prefTime:prefTime||null,
       notes:notes||"",
       createdAt:Date.now(),

@@ -16621,3 +16621,377 @@ npm run check:style OK
 
 Eleven rules tests fail against the pre-v17.16.1 rules file — the change is
 proven, not asserted.
+
+---
+
+## v17.16.2 — one time axis
+
+**Date:** 2026-08-31 · **Branch:** `fix/v17.16.2-time-axis-write-path` ·
+**Files:** `src/lib/day.js` (new), `tests/day.test.js` (new), `src/App.jsx`
+(version) · **Behavioural change:** none yet — this commit adds the primitives
+the following commits sweep onto.
+
+The third instalment of the v17.15.7 crash-test response, and the first that is
+not a fix in itself. Three of the eighteen open findings are one defect wearing
+three faces: **the app has no single answer to "what day is it", and none at all
+to "how do now and a booking share an axis".**
+
+`nowMins` is minutes since LOCAL midnight of today (`useNowMins`, via
+`getHours()*60+getMinutes()`). `toMins(b.time)` is minutes since midnight of
+**`b.date`**. They are the same number only while `b.date === today`, and every
+`nowMins - toMins(b.time)` in the codebase — there are many — silently assumed
+they always were.
+
+### 1 · `src/lib/day.js`
+
+Three functions, and the file imports **nothing**. That is structural rather than
+tidy: `constants.js` needs `todayStr()` for `EMPTY_FORM`, and `booking-logic.js`
+imports `constants.js`, so anything imported here could close that loop. A helper
+needing a live binding belongs in `booking-logic.js` instead.
+
+- **`todayStr(now?)`** — today in the LOCAL timezone, replacing 44 copies of
+  `new Date().toISOString().slice(0,10)`, which answers the question in **UTC**.
+- **`dayDiff(from, to)`** — whole days between two date-only strings.
+- **`nowOn(dateStr, today, nowMins)`** — now, in minutes since `dateStr`'s
+  midnight. The one axis on which it may be compared with `toMins(b.time)`.
+
+`nowOn` is not invented here. **Exactly one function in the repo already got this
+right** — `pastCloseMins`, module-private inside `usePersistence.js`, which
+projects with `dayDiff*1440 + nowMins`. It was private because the file it lives
+in has never been executed by a test, which is the same sentence as §7 of the
+crash-test hand-off. This makes the expression public; the later commits make the
+file testable.
+
+### 2 · Why the UTC/local split is seasonal, and why that matters
+
+Me Gustas Tú is in the Canaries: **WEST (UTC+1) from late March to late October,
+WET (UTC+0) the rest of the year.** So the app disagreed with the wall clock for
+the first hour of every local day for eight months a year, and agreed perfectly
+for the other four — the shape of a defect that survives years of use unreported.
+Measured on the dev machine at `GMT+0100`: at 23:05 local it agrees, and 55
+minutes later it would not have.
+
+### 3 · The distinction the sweep must not blur
+
+The app's other UTC date handling is **correct and stays**. A date-only string
+parses as UTC midnight, so `new Date(dateStr).getUTCDay()` is the real weekday
+(ten sites), and `Date.parse` on two such strings is an exact multiple of
+86400000 — which is precisely what makes `dayDiff` immune to DST, where local
+midnights would make one spring day 23 hours and round to zero. Pinned in both
+directions against the 2026 EU transitions. Only deriving today from the current
+**instant** was ever wrong.
+
+### 4 · Verification
+
+`tests/day.test.js`, **14 tests**, TZ-deterministic: they set `process.env.TZ`
+(Node honours it at runtime) rather than passing or failing by machine, because
+this whole class of defect exists only in certain zones in certain months, and a
+TZ-agnostic test would be testing nothing.
+
+Both halves proven against a sabotaged build rather than asserted: reverting
+`todayStr` to `toISOString().slice(0,10)` fails the two divergence cases, and
+dropping `nowOn`'s day term fails three including the CT-2B-01 reconstruction.
+
+### 5 · CT-2B-03 — the sweep (commit 2/4)
+
+**Files:** 17 (`src/App.jsx` ×19 sites, `useWalkin` ×4, `useReminders` ×3,
+`booking-logic` / `useWaitlist` / `usePersistence` / `useKeyboardShortcuts` /
+`useAutoOptimizer` ×2 each, and one apiece in `constants`, `reminders`,
+`useOperatingHours`, `TimelineView`, `PlanView`, `WalkinForm`, `WeekView`,
+`ReminderEditor`, `LayoutSettings`) · **Behavioural change:** "today" is now the
+LOCAL date everywhere it is derived from the current instant.
+
+`constants.js` gains its **first ever import** to do it. That is safe only
+because `day.js` imports nothing — the property was chosen for exactly this, and
+must not be given away later.
+
+Two sites the sweep's own regex could not see, both found by widening it
+afterwards rather than by trusting the count:
+
+- **`src/lib/reminders.js`** spelled it `var now=new Date();var todayStr=now.toISOString()…`,
+  and then read `now.getHours()` two lines below. A UTC date and a local clock
+  compared inside one function — CT-2B-03 in miniature, in the file the register
+  never named. A once-reminder for the true today skipped the past-times check
+  entirely for that hour.
+- **The 45th match was `day.js`'s own comment**, which quotes the expression it
+  replaced. The repo's recorded "prose that names the thing a regex hunts for is
+  indistinguishable from the thing" trap (`tests/csp.test.js`, v17.15.1), walked
+  into again by the commit that removes the thing.
+
+`useOperatingHours`'s `const TODAY = () => …` was left a bare alias by the sweep
+and is gone; its three call sites read `todayStr()` directly.
+
+### 6 · The sweep created three runtime crashes, and lint caught two
+
+`PlanView`, `ReminderEditor` and `App.jsx` each declared `const todayStr = <the
+old expression>`. Substituting the call produced **`const todayStr = todayStr();`**
+— a TDZ self-reference that throws `Cannot access 'todayStr' before
+initialization` the moment the component renders. `npm run build` passed, `npm
+test` passed (698), and the app was dead in two of its three views.
+
+`no-unused-vars` flagged the first two, because the shadowed import was then
+unused in those files. **It could not flag the third**: `App.jsx` uses the import
+at eighteen other sites, so the import was legitimately used and the self-
+reference was invisible to every gate the repo has. It was found by grepping for
+the shape (`(const|let|var) todayStr =`) after the first two appeared — the
+lesson being that two instances of a mechanical error mean you look for the
+third, rather than fixing the two the tool named.
+
+This is the documented "a `const` used above its declaration blanks the whole
+app, and lint and build both pass" gotcha, reached from a new direction: not by
+moving a declaration, but by a rename colliding with one.
+
+Verified live rather than argued: `npm run dev` on DEV Firebase, all three
+affected surfaces rendered (Timeline 505 bookings, Plan's floor grid, the New
+reminder editor), console clean, and the reminder date field's `min` reading
+`2026-08-31` from the new helper. Build 335.17 kB / 91.36 kB gz (−1.25 kB raw:
+44 long expressions became one call). Lint back at the exact standing baseline,
+**71 problems, 0 errors**.
+
+### 7 · CT-2B-01 + CT-2B-02 — the shared axis (commit 3/4)
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `src/hooks/usePersistence.js`,
+`TimelineView`, `ListView`, `LateBanner`, `WalkinForm`,
+`tests/booking-logic.test.js` · **Behavioural change:** yes, after midnight and
+on any past date · **716 tests** (+18).
+
+Seven functions took a bare `nowMins` and compared it against `toMins(b.time)`.
+Four now take `today` as well (`liveBarDur`, `occupancyEnd`, `applySeatedShift`,
+`lateMins` — 14 call sites); three already had it and were using it as a FILTER
+rather than as an axis (`lateState`, `freeingSoon`, `syncLiveDurations`).
+
+`pastCloseMins` moved out of `usePersistence` into `booking-logic.js`, which is
+the point of the whole version: the one function that was already right stops
+being private to the one file no test can reach.
+
+**`lateState` deliberately keeps its `b.date !== today` filter.** The asymmetry
+with `freeingSoon`, which loses its, is principled: `freeingSoon` is
+SELF-BOUNDING (`0 < inMin <= win`), so a stale seated booking falls out on its
+own, while "late" is unbounded backwards and a booking from a fortnight ago would
+read "20160 min late" for ever. Widening it correctly means deciding how long
+lateness stays interesting, which is a product decision and not a bug fix.
+
+### 8 · The bound had to be a CAP, and a test is what said so
+
+The first version guarded `liveBarDur` and `syncLiveDurations` with
+`pastCloseMins(...) === null` — live only until that day's close. It made an
+existing test **time-dependent**: `a seated party past its duration is a change,
+not a no-op` passes before 22:00 and fails after it, and the suite was being run
+at 23:36.
+
+That is the right complaint. Skipping makes the figure jump back to the stored
+duration the instant close passes; **capping** at close matches auto-complete's
+own `closeMins - toMins(b.time)` exactly, so the live number and the frozen one
+meet instead of stepping. `seatedElapsed(b, today, nowM)` is that cap, and it is
+what makes dropping the old `b.date === today` filter safe — without it a booking
+left seated three weeks ago has a true elapsed time of 30240 minutes, which
+`syncLiveDurations` would have written to the database as the party's duration.
+
+### 9 · Three defects the diff did not contain
+
+- **`applySeatedShift` cannot represent a past-midnight start.** A start is
+  stored as `HH:MM` against the booking's own date and `toTime` wraps modulo 24,
+  so shifting a 23:30 booking to 00:15 would write "00:15" onto YESTERDAY — a
+  full day into the past. Fixing the axis alone would have replaced a 24-hour
+  duration with a 24-hour displacement. It refuses instead, keeping the scheduled
+  time, which is imprecise rather than false. The plan's `newDuration` clamp is
+  kept as the second line of defence at the one point this reaches the database.
+- **The auto-extend effect's dedupe key was narrower than its own pass.** The
+  pass now keys on the booking's close; the key still filtered `b.date===today`,
+  so under a 24/25 close a yesterday-only extension produced an EMPTY key that
+  never changed and every tick after the first was suppressed. The repo's own
+  v17.10.2 lesson, one file over.
+- **Three completion paths recorded a 15-minute visit.** `doSave`'s truncation,
+  `doSave`'s `stayedMin` stamp and `updateStatus`'s all computed
+  `now - toMins(b.time)` with no projection — the register's "completing records
+  `stayedMin = 15`". Found by seating a booking in DEV and watching what happened
+  next, not by reading the diff.
+
+`ListView`'s `elapsedMin` turned out to be `liveBarDur`'s seated branch **byte for
+byte**, so it reuses it rather than becoming a fourth copy of the same arithmetic
+(and inherits the cap for free). The file header's note that `liveDur` differs
+still holds — that is the end-time pinning on the next line, not this.
+
+Two parameters named `todayStr` in `booking-logic.js` were renamed to `today`:
+they shadow the newly-imported function of that name. Harmless as written, and
+exactly the shape that produced three crashes one commit earlier.
+
+### 10 · Verification
+
+18 new tests, all reachable only under a past-midnight close (24/25), which
+Settings permits and Me Gustas Tú does not currently use — the hours are set
+directly and restored, on the TURN_BUFFER precedent in the same file. Reverting
+the projections fails **7** of them across all five functions.
+
+Live on DEV: 505 bookings, both views render, six timeline blocks, no `NaN`
+anywhere in the document, console clean, and `lateMins` producing real figures
+(520 / 400 / 280 / 160) through the new prop. 716 tests, 0 lint errors,
+335.61 kB / 91.49 kB gz.
+
+### 11 · The write path under test (commit 4/4)
+
+**Files:** `src/lib/write-path.js` (new), `tests/write-path.test.js` (new),
+`src/hooks/usePersistence.js` (753 → 705 lines) · **Behavioural change:** none
+intended; the bodies moved verbatim and were then parameterised ·
+**747 tests** (+31).
+
+§7 of the crash-test hand-off, and the reason it outlives the fixes: **737 lines
+that decide whether a booking reaches the server had never been executed by a
+test.** Everything the report says about the retry queue, the stale gate, the
+resync and the dedupe window was established by *reading the code* — which is
+also why it rates its own confidence at 55%. Two sessions reached this
+independently, 2A because the retry logic could not be attacked from outside and
+2B because `pastCloseMins` was locked in the same file.
+
+Moved: `contentKey`, `bookingChanged`, `stampForWrite`, `buildPatch`,
+`patchSignature`, `isDuplicatePatch`, `isStaleGap`, `retryDecision`, and the
+`STALE_GAP_MS` / `MAX_RETRIES` / `DEDUPE_WINDOW_MS` constants.
+
+**The monotonic stamp is THREADED, not hidden.** `buildPatch(prev, computed,
+lastStamp, nowMs)` returns `{patch, lastStamp}`, so the ref stays in the hook
+where refs belong and the arithmetic becomes something a test can drive. That
+change is what surfaced a property the old closure made invisible: **every child
+of one patch gets a distinct, ascending stamp**, which cannot come from the wall
+clock (they share a millisecond) and only ever came from the counter.
+
+**What deliberately did NOT move:** the refs, the listeners, the effects, every
+`setState`. Restructuring the write path was explicitly ruled out for this
+version — it already carries three behavioural fixes, and a bisect has to be able
+to tell them apart. Rewriting the write path is also how this repo has lost
+production data twice.
+
+### 12 · What the tests pin, and what a wrong premise cost
+
+31 tests, and the ones worth naming assert what four major versions of comments
+have claimed: the stamp clears BOTH bars (the device counter, for StrictMode;
+the booking's stored value, for clock skew); `baseUpdatedAt` carries the stored
+stamp on an update and **0 on a create**, which is the v16.0.0 CAS that closed
+the 2026-07-05 incident and which v17.16.1's rules now require explicitly; an
+empty diff produces no write; a deletion becomes `{id: null}`; the dedupe window
+admits a genuine change and refuses a byte-identical redispatch; the retry cap
+terminates.
+
+Proven against a sabotaged build, three ways: dropping the device-counter bar
+fails 4, always claiming CAS base 0 — the 2026-07-05 hole exactly — fails 2, and
+an off-by-one retry cap fails 2.
+
+One test was wrong rather than the code, and it is the useful one. "The signature
+is stable across the fresh stamps" first drove two patches with counters of 0 and
+50 against a clock of 1000 — the clock wins both times, so the stamps were
+*equal* and the premise never held. The real StrictMode case is the second invoke
+sharing the millisecond with a counter already advanced PAST the clock. Left in
+the comment, because a test that cannot fail for its stated reason is worse than
+no test.
+
+### 13 · Verification
+
+Live end-to-end on DEV, which is the only thing that proves an extracted write
+path still writes: a new booking created through the form, **505 → 506 bookings
+after a full reload**, no refusal banner, console clean. Local state alone would
+have looked identical before the reload.
+
+`npm run build` 335.96 kB / 91.64 kB gz · `npm test` **747 passed (24 files)** ·
+`npm run lint` 0 errors, 71 warnings (the standing baseline) · `npm run
+check:style` OK.
+
+### 14 · The day the Next-day button did nothing (commit 5/5)
+
+**Files:** `src/lib/day.js`, `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/WeekView.jsx`, `tests/day.test.js` · **Behavioural change:** date
+navigation works on the spring-forward day · **752 tests** (+5).
+
+**Not from the crash-test register.** Found while widening the CT-2B-03 sweep's
+regex afterwards, because the four broken sites spell the same mistake a
+different way — which is the argument for widening it rather than trusting the
+count of 44.
+
+The two header arrows and the two arrow KEYS hand-rolled
+`new Date(viewDate); d.setDate(d.getDate() + n)`. `new Date(dateStr)` is UTC
+midnight; `setDate`/`getDate` read and write LOCAL components. On the
+spring-forward day the local day is 23 hours, so +1 local day lands BEFORE the
+next UTC midnight and `toISOString().slice(0,10)` reads back the day you started
+on. Measured in `Atlantic/Canary`: **`2026-03-29 → next` returned `2026-03-29`.**
+Forward navigation was dead for that day, once a year.
+
+**The correct implementation already existed and was the hidden one.**
+`WeekView.jsx` had a private `addDays` doing it in UTC throughout; it now lives
+in `day.js` and WeekView imports it. Everything already using `setUTCDate` — the
+recurring-occurrence generator, every WeekView grid step — was checked and is
+unaffected, so no data path was ever wrong. The **public behaviour was a broken
+hand-rolled copy of a correct private helper**, which is the same shape as
+`hourLabel`/`cutoffLabel` in reverse.
+
+Five tests, including the naive expression asserted alongside the fix so the
+difference is visible, and a property test stepping all 365 days of a DST year
+in both directions: a step must always move, and must round-trip. Verified live
+on DEV — Next day took 2026-03-29 → 2026-03-30, and ← took it back.
+
+Worth recording: the first live attempt pressed → and the date did **not** move,
+which looked like the fix failing. Focus was still in the date input, so
+`isTyping` had correctly swallowed the key. The app was right and the test of it
+was wrong — the same shape as the write-path test whose premise never held.
+
+### 15 · Docs
+
+`CLAUDE.md`: `lib/day.js` and `lib/write-path.js` in the file-structure block;
+`booking-logic.js` gains the shared-axis paragraph (`pastCloseMins` moved in,
+`seatedElapsed`, why `lateState` keeps its filter while `freeingSoon` loses its,
+why `applySeatedShift` refuses rather than shifts); `usePersistence.js` records
+753 → 705 and where its core went; the test count 684 → **752** across 24 files.
+
+One new **Gotchas** row, which is the rule the whole version encodes:
+*`nowMins` and `b.time` are only the same axis when `b.date === today`* — with
+the two traps beyond the arithmetic, that dropping a date filter needs a BOUND
+and that some values (a start time) cannot be re-expressed on another day's axis
+at all.
+
+`ROADMAP.md`: CT-2B-01 / CT-2B-02 / CT-2B-03 deleted; the §7 extraction marked
+DONE with the note that **the crash test's 55% confidence rating is now the thing
+to revisit**, since having the write path under test was the condition it set;
+`EMPTY_FORM.date`'s module-load evaluation added as a new P3 (not reachable in a
+saved booking — all three `openForm` sites set `date` — so it is a tidy-up, not a
+bug). Header count four → seven of twenty-two.
+
+`DESIGN.md` and `GLOSSARY.md`: no change. Nothing visual, and no new
+user-visible surface or control to name.
+
+### 16 · `/code-review` — two regressions the axis fix introduced
+
+Both found by reading the diff, neither by a failing test, and **both the same
+shape: a guard that used to hold for an INCIDENTAL reason stopped holding once
+`now` was projected.** That is the risk this kind of change carries, and it is
+why the review mattered more than the 752 passing tests did.
+
+**1 · `applySeatedShift` wrote a negative time (data corruption).** The new guard
+bounded only the upper end (`nm >= 1440`). Seating a booking dated **tomorrow**
+projects `now` NEGATIVE: at 23:00 today, `nowOn(tomorrow, today, 1380)` = −60,
+which cleared `nm === scheduledStart`, cleared `nm >= scheduledEnd` (−60 >= 870
+is false) and produced `newDuration` 930, inside the clamp. `toTime(-60)` is
+**`"-1:00"`** — written to the database as the booking's time, where
+`toMins("-1:00")` is −60 and the block renders off-grid. Confirmed by direct
+call, not argued.
+
+The pre-v17.16.2 code was safe here **by accident**: its `nowM >= scheduledEnd`
+test fired on the UNPROJECTED 1380. So the axis fix removed a protection nothing
+in the file pointed at. The guard is now `nm < 0 || nm >= 1440` — a shift must
+land inside the booking's own day, because that is the only day its `HH:MM` can
+mean.
+
+**2 · `syncLiveDurations` rewrote historical records.** Dropping
+`b.date === today` was correct for the midnight case and wrong for every day
+before it: a booking left `seated` three weeks ago (a device offline at closing
+time) has a capped elapsed of 540 against a stored 90, so **the next unrelated
+save emitted a patch child for it** — `bookingsAfterAction` runs
+`syncLiveDurations` on EVERY save. It also grew the atomic multi-path `update()`,
+where one malformed historical booking can reject an otherwise valid save (the
+documented CT-2A-03 hazard).
+
+**The cap bounded the VALUE; it never authorised the WRITE** — that distinction
+is the fix. `seatedIsLive(b,today,nowM)` = today's booking, or another day's
+whose close has not passed, which is exactly what a 24/25 close means and all
+the midnight fix ever needed. `liveBarDur` shares the test, so the bar drawn and
+the duration stored cannot disagree.
+
+8 tests, both proven against a sabotaged build: restoring the upper-bound-only
+guard fails the future-booking case, dropping the liveness test fails the
+historical-write case. **760 tests**, 0 lint errors, 335.90 kB / 91.63 kB gz.

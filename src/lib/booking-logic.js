@@ -27,6 +27,7 @@ import {
   DUR_TIERS,
   TURN_BUFFER
 } from "./constants";
+import { todayStr, nowOn } from "./day";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -44,34 +45,41 @@ export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++
 // changes, a booking near midnight compared against a post-rollover `nowMins`
 // would compute a large negative `lateBy` (harmlessly → null here, but any future
 // consumer of the raw minutes must account for it).
-export function lateState(b,todayStr,nowMins,cfg){
+export function lateState(b,today,nowMins,cfg){
   if(!cfg||!cfg.lateEnabled) return null;
   // v17.0.0: PENDING flags late too (Patryk-confirmed "same as confirmed") —
   // an unconfirmed request past its time needs staff attention just the same.
-  if(!b||(b.status!=="confirmed"&&b.status!=="pending")||b.date!==todayStr) return null;
-  var lateBy=lateMins(b,nowMins);
+  if(!b||(b.status!=="confirmed"&&b.status!=="pending")||b.date!==today) return null;
+  var lateBy=lateMins(b,nowMins,today);
   if(lateBy>=cfg.lateNoShowMin) return "noshow";
   if(lateBy>=cfg.lateWarnMin) return "warn";
   return null;
 }
 // v16.1.1: minutes a booking is past its start time. Single source for the
 // "N min late" arithmetic (was duplicated in the App banner + the ListView tag).
-export function lateMins(b,nowMins){return nowMins-toMins(b.time);}
+export function lateMins(b,nowMins,today){return nowOn(b.date,today,nowMins)-toMins(b.time);}
 // v16.3.0: table-turn prediction. Which of TODAY'S SEATED bookings are about to
 // free their table? Returns [{id, name, tables, inMin}] for seated bookings whose
 // scheduled end (start + duration) is 0 < end−now ≤ windowMin (default 15),
 // sorted soonest-first. OVERSTAYERS (end already passed) are excluded — the
 // overlap-warning machinery covers them, and "free in ~N" would be a lie for an
 // open-ended overstay. cfg-gated by the caller (freeSoonEnabled). Same
-// no-midnight-wraparound assumption as lateState (bookings don't start past
-// midnight, so an end up to ~01:30 stays same-side of `nowMins`).
-export function freeingSoon(bookings,todayStr,nowMins,windowMin){
+// v17.16.2 (CT-2B-02): the old note here claimed a no-midnight-wraparound
+// assumption "same as lateState", and it was false in a way worth keeping.
+// An end up to ~01:30 does stay same-side of the BOOKING's own midnight — and
+// that says nothing about `nowMins`, which after midnight is measured from the
+// NEXT day's. So a party seated 23:30-00:30 was never offered as freeing soon.
+// `nowOn` puts both on the booking's ruler. The date filter is gone rather than
+// replaced because this function is SELF-BOUNDING (0 < inMin <= win), so a stale
+// seated booking falls out on its own — which is exactly why lateState, which is
+// unbounded backwards, keeps its filter.
+export function freeingSoon(bookings,today,nowMins,windowMin){
   var win=windowMin||15;
   var out=[];
   (bookings||[]).forEach(function(b){
-    if(!b||b.status!=="seated"||b.date!==todayStr) return;
+    if(!b||b.status!=="seated") return;
     var end=toMins(b.time)+(b.duration||90);
-    var inMin=end-nowMins;
+    var inMin=end-nowOn(b.date,today,nowMins);
     if(inMin>0&&inMin<=win) out.push({id:b.id,name:b.name,tables:(b.tables||[]).slice(),inMin:inMin});
   });
   out.sort(function(a,b){return a.inMin-b.inMin;});
@@ -149,6 +157,59 @@ export function stayedMins(b){
 }
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
+// v17.16.2: MOVED here from usePersistence.js, where it had been module-private
+// since v15.1.0 — the one function in the repo that ever put "now" and a booking
+// on a common axis, locked inside the one file no test could reach. It lives
+// here because it needs the `hoursFor` LIVE BINDING, which day.js must not take
+// (day.js imports nothing so constants.js may import it; see that file's header).
+//
+// Has `dateStr`'s closing moment already passed? A booking's closing moment is
+// its OWN date's per-weekday close (may be 24/25, i.e. past midnight) in minutes
+// since that date's midnight; `nowOn` puts now on the same ruler. Returns the
+// close-in-minutes when it has passed, else null — including for a future date,
+// whose projected `now` is negative and so can never reach a close of 6..25.
+//
+// This is now also the LIVENESS guard for the two functions that grow a seated
+// booking (`liveBarDur`, `syncLiveDurations`). It replaced a `b.date === today`
+// filter in both, and replacing it with nothing would have been a runaway: a
+// booking left `seated` from three weeks ago has a real elapsed time of 30240
+// minutes, which the old filter hid and a bare axis fix would have written to
+// the database as its duration.
+// v17.16.2: minutes a SEATED party has been at the table, on the booking's own
+// axis, capped at that day's close.
+//
+// The cap is the bound that makes dropping the old `b.date === today` filter
+// safe, and it is a CAP rather than a skip for a reason found by a test: skipping
+// made the figure jump back to the stored duration the moment close passed, and
+// made an existing test time-dependent (it fails after 22:00 and passes before).
+// Capping matches auto-complete's own formula exactly, so the live number and
+// the frozen one agree at the boundary instead of stepping. A booking left
+// seated three weeks ago reads its own day's full service, once, and then stops
+// — not 30240 minutes and rising.
+// v17.16.2 (/code-review): is this seated booking still LIVE — i.e. may its
+// duration grow? Today's, always (auto-complete owns it after close, and the cap
+// below keeps the figure honest in the gap). Another day's, only while that day
+// is still open, which is what a 24/25 close means and what the midnight fix
+// exists for.
+//
+// Dropping `b.date === today` without this let `syncLiveDurations` rewrite
+// HISTORICAL records: a booking left seated three weeks ago has a capped elapsed
+// of 540 against a stored 90, so the next unrelated save emitted a patch child
+// for it. The cap bounds the VALUE; it never authorised the WRITE. It also grew
+// the atomic multi-path update, where one malformed historical booking can
+// reject an otherwise valid save.
+export function seatedIsLive(b,today,nowM){
+  return b.date===today||pastCloseMins(b.date,today,nowM)===null;
+}
+export function seatedElapsed(b,today,nowM){
+  var closeMins=hoursFor(b.date).close*60;
+  return Math.min(nowOn(b.date,today,nowM),closeMins)-toMins(b.time);
+}
+export function pastCloseMins(dateStr,todayS,nowMins){
+  var nm=nowOn(dateStr,todayS,nowMins);
+  var closeMins=hoursFor(dateStr).close*60;
+  return nm>=closeMins?closeMins:null;
+}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 // ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
 // The separation between bookings (Settings → General; off by default, so
@@ -311,9 +372,16 @@ export function getBusy(slots,s,e){var busy=new Set();slots.forEach(function(sl)
 // checks, which is exactly the placement scope. The overstay branch returns
 // nowM+1+buffer for the same reason: the party is still at the table, so the
 // turnaround has not started yet.
-export function occupancyEnd(b,nowM){
+// v17.16.2 (CT-2B-02): `nowM` arrives on TODAY's axis and every value it is
+// compared with here is on `b.date`'s, so after midnight the overstay branch
+// could not fire — a party seated 23:30 still at the table at 00:30 had
+// `e`(1470) > `nowM`(30), the slot read FREE, and canAssign offered their table
+// to a walk-in. `nowOn` is the whole fix; the returned minute stays on b.date's
+// axis, which is what the callers' `s`/`e` are built from.
+export function occupancyEnd(b,nowM,today){
   var e=bookEnd(b);
-  if(b.status==="seated"&&e<=nowM) return padEnd(nowM+1);
+  var nm=nowOn(b.date,today,nowM);
+  if(b.status==="seated"&&e<=nm) return padEnd(nm+1);
   return e;
 }
 export function canAssign(ids,slots,s,e){
@@ -666,14 +734,20 @@ export function applyOpt(bookings,date,blocks){
 // When the auto-optimizer is OFF (after 15:00 today), we do not reshuffle other
 // bookings. We only find a free slot for the booking being added/edited.
 export function optimizerActiveFor(date,autoOptimizerState){
-  var today=new Date().toISOString().slice(0,10);
+  var today=todayStr();
   if(date===today&&autoOptimizerState===false) return false;
   return true;
 }
+// v17.16.2 (CT-2B-02): was `b.date===today`, which no-op'd across midnight so a
+// party seated 23:30 stopped accruing at 00:00. The filter is replaced by, not
+// merely removed from, the liveness test: `pastCloseMins === null` means this
+// booking's own day is still open, which covers yesterday's party under a 24/25
+// close AND still excludes one left seated three weeks ago, whose true elapsed
+// time is 30240 minutes and would otherwise be written as its duration.
 export function syncLiveDurations(bookings,today,nowM){
   return bookings.map(function(b){
-    if(b.date===today&&b.status==="seated"){
-      var elapsed=nowM-toMins(b.time);
+    if(b.status==="seated"&&seatedIsLive(b,today,nowM)){
+      var elapsed=seatedElapsed(b,today,nowM);
       if(elapsed>(b.duration||90)) return Object.assign({},b,{duration:elapsed,customDur:elapsed});
     }
     return b;
@@ -690,13 +764,34 @@ export function syncLiveDurations(bookings,today,nowM){
 //   (3) shifted window [now, scheduledEnd] would overlap an active booking on
 //       any shared table (per user rule 3a: don't shift).
 // Otherwise returns {newTime, newDuration, oldTime, direction}.
-export function applySeatedShift(booking,nowM,allBookings){
+// v17.16.2 (CT-2B-01): `nowM` arrived on TODAY's axis while every value below is
+// on `booking.date`'s. Seating a 23:30 booking at 00:30 gave nowM=30 against a
+// scheduledEnd of 1470, so the `nowM>=scheduledEnd` guard did not fire and this
+// returned newDuration = 1470-30 = **1440** — a 24-hour reservation, written to
+// the database. Its conflict scan excludes completed bookings, so nothing at
+// 00:30 stood in the way.
+export function applySeatedShift(booking,nowM,allBookings,today){
   if(!booking||!booking.time) return null;
   var scheduledStart=toMins(booking.time);
   var scheduledDur=booking.duration||90;
   var scheduledEnd=scheduledStart+scheduledDur;
-  if(nowM===scheduledStart) return null;
-  if(nowM>=scheduledEnd) return null;
+  var nm=nowOn(booking.date,today,nowM);
+  // A start time is stored as HH:MM against the booking's own date, so a shift
+  // to a moment OUTSIDE that date cannot be REPRESENTED: toTime wraps modulo 24,
+  // and `now` must therefore fall inside [0, 1440) of the booking's own day.
+  //
+  // BOTH ends are load-bearing (/code-review). Past the end: writing "00:15"
+  // onto yesterday's booking moves it a full day into the past. Before the
+  // start: seating a booking dated TOMORROW projects `now` NEGATIVE, and the
+  // first version of this guard only checked the upper bound — so seating a
+  // 13:00 booking on tomorrow's date at 23:00 today gave nm = -60, cleared
+  // every remaining guard (newDuration 930 is inside the clamp), and wrote
+  // `toTime(-60)` = **"-1:00"** as the booking's time. The pre-v17.16.2 code was
+  // safe here by accident: its `nowM >= scheduledEnd` test fired on the
+  // unprojected 1380, so the axis fix REMOVED that protection.
+  if(!Number.isFinite(nm)||nm<0||nm>=1440) return null;
+  if(nm===scheduledStart) return null;
+  if(nm>=scheduledEnd) return null;
   var myTables=booking.tables||[];
   if(myTables.length>0){
     var conflict=allBookings.some(function(other){
@@ -708,11 +803,17 @@ export function applySeatedShift(booking,nowM,allBookings){
       if(!shared) return false;
       var os=toMins(other.time);
       var oe=os+(other.duration||90);
-      return overlaps(nowM,scheduledEnd,os,oe);
+      return overlaps(nm,scheduledEnd,os,oe);
     });
     if(conflict) return null;
   }
-  return {newTime:toTime(nowM),newDuration:scheduledEnd-nowM,oldTime:booking.time,direction:nowM<scheduledStart?"early":"late"};
+  var newDuration=scheduledEnd-nm;
+  // Second line of defence, at the one point this reaches the database. The
+  // shared axis above makes it unreachable; a duration the schedule cannot mean
+  // should still be refused where it would be written, not only where it is
+  // computed.
+  if(!Number.isFinite(newDuration)||newDuration<=0||newDuration>1440) return null;
+  return {newTime:toTime(nm),newDuration:newDuration,oldTime:booking.time,direction:nm<scheduledStart?"early":"late"};
 }
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
@@ -768,7 +869,7 @@ function sameBookings(a,b){
 // as immutable — none of them mutates it today (all read via map/filter/find),
 // and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
-  var today=new Date().toISOString().slice(0,10);
+  var today=todayStr();
   var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
   var synced=syncLiveDurations(updatedBks,today,nowM);
   var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);
@@ -1005,10 +1106,18 @@ export function pct(mins){var totalMins=(GRID_CLOSE-OPEN)*60;return ((mins-OPEN*
 // `nowMins`. NB: ListView's similarly-shaped inline `liveDur` has different
 // semantics (pinned-to-plan end-time) and is intentionally NOT consolidated
 // here — that lives in ListView and is a separate concern.
-export function liveBarDur(b,nowMins){
-  if(b&&b.status==="seated"){
-    var elapsed=nowMins-toMins(b.time);
-    return Math.max(15,elapsed);
+// v17.16.2 (CT-2B-02): `nowMins-toMins(b.time)` mixed axes, so a seated booking
+// on ANY past date measured negative and clamped to the 15-minute floor — a
+// party an hour into their meal drawn as a fifteen-minute block. Bounded by
+// pastCloseMins for syncLiveDurations' reason: past its own day's close a
+// booking shows its STORED duration, which auto-complete has already frozen at
+// the close, rather than growing without limit.
+export function liveBarDur(b,nowMins,today){
+  // Same liveness test as syncLiveDurations, so the bar drawn and the duration
+  // stored can never disagree: a booking the writer will not touch shows the
+  // value the writer left.
+  if(b&&b.status==="seated"&&seatedIsLive(b,today,nowMins)){
+    return Math.max(15,seatedElapsed(b,today,nowMins));
   }
   return b?b.duration:0;
 }

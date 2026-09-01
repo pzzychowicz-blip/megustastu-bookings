@@ -25,7 +25,7 @@ import { lateMins } from "../lib/booking-logic";
 import { BTN, T, FW, IC, H } from "../lib/constants";
 import { CloseIcon, NoShowIcon } from "./Icons";
 
-export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, }) {
+export function LateBanner({ lateMap, bookings, nowMins, today = "", onNoShow, onDismiss, }) {
   // v17.0.0 review fix #6: the collapsible/Reveal scaffolding moved to the
   // shared BannerRows shell (also used by OverlapBanner); this file supplies
   // only the row content. The No-show button (offerNoShow = lateMap[id]===
@@ -51,7 +51,7 @@ export function LateBanner({ lateMap, bookings, nowMins, onNoShow, onDismiss, })
     const who = b.name || "(no name)";
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
-        <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins) + " min late"}</span>
+        <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins, today) + " min late"}</span>
         <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
           <button
             onClick={function () { onNoShow(id); }}

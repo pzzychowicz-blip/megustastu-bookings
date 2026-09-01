@@ -40,6 +40,7 @@ import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
 import { mkBtn, Reveal, SBadge } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
+import { todayStr } from "../lib/day";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
 const FREE_FILL = "var(--bg-card)";
@@ -78,8 +79,8 @@ export const PlanView = memo(function PlanView({
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
   const h = hoursFor(date);
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const isToday = date === todayStr;
+  const today = todayStr();
+  const isToday = date === today;
   const openM = (h.closed ? 13 : h.open) * 60;
   // v17.5.0: the upper bound is now GRID_CLOSE (one hour past closing), not
   // CLOSE — matching the Timeline axis exactly, which is what lets TimeAxis

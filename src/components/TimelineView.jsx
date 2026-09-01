@@ -177,8 +177,8 @@ function BlockFlag({ title, children }) {
   );
 }
 
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
-  const d = liveBarDur(b, nowMins);
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
+  const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
   const w = Math.max((d / totalMins) * 100, 0.5) + "%";
@@ -1089,6 +1089,9 @@ export const TimelineView = memo(function TimelineView({
   // callback had two names across three views and the next surface would have
   // guessed wrong and got a silently missing button. One input, one name.
   onNew = null, emptyWalkin = null, dayClosed = false, isEmpty = false,
+  // v17.16.2: TODAY (App's single `todayStr()`), which is NOT `date` — that is
+  // the day being VIEWED. liveBarDur needs both to put now on a booking's axis.
+  today = "",
   late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
@@ -1118,7 +1121,7 @@ export const TimelineView = memo(function TimelineView({
   const [quickStatus, setQuickStatus] = useState(null);
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
-  const isToday = date === new Date().toISOString().slice(0, 10);
+  const isToday = date === today;
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
   // v16.0.0: px-per-minute estimate for the time-chip decision (gridW is a
@@ -1255,7 +1258,7 @@ export const TimelineView = memo(function TimelineView({
   // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
-    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
+    return liveBarDur(b, nowMins, today) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
   });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -1494,7 +1497,7 @@ export const TimelineView = memo(function TimelineView({
             // entirely OUTSIDE the grid — an absolutely-positioned child still
             // counts toward the scroller's scrollWidth, so it added a strip of
             // empty scroll past the end of the day that grew with zoom.
-            const tStart = toMins(b.time) + liveBarDur(b, nowMins);
+            const tStart = toMins(b.time) + liveBarDur(b, nowMins, today);
             const tEnd = Math.min(tStart + turnBuffer, GRID_CLOSE * 60);
             const tMins = tEnd - tStart;
             tail = tMins <= 0 ? null : (
@@ -1538,7 +1541,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1559,7 +1562,7 @@ export const TimelineView = memo(function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 

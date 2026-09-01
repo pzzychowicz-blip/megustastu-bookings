@@ -7,6 +7,7 @@
 // lines 441–521. No semantic changes.
 
 import { toMins } from "./booking-logic";
+import { todayStr } from "./day";
 
 // ── v14 preview 7: Reminder helpers (module-level, pure) ────────────────────
 // `rem_<id>_<YYYY-MM-DD>_<HH:MM>` — identifies one fire slot. Per-slot keys
@@ -75,9 +76,13 @@ export function validateReminderDraft(d){
   var rec=d.recurrence||{};
   if(rec.type==="once"){
     if(!rec.date) return "Pick a date.";
-    var now=new Date();var todayStr=now.toISOString().slice(0,10);
-    if(rec.date<todayStr) return "Date is in the past.";
-    if(rec.date===todayStr){
+    // v17.16.2 (CT-2B-03): `today` must be LOCAL, because `nowM` two lines below
+    // is local (getHours). Reading it from toISOString made this function compare
+    // a UTC date against a local clock — so all summer, between 00:00 and 01:00,
+    // a reminder for the real today skipped the past-times check entirely.
+    var now=new Date();var today=todayStr(now);
+    if(rec.date<today) return "Date is in the past.";
+    if(rec.date===today){
       var nowM=now.getHours()*60+now.getMinutes();
       var anyFuture=d.times.some(function(t){return toMins(t)>nowM;});
       if(!anyFuture) return "All times are in the past.";

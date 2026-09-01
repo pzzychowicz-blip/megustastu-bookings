@@ -31,7 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins, stayedMins, describeBooking } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
@@ -141,7 +141,7 @@ function endsASelection(el) {
 // data props change identity only on real change (memoized in BookingApp).
 export const ListView = memo(function ListView({
   bookings, date, onEdit, onStatus, onDelete, onManual,
-  nowMins = 0, warnings = {},
+  nowMins = 0, today = "", warnings = {},
   // v17.15.5: `clashes[id]` = {names, tables} for a booking double-booked with
   // another — App's `clashMap`, the same memo TimelineView takes.
   late = {}, clashes = {}, onNoShow = () => {},
@@ -352,7 +352,15 @@ export const ListView = memo(function ListView({
         // v14 p1 follow-up: the duration TAG is separate from end-time — it
         // shows actual minutes since seating (live, min 15) so staff can see
         // how long the party has been at the table regardless of the planned end.
-        const elapsedMin = b.status === "seated" ? Math.max(15, nowMins - toMins(b.time)) : 0;
+        // v17.16.2 (CT-2B-02): this was `nowMins - toMins(b.time)`, mixing an
+        // axis measured from TODAY's midnight with one measured from the
+        // BOOKING's — so a party an hour in read "15 min" on any past date.
+        // For a seated booking that expression IS liveBarDur's seated branch,
+        // byte for byte, so this reuses it rather than becoming a fourth copy
+        // of the same arithmetic (and inherits its past-close bound for free).
+        // The file header's note about `liveDur` differing still holds — that
+        // is the END-TIME pinning on the next line, not this.
+        const elapsedMin = b.status === "seated" ? Math.max(15, liveBarDur(b, nowMins, today)) : 0;
         const liveDur = b.status === "seated" ? Math.max(elapsedMin, b.duration || 90) : b.duration;
         const end = toTime(toMins(b.time) + liveDur);
         const warn = warnings[b.id];
@@ -458,7 +466,7 @@ export const ListView = memo(function ListView({
         ) : null;
         // v16.1.0: running-late flag (minutes past the booked time).
         const lateTag = lateSt ? (
-          <TextFlag ink={FLAG_WARN}>{lateMins(b, nowMins) + " min late"}</TextFlag>
+          <TextFlag ink={FLAG_WARN}>{lateMins(b, nowMins, today) + " min late"}</TextFlag>
         ) : null;
         // v16.3.0: deposit — a prepaid booking. The AMOUNT stays visible here;
         // on the block it fits only in the title. v17.9.0's lesson holds: the
