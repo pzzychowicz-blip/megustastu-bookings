@@ -1,10 +1,10 @@
 {
   "rules": {
     ".read": "auth != null",
-    ".write": "auth != null",
 
     "bookings": {
       "$bid": {
+        ".write": "auth != null",
         ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (data.exists() ? (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val()) : newData.child('baseUpdatedAt').val() === 0))",
         "name":     { ".validate": "newData.isString()" },
         "date":     { ".validate": "newData.isString()" },
@@ -16,44 +16,48 @@
       }
     },
 
-    "tableBlocks":       { ".validate": "newData.parent().child('tableBlocksRev').val() === (data.parent().child('tableBlocksRev').exists() ? data.parent().child('tableBlocksRev').val() + 1 : 1)" },
-    "tableBlocksRev":    { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+    "presence": {
+      "$key": { ".write": "auth != null" }
+    },
 
-    "waitlist":          { ".validate": "newData.parent().child('waitlistRev').val() === (data.parent().child('waitlistRev').exists() ? data.parent().child('waitlistRev').val() + 1 : 1)" },
-    "waitlistRev":       { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+    "tableBlocks":       { ".write": "auth != null && newData.parent().child('tableBlocksRev').val() === (data.parent().child('tableBlocksRev').exists() ? data.parent().child('tableBlocksRev').val() + 1 : 1)" },
+    "tableBlocksRev":    { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-    "reminders":         { ".validate": "newData.parent().child('remindersRev').val() === (data.parent().child('remindersRev').exists() ? data.parent().child('remindersRev').val() + 1 : 1)" },
-    "remindersRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+    "waitlist":          { ".write": "auth != null && newData.parent().child('waitlistRev').val() === (data.parent().child('waitlistRev').exists() ? data.parent().child('waitlistRev').val() + 1 : 1)" },
+    "waitlistRev":       { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-    "reminderFires":     { ".validate": "newData.parent().child('reminderFiresRev').val() === (data.parent().child('reminderFiresRev').exists() ? data.parent().child('reminderFiresRev').val() + 1 : 1)" },
-    "reminderFiresRev":  { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+    "reminders":         { ".write": "auth != null && newData.parent().child('remindersRev').val() === (data.parent().child('remindersRev').exists() ? data.parent().child('remindersRev').val() + 1 : 1)" },
+    "remindersRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-    "recurring":         { ".validate": "newData.parent().child('recurringRev').val() === (data.parent().child('recurringRev').exists() ? data.parent().child('recurringRev').val() + 1 : 1)" },
-    "recurringRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+    "reminderFires":     { ".write": "auth != null && newData.parent().child('reminderFiresRev').val() === (data.parent().child('reminderFiresRev').exists() ? data.parent().child('reminderFiresRev').val() + 1 : 1)" },
+    "reminderFiresRev":  { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+    "recurring":         { ".write": "auth != null && newData.parent().child('recurringRev').val() === (data.parent().child('recurringRev').exists() ? data.parent().child('recurringRev').val() + 1 : 1)" },
+    "recurringRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
     "settings": {
-      "operatingHours":    { ".validate": "newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
-      "operatingHoursRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "operatingHours":    { ".write": "auth != null && newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
+      "operatingHoursRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "dayShifts":         { ".validate": "newData.parent().child('dayShiftsRev').val() === (data.parent().child('dayShiftsRev').exists() ? data.parent().child('dayShiftsRev').val() + 1 : 1)" },
-      "dayShiftsRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "dayShifts":         { ".write": "auth != null && newData.parent().child('dayShiftsRev').val() === (data.parent().child('dayShiftsRev').exists() ? data.parent().child('dayShiftsRev').val() + 1 : 1)" },
+      "dayShiftsRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "optimizer":         { ".validate": "newData.parent().child('optimizerRev').val() === (data.parent().child('optimizerRev').exists() ? data.parent().child('optimizerRev').val() + 1 : 1)" },
-      "optimizerRev":      { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "optimizer":         { ".write": "auth != null && newData.parent().child('optimizerRev').val() === (data.parent().child('optimizerRev').exists() ? data.parent().child('optimizerRev').val() + 1 : 1)" },
+      "optimizerRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "layout":            { ".validate": "newData.parent().child('layoutRev').val() === (data.parent().child('layoutRev').exists() ? data.parent().child('layoutRev').val() + 1 : 1)" },
-      "layoutRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "layout":            { ".write": "auth != null && newData.parent().child('layoutRev').val() === (data.parent().child('layoutRev').exists() ? data.parent().child('layoutRev').val() + 1 : 1)" },
+      "layoutRev":         { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "bookingDefaults":    { ".validate": "newData.parent().child('bookingDefaultsRev').val() === (data.parent().child('bookingDefaultsRev').exists() ? data.parent().child('bookingDefaultsRev').val() + 1 : 1)" },
-      "bookingDefaultsRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "bookingDefaults":    { ".write": "auth != null && newData.parent().child('bookingDefaultsRev').val() === (data.parent().child('bookingDefaultsRev').exists() ? data.parent().child('bookingDefaultsRev').val() + 1 : 1)" },
+      "bookingDefaultsRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "general":            { ".validate": "newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
-      "generalRev":         { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "general":            { ".write": "auth != null && newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
+      "generalRev":         { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
       "users": {
         "$uid": {
-          "prefs":    { ".validate": "newData.parent().child('prefsRev').val() === (data.parent().child('prefsRev').exists() ? data.parent().child('prefsRev').val() + 1 : 1)" },
-          "prefsRev": { ".validate": "newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
+          "prefs":    { ".write": "auth != null && newData.parent().child('prefsRev').val() === (data.parent().child('prefsRev').exists() ? data.parent().child('prefsRev').val() + 1 : 1)" },
+          "prefsRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
         }
       }
     }

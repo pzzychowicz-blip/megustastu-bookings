@@ -27,8 +27,8 @@ session and keeping it in sync.
   is "record it, don't change it", the note belongs beside the existing
   exemption paragraph in `tests/contrast.test.js`.
 - **Run the Firebase rules suite in CI.** `npm run test:rules`
-  (`tests/rules/database-rules.test.js`, 78 tests against the real
-  `database.rules.json`) runs on a developer machine only. CI cannot run it as
+  (`tests/rules/database-rules.test.js`, 109 tests as of v17.16.7 against the
+  real `database.rules.json`) runs on a developer machine only. CI cannot run it as
   it stands: `.github/workflows/ci.yml` is `ubuntu-latest` with no JVM, and the
   emulator is a Java jar. Adding it means a `setup-java` step plus installing
   `firebase-tools` in the job — perhaps a minute per PR for a suite that changes
@@ -57,11 +57,15 @@ half — which closes that finding in both halves — leaving eight; v17.16.6
 shipped CT-2B-08 and CT-2A-11 and WITHDREW CT-2A-08 (the dedupe
 signature is (content, base), so two patches sharing one are indistinguishable
 to the server and have the same fate — measured, see `REFACTOR_LOG.md`), leaving
-**five**: CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10.** It also closed the
-`getBlockSlots` sibling of CT-2A-03, which is not in that count — it was raised
-in v17.16.5, after the register was written. **The count is of REGISTER findings
-only**, stated here because the running tally was off by one for two commits of
-v17.16.6 before anybody re-derived it.
+five; v17.16.7 shipped CT-2A-04 and CT-2A-06 — the two P2s, and one structural
+change rather than two fixes — and SETTLED CT-2A-10 as a deliberate won't-fix
+(negligible on the v17.16.5 re-rating: every stamp derives from `Date.now()`, so
+reaching 2**53 needs a hand-written value from outside the app; the rules-suite
+pin stays, see `REFACTOR_LOG.md`), leaving **two**: CT-2A-07 and CT-2A-09.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
+is not in that count — it was raised in v17.16.5, after the register was
+written. **The count is of REGISTER findings only**, stated here because the
+running tally was off by one for two commits of v17.16.6 before anybody
+re-derived it.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -70,31 +74,17 @@ measurement cost when it has already been made. That is the re-rating the
 previous entry at the foot of this section asked for; it has been done, so the
 entry is gone and its output is here, where the work is.
 
-**A withdrawn finding is deleted from this file, not annotated in it** — this is
-a pending-work list, and an entry saying "we checked and there is nothing here"
-is not pending work. The measurement goes in `REFACTOR_LOG.md` and any evergreen
-lesson in `CLAUDE.md`'s Gotchas, which is where the two v17.16.3 withdrawals
-went.
+**A finding that has been SETTLED is deleted from this file, not annotated in
+it** — this is a pending-work list, and an entry saying "we checked and there is
+nothing here" is not pending work. That covers both ways a finding settles: a
+WITHDRAWAL (it was not there — CT-2C-02, CT-2B-07, CT-2A-08) and a deliberate
+WON'T-FIX (it is there and is not worth a version — CT-2A-10, deleted in
+v17.16.7). The two are different judgements and neither is pending. The
+measurement and the decision go in `REFACTOR_LOG.md`, and any evergreen lesson
+in `CLAUDE.md`'s Gotchas.
 
-**`database.rules.json` — what remains after v17.16.1.** The first two below are
-ONE structural change, not two fixes.
+**`database.rules.json` — what remains after v17.16.7.**
 
-- **CT-2A-04 (P2) + CT-2A-06 (P2) — the root `.write` grant.** CT-2A-04: an
-  authenticated client can delete the entire `/bookings` node in one call.
-  CT-2A-06: a whole-node `remove()` bypasses the rev CAS (node gone, rev left
-  behind). **Neither can be fixed by adding a rule** — RTDB write permission
-  cascades from the root's `".write": "auth != null"` and cannot be revoked
-  lower down, measured against the emulator (a child `".write": false` on
-  `bookings` does not deny the delete). Closing either means moving `.write` off
-  the root and granting it per path. That was measured too, and carries two
-  hazards: **deleting the last booking would be refused** (the natural predicate
-  `newData.exists() || !data.exists()` is false when the node empties), and
-  **every path not explicitly granted becomes unwritable** — `presence` failed
-  immediately in the probe, the one node documented as deliberately having no
-  rules. Both findings sit inside the documented single-restaurant trust model,
-  and the false claims that the rev CAS covered wipes were corrected in
-  v17.16.1. Wants its own version, a full per-path audit and its own emulator
-  group.
 - **CT-2A-03 follow-on (P3) — the rules check TYPE, never FORMAT.** v17.16.1
   validates `status`, `date` and `time` as strings and deliberately not against
   a value set or a pattern. `sanitize` guarantees type but not well-formedness,
@@ -110,7 +100,7 @@ ONE structural change, not two fixes.
 **Client fixes — P3, minor, each its own commit if taken at all.** Re-rated in
 v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
 the last of the non-P3 client entries (`getBlockSlots`), so everything left here
-is either a P3 or one of the two rules items above.
+is either a P3 or the one rules item above.
 
 - **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
   was applied optimistically to local state, behind a dismissible banner naming
@@ -137,12 +127,6 @@ is either a P3 or one of the two rules items above.
   layers deep and both layers are now tested (`write-path.js`, v17.16.2); the fix
   rewrites the file through which this repo has lost production data twice. Worth
   doing only as its own version, with nothing else riding along.
-- **CT-2A-10** — `2**53` freezes a booking: `old + 1 === old`, so `stampForWrite`
-  stops advancing and only a delete clears it. Pinned in the rules suite.
-  **Re-rated to negligible (v17.16.5):** every stamp derives from `Date.now()`
-  (~1.7e12), so reaching 2**53 needs a hand-written value from outside the app —
-  at which point the same writer can do worse things more directly. Keep the
-  rules-suite pin; do not spend a version on it.
 
 ## Designed, not implemented
 
@@ -153,6 +137,17 @@ is either a P3 or one of the two rules items above.
   `normalizePhone`/`formatPhone`/`matchCustomerByPhone` from
   `src/lib/customers.js` rather than keeping its own copies (the
   complementarity contract established in v16.0.0's customer layer).
+  **v17.16.7 adds a second precondition, and it BITES BEFORE the merge:** the
+  sandbox writes four top-level paths — `conversations`, `messages`,
+  `templates`, `settings/whatsapp` — and since the root `.write` grant went,
+  none of them is writable. Its own `database.rules.json` has no rule for any of
+  them; it relied on the root grant. So **the sandbox's WhatsApp writes are
+  already denied wherever these rules are published**, DEV included, while
+  booking sync in the same app keeps working and reads keep succeeding — it
+  looks populated and silently refuses to save. Closing it means deciding what
+  those nodes are: per the Rule of law each needs a per-child stamp CAS or a rev
+  pair, not just a grant, and `messages` is append-only in a way neither shape
+  fits cleanly. That is the WA module's own design work, not a rules edit.
 
 ## Ideas
 

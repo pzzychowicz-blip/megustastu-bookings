@@ -86,13 +86,16 @@ the moment somebody names the project.
 
 ### What the suite asserts
 
-78 tests, in six groups. The first asserts the rig itself is pointed at a
-loopback emulator and a `demo-` project. The next three are what you would
-expect: the
-`auth != null` boundary, the per-`$id` booking CAS (`updatedAt` strictly
-greater **and** `baseUpdatedAt` equal to stored — the pair that closed the
-2026-07-05 overwrite incident), and the twelve `<name>Rev` pairs, each swept for
-repeated / skipped / lower / absent / non-numeric revisions.
+109 tests as of v17.16.7. The first group asserts the rig itself is pointed at
+a loopback emulator and a `demo-` project — and, since v17.16.7, that the root
+carries **no** `.write` key, which is asserted as an ABSENCE because that
+absence is the whole of the access-control change and a re-added root grant
+would leave every other test in this file green. The next groups are what you
+would expect: the `auth != null` boundary, the per-`$id` booking CAS
+(`updatedAt` strictly greater **and** `baseUpdatedAt` equal to stored — the pair
+that closed the 2026-07-05 overwrite incident), and the twelve `<name>Rev`
+pairs, each swept for repeated / skipped / lower / absent / non-numeric
+revisions, and — v17.16.7 — for a bare `remove()` of the node and of its rev.
 
 The last group is marked **`PROBE:`** and is different in kind: those tests
 assert that something *is permitted* which you might wish were not. They are
@@ -106,6 +109,111 @@ the rules", which is a claim a hand-written list cannot make. A guard asserts
 the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
+
+## v17.16.7 — the root `.write` grant is gone (CT-2A-04, CT-2A-06)
+
+**The change is one deletion and a set of additions.** `".write": "auth != null"`
+no longer sits at the root; each writable path carries its own grant. `.read` is
+untouched — one signed-in account still reads the whole database, which is the
+single-restaurant trust model and not what these findings were about.
+
+Why it had to be a restructure rather than a rule: **RTDB write permission
+cascades from wherever it is granted and cannot be revoked lower down.** Measured
+against the emulator before the fix, a child `".write": false` on `bookings` did
+not deny a whole-node delete. So while the root grant existed, no rule added
+below it could have closed either finding.
+
+### What each finding was
+
+- **CT-2A-04** — an authenticated client could delete the entire `/bookings`
+  node in one call. `.validate` is not evaluated when `newData` does not exist,
+  and `/bookings` itself carried no rule; only `/bookings/$bid` did.
+- **CT-2A-06** — a whole-node `remove()` bypassed the rev CAS entirely (node
+  gone, rev left behind). Same cause: the CAS lived in `.validate`.
+
+### How they are closed
+
+1. **`/bookings` carries no `.write`; `/bookings/$bid` carries it.** The app has
+   only ever written children — the v15.5.0 diff-write is a multi-path `update()`
+   under `/bookings` — so a per-child grant covers every real write while a
+   whole-node `set` or `remove` has no grant to stand on. Deleting ONE booking is
+   a child write and is unaffected.
+2. **The rev CAS moved from `.validate` to `.write`** on all twelve pairs, node
+   and `<name>Rev` alike. The predicate is unchanged, character for character;
+   what changes is that **`.write` is evaluated for a delete and `.validate` is
+   not.** A bare `remove()` therefore fails the same CAS an ordinary write does.
+3. **`presence` gains an explicit `presence/$key` grant.** It is the one node
+   documented as deliberately having no rules of its own, and it would otherwise
+   have become unwritable — see the hazards below.
+
+### Two things closed that were not being aimed at
+
+- **A deep write that skips the rev.** Ancestor `.validate` rules are not
+  re-evaluated for a write landing below them, so `tableBlocks/0/from` could be
+  rewritten with the rev untouched. `.write` at `tableBlocks` *is* consulted for
+  a descendant write, so the CAS now covers it.
+- **Arbitrary top-level nodes.** A path with no rule now has no grant. This is
+  the property worth knowing when adding a node: **the write will fail loudly in
+  DEV rather than working there and being unguarded in PROD.**
+
+### The two hazards the ROADMAP entry named, and what happened to them
+
+1. *"Deleting the last booking would be refused"* — that was true of the
+   predicate probed at the time (`newData.exists() || !data.exists()` on the
+   `bookings` node, which is false when the node empties). **It does not arise
+   here, because no predicate was put on `/bookings` at all** — the grant moved
+   down to `$bid`, where a delete is an ordinary child write. Pinned:
+   "deleting ONE booking still works".
+2. *"Every path not explicitly granted becomes unwritable"* — **real, and it is
+   now the model.** The writable surface was enumerated from the source rather
+   than guessed: `usePersistence.js` (the bookings diff-write, and the legacy
+   array→keyed migration), `revGuard.js` (all twelve rev pairs) and
+   `usePresence.js`. Each has a grant and each is exercised by a test.
+
+   **That enumeration is of THIS branch's `src/`, and the DEV database has a
+   second writer.** The `wa-sandbox` branch — a parallel Vercel deployment
+   forced onto DEV Firebase — writes four paths nothing here grants:
+   `conversations`, `messages`, `templates` and `settings/whatsapp`. Its own
+   copy of this file has no rule for any of them; it relied entirely on the root
+   grant. **So publishing these rules to DEV denies every WhatsApp write while
+   booking sync in the same app keeps working**, and reads keep succeeding
+   (root `.read` is untouched), so the sandbox looks populated and silently
+   refuses to save. Deliberately not fixed here: granting those four would ship
+   rules for an unshipped module and pre-decide whether they get a rev CAS,
+   which the Rule of law says they must. On ROADMAP, against the WA merge.
+
+### One code path changed with it
+
+The lazy array→keyed migration (`usePersistence.js`, v15.5.0) wrote the whole
+`/bookings` node with `set()` — which is precisely the capability CT-2A-04 is
+about, so it could not be excepted. It is a multi-path `update()` now (the old
+integer keys nulled, the keyed children written in the same atomic patch), which
+the rules permit and which the tests pin from both sides. The path stays
+unreachable on PROD; leaving it broken was not an option, because
+`arrayShapeRef` holds **every** booking write until the migration echoes, so a
+legacy array node would have left the app permanently read-only for bookings.
+
+### Deployment — rules can go FIRST, or at any time
+
+No coordination, and no quiet window. Every client from v16.0.0 onward already
+writes only the shapes and paths these rules grant; that is asserted rather than
+assumed, by the group "every write shape the app actually performs still
+succeeds" plus the thirteen `sanitize`-produced booking shapes already in the
+suite.
+
+The migration change is a client-side improvement and is **not** a precondition:
+an older client would simply fail that one unreachable write.
+
+1. Paste `database.rules.json` into the Firebase console → Realtime Database →
+   Rules → **Publish**. PROD only; `firebase deploy` must never be run from this
+   repo (see above).
+2. Nothing else.
+
+**Rollback** is re-publishing the previous rules from git
+(`git show <commit-before-this-one>:database.rules.json` — the repo carries no
+version TAGS, so name a commit or `origin/main`, not `v17.16.6`).
+
+---
 
 ## v17.16.1 — the create branch is a real CAS, and fields have shapes
 
@@ -182,7 +290,8 @@ real rules and requires every one to be accepted.
 2. Nothing else. No app refresh, no quiet window.
 
 **Rollback** is re-publishing the previous rules from git
-(`git show v17.16.0:database.rules.json`, or any commit before this one).
+(`git show <commit-before-this-one>:database.rules.json` — see the note in the
+v17.16.7 section: `v17.16.0` is not a tag and does not resolve).
 
 **One code path changed with it.** `usePersistence`'s lazy array→keyed migration
 (v15.5.0) wrote each child with `updatedAt` and no `baseUpdatedAt`, so the new
@@ -193,6 +302,10 @@ service is lost years later, by someone who reads the code and believes it
 works.
 
 ### Two findings this version does NOT fix, and why
+
+**CLOSED IN v17.16.7** — see that section above; what follows is the record of
+why v17.16.1 could not close them, and it is still the reason the fix had to be
+a restructure rather than an added rule.
 
 Both need the same structural change and neither can be fixed by adding a rule.
 

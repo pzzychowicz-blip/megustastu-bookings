@@ -17943,3 +17943,220 @@ version gives both → `"null"` (equal). The fix restores `join`'s own semantics
 inside the map, so a hole collapses to nothing exactly as it always did, and the
 test asserts that identity as well as the separation — pinned against the
 un-restored build, where it is the only failure.
+
+---
+
+## v17.16.7 — the grant that could not be revoked
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.7-root-write-grant` ·
+**Behavioural change:** none in the app's UI. The SERVER refuses three things it
+used to permit. · **Firebase rules:** **YES — a manual console publish is
+required**, and it can go first or at any time (see `database.rules.README.md`).
+
+The eighth instalment of the v17.15.7 crash-test response, and the first to take
+a P2. Five register findings were open; this closes the two highest-rated of
+them, which the register had always described as ONE structural change rather
+than two fixes.
+
+### What was wrong
+
+`database.rules.json` granted `".write": "auth != null"` at the ROOT. Two
+findings followed from that single line:
+
+- **CT-2A-04** — an authenticated client could delete the entire `/bookings`
+  node in one call. `.validate` is not evaluated when `newData` does not exist,
+  and `/bookings` itself carried no rule; only `/bookings/$bid` did.
+- **CT-2A-06** — a whole-node `remove()` bypassed the rev CAS completely: node
+  gone, rev left behind. `revGuard.js` and `CLAUDE.md` had both claimed the rev
+  child's rule covered wipes; v17.16.1 corrected the claim and left the hole.
+
+Neither could be fixed by adding a rule, and that is the fact the whole version
+turns on: **RTDB write permission cascades from wherever it is granted and
+cannot be revoked lower down.** Measured against the emulator before this
+version, a child `".write": false` on `bookings` does not deny the delete.
+
+### What was done
+
+One deletion, then a set of additions.
+
+1. **The root `.write` is gone.** `.read` is untouched — one signed-in account
+   still reads the whole database, which is the single-restaurant trust model
+   and was never what these findings were about. What changed is WHERE
+   `auth != null` is asked, not what it asks.
+2. **`/bookings` carries no grant; `/bookings/$bid` carries it.** The app has
+   only ever written children — v15.5.0's diff-write is a multi-path `update()`
+   under `/bookings` — so a per-child grant covers every real write while a
+   whole-node `set` or `remove` has nothing to stand on. **Deleting ONE booking
+   is unaffected**, which is the capability that had to survive.
+3. **The rev CAS moved from `.validate` to `.write`** on all twelve pairs, node
+   and `<name>Rev` alike. The predicate is unchanged character for character;
+   what changes is that **`.write` is evaluated for a delete and `.validate` is
+   not.** That is the entirety of CT-2A-06.
+4. **`presence/$key` gains an explicit `auth != null`.** Identical permission to
+   what it always inherited — but the thing it inherited FROM is gone.
+
+### Two things closed that nobody was aiming at
+
+- **A deep write that skips the rev.** Ancestor `.validate` rules are not
+  re-evaluated for a write landing below them, so `tableBlocks/0/from` could be
+  rewritten with the rev untouched. `.write` at `tableBlocks` *is* consulted for
+  a descendant write, so the CAS now reaches it.
+- **Arbitrary top-level nodes.** A path with no rule now has no grant. The
+  writable surface is exactly the enumerated one, which turns "add a persisted
+  node and forget its rule" from a silent gap in PROD into a write that fails
+  immediately in DEV.
+
+### The two hazards the ROADMAP entry named
+
+The entry had been re-rated twice and both hazards were real when measured. One
+of them **does not arise in the shape that shipped**, and that is worth
+recording rather than quietly enjoying.
+
+1. *"Deleting the last booking would be refused."* True of the predicate that
+   had been probed — `newData.exists() || !data.exists()` placed on the
+   `bookings` NODE, which is false exactly when the node empties. It does not
+   arise here **because no predicate was put on `/bookings` at all**: the grant
+   moved DOWN to `$bid`, where a delete is an ordinary child write and the
+   emptiness of the parent is nobody's business. The hazard was an artefact of
+   the fix that had been imagined, not of the finding.
+2. *"Every path not explicitly granted becomes unwritable."* Real, and it is now
+   the model. So the writable surface was **enumerated from the source rather
+   than assumed**: four call sites write anything at all — `usePersistence.js`
+   (the bookings diff-write, and the legacy migration below), `revGuard.js` (all
+   twelve rev pairs) and `usePresence.js`. Each has a grant; each is exercised.
+
+   **`/code-review` found the scope that sentence quietly claimed.** The
+   enumeration is of this branch's `src/`, and the DEV database has a second
+   writer: the `wa-sandbox` branch, a parallel Vercel deployment forced onto DEV
+   Firebase, writes `conversations`, `messages`, `templates` and
+   `settings/whatsapp` — none granted, and its own copy of the rules file has no
+   rule for any of them, because it relied on the root grant like everything
+   else. Publishing to DEV therefore denies every WhatsApp write while booking
+   sync in the same app keeps working, and reads keep succeeding, so the sandbox
+   looks populated and silently refuses to save.
+
+   Not fixed here, and the reason is the boundary the ship run draws: granting
+   those four would ship rules for an unshipped module and would pre-decide
+   whether they get a rev CAS, which the Rule of law says they must. It is a
+   ROADMAP entry against the WA merge instead. **The lesson is about the
+   sentence, not the sandbox** — "enumerated from the source" is only as wide as
+   the tree you enumerated, and this repo has a second tree that writes the same
+   database.
+
+### The one app change, and why it could not be excepted
+
+`usePersistence`'s lazy array→keyed migration (v15.5.0) wrote the whole
+`/bookings` node with `set()`. That is *precisely* the capability CT-2A-04 is
+about, so it could not be carved out of the rule — a grant wide enough to permit
+it is a grant wide enough to permit the finding.
+
+It is a multi-path `update()` now: the legacy integer keys nulled and the keyed
+children written in the same atomic patch, which the rules permit and which the
+tests pin from both sides — "the new form works" being only half of it, since
+the finding would still be open if the old form were also still permitted.
+Afterwards **the app makes no whole-node `bookings` write at all**, so the rules
+and the client agree exactly rather than the rules merely tolerating the client;
+`set` left `usePersistence`'s Firebase import with it, which is the check that
+the last caller really was the last.
+
+Two ordering details are load-bearing, and both are the kind that would look
+like tidying to a later reader. The old keys come off the SNAPSHOT rather than
+off the sanitised array, so a row `sanitizeAll` dropped still has its slot
+cleared instead of surviving as a hole in a node that is supposed to be keyed.
+And the keyed rows are `Object.assign`ed OVER the nulls, not under them: a
+booking whose id happens to equal an old integer index would otherwise be
+deleted by the very patch that writes it.
+
+Leaving it denied was considered and rejected. The path is unreachable on PROD
+(keyed since v15.5.0, gated on `Array.isArray`) — but the failure would not have
+been benign: `arrayShapeRef` (`usePersistence.js:309`) holds **every** booking
+write until the migration echoes, so a legacy array node would leave the app
+permanently read-only for bookings. And the comment at that exact site, written
+in v17.16.1, already says why: *a recovery path left knowingly broken is how a
+service is lost years later.*
+
+### Verification
+
+Everything above was measured against the emulator BEFORE the rules file was
+written, using a machine-generated candidate and a throwaway probe — 119 of 120
+assertions green, the one failure being the probe's own helper (`seed` returns
+nothing) on the line after an `assertSucceeds` that had already passed. The
+shipped `database.rules.json` was then hand-written for readability and proved
+**order-insensitively identical** to that candidate before anything was
+committed, so no predicate could drift between what was probed and what ships.
+
+`tests/rules/database-rules.test.js`: **101 → 109**. Three `PROBE:`s became
+closed assertions — inverted with the rules, never weakened, which is what that
+convention exists to force. The bare-remove sweep runs over `revPairsIn`'s own
+walked list rather than a typed one, so a thirteenth pair is covered without
+this file being edited.
+
+### CT-2A-10 settled as a deliberate won't-fix, and deleted from ROADMAP
+
+Not shipped, not withdrawn — a third thing, and the file that tracks these had
+only had words for the first two. `2**53` freezes a booking's stamp (`old + 1
+=== old`, so `stampForWrite` stops advancing and only a delete clears it). It is
+real, it is pinned in the rules suite, and the v17.16.5 re-rating measured why it
+is negligible: every stamp derives from `Date.now()` (~1.7e12), so reaching
+`2**53` needs a hand-written value from outside the app — at which point the same
+writer can do worse things more directly.
+
+Patryk's call, this version: **the decision has been made, so it is not pending
+work.** The entry is deleted from `ROADMAP.md`, the rules-suite pin stays exactly
+where it is, and the reasoning lives here.
+
+`ROADMAP.md`'s own paragraph on this was widened to say so, because it read "a
+WITHDRAWN finding is deleted from this file, not annotated in it" and a
+won't-fix is not a withdrawal — the first says *it was not there*, the second
+says *it is there and is not worth a version*. Different judgements; neither is
+pending work. Left un-widened, the next won't-fix would have been annotated in
+place, which is how a pending-work list turns into a register.
+
+### Two stale figures, corrected while re-verifying the file
+
+Every remaining `ROADMAP.md` entry was re-checked against the source rather than
+re-read, which is what turned these up. Neither is load-bearing; both are the
+kind of number that gets quoted with confidence.
+
+- `CLAUDE.md` said **783 tests as of v17.16.5**. It is **805**, and had been
+  wrong for two versions — the same drift the file's own line-count note warns
+  about ("re-measure rather than trust this number"). The parenthetical about
+  running the build first was re-measured too: without `dist`, 804 pass and 1 is
+  skipped.
+- `ROADMAP.md` and `database.rules.README.md` both said the rules suite is **78
+  tests**. It was 101 before this version and is **109** after it.
+
+The entries themselves all stand, verified: no `paint-order` treatment ships
+(the contrast decision is still yours); `.github/workflows/ci.yml` still has no
+JVM step; `database.rules.json` contains zero `matches(` calls, so the rules
+still check type and never format; `drainPending`'s give-up branch still only
+sets a warning; `persist` is still called from inside the `setBookings` updater;
+and there is no `InboxPanel` in `src/components`.
+
+### `/code-review` — a comment that made the audit it exists to support harder
+
+Dropping `set` from `usePersistence`'s Firebase import was annotated "The app
+now reaches Firebase through `update` and `get` only." Wrong twice.
+`usePresence.js` uses `set`, `push`, `remove` and `onDisconnect`; and the very
+import being annotated also pulls `onValue` and `goOnline`, used 3 and 1 times
+in that file, so the narrower reading fails too.
+
+**What makes it worth a commit rather than a typo fix is who reads it.** The
+per-path rules make "what writes Firebase, and where" a question anybody adding
+a node now has to answer, and this comment answers it wrongly in the direction
+that hides `usePresence` — the one node whose grant this version had to add by
+hand. Same class as the `revGuard.js` header v17.16.1 corrected: a comment
+stating a guarantee nothing enforces.
+
+### `/code-review` — the rollback command names a tag that does not exist
+
+The new section's rollback line read `git show v17.16.6:database.rules.json`.
+**The repo has no version tags at all** — `git tag --list 'v17*'` is empty, and
+the pre-existing instance one section down (`v17.16.0`, added by v17.16.1) fails
+with `fatal: invalid object name`. Both are corrected to a form that resolves.
+
+It survived a version because the sentence offers "or any commit before this
+one" as an alternative, and that half works. The half that does not is the one
+somebody reaches for under pressure: these rules are pasted into a console by
+hand with no staging, so this is the recovery path for a change that can leave
+staff unable to save a booking.
