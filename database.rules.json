@@ -35,6 +35,17 @@
     "recurring":         { ".write": "auth != null && newData.parent().child('recurringRev').val() === (data.parent().child('recurringRev').exists() ? data.parent().child('recurringRev').val() + 1 : 1)" },
     "recurringRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
+    "conversations": {
+      "$phoneKey": { ".write": "auth != null" }
+    },
+
+    "messages": {
+      "$phoneKey": { ".write": "auth != null" }
+    },
+
+    "templates":         { ".write": "auth != null && newData.parent().child('templatesRev').val() === (data.parent().child('templatesRev').exists() ? data.parent().child('templatesRev').val() + 1 : 1)" },
+    "templatesRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
     "settings": {
       "operatingHours":    { ".write": "auth != null && newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
       "operatingHoursRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
@@ -53,6 +64,9 @@
 
       "general":            { ".write": "auth != null && newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
       "generalRev":         { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "whatsapp":           { ".write": "auth != null && newData.parent().child('whatsappRev').val() === (data.parent().child('whatsappRev').exists() ? data.parent().child('whatsappRev').val() + 1 : 1)" },
+      "whatsappRev":        { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
       "users": {
         "$uid": {

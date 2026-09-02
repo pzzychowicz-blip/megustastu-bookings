@@ -556,8 +556,9 @@ describe("whole-node deletion is refused (v17.16.7)", () => {
 
   it("every rev-paired node refuses a bare remove of the node AND of its rev", async () => {
     // The sweep, over the walker's own list rather than a typed one — the same
-    // reason `revPairsIn` exists above. Twelve pairs, 24 assertions: a pair
-    // added to the rules is covered here without this test being edited.
+    // reason `revPairsIn` exists above. Fourteen pairs as of v17.16.8, two
+    // assertions each: a pair added to the rules is covered here without this
+    // test being edited, which is why the floor below is `>=` and not `===`.
     const PAIRS = revPairsIn(JSON.parse(readFileSync(RULES_PATH, "utf8")).rules)
       .map((p) => p.replace("$uid", "staff-a"));
     expect(PAIRS.length).toBeGreaterThanOrEqual(12);
@@ -617,10 +618,90 @@ describe("the paths that still have to be writable (v17.16.7)", () => {
     // Enumerated from the source, not guessed: the four call sites that write
     // anything at all are usePersistence.js (the bookings diff-write and the
     // legacy migration), revGuard.js (all twelve rev pairs) and usePresence.js.
+    // TWELVE is right here and FOURTEEN is right in the sweep above, and the
+    // difference is the point: this group is about what THIS branch's app
+    // writes, and the two v17.16.8 pairs (templatesRev, whatsappRev) are
+    // written by the `wa-sandbox` branch. Do not "correct" one to match the
+    // other — they are counting different things.
     await assertSucceeds(writeBooking(staff(), "b1", booking()));
     await assertSucceeds(writeWithRev(staff(), "tableBlocks", [{ id: "k1" }], 1));
     await assertSucceeds(writeWithRev(staff(), "settings/layout", { tables: [] }, 1));
     await assertSucceeds(writeWithRev(staff(), "settings/users/staff-a/prefs", { theme: "dark" }, 1));
+  });
+});
+
+// ── The WhatsApp sandbox nodes (v17.16.8) ───────────────────────────────────
+// Four paths the `wa-sandbox` branch writes and main does not. They had no
+// rules of their own and relied entirely on the root `.write` grant, so
+// v17.16.7 left every WhatsApp write denied wherever these rules are
+// published. The grants below are shaped by TWO measurements, both in the
+// sandbox source rather than inferred:
+//
+//   1. `api/_lib/rtdb.js` writes `conversations` and `messages` through
+//      firebase-admin, which BYPASSES rules entirely. A CAS on those two would
+//      therefore constrain the browser and not the backend doing most of the
+//      writing — a pin that looks like a guarantee while guaranteeing nothing.
+//      They get a per-child grant in the `presence` shape and no CAS, which is
+//      a deliberate, documented deviation from the Rule of law.
+//   2. `templates` and `settings/whatsapp` have exactly one writer each, the
+//      client, so both get a real rev pair. `settings/whatsapp` already used
+//      `writeWithRev`; `templates` was a bare whole-node `set()` and the
+//      sandbox client is hardened onto `writeWithRev` alongside this.
+//
+// The grant is at `$phoneKey`, NOT at `$phoneKey/$mid`: write permission
+// cascades down, so one grant covers the per-message writes and the "delete
+// this conversation" call, while the whole-node wipe stays denied.
+const PHONE = "+34600111222";
+
+describe("the WhatsApp sandbox nodes (v17.16.8)", () => {
+  it("conversations: one conversation can be created, patched and deleted", async () => {
+    await assertSucceeds(staff().ref("conversations/" + PHONE)
+      .set({ phone: PHONE, unread: true, archived: false }));
+    await assertSucceeds(staff().ref("conversations/" + PHONE)
+      .update({ unread: false }));
+    await assertSucceeds(staff().ref("conversations/" + PHONE).remove());
+  });
+
+  it("messages: a message writes, patches, and a conversation's messages delete", async () => {
+    // The $mid write is what pins the cascade: the grant is one level above it.
+    await assertSucceeds(staff().ref("messages/" + PHONE + "/m1")
+      .set({ id: "m1", dir: "in", text: "hola" }));
+    await assertSucceeds(staff().ref("messages/" + PHONE + "/m1")
+      .update({ status: "read" }));
+    await assertSucceeds(staff().ref("messages/" + PHONE).remove());
+  });
+
+  it("the ENTIRE conversations node canNOT be wiped in one call", async () => {
+    // `clearAllWaData()` did exactly this. It is the CT-2A-06 capability, so it
+    // stays denied and the sandbox client deletes per conversation instead.
+    await seed((db) => db.ref("conversations").set({ [PHONE]: { phone: PHONE } }));
+    await assertFails(staff().ref("conversations").remove());
+    expect(await seedRead("conversations")).not.toBeNull();
+  });
+
+  it("the ENTIRE messages node canNOT be wiped in one call", async () => {
+    await seed((db) => db.ref("messages").set({ [PHONE]: { m1: { id: "m1" } } }));
+    await assertFails(staff().ref("messages").remove());
+    expect(await seedRead("messages")).not.toBeNull();
+  });
+
+  it("templates: a bare whole-node set is REFUSED, the rev'd write is accepted", async () => {
+    // The un-CASed write the sandbox hardening removes. Both halves matter: if
+    // the bare form still passed, the rev pair would be decoration.
+    await assertFails(staff().ref("templates").set([{ id: "t1", body: "hi" }]));
+    await assertSucceeds(writeWithRev(staff(), "templates", [{ id: "t1", body: "hi" }], 1));
+  });
+
+  it("settings/whatsapp: the rev pair is enforced", async () => {
+    await assertFails(staff().ref("settings/whatsapp").set({ v: 1, enabled: true }));
+    await assertSucceeds(writeWithRev(staff(), "settings/whatsapp", { v: 1, enabled: true }, 1));
+  });
+
+  it("an unauthenticated client can write none of them", async () => {
+    await assertFails(anon().ref("conversations/" + PHONE).set({ phone: PHONE }));
+    await assertFails(anon().ref("messages/" + PHONE + "/m1").set({ id: "m1" }));
+    await assertFails(anon().ref("templates").set([]));
+    await assertFails(anon().ref("settings/whatsapp").set({ v: 1 }));
   });
 });
 

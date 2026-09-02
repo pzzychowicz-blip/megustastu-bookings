@@ -18160,3 +18160,82 @@ one" as an alternative, and that half works. The half that does not is the one
 somebody reaches for under pressure: these rules are pasted into a console by
 hand with no staging, so this is the recovery path for a change that can leave
 staff unable to save a booking.
+
+---
+
+## v17.16.8 — the grants that had to decide something first
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.8-wa-node-grants` ·
+**Behavioural change (MGT Bookings):** none — no `src/` change but the version
+line. **Files:** `database.rules.json`, `tests/rules/database-rules.test.js`,
+`database.rules.README.md`, `CLAUDE.md`, `ROADMAP.md`, `src/App.jsx` (version).
+Plus two commits on the `wa-sandbox` branch, which is not this PR.
+
+### What this closes
+
+v17.16.7 deleted the root `.write` grant, which was the right fix for CT-2A-04
+and CT-2A-06 and had one consequence it recorded and deliberately did not act
+on: four paths that only the `wa-sandbox` branch writes — `conversations`,
+`messages`, `templates`, `settings/whatsapp` — had no rule of their own and
+were left unwritable. Root `.read` is untouched, so the sandbox **looked
+populated and silently refused to save**.
+
+That version's stated reason for deferring was that granting them "would ship
+rules for an unshipped module and pre-decide whether they get a rev CAS, which
+the Rule of law says they must". **The objection was to shipping a CAS shape
+nobody had thought about, not to the grants.** So this version thinks about it.
+
+### The shape differs per node, and the reason is measured, not stylistic
+
+`api/_lib/rtdb.js` on `wa-sandbox` writes `conversations/{phoneKey}` and
+`messages/{phoneKey}/{msgId}` through **firebase-admin** — and Admin SDK writes
+bypass security rules entirely. A CAS on those two would bind the browser and
+not the backend doing most of the writing: a pin that looks like a guarantee
+while guaranteeing nothing, which is the defect this repo already records
+against `test:rules`' openjdk prefix. They get a per-child grant in the
+`presence` shape and no CAS.
+
+`templates` and `settings/whatsapp` have exactly one writer each — the client —
+so both get real rev pairs (`templatesRev`, `whatsappRev`).
+
+**This is the second CAS exemption, and unlike `presence` it is real data**, so
+`CLAUDE.md`'s closing sentence ("ONLY for genuinely ephemeral, per-connection
+-owned nodes — never for real data") was corrected rather than quoted around.
+The exemption test is no longer *is this ephemeral* but **can a rule bind every
+writer of this node**: `presence` passes the old test, these pass the new one,
+and a node with only client writers passes neither and gets its CAS.
+
+### The grant sits one level above where it looks like it should
+
+`conversations/$phoneKey` and `messages/$phoneKey`, not `$phoneKey/$mid`. Write
+permission cascades DOWN, so one grant covers the per-message writes *and* the
+delete-this-conversation call, while the whole-node wipe stays denied. That last
+part is the whole of CT-2A-06 still holding: `clearAllWaData()` did
+`set(ref(db,"conversations"), null)`, and granting that back for two nodes would
+have spent v17.16.7's win six days after shipping it. The sandbox client deletes
+per key instead.
+
+### Verification
+
+| | |
+|---|---|
+| `npm run test:rules` | **109 → 120 passed** |
+| `npm run build` | clean · 92.14 kB gz (unchanged — no `src/` change but the version line) |
+| `npm test` | 805 passed (24 files) — unchanged, as expected |
+
+The +11 was reconciled rather than accepted: **7** new tests in the WhatsApp
+group, **4** from the rev-pair sweep picking the two new pairs up automatically
+(2 pairs × 2 tests). `revPairsIn` derives `PAIRS` from the rules file, so
+neither the sweep nor its `>= 12` floor needed editing — which is the property
+that rule was written for.
+
+### Counts corrected while here
+
+`109 tests` → `120` in `ROADMAP.md`, `database.rules.README.md` and `CLAUDE.md`;
+`the twelve <name>Rev pairs` → `fourteen` in `CLAUDE.md`. Two "twelve"
+references were deliberately **left**: they are inside the v17.16.7 sections and
+are correct as history. A third, in the test file's "every write shape the app
+actually performs" comment, is correct for a different reason — it counts what
+*this branch's app* writes, where the two new pairs belong to `wa-sandbox` — and
+now carries a note saying so, because twelve and fourteen sitting a few lines
+apart in one file is exactly the shape somebody "corrects".

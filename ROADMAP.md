@@ -27,7 +27,7 @@ session and keeping it in sync.
   is "record it, don't change it", the note belongs beside the existing
   exemption paragraph in `tests/contrast.test.js`.
 - **Run the Firebase rules suite in CI.** `npm run test:rules`
-  (`tests/rules/database-rules.test.js`, 109 tests as of v17.16.7 against the
+  (`tests/rules/database-rules.test.js`, 120 tests as of v17.16.8 against the
   real `database.rules.json`) runs on a developer machine only. CI cannot run it as
   it stands: `.github/workflows/ci.yml` is `ubuntu-latest` with no JVM, and the
   emulator is a Java jar. Adding it means a `setup-java` step plus installing
@@ -137,17 +137,23 @@ is either a P3 or the one rules item above.
   `normalizePhone`/`formatPhone`/`matchCustomerByPhone` from
   `src/lib/customers.js` rather than keeping its own copies (the
   complementarity contract established in v16.0.0's customer layer).
-  **v17.16.7 adds a second precondition, and it BITES BEFORE the merge:** the
-  sandbox writes four top-level paths — `conversations`, `messages`,
-  `templates`, `settings/whatsapp` — and since the root `.write` grant went,
-  none of them is writable. Its own `database.rules.json` has no rule for any of
-  them; it relied on the root grant. So **the sandbox's WhatsApp writes are
-  already denied wherever these rules are published**, DEV included, while
-  booking sync in the same app keeps working and reads keep succeeding — it
-  looks populated and silently refuses to save. Closing it means deciding what
-  those nodes are: per the Rule of law each needs a per-child stamp CAS or a rev
-  pair, not just a grant, and `messages` is append-only in a way neither shape
-  fits cleanly. That is the WA module's own design work, not a rules edit.
+  **v17.16.7 added a second precondition; v17.16.8 removed it.** The sandbox
+  writes four top-level paths — `conversations`, `messages`, `templates` and
+  `settings/whatsapp` — and when the root `.write` grant went, none of them was
+  writable: the sandbox looked populated and silently refused to save.
+  v17.16.8 grants all four, with a CAS shape decided per node rather than
+  deferred (`conversations`/`messages` per-child and uncased, because the WA
+  Admin backend bypasses rules entirely; `templates`/`settings/whatsapp` on real
+  rev pairs). **What remains for the merge is smaller and is client work, not
+  rules work:** the two `wa-sandbox` commits that made `templates` use
+  `writeWithRev` and turned `clearAllWaData()` into a per-key delete loop must
+  survive the re-merge onto the new prod baseline, or the sandbox will write
+  shapes the published rules refuse. See `database.rules.README.md` § v17.16.8.
+
+- **`wa-sandbox` is 91 commits behind `main`** (at `17.15.3-wa-sandbox` against
+  v17.16.8). Surfaced in v17.16.8 while hardening the client there; noted rather
+  than acted on, because re-merging onto a new prod baseline is the explicit
+  "Update with the production version" flow and not something to do in passing.
 
 ## Ideas
 
