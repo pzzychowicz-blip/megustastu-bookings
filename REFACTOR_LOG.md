@@ -18436,3 +18436,71 @@ then raising an independent warning: both sentences and all three buttons.
 The whole verification rig — a `window.__FORCE_STALE__` lever, `MAX_RETRIES` at
 1, four `console.log`s and a StrictMode removal — was added, used and removed;
 `git diff` against `origin/main` touches neither `main.jsx` nor any of it.
+
+---
+
+## v17.16.10 — the pointers that outlived what they pointed at
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.10-ref-mirror-and-doc-truth` ·
+**Behavioural change:** see each commit below. **Files:** `src/App.jsx`,
+`CLAUDE.md`, `ROADMAP.md`, `tests/contrast.test.js` (+ the CT-2A-09 commit's
+own files, recorded with it).
+
+A version carrying four scopes Patryk chose together: three that correct or
+settle a claim, and one structural fix. The first three change no shipped
+behaviour at all — which is the point of grouping them, since each one is a
+sentence somebody would otherwise quote with confidence.
+
+### Commit 1 — the three claims in CLAUDE.md that were false
+
+**None of these was found by reading the code looking for bugs.** All three were
+found by checking a claim against the thing it described, which is the only way
+this class shows up: a wrong sentence in a file that is auto-loaded into every
+session reads exactly like a right one.
+
+**(1) The dangling ROADMAP pointer.** The Gotchas row on naming a control
+rendered from a `.map` ended *"Still open in `LayoutSettings`' priorities editor
+— see ROADMAP"*. Measured: the priorities editor's two control groups both carry
+`aria-pressed` **and** an identity-bearing `aria-label` — the zone-mode segments
+(`LayoutSettings.jsx:840`, named `"Indoor (Party of 2 to 2)"` and so on) and the
+`mixedRequire` chips (`LayoutSettings.jsx:932`, `"5A — require in cross-zone
+combos"`), each with the v17.15.6 comment that put it there. And `ROADMAP.md`
+holds no matching entry — `grep -in 'layoutsettings\|aria-pressed\|priorit'`
+returns nothing.
+
+So the work shipped in v17.15.6 and the ROADMAP entry was correctly deleted with
+it; what nobody deleted was the pointer *to* that entry, one file over. **A
+pointer to nothing reads as open work**, and this is the same shape the row it
+sits in is about: one fact written in two places, and the half that goes stale
+is the half nobody is looking at.
+
+**(2) "StrictMode-proof".** The v15.5.0 paragraph describes `stampForWrite` as
+clock-skew-proof *and* StrictMode-proof, "the dev double-write gets a higher
+stamp → accepted, no spurious reject". True of the rule that paragraph
+describes, where acceptance required `updatedAt` **greater than** stored — and
+v16.0.0 replaced greater-than with a CAS requiring `baseUpdatedAt` to **equal**
+it. Under CAS a higher stamp guarantees nothing. The clause now says which rule
+it belongs to and points at the paragraph that superseded it.
+
+**(3) `lastPatchSigRef` "dedupes StrictMode's dev double-dispatch".** The
+claim ROADMAP had already flagged, and it is unqualified where the code is
+conditional. `contentKey` deletes `updatedAt` and nothing else
+(`write-path.js`), so `patchSignature` keeps `baseUpdatedAt` — the signature is
+(content, base). StrictMode's double-invoked updater can read two different
+`prev` values, one pre-resync and one post-resync, so the two dispatches carry
+**different bases**, produce different signatures, escape the 2s window, and the
+stale one is correctly rejected by the CAS. Measured on unmodified v17.16.8 and
+recorded under v17.16.9: six consecutive ordinary status changes each exhausted
+the retries and raised the write-error banner in DEV.
+
+Corrected rather than "fixed", which is the decision the ROADMAP entry itself
+predicted: the change that would make the sentence true — dropping
+`baseUpdatedAt` from the signature — is exactly what v17.16.6 pinned **against**
+under CT-2A-08, because it is what makes two patches indistinguishable to the
+server. So the code is right and the sentence was wrong. Dev-only; the rejected
+write is the redundant one.
+
+**(4)** `App.jsx` re-measured at **3879** lines (`wc -l`), against the `~3754 as
+of v17.15.2` the block claimed — the drift its own note tells the reader to
+expect. The test count was checked the same way and needed no change: 817 in 24
+files, exactly as stated.

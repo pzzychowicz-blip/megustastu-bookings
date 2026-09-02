@@ -97,20 +97,6 @@ is either a P3 or the one rules item above.
   observation:** whether any two ids in PROD coincide at all — a one-line scan
   of the `bookings` node, which nobody has run.
 
-- **`lastPatchSigRef` is not the StrictMode guarantee `CLAUDE.md` describes**
-  (surfaced v17.16.9, DEV-only). It dedupes two patches with the same content
-  AND the same `baseUpdatedAt` inside 2s — but the double-invoked updater can
-  see two different `prev` values (one pre-resync, one post-resync), so the two
-  dispatches carry different bases, escape the window, and the stale one is
-  correctly rejected by the CAS. Measured: on unmodified v17.16.8, **six
-  consecutive ordinary status changes each exhausted the retries** and raised
-  the write-error banner in DEV. **No PROD impact** — StrictMode is dev-only,
-  and the rejected write is the redundant one — so this is a documentation
-  defect plus DEV noise, not a data risk. **Settling observation:** whether the
-  signature should drop `baseUpdatedAt`, which is exactly the change v17.16.6
-  pinned AGAINST under CT-2A-08 (it is what makes two patches indistinguishable
-  to the server), so the answer is probably to correct the claim rather than the
-  code.
 - **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
   `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
   survives, and recorded why the v16.0.0 corruption has not recurred (an
