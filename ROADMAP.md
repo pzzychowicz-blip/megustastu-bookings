@@ -40,12 +40,6 @@ session and keeping it in sync.
   and the job depends on whatever `java` the runner exposes. Drop the prefix in
   favour of `setup-java`, or the pin will look like a guarantee while
   guaranteeing nothing (rig `/code-review`, CR-2).
-- **The Plan legend chip has no `boxShadow: var(--shadow-flat)`**, which its
-  TimelineView twin has carried since v17.11.0. v17.15.7 matched the twin in
-  every other respect (inline-flex, gap, `StatusIcon` at `IC.inline`) and left
-  this deliberately out of scope: it is a decision about a chip on a different
-  card, and the plan's header row has no other shadowed chip. One line either
-  way — make the two legends identical, or record why they differ.
 
 ### Crash test v17.15.7 — confirmed and unfixed
 
@@ -58,8 +52,15 @@ seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
 reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
 thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
 (both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
-leaving ten.
+leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
+half — which closes that finding in both halves — leaving eight.**
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
+
+**Every bullet below now carries its SETTLING OBSERVATION** — the single thing
+you would measure to decide whether it is worth a version, and what that
+measurement cost when it has already been made. That is the re-rating the
+previous entry at the foot of this section asked for; it has been done, so the
+entry is gone and its output is here, where the work is.
 
 **A withdrawn finding is deleted from this file, not annotated in it** — this is
 a pending-work list, and an entry saying "we checked and there is nothing here"
@@ -102,95 +103,74 @@ ONE structural change, not two fixes.
 CT-2B-01, CT-2B-02 and CT-2B-03, plus a DST date-navigation bug not in the
 register — the Next-day button was a no-op on the spring-forward day.)*
 
-- **`EMPTY_FORM.date` is evaluated once at module load (P3, new in v17.16.2).**
-  `constants.js` builds it at import, so an app left open across midnight holds
-  yesterday's default. Not currently reachable in a saved booking: all three
-  `openForm` call sites (`openNew`, `bookAgain`, `bookFromWaitlist`) set `date`
-  explicitly. Fixing it means making the default a getter or dropping `date` from
-  the constant — worth doing when something else touches that object.
+- **The `getBlockSlots` sibling of CT-2A-03 (P3, new in v17.16.5).** v17.16.5
+  made `sanitize` guarantee that a booking's `time` is something `toMins` can
+  read. A table BLOCK's `from`/`to` reach the same `toMins`, from
+  `getBlockSlots`, and have no such guard: `sanitizeBlock` is a MINT rather than
+  a whitelist — its header says so, and says not to "finish" it by copying
+  `sanitize`'s shape — so a block holding `from: 2000` throws in the placement
+  path exactly as a booking used to. **Settling observation:** none needed for
+  reachability, which is identical to the booking case (a non-app writer, since
+  `tableBlocks` has no per-field `.validate`); what needs deciding is WHERE. The
+  argument for the consumer rather than the mint: an unreadable block is not a
+  block, so `getBlockSlots` should skip it rather than have stored data silently
+  rewritten to a default time it was never given.
 
-- **CT-2B-05 (P2) — a wrong guest join files one person's visits under another's
-  number.** `customerIndex` keys as `phone || alias[guestId] || guestId`, so
-  after a mis-join the phone-LESS bookings of the other person land under the
-  first person's number (3 visits under one key, measured) and "Delete customer &
-  all data" takes all of them. Bounded: two REAL phones under one `guestId` stay
-  two customers. **Open question for Patryk:** what should the delete reach after
-  a mis-join? The safe answer may be to exclude bookings whose own phone differs
-  from the row's key.
-- **CT-2A-03 (P2), client half — `sanitize` guards truthiness only.**
-  `time: 2000` survives `b.time || "13:00"` and then `toMins` (`t.split(":")`,
-  83 call sites) throws. Also silently mis-read rather than throwing:
-  `size:"many"` → a party of **2**, `duration:"long"` → **90 min**,
-  `tables:"3"` → **no table**, and an unknown status for which `isActive`
-  returns true. v17.16.0's error boundary contains the crash; it does not make
-  the data readable.
-- **CT-2A-05 (P2) — the optimiser is not order-invariant.** `optimise`'s four
-  sort keys are not a total order, so ties fall back to array position.
-  Measured: assignment differs in **1000/1000** shuffled days; the number of
-  UNPLACED bookings differs in **2/1000** (worst: seed 47, n=24, 2 vs 3). Array
-  order is not identical across devices — one that just created a booking has it
-  appended, one that received it by snapshot has it key-sorted. Cross-device
-  divergence is argued, not reproduced. **Open question: is a tie-break worth it
-  at 2/1000?**
-
-**P3 — minor, each its own commit if taken at all.**
+**P3 — minor, each its own commit if taken at all.** Re-rated in v17.16.5; the
+order below is by that rating, not by the filed one.
 
 - **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
   was applied optimistically to local state, behind a dismissible banner naming
   no booking. Screen and server disagree until the next echo silently reverts it.
+  **Confirmed by reading (v17.16.5):** `drainPending`'s give-up branch sets the
+  warning and nothing reverts the `setBookings(next)` the hold branch applied.
+  **Settling observation is not needed — the DECISION is what is missing.** The
+  queue holds an updater function, not a booking, so naming the lost change means
+  changing what is queued; and reverting it discards work the user can see. That
+  is a design question for Patryk, not a repair. Highest-value of the P3s.
+- **CT-2B-08** — a second join naming an already-joined seed correctly refuses to
+  re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
+  group of one while the operator believes the two were joined. Nothing on screen
+  distinguishes this from success. **Confirmed by reading (v17.16.5):** `doSave`
+  writes `guestId: f.guestId || null` verbatim, so the draft's id minted at OPEN
+  time is never re-derived from the seed's live state. **Settling observation:**
+  how wide is the window? It needs a concurrent join on the same seed from
+  another device between opening the form and saving. The fix is small — adopt
+  the seed's existing id inside `stampGuestSeed`'s pass instead of leaving the
+  minted one — so this may be worth taking on its cheapness rather than its rate.
+- **CT-2A-11** — `undoKey`'s array separator is collidable by a pasted control
+  character in a table id, which reads as "nothing changed" so an undo snapshot
+  is never taken. The source comment asserts no text field can produce one and
+  nothing enforces it. **Re-rated down (v17.16.5):** `notes` is a `<textarea>`
+  and `sanitize` does not strip control characters, so the assertion is false as
+  written — but a collision additionally needs two bookings whose whole key
+  strings coincide, which no realistic paste produces. **Settling observation:**
+  whether any PROD `notes` field contains a control character at all; if none
+  does, the honest fix is to make the comment true (strip them in `sanitize`)
+  rather than to re-engineer the key.
+  Also unrated: nothing checks for duplicate booking ids, and two sharing one
+  collapse in the optimiser's assignment map (`genId` collision ≈ 1 in 1.7M,
+  same millisecond).
 - **CT-2A-08** — the StrictMode patch-dedupe (`lastPatchSigRef`, 2 s) can swallow
   a legitimate A→B→A write with no echo between. Every reachable instance
-  self-heals; no lasting divergence was constructed.
+  self-heals; no lasting divergence was constructed. **Settling observation:**
+  construct one, or close the finding. It has now survived two versions without
+  anybody managing to.
 - **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
   `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
   survives, and recorded why the v16.0.0 corruption has not recurred (an
   idempotent per-child diff `update()`, plus the signature dedupe). Converting it
   to the ref-mirror shape is the structural fix the rule actually prescribes.
+  **Re-rated (v17.16.5): low value, high risk.** The defect is mitigated two
+  layers deep and both layers are now tested (`write-path.js`, v17.16.2); the fix
+  rewrites the file through which this repo has lost production data twice. Worth
+  doing only as its own version, with nothing else riding along.
 - **CT-2A-10** — `2**53` freezes a booking: `old + 1 === old`, so `stampForWrite`
   stops advancing and only a delete clears it. Pinned in the rules suite.
-- **CT-2A-11** — `undoKey`'s array separator is collidable by a pasted control
-  character in a table id, which reads as "nothing changed" so an undo snapshot
-  is never taken. The source comment asserts no text field can produce one and
-  nothing enforces it. Also unrated: nothing checks for duplicate booking ids,
-  and two sharing one collapse in the optimiser's assignment map (`genId`
-  collision ≈ 1 in 1.7M, same millisecond).
-- **CT-2B-08** — a second join naming an already-joined seed correctly refuses to
-  re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
-  group of one while the operator believes the two were joined. Nothing on screen
-  distinguishes this from success.
-
-### Re-rate the ten open findings before spending a version on any of them
-
-Three of the register's findings have now been measured and withdrawn — CT-2C-02
-and the view-button accessible name in v17.16.3, CT-2B-07 in v17.16.4 — against
-eight fixed. That is a high enough withdrawal rate that "confirmed" in the
-register is not a fact about the app. (The count is the register's: CT-2A-03 is
-carried as shipped, since v17.16.1 closed its server half, while its client half
-is still listed below as open work. The bullets here do not map 1:1 to findings —
-one covers CT-2A-04 and CT-2A-06 together, and `EMPTY_FORM.date` was never in the
-register at all.)
-
-**They share a shape.** A finding that names a CONCLUSION ("all three share one
-name", "focus restore never works, on any modal", "the chip and the confirm
-disagree") is worth less than one naming an OBSERVATION, because only the
-observation can be re-run. Each of the three was verified against something other
-than the running app: a browser-automation tree that prints `title` where Chrome
-computes `contents`; a dev build whose StrictMode double-invokes the effect being
-measured; one line of a two-line expression.
-
-**The job:** walk the ten open findings and, for each, write down the single
-observation that would settle it and how to make it — then rate them by that,
-not by their filed priority. Cheap, and it decides what the next versions are
-worth doing. The two P2s carrying open questions for Patryk (CT-2B-05's delete
-scope, CT-2A-05's tie-break at 2/1000) are the ones where this matters most,
-since each would otherwise start with a decision made on a rating nothing has
-checked.
-
-This replaces the entry that pointed at the crash test's own **55% self-rating**
-as the thing to revisit. That condition — extract the pure core of
-`usePersistence.js` so its claims become testable — was met in v17.16.2
-(`src/lib/write-path.js`, 31 tests), and the rating itself lives in the §25
-report rather than in this repo, so what is actionable HERE is the register.
+  **Re-rated to negligible (v17.16.5):** every stamp derives from `Date.now()`
+  (~1.7e12), so reaching 2**53 needs a hand-written value from outside the app —
+  at which point the same writer can do worse things more directly. Keep the
+  rules-suite pin; do not spend a version on it.
 
 ## Designed, not implemented
 

@@ -429,8 +429,15 @@ export const PlanView = memo(function PlanView({
   // rows are bookings, so they take the atom. `IC.inline` rather than the
   // glyph's `IC.control`, matching TimelineView's legend: a key is read once,
   // a mark on the plan is scanned during service.
+  //
+  // v17.16.5: `--shadow-flat`, which the TimelineView twin has carried since
+  // v17.11.0. v17.15.7 matched that chip in every other respect — inline-flex,
+  // the 4px gap, `StatusIcon` at `IC.inline` — and left this one line out of
+  // scope, so the two legends were byte-identical but for a shadow. Two chips
+  // that are the same chip should not need a reader to work out whether the
+  // difference means anything; it did not.
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 4 }}>
+    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize", boxShadow: "var(--shadow-flat)", display: "inline-flex", alignItems: "center", gap: 4 }}>
       <StatusIcon status={s} size={IC.inline} />{s}
     </span>
   ));

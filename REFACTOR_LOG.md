@@ -17375,3 +17375,278 @@ mixed node is distinct. All three fail against the pre-review logic.
 files) + `npm run check:style` + `eslint` (0 errors) after every commit. Main
 bundle 335.97 → 336.49 kB (gzip 91.66 → 91.87, +0.21 kB) — the deterministic
 seed and its comments.
+
+---
+
+## v17.16.5 — the findings that survived a second measurement
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.5-re-rated-findings` ·
+**Files:** `src/App.jsx` (version), `src/lib/booking-logic.js`,
+`src/lib/customers.js`, `src/lib/constants.js`, `src/components/PlanView.jsx`,
+`tests/booking-logic.test.js`, `tests/customers.test.js`, `tests/day.test.js`,
+`tests/reconcile.test.js`, `CLAUDE.md`, `DESIGN.md`, `REFACTOR_LOG.md`,
+`ROADMAP.md` · **Behavioural change:** yes, in **five** places — a malformed
+stored `time` no longer crashes the app; "Delete customer & all data" no longer
+reaches a booking carrying a different real phone; the booking form's
+"Regular · N past visits" and no-show chips stop counting that same booking,
+because `matchCustomerFor` shares the predicate the delete uses; the optimiser's
+answer no longer depends on the order the bookings arrived in; and the
+new-booking form's default date follows the clock across midnight. **The first
+draft of this line said three** — it named the changes that were designed and
+missed the two that came with them, which is exactly what this field is for, and
+`/code-review` caught it.
+
+The sixth instalment of the v17.15.7 crash-test response, and the first to start
+where `ROADMAP.md` said it should: **re-rate the open findings before spending a
+version on any of them.** Three of the register's findings had already been
+measured and withdrawn against eight fixed, which is a high enough rate that
+"confirmed" in the register was not a fact about the app. So every item below was
+re-measured first, and the version is what the measurements chose — including one
+finding whose numbers came back very different from the filed ones, and one break
+that was not in the register at all because it did not exist when the register
+was written.
+
+It also closes `ROADMAP.md`'s "re-rate the ten open findings" entry, which is why
+that entry is gone from the file: the job it asked for is done, and its output —
+the single observation that would settle each remaining finding — now sits on the
+bullets themselves, where the work is, rather than in a note about the work.
+Three of those bullets were re-rated DOWN in the process (CT-2A-05 before it was
+measured, CT-2A-10 to negligible, CT-2A-09 to low-value/high-risk) and one up
+(CT-2A-07, now the most valuable P3).
+
+### 0 · The suite was red on `main`, and had been since the day before
+
+Found by running `npm test` on a clean checkout before touching anything.
+`tests/reconcile.test.js` opened with:
+
+```js
+const D = "2026-09-01";                    // a future date
+const today = new Date().toISOString().slice(0, 10);
+```
+
+`dirtyDates` only looks at dates `>= today`, so the fixture had to BE in the
+future. On 2026-09-02 it stopped being, `dirtyDates` correctly ignored the whole
+day, and the assertion that a clash is found failed. CI gates every PR on `npm
+test`, so `main` was red and so was every branch cut from it.
+
+**A test that passes for a while and then fails for a reason having nothing to do
+with the code it guards is worse than a missing test**, because the first
+response to it is to distrust the change in front of you — which is exactly what
+happened here, for the few minutes it took to reproduce it on a stashed tree.
+`D` is now `addDays(today, 30)`, through the same helper the app navigates dates
+with, so it cannot expire and cannot land on the DST day a hand-rolled
+`setDate(getDate()+n)` would (v17.16.2's own finding).
+
+The rest of the suite was swept for the same shape. The other date literals are
+arithmetic fixtures — `dayDiff("2026-03-28", "2026-03-30")` is testing DST, not
+the future — and the only other file mixing a live clock with dates derives them
+from it. This was the one.
+
+### 1 · CT-2A-03, client half — `sanitize` guaranteed truthiness, not readability
+
+Every claim in the register reproduced exactly, which is worth saying because two
+of the three re-measurements in this version did not:
+
+| stored | sanitised to | then |
+|---|---|---|
+| `time: 2000` | `2000` (a number is truthy) | `toMins` throws `t.split is not a function` |
+| `time: "31/08/2026"` | kept | `toMins` → `NaN`, silently |
+| `size: "many"` | `2` | a party of two |
+| `duration: "long"` | `90` | ninety minutes |
+| `tables: "3"` | `[]` | no table |
+| `status: "weird"` | kept | `isActive` returns **true** |
+
+Only the first row is a crash, and `toMins` is `t.split(":")` at 83 call sites,
+so it is a crash in whichever view happens to read the booking first. v17.16.0's
+error boundary contains it; it does not make the day usable, and a member of
+staff meeting a recovery panel mid-service has no way to know which booking did
+it. It is reachable from the server, because v17.16.1's per-field rules check
+TYPE and deliberately not FORMAT — the two halves of one finding.
+
+**The guard is the CONSUMER'S requirement, not a format of its own.** `time` and
+`scheduledTime` are kept only if `toMins` can read them: a string that splits on
+`":"` into two finite numbers. That is the narrowest guard that closes the crash,
+and it was chosen over a `/^\d{2}:\d{2}$/` pattern deliberately — a pattern would
+also move `"9:30"`, `"13:00:00"` and `"13:0"`, all of which read correctly today,
+and **the one rule this function cannot break is that nothing currently working
+may move.** Pinned in both directions, since a guard that only rejects is half a
+guard.
+
+The cost of that choice is stated at the predicate rather than hidden: `":"`
+reads as 00:00 and is therefore KEPT, and `"25:99"` reads as 1599 and is kept
+too. Neither crashes, so neither is this fix's business. Normalising an
+out-of-day time would rewrite a record that renders, which is a different
+decision and wants its own version.
+
+`scheduledTime` falls back to the SANITISED time rather than to the literal
+`"13:00"` — a booking moved to 19:00 whose `scheduledTime` is junk must not go on
+to claim it was scheduled for one o'clock.
+
+**The sibling this did not touch**, recorded in `ROADMAP.md`: `getBlockSlots`
+calls `toMins(bl.from)` on a table block, and `sanitizeBlock` is a MINT rather
+than a whitelist — its header says so in terms, and says not to "finish" it by
+copying `sanitize`'s shape. So the same class is open one file over, and the fix
+there belongs at the consumer, not in the mint.
+
+### 2 · CT-2B-05 — the Customers list said two people; the delete acted on one
+
+The scenario is one wrong tap. Ana books with a phone, and while typing her
+booking the operator picks a phone-less "Bea" from the name dropdown — which
+mints one `guestId` across both. `guestPhoneAlias` then folds Bea's group onto
+Ana's number, so Bea's phone-less bookings appear under Ana. That much is
+inherent in a mis-join and nothing automatic can unpick it.
+
+What is not inherent: `customerIndex` keys on the phone FIRST, so a booking of
+Bea's carrying her OWN number was already displayed as a **separate customer with
+a separate number** — while `matchesIdentity` still reached it through the shared
+`guestId`, so "Delete customer & all data" on Ana anonymised it. The list and the
+delete disagreed, and a wrong join is invisible, so the operator had no way to
+know that deleting Ana was about to take a record belonging to somebody else.
+
+A booking carrying its own real phone is now never reached through a `guestId`.
+Three details:
+
+- **`hasRealPhone`, not `b.phone`.** The booking form seeds the field with the
+  dial prefix, so `"+34"` means *no phone* rather than a different one, and
+  reading it as different would have excluded the customer's own bookings from
+  their own delete — the fix causing a worse version of the bug it fixes.
+- **The exclusion needs a phone on BOTH sides.** A row keyed by `guestId` alone
+  has no key to differ from, and must keep reaching its bookings.
+- **The predicate is shared, and the note that shipped with it said otherwise.**
+  `matchCustomerFor` filters with `matchesIdentity`, so the same exclusion moves
+  the booking form's "Regular · N past visits" and no-show chips. That is the
+  right answer — `customerIndex` and `noShowMap` both key a booking with its own
+  phone under that phone, so all three agree now where the chips and the delete
+  were the two that did not — but it was designed as a delete-scope fix and
+  documented as one, and `/code-review` found the gap. **A predicate with two
+  callers has two blast radii**, and the comment at the site now names both.
+- **The phone-LESS bookings in the group are still taken, and that is the
+  deliberate half.** For a CORRECT join they are the customer and "all data" has
+  to mean all of it. The alternative — matching only a booking's own key — would
+  leave a genuinely phone-less guest's earlier bookings behind, with their name
+  and notes intact, on every correct join, to guard against the rare wrong one.
+  They also stay visible on both rows under a name a human can read, which is the
+  case somebody can still catch.
+
+### 3 · CT-2A-05 — the register's numbers were wrong in both directions
+
+Filed as "assignment differs in **1000/1000** shuffled days; unplaced count
+differs in **2/1000**". Re-measured over 200 shuffled days per scenario, on days
+of 8–17 bookings:
+
+| day shape | assignment differs | unplaced differs |
+|---|---|---|
+| varied (sizes 1–8, quarter-hour starts, mixed preferences) | 13/200 | **0/200** |
+| clustered (parties of 2 and 4, on the hour and half hour, nearly all "auto") | **138/200** | **0/200** |
+| either, after the fix | **0/200** | 0/200 |
+
+Both filed numbers were off, and the gap between the two scenarios is the whole
+explanation: `optimise` sorts by locked-first, size descending, stated preference
+before "auto", then start time, and a tie needs two bookings agreeing on all
+four. A varied day rarely produces one; **the shape a real service has produces
+them constantly** — which is why the clustered figure is the one that matters and
+why the varied figure alone would have argued for closing the finding.
+
+So the finding's true shape is not "the optimiser is not order-invariant" but
+**which table you get was a coin flip on two days in three, and whether you get
+one never was.** That is a better finding than the one filed, and it is what made
+the tie-break easy to justify: it buys determinism and costs nothing in placement
+quality, rather than trading one against the other.
+
+`id` is the fifth sort key. You cannot regress from "undefined", which is what
+array position is here — but the replacement is meaningful rather than merely
+stable: `genId()` is a base36 timestamp, so ordering by id orders by CREATION,
+and among equals the party who booked first is placed first. It is also the only
+key guaranteed unique, so the sort has no remaining tie to fall through.
+
+**The later passes needed no key of their own.** The swap pass's `others.sort` is
+just as partial, but it sorts a list DERIVED from `day`, and `Array.prototype.sort`
+is stable — the same property that caused the defect is what propagates the fix,
+so one total order at the top settles all of them. That is what the 0/200 confirms.
+
+**Two tests, and BOTH had to be rewritten before they were worth having — the
+second time by `/code-review`, after the first rewrite.** The first draft
+asserted that one hand-picked shuffle gives the same answer, and it PASSED
+against a build with the tie-break removed: that permutation simply did not
+discriminate. It became all **120** orderings of five fully-tied parties,
+asserting exactly one distinct answer.
+
+That was still not enough, and the reason is worth more than the fix. `sig({})`
+is the empty string, so **an `optimise` that places NOBODY produces one identical
+signature for every ordering and satisfies invariance perfectly.** Substituting
+`var assigned={}` for the greedy pass — the strongest regression this function
+can suffer — left both tests green. Invariance is a property of the ANSWER, so
+there has to be an answer first: every case now asserts placement (`placed(res,
+n)`) before it asserts sameness, and the 120-permutation case additionally
+requires the five tied parties to land on five DISTINCT tables, so a collapse
+cannot masquerade as agreement. Both sabotages now fail both tests.
+
+The same pass removed a third line that could not fail:
+`answers.has(sig(optimise(tied, …)))`, where `tied` is one of the 120 and the
+line above already asserts there is exactly one answer. **The trap this test was
+rewritten to escape had been reintroduced one line below the escape** — which is
+the honest summary of why a test's failure mode has to be constructed rather than
+reasoned about.
+
+### 4 · `EMPTY_FORM.date` was evaluated once, at module load
+
+`constants.js` builds the object at import, so an app left open across midnight —
+a tablet in a restaurant, which is how this one is used — offered yesterday as
+the new-booking default for the whole of the next service. Not reachable in a
+saved booking (all three `openForm` call sites pass a date explicitly), which is
+why it was a P3.
+
+A **getter**, because that keeps every consumer unchanged: `Object.assign` and
+object spread both read an accessor and copy its result, so the call sites and
+the `form` / `formRef` / `formBaseline` initializers all keep receiving a plain
+string. It is fixed rather than left because a default that is silently wrong is
+a trap for the next call site added, which will not know it has to set the field.
+
+**The test had the same defect as CT-2A-05's**, caught the same way: within one
+process on one day, a value frozen at import and a value recomputed on read are
+identical, so `expect(EMPTY_FORM.date).toBe(todayStr())` passes on the very build
+this fixes. It moves the clock across midnight under fake timers instead — the
+defect itself, reproduced.
+
+### 5 · The Plan legend chip's missing shadow
+
+One line. v17.15.7 gave the plan legend its status marks by copying the
+TimelineView chip, and copied everything but `boxShadow: var(--shadow-flat)` —
+leaving two chips that are the same chip differing by one declaration, which
+makes a reader work out whether the difference means something.
+
+It did not, and `DESIGN.md` had already decided it: the shadow triage asks
+whether the ELEMENT's own fill flips with the theme, a MIX counts as "no", and
+`BLOCK_BG[status]` is named there as exactly such a mix. **The rule covered this
+chip from the day it was written and simply never swept it, because the chip did
+not exist yet.** `DESIGN.md` now names the third site and the lesson: a rule
+stated there does not apply itself to a site added afterwards — when you copy a
+component, diff it against its twin rather than against your memory of the twin.
+
+### Verification
+
+`npm run build` + `npm test` + `npm run check:style` + `eslint` (0 errors) after
+every commit, and again after the `/code-review` pass — which returned five
+findings, all fixed in this branch: the two vacuous-test holes and the
+never-failing assertion above, the shared-predicate blast radius, a stray comment
+indent, and this entry's own Behavioural-change field, which said three when the
+release changes five things. **783 tests, 24 files** — up from 774 with one failing: +9 new
+(5 booking-logic, 2 customers, 2 day) and the red one repaired. Every new
+assertion was proven against a sabotaged build — the truthiness guard restored,
+the identity exclusion deleted, the fifth sort key removed, the getter turned
+back into a value — and each failed the intended test and only that one.
+
+Main bundle 336.49 → 336.83 kB (gzip 91.87 → **91.97, +0.10 kB**), nearly all of
+it comments.
+
+**Verified in the browser** (DEV, `localhost:5177` on this worktree), because
+the first draft of this paragraph said the shadow "does not need to be" — a chip
+copied from a twin, matching a rule already written down. That is precisely the
+reasoning that produced the missing line in the first place, so it was measured
+instead. All three plan legend chips compute `rgba(0,0,0,0.35) 0 1px 3px`, which
+is `--shadow-flat` resolved in dark; the token is theme-split, and forcing
+`data-theme="light"` gives `rgba(0,0,0,0.1) 0 1px 3px` on both legends. The
+timeline's five chips read identically, so the two keys now differ in nothing.
+
+The other four changes are pure functions with no rendering surface, and their
+verification is the 783-test suite above.

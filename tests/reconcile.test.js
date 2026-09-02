@@ -11,9 +11,17 @@
 import { describe, it, expect } from "vitest";
 import { dirtyDates, reconcile } from "../src/lib/reconcile.js";
 import { verifyClean } from "../src/lib/booking-logic.js";
+import { todayStr, addDays } from "../src/lib/day.js";
 
-const D = "2026-09-01";                                   // a future date
-const today = new Date().toISOString().slice(0, 10);
+// `dirtyDates` only looks at dates >= today, so D has to BE a future date
+// rather than have been one when this file was written. It was the literal
+// "2026-09-01", which reached its own expiry on 2026-09-02 and turned the whole
+// suite red on main — a test that passes for a while and then fails for a
+// reason having nothing to do with the code it guards. Derived from `today`
+// through the same `addDays` the app navigates dates with, so it cannot expire
+// and cannot drift onto the DST day a hand-rolled `setDate` would (v17.16.2).
+const today = todayStr();
+const D = addDays(today, 30);
 
 const mk = (o) => Object.assign({
   id: "x", name: "Guest", phone: "", date: D, time: "20:00", size: 2,

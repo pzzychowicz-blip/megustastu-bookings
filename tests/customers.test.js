@@ -237,6 +237,33 @@ describe("matchesIdentity", () => {
     expect(matchesIdentity(bk({ phone: "", guestId: "gC" }), ident)).toBe(false);
     expect(matchesIdentity(bk({ phone: "", guestId: null }), { phone: "", guestIds: [] })).toBe(false);
   });
+  // v17.16.5 (CT-2B-05). The scenario, end to end: Ana books with a phone and
+  // picks a phone-less "Bea" from the name dropdown, minting one guestId across
+  // both. `guestPhoneAlias` then folds Bea's group onto Ana's number, so Bea's
+  // phone-less bookings appear under Ana. That is the mis-join. The part this
+  // fixes is a booking of Bea's that carries her OWN number: the index shows it
+  // as a separate customer, and the delete used to take it anyway.
+  it("never reaches a booking through a guestId when it carries a different real phone", () => {
+    const ident = { phone: "+34600111222", guestIds: ["gA"] };
+    const beaOwnNumber = bk({ phone: "+34600999888", guestId: "gA" });
+    expect(matchesIdentity(beaOwnNumber, ident)).toBe(false);
+    // Deliberately still reached — for a CORRECT join these ARE the customer,
+    // and "all data" has to mean all of it.
+    expect(matchesIdentity(bk({ phone: "", guestId: "gA" }), ident)).toBe(true);
+    // The dial prefix is not a phone: the form seeds the field with it, so
+    // reading "+34" as a different number would exclude the customer's own
+    // bookings from their own delete.
+    expect(matchesIdentity(bk({ phone: "+34", guestId: "gA" }), ident)).toBe(true);
+    // Same number, any formatting, is the customer — the phone branch above
+    // already matched, and this must not fall into the new exclusion.
+    expect(matchesIdentity(bk({ phone: "+34 600 111 222", guestId: "gA" }), ident)).toBe(true);
+  });
+  it("the exclusion needs a phone on BOTH sides to bite", () => {
+    // A row keyed by guestId alone (no booking in the group has a number) must
+    // keep reaching its bookings — there is no key to differ from.
+    const ident = { phone: "", guestIds: ["gA"] };
+    expect(matchesIdentity(bk({ phone: "+34600999888", guestId: "gA" }), ident)).toBe(true);
+  });
   it("does not treat an absent guestId as a wildcard", () => {
     // Both sides missing the key must not match — the trap that would fuse every
     // phone-less booking into one customer.
