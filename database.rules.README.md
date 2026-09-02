@@ -43,11 +43,16 @@ globally in the `rules` job alone, **pinned to an exact version** so that job an
 this machine evaluate the rules on the same emulator jar:
 
 ```yaml
-- run: npm i -g firebase-tools@15.28.2   # .github/workflows/ci.yml, job `rules`
+# .github/workflows/ci.yml, job `rules`
+env:
+  FIREBASE_TOOLS_VERSION: "15.28.2"
 ```
 
-Upgrading locally means bumping that pin in the same PR, or a rules failure that
-reproduces in only one of the two places has two candidate causes instead of one.
+That one value is both the install version and the cache key for
+`~/.cache/firebase/emulators` (the CLI is what selects the emulator jar, so the
+key cannot go stale while the pin holds). Upgrading locally means bumping it in
+the same PR, or a rules failure that reproduces in only one of the two places
+has two candidate causes instead of one.
 
 ### Running
 

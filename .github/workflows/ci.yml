@@ -56,6 +56,11 @@ jobs:
   # required check. ~1 min of parallel runner time is the cheaper side of that.
   rules:
     runs-on: ubuntu-latest
+    # ONE copy of the pin. It is read twice below — the install, and the
+    # emulator-jar cache key — and two hand-written copies of a version is the
+    # shape that drifts (a stale key would silently restore the wrong jar).
+    env:
+      FIREBASE_TOOLS_VERSION: "15.28.2"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -80,6 +85,21 @@ jobs:
       # STARTS the emulator, and `verify`'s `npm ci` would pay for it on every
       # PR without ever running it (database.rules.README.md).
       - name: Install the emulator CLI
-        run: npm i -g firebase-tools@15.28.2
+        run: npm i -g firebase-tools@${{ env.FIREBASE_TOOLS_VERSION }}
+      # firebase-tools asks for this itself. On a cold run with CI=true it
+      # prints: "It appears you are running in a CI environment. You can avoid
+      # downloading the Database Emulator repeatedly by caching the
+      # ~/.cache/firebase/emulators directory" — then fetches
+      # firebase-database-emulator-v4.11.2.jar. Keyed on the CLI pin because
+      # the CLI is what SELECTS the jar version, so the key cannot go stale
+      # while that pin holds; bumping the pin misses the cache once, correctly.
+      - name: Cache the emulator jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ env.FIREBASE_TOOLS_VERSION }}
+      # Must go through `npm run`: that is what puts node_modules/.bin on PATH,
+      # without which emulators:exec starts the emulator and then exits 127 on
+      # `vitest: command not found`.
       - name: Firebase Security Rules (local emulator)
         run: npm run test:rules
