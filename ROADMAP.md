@@ -38,10 +38,10 @@ pin stays, see `REFACTOR_LOG.md`), leaving two: CT-2A-07 and CT-2A-09;
 **v17.16.9 shipped CT-2A-07** — the decision it was waiting on was Patryk's
 (park, name, offer Retry) — leaving one; **v17.16.10 shipped CT-2A-09, the last
 of them, and settled the unrated duplicate-booking-id entry that had outlived
-CT-2A-11 (measured: zero duplicates and zero key/id divergence in 507 DEV
+CT-2A-11** (measured: zero duplicates and zero key/id divergence in 507 DEV
 bookings, and `buildPatch` keys its patch BY the id, so a collision overwrites
-rather than duplicating — see `REFACTOR_LOG.md`). The register is now at
-**zero** open findings.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
+rather than duplicating — see `REFACTOR_LOG.md`). **The register is now at zero
+open findings.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
 is not in that count — it was raised in v17.16.5, after the register was
 written. **The count is of REGISTER findings only**, stated here because the
 running tally was off by one for two commits of v17.16.6 before anybody

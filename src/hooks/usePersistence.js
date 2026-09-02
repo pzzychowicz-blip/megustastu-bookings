@@ -94,9 +94,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // INVARIANT, and the only thing that can break this: every `setBookings` /
   // `setTableBlocks` in this file assigns its mirror on the line above it.
   // There are four `setBookings` and three `setTableBlocks`. A new set site
-  // that forgets one hands the next
-  // save a stale `prev`, which the diff would then read as "these fields
-  // changed back" — so it would write, not merely skip.
+  // that forgets one hands the NEXT save a stale `prev`, which the diff would
+  // then read as "these fields changed back" — so it would write, not merely
+  // skip.
   const bookingsRef=useRef([]);
   const blocksRef=useRef([]);
   // v17.3.0: has the FIRST bookings snapshot arrived from Firebase? Drives the

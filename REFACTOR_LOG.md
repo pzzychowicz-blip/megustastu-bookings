@@ -18698,3 +18698,43 @@ What it adds beyond a pointer is the rule the decision establishes: a halo or
 outline on the mark is a new treatment that must reach the timeline rail,
 `SBadge` and the plan table in one version, or the app ships two status
 vocabularies that disagree.
+
+### Commit 6 — `/code-review` pass
+
+Two findings, both in this branch's own diff, both confirmed and both cosmetic;
+**no correctness defect was found in the conversion**, and the checking that
+established it is worth recording because it is the part a reader would want to
+re-run.
+
+- `ROADMAP.md` — the v17.16.10 tally nested a `**zero**` inside an already-open
+  bold span, so the one sentence in the file that says how many findings remain
+  rendered with literal asterisks. Re-split so each emphasis closes.
+- `usePersistence.js` — the scripted edit had wrapped the invariant comment
+  mid-clause ("hands the next / save a stale `prev`"), which is the sentence a
+  developer adding a fifth set site would read to learn the rule.
+
+**What was checked and cleared.** The one way a ref mirror can genuinely differ
+from a React updater is a NON-idempotent transform applied twice: the updater is
+re-run from the base state, so React discards the first result, whereas the
+mirror has already advanced and the second call would compound. It is not
+reachable here, and each site was opened rather than assumed — the two
+effect-driven callers (which StrictMode double-invokes) both carry idempotency
+guards already, `reconcile` returning `prev` when nothing moved and the
+recurring generator skipping an occurrence it can already see; and the one true
+concat, `doSave`'s, runs `applyBase`, which filters `newId` out before
+concatenating. Those guards exist because the write path has always had to
+survive a retry replay, so the property the conversion needs was already paid
+for.
+
+**Two latent bugs the conversion fixes that were not why it was filed.** Both
+are reads of a value set inside a deferred updater, on the line after the call:
+`saveBookings`' `dispatched` (which every caller gates "Booking saved." on) and
+the reconciliation effect's `changed` (which gates `flashSyncFix`). Both worked
+only because React eagerly evaluates the first update on an idle fiber. They are
+now set synchronously.
+
+**Also confirmed unchanged, and left alone:** on a `persist` refusal (not
+loaded, empty-array guard, legacy-array hold) local state has already advanced
+to `computed`. That is pre-existing — the old updater returned `computed`
+regardless of the outcome too — so it is out of scope for this diff and is not
+a regression.
