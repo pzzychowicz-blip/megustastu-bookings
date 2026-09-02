@@ -192,6 +192,38 @@ export function matchesIdentity(b, ident) {
   // must reach every id the row is showing, or "delete all data" leaves some.
   const gids = Array.isArray(o.guestIds) ? o.guestIds : (o.guestId ? [o.guestId] : []);
   if (key && b.phone && normalizePhone(b.phone) === key) return true;
+  // v17.16.5 (CT-2B-05): a booking carrying its OWN real phone is never reached
+  // through a guestId. `customerIndex` keys on the phone FIRST, so such a
+  // booking is already displayed as a different customer with a different
+  // number — and the guestId union made deleting either row anonymise both.
+  // The list said two people and the delete acted on one, which is the whole of
+  // the defect: a wrong join is invisible, so the operator has no way to know
+  // that "Delete customer & all data" on Ana is about to take Bea's record too.
+  //
+  // What this does NOT do is protect the phone-LESS bookings in the group, and
+  // that is the deliberate half. For a CORRECT join they are the same person and
+  // "all data" has to mean all of it; for a wrong one they stay visible on the
+  // row, under a name a human can read, which is the case somebody can still
+  // catch. The alternative — matching only a booking's own key — would leave a
+  // genuinely phone-less guest's earlier bookings behind with their name and
+  // notes intact, breaking the promise on every correct join to guard against
+  // the rare wrong one.
+  //
+  // `hasRealPhone`, not `b.phone`: the form seeds the field with the dial
+  // prefix, so "+34" means no phone rather than a different one, and reading it
+  // as different would exclude bookings that belong to the customer.
+  //
+  // **This predicate is not only the delete's** (/code-review). `matchCustomerFor`
+  // below filters with it, so the same exclusion decides the booking form's
+  // "Regular · N past visits" and no-show chips: after a mis-join those counts
+  // stop including a booking that carries a different real number. That is the
+  // RIGHT answer and the one `customerIndex` and `noShowMap` already give — both
+  // key a booking with its own phone under that phone — so the three now agree
+  // where before the chips and the delete were the two that did not. It is
+  // written down because the change was designed as a delete-scope fix, and the
+  // next person editing this for a delete-scope reason would otherwise move what
+  // the form asserts about a customer without knowing it.
+  if (hasRealPhone(b.phone) && key && normalizePhone(b.phone) !== key) return false;
   return !!(b.guestId && gids.indexOf(b.guestId) !== -1);
 }
 
