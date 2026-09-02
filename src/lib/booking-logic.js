@@ -753,7 +753,32 @@ export function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
   var baseSlots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
   if(blocks) baseSlots=baseSlots.concat(getBlockSlots(blocks,date));
-  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;return toMins(a.time)-toMins(b.time);});
+  // v17.16.5 (CT-2A-05): `id` is the FIFTH key, and it is what makes this a
+  // total order. The four above it — locked first, larger party first, a stated
+  // preference before "auto", earlier start first — leave real ties, and
+  // `Array.prototype.sort` is stable, so a tie fell through to ARRAY POSITION:
+  // the order the list happened to arrive in decided who got which table.
+  //
+  // Measured over 200 shuffled days (see REFACTOR_LOG): on a varied day the
+  // assignment differs in 13/200, and on the shape a service actually has —
+  // parties of 2 and 4, on the hour and half hour, nearly all "auto", which is
+  // exactly where these four keys tie — in 138/200. Which table you get was a
+  // coin flip on two days in three. Whether you get one was not: the number of
+  // UNPLACED bookings differed in 0/200 in both scenarios, so this buys
+  // determinism and costs nothing in placement quality.
+  //
+  // You cannot regress from "undefined", which is what array position is here —
+  // but the replacement is meaningful rather than merely stable: `genId()` is a
+  // base36 timestamp, so ordering by id orders by CREATION, and the party who
+  // booked first is served first among equals. It is also the only key here
+  // guaranteed unique, so the sort has no remaining tie to fall through.
+  //
+  // The later passes need no key of their own. The swap pass's `others.sort` is
+  // just as partial, but it sorts a list DERIVED from `day`, and
+  // `Array.prototype.sort` is stable — the same property that made the defect
+  // is what propagates the fix, so one total order at the top settles all of
+  // them. Verified: after this, both scenarios above are 0/200.
+  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;var ta=toMins(a.time),tb=toMins(b.time);if(ta!==tb) return ta-tb;return String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0);});
   // First pass
   var assigned=_runGreedy(day,baseSlots);
   // Swap pass — v15.9.0: data-driven via PRIORITIES.swapRules (was the MGT-only

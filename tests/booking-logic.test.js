@@ -17,7 +17,7 @@ import {
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
   verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots,
-  findBest, findFreeSlot, applyOpt, bookingsAfterAction,
+  findBest, findFreeSlot, applyOpt, optimise, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
@@ -100,6 +100,83 @@ describe("combo capacity", () => {
     expect(comboCapBest(["1A", "2"])).toBe(4);
     // largest contained combo (1A|1B=6) + leftover standalone 2
     expect(comboCapBest(["1A", "1B", "2"])).toBe(8);
+  });
+});
+
+// v17.16.5 (CT-2A-05): the optimiser's answer must not depend on the order the
+// bookings arrived in. It did — `optimise`'s four sort keys are not a total
+// order and `Array.sort` is stable, so a tie fell through to array position,
+// and array order is not the same on two devices (one that just created a
+// booking has it appended; one that received it by snapshot has it key-sorted).
+//
+// The fixture is deliberately the shape that TIES: same size, same start, same
+// "auto" preference — which is also the shape a real service has. On the
+// measured 200-day harness this scenario differed in 138/200 before the id key
+// and 0/200 after.
+describe("optimise is order-invariant", () => {
+  const D = "2026-09-10";
+  const party = (id, time, size) => sanitize({
+    id, name: id, date: D, time, size, duration: 90,
+    preference: "auto", status: "confirmed",
+  });
+  const day = () => [
+    party("b01", "20:00", 2), party("b02", "20:00", 2), party("b03", "20:00", 2),
+    party("b04", "20:00", 4), party("b05", "20:00", 4), party("b06", "20:30", 2),
+    party("b07", "20:30", 2), party("b08", "20:30", 4),
+  ];
+  const sig = (res) => Object.keys(res).sort()
+    .map((k) => k + ":" + (res[k] || []).slice().sort().join("+")).join("|");
+
+  // Every case below asserts PLACEMENT before it asserts invariance, and that
+  // order is the point (/code-review). `sig({})` is the empty string, so an
+  // `optimise` that assigns NOBODY produces one identical signature for every
+  // ordering and satisfies invariance perfectly — proven, not argued: with
+  // `var assigned={}` substituted for the greedy pass, both of these tests
+  // passed. **Invariance is a property of the answer, so there has to be an
+  // answer first**, or the strongest possible regression reads as green.
+  const placed = (res, n) => {
+    const got = Object.keys(res).filter((k) => (res[k] || []).length > 0);
+    expect(got.length).toBe(n);
+    return res;
+  };
+
+  it("gives the same assignment however the list is ordered", () => {
+    const base = sig(placed(optimise(day(), D, []), 8));
+    expect(base).not.toBe("");
+    expect(sig(placed(optimise(day().reverse(), D, []), 8))).toBe(base);
+    // A rotation and a swap of two tied neighbours — the two ways a real array
+    // diverges (an append landing elsewhere than the key sort would put it).
+    const rot = day(); rot.push(rot.shift());
+    expect(sig(placed(optimise(rot, D, []), 8))).toBe(base);
+    const sw = day(); const t = sw[0]; sw[0] = sw[2]; sw[2] = t;
+    expect(sig(placed(optimise(sw, D, []), 8))).toBe(base);
+  });
+
+  // Every permutation, not a handful. A sampled shuffle can pass by luck on a
+  // build with no tie-break — the first draft of this test did exactly that,
+  // and a test that cannot fail is worse than none because it reports coverage
+  // it does not have. Five fully-tied parties is 120 orderings, which settles it
+  // exhaustively and runs in milliseconds.
+  it("gives one answer across all 120 orderings of a fully tied day", () => {
+    const tied = [
+      party("b01", "20:00", 2), party("b02", "20:00", 2), party("b03", "20:00", 2),
+      party("b04", "20:00", 2), party("b05", "20:00", 2),
+    ];
+    const perms = (a) => a.length <= 1 ? [a] : a.flatMap((x, i) =>
+      perms(a.slice(0, i).concat(a.slice(i + 1))).map((p) => [x].concat(p)));
+    const all = perms(tied);
+    expect(all.length).toBe(120);
+    const answers = new Set(all.map((p) => sig(placed(optimise(p, D, []), 5))));
+    expect(answers.size).toBe(1);
+    // NOT `answers.has(sig(optimise(tied, …)))`: `tied` is one of the 120, and
+    // the line above already says there is exactly one answer, so that check
+    // could never fail — the vacuous-assertion trap this whole test exists to
+    // avoid, one line further down. What is actually worth pinning is that the
+    // single answer places every party on a distinct table, i.e. that the five
+    // tied parties were resolved rather than collapsed onto one another.
+    const only = [...answers][0];
+    const tables = only.split("|").map((e) => e.split(":")[1]);
+    expect(new Set(tables).size).toBe(5);
   });
 });
 
