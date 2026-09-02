@@ -560,13 +560,36 @@ export function useWhatsApp({
     return p;
   }
 
-  // Dev-only hard reset for the simulator: wipe BOTH WA nodes directly (bypasses
-  // the empty-array guard on purpose — this is an explicit "clear the sandbox"
+  // Dev-only hard reset for the simulator: clear BOTH WA nodes (bypasses the
+  // empty-array guard on purpose — this is an explicit "clear the sandbox"
   // action, not an accidental effect write). Never wired outside the DEV-gated
   // simulator surface.
+  //
+  // v17.16.8: this deletes PER KEY and no longer nulls the two nodes. A
+  // whole-node `set(…, null)` is exactly the CT-2A-06 capability that v17.16.7
+  // closed by deleting the root .write grant, and the rules on main grant these
+  // two nodes at `$phoneKey` precisely so that the wipe stays denied while the
+  // per-conversation writes and deletes keep working. Granting the wipe back
+  // for these two would have spent that fix.
+  //
+  // ONE root-level multi-path update, not a loop of sets: RTDB applies it
+  // atomically, so the simulator cannot leave half a conversation behind, and
+  // each leaf is evaluated against `$phoneKey`'s own rule. The key union is
+  // taken from BOTH refs — a conversation can have no messages yet, and a
+  // message subtree can outlive its conversation row.
   function clearAllWaData() {
-    set(ref(db, "conversations"), null).catch(function () {});
-    set(ref(db, "messages"), null).catch(function () {});
+    const keys = new Set([
+      ...conversationsRef.current.map(function (c) { return c.phoneKey; }),
+      ...Object.keys(messagesMapRef.current || {}),
+    ]);
+    const patch = {};
+    keys.forEach(function (k) {
+      if (!k) return;
+      patch["conversations/" + k] = null;
+      patch["messages/" + k] = null;
+    });
+    if (!Object.keys(patch).length) return;
+    update(ref(db), patch).catch(function () {});
   }
 
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
