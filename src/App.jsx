@@ -277,7 +277,7 @@ import { todayStr, addDays } from "./lib/day";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"MGT Bookings",
-  version:"17.16.8",
+  version:"17.16.9",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -969,6 +969,7 @@ function BookingApp({uid}){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
+    parkedWrites, retryParked, discardParked,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
     loadStalled, readError, hasConnected, forceReconnect,
     firstLoadCount,
@@ -3037,6 +3038,15 @@ function BookingApp({uid}){
       isOnline:isOnline,
       writeWarning:writeWarning,
       onDismissWarning:function(){setWriteWarning(null);},
+      // v17.16.9 (CT-2A-07): a write whose automatic retries ran out is PARKED
+      // rather than dropped, and the "Couldn't save" section grows the two
+      // controls that resolve it. It stays in that section rather than becoming
+      // its own: the strip's collapsed tally is one icon+count per SECTION, so a
+      // second section would have to wear a second mark, and "a write that could
+      // not be saved" is not a different category from "couldn't save".
+      parkedWrites:parkedWrites,
+      onRetryParked:retryParked,
+      onDiscardParked:discardParked,
       ineffShow:ineffShow,
       onDismissIneff:function(){setDismissedIneff(viewDate);},
       onReshuffle:function(){setConfirmReshuffle(true);},

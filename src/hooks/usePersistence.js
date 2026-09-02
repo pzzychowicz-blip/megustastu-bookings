@@ -37,7 +37,7 @@ import { dbError, onDbError } from "../lib/dbError";
 // this hook keeps the refs, listeners, effects and setState. See its header.
 import {
   buildPatch, patchSignature, isDuplicatePatch,
-  isStaleGap, retryDecision, STALE_GAP_MS, MAX_RETRIES,
+  isStaleGap, retryDecision, describeWrite, STALE_GAP_MS, MAX_RETRIES,
 } from "../lib/write-path";
 import { todayStr } from "../lib/day";
 
@@ -184,6 +184,69 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // re-running them on fresh data is safe. Value-form / silent writes (the auto
   // effects) never queue; replaying a precomputed stale array would re-write stale data.
   const pendingRetriesRef=useRef([]);
+  // v17.16.9 (CT-2A-07): where a write goes once its automatic retries are spent.
+  //
+  // It used to go nowhere — `drainPending`'s give-up branch set a banner naming
+  // no booking and dropped the item. The user's change was gone, and the only
+  // thing said about it was "Couldn't save a change after several attempts".
+  //
+  // **The register's account of WHY that is bad does not survive running it,
+  // and the correction is worth keeping.** CT-2A-07 says the optimistic
+  // `setBookings` is never reverted, so "screen and server disagree until the
+  // next echo silently reverts it". They do not: `drainPending` is called from
+  // exactly two places — `resync().then` and the live `bookings` onValue — and
+  // BOTH set local state to server truth and call `clearStale()` immediately
+  // before it, in the same React commit. So by the time the give-up branch
+  // runs, the change has already been reverted. Verified live (v17.16.9): with
+  // the retries forced to fail, the card was back to "Confirmed" the moment the
+  // banner appeared, with no further echo. The defect is therefore not a
+  // divergence but a SILENT DISCARD — the change visibly snaps back and nothing
+  // says which one it was. That makes naming it the whole repair rather than
+  // half of one.
+  //
+  // A parked write is KEPT, NAMED and actionable. `parkedRef` holds the updater
+  // functions (which is where functions belong — `setState` would treat one as
+  // an updater); `parkedWrites` is the render-side mirror the banner reads, and
+  // holds labels only. The two are written together, never separately.
+  const parkedRef=useRef([]);
+  const [parkedWrites,setParkedWrites]=useState([]);
+  // Bails out of the render when the labels are unchanged — the same
+  // return-the-same-reference contract `bookingsAfterAction` and `useDismissals`
+  // keep, and the reason `drainPending` can call this unconditionally.
+  function syncParked(){
+    const next=parkedRef.current.map(function(p){return p.label;});
+    setParkedWrites(function(prev){
+      if(prev.length===next.length&&prev.every(function(v,i){return v===next[i];})) return prev;
+      return next;
+    });
+  }
+  // Hand the parked writes back to the automatic queue for a fresh round of
+  // attempts, on freshly-resynced data. `tries` resets to 0 because this is a
+  // new decision by a person, not a continuation of the run that gave up — and
+  // because a retry that could only ever make one attempt would be a button that
+  // usually does nothing. If the fresh round also fails they park again, so this
+  // cannot loop without somebody pressing it.
+  function retryParked(){
+    if(!parkedRef.current.length) return;
+    const items=parkedRef.current;
+    parkedRef.current=[];
+    syncParked();
+    items.forEach(function(it){ it.tries=0; pendingRetriesRef.current.push(it); });
+    markStale(); // resync → clearStale → drainPending replays them on fresh data
+  }
+  // Accept the loss: stop offering to retry these, and clear the banner.
+  //
+  // The first version also called `markStale()` here, to pull server truth back
+  // over the optimistically-shown change — which is what the finding describes
+  // and what the screen does not do. Since local state IS already server truth
+  // at park time (see above), that resync reverted nothing and cost a round
+  // trip plus a "⟳ Syncing the latest data…" toast for a button whose whole
+  // meaning is "stop". Dropping the items is the entire operation.
+  function discardParked(){
+    if(!parkedRef.current.length) return;
+    parkedRef.current=[];
+    syncParked();
+  }
   function clearStale(){
     staleRef.current=false;
     lastBeatRef.current=Date.now();
@@ -204,9 +267,19 @@ export function usePersistence({ autoOptimizer, nowMins }){
     pendingRetriesRef.current=[];
     queue.forEach(function(item){
       const d=retryDecision(item.tries);
-      if(d.action==="retry") saveBookings(item.fn,false,d.tries);
-      else setWriteWarning("Couldn't save a change after several attempts — please re-check and try again.");
+      // The label rides along: a retry is the SAME user change, so it keeps the
+      // name computed for the first attempt. That is also what closes the race
+      // below — a retry is dispatched from a promise callback, where React
+      // defers the render that would compute a fresh one.
+      if(d.action==="retry") saveBookings(item.fn,false,d.tries,item.label);
+      // v17.16.9: PARK, don't drop. See parkedRef above for what dropping cost.
+      // No `setWriteWarning` here any more: the parked banner carries the message,
+      // and a dismissible red banner beside an undismissable one saying the same
+      // thing is two notices for one fault. The red banner keeps its other three
+      // callers (not loaded, empty-array refusal, blocks rejected) unchanged.
+      else parkedRef.current=parkedRef.current.concat([item]);
     });
+    syncParked();
   }
   // Force-pull the server's current bookings + tableBlocks, replace local state,
   // then lift the gate. Runs ONLY when connected: an offline get() can resolve
@@ -275,7 +348,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // it was blocked by the stale gate. Callers gate their success UI (the "saved"
   // flash / closing the form) on the result so a refused write is never shown as
   // saved. `tryN` (internal) tracks auto-retry attempts; callers omit it.
-  function saveBookings(next,isSilent,tryN){
+  function saveBookings(next,isSilent,tryN,carriedLabel){
     tryN=tryN||0;
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
@@ -285,7 +358,29 @@ export function usePersistence({ autoOptimizer, nowMins }){
     if(staleRef.current){
       console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry, shown optimistically.");
       if(typeof next==="function"&&!isSilent){
-        pendingRetriesRef.current.push({fn:next,tries:tryN});
+        // v17.16.9: the item carries a LABEL, so that if the automatic retries are
+        // exhausted the parked-write banner can say which change it is holding.
+        // It is filled in below rather than here: this branch never runs the
+        // updater, so `prev`/`computed` — the only things that know what changed —
+        // exist only inside the setBookings call.
+        //
+        // **That fill is not synchronous, and on the RETRY path it loses a race.**
+        // A retry is dispatched from inside `resync().then`, so React defers the
+        // render that would fill the label; the next `get()` can resolve from the
+        // local cache one microtask later, drain again, and park the item while
+        // `label` is still null. Measured, not reasoned about: the console read
+        // `parking: null tries 1` BETWEEN the two fills, and the banner said "A
+        // change" for a booking it could name.
+        //
+        // `carriedLabel` is what closes it — a retry inherits the name computed
+        // for the first attempt, which is the right name anyway (it is the same
+        // change, and the FIRST `prev` is the version the card still shows). So
+        // only the first attempt computes one, and that one is dispatched from a
+        // discrete event handler, which React flushes before yielding to the
+        // microtask that could drain. The failure mode if that ever stopped
+        // holding is the banner saying "A change" — degraded, not wrong.
+        const item={fn:next,tries:tryN,label:carriedLabel||null};
+        pendingRetriesRef.current.push(item);
         // v15.6.0: optimistic show. Apply the user's change to LOCAL state NOW so it's
         // visible immediately — previously a held write stayed invisible until resync
         // finished (1–2s+), which read as "my tap did nothing / didn't save". We still
@@ -293,7 +388,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // resync() replays this queued function on FRESH data (and reconciles it into
         // the fresh-data state set, flicker-free). Value-form (doSave) + silent (auto-
         // effect) writes don't reach this branch, so they keep their existing behaviour.
-        setBookings(next);
+        setBookings(function(prev){
+          const computed=next(prev);
+          if(!item.label) item.label=describeWrite(prev,computed);
+          return computed;
+        });
       }
       markStale();
       return false;
@@ -316,7 +415,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // keyed shape lands (arrayShapeRef clears) the queued retry succeeds.
       if(arrayShapeRef.current){
         console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
         markStale();
         dispatched=false;return;
       }
@@ -345,7 +444,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       lastPatchSigRef.current={sig:sig,at:nowMs};
       update(ref(db,"bookings"),patch).catch(function(){
         console.warn("[SAFE] bookings write rejected by server (stale per-booking revision) — resyncing + retry.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
         markStale();
       });
     }
@@ -727,6 +826,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
+    parkedWrites, retryParked, discardParked,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
     // v17.5.1 diagnosis surface — see the load-watchdog effect above.
     loadStalled, readError, hasConnected,

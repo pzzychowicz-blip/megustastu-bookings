@@ -47,7 +47,9 @@ five; v17.16.7 shipped CT-2A-04 and CT-2A-06 — the two P2s, and one structural
 change rather than two fixes — and SETTLED CT-2A-10 as a deliberate won't-fix
 (negligible on the v17.16.5 re-rating: every stamp derives from `Date.now()`, so
 reaching 2**53 needs a hand-written value from outside the app; the rules-suite
-pin stays, see `REFACTOR_LOG.md`), leaving **two**: CT-2A-07 and CT-2A-09.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
+pin stays, see `REFACTOR_LOG.md`), leaving two: CT-2A-07 and CT-2A-09;
+**v17.16.9 shipped CT-2A-07** — the decision it was waiting on was Patryk's
+(park, name, offer Retry) — leaving **one**: CT-2A-09.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
 is not in that count — it was raised in v17.16.5, after the register was
 written. **The count is of REGISTER findings only**, stated here because the
 running tally was off by one for two commits of v17.16.6 before anybody
@@ -88,15 +90,6 @@ v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
 the last of the non-P3 client entries (`getBlockSlots`), so everything left here
 is either a P3 or the one rules item above.
 
-- **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
-  was applied optimistically to local state, behind a dismissible banner naming
-  no booking. Screen and server disagree until the next echo silently reverts it.
-  **Confirmed by reading (v17.16.5):** `drainPending`'s give-up branch sets the
-  warning and nothing reverts the `setBookings(next)` the hold branch applied.
-  **Settling observation is not needed — the DECISION is what is missing.** The
-  queue holds an updater function, not a booking, so naming the lost change means
-  changing what is queued; and reverting it discards work the user can see. That
-  is a design question for Patryk, not a repair. Highest-value of the P3s.
 - **Duplicate booking ids are unchecked** (unrated; surfaced under CT-2A-11 and
   outlived it). Two bookings sharing an id collapse in the optimiser's
   assignment map. A `genId()` collision needs the same millisecond and the same
@@ -104,6 +97,20 @@ is either a P3 or the one rules item above.
   observation:** whether any two ids in PROD coincide at all — a one-line scan
   of the `bookings` node, which nobody has run.
 
+- **`lastPatchSigRef` is not the StrictMode guarantee `CLAUDE.md` describes**
+  (surfaced v17.16.9, DEV-only). It dedupes two patches with the same content
+  AND the same `baseUpdatedAt` inside 2s — but the double-invoked updater can
+  see two different `prev` values (one pre-resync, one post-resync), so the two
+  dispatches carry different bases, escape the window, and the stale one is
+  correctly rejected by the CAS. Measured: on unmodified v17.16.8, **six
+  consecutive ordinary status changes each exhausted the retries** and raised
+  the write-error banner in DEV. **No PROD impact** — StrictMode is dev-only,
+  and the rejected write is the redundant one — so this is a documentation
+  defect plus DEV noise, not a data risk. **Settling observation:** whether the
+  signature should drop `baseUpdatedAt`, which is exactly the change v17.16.6
+  pinned AGAINST under CT-2A-08 (it is what makes two patches indistinguishable
+  to the server), so the answer is probably to correct the claim rather than the
+  code.
 - **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
   `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
   survives, and recorded why the v16.0.0 corruption has not recurred (an
