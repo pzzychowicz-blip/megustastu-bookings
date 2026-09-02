@@ -84,23 +84,99 @@ export function stampForWrite(b, old, lastStamp, nowMs) {
 //
 // Returns the next stamp alongside the patch. The caller owns the ref.
 export function buildPatch(prev, computed, lastStamp, nowMs) {
+  const d = diffChanged(prev, computed);
+  const patch = {};
+  let stamp = lastStamp;
+  d.ids.forEach(function (id) {
+    const b = d.byId[id];
+    if (!b) { patch[id] = null; return; } // in prev, not in computed — a deletion
+    const r = stampForWrite(b, d.prevById[id], stamp, nowMs);
+    patch[id] = r.booking;
+    stamp = r.lastStamp;
+  });
+  return { patch: patch, lastStamp: stamp };
+}
+
+// v17.16.9: ONE pass over the diff, feeding both public callers.
+//
+// `ids` is which children a write would touch — changed, added or deleted, in
+// `computed` order with the deletions last. `byId` is the version to WRITE for
+// each, `prevById` the version it is based on.
+//
+// This was `buildPatch`'s own loop until a second caller appeared: a parked
+// write (CT-2A-07, below) has to name the change it is holding, and it is
+// parked at three sites, only one of which has a patch in hand. Two copies of a
+// diff is how the banner ends up naming a different booking from the one the
+// patch carries.
+//
+// **`byId` records only the CHANGED occurrences, and that is not a detail.**
+// The first version of this extraction built it from every entry in `computed`,
+// which is identical for any well-formed input and diverges on a DUPLICATE id:
+// with `prev = [{id:"x",size:2}]` and `computed = [{id:"x",size:4},
+// {id:"x",size:2}]`, the original loop stamped the changed occurrence and
+// skipped the unchanged one (writing size 4), while a plain last-wins map
+// writes size 2 — silently discarding the edit. The KEY SETS are identical
+// either way, which is exactly why the `changedIds`/`buildPatch` agreement test
+// could not see it: it compares `Object.keys(patch)`. Duplicate ids are a state
+// this repo already tracks as reachable (a `genId()` collision — see
+// `ROADMAP.md`), so an equivalence contract has to hold there too.
+function diffChanged(prev, computed) {
   const prevById = {};
   (prev || []).forEach(function (b) { if (b && b.id != null) prevById[b.id] = b; });
   const seen = {};
-  const patch = {};
-  let stamp = lastStamp;
+  const ids = [];
+  const byId = {};
   (computed || []).forEach(function (b) {
     if (!b || b.id == null) return;
     seen[b.id] = true;
     const old = prevById[b.id];
-    if (!old || bookingChanged(old, b)) {
-      const r = stampForWrite(b, old, stamp, nowMs);
-      patch[b.id] = r.booking;
-      stamp = r.lastStamp;
-    }
+    if (!old || bookingChanged(old, b)) { ids.push(b.id); byId[b.id] = b; }
   });
-  Object.keys(prevById).forEach(function (id) { if (!seen[id]) patch[id] = null; });
-  return { patch: patch, lastStamp: stamp };
+  Object.keys(prevById).forEach(function (id) { if (!seen[id]) ids.push(id); });
+  return { ids: ids, byId: byId, prevById: prevById };
+}
+
+// The id list on its own — `buildPatch`'s diff, exposed for anything that needs
+// to know WHAT a write touches without building the patch.
+export function changedIds(prev, computed) {
+  return diffChanged(prev, computed).ids;
+}
+
+// v17.16.9: what the parked-write banner calls the change it is holding.
+//
+// **Deliberately NOT `describeBooking`**, which is the app's one answer to
+// "what does a booking SOUND like" and returns five clauses — name, time,
+// size, tables, status. That answers a different question. This one has to
+// IDENTIFY which of the day's changes failed, in one line of a red banner, and
+// "Pau Estévez, 20:00, 4 guests, table 3, seated" buries the identity inside a
+// description. The same distinction `time-grid.js` records for
+// `hourLabel`/`cutoffLabel`: two functions that look like copies, asked
+// different questions. It also keeps this module dependency-free, which its
+// header calls a property rather than an accident.
+//
+// **`prev` is read over `computed`, and the first draft had it the other way.**
+// Naming the values being SAVED sounds right and is wrong here: the parked
+// write was UNDONE, so the screen still shows the previous version, and the
+// user has to find that. Measured live — seating a 19:30 booking shifts its
+// time to now, so the banner named "P3 Smoke Test, 15:05" for a card reading
+// 19:30. A CREATE has no `prev` entry and falls back to `computed`, which is
+// the only version there has ever been.
+//
+// A write can touch many bookings (an optimiser reshuffle moves several), so
+// the first is named and the rest counted — listing five in a banner is a list
+// nobody reads.
+export function describeWrite(prev, computed) {
+  const d = diffChanged(prev, computed);
+  if (!d.ids.length) return null;
+  const ids = d.ids;
+  // `prevById` first, `byId` only as the fallback — a create is the one case
+  // with no previous version.
+  const b = d.prevById[ids[0]] || d.byId[ids[0]];
+  // The id is a poor name and a real fallback: `sanitize` guarantees a string
+  // `name`, not a non-empty one, and a nameless booking must still be pointed at.
+  const first = (b && [b.name, b.time].filter(Boolean).join(", ")) || String(ids[0]);
+  if (ids.length === 1) return first;
+  return first + " and " + (ids.length - 1) + " other" + (ids.length > 2 ? "s" : "");
 }
 
 // v16.0.0: the StrictMode dedupe signature. The dev double-invoked updater calls
@@ -141,7 +217,15 @@ export function isStaleGap(lastBeat, nowMs, gapMs) {
 }
 
 // v15.4.0: how many times a blocked or server-rejected user write is replayed on
-// freshly-resynced data before giving up and surfacing a red error.
+// freshly-resynced data before the automatic attempts stop.
+//
+// v17.16.9: what happens AFTER that changed. The item used to be dropped behind
+// a banner naming no booking — so a change the user had just watched revert was
+// reported to them as "Couldn't save a change" and nothing more (CT-2A-07; the
+// register's own account of the mechanism is corrected at `parkedRef` in
+// usePersistence.js, where it was measured). It is now PARKED: kept, named, and
+// retryable or discardable by hand. The cap still bounds the AUTOMATIC
+// attempts, which is what it was always for.
 export const MAX_RETRIES = 3;
 
 // The retry decision for one queued item: replay it, or report failure. Returns

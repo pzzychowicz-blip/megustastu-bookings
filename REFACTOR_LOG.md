@@ -18270,3 +18270,169 @@ apart in one file is exactly the shape somebody "corrects".
    listeners have seen, so calling it before the first snapshot is a no-op
    where the whole-node null was unconditional. The button is inside the
    DEV-gated simulator, which only renders once the inbox has data.
+
+---
+
+## v17.16.9 — the change that was thrown away without being named
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.9-parked-writes` ·
+**Behavioural change:** yes — an exhausted write is now kept, named and
+retryable instead of dropped. **Files:** `src/hooks/usePersistence.js`,
+`src/lib/write-path.js`, `src/components/AppBanners.jsx`, `src/App.jsx`,
+`tests/write-path.test.js`, plus the four living docs.
+
+### What this closes
+
+**CT-2A-07**, the highest-value remaining crash-test finding, and the one that
+had stayed open because it needed a decision rather than a repair.
+
+`drainPending`'s give-up branch was one line: set a red banner reading
+*"Couldn't save a change after several attempts — please re-check and try
+again"*, and drop the queued item. The user's change was gone, and the only
+thing the app said about it named no booking, offered no way to retry, and
+could be dismissed.
+
+### The finding's stated mechanism does not survive running it
+
+CT-2A-07 says the optimistic `setBookings` is never reverted, so *"screen and
+server disagree until the next echo silently reverts it"* — an unbounded
+window in which the app asserts a booking state the server does not have. That
+is what the fix was designed against, and the first draft of the banner copy
+said exactly that: *"shown here but not saved to the server."*
+
+**It is wrong.** `drainPending` is called from exactly two places —
+`resync().then` and the live `bookings` `onValue` — and *both* set local state
+to server truth and call `clearStale()` immediately before it, in the same
+React commit (`usePersistence.js` lines 280/292/295 and 477/484/548). So by the
+time the give-up branch runs, the change has already been reverted.
+
+Measured, not reasoned about: with the retries forced to fail, the card read
+`Confirmed` the moment the banner appeared, with no further echo.
+
+So there is no divergence to describe. The defect is a **silent discard** — the
+change visibly snaps back and nothing says which one it was. That makes naming
+it the whole repair rather than half of one, and it removed a `markStale()`
+from `discardParked` that would have resynced to revert something already
+reverted.
+
+### What ships
+
+A parked write is **kept, named and actionable**. `parkedRef` holds the updater
+functions; `parkedWrites` is the render-side mirror holding labels only. The
+existing "Couldn't save" section grows two controls — **Retry** (a fresh round
+of automatic attempts on freshly-resynced data) and **Discard** (accept the
+loss and clear the banner).
+
+It stays in that section rather than becoming its own, and that is structural:
+the strip's collapsed tally is one icon + count **per section**, so a second
+section would have to wear a second mark — the `ClashIcon` lesson — and "a
+write that could not be saved" is not a different category from "couldn't
+save".
+
+`MAX_RETRIES` is unchanged. It still bounds the *automatic* attempts, which is
+what it was always for; what changed is what happens after them.
+
+### Two bugs the live run found in the fix itself
+
+**1 · The label lost a race, and the banner said "A change".** The label is
+computed inside the `setBookings` updater, because the stale-gate branch never
+runs the updater itself and only `prev`/`computed` know what changed. That fill
+is not synchronous. A retry is dispatched from inside `resync().then`, so React
+defers the render that would fill it, and the next `get()` — resolving from the
+local cache one microtask later — drains again and parks the item while `label`
+is still `null`. The console read `parking: null tries 1` **between** the two
+fills.
+
+The first fix was a `useEffect` on `[bookings]` re-mirroring the labels. It
+worked, and it cost **three lint warnings** — one unused directive plus two
+`Cannot call impure function during render` on pre-existing `Date.now()` lines
+the rule had not previously flagged. Isolated by deleting the effect and
+re-linting: 8 warnings → 5, the baseline. So it was replaced by
+**`carriedLabel`**: a retry inherits the name computed for the first attempt,
+which is the right name anyway (same change; the *first* `prev` is the version
+the card still shows). Only the first attempt computes one, and that one is
+dispatched from a discrete event handler, which React flushes before yielding.
+Back to 71 warnings, 0 errors.
+
+**2 · The label named a booking that was not on screen.** `describeWrite` read
+`computed` over `prev` — the values being saved — which sounds right and is
+wrong here: the write was undone, so the card still shows the previous version.
+Seating a 19:30 booking shifts its time to now, so the banner named
+*"P3 Smoke Test, 15:05"* for a card reading *19:30*. It reads `prev` over
+`computed` now, falling back to `computed` for a create, which has no previous
+version.
+
+Both were found by watching the app, not by reading it. Neither would have
+failed a build.
+
+### `changedIds` — one diff, not two
+
+The label needs to know which children a write would touch, and a write is
+parked at three sites, only one of which has a patch in hand. Rather than a
+second copy of the diff loop — which is how the banner ends up naming a
+different booking from the one the patch carries — `buildPatch`'s own loop was
+extracted as `changedIds` and `buildPatch` now consumes it. Proven shared
+rather than merely adjacent: sabotaging `changedIds` to drop deletions breaks
+an existing `buildPatch` test (`nulls a removed child`) as well as two new ones.
+
+### A DEV-only false alarm, recorded because it is useful
+
+Under StrictMode the double-invoked updater can dispatch two `update()` calls
+whose CAS bases differ (one pre-resync, one post-resync), so they escape the 2s
+`patchSignature` dedupe and the stale one is correctly rejected — four times,
+and the write parks. **On unmodified v17.16.8, six consecutive ordinary status
+changes each raised the old banner**, so this is pre-existing DEV behaviour and
+not a regression; it is also what made the fix easy to demonstrate side by
+side. With StrictMode off, one forced failure parks exactly one item, Retry
+lands the change, `parkedWrites` returns to `[]` and the strip disappears.
+
+It does contradict CLAUDE.md's description of `lastPatchSigRef` as making the
+write path "StrictMode-proof" — see `ROADMAP.md`.
+
+### `/code-review` — two findings, both confirmed, both introduced here
+
+**1 · The extraction was not equivalent on a duplicate id.** `buildPatch`'s new
+lookup was built from every entry in `computed` (last wins), where the original
+loop only ever stamped the occurrences that DIFFERED from `prev`. With
+`prev = [{id:"x",size:2}]` and `computed = [{id:"x",size:4},{id:"x",size:2}]`,
+the original wrote size 4 and the extraction wrote size 2 — silently discarding
+the edit. Reproduced by running the pre-refactor function beside the new one:
+*"OLD writes size: 4  NEW writes size: 2"*.
+
+**The key sets are identical, which is exactly why the new agreement test could
+not see it** — it compares `Object.keys(patch)`. Duplicate ids are a state this
+repo already tracks as reachable (a `genId()` collision, `ROADMAP.md`), so an
+equivalence contract has to hold there too. Fixed by making the shared pass
+(`diffChanged`) record only the CHANGED occurrences, which also removed the
+double `bookingChanged` evaluation the naive fix would have cost on the hot
+write path. Pinned by a value test, not a key test.
+
+**2 · A parked write hid a concurrent `writeWarning`.** The section rendered
+the parked message *instead of* the warning and swapped Dismiss for
+Retry/Discard — so a second, unrelated failure was neither shown nor
+dismissable, and reappeared out of context when the parked write was resolved.
+The in-code comment asserted they "cannot both be rendered", which was true of
+the rendering and false of the states: `writeWarning` has three other callers
+(not loaded, empty-array refusal, **blocks rejected**), none related to
+parking. Concretely — a booking write parks, the user then edits a table block,
+`saveBlocks`' rev-CAS is rejected, and the block edit is lost with the app
+saying nothing.
+
+Both lines render now, parked first, with Dismiss alongside Retry/Discard
+whenever there is a warning to dismiss. Verified live by parking a write and
+then raising an independent warning: both sentences and all three buttons.
+
+### Verification
+
+| | |
+|---|---|
+| `npm run build` | clean · **92.68 kB gz** main bundle (main: 92.13, +0.55) |
+| `npm test` | **817 passed** (24 files), from 805 — 12 new in `write-path.test.js` |
+| sabotage checks | describeWrite reading `prev`-over-`computed` reversed → 1 fail; `changedIds` dropping deletions → 3 fails, one of them a pre-existing `buildPatch` test |
+| `npm run lint` | **71 problems (0 errors, 71 warnings)** — the baseline exactly, read off the `problems` line |
+| `npm run check:style` | OK |
+| live, DEV | park · label · Retry (lands, banner clears) · Discard (drops, banner clears) · ordinary path unaffected; and the same six clicks on v17.16.8 for the before/after |
+
+The whole verification rig — a `window.__FORCE_STALE__` lever, `MAX_RETRIES` at
+1, four `console.log`s and a StrictMode removal — was added, used and removed;
+`git diff` against `origin/main` touches neither `main.jsx` nor any of it.

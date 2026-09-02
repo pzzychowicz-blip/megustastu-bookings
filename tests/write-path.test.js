@@ -17,6 +17,7 @@ import { describe, it, expect } from "vitest";
 import {
   contentKey, bookingChanged, stampForWrite, buildPatch,
   patchSignature, isDuplicatePatch, isStaleGap, retryDecision,
+  changedIds, describeWrite,
   DEDUPE_WINDOW_MS, STALE_GAP_MS, MAX_RETRIES,
 } from "../src/lib/write-path.js";
 
@@ -278,5 +279,99 @@ describe("retryDecision — the cap that was only ever a comment", () => {
     let tries = 0, hops = 0;
     while (retryDecision(tries).action === "retry" && hops < 50) { tries = retryDecision(tries).tries; hops++; }
     expect(hops).toBe(MAX_RETRIES);
+  });
+});
+
+// ── v17.16.9 (CT-2A-07) ──────────────────────────────────────────────────────
+// A write whose automatic retries run out is now PARKED and NAMED rather than
+// dropped behind a banner naming nothing. These cover the two pure functions
+// that make the naming possible.
+
+describe("changedIds — buildPatch's diff, now shared", () => {
+  it("agrees with buildPatch on every input, which is the whole reason it exists", () => {
+    // The defect this guards is drift: if the banner names a booking the patch
+    // does not carry, the message is worse than no message. buildPatch consumes
+    // changedIds, so this pins the contract rather than merely observing it.
+    const cases = [
+      [[bk({ id: "a" })], [bk({ id: "a" })]],                                   // no change
+      [[bk({ id: "a" })], [bk({ id: "a", size: 4 })]],                          // changed
+      [[bk({ id: "a" })], [bk({ id: "a" }), bk({ id: "b" })]],                  // added
+      [[bk({ id: "a" }), bk({ id: "b" })], [bk({ id: "a" })]],                  // deleted
+      [[bk({ id: "a" }), bk({ id: "b" })], [bk({ id: "b", size: 6 })]],         // both at once
+      [[], []], [null, null], [undefined, [bk({ id: "a" })]],
+      // a duplicate id — reachable via a genId() collision, see ROADMAP
+      [[bk({ id: "a", size: 2 })], [bk({ id: "a", size: 4 }), bk({ id: "a", size: 2 })]],
+    ];
+    cases.forEach(([prev, computed]) => {
+      const ids = changedIds(prev, computed);
+      const patch = buildPatch(prev, computed, 0, 1000).patch;
+      expect(ids.slice().sort()).toEqual(Object.keys(patch).sort());
+    });
+  });
+  it("on a DUPLICATE id, buildPatch still writes the CHANGED occurrence", () => {
+    // Key-set agreement is NOT enough, and this is the case that proves it: the
+    // extraction's first version built its lookup from every entry in `computed`
+    // (last wins), which agrees on keys and writes the UNCHANGED copy — silently
+    // discarding the edit. Reproduced against the pre-refactor function before
+    // it was fixed: "OLD writes size: 4  NEW writes size: 2".
+    const prev = [bk({ id: "x", size: 2 })];
+    const computed = [bk({ id: "x", size: 4 }), bk({ id: "x", size: 2 })];
+    expect(buildPatch(prev, computed, 0, 1000).patch.x.size).toBe(4);
+  });
+  it("returns computed order first, deletions last", () => {
+    // buildPatch stamps in this order, so it is a real property, not incidental.
+    const prev = [bk({ id: "gone" }), bk({ id: "b" })];
+    const computed = [bk({ id: "b", size: 4 }), bk({ id: "new" })];
+    expect(changedIds(prev, computed)).toEqual(["b", "new", "gone"]);
+  });
+  it("ignores an echo-only stamp change, like the diff it came from", () => {
+    expect(changedIds([bk({ updatedAt: 1 })], [bk({ updatedAt: 999 })])).toEqual([]);
+  });
+  it("skips entries with no id rather than keying on undefined", () => {
+    expect(changedIds([], [bk({ id: null }), { name: "x" }])).toEqual([]);
+  });
+});
+
+describe("describeWrite — what the parked banner calls the change", () => {
+  it("names the booking by identity, not by description", () => {
+    // Deliberately NOT describeBooking's five clauses — this identifies which
+    // change failed, in one line of a banner.
+    expect(describeWrite([bk({ id: "a", name: "Pau", time: "20:00" })],
+                         [bk({ id: "a", name: "Pau", time: "20:00", status: "seated" })]))
+      .toBe("Pau, 20:00");
+  });
+  it("names the booking as it STILL APPEARS, not as it would have been saved", () => {
+    // The first version had this the other way round and it read as obviously
+    // right. It is wrong: a parked write was UNDONE, so the card still shows the
+    // previous version and that is what the user has to find. Caught live —
+    // seating a 19:30 booking shifts its time to now, so the banner named
+    // "P3 Smoke Test, 15:05" for a card reading 19:30.
+    expect(describeWrite([bk({ id: "a", name: "Old", time: "13:00" })],
+                         [bk({ id: "a", name: "New", time: "19:30" })]))
+      .toBe("Old, 13:00");
+  });
+  it("falls back to computed for a CREATE, which has no previous version", () => {
+    expect(describeWrite([], [bk({ id: "n", name: "Walk-in", time: "20:15" })]))
+      .toBe("Walk-in, 20:15");
+  });
+  it("falls back to the version being removed for a deletion", () => {
+    expect(describeWrite([bk({ id: "a", name: "Rita", time: "21:00" })], []))
+      .toBe("Rita, 21:00");
+  });
+  it("names the first and counts the rest, with the noun following the count", () => {
+    const prev = [bk({ id: "a", name: "A" }), bk({ id: "b", name: "B" }), bk({ id: "c", name: "C" })];
+    const two = [bk({ id: "a", name: "A", size: 4 }), bk({ id: "b", name: "B", size: 4 }), bk({ id: "c", name: "C" })];
+    expect(describeWrite(prev, two)).toBe("A, 13:00 and 1 other");
+    const three = two.map((b) => Object.assign({}, b, { size: 4 }));
+    expect(describeWrite(prev, three)).toBe("A, 13:00 and 2 others");
+  });
+  it("falls back to the id when a booking has neither name nor time", () => {
+    // sanitize guarantees a string name, not a non-empty one. A nameless
+    // booking must still be pointed at.
+    expect(describeWrite([], [bk({ id: "xyz", name: "", time: "" })])).toBe("xyz");
+  });
+  it("returns null when nothing changed, so the banner never claims a phantom", () => {
+    expect(describeWrite([bk()], [bk()])).toBe(null);
+    expect(describeWrite([], [])).toBe(null);
   });
 });
