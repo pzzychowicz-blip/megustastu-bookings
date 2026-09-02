@@ -17918,3 +17918,28 @@ statement about scheduling, not about visibility.
 `!bl` is folded into the predicate because `TimelineView`'s filter dereferences
 `bl.date` too, so the shared version has to survive a null element that the old
 `getBlockSlots` filter would equally have thrown on.
+
+### 7 · `/code-review` — the escape had to be an addition, not a re-spelling
+
+Commit 3 swapped `undoKey`'s array `join` for `.map(escSep).join`, and in doing
+so changed something the escape was never meant to touch.
+`Array.prototype.join` renders a `null` or `undefined` ELEMENT as the empty
+string; `escSep` reaches it through `String(v)` and renders the word `"null"`.
+So `tables: [null]` and `tables: ["null"]` became **one key** — a NEW collision,
+in the function this version exists to remove one from, and asymmetric with the
+scalar branch on the very next line, which has always spelled the two out.
+
+Reachable on the null side without contrivance: RTDB returns a sparse array as
+`["1A", null, "2"]` when the stored keys are 0 and 2, and `sanitize` only checks
+`Array.isArray`. A table literally named `"null"` is permitted by `idOk`. Both
+at once is unlikely — and the point is not the odds. **An escape is only safe
+if it is a pure ADDITION to the old key**: the moment it also re-spells values
+that were never in its range, it is a different key function and has to be
+argued from scratch.
+
+Measured with a standalone probe against both spellings before the fix: old
+`join` gives `[null]` → `""` and `["null"]` → `"null"` (distinct); the mapped
+version gives both → `"null"` (equal). The fix restores `join`'s own semantics
+inside the map, so a hole collapses to nothing exactly as it always did, and the
+test asserts that identity as well as the separation — pinned against the
+un-restored build, where it is the only failure.

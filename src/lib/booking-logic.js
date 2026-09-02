@@ -1130,7 +1130,20 @@ function escSep(v){
 function undoKey(b){
   return UNDO_FIELDS.map(function(k){
     var v=b[k];
-    if(Array.isArray(v)) return v.slice().sort().map(escSep).join(K_ARR);
+    // /code-review: the null/undefined collapse is `join`'s and had to be kept.
+    // `Array.prototype.join` renders a null or undefined element as the EMPTY
+    // STRING, while `escSep` reaches it through `String(v)` and renders the word
+    // "null" — so swapping the join for a map silently made `tables: [null]` and
+    // `tables: ["null"]` one key. That is a NEW collision, in the function this
+    // version exists to remove one from, and it was asymmetric with the very
+    // next line, which has always spelled the two out. RTDB returns a sparse
+    // array as `["1A", null, "2"]` and `sanitize` only checks `Array.isArray`,
+    // so the null side is reachable; a table named "null" is permitted by
+    // `idOk`. Rare together, and the point is that the escape had to be a pure
+    // ADDITION to the old key, not a re-spelling of it.
+    if(Array.isArray(v)) return v.slice().sort().map(function(x){
+      return (x===undefined||x===null)?"":escSep(x);
+    }).join(K_ARR);
     return (v===undefined||v===null)?"":escSep(v);
   }).join(K_FLD);
 }

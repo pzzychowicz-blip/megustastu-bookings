@@ -847,6 +847,27 @@ describe("undoSnapshots / applyUndo", () => {
     expect(undoSnapshots([esc], [forged]).map((x) => x.id)).toEqual(["k"]);
   });
 
+  it("renders a null array element as join always did, not as \"null\"", () => {
+    // /code-review. Swapping `join` for `.map(escSep)` changed how a null or
+    // undefined ELEMENT stringifies: join gives "", String(v) gives "null" —
+    // so [null] and ["null"] became one key, a NEW collision in the function
+    // this version exists to remove one from. RTDB returns a sparse array as
+    // ["1A", null, "2"] and sanitize only checks Array.isArray, so the null
+    // side is reachable; `idOk` permits a table literally named "null".
+    const holed = mk({ id: "k", tables: [null] });
+    const named = { ...holed, tables: ["null"] };
+    expect(undoSnapshots([holed], [named]).map((x) => x.id)).toEqual(["k"]);
+    expect(dayBookingsSig([holed], holed.date)).not.toBe(dayBookingsSig([named], named.date));
+    // ...and undefined the same way, against its own spelling
+    const undef = mk({ id: "k", tables: [undefined] });
+    const uname = { ...undef, tables: ["undefined"] };
+    expect(undoSnapshots([undef], [uname]).map((x) => x.id)).toEqual(["k"]);
+    // The escape must be a pure ADDITION to the old key: a hole still collapses
+    // to nothing, exactly as join rendered it.
+    expect(dayBookingsSig([holed], holed.date))
+      .toBe(dayBookingsSig([mk({ id: "k", tables: [undefined] })], holed.date));
+  });
+
   it("leaves every ordinary value exactly where it was", () => {
     // The guarantee that matters more than the collision: nothing WITHOUT a
     // control character may change behaviour. An unchanged booking still reads
