@@ -18072,3 +18072,45 @@ closed assertions — inverted with the rules, never weakened, which is what tha
 convention exists to force. The bare-remove sweep runs over `revPairsIn`'s own
 walked list rather than a typed one, so a thirteenth pair is covered without
 this file being edited.
+
+### CT-2A-10 settled as a deliberate won't-fix, and deleted from ROADMAP
+
+Not shipped, not withdrawn — a third thing, and the file that tracks these had
+only had words for the first two. `2**53` freezes a booking's stamp (`old + 1
+=== old`, so `stampForWrite` stops advancing and only a delete clears it). It is
+real, it is pinned in the rules suite, and the v17.16.5 re-rating measured why it
+is negligible: every stamp derives from `Date.now()` (~1.7e12), so reaching
+`2**53` needs a hand-written value from outside the app — at which point the same
+writer can do worse things more directly.
+
+Patryk's call, this version: **the decision has been made, so it is not pending
+work.** The entry is deleted from `ROADMAP.md`, the rules-suite pin stays exactly
+where it is, and the reasoning lives here.
+
+`ROADMAP.md`'s own paragraph on this was widened to say so, because it read "a
+WITHDRAWN finding is deleted from this file, not annotated in it" and a
+won't-fix is not a withdrawal — the first says *it was not there*, the second
+says *it is there and is not worth a version*. Different judgements; neither is
+pending work. Left un-widened, the next won't-fix would have been annotated in
+place, which is how a pending-work list turns into a register.
+
+### Two stale figures, corrected while re-verifying the file
+
+Every remaining `ROADMAP.md` entry was re-checked against the source rather than
+re-read, which is what turned these up. Neither is load-bearing; both are the
+kind of number that gets quoted with confidence.
+
+- `CLAUDE.md` said **783 tests as of v17.16.5**. It is **805**, and had been
+  wrong for two versions — the same drift the file's own line-count note warns
+  about ("re-measure rather than trust this number"). The parenthetical about
+  running the build first was re-measured too: without `dist`, 804 pass and 1 is
+  skipped.
+- `ROADMAP.md` and `database.rules.README.md` both said the rules suite is **78
+  tests**. It was 101 before this version and is **109** after it.
+
+The entries themselves all stand, verified: no `paint-order` treatment ships
+(the contrast decision is still yours); `.github/workflows/ci.yml` still has no
+JVM step; `database.rules.json` contains zero `matches(` calls, so the rules
+still check type and never format; `drainPending`'s give-up branch still only
+sets a warning; `persist` is still called from inside the `setBookings` updater;
+and there is no `InboxPanel` in `src/components`.
