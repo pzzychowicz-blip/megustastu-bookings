@@ -17842,3 +17842,37 @@ instead of only counting them, so the next drift is visible rather than
 arithmetic. Not amended into the earlier commits: the separate-commit record is
 the deliverable, and a wrong number corrected in the open is worth more than a
 clean one rewritten.
+
+### 5 · The lint error commit 3 shipped, and the line that hid it
+
+`npm run lint` is a **hard CI gate at 0 errors**. Commit 3's `SEP_RE` matches the
+ESC-to-US control range, which trips `no-control-regex` — a real error, present
+in commits 3 and 4, and it would have failed CI on the PR.
+
+**The verification said otherwise, twice, because it read the wrong line.**
+`eslint` prints two trailing lines and only the second is the verdict:
+
+```
+0 errors and 1 warning potentially fixable with the `--fix` option    <- about --fix
+N problems (1 error, 71 warnings)                                     <- the gate
+```
+
+Piping through `tail -2` surfaces the first and hides the second, so "0 errors"
+was reported from a sentence that never claimed it. Exactly the family this repo
+keeps re-learning — the synthetic `:active` press, the accessible name read out
+of an automation tree — where the thing that was wrong was the instrument.
+`main` was checked as a control and reads `71 problems (0 errors)`, which is what
+this branch reads again now. A Gotchas row was added: grep for `problems`, never
+`tail`.
+
+The rule itself is right, and the code is the exception it cannot know about:
+`SEP_RE` is the one regex in the app whose *job* is to find control characters.
+It carries an inline disable with the reason rather than a workaround, because
+every alternative is worse — a char-by-char loop runs over every field of every
+booking through `dayBookingsSig`, and a `new RegExp` built from the same escapes
+is flagged by the same rule while hiding the range from a reader.
+
+**Not amended into commit 3.** The separate-commit record is the deliverable.
+Commits 3 and 4 are green on build, test and `check:style` and red on lint; a
+bisect landing there gets a lint failure and this entry explaining it, which is
+more honest than a history that never had the mistake.

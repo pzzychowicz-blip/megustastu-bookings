@@ -1089,6 +1089,14 @@ var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
 // nothing decodes: the key is compared, and injectivity is the only property
 // asked of it.
 var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
+// `no-control-regex` exists to catch a control character that got into a pattern
+// by ACCIDENT — a pasted byte, a mistyped escape. Here the characters are the
+// entire subject: this is the one regex in the app whose job is to find them.
+// Disabled with the reason rather than worked around, because every alternative
+// is worse: a char-by-char loop runs on every field of every booking through
+// `dayBookingsSig`, and `new RegExp("[\\u001b-\\u001f]")` is flagged by the same
+// rule while hiding the range from a reader.
+// eslint-disable-next-line no-control-regex
 var SEP_RE=/[\u001b-\u001f]/g;
 function escSep(v){
   return String(v).replace(SEP_RE,function(c){
