@@ -685,6 +685,18 @@ describe("the WhatsApp sandbox nodes (v17.16.8)", () => {
     expect(await seedRead("messages")).not.toBeNull();
   });
 
+  it("neither node can be REPLACED wholesale either", async () => {
+    // The gap the bookings group already names: "replacing is the same
+    // capability wearing a different verb". A `set()` naming one conversation
+    // drops every other one, and each child it DOES name satisfies $phoneKey.
+    // Denying the wipe without denying this would close the reproduction and
+    // not the finding — so both verbs are pinned for these two nodes too.
+    await seed((db) => db.ref("conversations").set({ [PHONE]: { phone: PHONE } }));
+    await seed((db) => db.ref("messages").set({ [PHONE]: { m1: { id: "m1" } } }));
+    await assertFails(staff().ref("conversations").set({ other: { phone: "x" } }));
+    await assertFails(staff().ref("messages").set({ other: { m9: { id: "m9" } } }));
+  });
+
   it("templates: a bare whole-node set is REFUSED, the rev'd write is accepted", async () => {
     // The un-CASed write the sandbox hardening removes. Both halves matter: if
     // the bare form still passed, the rev pair would be decoration.
