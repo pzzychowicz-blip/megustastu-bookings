@@ -670,8 +670,14 @@ explaining why is usually the one to read.
   `--shadow-popover` (floating surfaces — `StatusToasts`, matching the
   quick-status popup). **Triage each site by one question: does the ELEMENT's own
   fill flip with the theme?** A MIX counts as "no" — `BLOCK_BG[status]` spans
-  three invariant fills and two that flip, so `SBadge` and the timeline's status
-  swatch take `--shadow-flat`. Genuine remaining exceptions are **rings and
+  three invariant fills and two that flip, so `SBadge`, the timeline's status
+  swatch and (v17.16.5) the PLAN legend's take `--shadow-flat`. The plan one is
+  worth its own clause: it was covered by this rule from the day the rule was
+  written and simply never swept, because it did not exist yet when the sweep
+  ran and arrived in v17.15.7 as a copy of the timeline chip with one line
+  missing. **A rule stated in this file does not apply itself to a site added
+  after it** — when you copy a component, diff it against its twin rather than
+  against your memory of the twin. Genuine remaining exceptions are **rings and
   glows** (`0 0 0 3px …`: the connection dot, the focus and selection rings),
   which are not drop shadows at all.
   **And a literal can hide behind a `const`** — `StatusToasts`' `toastShadow`
