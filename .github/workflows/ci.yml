@@ -46,10 +46,12 @@ jobs:
   #
   # A SEPARATE job, not extra steps on `verify`, for two reasons: it runs in
   # parallel with `verify` rather than in series, and a failure to install the
-  # CLI cannot take down the gate every PR depends on. It is NOT free: measured
-  # on run 33618082212 (both jobs from 10:10:34) `verify` finished in 34s and
-  # this job in 43s, so `rules` is what sets the wall-clock, by ~9s. That run
-  # was a cold cache and paid the jar download; expect the gap to close.
+  # CLI cannot take down the gate every PR depends on. It is NOT free, and the
+  # cache below does not make it so: measured over the first two runs, cold
+  # then warm, `verify` took 34s / 30s and this job 43s / 38s. So `rules` sets
+  # the wall-clock by ~8-9s, and caching the jar did NOT close that gap — it
+  # removed the download (absent from the warm run's log) while setup-java and
+  # the ~200 MB global install stayed. Don't cite a saving this hasn't made.
   #
   # Deliberately NOT path-filtered. The suite's inputs are database.rules.json,
   # tests/rules/**, firebase.json, vitest.rules.config.js AND package.json — a
