@@ -5,7 +5,12 @@
 //   conversations/{phoneKey}     — one object per conversation (KEYED — the
 //                                  production schema; matches api/_lib/rtdb.js)
 //   messages/{phoneKey}/{msgId}  — one object per message (KEYED)
-//   templates/                   — staff-editable quick replies (array)
+//   templates/                   — staff-editable quick replies (array), under
+//                                  a revGuard CAS on templatesRev since
+//                                  v17.16.8 — it has ONE writer (this client),
+//                                  where conversations/messages are also
+//                                  written by api/_lib/rtdb.js through the
+//                                  Admin SDK, which bypasses rules entirely
 // plus every inbox handler ported from the pre-refactor preview, the
 // draft→form handoff seam (draftSourceRef + completeDraftAccept), and the
 // guarded save helpers.
@@ -32,6 +37,7 @@ import { EMPTY_FORM } from "../lib/constants";
 import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible } from "../lib/whatsapp";
 import { backendEnabled, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { WA_SANDBOX } from "../lib/waSandbox";
+import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
 
 export function useWhatsApp({
@@ -57,6 +63,12 @@ export function useWhatsApp({
   const messagesLoaded = useRef(false);
   const templatesLoaded = useRef(false);
   const templatesSeeded = useRef(false);
+  // v17.16.8: `templates` is one of the two WA nodes with a SINGLE writer (this
+  // client — the Admin backend never touches it), so unlike conversations and
+  // messages it gets a real revGuard CAS rather than a bare per-child grant.
+  // The published rules refuse a whole-node `set()` on it, which is what makes
+  // this ref load-bearing rather than decorative. See database.rules.README.md.
+  const templatesRevRef = useRef(0);
   const convFirstLoadCount = useRef(null); // #conversations on first load (empty-array guard)
   // draftSourceRef: phoneKey whose draft is being accepted. Set by
   // handleAcceptDraft, consumed by completeDraftAccept after the booking saves.
@@ -123,6 +135,10 @@ export function useWhatsApp({
   }, []);
   useEffect(() => {
     if (!WA_SANDBOX) return;
+    return attachRev("templates", templatesRevRef);
+  }, []);
+  useEffect(() => {
+    if (!WA_SANDBOX) return;
     const unsub = onValue(ref(db, "templates"), (snap) => {
       const val = snap.val();
       if (val) {
@@ -132,7 +148,7 @@ export function useWhatsApp({
         setTemplates(DEFAULT_TEMPLATES);
         if (!templatesSeeded.current) {
           templatesSeeded.current = true;
-          set(ref(db, "templates"), DEFAULT_TEMPLATES).catch(function () {});
+          writeWithRev("templates", DEFAULT_TEMPLATES, templatesRevRef);
         }
       }
       templatesLoaded.current = true;
@@ -235,7 +251,7 @@ export function useWhatsApp({
       return;
     }
     setTemplates(next);
-    set(ref(db, "templates"), next).catch(function () {});
+    writeWithRev("templates", next, templatesRevRef);
   }
 
   // ── Inbox handlers ──────────────────────────────────────────────────────────
