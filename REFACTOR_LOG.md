@@ -18605,3 +18605,81 @@ console.log({
 ```
 
 Both lists empty is the same answer DEV gave.
+
+### Commit 4 — CT-2A-09: the write leaves the setState updater
+
+**Files:** `src/hooks/usePersistence.js`. The last open crash-test register
+finding, and the one ROADMAP rated *low value, high risk* — "worth doing only as
+its own version, with nothing else riding along". It is the last commit of this
+branch for exactly that reason: the three before it change no shipped behaviour,
+so a bisect can tell them apart from this one.
+
+`saveBookings` and `saveBlocks` called `persist(...)` — which performs the
+Firebase `update()` — from **inside** their `setState` updater, the shape
+`CLAUDE.md`'s own gotcha row has forbidden since v16.0.0 while this file did it.
+v17.16.0 corrected the row's claim that the shape was gone; this removes the
+shape. Both now use `useWaitlist.js`'s pattern verbatim: compute from a ref
+mirror, assign the mirror, `setState`, then write — all plain statements.
+
+**Two things it fixes beyond obeying the rule**, neither of which is why it was
+filed:
+
+React invokes an updater during **render**, not at the call. It only *looked*
+synchronous here because React eagerly evaluates the first update on an idle
+fiber — an internal optimisation, not a contract. `saveBookings` returns a
+`dispatched` boolean that `persist`'s guard branches set and that is read on the
+very next line, and **every caller gates its "Booking saved." on that return**.
+The whole contract was resting on an implementation detail. And the same eager
+path invokes the updater a *second* time when the render arrives, which is the
+dev double-dispatch `lastPatchSigRef` exists to absorb.
+
+It also makes the v17.16.9 parked-write label synchronous. That comment explains
+at length that the label must be filled inside the updater because "`prev` /
+`computed` … exist only inside the setBookings call" — no longer true, so the
+label is computed before the item is pushed and the documented race (a drain
+seeing `label` still null) is unreachable. **`carriedLabel` stays**: it is still
+the right name for a retry, and removing a working defence is not this commit's
+job.
+
+**The invariant that replaces the mitigation**, stated at the ref declarations:
+every `setBookings` / `setTableBlocks` in the file assigns its mirror on the
+line above it — **four and three respectively, counted rather than assumed** (a
+first draft of that comment said "four of each"). A new set site that forgets
+one hands the next save a stale `prev`, and the diff would read that as fields
+changing *back*, so it would write rather than skip.
+
+### Verification — measured against the real server, not reasoned about
+
+Rewriting this path is how the repo has lost production data twice, so it was
+exercised live in DEV rather than trusted to the suite.
+
+| | |
+|---|---|
+| `npm run build` | main bundle 339.21 kB, **92.67 kB gz** (baseline 92.68) |
+| `npm test` | **817 passed**, 24 files |
+| `npm run check:style` | OK |
+| `npx eslint src` | **71 problems, 0 errors** — byte-identical to the pre-change baseline, measured by stashing the change and re-running |
+
+Live, against DEV Firebase:
+
+- **A form save lands.** `P3 Smoke Test` edited to Seated → server `status`
+  `confirmed` → `seated`, `updatedAt` `1788359547299` → `1788363527629`.
+- **The mirror chains, which is the property that could actually have broken.**
+  Two back-to-back quick actions (Confirmed, then Completed) with no server
+  round-trip between them: the second write's `baseUpdatedAt` came back as
+  **1788363576345 — exactly the first write's `updatedAt`**. So the second diff
+  was computed against the post-first-write snapshot. A stale mirror would have
+  carried the pre-Confirmed base and been rejected by the CAS; no rejection, no
+  resync, and no `[SAFE]` line in the console.
+- **`saveBlocks` lands.** Blocking table 6 took `tableBlocks` 13 → 14 and
+  `tableBlocksRev` 98 → 99, i.e. the revGuard CAS advanced by exactly +1, with
+  the new block carrying a minted `id`.
+
+**One false alarm, recorded because it would otherwise be re-found.** Adding two
+`useRef`s to a live hook changes its hook order, so the first HMR swap threw
+*"React has detected a change in the order of Hooks"* and the error boundary
+caught it — position 72, `useState` → `useRef`. It also left one stale render
+where the timeline drew blank. Both are HMR artefacts of editing a mounted hook:
+every clean load renders correctly and the console errors carry the *pre-reload*
+module timestamps. Checked rather than assumed, because "it's just HMR" is
+exactly what a real regression would also look like for one screenshot.
