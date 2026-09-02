@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap, stampGuestSeed,
+  resolveGuestId,
   searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
 } from "../src/lib/customers.js";
 
@@ -527,5 +528,71 @@ describe("stampGuestSeed", () => {
     // directions, or a caller gating on it silently drops a real write.
     const list = [bk({ id: "b1", phone: "" })];
     expect(stampGuestSeed(list, draft)).not.toBe(list);
+  });
+});
+
+// ── v17.16.6 (CT-2B-08): which group does the SAVED booking join? ─────────────
+// The half `stampGuestSeed` above does not answer. It refuses to re-home a seed
+// that has since been joined — correctly — and before this the draft went on
+// carrying the id minted when the name was picked, so the new booking landed in
+// a group of one beside the group the operator meant to join, with nothing on
+// screen distinguishing that from success.
+describe("resolveGuestId", () => {
+  const draft = { guestId: "gb1", guestSeed: "b1" };
+
+  it("adopts the id the seed has acquired since the draft was minted", () => {
+    // THE finding. Another device joined this guest through a different booking
+    // of theirs between the pick and the Save, so the seed carries an id that is
+    // not the deterministic "g"+seedId this draft minted.
+    const list = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(resolveGuestId(list, draft)).toBe("gOTHER");
+  });
+
+  it("keeps the minted id when the seed is still unjoined", () => {
+    // The ordinary path, and the one that must not move: `stampGuestSeed` is
+    // about to write this very id onto the seed, so the two agree.
+    const list = [bk({ id: "b1", phone: "" })];
+    expect(resolveGuestId(list, draft)).toBe("gb1");
+  });
+
+  it("agrees with stampGuestSeed in BOTH directions, which is the point", () => {
+    // The defect was the two halves disagreeing, so the property worth pinning
+    // is that they cannot: whatever id the seed ends up with is the id the new
+    // booking gets.
+    [[], [bk({ id: "b1", phone: "" })], [bk({ id: "b1", phone: "", guestId: "gOTHER" })]]
+      .forEach((list) => {
+        const after = stampGuestSeed(list, draft);
+        const seed = after.find((b) => b.id === "b1");
+        const resolved = resolveGuestId(list, draft);
+        if (seed) expect(resolved).toBe(seed.guestId);
+        else expect(resolved).toBe("gb1");   // nothing to join
+      });
+  });
+
+  it("stands on the draft when there is no seed to reconcile against", () => {
+    // bookAgain on a booking that already had an id, and every edit (openEdit
+    // sets guestSeed: null) — there is no second party to the decision.
+    const list = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(resolveGuestId(list, { guestId: "gADOPTED" })).toBe("gADOPTED");
+  });
+
+  it("stands on the mint when the seed is no longer in the list", () => {
+    // Deleted meanwhile, or a replay on fresh data that no longer holds it:
+    // there is no group left to join, so the newcomer starts its own.
+    expect(resolveGuestId([bk({ id: "b2", phone: "" })], draft)).toBe("gb1");
+    expect(resolveGuestId([], draft)).toBe("gb1");
+  });
+
+  it("returns null for a draft carrying no guest identity at all", () => {
+    // Every ordinary phone booking. The call site writes this straight into the
+    // booking, so `undefined` would be a different value from today's `null`.
+    expect(resolveGuestId([], { guestSeed: "b1" })).toBe(null);
+    expect(resolveGuestId([], {})).toBe(null);
+    expect(resolveGuestId([], null)).toBe(null);
+  });
+
+  it("survives a list holding holes, like every other pass over `prev`", () => {
+    expect(resolveGuestId([null, bk({ id: "b1", phone: "", guestId: "gOTHER" })], draft)).toBe("gOTHER");
+    expect(resolveGuestId(null, draft)).toBe("gb1");
   });
 });

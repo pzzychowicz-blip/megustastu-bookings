@@ -42,7 +42,7 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
@@ -1183,7 +1183,12 @@ export const TimelineView = memo(function TimelineView({
   }
 
   const day = bookings.filter((b) => b.date === date && b.status !== "cancelled");
-  const dayBlocks = blocks.filter((bl) => bl.date === date);
+  // v17.16.6 (/code-review): filtered through the SAME predicate getBlockSlots
+  // uses, because BlockBar below calls toMins(bl.from) itself. Guarding only the
+  // placement path left an unreadable block throwing during RENDER, where the
+  // error boundary unmounts the whole app — the day stayed unusable and the
+  // crash simply moved somewhere worse.
+  const dayBlocks = blocks.filter((bl) => isReadableBlock(bl) && bl.date === date);
 
   // ── v17.15.3: the waitlist ghost's departure ────────────────────────────────
   // A ghost draws one CELL per matched table, so the tracked identity is the

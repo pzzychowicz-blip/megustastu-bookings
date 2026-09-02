@@ -16,7 +16,7 @@ import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
-  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots,
+  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots, isReadableBlock,
   findBest, findFreeSlot, applyOpt, optimise, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
@@ -353,6 +353,95 @@ describe("canAssign / getBusy / getBlockSlots", () => {
     const blocks = [{ tableId: "7", date: D, allDay: false, from: "14:00", to: "15:00" }];
     const s = getBlockSlots(blocks, D);
     expect(s).toEqual([{ tables: ["7"], s: 840, e: 900 }]);
+  });
+
+  // v17.16.6 — the getBlockSlots sibling of CT-2A-03. A block's from/to reach
+  // the same `toMins` a booking's `time` does, and `sanitizeBlock` is a MINT
+  // rather than a whitelist, so nothing upstream guarantees they are readable.
+  // Before this the call threw `t.split is not a function` and took the whole
+  // placement path with it — every scan that consults blocks.
+  it("skips a block whose from/to `toMins` cannot read, instead of throwing", () => {
+    const bad = { tableId: "7", date: D, allDay: false, from: 2000, to: 2100 };
+    const good = { tableId: "2", date: D, allDay: false, from: "14:00", to: "15:00" };
+    expect(() => getBlockSlots([bad], D)).not.toThrow();
+    // The survivor is what matters: one malformed block must not cost the others.
+    expect(getBlockSlots([bad, good], D)).toEqual([{ tables: ["2"], s: 840, e: 900 }]);
+  });
+
+  it("skips it whichever end is unreadable, and for every unreadable shape", () => {
+    const shapes = [
+      { from: 2000, to: "15:00" },
+      { from: "14:00", to: 2100 },
+      { from: null, to: "15:00" },
+      { from: "14:00", to: undefined },
+      { from: "", to: "15:00" },
+      { from: "14:00", to: {} },
+      { from: "not a time", to: "15:00" },
+    ];
+    shapes.forEach((sh) => {
+      const bl = Object.assign({ tableId: "7", date: D, allDay: false }, sh);
+      expect(() => getBlockSlots([bl], D)).not.toThrow();
+      expect(getBlockSlots([bl], D)).toEqual([]);
+    });
+  });
+
+  it("leaves an allDay block alone — it never reads from/to", () => {
+    // The skip must not widen into blocks the defect cannot reach: an allDay
+    // block spans hoursFor(date) and its from/to are ignored, so a malformed
+    // pair there is not a reason to stop protecting the table all day.
+    const bl = { tableId: "7", date: D, allDay: true, from: 2000, to: null };
+    const s = getBlockSlots([bl], D);
+    expect(s).toHaveLength(1);
+    expect(s[0].tables).toEqual(["7"]);
+    expect(Number.isFinite(s[0].s) && Number.isFinite(s[0].e)).toBe(true);
+  });
+
+  // v17.16.6 (/code-review): the guard shipped on ONE of two consumers. BlockBar
+  // (TimelineView) filters dayBlocks by date alone and then calls toMins(bl.from)
+  // itself, so an unreadable block still threw — during RENDER, where the error
+  // boundary unmounts the whole app. The predicate is exported and shared now,
+  // and this is the guard that fails if a third consumer appears without it.
+  it("EVERY consumer that computes with bl.from/bl.to filters on the predicate", () => {
+    const files = ["src/lib/booking-logic.js", "src/components/TimelineView.jsx",
+      "src/components/PlanView.jsx", "src/components/DaySheet.jsx",
+      "src/components/BlockModal.jsx", "src/components/ManualModal.jsx",
+      "src/components/WalkinForm.jsx", "src/App.jsx"];
+    const offenders = [];
+    files.forEach((f) => {
+      const src = readFileSync(new URL("../" + f, import.meta.url), "utf8");
+      // Does this file hand a block's own from/to to toMins itself, rather than
+      // going through getBlockSlots? If so it must know about the predicate.
+      const computes = /toMins\(\s*b[a-z]*\.(from|to)\s*\)/.test(src);
+      if (computes && !src.includes("isReadableBlock")) offenders.push(f);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("isReadableBlock answers for a null block and for allDay", () => {
+    expect(isReadableBlock(null)).toBe(false);
+    expect(isReadableBlock(undefined)).toBe(false);
+    // allDay never reads from/to, so a malformed pair there is not a reason to
+    // stop protecting the table all day.
+    expect(isReadableBlock({ allDay: true, from: 2000, to: null })).toBe(true);
+    expect(isReadableBlock({ allDay: false, from: "14:00", to: "15:00" })).toBe(true);
+    expect(isReadableBlock({ allDay: false, from: 2000, to: "15:00" })).toBe(false);
+    expect(isReadableBlock({ allDay: false, from: "14:00", to: undefined })).toBe(false);
+  });
+
+  it("keeps every readable time the app already accepts", () => {
+    // The guard is `toMins` yields a finite number — the consumer's own
+    // requirement — and NOT a format of its own, for `isReadableTime`'s stated
+    // reason: nothing that currently works may move. "9:30" and "13:00:00" are
+    // not what the picker emits and both read fine today.
+    const keep = [
+      ["9:30", "10:30", 570, 630],
+      ["13:00:00", "14:00:00", 780, 840],
+      [":", "1:00", 0, 60],
+    ];
+    keep.forEach(([from, to, es, ee]) => {
+      const bl = { tableId: "7", date: D, allDay: false, from, to };
+      expect(getBlockSlots([bl], D)).toEqual([{ tables: ["7"], s: es, e: ee }]);
+    });
   });
 });
 
@@ -707,6 +796,86 @@ describe("undoSnapshots / applyUndo", () => {
   it("treats table ORDER as equivalent (a reorder is not a move)", () => {
     const two = mk({ id: "t", tables: ["1A", "1B"] });
     expect(undoSnapshots([two], [{ ...two, tables: ["1B", "1A"] }])).toEqual([]);
+  });
+
+  // v17.16.6 (CT-2A-11): the separator is no longer reachable FROM THE DATA.
+  //
+  // The source comment used to assert "No text field in the app can produce a
+  // control character", which nothing enforced and which was false — `notes` is
+  // a <textarea> and `sanitize` writes it verbatim. `idOk`
+  // (LayoutSettings.jsx:81) forbids only "|" in a table id, and neither
+  // `settings/layout` nor `bookings` validates field FORMAT server-side, so a
+  // value carrying one is reachable exactly as a malformed `time` is.
+  //
+  // The ARRAY join is where a SINGLE poisoned value collides. The field join has
+  // fixed arity, so shifting content across one boundary changes the separator
+  // count and cannot collide without a second poisoned field — which is why the
+  // reachable case here is the same shape as the v17.10.2 defect that introduced
+  // these separators ("1+2" vs ["1","2"]), with the separator that replaced it.
+  const SEP = "\u001f";  // K_ARR — written as the escape, never the raw byte
+  it("does not collapse a poisoned table id and a two-table set into one key", () => {
+    const one = mk({ id: "k", tables: ["a" + SEP + "b"] });
+    const two = { ...one, tables: ["a", "b"] };
+    // Two genuinely different table sets. Before this both joined to the same
+    // string, undoKey read "nothing changed", and NO UNDO SNAPSHOT WAS TAKEN —
+    // the action became silently un-undoable.
+    expect(undoSnapshots([one], [two]).map((x) => x.id)).toEqual(["k"]);
+    expect(undoSnapshots([two], [one]).map((x) => x.id)).toEqual(["k"]);
+    // dayBookingsSig gates the reconciliation effect on the same key, where the
+    // same collision discards a real reshuffle instead.
+    expect(dayBookingsSig([one], one.date)).not.toBe(dayBookingsSig([two], two.date));
+  });
+
+  it("separates a poisoned preferredTables the same way", () => {
+    // The other array field in UNDO_FIELDS, and it holds table ids too.
+    const one = mk({ id: "k", preferredTables: ["a" + SEP + "b"] });
+    const two = { ...one, preferredTables: ["a", "b"] };
+    expect(undoSnapshots([one], [two]).map((x) => x.id)).toEqual(["k"]);
+  });
+
+  it("ESCAPES rather than strips, so it opens no collision of its own", () => {
+    // The distinction that decided the fix. Stripping the bytes out would map
+    // "a<SEP>b" and "ab" onto one key — the identical failure one character
+    // away, and the one an injective escape cannot produce.
+    const withSep = mk({ id: "k", notes: "a" + SEP + "b" });
+    const without = { ...withSep, notes: "ab" };
+    expect(undoSnapshots([withSep], [without]).map((x) => x.id)).toEqual(["k"]);
+    // ESC is itself inside the escaped range, so data cannot forge an escape:
+    // a literal ESC becomes ESC-"[" and a literal "[" stays "[".
+    const esc = mk({ id: "k", notes: "a\u001bb" });
+    const forged = { ...esc, notes: "a[b" };
+    expect(undoSnapshots([esc], [forged]).map((x) => x.id)).toEqual(["k"]);
+  });
+
+  it("renders a null array element as join always did, not as \"null\"", () => {
+    // /code-review. Swapping `join` for `.map(escSep)` changed how a null or
+    // undefined ELEMENT stringifies: join gives "", String(v) gives "null" —
+    // so [null] and ["null"] became one key, a NEW collision in the function
+    // this version exists to remove one from. RTDB returns a sparse array as
+    // ["1A", null, "2"] and sanitize only checks Array.isArray, so the null
+    // side is reachable; `idOk` permits a table literally named "null".
+    const holed = mk({ id: "k", tables: [null] });
+    const named = { ...holed, tables: ["null"] };
+    expect(undoSnapshots([holed], [named]).map((x) => x.id)).toEqual(["k"]);
+    expect(dayBookingsSig([holed], holed.date)).not.toBe(dayBookingsSig([named], named.date));
+    // ...and undefined the same way, against its own spelling
+    const undef = mk({ id: "k", tables: [undefined] });
+    const uname = { ...undef, tables: ["undefined"] };
+    expect(undoSnapshots([undef], [uname]).map((x) => x.id)).toEqual(["k"]);
+    // The escape must be a pure ADDITION to the old key: a hole still collapses
+    // to nothing, exactly as join rendered it.
+    expect(dayBookingsSig([holed], holed.date))
+      .toBe(dayBookingsSig([mk({ id: "k", tables: [undefined] })], holed.date));
+  });
+
+  it("leaves every ordinary value exactly where it was", () => {
+    // The guarantee that matters more than the collision: nothing WITHOUT a
+    // control character may change behaviour. An unchanged booking still reads
+    // unchanged, and a real edit still reads as one.
+    const plain = mk({ id: "k", name: "Nunez-O'Brien", notes: "window seat, 2 high chairs" });
+    expect(undoSnapshots([plain], [{ ...plain }])).toEqual([]);
+    expect(undoSnapshots([plain], [{ ...plain, notes: "window seat" }]).map((x) => x.id)).toEqual(["k"]);
+    expect(dayBookingsSig([plain], plain.date)).toBe(dayBookingsSig([{ ...plain }], plain.date));
   });
 
   it("applyUndo replaces existing bookings and re-adds deleted ones", () => {

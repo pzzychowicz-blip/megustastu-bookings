@@ -443,11 +443,61 @@ export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
 export function isActive(b){return b.status!=="cancelled"&&b.status!=="completed";}
 
 // ── Slot/busy/assignment checks ───────────────────────────────────────────────
+// v17.16.6 (/code-review) — the malformed-block predicate, EXPORTED because it
+// has two consumers and the first version guarded only one.
+//
+// `getBlockSlots` was given the guard and `TimelineView`'s `BlockBar` was not:
+// it filters `dayBlocks` by date alone and then calls `toMins(bl.from)` itself,
+// so an unreadable block still threw — during RENDER, where the error boundary
+// unmounts the whole tree. The placement path was safe and the day was still
+// unusable, which is the failure the fix was written to remove, relocated to a
+// worse place. Two consumers of one rule, kept in step by nothing: the shape
+// this repo has now hit with the settings-tab list, the modal-visibility lists
+// and the four dismissal Sets.
+//
+// **Only the consumers that COMPUTE with `from`/`to` filter on this.** `DaySheet`
+// and `BlockModal` merely print the two strings, so a malformed block renders as
+// nonsense text and cannot crash — and `BlockModal` is where somebody goes to
+// REMOVE it, so hiding it there would take away the only repair. "An unreadable
+// block is not a block" is a statement about scheduling, not about visibility.
+//
+// `!bl` is included so the predicate is usable at both sites: `TimelineView`'s
+// own filter dereferences `bl.date` too, and a null element there threw exactly
+// as `getBlockSlots` did.
+export function isReadableBlock(bl){
+  if(!bl) return false;
+  return bl.allDay?true:(isReadableTime(bl.from)&&isReadableTime(bl.to));
+}
 export function getBlockSlots(blocks,date){
   // v15.0.0: an all-day block spans the BLOCK'S date's hours, not the active
   // view-day's — hoursFor(date) keeps it correct when date ≠ viewDate.
   var h=hoursFor(date);
-  return blocks.filter(function(bl){return bl.date===date;}).map(function(bl){
+  // v17.16.6 — the `getBlockSlots` sibling of CT-2A-03. v17.16.5 made `sanitize`
+  // guarantee that a booking's `time` is something `toMins` can read; a table
+  // BLOCK's `from`/`to` reach the same `toMins` two lines below and had no such
+  // guard, so a stored `from: 2000` throws `t.split is not a function` in the
+  // placement path exactly as a booking used to. Reachability is identical to
+  // the booking case — `tableBlocks` carries no per-field `.validate`, so any
+  // non-app writer can put one there — and v17.16.0's error boundary contains
+  // that crash without making the day usable.
+  //
+  // **The guard is HERE and not in `sanitizeBlock`, which is the whole decision.**
+  // That function is a MINT, not a whitelist (its header says so, and says not
+  // to "finish" it by copying `sanitize`'s shape): it exists to give a block an
+  // identity, and `reason` survives only because nothing there drops unknown
+  // fields. Defaulting an unreadable `from` there would hand the block a time
+  // window nobody entered and then persist it on the next `saveBlocks`, which is
+  // stored data silently rewritten. An unreadable block is not a block, so the
+  // consumer skips it.
+  //
+  // The cost, stated rather than hidden: the table is silently UNDER-blocked —
+  // it will be offered to the optimiser and to walk-ins for minutes somebody
+  // meant to protect. That is strictly better than the day being unusable, and
+  // it is the direction that leaves the stored record alone for whoever comes to
+  // repair it. An `allDay` block never reads `from`/`to` and is unaffected.
+  return blocks.filter(function(bl){
+    return isReadableBlock(bl)&&bl.date===date;
+  }).map(function(bl){
     var s=bl.allDay?h.open*60:toMins(bl.from);
     var e=bl.allDay?h.gridClose*60:toMins(bl.to);
     return {tables:[bl.tableId],s:s,e:e};
@@ -1037,14 +1087,64 @@ var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
 // made `["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can
 // contain either. A collision reads as "nothing changed": for undo that means a
 // snapshot is never taken, for `dayBookingsSig` below that a real reshuffle is
-// discarded. No text field in the app can produce a control character, and the
-// key is only ever compared — never stored, never shown.
+// discarded. The key is only ever compared — never stored, never shown.
+//
+// v17.16.6 (CT-2A-11): that comment used to end "No text field in the app can
+// produce a control character", and **it was an assertion nothing enforced and
+// nothing was true of**. `notes` is a `<textarea>`, `sanitize` writes
+// `b.notes || ""` verbatim, and a paste carries whatever bytes it carries. The
+// choice was to make the sentence true or to delete it; making it true is now
+// `escSep` below, so the guarantee is a property of this function rather than a
+// claim about the rest of the app — which is the version of it that cannot rot
+// when somebody adds a field.
+//
+// **It ESCAPES rather than strips, and that distinction is the whole fix.**
+// Stripping the separator bytes out of each value would close the boundary-shift
+// collision by opening an identical one a character away: `"a\u001fb"` and
+// `"ab"` would map to the same key, so an edit between them reads as "nothing
+// changed" — the very failure this exists to prevent, differing only in which
+// pair of values triggers it. Caret escaping is injective, so no two distinct
+// field sets can share a key at all, and the cost is nothing.
+//
+// The escape prefix is \u001b (ESC, the natural choice and outside the four
+// separators), and it escapes ITSELF first by being inside the replaced range:
+// every \u001b in the output is a prefix, never data. `+0x40` is caret notation
+// — \u001b..\u001f map to [ \ ] ^ _ — so a decoder is unambiguous even though
+// nothing decodes: the key is compared, and injectivity is the only property
+// asked of it.
 var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
+// `no-control-regex` exists to catch a control character that got into a pattern
+// by ACCIDENT — a pasted byte, a mistyped escape. Here the characters are the
+// entire subject: this is the one regex in the app whose job is to find them.
+// Disabled with the reason rather than worked around, because every alternative
+// is worse: a char-by-char loop runs on every field of every booking through
+// `dayBookingsSig`, and `new RegExp("[\\u001b-\\u001f]")` is flagged by the same
+// rule while hiding the range from a reader.
+// eslint-disable-next-line no-control-regex
+var SEP_RE=/[\u001b-\u001f]/g;
+function escSep(v){
+  return String(v).replace(SEP_RE,function(c){
+    return "\u001b"+String.fromCharCode(c.charCodeAt(0)+0x40);
+  });
+}
 function undoKey(b){
   return UNDO_FIELDS.map(function(k){
     var v=b[k];
-    if(Array.isArray(v)) return v.slice().sort().join(K_ARR);
-    return (v===undefined||v===null)?"":String(v);
+    // /code-review: the null/undefined collapse is `join`'s and had to be kept.
+    // `Array.prototype.join` renders a null or undefined element as the EMPTY
+    // STRING, while `escSep` reaches it through `String(v)` and renders the word
+    // "null" — so swapping the join for a map silently made `tables: [null]` and
+    // `tables: ["null"]` one key. That is a NEW collision, in the function this
+    // version exists to remove one from, and it was asymmetric with the very
+    // next line, which has always spelled the two out. RTDB returns a sparse
+    // array as `["1A", null, "2"]` and `sanitize` only checks `Array.isArray`,
+    // so the null side is reachable; a table named "null" is permitted by
+    // `idOk`. Rare together, and the point is that the escape had to be a pure
+    // ADDITION to the old key, not a re-spelling of it.
+    if(Array.isArray(v)) return v.slice().sort().map(function(x){
+      return (x===undefined||x===null)?"":escSep(x);
+    }).join(K_ARR);
+    return (v===undefined||v===null)?"":escSep(v);
   }).join(K_FLD);
 }
 export function undoSnapshots(prev,next){

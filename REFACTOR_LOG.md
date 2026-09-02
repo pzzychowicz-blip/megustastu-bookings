@@ -17650,3 +17650,296 @@ timeline's five chips read identically, so the two keys now differ in nothing.
 
 The other four changes are pure functions with no rendering surface, and their
 verification is the 783-test suite above.
+
+---
+
+## v17.16.6 — the halves that disagreed
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.6-p3-findings` ·
+**Files:** `src/App.jsx` (version), `src/lib/customers.js`,
+`src/lib/booking-logic.js`, `tests/customers.test.js`,
+`tests/booking-logic.test.js`, `tests/write-path.test.js`, `CLAUDE.md`,
+`REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** yes, in three places (commit 4 changes none) — a booking joined to a phone-less
+guest now joins the group that guest is actually in, rather than the one the
+draft was minted against; a table block the app cannot read is skipped rather
+than crashing every path that consults blocks; and an undo snapshot is taken for
+a table move between a poisoned id and a two-table set, where before it was
+silently not.
+
+The seventh instalment of the v17.15.7 crash-test response. Scope was Patryk's:
+the two confirmed P3s, plus settling CT-2A-08 one way or the other, plus
+CT-2A-11 — and CT-2A-11 on the narrower of the two options offered, which is the
+one that does not touch stored data.
+
+### 1 · CT-2B-08 — the second join that looked exactly like the first
+
+Picking an unjoined phone-less guest from the booking form's NAME dropdown is
+the one moment a `guestId` is minted (`BookingFormModal.jsx:189`). It writes
+`guestId = "g" + <that guest's latest booking id>` into the draft and records
+that booking in `guestSeed`. On save, `stampGuestSeed` writes the same id back
+onto the seed and the two become one customer.
+
+`stampGuestSeed` has always refused a seed that already carries an id — the
+`!b.guestId` guard, which is what makes a retry safe and what stops a booking
+already joined to somebody being silently re-homed. **Nothing reconsidered the
+draft.** So when another device joined that same guest in between — through a
+*different* booking of theirs, which is the only way the ids can differ, since
+the mint is deterministic in the seed's id — the seed kept `"g"+<other id>`, the
+new booking was written with the id minted at pick time, and it landed in a group
+of ONE beside the group the operator meant to join.
+
+The two halves of one decision disagreeing, with nothing on screen to tell that
+apart from success. Confirmed by reading: `App.jsx:2100` wrote
+`guestId: f.guestId || null` verbatim.
+
+`resolveGuestId(list, f)` is the missing half, a sibling of `stampGuestSeed` in
+`customers.js`. **The seed wins**, on principle rather than convenience: it is
+the existing group and this booking is the newcomer asking to be let in;
+adopting in the other direction would re-home a booking already joined to
+somebody, which is the exact thing `stampGuestSeed`'s guard exists to prevent.
+
+**Where it is called is load-bearing.** Not on the `nb` object, which is built
+once at Save time so that a replayed write cannot duplicate the booking, but
+inside `buildNext`, where `prev` is — so a held or retried write re-reads a
+`prev` that may have acquired the id since the first attempt. `newId` is
+untouched, so the stable-id property that comment relies on is unaffected.
+
+Seven tests. The one that matters is not either half in isolation but that they
+**cannot disagree**: for each of the three shapes of `prev`, whatever id
+`stampGuestSeed` leaves on the seed is the id `resolveGuestId` gives the new
+booking. Proven against a sabotaged build (`return f.guestId` — the pre-fix
+behaviour): three of the seven fail, and only those three.
+
+### 2 · The `getBlockSlots` sibling of CT-2A-03
+
+v17.16.5 made `sanitize` guarantee that a booking's `time` is something `toMins`
+can read. A table BLOCK's `from`/`to` reach that same `toMins`, from
+`getBlockSlots`, and had no such guard — so a stored `from: 2000` threw
+`t.split is not a function` in the placement path exactly as a booking used to,
+and took every scan that consults blocks with it. Reachability is identical to
+the booking case: `tableBlocks` carries no per-field `.validate`, so any non-app
+writer can put one there, and v17.16.0's error boundary contains the crash
+without making the day usable.
+
+**Where the guard goes was the decision, and it went to the CONSUMER.**
+`sanitizeBlock` is a MINT, not a whitelist — its own header says so and says not
+to "finish" it by copying `sanitize`'s shape. Defaulting an unreadable `from`
+there would hand the block a time window nobody entered and then PERSIST it on
+the next `saveBlocks`: stored data silently rewritten, which is the one thing
+this arc of versions has consistently refused to do. An unreadable block is not
+a block, so `getBlockSlots` skips it.
+
+**The cost is stated at the site rather than hidden.** The table is silently
+UNDER-blocked — offered to the optimiser and to walk-ins for minutes somebody
+meant to protect. That is strictly better than the day being unusable, and it is
+the direction that leaves the record intact for whoever comes to repair it.
+
+Four tests, in two pairs, and the second pair is the more interesting one: two
+prove the skip (proven against the restored pre-fix filter — exactly those two
+fail, across the whole 794-test suite, so nothing else silently depended on the
+throw), and two prove it does **not** widen. An `allDay` block never reads
+`from`/`to`, so a malformed pair there is not a reason to stop protecting the
+table all day; and `"9:30"`, `"13:00:00"` and `":"` still read, because the
+predicate is `isReadableTime` — `toMins` yielding a finite number, the
+consumer's own requirement — and deliberately not a format of its own. Same
+reasoning, and the same stated cost, as v17.16.5's booking half.
+
+### 3 · CT-2A-11 — the comment that was not true of anything
+
+v17.10.2 replaced `undoKey`'s `"|"` and `"+"` separators with ASCII control
+characters, because the old ones were reachable FROM THE DATA — a table id need
+only avoid `"|"`, so a venue naming a joined table `"1+2"` made `["1+2"]` and
+`["1","2"]` one key. The replacement carried a sentence: *"No text field in the
+app can produce a control character."*
+
+**Nothing enforced it and nothing was true of it.** `notes` is a `<textarea>`
+and `sanitize` writes `b.notes || ""` verbatim; `idOk` (`LayoutSettings.jsx:81`)
+is `s.length > 0 && s.indexOf("|") < 0` and nothing more; and neither
+`settings/layout` nor `bookings` validates field FORMAT server-side, so a value
+carrying one is reachable exactly as a malformed `time` is. The choice was to
+delete the sentence or to make it true. `escSep` makes it true, and makes it a
+property of this one function rather than a claim about the rest of the app —
+the version of the guarantee that cannot rot when somebody adds a field.
+
+**It escapes; it does not strip — and the option first written down said strip.**
+Removing the bytes would close the boundary-shift collision by opening an
+identical one a character away: `"aSEPb"` and `"ab"` map to the same key, so an
+edit between them reads as "nothing changed". That is the same failure this
+exists to prevent, differing only in which pair of values triggers it. Caret
+escaping (ESC prefix, `+0x40`, ESC itself inside the replaced range so data
+cannot forge one) is injective and costs nothing. Reported as a departure from
+the wording rather than made quietly.
+
+**Which join actually collides was worth establishing rather than assuming.**
+Only the ARRAY one, where a single poisoned value suffices — the same shape as
+the v17.10.2 defect that introduced these separators. The field join has FIXED
+arity, so shifting content across one boundary changes the separator count; a
+collision there needs a *second* poisoned field. Measured with a standalone
+probe against the pre-fix key before either test was written: array collision
+`true`, the natural single-field construction `false`. The test asserts the
+reachable one and the comment records why the other is not it.
+
+Five tests, and two sabotages that fail different ones — the un-escaped key
+fails the two collision tests, the stripping variant fails the escape test and
+neither of those. The fifth is the guarantee that matters more than the
+collision: nothing WITHOUT a control character changes behaviour, in either
+direction.
+
+`clashRowId` and `blockContentKey` were checked and deliberately left. The first
+joins `genId()` ids, which are base36. The second does take free staff text
+(`reason`), but v17.16.4's `used` set already guarantees distinct block ids by
+construction, so a key collision there costs an ordinal and never an identity.
+
+### 4 · CT-2A-08 — withdrawn, on an argument rather than on a shrug
+
+`ROADMAP.md` asked for one observation: *construct a lasting divergence, or close
+the finding.* The claim was that the 2 s StrictMode dedupe can swallow a
+legitimate A→B→A write when no echo lands in between. It has survived two
+versions without anybody constructing one, which is weak evidence and was
+honestly recorded as such.
+
+There is a stronger reason, and it took reading `contentKey` to see it. **A
+signature is `(content, baseUpdatedAt)` per child** — `contentKey` deletes
+`updatedAt` and nothing else, so the CAS base is inside the signature. Two
+patches that share a signature are therefore *indistinguishable to the server*:
+same content, same claimed base, so the rule reaches the same verdict on both.
+
+That turns "we could not build one" into a complete case analysis:
+
+- **The earlier patch landed.** The server already holds exactly what the
+  swallowed one wanted. Nothing is lost. (An intermediate B cannot also have
+  landed: its base was consumed by the first write, so the CAS refuses it.)
+- **The earlier patch was rejected.** The swallowed one carries the identical
+  base, so it would have been rejected too — and `update().catch` has already
+  queued the retry and tripped `markStale`, so the recovery is armed.
+- **It was never dispatched.** Then `lastPatchSigRef` was never set and there is
+  nothing to collide with.
+
+There is no fourth outcome, and the base not advancing is itself the precondition
+(`persist` passes `computed` to `setBookings`, and the stamp lives only in the
+patch — the real value returns via the echo).
+
+**So the finding closes, and the commit that closes it adds a guard rather than a
+fix.** What would MAKE CT-2A-08 real is `baseUpdatedAt` leaving the signature —
+a perfectly plausible future tidy-up of `contentKey`, sitting one line from the
+`delete c.updatedAt` that is meant to be there. Sabotaged that way, the whole
+802-test suite lost **exactly one test**: the one written here. The property the
+argument rests on was, until now, guarded by nothing.
+
+Four tests: the base is in the signature; A→B→A with an echo between is not
+deduped; A→B→A with the base frozen IS deduped *and the swallowed patch is
+byte-identical to the one already sent*, which is the harmlessness pinned rather
+than asserted; and the whole-patch comparison, so a repeat spread across
+different children is covered by the same analysis.
+
+**A count correction.** The running tally in `ROADMAP.md` was off by one through
+commits 2 and 3 of this version, because the `getBlockSlots` sibling was
+subtracted from it — and that entry is not a register finding, having been raised
+in v17.16.5 after the register was written. Corrected here, with the tally now
+naming the five that remain (CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10)
+instead of only counting them, so the next drift is visible rather than
+arithmetic. Not amended into the earlier commits: the separate-commit record is
+the deliverable, and a wrong number corrected in the open is worth more than a
+clean one rewritten.
+
+### 5 · The lint error commit 3 shipped, and the line that hid it
+
+`npm run lint` is a **hard CI gate at 0 errors**. Commit 3's `SEP_RE` matches the
+ESC-to-US control range, which trips `no-control-regex` — a real error, present
+in commits 3 and 4, and it would have failed CI on the PR.
+
+**The verification said otherwise, twice, because it read the wrong line.**
+`eslint` prints two trailing lines and only the second is the verdict:
+
+```
+0 errors and 1 warning potentially fixable with the `--fix` option    <- about --fix
+N problems (1 error, 71 warnings)                                     <- the gate
+```
+
+Piping through `tail -2` surfaces the first and hides the second, so "0 errors"
+was reported from a sentence that never claimed it. Exactly the family this repo
+keeps re-learning — the synthetic `:active` press, the accessible name read out
+of an automation tree — where the thing that was wrong was the instrument.
+`main` was checked as a control and reads `71 problems (0 errors)`, which is what
+this branch reads again now. A Gotchas row was added: grep for `problems`, never
+`tail`.
+
+The rule itself is right, and the code is the exception it cannot know about:
+`SEP_RE` is the one regex in the app whose *job* is to find control characters.
+It carries an inline disable with the reason rather than a workaround, because
+every alternative is worse — a char-by-char loop runs over every field of every
+booking through `dayBookingsSig`, and a `new RegExp` built from the same escapes
+is flagged by the same rule while hiding the range from a reader.
+
+**Not amended into commit 3.** The separate-commit record is the deliverable.
+Commits 3 and 4 are green on build, test and `check:style` and red on lint; a
+bisect landing there gets a lint failure and this entry explaining it, which is
+more honest than a history that never had the mistake.
+
+### 6 · `/code-review` — the guard that covered one of two consumers
+
+Commit 2 put the malformed-block guard in `getBlockSlots` and said the sibling
+was closed. **It was not.** `TimelineView`'s `BlockBar` builds `dayBlocks` with a
+date filter alone and then calls `toMins(bl.from)` itself, so a block the app
+cannot read still threw — during RENDER, where React's contract unmounts the
+whole tree and v17.16.0's error boundary takes over. The placement path went
+safe and the day stayed unusable: the crash **moved somewhere worse** rather
+than closing, since a render throw kills the app where a placement throw killed
+one scan.
+
+That is the shape this repo keeps meeting — one rule, two consumers, kept in
+step by nothing (the settings-tab list, the five modal-visibility lists, the
+four dismissal Sets). So the predicate is now `isReadableBlock`, EXPORTED, and
+both sites read it; `tests/booking-logic.test.js` scans every file that hands a
+block's own `from`/`to` to `toMins` and fails if it has not heard of it. That
+guard was proven against the shipped code: reverted, it names
+`src/components/TimelineView.jsx` and nothing else.
+
+**Measured live, on DEV, on real data rather than argued.** A malformed block
+(`from: 2000`, `to: 2100`, table 3, today) was written straight into
+`tableBlocks` through the rev CAS, which the app's own writer cannot produce:
+
+| build | result |
+|---|---|
+| with the filter | day renders normally, BLOCKED bar for the *valid* block still drawn, no console error |
+| filter reverted (control) | `#root` replaced by **"MGT Bookings hit an error"** — the whole app |
+
+The block is deliberately left in the DEV database. It is a scratch database by
+policy, and it is now a standing fixture for exactly this regression.
+
+**Where the line falls, and why it is not "filter everywhere".** Only the
+consumers that COMPUTE with `from`/`to` filter on the predicate. `DaySheet` and
+`BlockModal` concatenate the two strings for display: they cannot crash, and
+`BlockModal` is the surface somebody uses to REMOVE the bad block, so hiding it
+there would take away the only repair. "An unreadable block is not a block" is a
+statement about scheduling, not about visibility.
+
+`!bl` is folded into the predicate because `TimelineView`'s filter dereferences
+`bl.date` too, so the shared version has to survive a null element that the old
+`getBlockSlots` filter would equally have thrown on.
+
+### 7 · `/code-review` — the escape had to be an addition, not a re-spelling
+
+Commit 3 swapped `undoKey`'s array `join` for `.map(escSep).join`, and in doing
+so changed something the escape was never meant to touch.
+`Array.prototype.join` renders a `null` or `undefined` ELEMENT as the empty
+string; `escSep` reaches it through `String(v)` and renders the word `"null"`.
+So `tables: [null]` and `tables: ["null"]` became **one key** — a NEW collision,
+in the function this version exists to remove one from, and asymmetric with the
+scalar branch on the very next line, which has always spelled the two out.
+
+Reachable on the null side without contrivance: RTDB returns a sparse array as
+`["1A", null, "2"]` when the stored keys are 0 and 2, and `sanitize` only checks
+`Array.isArray`. A table literally named `"null"` is permitted by `idOk`. Both
+at once is unlikely — and the point is not the odds. **An escape is only safe
+if it is a pure ADDITION to the old key**: the moment it also re-spells values
+that were never in its range, it is a different key function and has to be
+argued from scratch.
+
+Measured with a standalone probe against both spellings before the fix: old
+`join` gives `[null]` → `""` and `["null"]` → `"null"` (distinct); the mapped
+version gives both → `"null"` (equal). The fix restores `join`'s own semantics
+inside the map, so a hole collapses to nothing exactly as it always did, and the
+test asserts that identity as well as the separation — pinned against the
+un-restored build, where it is the only failure.

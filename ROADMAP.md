@@ -53,7 +53,15 @@ reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
 thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
 (both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
 leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
-half — which closes that finding in both halves — leaving eight.**
+half — which closes that finding in both halves — leaving eight; v17.16.6
+shipped CT-2B-08 and CT-2A-11 and WITHDREW CT-2A-08 (the dedupe
+signature is (content, base), so two patches sharing one are indistinguishable
+to the server and have the same fate — measured, see `REFACTOR_LOG.md`), leaving
+**five**: CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10.** It also closed the
+`getBlockSlots` sibling of CT-2A-03, which is not in that count — it was raised
+in v17.16.5, after the register was written. **The count is of REGISTER findings
+only**, stated here because the running tally was off by one for two commits of
+v17.16.6 before anybody re-derived it.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -99,25 +107,10 @@ ONE structural change, not two fixes.
   the layout, which is correct — the layout is editable, so the rules would
   duplicate it and go stale.
 
-**Version C or later — client fixes, in rough value order.** *(v17.16.2 shipped
-CT-2B-01, CT-2B-02 and CT-2B-03, plus a DST date-navigation bug not in the
-register — the Next-day button was a no-op on the spring-forward day.)*
-
-- **The `getBlockSlots` sibling of CT-2A-03 (P3, new in v17.16.5).** v17.16.5
-  made `sanitize` guarantee that a booking's `time` is something `toMins` can
-  read. A table BLOCK's `from`/`to` reach the same `toMins`, from
-  `getBlockSlots`, and have no such guard: `sanitizeBlock` is a MINT rather than
-  a whitelist — its header says so, and says not to "finish" it by copying
-  `sanitize`'s shape — so a block holding `from: 2000` throws in the placement
-  path exactly as a booking used to. **Settling observation:** none needed for
-  reachability, which is identical to the booking case (a non-app writer, since
-  `tableBlocks` has no per-field `.validate`); what needs deciding is WHERE. The
-  argument for the consumer rather than the mint: an unreadable block is not a
-  block, so `getBlockSlots` should skip it rather than have stored data silently
-  rewritten to a default time it was never given.
-
-**P3 — minor, each its own commit if taken at all.** Re-rated in v17.16.5; the
-order below is by that rating, not by the filed one.
+**Client fixes — P3, minor, each its own commit if taken at all.** Re-rated in
+v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
+the last of the non-P3 client entries (`getBlockSlots`), so everything left here
+is either a P3 or one of the two rules items above.
 
 - **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
   was applied optimistically to local state, behind a dismissible banner naming
@@ -128,34 +121,13 @@ order below is by that rating, not by the filed one.
   queue holds an updater function, not a booking, so naming the lost change means
   changing what is queued; and reverting it discards work the user can see. That
   is a design question for Patryk, not a repair. Highest-value of the P3s.
-- **CT-2B-08** — a second join naming an already-joined seed correctly refuses to
-  re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
-  group of one while the operator believes the two were joined. Nothing on screen
-  distinguishes this from success. **Confirmed by reading (v17.16.5):** `doSave`
-  writes `guestId: f.guestId || null` verbatim, so the draft's id minted at OPEN
-  time is never re-derived from the seed's live state. **Settling observation:**
-  how wide is the window? It needs a concurrent join on the same seed from
-  another device between opening the form and saving. The fix is small — adopt
-  the seed's existing id inside `stampGuestSeed`'s pass instead of leaving the
-  minted one — so this may be worth taking on its cheapness rather than its rate.
-- **CT-2A-11** — `undoKey`'s array separator is collidable by a pasted control
-  character in a table id, which reads as "nothing changed" so an undo snapshot
-  is never taken. The source comment asserts no text field can produce one and
-  nothing enforces it. **Re-rated down (v17.16.5):** `notes` is a `<textarea>`
-  and `sanitize` does not strip control characters, so the assertion is false as
-  written — but a collision additionally needs two bookings whose whole key
-  strings coincide, which no realistic paste produces. **Settling observation:**
-  whether any PROD `notes` field contains a control character at all; if none
-  does, the honest fix is to make the comment true (strip them in `sanitize`)
-  rather than to re-engineer the key.
-  Also unrated: nothing checks for duplicate booking ids, and two sharing one
-  collapse in the optimiser's assignment map (`genId` collision ≈ 1 in 1.7M,
-  same millisecond).
-- **CT-2A-08** — the StrictMode patch-dedupe (`lastPatchSigRef`, 2 s) can swallow
-  a legitimate A→B→A write with no echo between. Every reachable instance
-  self-heals; no lasting divergence was constructed. **Settling observation:**
-  construct one, or close the finding. It has now survived two versions without
-  anybody managing to.
+- **Duplicate booking ids are unchecked** (unrated; surfaced under CT-2A-11 and
+  outlived it). Two bookings sharing an id collapse in the optimiser's
+  assignment map. A `genId()` collision needs the same millisecond and the same
+  4 random base36 characters, ≈ 1 in 1.7M given the first. **Settling
+  observation:** whether any two ids in PROD coincide at all — a one-line scan
+  of the `bookings` node, which nobody has run.
+
 - **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
   `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
   survives, and recorded why the v16.0.0 corruption has not recurred (an

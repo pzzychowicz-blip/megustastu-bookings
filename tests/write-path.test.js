@@ -164,6 +164,91 @@ describe("patchSignature / isDuplicatePatch — the StrictMode window", () => {
   });
 });
 
+// ── v17.16.6: CT-2A-08, settled ──────────────────────────────────────────────
+//
+// The register's claim: the 2 s dedupe "can swallow a legitimate A→B→A write
+// with no echo between". The settling observation ROADMAP.md asked for was
+// "construct one, or close the finding". These tests are the close, and the
+// argument they pin is structural rather than a failure to construct.
+//
+// A signature is (content, baseUpdatedAt) per child — `contentKey` deletes
+// `updatedAt` and NOTHING ELSE, so the CAS base is inside it. Two patches with
+// the same signature are therefore INDISTINGUISHABLE TO THE SERVER: same
+// content, same claimed base, so the rule reaches the same verdict on both.
+//
+// That is what makes a swallow safe, and it is a complete case analysis rather
+// than an absence of counterexamples. If the earlier patch landed, the server
+// already holds what the swallowed one wanted, so nothing is lost. If it was
+// rejected, the swallowed one carrying the identical base would have been
+// rejected too — and `update().catch` has already queued the retry and tripped
+// `markStale`, so recovery is armed. There is no third outcome.
+//
+// The property is therefore not "we could not build one" but "the two writes
+// have the same fate by construction". What would MAKE the finding real is
+// `baseUpdatedAt` leaving the signature — which is exactly what the first test
+// below guards, and is a plausible future simplification of `contentKey`.
+describe("CT-2A-08 — why swallowing a duplicate cannot diverge", () => {
+  it("keeps baseUpdatedAt INSIDE the signature — the load-bearing property", () => {
+    // Same content, different CAS base. These are different writes with
+    // different fates and must never share a signature. Delete baseUpdatedAt in
+    // contentKey alongside updatedAt and this is the assertion that fails.
+    const same = { name: "Ana", size: 2 };
+    const p1 = buildPatch([bk({ id: "a", updatedAt: 100, ...same })],
+                          [bk({ id: "a", updatedAt: 100, ...same, size: 4 })], 0, 1000).patch;
+    const p2 = buildPatch([bk({ id: "a", updatedAt: 200, ...same })],
+                          [bk({ id: "a", updatedAt: 200, ...same, size: 4 })], 0, 1000).patch;
+    expect(p1.a.baseUpdatedAt).toBe(100);
+    expect(p2.a.baseUpdatedAt).toBe(200);
+    expect(patchSignature(p1)).not.toBe(patchSignature(p2));
+  });
+
+  it("does not dedupe A→B→A once an echo has advanced the base", () => {
+    // The ordinary path. An echo writes the server stamp back into local state,
+    // so the third write claims a different base and is a different signature.
+    const A = { id: "a", size: 2 }, B = { id: "a", size: 4 };
+    const w1 = buildPatch([bk({ ...A, updatedAt: 100 })], [bk({ ...B, updatedAt: 100 })], 0, 1000).patch;
+    // echo: the server value lands, base moves to the stamp w1 issued
+    const echoed = bk({ ...B, updatedAt: w1.a.updatedAt });
+    const w2 = buildPatch([echoed], [bk({ ...A, updatedAt: echoed.updatedAt })], w1.a.updatedAt, 1001).patch;
+    expect(patchSignature(w2)).not.toBe(patchSignature(w1));
+    expect(isDuplicatePatch(patchSignature(w2), { sig: patchSignature(w1), at: 1000 }, 1001)).toBe(false);
+  });
+
+  it("the swallowed patch is byte-identical to the one already sent", () => {
+    // The finding's own scenario, with the base frozen (no echo). The third
+    // write IS deduped — and this is what makes that harmless: it carries the
+    // same content and the same base as the first, so whatever the server did
+    // with the first it would do with this one.
+    const A = { id: "a", size: 2 }, B = { id: "a", size: 4 };
+    const base = bk({ ...A, updatedAt: 100 });
+    const w1 = buildPatch([base], [bk({ ...B, updatedAt: 100 })], 0, 1000).patch;
+    const w2 = buildPatch([bk({ ...B, updatedAt: 100 })], [bk({ ...A, updatedAt: 100 })], w1.a.updatedAt, 1001).patch;
+    const w3 = buildPatch([bk({ ...A, updatedAt: 100 })], [bk({ ...B, updatedAt: 100 })], w2.a.updatedAt, 1002).patch;
+    // w2 is a genuinely different write and is never suppressed
+    expect(isDuplicatePatch(patchSignature(w2), { sig: patchSignature(w1), at: 1000 }, 1001)).toBe(false);
+    // w3 repeats w1 exactly — same content, same claimed base
+    expect(patchSignature(w3)).toBe(patchSignature(w1));
+    expect(w3.a.baseUpdatedAt).toBe(w1.a.baseUpdatedAt);
+    expect(isDuplicatePatch(patchSignature(w3), { sig: patchSignature(w1), at: 1000 }, 1002)).toBe(true);
+    // ...and the stamps still advance, so nothing here depends on the swallow
+    expect(w3.a.updatedAt).toBeGreaterThan(w1.a.updatedAt);
+  });
+
+  it("compares the WHOLE patch, so a repeat across different children still holds", () => {
+    // Three writes touching different ids can also make sig3 === sig1. The same
+    // analysis covers it, because the signature is per-child and the equality is
+    // still content-and-base for every child in the patch.
+    const px = buildPatch([bk({ id: "x", updatedAt: 100, size: 2 })],
+                          [bk({ id: "x", updatedAt: 100, size: 4 })], 0, 1000).patch;
+    const py = buildPatch([bk({ id: "y", updatedAt: 100, size: 2 })],
+                          [bk({ id: "y", updatedAt: 100, size: 6 })], px.x.updatedAt, 1001).patch;
+    const px2 = buildPatch([bk({ id: "x", updatedAt: 100, size: 2 })],
+                           [bk({ id: "x", updatedAt: 100, size: 4 })], py.y.updatedAt, 1002).patch;
+    expect(patchSignature(py)).not.toBe(patchSignature(px));
+    expect(patchSignature(px2)).toBe(patchSignature(px));
+  });
+});
+
 describe("isStaleGap — the freshness gate", () => {
   it("does not trip on ordinary operation", () => {
     expect(isStaleGap(0, 10000)).toBe(false);   // one heartbeat
