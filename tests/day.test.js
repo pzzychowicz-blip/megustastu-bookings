@@ -15,9 +15,10 @@
 // only exists in certain zones and certain months, so a TZ-agnostic test would
 // be testing nothing.
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import process from "node:process";
 import { todayStr, dayDiff, nowOn, addDays } from "../src/lib/day.js";
+import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const REAL_TZ = process.env.TZ;
 function withTZ(tz, fn) {
@@ -181,5 +182,43 @@ describe("addDays — the arrows, and the day they did nothing", () => {
       }
       expect(d).toBe("2027-01-01");
     });
+  });
+});
+
+// v17.16.5. `EMPTY_FORM` is built once at module load, so its `date` was
+// yesterday's for the whole of the next service on a tablet left open across
+// midnight. It lives here rather than in a constants suite because what is
+// actually being pinned is that the default tracks `todayStr()` — and because
+// the getter's whole justification is that no CONSUMER has to change, which is
+// what these assertions check.
+describe("EMPTY_FORM.date tracks today", () => {
+  // The clock has to MOVE, or this test cannot fail: within one process on one
+  // day, a value frozen at import and a value recomputed on read are identical,
+  // so asserting `EMPTY_FORM.date === todayStr()` would pass on the very build
+  // this fixes. Crossing midnight under fake timers is the observation that
+  // separates them — it is the whole defect, reproduced.
+  it("follows the clock across midnight", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 8, 2, 23, 59));
+      expect(EMPTY_FORM.date).toBe("2026-09-02");
+      vi.setSystemTime(new Date(2026, 8, 3, 0, 1));
+      expect(EMPTY_FORM.date).toBe("2026-09-03");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("copies as a plain string through every shape a call site uses", () => {
+    // Object.assign is the form all three openForm call sites take; spread is
+    // what the form-state initializers take. Both READ an accessor and copy the
+    // result, which is why the getter needed no call-site change.
+    expect(Object.assign({}, EMPTY_FORM).date).toBe(todayStr());
+    expect({ ...EMPTY_FORM }.date).toBe(todayStr());
+    expect(typeof Object.assign({}, EMPTY_FORM).date).toBe("string");
+    // An explicit date still wins — openNew/bookAgain/bookFromWaitlist all pass
+    // one, and the getter must not shadow it.
+    expect(Object.assign({}, EMPTY_FORM, { date: "2026-01-01" }).date).toBe("2026-01-01");
+    // Not an own-property trap: it survives serialisation like any value.
+    expect(JSON.parse(JSON.stringify(EMPTY_FORM)).date).toBe(todayStr());
   });
 });
