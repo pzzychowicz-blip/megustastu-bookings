@@ -314,6 +314,40 @@ const NEED = { label: 4.5, button: 3 };
 // chose this one, informed, after seeing the numbers and the pixels. It is
 // recorded here rather than argued away: the floors below still gate a
 // regression, and an accepted contrast is not a licence to keep going.
+// ── v17.16.10: the same pairing, judged against a DIFFERENT criterion ───────
+// v17.11.0 put `StatusIcon` on the timeline block's rail and v17.15.7 put it on
+// the floor-plan table, both to stop status being carried by colour alone. The
+// mark is `BLOCK_INK[status]` on `BLOCK_BG[status]` — the very token pairs
+// above — but the criterion that applies to it is not the one they are measured
+// against. Text is WCAG 1.4.3; a mark is a graphical object, WCAG 1.4.11, and
+// the bar is 3:1.
+//
+// Measured v17.16.10, composited over BASE (the extreme of each theme, as
+// everything here is):
+//
+//   pending    1.82 light / 2.20 dark      confirmed  2.90 / 3.58
+//   seated     4.52 light / 4.56 dark
+//
+// Three of six under 3:1. **Patryk's decision: record it, do not change it.**
+// Fixing it means a `paint-order: stroke` halo or a `--block-*` outline on the
+// mark — a NEW treatment, and one that has to land on the timeline rail, SBadge
+// and the plan table in the same version or the app ends up with two status
+// vocabularies that disagree about what a status looks like. That is its own
+// release, not a rider on this one.
+//
+// **No entry is added to EXEMPT_FLOOR for this, deliberately.** The mark reuses
+// tokens the registry already carries — `--block-confirmed`/`--block-pending`
+// are exempt with floors 2.8 / 1.75, `--block-seated` is a `label` held to the
+// full 4.5 and clears it at 4.52 — so a regression in exactly these pairs
+// already breaks the build on every run. A second entry would be a second
+// answer to one question, which is the defect this file keeps finding elsewhere.
+//
+// What makes the number defensible here is narrower than the text argument
+// above and does not inherit from it: the mark was never the only carrier of
+// status. The fill is still there, `PlanView`'s `ariaLabel` names the status in
+// words, and `STATUS_LABEL` puts it in the block's accessible name. The mark
+// removes a colour-ONLY failure; it is not asked to survive alone.
+//
 // A number may be a scalar (both themes) or a {light, dark} pair. The per-theme
 // form arrived for --btn-disabled, whose two themes were 5x apart so a single
 // floor could not have seen a dark-mode regression at all; that entry is no

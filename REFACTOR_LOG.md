@@ -18504,3 +18504,48 @@ write is the redundant one.
 of v17.15.2` the block claimed — the drift its own note tells the reader to
 expect. The test count was checked the same way and needed no change: 817 in 24
 files, exactly as stated.
+
+### Commit 2 — the status mark's non-text contrast, recorded rather than changed
+
+The `Deferred` item v17.15.7 left at the top of `ROADMAP.md`, settled by
+measurement plus Patryk's call.
+
+**Re-measured before deciding, and the first measurement was wrong.** The
+instrument read `--card` for the backdrop; that token does not exist, so the
+`|| "#fff"` fallback hardcoded a white base in *both* themes and the dark
+column came back flat (1.82 / 2.90 / 3.01 against ROADMAP's 2.20 / 3.58 /
+4.58). The theme *was* flipping — `--block-seated` changed with it — which is
+what made the reading look plausible. Re-run against the repo's own `BASE`
+constant (`{light: #fff, dark: rgb(36,37,42)}`, "the extreme of each theme"):
+
+|           | light | dark |
+|---|---|---|
+| pending   | 1.82 | 2.20 |
+| confirmed | 2.90 | 3.58 |
+| seated    | 4.52 | 4.56 |
+
+which matches ROADMAP's recorded figures within rounding. **ROADMAP's numbers
+were right and the new measurement was wrong**, and it was wrong in the way
+this file keeps recording: check the instrument before the app.
+
+**The decision (Patryk's): record it, do not change it.** The mark is
+`BLOCK_INK[status]` on `BLOCK_BG[status]` — the app's existing status
+vocabulary, already shipping identically on the timeline rail and in `SBadge`.
+A `paint-order: stroke` halo or a `--block-*` outline is a new treatment that
+has to reach every status surface in one version, or the app grows two
+vocabularies that disagree; that is its own release.
+
+The note went beside the existing exemption paragraphs in
+`tests/contrast.test.js`, where the two earlier ones live, and it makes two
+points those do not. The criterion is **different** — text is 1.4.3, a mark is
+1.4.11 and the bar is 3:1 — so the exemption above does not simply extend to
+cover it. And **no `EXEMPT_FLOOR` entry was added**: the mark reuses tokens the
+registry already carries (`--block-confirmed` / `--block-pending` exempt at
+2.8 / 1.75, `--block-seated` a `label` at the full 4.5, clearing it at 4.52),
+so a regression in exactly these pairs already fails the build. A second entry
+would be a second answer to one question.
+
+What is *not* inherited from the text argument is stated at the site: the mark
+was never the only carrier. The fill remains, `PlanView`'s `ariaLabel` names the
+status in words, and `STATUS_LABEL` puts it in the block's accessible name. The
+mark removes a colour-only failure; it is not asked to survive alone.
