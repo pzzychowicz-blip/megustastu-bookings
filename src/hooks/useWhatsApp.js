@@ -88,6 +88,14 @@ export function useWhatsApp({
   // a `set()` inside one re-enters via Firebase's synchronous local echo, which
   // appended the same message twice. Refs are kept in sync by the listeners + savers.
   const conversationsRef = useRef([]);
+  // v17.16.8: the RTDB keys of `conversations`, kept separately from the parsed
+  // rows above. The listener builds those with Object.values() keyed by the
+  // `phoneKey` FIELD in each body, which is NOT guaranteed to equal the key the
+  // row is stored under — api/_lib/rtdb.js writes at sanitizeKey(phoneKey),
+  // mapping . # $ [ ] / to "_", while the body can carry the raw value. Any
+  // code that builds a PATH needs this ref, never c.phoneKey; see
+  // clearAllWaData.
+  const conversationKeysRef = useRef([]);
   const messagesMapRef = useRef({});
 
   // ── Listeners (read-only; never write back) ────────────────────────────────
@@ -108,6 +116,7 @@ export function useWhatsApp({
       raw.forEach((c) => { if (c && c.phoneKey) byKey[c.phoneKey] = c; });
       const arr = Object.values(byKey);
       conversationsRef.current = arr;
+      conversationKeysRef.current = val ? Object.keys(val) : [];
       setConversations(arr);
       if (convFirstLoadCount.current === null) convFirstLoadCount.current = arr.length;
       conversationsLoaded.current = true;
@@ -577,9 +586,23 @@ export function useWhatsApp({
   // each leaf is evaluated against `$phoneKey`'s own rule. The key union is
   // taken from BOTH refs — a conversation can have no messages yet, and a
   // message subtree can outlive its conversation row.
+  //
+  // The keys are the SNAPSHOT keys, never `c.phoneKey`. That field is what the
+  // listener groups rows BY, and it comes out of each row's body, so it can
+  // disagree with the key the row is stored under — the backend writes at
+  // sanitizeKey(phoneKey). Building a path from it deletes something that does
+  // not exist and silently leaves the real row behind, which is the "it does
+  // not fail, it re-targets" hazard api/_lib/rtdb.js's own header describes.
+  // Snapshot keys also cover rows the listener DROPPED (it skips any body with
+  // no phoneKey field) — a hard reset has to clear those too.
+  //
+  // Known and accepted: this clears what the listeners have seen, so calling it
+  // before the first snapshot lands is a no-op where the old whole-node null
+  // was unconditional. The button lives inside the DEV-gated simulator, which
+  // only renders once the inbox has data.
   function clearAllWaData() {
     const keys = new Set([
-      ...conversationsRef.current.map(function (c) { return c.phoneKey; }),
+      ...conversationKeysRef.current,
       ...Object.keys(messagesMapRef.current || {}),
     ]);
     const patch = {};
