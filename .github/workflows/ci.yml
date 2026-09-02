@@ -46,8 +46,10 @@ jobs:
   #
   # A SEPARATE job, not extra steps on `verify`, for two reasons: it runs in
   # parallel with `verify` rather than in series, and a failure to install the
-  # CLI cannot take down the gate every PR depends on. (Which of the two jobs
-  # ends last has not been measured — don't claim this one is free.)
+  # CLI cannot take down the gate every PR depends on. It is NOT free: measured
+  # on run 33618082212 (both jobs from 10:10:34) `verify` finished in 34s and
+  # this job in 43s, so `rules` is what sets the wall-clock, by ~9s. That run
+  # was a cold cache and paid the jar download; expect the gap to close.
   #
   # Deliberately NOT path-filtered. The suite's inputs are database.rules.json,
   # tests/rules/**, firebase.json, vitest.rules.config.js AND package.json — a
