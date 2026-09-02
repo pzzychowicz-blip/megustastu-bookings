@@ -145,7 +145,7 @@ is either a P3 or the one rules item above.
   deferred (`conversations`/`messages` per-child and uncased, because the WA
   Admin backend bypasses rules entirely; `templates`/`settings/whatsapp` on real
   rev pairs). **What remains for the merge is smaller and is client work, not
-  rules work:** the two `wa-sandbox` commits that made `templates` use
+  rules work:** the `wa-sandbox` changes that put `templates` behind
   `writeWithRev` and turned `clearAllWaData()` into a per-key delete loop must
   survive the re-merge onto the new prod baseline, or the sandbox will write
   shapes the published rules refuse. See `database.rules.README.md` § v17.16.8.

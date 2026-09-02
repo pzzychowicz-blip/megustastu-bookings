@@ -152,14 +152,19 @@ client deletes per conversation instead (see below).
 
 ### The client changed with it, on the `wa-sandbox` branch
 
-Two commits there, because the rules above describe a client that did not yet
+Two changes there, because the rules above describe a client that did not yet
 exist:
 
 1. `templates` moved from a bare whole-node `set()` (the seed at
    `useWhatsApp.js:135` and the save at `:238`) onto `writeWithRev`, so the new
    `templatesRev` pair is real rather than decoration.
 2. `clearAllWaData()` deletes each conversation and each message subtree by key
-   instead of nulling the two nodes.
+   instead of nulling the two nodes. **It keys off the SNAPSHOT keys, not the
+   `phoneKey` field on each row** — the listener groups rows by that field and
+   discards the real keys, and the backend writes at `sanitizeKey(phoneKey)`, so
+   a path built from the field can name nothing and leave the real row behind.
+   That is the "it does not fail, it re-targets" hazard `api/_lib/rtdb.js`'s own
+   header describes; it was caught by `/code-review` here, one file over.
 
 **`settings/whatsapp` needed no client change** — `useWaSettings.js:103`
 already used `writeWithRev`. It was denied only because no rule named it.

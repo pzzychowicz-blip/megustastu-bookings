@@ -18239,3 +18239,34 @@ actually performs" comment, is correct for a different reason — it counts what
 *this branch's app* writes, where the two new pairs belong to `wa-sandbox` — and
 now carries a note saying so, because twelve and fourteen sitting a few lines
 apart in one file is exactly the shape somebody "corrects".
+
+### `/code-review` — two findings, both confirmed
+
+1. **The new WhatsApp group pinned the wipe and not the REPLACE.** The bookings
+   group two screens up already names why that is half a test — "replacing is
+   the same capability wearing a different verb" — and the same is true of
+   `conversations` and `messages`: a `set()` naming one child drops every other
+   one, and each child it *does* name satisfies `$phoneKey`. Measured before
+   writing the test: the replace is already refused, so this pins existing
+   behaviour rather than changing a rule. **120 → 121.**
+
+2. **`clearAllWaData()` built its paths from a FIELD, not from the key** —
+   a real bug, introduced by this version's own sandbox commit and caught here.
+   The conversations listener does `Object.values(val)` and groups by
+   `c.phoneKey`, **discarding the snapshot keys**; that field comes out of each
+   row's body and is not guaranteed to equal the key the row is stored under,
+   because `api/_lib/rtdb.js` writes at `sanitizeKey(phoneKey)` (mapping
+   `. # $ [ ] /` to `_`). So `"conversations/" + c.phoneKey` could name a path
+   that does not exist: the delete succeeds against nothing and the real row
+   survives a hard reset. **That is the "it does not fail, it silently
+   RE-TARGETS the write" hazard that file's own header is about, reproduced one
+   file over by someone who had just read it.** Fixed with a
+   `conversationKeysRef` holding the snapshot keys — which also picks up rows
+   the listener DROPS (it skips any body with no `phoneKey`), so the per-key
+   reset now clears strictly more than the first rewrite would have, and the
+   same set the old whole-node null did.
+
+   Accepted and commented rather than fixed: the reset clears what the
+   listeners have seen, so calling it before the first snapshot is a no-op
+   where the whole-node null was unconditional. The button is inside the
+   DEV-gated simulator, which only renders once the inbox has data.
