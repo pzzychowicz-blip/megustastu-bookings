@@ -447,7 +447,33 @@ export function getBlockSlots(blocks,date){
   // v15.0.0: an all-day block spans the BLOCK'S date's hours, not the active
   // view-day's — hoursFor(date) keeps it correct when date ≠ viewDate.
   var h=hoursFor(date);
-  return blocks.filter(function(bl){return bl.date===date;}).map(function(bl){
+  // v17.16.6 — the `getBlockSlots` sibling of CT-2A-03. v17.16.5 made `sanitize`
+  // guarantee that a booking's `time` is something `toMins` can read; a table
+  // BLOCK's `from`/`to` reach the same `toMins` two lines below and had no such
+  // guard, so a stored `from: 2000` throws `t.split is not a function` in the
+  // placement path exactly as a booking used to. Reachability is identical to
+  // the booking case — `tableBlocks` carries no per-field `.validate`, so any
+  // non-app writer can put one there — and v17.16.0's error boundary contains
+  // that crash without making the day usable.
+  //
+  // **The guard is HERE and not in `sanitizeBlock`, which is the whole decision.**
+  // That function is a MINT, not a whitelist (its header says so, and says not
+  // to "finish" it by copying `sanitize`'s shape): it exists to give a block an
+  // identity, and `reason` survives only because nothing there drops unknown
+  // fields. Defaulting an unreadable `from` there would hand the block a time
+  // window nobody entered and then persist it on the next `saveBlocks`, which is
+  // stored data silently rewritten. An unreadable block is not a block, so the
+  // consumer skips it.
+  //
+  // The cost, stated rather than hidden: the table is silently UNDER-blocked —
+  // it will be offered to the optimiser and to walk-ins for minutes somebody
+  // meant to protect. That is strictly better than the day being unusable, and
+  // it is the direction that leaves the stored record alone for whoever comes to
+  // repair it. An `allDay` block never reads `from`/`to` and is unaffected.
+  return blocks.filter(function(bl){
+    if(bl.date!==date) return false;
+    return bl.allDay?true:(isReadableTime(bl.from)&&isReadableTime(bl.to));
+  }).map(function(bl){
     var s=bl.allDay?h.open*60:toMins(bl.from);
     var e=bl.allDay?h.gridClose*60:toMins(bl.to);
     return {tables:[bl.tableId],s:s,e:e};

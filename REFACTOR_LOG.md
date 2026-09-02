@@ -17657,10 +17657,12 @@ verification is the 783-test suite above.
 
 **Date:** 2026-09-02 · **Branch:** `fix/v17.16.6-p3-findings` ·
 **Files:** `src/App.jsx` (version), `src/lib/customers.js`,
-`tests/customers.test.js`, `CLAUDE.md`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
-**Behavioural change:** yes — a booking joined to a phone-less guest now joins
-the group that guest is actually in, rather than the one the draft was minted
-against.
+`src/lib/booking-logic.js`, `tests/customers.test.js`,
+`tests/booking-logic.test.js`, `CLAUDE.md`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** yes, in two places — a booking joined to a phone-less
+guest now joins the group that guest is actually in, rather than the one the
+draft was minted against; and a table block the app cannot read is skipped
+rather than crashing every path that consults blocks.
 
 The seventh instalment of the v17.15.7 crash-test response. Scope was Patryk's:
 the two confirmed P3s, plus settling CT-2A-08 one way or the other, plus
@@ -17705,3 +17707,37 @@ Seven tests. The one that matters is not either half in isolation but that they
 `stampGuestSeed` leaves on the seed is the id `resolveGuestId` gives the new
 booking. Proven against a sabotaged build (`return f.guestId` — the pre-fix
 behaviour): three of the seven fail, and only those three.
+
+### 2 · The `getBlockSlots` sibling of CT-2A-03
+
+v17.16.5 made `sanitize` guarantee that a booking's `time` is something `toMins`
+can read. A table BLOCK's `from`/`to` reach that same `toMins`, from
+`getBlockSlots`, and had no such guard — so a stored `from: 2000` threw
+`t.split is not a function` in the placement path exactly as a booking used to,
+and took every scan that consults blocks with it. Reachability is identical to
+the booking case: `tableBlocks` carries no per-field `.validate`, so any non-app
+writer can put one there, and v17.16.0's error boundary contains the crash
+without making the day usable.
+
+**Where the guard goes was the decision, and it went to the CONSUMER.**
+`sanitizeBlock` is a MINT, not a whitelist — its own header says so and says not
+to "finish" it by copying `sanitize`'s shape. Defaulting an unreadable `from`
+there would hand the block a time window nobody entered and then PERSIST it on
+the next `saveBlocks`: stored data silently rewritten, which is the one thing
+this arc of versions has consistently refused to do. An unreadable block is not
+a block, so `getBlockSlots` skips it.
+
+**The cost is stated at the site rather than hidden.** The table is silently
+UNDER-blocked — offered to the optimiser and to walk-ins for minutes somebody
+meant to protect. That is strictly better than the day being unusable, and it is
+the direction that leaves the record intact for whoever comes to repair it.
+
+Four tests, in two pairs, and the second pair is the more interesting one: two
+prove the skip (proven against the restored pre-fix filter — exactly those two
+fail, across the whole 794-test suite, so nothing else silently depended on the
+throw), and two prove it does **not** widen. An `allDay` block never reads
+`from`/`to`, so a malformed pair there is not a reason to stop protecting the
+table all day; and `"9:30"`, `"13:00:00"` and `":"` still read, because the
+predicate is `isReadableTime` — `toMins` yielding a finite number, the
+consumer's own requirement — and deliberately not a format of its own. Same
+reasoning, and the same stated cost, as v17.16.5's booking half.

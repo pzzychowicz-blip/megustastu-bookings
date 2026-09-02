@@ -54,7 +54,7 @@ thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
 (both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
 leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
 half — which closes that finding in both halves — leaving eight; v17.16.6
-shipped CT-2B-08, leaving seven.**
+shipped CT-2B-08 and the `getBlockSlots` sibling of CT-2A-03, leaving six.**
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -100,25 +100,10 @@ ONE structural change, not two fixes.
   the layout, which is correct — the layout is editable, so the rules would
   duplicate it and go stale.
 
-**Version C or later — client fixes, in rough value order.** *(v17.16.2 shipped
-CT-2B-01, CT-2B-02 and CT-2B-03, plus a DST date-navigation bug not in the
-register — the Next-day button was a no-op on the spring-forward day.)*
-
-- **The `getBlockSlots` sibling of CT-2A-03 (P3, new in v17.16.5).** v17.16.5
-  made `sanitize` guarantee that a booking's `time` is something `toMins` can
-  read. A table BLOCK's `from`/`to` reach the same `toMins`, from
-  `getBlockSlots`, and have no such guard: `sanitizeBlock` is a MINT rather than
-  a whitelist — its header says so, and says not to "finish" it by copying
-  `sanitize`'s shape — so a block holding `from: 2000` throws in the placement
-  path exactly as a booking used to. **Settling observation:** none needed for
-  reachability, which is identical to the booking case (a non-app writer, since
-  `tableBlocks` has no per-field `.validate`); what needs deciding is WHERE. The
-  argument for the consumer rather than the mint: an unreadable block is not a
-  block, so `getBlockSlots` should skip it rather than have stored data silently
-  rewritten to a default time it was never given.
-
-**P3 — minor, each its own commit if taken at all.** Re-rated in v17.16.5; the
-order below is by that rating, not by the filed one.
+**Client fixes — P3, minor, each its own commit if taken at all.** Re-rated in
+v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
+the last of the non-P3 client entries (`getBlockSlots`), so everything left here
+is either a P3 or one of the two rules items above.
 
 - **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
   was applied optimistically to local state, behind a dismissible banner naming

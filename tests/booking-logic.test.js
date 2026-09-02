@@ -354,6 +354,63 @@ describe("canAssign / getBusy / getBlockSlots", () => {
     const s = getBlockSlots(blocks, D);
     expect(s).toEqual([{ tables: ["7"], s: 840, e: 900 }]);
   });
+
+  // v17.16.6 — the getBlockSlots sibling of CT-2A-03. A block's from/to reach
+  // the same `toMins` a booking's `time` does, and `sanitizeBlock` is a MINT
+  // rather than a whitelist, so nothing upstream guarantees they are readable.
+  // Before this the call threw `t.split is not a function` and took the whole
+  // placement path with it — every scan that consults blocks.
+  it("skips a block whose from/to `toMins` cannot read, instead of throwing", () => {
+    const bad = { tableId: "7", date: D, allDay: false, from: 2000, to: 2100 };
+    const good = { tableId: "2", date: D, allDay: false, from: "14:00", to: "15:00" };
+    expect(() => getBlockSlots([bad], D)).not.toThrow();
+    // The survivor is what matters: one malformed block must not cost the others.
+    expect(getBlockSlots([bad, good], D)).toEqual([{ tables: ["2"], s: 840, e: 900 }]);
+  });
+
+  it("skips it whichever end is unreadable, and for every unreadable shape", () => {
+    const shapes = [
+      { from: 2000, to: "15:00" },
+      { from: "14:00", to: 2100 },
+      { from: null, to: "15:00" },
+      { from: "14:00", to: undefined },
+      { from: "", to: "15:00" },
+      { from: "14:00", to: {} },
+      { from: "not a time", to: "15:00" },
+    ];
+    shapes.forEach((sh) => {
+      const bl = Object.assign({ tableId: "7", date: D, allDay: false }, sh);
+      expect(() => getBlockSlots([bl], D)).not.toThrow();
+      expect(getBlockSlots([bl], D)).toEqual([]);
+    });
+  });
+
+  it("leaves an allDay block alone — it never reads from/to", () => {
+    // The skip must not widen into blocks the defect cannot reach: an allDay
+    // block spans hoursFor(date) and its from/to are ignored, so a malformed
+    // pair there is not a reason to stop protecting the table all day.
+    const bl = { tableId: "7", date: D, allDay: true, from: 2000, to: null };
+    const s = getBlockSlots([bl], D);
+    expect(s).toHaveLength(1);
+    expect(s[0].tables).toEqual(["7"]);
+    expect(Number.isFinite(s[0].s) && Number.isFinite(s[0].e)).toBe(true);
+  });
+
+  it("keeps every readable time the app already accepts", () => {
+    // The guard is `toMins` yields a finite number — the consumer's own
+    // requirement — and NOT a format of its own, for `isReadableTime`'s stated
+    // reason: nothing that currently works may move. "9:30" and "13:00:00" are
+    // not what the picker emits and both read fine today.
+    const keep = [
+      ["9:30", "10:30", 570, 630],
+      ["13:00:00", "14:00:00", 780, 840],
+      [":", "1:00", 0, 60],
+    ];
+    keep.forEach(([from, to, es, ee]) => {
+      const bl = { tableId: "7", date: D, allDay: false, from, to };
+      expect(getBlockSlots([bl], D)).toEqual([{ tables: ["7"], s: es, e: ee }]);
+    });
+  });
 });
 
 describe("findBest (MGT single/combo contracts)", () => {
