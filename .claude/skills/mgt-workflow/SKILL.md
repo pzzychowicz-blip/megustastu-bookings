@@ -279,24 +279,30 @@ read as one version's story. Body ends with the Claude co-author trailer.
 a green PR then mean the same thing; running two of four just means the PR is the first
 place the other two get tried.
 
-```bash
-npm run build && npm test && npm run lint && npm run check:style
-```
-
-Measured on this repo: **0.1s · 1.8s · 4.0s · 0.3s** — about six seconds for all four,
-so run them per commit; a `git bisect` should never land on a broken one. `lint` is a
-**hard** gate at 0 errors (warnings don't block; there are ~71 by design).
-
-**Read the lint count — don't `tail` it.** `eslint` prints two trailing lines and the
-reassuring one is not the verdict: `0 errors and 1 warning potentially fixable with the
---fix option` is about what `--fix` could *repair*, while `✖ N problems (E errors, W
-warnings)` is what CI gates on. `tail -2` shows the first and hides the second — two
-consecutive commits were verified that way and reported "0 errors" while carrying an
-error (CLAUDE.md's gotcha). So grep for the count:
+**Run this exact line.** It is the whole gate, and each stage is already filtered down
+to the one number worth reporting — so there is nothing left for you to trim by hand:
 
 ```bash
-npm run lint 2>&1 | grep -E "problems|✖"
+npm run build 2>&1 | grep -E "gzip:" | tail -1 && npm test 2>&1 | grep -E "Tests +[0-9]" && npm run lint 2>&1 | grep -E "✖.*problems" && npm run check:style 2>&1 | tail -1
 ```
+
+Four lines out, in order: main-bundle gz size · test count · lint problem count · the
+style verdict. Measured on this repo: **0.1s · 1.8s · 4.0s · 0.3s** — about six seconds
+for all four, so run them per commit; a `git bisect` should never land on a broken one.
+`lint` is a **hard** gate at 0 errors (warnings don't block; there are ~71 by design).
+
+**Why the line is pre-filtered rather than left to you.** The tempting shape is to
+chain the four commands and put a uniform `| tail -N` on each to keep the output small
+— and for `lint` that is wrong in a way that reads as success. `eslint` prints two
+trailing lines and the reassuring one is not the verdict: `0 errors and 1 warning
+potentially fixable with the --fix option` is about what `--fix` could *repair*, while
+`✖ N problems (E errors, W warnings)` is what CI gates on. `tail -2` shows the first and
+hides the second — two consecutive commits were verified that way and reported "0
+errors" while carrying an error (CLAUDE.md's gotcha). A v5 eval run then did it again,
+typing `npm run lint 2>&1 | tail -8` with the correct grep eight lines away in this
+file, because it was batching three gates and trimmed all three the same way. **A
+prohibition you have to remember loses to a habit; a command you paste doesn't** — so
+paste the line above rather than assembling your own.
 
 **A fifth gate, when the diff touches the rules.** Changed `database.rules.json`,
 `tests/rules/**`, `firebase.json` or `vitest.rules.config.js`? Also run
