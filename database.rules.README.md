@@ -37,8 +37,22 @@ still works.
 
 `firebase-tools` is **not** a devDependency on purpose. It is a ~200 MB tool that
 only ever *starts* the emulator — no app or test code imports it — and CI runs
-`npm ci` on every PR. Adding it there would slow every build for something CI
-never executes.
+`npm ci` in **both** jobs. As a devDependency, `verify` (build · test · lint ·
+check:style) would pay for it on every PR and never run it. So CI installs it
+globally in the `rules` job alone, **pinned to an exact version** so that job and
+this machine evaluate the rules on the same emulator jar:
+
+```yaml
+# .github/workflows/ci.yml, job `rules`
+env:
+  FIREBASE_TOOLS_VERSION: "15.28.2"
+```
+
+That one value is both the install version and the cache key for
+`~/.cache/firebase/emulators` (the CLI is what selects the emulator jar, so the
+key cannot go stale while the pin holds). Upgrading locally means bumping it in
+the same PR, or a rules failure that reproduces in only one of the two places
+has two candidate causes instead of one.
 
 ### Running
 
@@ -86,16 +100,18 @@ the moment somebody names the project.
 
 ### What the suite asserts
 
-120 tests as of v17.16.8. The first group asserts the rig itself is pointed at
-a loopback emulator and a `demo-` project — and, since v17.16.7, that the root
-carries **no** `.write` key, which is asserted as an ABSENCE because that
-absence is the whole of the access-control change and a re-added root grant
-would leave every other test in this file green. The next groups are what you
-would expect: the `auth != null` boundary, the per-`$id` booking CAS
-(`updatedAt` strictly greater **and** `baseUpdatedAt` equal to stored — the pair
-that closed the 2026-07-05 overwrite incident), and the twelve `<name>Rev`
-pairs, each swept for repeated / skipped / lower / absent / non-numeric
-revisions, and — v17.16.7 — for a bare `remove()` of the node and of its rev.
+121 tests as of v17.16.8, run on every PR by the `rules` job in
+`.github/workflows/ci.yml` as well as on demand here. The first group asserts
+the rig itself is pointed at a loopback emulator and a `demo-` project — and,
+since v17.16.7, that the root carries **no** `.write` key, which is asserted as
+an ABSENCE because that absence is the whole of the access-control change and a
+re-added root grant would leave every other test in this file green. The next
+groups are what you would expect: the `auth != null` boundary, the per-`$id`
+booking CAS (`updatedAt` strictly greater **and** `baseUpdatedAt` equal to
+stored — the pair that closed the 2026-07-05 overwrite incident), and the twelve
+`<name>Rev` pairs, each swept for repeated / skipped / lower / absent /
+non-numeric revisions, and — v17.16.7 — for a bare `remove()` of the node and of
+its rev.
 
 The last group is marked **`PROBE:`** and is different in kind: those tests
 assert that something *is permitted* which you might wish were not. They are
