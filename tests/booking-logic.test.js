@@ -14,7 +14,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
-  comboCap, comboCapBest, sanitize, sanitizeAll, diffBooking,
+  comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
   verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots,
   findBest, findFreeSlot, applyOpt, bookingsAfterAction,
@@ -114,6 +114,45 @@ describe("sanitize / sanitizeAll", () => {
     expect(s.tables).toEqual([]);
     expect(sanitize({ deposit: -50 }).deposit).toBe(0);
     expect(sanitize({ deposit: 20 }).deposit).toBe(20);
+  });
+  // v17.16.5 (CT-2A-03, client half). `toMins` is `t.split(":")` at 83 call
+  // sites, so a stored time that is not a readable string is a crash, not a
+  // wrong value — and it is reachable from the server, where the rules check
+  // type and deliberately not format.
+  it("keeps only a time toMins can read; every other shape takes the default", () => {
+    // The exact reproduction: a number is truthy, so it used to survive.
+    expect(sanitize({ time: 2000 }).time).toBe("13:00");
+    expect(() => toMins(sanitize({ time: 2000 }).time)).not.toThrow();
+    expect(sanitize({ time: true }).time).toBe("13:00");
+    expect(sanitize({ time: { h: 13 } }).time).toBe("13:00");
+    expect(sanitize({ time: ["13:00"] }).time).toBe("13:00");
+    // Silent rather than throwing, and just as unusable: toMins("31/08/2026") is NaN.
+    expect(sanitize({ time: "31/08/2026" }).time).toBe("13:00");
+    // scheduledTime carries the same guard, and falls back to the sanitised
+    // time rather than to the literal — a booking moved to 19:00 whose
+    // scheduledTime is junk must not claim it was scheduled for 13:00.
+    expect(sanitize({ time: "19:00", scheduledTime: 9 }).scheduledTime).toBe("19:00");
+    expect(sanitize({ time: 2000, scheduledTime: 2000 }).scheduledTime).toBe("13:00");
+  });
+  // The guard is the CONSUMER'S requirement, not a format of its own: nothing
+  // that reads today may move. These are the values that would break if someone
+  // "tightened" it into a /^\d{2}:\d{2}$/ pattern.
+  it("does not move a value that already reads", () => {
+    expect(sanitize({ time: "9:30" }).time).toBe("9:30");
+    expect(sanitize({ time: "13:00:00" }).time).toBe("13:00:00");
+    expect(sanitize({ time: "13:0" }).time).toBe("13:0");
+    // Kept deliberately, and recorded at the predicate: neither crashes, so
+    // neither is this fix's business. ":" reads as 00:00, "25:99" as 1599.
+    expect(sanitize({ time: ":" }).time).toBe(":");
+    expect(sanitize({ time: "25:99" }).time).toBe("25:99");
+  });
+  it("isReadableTime answers for the consumer", () => {
+    expect(isReadableTime("13:00")).toBe(true);
+    expect(isReadableTime(2000)).toBe(false);
+    expect(isReadableTime("")).toBe(false);
+    expect(isReadableTime("1300")).toBe(false);
+    expect(isReadableTime(null)).toBe(false);
+    expect(isReadableTime(undefined)).toBe(false);
   });
   it("preserves the updatedAt stamp; reads both array and keyed shapes", () => {
     expect(sanitize({ updatedAt: 12345 }).updatedAt).toBe(12345);

@@ -234,7 +234,30 @@ export function bookEnd(b){return toMins(b.time)+((b&&b.duration)||90)+TURN_BUFF
 export function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
 // ── Booking sanitisation / diffing ────────────────────────────────────────────
-export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time||"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:b.scheduledTime||t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
+// v17.16.5 (CT-2A-03, client half): is this value a time the rest of the app can
+// READ? `sanitize` has always guarded truthiness — `b.time || "13:00"` — and
+// every consumer needs something `toMins` can take apart. The gap between the
+// two is not academic: `toMins` is `t.split(":")` at 83 call sites, so a stored
+// `time: 2000` survives sanitisation (a number is truthy), reaches the first
+// consumer and throws `t.split is not a function`. v17.16.0's error boundary
+// contains that crash; it does not make the day usable. And it is reachable
+// from the server, because v17.16.1's per-field rules deliberately check TYPE
+// and not FORMAT — the two halves of one finding, and this is the client half.
+//
+// The predicate is deliberately the CONSUMER'S requirement rather than a format
+// of its own: readable means `toMins` yields a finite number. That is the
+// narrowest possible guard — a value only stops being kept if it already throws
+// or already produces NaN today — so nothing that currently works can move. The
+// cost of that choice, stated rather than hidden: `":"` reads as 00:00 and is
+// therefore KEPT, because it is not a crash. Times outside the day (`"25:99"`
+// reads as 1599) are kept for the same reason; normalising them would rewrite a
+// record that renders, which is a different decision and not this one.
+export function isReadableTime(v){
+  if(typeof v!=="string") return false;
+  var p=v.split(":");
+  return p.length>=2&&Number.isFinite(Number(p[0]))&&Number.isFinite(Number(p[1]));
+}
+export function sanitize(b){if(!b||typeof b!=="object") return null;var t=isReadableTime(b.time)?b.time:"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:isReadableTime(b.scheduledTime)?b.scheduledTime:t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
   // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
   // it survives reads; legacy no-shows (history entry only) are counted by
   // customers.js isNoShow's history fallback — no migration needed.
