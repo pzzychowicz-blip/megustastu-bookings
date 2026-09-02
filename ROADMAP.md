@@ -77,13 +77,6 @@ v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
 the last of the non-P3 client entries (`getBlockSlots`), so everything left here
 is either a P3 or the one rules item above.
 
-- **Duplicate booking ids are unchecked** (unrated; surfaced under CT-2A-11 and
-  outlived it). Two bookings sharing an id collapse in the optimiser's
-  assignment map. A `genId()` collision needs the same millisecond and the same
-  4 random base36 characters, ≈ 1 in 1.7M given the first. **Settling
-  observation:** whether any two ids in PROD coincide at all — a one-line scan
-  of the `bookings` node, which nobody has run.
-
 - **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
   `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
   survives, and recorded why the v16.0.0 corruption has not recurred (an

@@ -18549,3 +18549,59 @@ What is *not* inherited from the text argument is stated at the site: the mark
 was never the only carrier. The fill remains, `PlanView`'s `ariaLabel` names the
 status in words, and `STATUS_LABEL` puts it in the block's accessible name. The
 mark removes a colour-only failure; it is not asked to survive alone.
+
+### Commit 3 — duplicate booking ids: the scan nobody had run
+
+The `ROADMAP` bullet asked for one settling observation — *"whether any two ids
+in PROD coincide at all"*. It is deleted on two independent grounds, one
+measured and one structural.
+
+**Measured (DEV, 507 bookings, via the app's own authenticated handle):**
+
+| | |
+|---|---|
+| duplicate `id` fields | **0** |
+| children whose RTDB key ≠ their own `id` field | **0** |
+| children with no `id` field | **0** |
+| node shape | keyed object (not a legacy array) |
+
+**Structural, and this is the stronger half.** `buildPatch` writes
+`patch[id] = r.booking` (`write-path.js`) into a node that *is* `/bookings/{id}`
+— so two bookings sharing an id address the same child, and a `genId()`
+collision **overwrites rather than duplicating**. Two same-id bookings cannot
+coexist as separate children at all. The only shape that produces a duplicate in
+the in-memory array is two DIFFERENT keys whose `id` fields agree, because
+`sanitizeAll` is `Object.values(...)` and throws the keys away — and that
+requires an out-of-band write, since nothing in the app can author it. That is
+the divergence the second row above measures, and it is zero.
+
+**A hypothesis raised and killed in the same pass.** The id-length histogram
+showed suffixes of 3, 0 and even −4 characters, which read as `genId()`'s
+`Math.random().toString(36).slice(2, 6)` sometimes returning fewer than four —
+which would have put the collision odds well above the bullet's stated figure.
+Inspecting the outliers disproved it: every short id is a hand-seeded DEV
+fixture (`clashaaa` / `clashbbb` from clash testing, the `rvmt0astu5*` run
+staged for the user manual, `pzh6`), and the 24-character ones are documented
+recurring-occurrence ids. All 481 genuine `genId()` outputs are exactly four.
+Confirmed independently at 5,000,000 samples: `{"4": 5000000}`, zero short. So
+`36⁴ = 1,679,616` given the same millisecond, exactly as the bullet said.
+
+**No code change.** A guard would defend a state the storage shape makes
+unreachable, on the hottest read path in the app.
+
+**The PROD half is Patryk's**, since Claude never touches PROD. Signed in, in
+the browser console:
+
+```js
+const fb = await import('/src/firebase.js');
+const tok = await fb.auth.currentUser.getIdToken();
+const raw = await (await fetch(fb.db.app.options.databaseURL + '/bookings.json?auth=' + tok)).json();
+const e = Object.entries(raw), ids = e.map(([k, v]) => String(v && v.id !== undefined ? v.id : k));
+console.log({
+  children: e.length,
+  keyVsIdMismatch: e.filter(([k, v]) => v && v.id !== undefined && String(v.id) !== String(k)).map(([k]) => k),
+  duplicates: [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))],
+});
+```
+
+Both lists empty is the same answer DEV gave.
