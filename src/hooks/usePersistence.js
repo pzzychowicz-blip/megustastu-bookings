@@ -86,6 +86,19 @@ const LOAD_TIMEOUT_MS = 15000;
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
   const [tableBlocks, setTableBlocks] = useState([]);
+  // v17.16.10 (CT-2A-09): ref mirrors, so a save can compute from the live
+  // snapshot WITHOUT performing its Firebase write inside a setState updater.
+  // The shape is useWaitlist.js's, verbatim: compute from the ref, assign the
+  // ref, setState, then write — all as plain statements.
+  //
+  // INVARIANT, and the only thing that can break this: every `setBookings` /
+  // `setTableBlocks` in this file assigns its mirror on the line above it.
+  // There are four `setBookings` and three `setTableBlocks`. A new set site
+  // that forgets one hands the NEXT save a stale `prev`, which the diff would
+  // then read as "these fields changed back" — so it would write, not merely
+  // skip.
+  const bookingsRef=useRef([]);
+  const blocksRef=useRef([]);
   // v17.3.0: has the FIRST bookings snapshot arrived from Firebase? Drives the
   // "⟳ Loading bookings…" floating toast in App — before this flips true the
   // screen shows an empty [] state that looks ready but isn't (a real gap on a
@@ -291,6 +304,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const bVal=snaps[0].val();
       arrayShapeRef.current=Array.isArray(bVal); // v15.5.0: keep the migration/shape gate fresh
       const bArr=bVal?sanitizeAll(bVal):[];
+      bookingsRef.current=bArr;
       setBookings(bArr);
       setBookingsReady(true); // v17.3.0: a resync pull also proves data is present
       if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
@@ -298,7 +312,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // v17.15.3: the SECOND block read site, and it has to mint ids too — a
       // resync that skipped it would hand the app id-less blocks after every
       // sleep/wake, i.e. exactly when the tablet has been closed all afternoon.
-      setTableBlocks(sanitizeBlocks(tVal));
+      const tArr=sanitizeBlocks(tVal);
+      blocksRef.current=tArr;
+      setTableBlocks(tArr);
       // v16.0.0: re-anchor the blocks revision-CAS ref to the true server value —
       // the rev onValue may have been dead through the stale window.
       const rVal=snaps[2].val();
@@ -379,7 +395,16 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // discrete event handler, which React flushes before yielding to the
         // microtask that could drain. The failure mode if that ever stopped
         // holding is the banner saying "A change" — degraded, not wrong.
-        const item={fn:next,tries:tryN,label:carriedLabel||null};
+        // v17.16.10 (CT-2A-09): `prev` and `computed` are in hand HERE now, so
+        // the label is computed before the item is pushed rather than mutated
+        // into it from inside an updater. The race the note above describes —
+        // a drain seeing `label` still null — is structurally unreachable once
+        // the fill is synchronous. `carriedLabel` STAYS: it is still the right
+        // name for a retry (the first `prev` is the version the card shows),
+        // and removing a working defence is not this commit's job.
+        const prevHeld=bookingsRef.current;
+        const computedHeld=next(prevHeld);
+        const item={fn:next,tries:tryN,label:carriedLabel||describeWrite(prevHeld,computedHeld)};
         pendingRetriesRef.current.push(item);
         // v15.6.0: optimistic show. Apply the user's change to LOCAL state NOW so it's
         // visible immediately — previously a held write stayed invisible until resync
@@ -388,11 +413,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // resync() replays this queued function on FRESH data (and reconciles it into
         // the fresh-data state set, flicker-free). Value-form (doSave) + silent (auto-
         // effect) writes don't reach this branch, so they keep their existing behaviour.
-        setBookings(function(prev){
-          const computed=next(prev);
-          if(!item.label) item.label=describeWrite(prev,computed);
-          return computed;
-        });
+        bookingsRef.current=computedHeld;
+        setBookings(computedHeld);
       }
       markStale();
       return false;
@@ -448,14 +470,25 @@ export function usePersistence({ autoOptimizer, nowMins }){
         markStale();
       });
     }
-    // Always run through the functional updater so persist() has `prev` (the live
-    // in-memory snapshot, reflecting other devices' echoes) to diff against — for
-    // BOTH the function form (user actions) and the value form (auto-effects).
-    setBookings(function(prev){
-      const computed=(typeof next==="function")?next(prev):next;
-      persist(prev,computed);
-      return computed;
-    });
+    // v17.16.10 (CT-2A-09): this was a `setBookings(prev => { persist(...); return
+    // computed; })` — the updater-side write CLAUDE.md's own gotcha row forbids,
+    // and the one this file had always done. `prev` still comes from the live
+    // in-memory snapshot (other devices' echoes included); it comes from the
+    // mirror instead of from React.
+    //
+    // Two things this fixes beyond the rule. React invokes an updater during
+    // RENDER, not at the call — it only appeared synchronous here because React
+    // eagerly evaluates the first update on an idle fiber, an internal
+    // optimisation that also runs the updater a second time when the render
+    // arrives. `dispatched` is read on the line below, so the whole
+    // return-a-boolean contract every caller gates its "Booking saved." on was
+    // resting on that. And the double invocation is the dev double-dispatch
+    // `lastPatchSigRef` exists to absorb.
+    const prev=bookingsRef.current;
+    const computed=(typeof next==="function")?next(prev):next;
+    bookingsRef.current=computed;
+    setBookings(computed);
+    persist(prev,computed);
     return dispatched;
   }
   // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can
@@ -481,11 +514,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
         if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
       });
     }
-    if(typeof next==="function"){
-      setTableBlocks(function(prev){const computed=next(prev);persist(computed);return computed;});
-    } else {
-      setTableBlocks(next);persist(next);
-    }
+    // v17.16.10 (CT-2A-09): same conversion as saveBookings, and it also
+    // collapses the two branches — the value form and the function form differ
+    // only in how `computed` is obtained.
+    const computed=(typeof next==="function")?next(blocksRef.current):next;
+    blocksRef.current=computed;
+    setTableBlocks(computed);
+    persist(computed);
     return true;
   }
   // Firebase real-time listeners — read only, never write back.
@@ -502,6 +537,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const isArrayShape=Array.isArray(val);
       arrayShapeRef.current=isArrayShape;
       const arr=val?sanitizeAll(val):[];
+      bookingsRef.current=arr;
       setBookings(arr);
       if(firstLoadCount.current===null){
         firstLoadCount.current=arr.length;
@@ -584,7 +620,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // removeBlock can match on identity instead of on the field set (which two
       // duplicate blocks share — see booking-logic). It also owns the array-vs-
       // object-vs-null shrug this line used to spell out, shared with resync().
-      setTableBlocks(sanitizeBlocks(val));
+      const bl=sanitizeBlocks(val);
+      blocksRef.current=bl;
+      setTableBlocks(bl);
       blocksLoaded.current=true;
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
     },dbError("tableBlocks"));

@@ -14,19 +14,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **Decide the status mark's non-text contrast (WCAG 1.4.11).** v17.15.7 put
-  `StatusIcon` on the floor-plan table. Measured, composited over the plan card,
-  the white mark is **pending 1.83:1 light / 2.20:1 dark, confirmed 2.92:1 light
-  / 3.58:1 dark, seated 4.59 / 4.58** — three of six under the 3:1 a graphical
-  object wants. Not a new defect: the identical pairing already ships on the
-  timeline block's rail and in `SBadge`, and the recorded `--block-pending` /
-  `--block-confirmed` text exemptions (floors 1.75 / 2.8) agree with these
-  numbers. Fixing it means a `paint-order: stroke` halo or a `--block-*` outline
-  on the mark — a **new treatment**, applied to every status surface at once or
-  not at all, so it wants its own version and Patryk's sign-off. If the answer
-  is "record it, don't change it", the note belongs beside the existing
-  exemption paragraph in `tests/contrast.test.js`.
-
 ### Crash test v17.15.7 — confirmed and unfixed
 
 The findings from the three adversarial QA sessions that are still open
@@ -49,7 +36,12 @@ change rather than two fixes — and SETTLED CT-2A-10 as a deliberate won't-fix
 reaching 2**53 needs a hand-written value from outside the app; the rules-suite
 pin stays, see `REFACTOR_LOG.md`), leaving two: CT-2A-07 and CT-2A-09;
 **v17.16.9 shipped CT-2A-07** — the decision it was waiting on was Patryk's
-(park, name, offer Retry) — leaving **one**: CT-2A-09.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
+(park, name, offer Retry) — leaving one; **v17.16.10 shipped CT-2A-09, the last
+of them, and settled the unrated duplicate-booking-id entry that had outlived
+CT-2A-11** (measured: zero duplicates and zero key/id divergence in 507 DEV
+bookings, and `buildPatch` keys its patch BY the id, so a collision overwrites
+rather than duplicating — see `REFACTOR_LOG.md`). **The register is now at zero
+open findings.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
 is not in that count — it was raised in v17.16.5, after the register was
 written. **The count is of REGISTER findings only**, stated here because the
 running tally was off by one for two commits of v17.16.6 before anybody
@@ -85,41 +77,8 @@ in `CLAUDE.md`'s Gotchas.
   the layout, which is correct — the layout is editable, so the rules would
   duplicate it and go stale.
 
-**Client fixes — P3, minor, each its own commit if taken at all.** Re-rated in
-v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
-the last of the non-P3 client entries (`getBlockSlots`), so everything left here
-is either a P3 or the one rules item above.
-
-- **Duplicate booking ids are unchecked** (unrated; surfaced under CT-2A-11 and
-  outlived it). Two bookings sharing an id collapse in the optimiser's
-  assignment map. A `genId()` collision needs the same millisecond and the same
-  4 random base36 characters, ≈ 1 in 1.7M given the first. **Settling
-  observation:** whether any two ids in PROD coincide at all — a one-line scan
-  of the `bookings` node, which nobody has run.
-
-- **`lastPatchSigRef` is not the StrictMode guarantee `CLAUDE.md` describes**
-  (surfaced v17.16.9, DEV-only). It dedupes two patches with the same content
-  AND the same `baseUpdatedAt` inside 2s — but the double-invoked updater can
-  see two different `prev` values (one pre-resync, one post-resync), so the two
-  dispatches carry different bases, escape the window, and the stale one is
-  correctly rejected by the CAS. Measured: on unmodified v17.16.8, **six
-  consecutive ordinary status changes each exhausted the retries** and raised
-  the write-error banner in DEV. **No PROD impact** — StrictMode is dev-only,
-  and the rejected write is the redundant one — so this is a documentation
-  defect plus DEV noise, not a data risk. **Settling observation:** whether the
-  signature should drop `baseUpdatedAt`, which is exactly the change v17.16.6
-  pinned AGAINST under CT-2A-08 (it is what makes two patches indistinguishable
-  to the server), so the answer is probably to correct the claim rather than the
-  code.
-- **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
-  `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
-  survives, and recorded why the v16.0.0 corruption has not recurred (an
-  idempotent per-child diff `update()`, plus the signature dedupe). Converting it
-  to the ref-mirror shape is the structural fix the rule actually prescribes.
-  **Re-rated (v17.16.5): low value, high risk.** The defect is mitigated two
-  layers deep and both layers are now tested (`write-path.js`, v17.16.2); the fix
-  rewrites the file through which this repo has lost production data twice. Worth
-  doing only as its own version, with nothing else riding along.
+**No client entries remain.** The last of them went in v17.16.10; the single
+rules item above is all this section still holds.
 
 ## Designed, not implemented
 

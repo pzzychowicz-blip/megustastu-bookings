@@ -18436,3 +18436,305 @@ then raising an independent warning: both sentences and all three buttons.
 The whole verification rig — a `window.__FORCE_STALE__` lever, `MAX_RETRIES` at
 1, four `console.log`s and a StrictMode removal — was added, used and removed;
 `git diff` against `origin/main` touches neither `main.jsx` nor any of it.
+
+---
+
+## v17.16.10 — the pointers that outlived what they pointed at
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.10-ref-mirror-and-doc-truth` ·
+**Behavioural change:** see each commit below. **Files:** `src/App.jsx`,
+`CLAUDE.md`, `ROADMAP.md`, `tests/contrast.test.js` (+ the CT-2A-09 commit's
+own files, recorded with it).
+
+A version carrying four scopes Patryk chose together: three that correct or
+settle a claim, and one structural fix. The first three change no shipped
+behaviour at all — which is the point of grouping them, since each one is a
+sentence somebody would otherwise quote with confidence.
+
+### Commit 1 — the three claims in CLAUDE.md that were false
+
+**None of these was found by reading the code looking for bugs.** All three were
+found by checking a claim against the thing it described, which is the only way
+this class shows up: a wrong sentence in a file that is auto-loaded into every
+session reads exactly like a right one.
+
+**(1) The dangling ROADMAP pointer.** The Gotchas row on naming a control
+rendered from a `.map` ended *"Still open in `LayoutSettings`' priorities editor
+— see ROADMAP"*. Measured: the priorities editor's two control groups both carry
+`aria-pressed` **and** an identity-bearing `aria-label` — the zone-mode segments
+(`LayoutSettings.jsx:840`, named `"Indoor (Party of 2 to 2)"` and so on) and the
+`mixedRequire` chips (`LayoutSettings.jsx:932`, `"5A — require in cross-zone
+combos"`), each with the v17.15.6 comment that put it there. And `ROADMAP.md`
+holds no matching entry — `grep -in 'layoutsettings\|aria-pressed\|priorit'`
+returns nothing.
+
+So the work shipped in v17.15.6 and the ROADMAP entry was correctly deleted with
+it; what nobody deleted was the pointer *to* that entry, one file over. **A
+pointer to nothing reads as open work**, and this is the same shape the row it
+sits in is about: one fact written in two places, and the half that goes stale
+is the half nobody is looking at.
+
+**(2) "StrictMode-proof".** The v15.5.0 paragraph describes `stampForWrite` as
+clock-skew-proof *and* StrictMode-proof, "the dev double-write gets a higher
+stamp → accepted, no spurious reject". True of the rule that paragraph
+describes, where acceptance required `updatedAt` **greater than** stored — and
+v16.0.0 replaced greater-than with a CAS requiring `baseUpdatedAt` to **equal**
+it. Under CAS a higher stamp guarantees nothing. The clause now says which rule
+it belongs to and points at the paragraph that superseded it.
+
+**(3) `lastPatchSigRef` "dedupes StrictMode's dev double-dispatch".** The
+claim ROADMAP had already flagged, and it is unqualified where the code is
+conditional. `contentKey` deletes `updatedAt` and nothing else
+(`write-path.js`), so `patchSignature` keeps `baseUpdatedAt` — the signature is
+(content, base). StrictMode's double-invoked updater can read two different
+`prev` values, one pre-resync and one post-resync, so the two dispatches carry
+**different bases**, produce different signatures, escape the 2s window, and the
+stale one is correctly rejected by the CAS. Measured on unmodified v17.16.8 and
+recorded under v17.16.9: six consecutive ordinary status changes each exhausted
+the retries and raised the write-error banner in DEV.
+
+Corrected rather than "fixed", which is the decision the ROADMAP entry itself
+predicted: the change that would make the sentence true — dropping
+`baseUpdatedAt` from the signature — is exactly what v17.16.6 pinned **against**
+under CT-2A-08, because it is what makes two patches indistinguishable to the
+server. So the code is right and the sentence was wrong. Dev-only; the rejected
+write is the redundant one.
+
+**(4)** `App.jsx` re-measured at **3879** lines (`wc -l`), against the `~3754 as
+of v17.15.2` the block claimed — the drift its own note tells the reader to
+expect. The test count was checked the same way and needed no change: 817 in 24
+files, exactly as stated.
+
+### Commit 2 — the status mark's non-text contrast, recorded rather than changed
+
+The `Deferred` item v17.15.7 left at the top of `ROADMAP.md`, settled by
+measurement plus Patryk's call.
+
+**Re-measured before deciding, and the first measurement was wrong.** The
+instrument read `--card` for the backdrop; that token does not exist, so the
+`|| "#fff"` fallback hardcoded a white base in *both* themes and the dark
+column came back flat (1.82 / 2.90 / 3.01 against ROADMAP's 2.20 / 3.58 /
+4.58). The theme *was* flipping — `--block-seated` changed with it — which is
+what made the reading look plausible. Re-run against the repo's own `BASE`
+constant (`{light: #fff, dark: rgb(36,37,42)}`, "the extreme of each theme"):
+
+|           | light | dark |
+|---|---|---|
+| pending   | 1.82 | 2.20 |
+| confirmed | 2.90 | 3.58 |
+| seated    | 4.52 | 4.56 |
+
+which matches ROADMAP's recorded figures within rounding. **ROADMAP's numbers
+were right and the new measurement was wrong**, and it was wrong in the way
+this file keeps recording: check the instrument before the app.
+
+**The decision (Patryk's): record it, do not change it.** The mark is
+`BLOCK_INK[status]` on `BLOCK_BG[status]` — the app's existing status
+vocabulary, already shipping identically on the timeline rail and in `SBadge`.
+A `paint-order: stroke` halo or a `--block-*` outline is a new treatment that
+has to reach every status surface in one version, or the app grows two
+vocabularies that disagree; that is its own release.
+
+The note went beside the existing exemption paragraphs in
+`tests/contrast.test.js`, where the two earlier ones live, and it makes two
+points those do not. The criterion is **different** — text is 1.4.3, a mark is
+1.4.11 and the bar is 3:1 — so the exemption above does not simply extend to
+cover it. And **no `EXEMPT_FLOOR` entry was added**: the mark reuses tokens the
+registry already carries (`--block-confirmed` / `--block-pending` exempt at
+2.8 / 1.75, `--block-seated` a `label` at the full 4.5, clearing it at 4.52),
+so a regression in exactly these pairs already fails the build. A second entry
+would be a second answer to one question.
+
+What is *not* inherited from the text argument is stated at the site: the mark
+was never the only carrier. The fill remains, `PlanView`'s `ariaLabel` names the
+status in words, and `STATUS_LABEL` puts it in the block's accessible name. The
+mark removes a colour-only failure; it is not asked to survive alone.
+
+### Commit 3 — duplicate booking ids: the scan nobody had run
+
+The `ROADMAP` bullet asked for one settling observation — *"whether any two ids
+in PROD coincide at all"*. It is deleted on two independent grounds, one
+measured and one structural.
+
+**Measured (DEV, 507 bookings, via the app's own authenticated handle):**
+
+| | |
+|---|---|
+| duplicate `id` fields | **0** |
+| children whose RTDB key ≠ their own `id` field | **0** |
+| children with no `id` field | **0** |
+| node shape | keyed object (not a legacy array) |
+
+**Structural, and this is the stronger half.** `buildPatch` writes
+`patch[id] = r.booking` (`write-path.js`) into a node that *is* `/bookings/{id}`
+— so two bookings sharing an id address the same child, and a `genId()`
+collision **overwrites rather than duplicating**. Two same-id bookings cannot
+coexist as separate children at all. The only shape that produces a duplicate in
+the in-memory array is two DIFFERENT keys whose `id` fields agree, because
+`sanitizeAll` is `Object.values(...)` and throws the keys away — and that
+requires an out-of-band write, since nothing in the app can author it. That is
+the divergence the second row above measures, and it is zero.
+
+**A hypothesis raised and killed in the same pass.** The id-length histogram
+showed suffixes of 3, 0 and even −4 characters, which read as `genId()`'s
+`Math.random().toString(36).slice(2, 6)` sometimes returning fewer than four —
+which would have put the collision odds well above the bullet's stated figure.
+Inspecting the outliers disproved it: every short id is a hand-seeded DEV
+fixture (`clashaaa` / `clashbbb` from clash testing, the `rvmt0astu5*` run
+staged for the user manual, `pzh6`), and the 24-character ones are documented
+recurring-occurrence ids. All 481 genuine `genId()` outputs are exactly four.
+Confirmed independently at 5,000,000 samples: `{"4": 5000000}`, zero short. So
+`36⁴ = 1,679,616` given the same millisecond, exactly as the bullet said.
+
+**No code change.** A guard would defend a state the storage shape makes
+unreachable, on the hottest read path in the app.
+
+**The PROD half is Patryk's**, since Claude never touches PROD. Signed in, in
+the browser console:
+
+```js
+const fb = await import('/src/firebase.js');
+const tok = await fb.auth.currentUser.getIdToken();
+const raw = await (await fetch(fb.db.app.options.databaseURL + '/bookings.json?auth=' + tok)).json();
+const e = Object.entries(raw), ids = e.map(([k, v]) => String(v && v.id !== undefined ? v.id : k));
+console.log({
+  children: e.length,
+  keyVsIdMismatch: e.filter(([k, v]) => v && v.id !== undefined && String(v.id) !== String(k)).map(([k]) => k),
+  duplicates: [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))],
+});
+```
+
+Both lists empty is the same answer DEV gave.
+
+### Commit 4 — CT-2A-09: the write leaves the setState updater
+
+**Files:** `src/hooks/usePersistence.js`. The last open crash-test register
+finding, and the one ROADMAP rated *low value, high risk* — "worth doing only as
+its own version, with nothing else riding along". It is the last commit of this
+branch for exactly that reason: the three before it change no shipped behaviour,
+so a bisect can tell them apart from this one.
+
+`saveBookings` and `saveBlocks` called `persist(...)` — which performs the
+Firebase `update()` — from **inside** their `setState` updater, the shape
+`CLAUDE.md`'s own gotcha row has forbidden since v16.0.0 while this file did it.
+v17.16.0 corrected the row's claim that the shape was gone; this removes the
+shape. Both now use `useWaitlist.js`'s pattern verbatim: compute from a ref
+mirror, assign the mirror, `setState`, then write — all plain statements.
+
+**Two things it fixes beyond obeying the rule**, neither of which is why it was
+filed:
+
+React invokes an updater during **render**, not at the call. It only *looked*
+synchronous here because React eagerly evaluates the first update on an idle
+fiber — an internal optimisation, not a contract. `saveBookings` returns a
+`dispatched` boolean that `persist`'s guard branches set and that is read on the
+very next line, and **every caller gates its "Booking saved." on that return**.
+The whole contract was resting on an implementation detail. And the same eager
+path invokes the updater a *second* time when the render arrives, which is the
+dev double-dispatch `lastPatchSigRef` exists to absorb.
+
+It also makes the v17.16.9 parked-write label synchronous. That comment explains
+at length that the label must be filled inside the updater because "`prev` /
+`computed` … exist only inside the setBookings call" — no longer true, so the
+label is computed before the item is pushed and the documented race (a drain
+seeing `label` still null) is unreachable. **`carriedLabel` stays**: it is still
+the right name for a retry, and removing a working defence is not this commit's
+job.
+
+**The invariant that replaces the mitigation**, stated at the ref declarations:
+every `setBookings` / `setTableBlocks` in the file assigns its mirror on the
+line above it — **four and three respectively, counted rather than assumed** (a
+first draft of that comment said "four of each"). A new set site that forgets
+one hands the next save a stale `prev`, and the diff would read that as fields
+changing *back*, so it would write rather than skip.
+
+### Verification — measured against the real server, not reasoned about
+
+Rewriting this path is how the repo has lost production data twice, so it was
+exercised live in DEV rather than trusted to the suite.
+
+| | |
+|---|---|
+| `npm run build` | main bundle 339.21 kB, **92.67 kB gz** (baseline 92.68) |
+| `npm test` | **817 passed**, 24 files |
+| `npm run check:style` | OK |
+| `npx eslint src` | **71 problems, 0 errors** — byte-identical to the pre-change baseline, measured by stashing the change and re-running |
+
+Live, against DEV Firebase:
+
+- **A form save lands.** `P3 Smoke Test` edited to Seated → server `status`
+  `confirmed` → `seated`, `updatedAt` `1788359547299` → `1788363527629`.
+- **The mirror chains, which is the property that could actually have broken.**
+  Two back-to-back quick actions (Confirmed, then Completed) with no server
+  round-trip between them: the second write's `baseUpdatedAt` came back as
+  **1788363576345 — exactly the first write's `updatedAt`**. So the second diff
+  was computed against the post-first-write snapshot. A stale mirror would have
+  carried the pre-Confirmed base and been rejected by the CAS; no rejection, no
+  resync, and no `[SAFE]` line in the console.
+- **`saveBlocks` lands.** Blocking table 6 took `tableBlocks` 13 → 14 and
+  `tableBlocksRev` 98 → 99, i.e. the revGuard CAS advanced by exactly +1, with
+  the new block carrying a minted `id`.
+
+**One false alarm, recorded because it would otherwise be re-found.** Adding two
+`useRef`s to a live hook changes its hook order, so the first HMR swap threw
+*"React has detected a change in the order of Hooks"* and the error boundary
+caught it — position 72, `useState` → `useRef`. It also left one stale render
+where the timeline drew blank. Both are HMR artefacts of editing a mounted hook:
+every clean load renders correctly and the console errors carry the *pre-reload*
+module timestamps. Checked rather than assumed, because "it's just HMR" is
+exactly what a real regression would also look like for one screenshot.
+
+### Commit 5 — the contrast decision, recorded where design decisions live
+
+A follow-up to commit 2 rather than part of it: the measurement and the
+`EXEMPT_FLOOR` reasoning belong in `tests/contrast.test.js`, but the *decision*
+is a design decision, and `DESIGN.md` owns those. It joins the amber-exemption
+bullet it sits beside, and deliberately **points at the test file instead of
+repeating its numbers** — a rule answered in two files is the defect all three
+living docs warn about, and the one that goes stale is the copy nobody is
+reading.
+
+What it adds beyond a pointer is the rule the decision establishes: a halo or
+outline on the mark is a new treatment that must reach the timeline rail,
+`SBadge` and the plan table in one version, or the app ships two status
+vocabularies that disagree.
+
+### Commit 6 — `/code-review` pass
+
+Two findings, both in this branch's own diff, both confirmed and both cosmetic;
+**no correctness defect was found in the conversion**, and the checking that
+established it is worth recording because it is the part a reader would want to
+re-run.
+
+- `ROADMAP.md` — the v17.16.10 tally nested a `**zero**` inside an already-open
+  bold span, so the one sentence in the file that says how many findings remain
+  rendered with literal asterisks. Re-split so each emphasis closes.
+- `usePersistence.js` — the scripted edit had wrapped the invariant comment
+  mid-clause ("hands the next / save a stale `prev`"), which is the sentence a
+  developer adding a fifth set site would read to learn the rule.
+
+**What was checked and cleared.** The one way a ref mirror can genuinely differ
+from a React updater is a NON-idempotent transform applied twice: the updater is
+re-run from the base state, so React discards the first result, whereas the
+mirror has already advanced and the second call would compound. It is not
+reachable here, and each site was opened rather than assumed — the two
+effect-driven callers (which StrictMode double-invokes) both carry idempotency
+guards already, `reconcile` returning `prev` when nothing moved and the
+recurring generator skipping an occurrence it can already see; and the one true
+concat, `doSave`'s, runs `applyBase`, which filters `newId` out before
+concatenating. Those guards exist because the write path has always had to
+survive a retry replay, so the property the conversion needs was already paid
+for.
+
+**Two latent bugs the conversion fixes that were not why it was filed.** Both
+are reads of a value set inside a deferred updater, on the line after the call:
+`saveBookings`' `dispatched` (which every caller gates "Booking saved." on) and
+the reconciliation effect's `changed` (which gates `flashSyncFix`). Both worked
+only because React eagerly evaluates the first update on an idle fiber. They are
+now set synchronously.
+
+**Also confirmed unchanged, and left alone:** on a `persist` refusal (not
+loaded, empty-array guard, legacy-array hold) local state has already advanced
+to `computed`. That is pre-existing — the old updater returned `computed`
+regardless of the outcome too — so it is out of scope for this diff and is not
+a regression.
