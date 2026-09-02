@@ -599,6 +599,20 @@ describe("the paths that still have to be writable (v17.16.7)", () => {
     await assertSucceeds(staff().ref("presence/k2").remove());
   });
 
+  it("the legacy array→keyed migration, in the shape the app now writes it", async () => {
+    // usePersistence's one-time v15.5.0 conversion. It used to be a whole-node
+    // `set`, which is the exact capability CT-2A-04 is about — so it could not
+    // be excepted, and became a multi-path update of CHILDREN instead. Both
+    // sides are pinned here, because "the new form works" is only half of it:
+    // if the old form were still permitted the finding would still be open.
+    await seed((db) => db.ref("bookings").set([booking({ id: "b1" })]));
+    await assertFails(staff().ref("bookings")
+      .set({ b1: booking({ updatedAt: 5000, baseUpdatedAt: 0 }) }));
+    await assertSucceeds(staff().ref("bookings")
+      .update({ 0: null, b1: booking({ updatedAt: 5000, baseUpdatedAt: 0 }) }));
+    expect(Object.keys(await seedRead("bookings"))).toEqual(["b1"]);
+  });
+
   it("every write shape the app actually performs still succeeds", async () => {
     // Enumerated from the source, not guessed: the four call sites that write
     // anything at all are usePersistence.js (the bookings diff-write and the

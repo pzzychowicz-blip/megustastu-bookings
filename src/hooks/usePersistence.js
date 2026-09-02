@@ -19,7 +19,11 @@
 // prop and the seam disappears.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set, get, update, goOnline } from "firebase/database";
+// v17.16.7: `set` is gone from this import. It had exactly one caller left —
+// the legacy array→keyed migration below — and that became an `update()` when
+// the rules stopped granting a whole-node write on /bookings (CT-2A-04). The
+// app now reaches Firebase through `update` and `get` only.
+import { ref, onValue, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
@@ -404,9 +408,10 @@ export function usePersistence({ autoOptimizer, nowMins }){
       setBookingsReady(true); // v17.3.0: first snapshot landed — drop the loading toast
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
       // v15.5.0: one-time lazy migration legacy-array → per-booking child nodes.
-      // Write the keyed object once; the echo comes back as an object so isArrayShape
-      // flips false and this never re-fires. Gated on connected (an offline set()
-      // would queue unverifiably) and migratedRef (a single attempt per session).
+      // Write the keyed children once; the echo comes back as an object so
+      // isArrayShape flips false and this never re-fires. Gated on connected (an
+      // offline write would queue unverifiably) and migratedRef (a single
+      // attempt per session).
       if(isArrayShape&&arr.length>0&&!migratedRef.current&&isConnectedRef.current){
         migratedRef.current=true;
         const keyed={};
@@ -418,17 +423,46 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // no `old`. Without it every child of this migration write is refused.
         // It is NOT a guarantee the write lands: `arr` is `sanitizeAll(val)`, so
         // these rows are type-correct but otherwise whatever the legacy node
-        // held, and `set()` here is atomic — one row the rules dislike rejects
-        // the whole migration, and the `.catch` below resets `migratedRef`, so
-        // the rejected write's rollback echo re-fires this listener and it
-        // re-attempts on every snapshot. That is a write-reject loop, the same
-        // class as the v17.10.2 reconciliation loop (CLAUDE.md Gotchas).
-        // Unreachable on PROD (the node has been keyed since v15.5.0, and this
-        // branch is gated on `Array.isArray`), so nothing observable changes —
-        // but a recovery path left knowingly broken is how a service is lost
-        // years later, by someone who reads the code and believes it works.
+        // held, and the patch below is atomic — one row the rules dislike
+        // rejects the whole migration, and the `.catch` below resets
+        // `migratedRef`, so the rejected write's rollback echo re-fires this
+        // listener and it re-attempts on every snapshot. That is a write-reject
+        // loop, the same class as the v17.10.2 reconciliation loop (CLAUDE.md
+        // Gotchas). Unreachable on PROD (the node has been keyed since v15.5.0,
+        // and this branch is gated on `Array.isArray`), so nothing observable
+        // changes — but a recovery path left knowingly broken is how a service
+        // is lost years later, by someone who reads the code and believes it
+        // works.
+        //
+        // v17.16.7: this was `set(ref(db,"bookings"), keyed)` — a WHOLE-NODE
+        // write, which is precisely the capability CT-2A-04 is about, so it
+        // could not be excepted from the fix: a grant wide enough to permit it
+        // is a grant wide enough to permit the finding. `/bookings` now carries
+        // no `.write` and `/bookings/$bid` does, so the migration became a
+        // multi-path `update()` of CHILDREN instead — the legacy integer keys
+        // nulled, the keyed rows written, in one atomic patch with exactly the
+        // semantics `set` had. Afterwards the app makes no whole-node
+        // `bookings` write anywhere, so the rules and the client agree rather
+        // than the rules merely tolerating the client.
+        //
+        // Leaving it denied was the alternative and it is not benign: the hold
+        // at the top of `persist` (`arrayShapeRef`) blocks EVERY booking write
+        // until the keyed shape echoes, so a legacy array node would leave the
+        // app permanently read-only for bookings rather than merely
+        // unmigrated.
+        const nulls={};
+        // The old keys, taken from the SNAPSHOT rather than from `arr` — RTDB
+        // returns an array only for sequential integer keys, so these are
+        // 0..n-1, and `arr` carries the bookings' own ids, which are what the
+        // new keys are. Reading the indices off the snapshot keeps the two
+        // sides of the patch independent: a row `sanitizeAll` dropped still has
+        // its slot cleared instead of being silently carried over as a hole.
+        Object.keys(val).forEach(function(k){ nulls[k]=null; });
         arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1,baseUpdatedAt:0}); });
-        set(ref(db,"bookings"),keyed).catch(function(){ migratedRef.current=false; });
+        // Object.assign order matters: a keyed row whose id happens to equal an
+        // old integer index must WIN over that index's null, or the migration
+        // would delete the very booking it is writing.
+        update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(){ migratedRef.current=false; });
       }
       // v15.6.0: re-apply + persist any held user changes on top of this fresh snapshot
       // (after clearStale, so they don't re-hold). Without this, a live snapshot that

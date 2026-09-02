@@ -18034,9 +18034,20 @@ it is a grant wide enough to permit the finding.
 
 It is a multi-path `update()` now: the legacy integer keys nulled and the keyed
 children written in the same atomic patch, which the rules permit and which the
-tests pin from both sides. Afterwards **the app makes no whole-node `bookings`
-write at all**, so the rules and the client agree exactly rather than the rules
-merely tolerating the client.
+tests pin from both sides — "the new form works" being only half of it, since
+the finding would still be open if the old form were also still permitted.
+Afterwards **the app makes no whole-node `bookings` write at all**, so the rules
+and the client agree exactly rather than the rules merely tolerating the client;
+`set` left `usePersistence`'s Firebase import with it, which is the check that
+the last caller really was the last.
+
+Two ordering details are load-bearing, and both are the kind that would look
+like tidying to a later reader. The old keys come off the SNAPSHOT rather than
+off the sanitised array, so a row `sanitizeAll` dropped still has its slot
+cleared instead of surviving as a hole in a node that is supposed to be keyed.
+And the keyed rows are `Object.assign`ed OVER the nulls, not under them: a
+booking whose id happens to equal an old integer index would otherwise be
+deleted by the very patch that writes it.
 
 Leaving it denied was considered and rejected. The path is unreachable on PROD
 (keyed since v15.5.0, gated on `Array.isArray`) — but the failure would not have
@@ -18056,7 +18067,7 @@ shipped `database.rules.json` was then hand-written for readability and proved
 **order-insensitively identical** to that candidate before anything was
 committed, so no predicate could drift between what was probed and what ships.
 
-`tests/rules/database-rules.test.js`: **101 → 108**. Three `PROBE:`s became
+`tests/rules/database-rules.test.js`: **101 → 109**. Three `PROBE:`s became
 closed assertions — inverted with the rules, never weakened, which is what that
 convention exists to force. The bare-remove sweep runs over `revPairsIn`'s own
 walked list rather than a typed one, so a thirteenth pair is covered without

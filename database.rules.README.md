@@ -86,7 +86,7 @@ the moment somebody names the project.
 
 ### What the suite asserts
 
-108 tests as of v17.16.7. The first group asserts the rig itself is pointed at
+109 tests as of v17.16.7. The first group asserts the rig itself is pointed at
 a loopback emulator and a `demo-` project — and, since v17.16.7, that the root
 carries **no** `.write` key, which is asserted as an ABSENCE because that
 absence is the whole of the access-control change and a re-added root grant
