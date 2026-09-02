@@ -129,19 +129,39 @@ describe("the rig itself", () => {
   it("loaded the REAL rules file, not a copy", () => {
     const raw = readFileSync(RULES_PATH, "utf8");
     const parsed = JSON.parse(raw);
-    // Spot-check the two structures the rest of this file is about, so a
-    // truncated or reshaped rules file fails here rather than as 60 confusing
-    // downstream failures.
+    // Spot-check the structures the rest of this file is about, so a truncated
+    // or reshaped rules file fails here rather than as 60 confusing downstream
+    // failures.
     expect(parsed.rules[".read"]).toBe("auth != null");
     expect(parsed.rules.bookings.$bid[".validate"]).toContain("baseUpdatedAt");
-    expect(parsed.rules.tableBlocksRev[".validate"]).toContain("data.val() + 1");
+    // v17.16.7: the root `.write` grant is GONE, and that single absence is
+    // what makes every per-path grant below reachable at all — RTDB write
+    // permission cascades from the root and cannot be revoked lower down, so
+    // while this key exists no child rule can deny anything (CT-2A-04/06).
+    // Asserted as an absence because that is the whole of the change; a
+    // re-added root grant would leave every other test in this file green.
+    expect(parsed.rules[".write"]).toBeUndefined();
+    expect(parsed.rules.bookings[".write"]).toBeUndefined();
+    expect(parsed.rules.bookings.$bid[".write"]).toBe("auth != null");
+    // The rev CAS moved from `.validate` to `.write`, which is what extends it
+    // over DELETES: `.validate` is not evaluated when newData does not exist.
+    expect(parsed.rules.tableBlocksRev[".validate"]).toBeUndefined();
+    expect(parsed.rules.tableBlocksRev[".write"]).toContain("data.val() + 1");
   });
 });
 
 // ── 1–3. The auth boundary ──────────────────────────────────────────────────
-// `.read`/`.write`: "auth != null" at the root, and nothing below re-grants or
-// re-denies. So this is the entire access-control model, and it is worth
-// proving rather than assuming.
+// `.read` is "auth != null" at the root and nothing below re-grants it, so one
+// signed-in account can read the whole database — the single-restaurant trust
+// model, unchanged.
+//
+// WRITE is no longer symmetrical with it (v17.16.7). The root grant is gone and
+// each writable path carries its own, because RTDB write permission CASCADES
+// from wherever it is granted and cannot be revoked lower down — so a root
+// grant made `/bookings` deletable in one call (CT-2A-04) and made every
+// whole-node `remove()` bypass its rev CAS (CT-2A-06), and no rule added below
+// could have denied either. `auth != null` is still the only identity test
+// anywhere; what changed is WHERE it is asked, not what it asks.
 
 describe("the auth boundary", () => {
   beforeEach(async () => {
@@ -462,35 +482,131 @@ describe("a deleted booking STAYS deleted (v17.16.1)", () => {
 // Adversarial. Each records what the server ACTUALLY does. A green test here
 // does not mean "safe" — read the comment.
 
-describe("PROBE — whole-node deletion", () => {
-  it("PROBE: an authenticated client can delete the ENTIRE bookings node in one call", async () => {
-    // `.validate` is not evaluated when newData does not exist, and /bookings
-    // itself carries no rule — only /bookings/$bid does. So every booking in
-    // the restaurant is one `set(null)` away, with no CAS, no rev, no guard.
-    // The app's own client-side empty-array write guard lives in
-    // usePersistence.js and is not on this path.
+// ── FIXED v17.16.7 — the root `.write` grant (CT-2A-04, CT-2A-06) ───────────
+// Both of these were `PROBE:`s. Their assertions were INVERTED when the rules
+// changed, never weakened — the same deliberate update the v17.16.1 group above
+// records, and what the PROBE convention exists to force.
+//
+// One structural change closed both, and it is a DELETION: the root
+// `".write": "auth != null"` is gone. Nothing could be added below it, because
+// RTDB write permission cascades from wherever it is granted and cannot be
+// revoked deeper — measured against this emulator before the fix, a child
+// `".write": false` on `bookings` did not deny the delete.
+//
+// So `/bookings` now carries no `.write` and `/bookings/$bid` carries it
+// instead (the app only ever writes children — the diff-write's multi-path
+// update), and each rev-paired node carries the CAS in `.write` rather than in
+// `.validate`, which is what extends it over deletes.
+
+describe("whole-node deletion is refused (v17.16.7)", () => {
+  it("the ENTIRE bookings node canNOT be deleted in one call", async () => {
     await seed((db) => db.ref("bookings").set({
       b1: booking(), b2: booking({ id: "b2" }), b3: booking({ id: "b3" }),
     }));
-    await assertSucceeds(staff().ref("bookings").remove());
-    expect(await seedRead("bookings")).toBeNull();
+    await assertFails(staff().ref("bookings").remove());
+    expect(Object.keys(await seedRead("bookings"))).toEqual(["b1", "b2", "b3"]);
   });
 
-  it("PROBE: tableBlocks can be deleted WITHOUT touching its rev", async () => {
-    // revGuard.js's header says: "RTDB stores that as a node DELETE, which
-    // skips the node's own .validate, but the rev child's rule still enforces
-    // +1, so the CAS holds even for wipes." That is true of the APP's write
-    // path, which always sends both keys. It is not a property of the RULES:
-    // a client that simply omits the rev is not constrained by it.
+  it("the bookings node canNOT be REPLACED wholesale either", async () => {
+    // Replacing is the same capability wearing a different verb: a `set` that
+    // names one booking drops every other one, and each child it DOES name can
+    // satisfy `$bid`'s CAS because read is granted. Denying the delete without
+    // denying this would have closed the reproduction and not the finding.
+    await seed((db) => db.ref("bookings").set({ b1: booking(), b2: booking({ id: "b2" }) }));
+    await assertFails(staff().ref("bookings").set({ b1: booking({ updatedAt: 9000, baseUpdatedAt: 1000 }) }));
+  });
+
+  it("deleting ONE booking still works", async () => {
+    // The capability that had to survive. `$bid` grants the write and
+    // `.validate` is skipped for a delete, exactly as before.
+    await seed((db) => db.ref("bookings").set({ b1: booking(), b2: booking({ id: "b2" }) }));
+    await assertSucceeds(staff().ref("bookings").update({ b1: null }));
+    expect(Object.keys(await seedRead("bookings"))).toEqual(["b2"]);
+  });
+
+  it("tableBlocks canNOT be deleted without touching its rev", async () => {
+    // revGuard.js's header used to claim the rev child's rule enforced +1 even
+    // for a wipe. True of the APP's write path, which always sends both keys;
+    // false of the RULES, because `.validate` is not evaluated when newData
+    // does not exist. Putting the same predicate in `.write` is what fixes it —
+    // `.write` IS evaluated for a delete.
     await seed((db) => db.ref().update({ tableBlocks: [{ id: "k1" }], tableBlocksRev: 5 }));
-    await assertSucceeds(staff().ref("tableBlocks").remove());
-    expect(await seedRead("tableBlocks")).toBeNull();
-    expect(await seedRead("tableBlocksRev")).toBe(5);   // rev left behind, node gone
+    await assertFails(staff().ref("tableBlocks").remove());
+    expect(await seedRead("tableBlocks")).not.toBeNull();
+    expect(await seedRead("tableBlocksRev")).toBe(5);
   });
 
-  it("the app's own wipe (node + rev, atomically) is accepted", async () => {
+  it("a rev sibling canNOT be deleted on its own either", async () => {
+    // The mirror image, and it needs the same mechanism: a bare `remove()` of
+    // the rev would otherwise reset the sequence and let a stale writer back in
+    // at rev 1.
+    await seed((db) => db.ref().update({ tableBlocks: [{ id: "k1" }], tableBlocksRev: 5 }));
+    await assertFails(staff().ref("tableBlocksRev").remove());
+    expect(await seedRead("tableBlocksRev")).toBe(5);
+  });
+
+  it("the app's own wipe (node + rev, atomically) is STILL accepted", async () => {
+    // The capability the fix must not cost: emptying every block is an ordinary
+    // thing to do, and RTDB stores an empty collection as a node delete. It
+    // passes because the rev moves in the SAME update, which is the one thing
+    // that distinguishes it from the bare remove above.
     await seed((db) => db.ref().update({ tableBlocks: [{ id: "k1" }], tableBlocksRev: 5 }));
     await assertSucceeds(writeWithRev(staff(), "tableBlocks", null, 6));
+  });
+
+  it("every rev-paired node refuses a bare remove of the node AND of its rev", async () => {
+    // The sweep, over the walker's own list rather than a typed one — the same
+    // reason `revPairsIn` exists above. Twelve pairs, 24 assertions: a pair
+    // added to the rules is covered here without this test being edited.
+    const PAIRS = revPairsIn(JSON.parse(readFileSync(RULES_PATH, "utf8")).rules)
+      .map((p) => p.replace("$uid", "staff-a"));
+    expect(PAIRS.length).toBeGreaterThanOrEqual(12);
+    for (const path of PAIRS) {
+      await seed((db) => db.ref().update({ [path]: { v: 1 }, [path + "Rev"]: 1 }));
+      await assertFails(staff().ref(path).remove());
+      await assertFails(staff().ref(path + "Rev").remove());
+    }
+  });
+
+  it("a deep write that skips the rev is refused too", async () => {
+    // Not in either finding, and closed by the same change. Ancestor `.validate`
+    // rules are NOT re-evaluated for a write landing below them, so under the
+    // root grant `tableBlocks/0/from` could be rewritten with the rev untouched.
+    // `.write` at `tableBlocks` IS consulted for a descendant write, so the CAS
+    // now covers it.
+    await seed((db) => db.ref().update({
+      tableBlocks: [{ id: "k1", from: "20:00", to: "21:00" }], tableBlocksRev: 5,
+    }));
+    await assertFails(staff().ref("tableBlocks/0/from").set("09:00"));
+    expect(await seedRead("tableBlocks/0/from")).toBe("20:00");
+  });
+});
+
+describe("the paths that still have to be writable (v17.16.7)", () => {
+  // Removing the root grant makes every ungranted path unwritable, which is the
+  // hazard the ROADMAP entry named and the reason this group exists: `presence`
+  // failed immediately in the pre-fix probe, and it is the ONE node documented
+  // as deliberately having no rules of its own (ephemeral, per-connection,
+  // exempt from the CAS rule — CLAUDE.md). A missing grant here is not a
+  // subtle bug; it is the connection popover silently never listing a device.
+
+  it("presence: register, heartbeat, and prune another device's child", async () => {
+    await assertSucceeds(staff().ref("presence/k1")
+      .set({ email: "a@b.c", ua: "iPad", since: 1, lastSeen: 1 }));
+    await assertSucceeds(staff().ref("presence/k1")
+      .update({ email: "a@b.c", ua: "iPad", since: 1, lastSeen: 2 }));
+    await seed((db) => db.ref("presence/k2").set({ email: "x@y.z", ua: "Mac", since: 1, lastSeen: 1 }));
+    await assertSucceeds(staff().ref("presence/k2").remove());
+  });
+
+  it("every write shape the app actually performs still succeeds", async () => {
+    // Enumerated from the source, not guessed: the four call sites that write
+    // anything at all are usePersistence.js (the bookings diff-write and the
+    // legacy migration), revGuard.js (all twelve rev pairs) and usePresence.js.
+    await assertSucceeds(writeBooking(staff(), "b1", booking()));
+    await assertSucceeds(writeWithRev(staff(), "tableBlocks", [{ id: "k1" }], 1));
+    await assertSucceeds(writeWithRev(staff(), "settings/layout", { tables: [] }, 1));
+    await assertSucceeds(writeWithRev(staff(), "settings/users/staff-a/prefs", { theme: "dark" }, 1));
   });
 });
 
@@ -714,10 +830,16 @@ describe("PROBE — the trust model's edges", () => {
       staff("staff-a"), "settings/users/staff-b/prefs", { theme: "dark" }, 1));
   });
 
-  it("PROBE: any signed-in user can create arbitrary top-level nodes", async () => {
-    await assertSucceeds(staff().ref("junk").set({ anything: true }));
-    await assertSucceeds(staff().ref("bookingz").set({ typo: true }));
-    await assertSucceeds(staff().ref("settings/unknownNode").set({ x: 1 }));
+  it("arbitrary top-level nodes can no longer be created (v17.16.7)", async () => {
+    // WAS a PROBE, closed as a side effect rather than as a target: once the
+    // root grant is gone, a path with no rule of its own has no grant, so the
+    // writable surface is now exactly the enumerated one. Worth pinning in its
+    // own right — it is what turns "add a persisted node" into a change that
+    // FAILS LOUDLY if its rule is forgotten, instead of one that works in DEV
+    // and is unguarded in PROD.
+    await assertFails(staff().ref("junk").set({ anything: true }));
+    await assertFails(staff().ref("bookingz").set({ typo: true }));
+    await assertFails(staff().ref("settings/unknownNode").set({ x: 1 }));
   });
 
   it("PROBE: a booking id may contain characters the app never mints", async () => {

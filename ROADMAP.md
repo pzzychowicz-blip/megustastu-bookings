@@ -57,11 +57,13 @@ half — which closes that finding in both halves — leaving eight; v17.16.6
 shipped CT-2B-08 and CT-2A-11 and WITHDREW CT-2A-08 (the dedupe
 signature is (content, base), so two patches sharing one are indistinguishable
 to the server and have the same fate — measured, see `REFACTOR_LOG.md`), leaving
-**five**: CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10.** It also closed the
-`getBlockSlots` sibling of CT-2A-03, which is not in that count — it was raised
-in v17.16.5, after the register was written. **The count is of REGISTER findings
-only**, stated here because the running tally was off by one for two commits of
-v17.16.6 before anybody re-derived it.
+five; v17.16.7 shipped CT-2A-04 and CT-2A-06 — the two P2s, and one structural
+change rather than two fixes — leaving **three**: CT-2A-07, CT-2A-09,
+CT-2A-10.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
+is not in that count — it was raised in v17.16.5, after the register was
+written. **The count is of REGISTER findings only**, stated here because the
+running tally was off by one for two commits of v17.16.6 before anybody
+re-derived it.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -76,25 +78,8 @@ is not pending work. The measurement goes in `REFACTOR_LOG.md` and any evergreen
 lesson in `CLAUDE.md`'s Gotchas, which is where the two v17.16.3 withdrawals
 went.
 
-**`database.rules.json` — what remains after v17.16.1.** The first two below are
-ONE structural change, not two fixes.
+**`database.rules.json` — what remains after v17.16.7.**
 
-- **CT-2A-04 (P2) + CT-2A-06 (P2) — the root `.write` grant.** CT-2A-04: an
-  authenticated client can delete the entire `/bookings` node in one call.
-  CT-2A-06: a whole-node `remove()` bypasses the rev CAS (node gone, rev left
-  behind). **Neither can be fixed by adding a rule** — RTDB write permission
-  cascades from the root's `".write": "auth != null"` and cannot be revoked
-  lower down, measured against the emulator (a child `".write": false` on
-  `bookings` does not deny the delete). Closing either means moving `.write` off
-  the root and granting it per path. That was measured too, and carries two
-  hazards: **deleting the last booking would be refused** (the natural predicate
-  `newData.exists() || !data.exists()` is false when the node empties), and
-  **every path not explicitly granted becomes unwritable** — `presence` failed
-  immediately in the probe, the one node documented as deliberately having no
-  rules. Both findings sit inside the documented single-restaurant trust model,
-  and the false claims that the rev CAS covered wipes were corrected in
-  v17.16.1. Wants its own version, a full per-path audit and its own emulator
-  group.
 - **CT-2A-03 follow-on (P3) — the rules check TYPE, never FORMAT.** v17.16.1
   validates `status`, `date` and `time` as strings and deliberately not against
   a value set or a pattern. `sanitize` guarantees type but not well-formedness,
@@ -110,7 +95,7 @@ ONE structural change, not two fixes.
 **Client fixes — P3, minor, each its own commit if taken at all.** Re-rated in
 v17.16.5; the order below is by that rating, not by the filed one. v17.16.6 took
 the last of the non-P3 client entries (`getBlockSlots`), so everything left here
-is either a P3 or one of the two rules items above.
+is either a P3 or the one rules item above.
 
 - **CT-2A-07** — an exhausted retry (`MAX_RETRIES` 3) drops the item *after* it
   was applied optimistically to local state, behind a dismissible banner naming

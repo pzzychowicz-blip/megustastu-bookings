@@ -17943,3 +17943,121 @@ version gives both → `"null"` (equal). The fix restores `join`'s own semantics
 inside the map, so a hole collapses to nothing exactly as it always did, and the
 test asserts that identity as well as the separation — pinned against the
 un-restored build, where it is the only failure.
+
+---
+
+## v17.16.7 — the grant that could not be revoked
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.7-root-write-grant` ·
+**Behavioural change:** none in the app's UI. The SERVER refuses three things it
+used to permit. · **Firebase rules:** **YES — a manual console publish is
+required**, and it can go first or at any time (see `database.rules.README.md`).
+
+The eighth instalment of the v17.15.7 crash-test response, and the first to take
+a P2. Five register findings were open; this closes the two highest-rated of
+them, which the register had always described as ONE structural change rather
+than two fixes.
+
+### What was wrong
+
+`database.rules.json` granted `".write": "auth != null"` at the ROOT. Two
+findings followed from that single line:
+
+- **CT-2A-04** — an authenticated client could delete the entire `/bookings`
+  node in one call. `.validate` is not evaluated when `newData` does not exist,
+  and `/bookings` itself carried no rule; only `/bookings/$bid` did.
+- **CT-2A-06** — a whole-node `remove()` bypassed the rev CAS completely: node
+  gone, rev left behind. `revGuard.js` and `CLAUDE.md` had both claimed the rev
+  child's rule covered wipes; v17.16.1 corrected the claim and left the hole.
+
+Neither could be fixed by adding a rule, and that is the fact the whole version
+turns on: **RTDB write permission cascades from wherever it is granted and
+cannot be revoked lower down.** Measured against the emulator before this
+version, a child `".write": false` on `bookings` does not deny the delete.
+
+### What was done
+
+One deletion, then a set of additions.
+
+1. **The root `.write` is gone.** `.read` is untouched — one signed-in account
+   still reads the whole database, which is the single-restaurant trust model
+   and was never what these findings were about. What changed is WHERE
+   `auth != null` is asked, not what it asks.
+2. **`/bookings` carries no grant; `/bookings/$bid` carries it.** The app has
+   only ever written children — v15.5.0's diff-write is a multi-path `update()`
+   under `/bookings` — so a per-child grant covers every real write while a
+   whole-node `set` or `remove` has nothing to stand on. **Deleting ONE booking
+   is unaffected**, which is the capability that had to survive.
+3. **The rev CAS moved from `.validate` to `.write`** on all twelve pairs, node
+   and `<name>Rev` alike. The predicate is unchanged character for character;
+   what changes is that **`.write` is evaluated for a delete and `.validate` is
+   not.** That is the entirety of CT-2A-06.
+4. **`presence/$key` gains an explicit `auth != null`.** Identical permission to
+   what it always inherited — but the thing it inherited FROM is gone.
+
+### Two things closed that nobody was aiming at
+
+- **A deep write that skips the rev.** Ancestor `.validate` rules are not
+  re-evaluated for a write landing below them, so `tableBlocks/0/from` could be
+  rewritten with the rev untouched. `.write` at `tableBlocks` *is* consulted for
+  a descendant write, so the CAS now reaches it.
+- **Arbitrary top-level nodes.** A path with no rule now has no grant. The
+  writable surface is exactly the enumerated one, which turns "add a persisted
+  node and forget its rule" from a silent gap in PROD into a write that fails
+  immediately in DEV.
+
+### The two hazards the ROADMAP entry named
+
+The entry had been re-rated twice and both hazards were real when measured. One
+of them **does not arise in the shape that shipped**, and that is worth
+recording rather than quietly enjoying.
+
+1. *"Deleting the last booking would be refused."* True of the predicate that
+   had been probed — `newData.exists() || !data.exists()` placed on the
+   `bookings` NODE, which is false exactly when the node empties. It does not
+   arise here **because no predicate was put on `/bookings` at all**: the grant
+   moved DOWN to `$bid`, where a delete is an ordinary child write and the
+   emptiness of the parent is nobody's business. The hazard was an artefact of
+   the fix that had been imagined, not of the finding.
+2. *"Every path not explicitly granted becomes unwritable."* Real, and it is now
+   the model. So the writable surface was **enumerated from the source rather
+   than assumed**: four call sites write anything at all — `usePersistence.js`
+   (the bookings diff-write, and the legacy migration below), `revGuard.js` (all
+   twelve rev pairs) and `usePresence.js`. Each has a grant; each is exercised.
+
+### The one app change, and why it could not be excepted
+
+`usePersistence`'s lazy array→keyed migration (v15.5.0) wrote the whole
+`/bookings` node with `set()`. That is *precisely* the capability CT-2A-04 is
+about, so it could not be carved out of the rule — a grant wide enough to permit
+it is a grant wide enough to permit the finding.
+
+It is a multi-path `update()` now: the legacy integer keys nulled and the keyed
+children written in the same atomic patch, which the rules permit and which the
+tests pin from both sides. Afterwards **the app makes no whole-node `bookings`
+write at all**, so the rules and the client agree exactly rather than the rules
+merely tolerating the client.
+
+Leaving it denied was considered and rejected. The path is unreachable on PROD
+(keyed since v15.5.0, gated on `Array.isArray`) — but the failure would not have
+been benign: `arrayShapeRef` (`usePersistence.js:309`) holds **every** booking
+write until the migration echoes, so a legacy array node would leave the app
+permanently read-only for bookings. And the comment at that exact site, written
+in v17.16.1, already says why: *a recovery path left knowingly broken is how a
+service is lost years later.*
+
+### Verification
+
+Everything above was measured against the emulator BEFORE the rules file was
+written, using a machine-generated candidate and a throwaway probe — 119 of 120
+assertions green, the one failure being the probe's own helper (`seed` returns
+nothing) on the line after an `assertSucceeds` that had already passed. The
+shipped `database.rules.json` was then hand-written for readability and proved
+**order-insensitively identical** to that candidate before anything was
+committed, so no predicate could drift between what was probed and what ships.
+
+`tests/rules/database-rules.test.js`: **101 → 108**. Three `PROBE:`s became
+closed assertions — inverted with the rules, never weakened, which is what that
+convention exists to force. The bare-remove sweep runs over `revPairsIn`'s own
+walked list rather than a typed one, so a thirteenth pair is covered without
+this file being edited.
