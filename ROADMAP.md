@@ -54,7 +54,7 @@ thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
 (both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
 leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
 half — which closes that finding in both halves — leaving eight; v17.16.6
-shipped CT-2B-08 and the `getBlockSlots` sibling of CT-2A-03, leaving six.**
+shipped CT-2B-08, the `getBlockSlots` sibling of CT-2A-03 and CT-2A-11, leaving five.**
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -114,19 +114,13 @@ is either a P3 or one of the two rules items above.
   queue holds an updater function, not a booking, so naming the lost change means
   changing what is queued; and reverting it discards work the user can see. That
   is a design question for Patryk, not a repair. Highest-value of the P3s.
-- **CT-2A-11** — `undoKey`'s array separator is collidable by a pasted control
-  character in a table id, which reads as "nothing changed" so an undo snapshot
-  is never taken. The source comment asserts no text field can produce one and
-  nothing enforces it. **Re-rated down (v17.16.5):** `notes` is a `<textarea>`
-  and `sanitize` does not strip control characters, so the assertion is false as
-  written — but a collision additionally needs two bookings whose whole key
-  strings coincide, which no realistic paste produces. **Settling observation:**
-  whether any PROD `notes` field contains a control character at all; if none
-  does, the honest fix is to make the comment true (strip them in `sanitize`)
-  rather than to re-engineer the key.
-  Also unrated: nothing checks for duplicate booking ids, and two sharing one
-  collapse in the optimiser's assignment map (`genId` collision ≈ 1 in 1.7M,
-  same millisecond).
+- **Duplicate booking ids are unchecked** (unrated; surfaced under CT-2A-11 and
+  outlived it). Two bookings sharing an id collapse in the optimiser's
+  assignment map. A `genId()` collision needs the same millisecond and the same
+  4 random base36 characters, ≈ 1 in 1.7M given the first. **Settling
+  observation:** whether any two ids in PROD coincide at all — a one-line scan
+  of the `bookings` node, which nobody has run.
+
 - **CT-2A-08** — the StrictMode patch-dedupe (`lastPatchSigRef`, 2 s) can swallow
   a legitimate A→B→A write with no echo between. Every reachable instance
   self-heals; no lasting divergence was constructed. **Settling observation:**

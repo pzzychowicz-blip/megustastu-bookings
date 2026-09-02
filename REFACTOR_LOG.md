@@ -17659,10 +17659,12 @@ verification is the 783-test suite above.
 **Files:** `src/App.jsx` (version), `src/lib/customers.js`,
 `src/lib/booking-logic.js`, `tests/customers.test.js`,
 `tests/booking-logic.test.js`, `CLAUDE.md`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
-**Behavioural change:** yes, in two places — a booking joined to a phone-less
+**Behavioural change:** yes, in three places — a booking joined to a phone-less
 guest now joins the group that guest is actually in, rather than the one the
-draft was minted against; and a table block the app cannot read is skipped
-rather than crashing every path that consults blocks.
+draft was minted against; a table block the app cannot read is skipped rather
+than crashing every path that consults blocks; and an undo snapshot is taken for
+a table move between a poisoned id and a two-table set, where before it was
+silently not.
 
 The seventh instalment of the v17.15.7 crash-test response. Scope was Patryk's:
 the two confirmed P3s, plus settling CT-2A-08 one way or the other, plus
@@ -17741,3 +17743,49 @@ table all day; and `"9:30"`, `"13:00:00"` and `":"` still read, because the
 predicate is `isReadableTime` — `toMins` yielding a finite number, the
 consumer's own requirement — and deliberately not a format of its own. Same
 reasoning, and the same stated cost, as v17.16.5's booking half.
+
+### 3 · CT-2A-11 — the comment that was not true of anything
+
+v17.10.2 replaced `undoKey`'s `"|"` and `"+"` separators with ASCII control
+characters, because the old ones were reachable FROM THE DATA — a table id need
+only avoid `"|"`, so a venue naming a joined table `"1+2"` made `["1+2"]` and
+`["1","2"]` one key. The replacement carried a sentence: *"No text field in the
+app can produce a control character."*
+
+**Nothing enforced it and nothing was true of it.** `notes` is a `<textarea>`
+and `sanitize` writes `b.notes || ""` verbatim; `idOk` (`LayoutSettings.jsx:81`)
+is `s.length > 0 && s.indexOf("|") < 0` and nothing more; and neither
+`settings/layout` nor `bookings` validates field FORMAT server-side, so a value
+carrying one is reachable exactly as a malformed `time` is. The choice was to
+delete the sentence or to make it true. `escSep` makes it true, and makes it a
+property of this one function rather than a claim about the rest of the app —
+the version of the guarantee that cannot rot when somebody adds a field.
+
+**It escapes; it does not strip — and the option first written down said strip.**
+Removing the bytes would close the boundary-shift collision by opening an
+identical one a character away: `"aSEPb"` and `"ab"` map to the same key, so an
+edit between them reads as "nothing changed". That is the same failure this
+exists to prevent, differing only in which pair of values triggers it. Caret
+escaping (ESC prefix, `+0x40`, ESC itself inside the replaced range so data
+cannot forge one) is injective and costs nothing. Reported as a departure from
+the wording rather than made quietly.
+
+**Which join actually collides was worth establishing rather than assuming.**
+Only the ARRAY one, where a single poisoned value suffices — the same shape as
+the v17.10.2 defect that introduced these separators. The field join has FIXED
+arity, so shifting content across one boundary changes the separator count; a
+collision there needs a *second* poisoned field. Measured with a standalone
+probe against the pre-fix key before either test was written: array collision
+`true`, the natural single-field construction `false`. The test asserts the
+reachable one and the comment records why the other is not it.
+
+Five tests, and two sabotages that fail different ones — the un-escaped key
+fails the two collision tests, the stripping variant fails the escape test and
+neither of those. The fifth is the guarantee that matters more than the
+collision: nothing WITHOUT a control character changes behaviour, in either
+direction.
+
+`clashRowId` and `blockContentKey` were checked and deliberately left. The first
+joins `genId()` ids, which are base36. The second does take free staff text
+(`reason`), but v17.16.4's `used` set already guarantees distinct block ids by
+construction, so a key collision there costs an ordinal and never an identity.

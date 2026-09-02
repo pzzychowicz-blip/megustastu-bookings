@@ -1063,14 +1063,43 @@ var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
 // made `["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can
 // contain either. A collision reads as "nothing changed": for undo that means a
 // snapshot is never taken, for `dayBookingsSig` below that a real reshuffle is
-// discarded. No text field in the app can produce a control character, and the
-// key is only ever compared — never stored, never shown.
+// discarded. The key is only ever compared — never stored, never shown.
+//
+// v17.16.6 (CT-2A-11): that comment used to end "No text field in the app can
+// produce a control character", and **it was an assertion nothing enforced and
+// nothing was true of**. `notes` is a `<textarea>`, `sanitize` writes
+// `b.notes || ""` verbatim, and a paste carries whatever bytes it carries. The
+// choice was to make the sentence true or to delete it; making it true is now
+// `escSep` below, so the guarantee is a property of this function rather than a
+// claim about the rest of the app — which is the version of it that cannot rot
+// when somebody adds a field.
+//
+// **It ESCAPES rather than strips, and that distinction is the whole fix.**
+// Stripping the separator bytes out of each value would close the boundary-shift
+// collision by opening an identical one a character away: `"a\u001fb"` and
+// `"ab"` would map to the same key, so an edit between them reads as "nothing
+// changed" — the very failure this exists to prevent, differing only in which
+// pair of values triggers it. Caret escaping is injective, so no two distinct
+// field sets can share a key at all, and the cost is nothing.
+//
+// The escape prefix is \u001b (ESC, the natural choice and outside the four
+// separators), and it escapes ITSELF first by being inside the replaced range:
+// every \u001b in the output is a prefix, never data. `+0x40` is caret notation
+// — \u001b..\u001f map to [ \ ] ^ _ — so a decoder is unambiguous even though
+// nothing decodes: the key is compared, and injectivity is the only property
+// asked of it.
 var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
+var SEP_RE=/[\u001b-\u001f]/g;
+function escSep(v){
+  return String(v).replace(SEP_RE,function(c){
+    return "\u001b"+String.fromCharCode(c.charCodeAt(0)+0x40);
+  });
+}
 function undoKey(b){
   return UNDO_FIELDS.map(function(k){
     var v=b[k];
-    if(Array.isArray(v)) return v.slice().sort().join(K_ARR);
-    return (v===undefined||v===null)?"":String(v);
+    if(Array.isArray(v)) return v.slice().sort().map(escSep).join(K_ARR);
+    return (v===undefined||v===null)?"":escSep(v);
   }).join(K_FLD);
 }
 export function undoSnapshots(prev,next){

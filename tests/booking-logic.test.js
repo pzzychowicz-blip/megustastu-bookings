@@ -766,6 +766,65 @@ describe("undoSnapshots / applyUndo", () => {
     expect(undoSnapshots([two], [{ ...two, tables: ["1B", "1A"] }])).toEqual([]);
   });
 
+  // v17.16.6 (CT-2A-11): the separator is no longer reachable FROM THE DATA.
+  //
+  // The source comment used to assert "No text field in the app can produce a
+  // control character", which nothing enforced and which was false — `notes` is
+  // a <textarea> and `sanitize` writes it verbatim. `idOk`
+  // (LayoutSettings.jsx:81) forbids only "|" in a table id, and neither
+  // `settings/layout` nor `bookings` validates field FORMAT server-side, so a
+  // value carrying one is reachable exactly as a malformed `time` is.
+  //
+  // The ARRAY join is where a SINGLE poisoned value collides. The field join has
+  // fixed arity, so shifting content across one boundary changes the separator
+  // count and cannot collide without a second poisoned field — which is why the
+  // reachable case here is the same shape as the v17.10.2 defect that introduced
+  // these separators ("1+2" vs ["1","2"]), with the separator that replaced it.
+  const SEP = "\u001f";  // K_ARR — written as the escape, never the raw byte
+  it("does not collapse a poisoned table id and a two-table set into one key", () => {
+    const one = mk({ id: "k", tables: ["a" + SEP + "b"] });
+    const two = { ...one, tables: ["a", "b"] };
+    // Two genuinely different table sets. Before this both joined to the same
+    // string, undoKey read "nothing changed", and NO UNDO SNAPSHOT WAS TAKEN —
+    // the action became silently un-undoable.
+    expect(undoSnapshots([one], [two]).map((x) => x.id)).toEqual(["k"]);
+    expect(undoSnapshots([two], [one]).map((x) => x.id)).toEqual(["k"]);
+    // dayBookingsSig gates the reconciliation effect on the same key, where the
+    // same collision discards a real reshuffle instead.
+    expect(dayBookingsSig([one], one.date)).not.toBe(dayBookingsSig([two], two.date));
+  });
+
+  it("separates a poisoned preferredTables the same way", () => {
+    // The other array field in UNDO_FIELDS, and it holds table ids too.
+    const one = mk({ id: "k", preferredTables: ["a" + SEP + "b"] });
+    const two = { ...one, preferredTables: ["a", "b"] };
+    expect(undoSnapshots([one], [two]).map((x) => x.id)).toEqual(["k"]);
+  });
+
+  it("ESCAPES rather than strips, so it opens no collision of its own", () => {
+    // The distinction that decided the fix. Stripping the bytes out would map
+    // "a<SEP>b" and "ab" onto one key — the identical failure one character
+    // away, and the one an injective escape cannot produce.
+    const withSep = mk({ id: "k", notes: "a" + SEP + "b" });
+    const without = { ...withSep, notes: "ab" };
+    expect(undoSnapshots([withSep], [without]).map((x) => x.id)).toEqual(["k"]);
+    // ESC is itself inside the escaped range, so data cannot forge an escape:
+    // a literal ESC becomes ESC-"[" and a literal "[" stays "[".
+    const esc = mk({ id: "k", notes: "a\u001bb" });
+    const forged = { ...esc, notes: "a[b" };
+    expect(undoSnapshots([esc], [forged]).map((x) => x.id)).toEqual(["k"]);
+  });
+
+  it("leaves every ordinary value exactly where it was", () => {
+    // The guarantee that matters more than the collision: nothing WITHOUT a
+    // control character may change behaviour. An unchanged booking still reads
+    // unchanged, and a real edit still reads as one.
+    const plain = mk({ id: "k", name: "Nunez-O'Brien", notes: "window seat, 2 high chairs" });
+    expect(undoSnapshots([plain], [{ ...plain }])).toEqual([]);
+    expect(undoSnapshots([plain], [{ ...plain, notes: "window seat" }]).map((x) => x.id)).toEqual(["k"]);
+    expect(dayBookingsSig([plain], plain.date)).toBe(dayBookingsSig([{ ...plain }], plain.date));
+  });
+
   it("applyUndo replaces existing bookings and re-adds deleted ones", () => {
     const current = [{ ...a, size: 6 }, { ...b, tables: ["5A"] }, c];
     const out = applyUndo(current, [a, b]);
