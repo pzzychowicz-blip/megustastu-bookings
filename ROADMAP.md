@@ -137,6 +137,17 @@ is either a P3 or the one rules item above.
   `normalizePhone`/`formatPhone`/`matchCustomerByPhone` from
   `src/lib/customers.js` rather than keeping its own copies (the
   complementarity contract established in v16.0.0's customer layer).
+  **v17.16.7 adds a second precondition, and it BITES BEFORE the merge:** the
+  sandbox writes four top-level paths — `conversations`, `messages`,
+  `templates`, `settings/whatsapp` — and since the root `.write` grant went,
+  none of them is writable. Its own `database.rules.json` has no rule for any of
+  them; it relied on the root grant. So **the sandbox's WhatsApp writes are
+  already denied wherever these rules are published**, DEV included, while
+  booking sync in the same app keeps working and reads keep succeeding — it
+  looks populated and silently refuses to save. Closing it means deciding what
+  those nodes are: per the Rule of law each needs a per-child stamp CAS or a rev
+  pair, not just a grant, and `messages` is append-only in a way neither shape
+  fits cleanly. That is the WA module's own design work, not a rules edit.
 
 ## Ideas
 

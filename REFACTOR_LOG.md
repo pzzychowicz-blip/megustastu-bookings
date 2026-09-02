@@ -18025,6 +18025,24 @@ recording rather than quietly enjoying.
    (the bookings diff-write, and the legacy migration below), `revGuard.js` (all
    twelve rev pairs) and `usePresence.js`. Each has a grant; each is exercised.
 
+   **`/code-review` found the scope that sentence quietly claimed.** The
+   enumeration is of this branch's `src/`, and the DEV database has a second
+   writer: the `wa-sandbox` branch, a parallel Vercel deployment forced onto DEV
+   Firebase, writes `conversations`, `messages`, `templates` and
+   `settings/whatsapp` — none granted, and its own copy of the rules file has no
+   rule for any of them, because it relied on the root grant like everything
+   else. Publishing to DEV therefore denies every WhatsApp write while booking
+   sync in the same app keeps working, and reads keep succeeding, so the sandbox
+   looks populated and silently refuses to save.
+
+   Not fixed here, and the reason is the boundary the ship run draws: granting
+   those four would ship rules for an unshipped module and would pre-decide
+   whether they get a rev CAS, which the Rule of law says they must. It is a
+   ROADMAP entry against the WA merge instead. **The lesson is about the
+   sentence, not the sandbox** — "enumerated from the source" is only as wide as
+   the tree you enumerated, and this repo has a second tree that writes the same
+   database.
+
 ### The one app change, and why it could not be excepted
 
 `usePersistence`'s lazy array→keyed migration (v15.5.0) wrote the whole

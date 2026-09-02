@@ -170,6 +170,18 @@ below it could have closed either finding.
    array→keyed migration), `revGuard.js` (all twelve rev pairs) and
    `usePresence.js`. Each has a grant and each is exercised by a test.
 
+   **That enumeration is of THIS branch's `src/`, and the DEV database has a
+   second writer.** The `wa-sandbox` branch — a parallel Vercel deployment
+   forced onto DEV Firebase — writes four paths nothing here grants:
+   `conversations`, `messages`, `templates` and `settings/whatsapp`. Its own
+   copy of this file has no rule for any of them; it relied entirely on the root
+   grant. **So publishing these rules to DEV denies every WhatsApp write while
+   booking sync in the same app keeps working**, and reads keep succeeding
+   (root `.read` is untouched), so the sandbox looks populated and silently
+   refuses to save. Deliberately not fixed here: granting those four would ship
+   rules for an unshipped module and pre-decide whether they get a rev CAS,
+   which the Rule of law says they must. On ROADMAP, against the WA merge.
+
 ### One code path changed with it
 
 The lazy array→keyed migration (`usePersistence.js`, v15.5.0) wrote the whole
