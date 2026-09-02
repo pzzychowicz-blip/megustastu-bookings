@@ -86,7 +86,7 @@ the moment somebody names the project.
 
 ### What the suite asserts
 
-109 tests as of v17.16.7. The first group asserts the rig itself is pointed at
+120 tests as of v17.16.8. The first group asserts the rig itself is pointed at
 a loopback emulator and a `demo-` project — and, since v17.16.7, that the root
 carries **no** `.write` key, which is asserted as an ABSENCE because that
 absence is the whole of the access-control change and a re-added root grant
@@ -109,6 +109,81 @@ the rules", which is a claim a hand-written list cannot make. A guard asserts
 the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
+
+## v17.16.8 — the WhatsApp sandbox nodes get grants, and a decided CAS shape
+
+v17.16.7 removed the root `.write` grant, which left four paths unwritable that
+only the `wa-sandbox` branch writes: `conversations`, `messages`, `templates`
+and `settings/whatsapp`. Reads kept succeeding (root `.read` is untouched), so
+the sandbox looked populated and silently refused to save. That version declined
+to grant them because doing so would pre-decide their CAS shape. **This version
+decides the shape.**
+
+### The shape is not the same for all four, and the reason is measurable
+
+`api/_lib/rtdb.js` on `wa-sandbox` writes `conversations/{phoneKey}` and
+`messages/{phoneKey}/{msgId}` through **firebase-admin**, and Admin SDK writes
+**bypass security rules entirely**. A rev or stamp CAS on those two nodes would
+therefore constrain the browser while the backend that does most of the writing
+walks past it — a pin that looks like a guarantee while guaranteeing nothing,
+which is the failure this repo already names for the `test:rules` openjdk
+prefix. So:
+
+| Node | Writers | Shape |
+|---|---|---|
+| `conversations/$phoneKey` | client **and** Admin backend | per-child grant, no CAS (`presence` shape) |
+| `messages/$phoneKey` | client **and** Admin backend | per-child grant, no CAS |
+| `templates` | client only | rev pair — `templatesRev` |
+| `settings/whatsapp` | client only | rev pair — `whatsappRev` |
+
+**The two per-child grants are a deliberate, documented deviation from the Rule
+of law**, not an oversight. They are the second exemption after `presence`, and
+unlike `presence` these are real data — so the justification is the Admin
+bypass and nothing else. If the WA backend ever stops writing them, or starts
+stamping `updatedAt`/`baseUpdatedAt`, they should get the real CAS.
+
+**The grant sits at `$phoneKey`, not at `$phoneKey/$mid`.** Write permission
+cascades down, so one grant covers the per-message writes *and* the "delete this
+conversation" call, while the whole-node wipe stays denied. That last part is
+load-bearing: `clearAllWaData()` did `set(ref(db,"conversations"), null)`, which
+is exactly the CT-2A-06 capability v17.16.7 deleted the root grant to close.
+Granting it back for these two nodes would have spent that win, so the sandbox
+client deletes per conversation instead (see below).
+
+### The client changed with it, on the `wa-sandbox` branch
+
+Two changes there, because the rules above describe a client that did not yet
+exist:
+
+1. `templates` moved from a bare whole-node `set()` (the seed at
+   `useWhatsApp.js:135` and the save at `:238`) onto `writeWithRev`, so the new
+   `templatesRev` pair is real rather than decoration.
+2. `clearAllWaData()` deletes each conversation and each message subtree by key
+   instead of nulling the two nodes. **It keys off the SNAPSHOT keys, not the
+   `phoneKey` field on each row** — the listener groups rows by that field and
+   discards the real keys, and the backend writes at `sanitizeKey(phoneKey)`, so
+   a path built from the field can name nothing and leave the real row behind.
+   That is the "it does not fail, it re-targets" hazard `api/_lib/rtdb.js`'s own
+   header describes; it was caught by `/code-review` here, one file over.
+
+**`settings/whatsapp` needed no client change** — `useWaSettings.js:103`
+already used `writeWithRev`. It was denied only because no rule named it.
+
+### Deployment — rules can go FIRST, or at any time
+
+The four nodes are unwritable today, so no client is relying on them; nothing
+can regress. Publish whenever.
+
+1. Paste `database.rules.json` into the Firebase console → Realtime Database →
+   Rules → **Publish**. **DEV and PROD both**, and that is the point of this
+   version: the two databases carry the same file again, which is what makes a
+   missing grant fail in DEV rather than only in production.
+2. On PROD the four grants are inert until the WA module merges — nothing on
+   `main` writes those paths.
+
+**Rollback** is re-publishing the previous rules from git
+(`git show <commit-before-this-one>:database.rules.json` — the repo carries no
+version TAGS, so name a commit or `origin/main`, not `v17.16.7`).
 
 ## v17.16.7 — the root `.write` grant is gone (CT-2A-04, CT-2A-06)
 
@@ -170,17 +245,19 @@ below it could have closed either finding.
    array→keyed migration), `revGuard.js` (all twelve rev pairs) and
    `usePresence.js`. Each has a grant and each is exercised by a test.
 
-   **That enumeration is of THIS branch's `src/`, and the DEV database has a
-   second writer.** The `wa-sandbox` branch — a parallel Vercel deployment
-   forced onto DEV Firebase — writes four paths nothing here grants:
-   `conversations`, `messages`, `templates` and `settings/whatsapp`. Its own
-   copy of this file has no rule for any of them; it relied entirely on the root
-   grant. **So publishing these rules to DEV denies every WhatsApp write while
-   booking sync in the same app keeps working**, and reads keep succeeding
-   (root `.read` is untouched), so the sandbox looks populated and silently
-   refuses to save. Deliberately not fixed here: granting those four would ship
-   rules for an unshipped module and pre-decide whether they get a rev CAS,
-   which the Rule of law says they must. On ROADMAP, against the WA merge.
+   **That enumeration was of THIS branch's `src/`, and the DEV database has a
+   second writer** — the `wa-sandbox` branch, a parallel Vercel deployment
+   forced onto DEV Firebase, which writes `conversations`, `messages`,
+   `templates` and `settings/whatsapp`. This version deliberately left all four
+   denied, on the grounds that granting them would "pre-decide whether they get
+   a rev CAS, which the Rule of law says they must".
+
+   **v17.16.8 closed it by making that decision instead of deferring it** — see
+   the section above. The reasoning here is kept rather than deleted because it
+   is what the next such call should be weighed against: the objection was never
+   to the grants, it was to shipping grants whose CAS shape nobody had thought
+   about. Deciding the shape answers it; adding the grants alone would not
+   have.
 
 ### One code path changed with it
 
