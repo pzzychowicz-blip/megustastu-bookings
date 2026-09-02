@@ -17658,8 +17658,9 @@ verification is the 783-test suite above.
 **Date:** 2026-09-02 · **Branch:** `fix/v17.16.6-p3-findings` ·
 **Files:** `src/App.jsx` (version), `src/lib/customers.js`,
 `src/lib/booking-logic.js`, `tests/customers.test.js`,
-`tests/booking-logic.test.js`, `CLAUDE.md`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
-**Behavioural change:** yes, in three places — a booking joined to a phone-less
+`tests/booking-logic.test.js`, `tests/write-path.test.js`, `CLAUDE.md`,
+`REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** yes, in three places (commit 4 changes none) — a booking joined to a phone-less
 guest now joins the group that guest is actually in, rather than the one the
 draft was minted against; a table block the app cannot read is skipped rather
 than crashing every path that consults blocks; and an undo snapshot is taken for
@@ -17789,3 +17790,55 @@ direction.
 joins `genId()` ids, which are base36. The second does take free staff text
 (`reason`), but v17.16.4's `used` set already guarantees distinct block ids by
 construction, so a key collision there costs an ordinal and never an identity.
+
+### 4 · CT-2A-08 — withdrawn, on an argument rather than on a shrug
+
+`ROADMAP.md` asked for one observation: *construct a lasting divergence, or close
+the finding.* The claim was that the 2 s StrictMode dedupe can swallow a
+legitimate A→B→A write when no echo lands in between. It has survived two
+versions without anybody constructing one, which is weak evidence and was
+honestly recorded as such.
+
+There is a stronger reason, and it took reading `contentKey` to see it. **A
+signature is `(content, baseUpdatedAt)` per child** — `contentKey` deletes
+`updatedAt` and nothing else, so the CAS base is inside the signature. Two
+patches that share a signature are therefore *indistinguishable to the server*:
+same content, same claimed base, so the rule reaches the same verdict on both.
+
+That turns "we could not build one" into a complete case analysis:
+
+- **The earlier patch landed.** The server already holds exactly what the
+  swallowed one wanted. Nothing is lost. (An intermediate B cannot also have
+  landed: its base was consumed by the first write, so the CAS refuses it.)
+- **The earlier patch was rejected.** The swallowed one carries the identical
+  base, so it would have been rejected too — and `update().catch` has already
+  queued the retry and tripped `markStale`, so the recovery is armed.
+- **It was never dispatched.** Then `lastPatchSigRef` was never set and there is
+  nothing to collide with.
+
+There is no fourth outcome, and the base not advancing is itself the precondition
+(`persist` passes `computed` to `setBookings`, and the stamp lives only in the
+patch — the real value returns via the echo).
+
+**So the finding closes, and the commit that closes it adds a guard rather than a
+fix.** What would MAKE CT-2A-08 real is `baseUpdatedAt` leaving the signature —
+a perfectly plausible future tidy-up of `contentKey`, sitting one line from the
+`delete c.updatedAt` that is meant to be there. Sabotaged that way, the whole
+802-test suite lost **exactly one test**: the one written here. The property the
+argument rests on was, until now, guarded by nothing.
+
+Four tests: the base is in the signature; A→B→A with an echo between is not
+deduped; A→B→A with the base frozen IS deduped *and the swallowed patch is
+byte-identical to the one already sent*, which is the harmlessness pinned rather
+than asserted; and the whole-patch comparison, so a repeat spread across
+different children is covered by the same analysis.
+
+**A count correction.** The running tally in `ROADMAP.md` was off by one through
+commits 2 and 3 of this version, because the `getBlockSlots` sibling was
+subtracted from it — and that entry is not a register finding, having been raised
+in v17.16.5 after the register was written. Corrected here, with the tally now
+naming the five that remain (CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10)
+instead of only counting them, so the next drift is visible rather than
+arithmetic. Not amended into the earlier commits: the separate-commit record is
+the deliverable, and a wrong number corrected in the open is worth more than a
+clean one rewritten.

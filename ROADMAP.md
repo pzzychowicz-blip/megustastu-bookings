@@ -54,7 +54,14 @@ thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
 (both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
 leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
 half — which closes that finding in both halves — leaving eight; v17.16.6
-shipped CT-2B-08, the `getBlockSlots` sibling of CT-2A-03 and CT-2A-11, leaving five.**
+shipped CT-2B-08 and CT-2A-11 and WITHDREW CT-2A-08 (the dedupe
+signature is (content, base), so two patches sharing one are indistinguishable
+to the server and have the same fate — measured, see `REFACTOR_LOG.md`), leaving
+**five**: CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10.** It also closed the
+`getBlockSlots` sibling of CT-2A-03, which is not in that count — it was raised
+in v17.16.5, after the register was written. **The count is of REGISTER findings
+only**, stated here because the running tally was off by one for two commits of
+v17.16.6 before anybody re-derived it.
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -121,11 +128,6 @@ is either a P3 or one of the two rules items above.
   observation:** whether any two ids in PROD coincide at all — a one-line scan
   of the `bookings` node, which nobody has run.
 
-- **CT-2A-08** — the StrictMode patch-dedupe (`lastPatchSigRef`, 2 s) can swallow
-  a legitimate A→B→A write with no echo between. Every reachable instance
-  self-heals; no lasting divergence was constructed. **Settling observation:**
-  construct one, or close the finding. It has now survived two versions without
-  anybody managing to.
 - **CT-2A-09** — `saveBookings`/`saveBlocks` dispatch the write from inside their
   `setState` updater. v17.16.0 corrected CLAUDE.md's claim that no such shape
   survives, and recorded why the v16.0.0 corruption has not recurred (an
