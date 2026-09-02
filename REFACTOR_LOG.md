@@ -18147,3 +18147,16 @@ a node now has to answer, and this comment answers it wrongly in the direction
 that hides `usePresence` — the one node whose grant this version had to add by
 hand. Same class as the `revGuard.js` header v17.16.1 corrected: a comment
 stating a guarantee nothing enforces.
+
+### `/code-review` — the rollback command names a tag that does not exist
+
+The new section's rollback line read `git show v17.16.6:database.rules.json`.
+**The repo has no version tags at all** — `git tag --list 'v17*'` is empty, and
+the pre-existing instance one section down (`v17.16.0`, added by v17.16.1) fails
+with `fatal: invalid object name`. Both are corrected to a form that resolves.
+
+It survived a version because the sentence offers "or any commit before this
+one" as an alternative, and that half works. The half that does not is the one
+somebody reaches for under pressure: these rules are pasted into a console by
+hand with no staging, so this is the recovery path for a change that can leave
+staff unable to save a booking.

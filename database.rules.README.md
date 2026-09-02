@@ -210,7 +210,8 @@ an older client would simply fail that one unreachable write.
 2. Nothing else.
 
 **Rollback** is re-publishing the previous rules from git
-(`git show v17.16.6:database.rules.json`, or any commit before this one).
+(`git show <commit-before-this-one>:database.rules.json` — the repo carries no
+version TAGS, so name a commit or `origin/main`, not `v17.16.6`).
 
 ---
 
@@ -289,7 +290,8 @@ real rules and requires every one to be accepted.
 2. Nothing else. No app refresh, no quiet window.
 
 **Rollback** is re-publishing the previous rules from git
-(`git show v17.16.0:database.rules.json`, or any commit before this one).
+(`git show <commit-before-this-one>:database.rules.json` — see the note in the
+v17.16.7 section: `v17.16.0` is not a tag and does not resolve).
 
 **One code path changed with it.** `usePersistence`'s lazy array→keyed migration
 (v15.5.0) wrote each child with `updatedAt` and no `baseUpdatedAt`, so the new
