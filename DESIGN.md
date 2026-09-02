@@ -395,6 +395,22 @@ explaining why is usually the one to read.
   amber ink (3.76 / 3.12, clears the 3:1 button bar), and this. Patryk chose this,
   informed. The note now lives beside `EXEMPT_FLOOR` so the record says what it
   actually blesses; the floors still gate a regression.
+- **v17.16.10: the status MARK is a recorded exemption too, under a different
+  criterion.** v17.11.0 put `StatusIcon` on the timeline block's rail and
+  v17.15.7 on the floor-plan table, both to stop status being carried by colour
+  alone. The mark is `BLOCK_INK` on `BLOCK_BG` — the same pairs as above — but
+  text is WCAG 1.4.3 and a mark is a **graphical object, 1.4.11, bar 3:1**, so
+  the exemption above does not simply extend over it. Re-measured in v17.16.10
+  and three of six are under: the numbers, and why no new `EXEMPT_FLOOR` entry
+  was added, live beside the other two notes in `tests/contrast.test.js` rather
+  than being restated here. **Patryk's decision was record-don't-change**, and
+  the reason is a rule worth carrying: a halo or outline on the mark is a NEW
+  treatment, and it would have to reach the timeline rail, `SBadge` and the plan
+  table in one version or the app ends up with two status vocabularies that
+  disagree. What keeps it defensible is narrower than the argument above and
+  does not inherit from it — the mark was never the only carrier, since the fill
+  remains and both `PlanView`'s `ariaLabel` and `STATUS_LABEL` name the status
+  in words.
 - **Accent = primary action or current selection. Nothing else (v17.8.0).** It is
   not for identity and not for decoration. `--tbl-out-rgb` used to be byte-identical
   to `--accent`, so nine outdoor table pills painted the accent on every screen at

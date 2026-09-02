@@ -18683,3 +18683,18 @@ where the timeline drew blank. Both are HMR artefacts of editing a mounted hook:
 every clean load renders correctly and the console errors carry the *pre-reload*
 module timestamps. Checked rather than assumed, because "it's just HMR" is
 exactly what a real regression would also look like for one screenshot.
+
+### Commit 5 — the contrast decision, recorded where design decisions live
+
+A follow-up to commit 2 rather than part of it: the measurement and the
+`EXEMPT_FLOOR` reasoning belong in `tests/contrast.test.js`, but the *decision*
+is a design decision, and `DESIGN.md` owns those. It joins the amber-exemption
+bullet it sits beside, and deliberately **points at the test file instead of
+repeating its numbers** — a rule answered in two files is the defect all three
+living docs warn about, and the one that goes stale is the copy nobody is
+reading.
+
+What it adds beyond a pointer is the rule the decision establishes: a halo or
+outline on the mark is a new treatment that must reach the timeline rail,
+`SBadge` and the plan table in one version, or the app ships two status
+vocabularies that disagree.
