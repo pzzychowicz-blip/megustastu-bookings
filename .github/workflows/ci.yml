@@ -1,11 +1,17 @@
 name: CI
 
-# Runs on every PR and on pushes to main. Gates on a clean production build, a
-# green test suite (tests/*.test.js), AND a 0-error lint (the ~68-error backlog
-# was cleared 2026-07-24: real fixes for unused vars / empty catches /
-# conditional hooks, plus the react-hooks v6 React-Compiler advisories
-# downgraded to warnings in eslint.config.js — they flag the app's documented
-# live-binding/ref-mirror architecture). Warnings do not block.
+# Runs on every PR and on pushes to main, as TWO parallel jobs.
+#
+#   verify — a clean production build, a green test suite (tests/*.test.js) and
+#            a 0-error lint (the ~68-error backlog was cleared 2026-07-24: real
+#            fixes for unused vars / empty catches / conditional hooks, plus the
+#            react-hooks v6 React-Compiler advisories downgraded to warnings in
+#            eslint.config.js — they flag the app's documented live-binding /
+#            ref-mirror architecture). Warnings do not block.
+#   rules  — the Firebase Security Rules suite against a local RTDB emulator.
+#            Added 2026-09-02; until then it ran on a developer machine only, so
+#            a rules regression was caught only if someone remembered to run it.
+#            See the comment above the job for why it is separate and unfiltered.
 
 on:
   pull_request:
@@ -32,3 +38,48 @@ jobs:
       # dark-mode bug shipped past both. See scripts/check-style-invariants.mjs.
       - name: Style invariants (radius scale, white-inset shadows)
         run: npm run check:style
+
+  # The Firebase Security Rules suite (tests/rules/**), which cannot run in
+  # `verify`: the RTDB emulator is a Java jar and `emulators:exec` needs the
+  # firebase CLI, neither of which the build/test/lint gate has any use for.
+  # `vite.config.js` excludes the directory from `npm test` for that reason.
+  #
+  # A SEPARATE job, not extra steps on `verify`, for two reasons: it runs in
+  # parallel with `verify` rather than in series, and a failure to install the
+  # CLI cannot take down the gate every PR depends on. (Which of the two jobs
+  # ends last has not been measured — don't claim this one is free.)
+  #
+  # Deliberately NOT path-filtered. The suite's inputs are database.rules.json,
+  # tests/rules/**, firebase.json, vitest.rules.config.js AND package.json — a
+  # five-path filter is one more list nothing keeps in step, and a filtered job
+  # reports as *skipped*, which blocks a merge outright if it is ever made a
+  # required check. ~1 min of parallel runner time is the cheaper side of that.
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      # THIS is the JDK pin. `test:rules` also prepends
+      # /opt/homebrew/opt/openjdk/bin, which does not exist here — verified
+      # inert (a nonexistent PATH entry is skipped, so java resolves from
+      # further down). That prefix is the macOS-local half; this step is the
+      # CI half. Neither is redundant: without the prefix the script cannot
+      # find java on a Mac, where openjdk is keg-only.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      # Pinned EXACTLY, and not to a floating major: CI and the developer
+      # machine must evaluate the rules on the same emulator jar, or a rules
+      # failure that reproduces in only one place has two candidate causes.
+      # Global rather than a devDependency — it is a ~200 MB tool that only
+      # STARTS the emulator, and `verify`'s `npm ci` would pay for it on every
+      # PR without ever running it (database.rules.README.md).
+      - name: Install the emulator CLI
+        run: npm i -g firebase-tools@15.28.2
+      - name: Firebase Security Rules (local emulator)
+        run: npm run test:rules

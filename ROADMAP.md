@@ -26,20 +26,6 @@ session and keeping it in sync.
   not at all, so it wants its own version and Patryk's sign-off. If the answer
   is "record it, don't change it", the note belongs beside the existing
   exemption paragraph in `tests/contrast.test.js`.
-- **Run the Firebase rules suite in CI.** `npm run test:rules`
-  (`tests/rules/database-rules.test.js`, 120 tests as of v17.16.8 against the
-  real `database.rules.json`) runs on a developer machine only. CI cannot run it as
-  it stands: `.github/workflows/ci.yml` is `ubuntu-latest` with no JVM, and the
-  emulator is a Java jar. Adding it means a `setup-java` step plus installing
-  `firebase-tools` in the job — perhaps a minute per PR for a suite that changes
-  only when `database.rules.json` does, so it may be better gated on a path
-  filter than run every time. Until this lands, a rules regression is caught
-  only if someone remembers to run the command. **Whoever does this: the
-  `test:rules` script prepends `/opt/homebrew/opt/openjdk/bin`, which does not
-  exist on `ubuntu-latest`** — so the explicit JDK pin silently becomes a no-op
-  and the job depends on whatever `java` the runner exposes. Drop the prefix in
-  favour of `setup-java`, or the pin will look like a guarantee while
-  guaranteeing nothing (rig `/code-review`, CR-2).
 
 ### Crash test v17.15.7 — confirmed and unfixed
 
