@@ -53,7 +53,8 @@ reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
 thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
 (both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
 leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
-half — which closes that finding in both halves — leaving eight.**
+half — which closes that finding in both halves — leaving eight; v17.16.6
+shipped CT-2B-08, leaving seven.**
 Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
 
 **Every bullet below now carries its SETTLING OBSERVATION** — the single thing
@@ -128,16 +129,6 @@ order below is by that rating, not by the filed one.
   queue holds an updater function, not a booking, so naming the lost change means
   changing what is queued; and reverting it discards work the user can see. That
   is a design question for Patryk, not a repair. Highest-value of the P3s.
-- **CT-2B-08** — a second join naming an already-joined seed correctly refuses to
-  re-home it, but the NEW booking keeps its own minted `guestId` and lands in a
-  group of one while the operator believes the two were joined. Nothing on screen
-  distinguishes this from success. **Confirmed by reading (v17.16.5):** `doSave`
-  writes `guestId: f.guestId || null` verbatim, so the draft's id minted at OPEN
-  time is never re-derived from the seed's live state. **Settling observation:**
-  how wide is the window? It needs a concurrent join on the same seed from
-  another device between opening the form and saving. The fix is small — adopt
-  the seed's existing id inside `stampGuestSeed`'s pass instead of leaving the
-  minted one — so this may be worth taking on its cheapness rather than its rate.
 - **CT-2A-11** — `undoKey`'s array separator is collidable by a pasted control
   character in a table id, which reads as "nothing changed" so an undo snapshot
   is never taken. The source comment asserts no text field can produce one and

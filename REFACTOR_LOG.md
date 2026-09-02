@@ -17650,3 +17650,58 @@ timeline's five chips read identically, so the two keys now differ in nothing.
 
 The other four changes are pure functions with no rendering surface, and their
 verification is the 783-test suite above.
+
+---
+
+## v17.16.6 — the halves that disagreed
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.6-p3-findings` ·
+**Files:** `src/App.jsx` (version), `src/lib/customers.js`,
+`tests/customers.test.js`, `CLAUDE.md`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** yes — a booking joined to a phone-less guest now joins
+the group that guest is actually in, rather than the one the draft was minted
+against.
+
+The seventh instalment of the v17.15.7 crash-test response. Scope was Patryk's:
+the two confirmed P3s, plus settling CT-2A-08 one way or the other, plus
+CT-2A-11 — and CT-2A-11 on the narrower of the two options offered, which is the
+one that does not touch stored data.
+
+### 1 · CT-2B-08 — the second join that looked exactly like the first
+
+Picking an unjoined phone-less guest from the booking form's NAME dropdown is
+the one moment a `guestId` is minted (`BookingFormModal.jsx:189`). It writes
+`guestId = "g" + <that guest's latest booking id>` into the draft and records
+that booking in `guestSeed`. On save, `stampGuestSeed` writes the same id back
+onto the seed and the two become one customer.
+
+`stampGuestSeed` has always refused a seed that already carries an id — the
+`!b.guestId` guard, which is what makes a retry safe and what stops a booking
+already joined to somebody being silently re-homed. **Nothing reconsidered the
+draft.** So when another device joined that same guest in between — through a
+*different* booking of theirs, which is the only way the ids can differ, since
+the mint is deterministic in the seed's id — the seed kept `"g"+<other id>`, the
+new booking was written with the id minted at pick time, and it landed in a group
+of ONE beside the group the operator meant to join.
+
+The two halves of one decision disagreeing, with nothing on screen to tell that
+apart from success. Confirmed by reading: `App.jsx:2100` wrote
+`guestId: f.guestId || null` verbatim.
+
+`resolveGuestId(list, f)` is the missing half, a sibling of `stampGuestSeed` in
+`customers.js`. **The seed wins**, on principle rather than convenience: it is
+the existing group and this booking is the newcomer asking to be let in;
+adopting in the other direction would re-home a booking already joined to
+somebody, which is the exact thing `stampGuestSeed`'s guard exists to prevent.
+
+**Where it is called is load-bearing.** Not on the `nb` object, which is built
+once at Save time so that a replayed write cannot duplicate the booking, but
+inside `buildNext`, where `prev` is — so a held or retried write re-reads a
+`prev` that may have acquired the id since the first attempt. `newId` is
+untouched, so the stable-id property that comment relies on is unaffected.
+
+Seven tests. The one that matters is not either half in isolation but that they
+**cannot disagree**: for each of the three shapes of `prev`, whatever id
+`stampGuestSeed` leaves on the seed is the id `resolveGuestId` gives the new
+booking. Proven against a sabotaged build (`return f.guestId` — the pre-fix
+behaviour): three of the seven fail, and only those three.

@@ -48,7 +48,7 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -277,7 +277,7 @@ import { todayStr, addDays } from "./lib/day";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"MGT Bookings",
-  version:"17.16.5",
+  version:"17.16.6",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2116,7 +2116,15 @@ function BookingApp({uid}){
           }
           return base;
         }
-        function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
+        // v17.16.6 (CT-2B-08): the guest id is resolved against `prev` HERE rather
+        // than baked into `nb` above, because `nb` is built once at Save time while
+        // this runs again on every replay. The draft's id was minted when the name
+        // was picked; if the seed has been joined since — by another device, through
+        // a different booking of the same guest — adopting the seed's id is what
+        // keeps the two in one group. See `resolveGuestId` for why the seed wins.
+        // `newId` is untouched, so the stable-id property the comment above relies
+        // on is unaffected.
+        function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([Object.assign({},nb,{guestId:resolveGuestId(prev,f)})]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
         // /code-review perf: prev-identity memo — one optimiser pass shared by
         // the guard check + the immediate dispatch (see the edit path above).
         const buildNextMemo=memoByPrev(buildNext);

@@ -142,6 +142,47 @@ export function stampGuestSeed(list, f) {
   return stamped ? out : list;
 }
 
+// resolveGuestId — which guest group does the booking being SAVED belong to?
+// v17.16.6 (CT-2B-08). `stampGuestSeed` above is the other half of one decision
+// and it only ever answers half of it: it refuses to re-home a seed that already
+// carries an id, which is right, and then nothing reconsiders the id the DRAFT is
+// carrying. So the two halves could disagree.
+//
+// The sequence. Picking an unjoined phone-less guest from the name dropdown mints
+// `guestId = "g" + <that booking's id>` into the draft and records the booking in
+// `guestSeed` (BookingFormModal). Between that moment and Save, another device can
+// join the same guest — through a DIFFERENT booking of theirs, which is the only
+// way the ids differ, since the mint is deterministic in the seed's id. The seed
+// now carries `"g"+<other id>`; `stampGuestSeed` correctly leaves it alone; and
+// the new booking was still written with the id minted at pick time. It lands in a
+// group of ONE, beside the group the operator meant to join, and **nothing on
+// screen distinguishes that from success** — which is the whole reason this is
+// worth a function rather than a comment.
+//
+// Resolving against the seed's LIVE state is what closes it, and it has to happen
+// where `prev` is: inside doSave's `buildNext`, not on the `nb` object built once
+// above it. That also makes a held/retried write correct for free — the replay
+// re-reads a `prev` that may have acquired the id since the first attempt.
+//
+// The seed WINS on principle, not for convenience: it is the existing group, and
+// this booking is the newcomer asking to be let in. Adopting in the other
+// direction would re-home a booking already joined to somebody, which is exactly
+// what `stampGuestSeed`'s `!b.guestId` guard exists to prevent.
+//
+// No seed (`bookAgain` on a booking that already had an id; an ordinary phone
+// booking; an edit, where `openEdit` sets `guestSeed: null`) means there is
+// nothing to reconcile against and the draft's own value stands. A seed that is
+// no longer in `list` — deleted meanwhile — is the same case: the mint stands
+// because there is no group left to join.
+export function resolveGuestId(list, f) {
+  if (!f) return null;
+  if (!f.guestId || !f.guestSeed) return f.guestId || null;
+  var seed = (Array.isArray(list) ? list : []).find(function (b) {
+    return b && b.id === f.guestSeed;
+  });
+  return (seed && seed.guestId) ? seed.guestId : f.guestId;
+}
+
 // isNoShow — did this booking end as a no-show?
 // Primary signal: the v16.0.0 `noShow` boolean set by doCancelBooking.
 // Fallback: the pre-v16 record was only a history entry {action:"no show"} (+
