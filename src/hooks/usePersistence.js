@@ -21,8 +21,12 @@
 import { useState, useRef, useEffect } from "react";
 // v17.16.7: `set` is gone from this import. It had exactly one caller left —
 // the legacy array→keyed migration below — and that became an `update()` when
-// the rules stopped granting a whole-node write on /bookings (CT-2A-04). The
-// app now reaches Firebase through `update` and `get` only.
+// the rules stopped granting a whole-node write on /bookings (CT-2A-04), so
+// THIS FILE's only write verb is now `update`. Not the app's: `usePresence.js`
+// still uses `set`, `push`, `remove` and `onDisconnect` on `presence/{key}`,
+// which is why that node needed a grant of its own when the root one went. An
+// audit of what writes Firebase starts from the four call sites named in
+// `database.rules.README.md`, never from this import.
 import { ref, onValue, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";

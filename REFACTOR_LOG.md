@@ -18132,3 +18132,18 @@ JVM step; `database.rules.json` contains zero `matches(` calls, so the rules
 still check type and never format; `drainPending`'s give-up branch still only
 sets a warning; `persist` is still called from inside the `setBookings` updater;
 and there is no `InboxPanel` in `src/components`.
+
+### `/code-review` — a comment that made the audit it exists to support harder
+
+Dropping `set` from `usePersistence`'s Firebase import was annotated "The app
+now reaches Firebase through `update` and `get` only." Wrong twice.
+`usePresence.js` uses `set`, `push`, `remove` and `onDisconnect`; and the very
+import being annotated also pulls `onValue` and `goOnline`, used 3 and 1 times
+in that file, so the narrower reading fails too.
+
+**What makes it worth a commit rather than a typo fix is who reads it.** The
+per-path rules make "what writes Firebase, and where" a question anybody adding
+a node now has to answer, and this comment answers it wrongly in the direction
+that hides `usePresence` — the one node whose grant this version had to add by
+hand. Same class as the `revGuard.js` header v17.16.1 corrected: a comment
+stating a guarantee nothing enforces.
