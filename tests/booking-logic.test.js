@@ -16,7 +16,7 @@ import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
   comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
-  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots,
+  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots, isReadableBlock,
   findBest, findFreeSlot, applyOpt, optimise, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
@@ -394,6 +394,38 @@ describe("canAssign / getBusy / getBlockSlots", () => {
     expect(s).toHaveLength(1);
     expect(s[0].tables).toEqual(["7"]);
     expect(Number.isFinite(s[0].s) && Number.isFinite(s[0].e)).toBe(true);
+  });
+
+  // v17.16.6 (/code-review): the guard shipped on ONE of two consumers. BlockBar
+  // (TimelineView) filters dayBlocks by date alone and then calls toMins(bl.from)
+  // itself, so an unreadable block still threw — during RENDER, where the error
+  // boundary unmounts the whole app. The predicate is exported and shared now,
+  // and this is the guard that fails if a third consumer appears without it.
+  it("EVERY consumer that computes with bl.from/bl.to filters on the predicate", () => {
+    const files = ["src/lib/booking-logic.js", "src/components/TimelineView.jsx",
+      "src/components/PlanView.jsx", "src/components/DaySheet.jsx",
+      "src/components/BlockModal.jsx", "src/components/ManualModal.jsx",
+      "src/components/WalkinForm.jsx", "src/App.jsx"];
+    const offenders = [];
+    files.forEach((f) => {
+      const src = readFileSync(new URL("../" + f, import.meta.url), "utf8");
+      // Does this file hand a block's own from/to to toMins itself, rather than
+      // going through getBlockSlots? If so it must know about the predicate.
+      const computes = /toMins\(\s*b[a-z]*\.(from|to)\s*\)/.test(src);
+      if (computes && !src.includes("isReadableBlock")) offenders.push(f);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("isReadableBlock answers for a null block and for allDay", () => {
+    expect(isReadableBlock(null)).toBe(false);
+    expect(isReadableBlock(undefined)).toBe(false);
+    // allDay never reads from/to, so a malformed pair there is not a reason to
+    // stop protecting the table all day.
+    expect(isReadableBlock({ allDay: true, from: 2000, to: null })).toBe(true);
+    expect(isReadableBlock({ allDay: false, from: "14:00", to: "15:00" })).toBe(true);
+    expect(isReadableBlock({ allDay: false, from: 2000, to: "15:00" })).toBe(false);
+    expect(isReadableBlock({ allDay: false, from: "14:00", to: undefined })).toBe(false);
   });
 
   it("keeps every readable time the app already accepts", () => {

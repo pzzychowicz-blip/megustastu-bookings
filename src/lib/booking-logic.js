@@ -443,6 +443,31 @@ export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
 export function isActive(b){return b.status!=="cancelled"&&b.status!=="completed";}
 
 // ── Slot/busy/assignment checks ───────────────────────────────────────────────
+// v17.16.6 (/code-review) — the malformed-block predicate, EXPORTED because it
+// has two consumers and the first version guarded only one.
+//
+// `getBlockSlots` was given the guard and `TimelineView`'s `BlockBar` was not:
+// it filters `dayBlocks` by date alone and then calls `toMins(bl.from)` itself,
+// so an unreadable block still threw — during RENDER, where the error boundary
+// unmounts the whole tree. The placement path was safe and the day was still
+// unusable, which is the failure the fix was written to remove, relocated to a
+// worse place. Two consumers of one rule, kept in step by nothing: the shape
+// this repo has now hit with the settings-tab list, the modal-visibility lists
+// and the four dismissal Sets.
+//
+// **Only the consumers that COMPUTE with `from`/`to` filter on this.** `DaySheet`
+// and `BlockModal` merely print the two strings, so a malformed block renders as
+// nonsense text and cannot crash — and `BlockModal` is where somebody goes to
+// REMOVE it, so hiding it there would take away the only repair. "An unreadable
+// block is not a block" is a statement about scheduling, not about visibility.
+//
+// `!bl` is included so the predicate is usable at both sites: `TimelineView`'s
+// own filter dereferences `bl.date` too, and a null element there threw exactly
+// as `getBlockSlots` did.
+export function isReadableBlock(bl){
+  if(!bl) return false;
+  return bl.allDay?true:(isReadableTime(bl.from)&&isReadableTime(bl.to));
+}
 export function getBlockSlots(blocks,date){
   // v15.0.0: an all-day block spans the BLOCK'S date's hours, not the active
   // view-day's — hoursFor(date) keeps it correct when date ≠ viewDate.
@@ -471,8 +496,7 @@ export function getBlockSlots(blocks,date){
   // it is the direction that leaves the stored record alone for whoever comes to
   // repair it. An `allDay` block never reads `from`/`to` and is unaffected.
   return blocks.filter(function(bl){
-    if(bl.date!==date) return false;
-    return bl.allDay?true:(isReadableTime(bl.from)&&isReadableTime(bl.to));
+    return isReadableBlock(bl)&&bl.date===date;
   }).map(function(bl){
     var s=bl.allDay?h.open*60:toMins(bl.from);
     var e=bl.allDay?h.gridClose*60:toMins(bl.to);

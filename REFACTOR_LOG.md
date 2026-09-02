@@ -17876,3 +17876,45 @@ is flagged by the same rule while hiding the range from a reader.
 Commits 3 and 4 are green on build, test and `check:style` and red on lint; a
 bisect landing there gets a lint failure and this entry explaining it, which is
 more honest than a history that never had the mistake.
+
+### 6 · `/code-review` — the guard that covered one of two consumers
+
+Commit 2 put the malformed-block guard in `getBlockSlots` and said the sibling
+was closed. **It was not.** `TimelineView`'s `BlockBar` builds `dayBlocks` with a
+date filter alone and then calls `toMins(bl.from)` itself, so a block the app
+cannot read still threw — during RENDER, where React's contract unmounts the
+whole tree and v17.16.0's error boundary takes over. The placement path went
+safe and the day stayed unusable: the crash **moved somewhere worse** rather
+than closing, since a render throw kills the app where a placement throw killed
+one scan.
+
+That is the shape this repo keeps meeting — one rule, two consumers, kept in
+step by nothing (the settings-tab list, the five modal-visibility lists, the
+four dismissal Sets). So the predicate is now `isReadableBlock`, EXPORTED, and
+both sites read it; `tests/booking-logic.test.js` scans every file that hands a
+block's own `from`/`to` to `toMins` and fails if it has not heard of it. That
+guard was proven against the shipped code: reverted, it names
+`src/components/TimelineView.jsx` and nothing else.
+
+**Measured live, on DEV, on real data rather than argued.** A malformed block
+(`from: 2000`, `to: 2100`, table 3, today) was written straight into
+`tableBlocks` through the rev CAS, which the app's own writer cannot produce:
+
+| build | result |
+|---|---|
+| with the filter | day renders normally, BLOCKED bar for the *valid* block still drawn, no console error |
+| filter reverted (control) | `#root` replaced by **"MGT Bookings hit an error"** — the whole app |
+
+The block is deliberately left in the DEV database. It is a scratch database by
+policy, and it is now a standing fixture for exactly this regression.
+
+**Where the line falls, and why it is not "filter everywhere".** Only the
+consumers that COMPUTE with `from`/`to` filter on the predicate. `DaySheet` and
+`BlockModal` concatenate the two strings for display: they cannot crash, and
+`BlockModal` is the surface somebody uses to REMOVE the bad block, so hiding it
+there would take away the only repair. "An unreadable block is not a block" is a
+statement about scheduling, not about visibility.
+
+`!bl` is folded into the predicate because `TimelineView`'s filter dereferences
+`bl.date` too, so the shared version has to survive a null element that the old
+`getBlockSlots` filter would equally have thrown on.
