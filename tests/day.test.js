@@ -237,6 +237,40 @@ describe("stepDate — the arrows, when the date came from a booking", () => {
   });
 });
 
+// v17.16.11 (/code-review). `openNew` seeds the booking form's date from
+// `viewDate`, which can hold a booking's stored date verbatim — and the rules
+// pin refuses a malformed date on a CREATE, where the grandfather clause cannot
+// apply. The seed therefore uses `stepDate(d, 0) === d` as its canonical test.
+// This pins the property that idiom depends on, because it is not obvious and
+// `isReadableDate` is deliberately WIDER than it.
+describe("stepDate(d, 0) === d — the canonical-date test openNew relies on", () => {
+  it("is an identity for exactly the dates an <input type=date> can render", () => {
+    withTZ("Atlantic/Canary", () => {
+      let d = todayStr();
+      for (let i = 0; i < 60; i++) {
+        expect(stepDate(d, 0)).toBe(d);   // canonical in, same string out
+        d = addDays(d, 1);
+      }
+    });
+  });
+
+  it("is NOT an identity for a merely steppable date, which is the point", () => {
+    withTZ("Atlantic/Canary", () => {
+      // "2026-8-3" is readable and navigable, but it is not a canonical
+      // YYYY-MM-DD and it normalises to a DIFFERENT day. Assigning the step
+      // would put a date nobody chose into the form; comparing rejects it.
+      expect(isReadableDate("2026-8-3")).toBe(true);
+      expect(stepDate("2026-8-3", 0)).not.toBe("2026-8-3");
+    });
+  });
+
+  it("is NOT an identity for anything unsteppable", () => {
+    for (const d of ["", "31/08/2026", "not-a-date", "20260803"]) {
+      expect(stepDate(d, 0)).not.toBe(d);
+    }
+  });
+});
+
 describe("isReadableDate — defined as the operation it guards", () => {
   it("agrees with addDays about every input, in both directions", () => {
     // The contract: readable IFF addDays does not throw. Written as an

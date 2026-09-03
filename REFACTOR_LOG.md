@@ -18941,3 +18941,39 @@ untouched.
 
 Nothing from this version was added back: the navigation crash shipped in commit
 1 rather than becoming a new entry.
+
+### Commit 4 — /code-review fix: `openNew` must not seed a date the rules refuse
+
+**The one finding of the three that fails for a user**, and it exists because
+commits 1 and 2 met. Commit 1 deliberately KEEPS the search-jump that puts a
+booking's stored date into `viewDate` — the bad booking has to stay reachable to
+be repaired. Commit 2 made a malformed `date` illegal on a CREATE, where the
+grandfather clause structurally cannot apply. `openNew` sat between them,
+seeding the draft with `date: viewDate` verbatim.
+
+So: find a booking stored with `date: "31/08/2026"` in search, tap it, press
+**+ New**. The date field renders BLANK (an `<input type=date>` cannot display
+that string) while the draft holds it; `doSave`'s guard is `!f.date`, which a
+truthy `"31/08/2026"` passes; and the save is then refused by the server and
+parked. It flows on, too — `addFormToWaitlist` takes `date: f.date || viewDate`.
+
+**The seed is now the viewed date only when that is CANONICAL, else today**, and
+the test is `stepDate(viewDate, 0) === viewDate` rather than a fourth date
+predicate. A zero-day step returns a well-formed date or today, so it is an
+IDENTITY exactly for the dates an `<input type=date>` can render — and comparing
+rather than assigning is load-bearing: `"2026-8-3"` is readable and steppable but
+normalises to a DIFFERENT day, so assigning the step would put a date nobody
+chose into the form. Three tests pin that property (`tests/day.test.js`, 29 →
+32), because the idiom is not self-evident and `isReadableDate` is deliberately
+wider than it.
+
+`openEdit` is deliberately NOT given the same treatment: it must keep showing a
+malformed booking's own date, because carrying it through unchanged is what the
+grandfather clause permits and changing it in the form is the repair.
+
+**Verified live against the now-deployed DEV rules**, on the exact scenario:
+search-jump to the `"31/08/2026"` booking (nav date blank, so `viewDate` really
+was poisoned) → **+ New** → the form's date field reads `2026-09-03` → Save →
+the booking is on the server with `date: "2026-09-03"`, status `confirmed`, no
+parked write.
+

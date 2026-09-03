@@ -1762,7 +1762,23 @@ function BookingApp({uid}){
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  // v17.16.11 (/code-review): the seed is the viewed date only when that is a
+  // CANONICAL "YYYY-MM-DD", else today. `viewDate` is not always app-controlled
+  // — SearchPanel's onPick puts a booking's stored date into it verbatim, and
+  // that path is deliberately preserved so a malformed booking stays reachable
+  // for repair — and this version's rules pin refuses a malformed `date` on a
+  // CREATE, where the grandfather clause cannot apply. Without this the form
+  // showed a BLANK date field (an <input type=date> cannot render "31/08/2026")
+  // while the draft held the string, `doSave`'s `!f.date` guard passed it
+  // because it is truthy, and the save was rejected by the server and parked.
+  // It also flows on: `addFormToWaitlist` takes `f.date || viewDate`.
+  //
+  // `stepDate(d,0) === d` is the canonical test rather than a fourth date
+  // predicate: a zero-day step returns a well-formed date or today, so it is
+  // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
+  // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
+  // rather than assigning is what stops the form inventing a date nobody chose.
+  function openNew(){pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
   function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
