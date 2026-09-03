@@ -50,6 +50,7 @@ import { useRevealRows } from "../hooks/useRevealRows";
 // and the notification strip's Overlap section render the same `warnings` entry.
 import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
@@ -454,6 +455,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   ) : null;
 
   function onTouchStart(e) {
+    // v17.16.12: nothing in the document is selectable for the duration of this
+    // hold — see lib/holdSelection for why the at-rest `user-select` rule on
+    // controls could not be enough. Self-terminating on release, so there is no
+    // matching call here or on any of the four other paths out of a hold.
+    beginHold();
     didLong.current = false;
     const t = e.touches[0];
     touchStartPos.current = { x: t.clientX, y: t.clientY };

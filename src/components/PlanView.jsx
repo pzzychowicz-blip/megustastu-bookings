@@ -36,6 +36,7 @@ import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, IC, RIM_SOLID } from "..
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { beginHold } from "../lib/holdSelection";
 import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
 import { mkBtn, Reveal, SBadge } from "./atoms";
@@ -318,6 +319,7 @@ export const PlanView = memo(function PlanView({
   // touch long-press → quick status (RMB parity for tablets, the timeline's 400ms).
   function startPress(id) {
     clearPress();
+    beginHold();   // v17.16.12 — see lib/holdSelection
     pressRef.current = setTimeout(() => {
       pressRef.current = null;
       const b = targetBookingFor(id);

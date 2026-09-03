@@ -19139,3 +19139,46 @@ record is real, and `seated` is the only one the app takes back.
 **Verified live, both directions.** On 2026-09-02 the popup offers
 `["Confirmed","Cancelled"]`; on 2026-09-03 it still offers
 `["Seated","Completed","Cancelled"]` plus No show. Suite 828 → 832.
+
+### Commit 4 — the OS selection callout during our own hold
+
+Holding a timeline block on the iPhone raised WebKit's selection UI — handles
+plus a **Kopiuj / Sprawdź / Tłumacz** bar — on top of the quick-status popup.
+v17.10.1 had already met this on Android and answered it with `user-select:
+none` on CONTROLS (`button, [role="button"]` in `index.css`, plus the block and
+the popup card inline). That is the right at-rest rule, and its own comment
+said "iOS does not show this today, but nothing prevented it".
+
+**It is not enough, and the screenshot is why: the selection did not land on the
+element under the finger.** It landed in the HEADER, a thousand pixels from the
+block being held. Which node WebKit picks when a long-press begins on
+unselectable content is not something this app can predict — so naming one more
+node would have been a guess, and CLAUDE.md rules out the other obvious move
+(widening the rule to a container) because the List card's phone number must
+stay copyable: staff select it to ring a party.
+
+So the guard is scoped by **time** instead of by element. `lib/holdSelection`'s
+`beginHold()` puts `data-holding` on `<html>` for the duration of one of OUR
+holds, and `html[data-holding] *` makes the whole document unselectable while it
+is there. At rest nothing changes at all.
+
+**Measured in the browser**: the `<h1>` computes `user-select: auto` before a
+hold, `none` during one, and `auto` again after the release — so selectability
+returns exactly as it was, which is the property the phone-number exception
+needs. `beginHold` is **self-terminating** (capture-phase `once` listeners for
+pointerup / pointercancel / touchend / touchcancel, plus a 3s backstop), because
+a hold has five exits per surface and an attribute stuck on `<html>` would leave
+the whole app permanently unselectable — a worse bug than the one being fixed.
+It also clears any range the gesture already made, since making things
+unselectable does not dismiss a selection that already exists.
+
+Wired at the three hold sites: `TimelineBlock`'s `onTouchStart`, `PlanView`'s
+`startPress`, `ViewSwitcher`'s `startPress`. `html[data-holding] *` joins
+`tests/stylesheet.test.js`' CRITICAL_SELECTORS — remove the rule and `beginHold`
+still sets the attribute while nothing whatsoever happens, which is that list's
+entry criterion exactly.
+
+**Not verified on the device.** The callout is a UA behaviour and no synthetic
+press can raise it — CLAUDE.md's own recorded lesson. What is verified is the
+mechanism: the attribute goes on, the computed style flips, both come back.
+Whether iOS still finds something to select needs the phone.
