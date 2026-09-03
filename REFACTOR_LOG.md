@@ -19066,3 +19066,41 @@ single frame, so `endDrag` cancels that rAF before it runs — the synthetic dra
 never lifts the block at all. A real drag spans hundreds of milliseconds and many
 frames. So the misdrawn half rests on control flow and on the device report, not
 on a reproduction, and the `didLong` half is the one that was reproduced.
+
+### Commit 2 — a hold-opened popup ignores the press that opened it
+
+`QuickStatusPopup` mounts at 400ms into a press-and-hold, as a viewport-CENTRED
+card portalled to `<body>`, while the finger is still down. Whatever ends up
+under that finger is something nobody aimed at, and the release lands on it: on
+the scrim, whose only job is `onClose`, so the popup closes itself the instant it
+appears; or on one of its own buttons, so a status change or the cancel-booking
+confirm fires from a gesture meant only to OPEN the menu.
+
+**Both faces are in the 15s iPhone recording, 0.1s frames.** At t=2.0s a popup
+opened on Beatriz and was gone by t=2.3s with nothing changed. At t=3.8s a popup
+opened on Rachel and the "Cancel booking?" confirm was already up at t=4.0s —
+200ms, faster than a person can read a card and aim at a button.
+
+**v17.10.1 had recorded this exact shape on Android** and fixed only the
+SELECTION half of it (the OS text-selection landing on the popup's button
+labels). The ACTIVATION half was left, and it is the half that changes a booking.
+
+New `src/hooks/useArmAfterRelease.js`: the surface is inert until the pointer
+that opened it has been released. Not a delay — the release itself is the signal,
+so a 300ms hold and a 3s hold behave identically. Listeners are capture-phase
+(the card calls `stopPropagation`), `pointerdown` is included because a new press
+means the opening one is long over, and the 2s timeout is a pure backstop against
+a surface that could otherwise stay inert forever.
+
+**`SplitMenu` takes the same hook**, not a copy of the logic: it is
+QuickStatusPopup's shell opened by the same 450ms hold, and it had the same
+defect. The scrims of both also gained the `user-select`/`touch-callout`
+suppression the CARDS have carried since v17.10.1 — the scrim is what the finger
+is on for most of the screen when a centred card appears under a hold, and a
+scrim is never a copy target.
+
+**Verified in the browser for regressions only** — right-click opens the popup,
+a scrim click closes it, and "Seated" applies the status and closes it (the
+booking went confirmed → seated with the seated-shift moving 13:00 → 14:02).
+The BLOCKING half cannot be exercised by browser automation, which cannot hold a
+press across frames; it needs the device.

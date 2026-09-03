@@ -20,9 +20,16 @@
 
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
+import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { NoShowIcon, StatusIcon } from "./Icons";
 
 export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
+  // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
+  // so the finger that opened it is sitting on the card it just conjured. Until
+  // that finger lifts, every control here is inert — see useArmAfterRelease for
+  // the measurements. Hooks run before the early return below, which is why
+  // this line is above it and not beside the other consts.
+  const armed = useArmAfterRelease();
   if (!booking) return null;
   // v17.0.0 correction: portalled to <body>. The popup mounts inside SlideView,
   // whose transform (while a view-slide runs/settles) turns this position:fixed
@@ -30,12 +37,16 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
   // on the scroller, not the screen. A body portal always centers on the viewport.
   return createPortal(
     <div
-      onClick={onClose}
+      onClick={() => { if (armed) onClose(); }}
       className="mgt-scrim-in"
       style={{
         position: "fixed", inset: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--tl-popup-scrim)"
+        background: "var(--tl-popup-scrim)",
+        // v17.16.12: the card below has carried these since v17.10.1; the SCRIM
+        // had not, and it is what the finger is on for most of the screen when
+        // a centred card appears under a hold. A scrim is never a copy target.
+        WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none"
       }}
     >
       <div
@@ -81,6 +92,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                   display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
                 }}
                 onClick={() => {
+                  if (!armed) return;
                   onStatus(booking.id, st);
                   onClose();
                 }}
@@ -100,6 +112,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
               }}
               onClick={() => {
+                if (!armed) return;
                 onNoShow(booking.id);
                 onClose();
               }}

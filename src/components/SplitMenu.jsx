@@ -29,6 +29,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { S, R, T, FW, IC } from "../lib/constants";
+import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { mkBtn } from "./atoms";
 import { SplitSideIcon, SplitStackIcon } from "./Icons";
 
@@ -43,6 +44,12 @@ const ORDER = ["timeline", "list", "plan"];
 export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
   const [step, setStep] = useState(1);   // 1 = direction, 2 = second view
   const [dir, setDir] = useState(null);
+  // v17.16.12: opened by a 450ms press-and-hold on a view button, as a centred
+  // card — so the finger that opened it is on the card, and its release would
+  // otherwise pick a direction or dismiss the menu. Inert until that release.
+  // Same defect and same fix as QuickStatusPopup, which this shell is copied
+  // from; the two share the mechanism rather than each carrying a copy of it.
+  const armed = useArmAfterRelease();
   if (!view) return null;
 
   const others = ORDER.filter((v) => v !== view);
@@ -63,12 +70,13 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
 
   return createPortal(
     <div
-      onClick={onClose}
+      onClick={() => { if (armed) onClose(); }}
       className="mgt-scrim-in"
       style={{
         position: "fixed", inset: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",
         background: "var(--tl-popup-scrim)",
+        WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none"
       }}
     >
       <div
@@ -89,16 +97,16 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
           <div style={row}>
             <button className={noSide ? "mgt-nopress" : "mgt-hover-scale"} disabled={noSide}
               style={dirBtn({ background: "var(--app-btn-grey)", ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
-              onClick={() => { if (!noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
+              onClick={() => { if (armed && !noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
             <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { setDir("h"); setStep(2); }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
+              onClick={() => { if (armed) { setDir("h"); setStep(2); } }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
           </div>
         ) : (
           <div style={row}>
             {others.map((v) => (
               <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
                 style={btn({ background: S.accent, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
-                onClick={() => { if (!tlBlocked(v)) onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); }}>{LABEL[v]}</button>
+                onClick={() => { if (armed && !tlBlocked(v)) onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); }}>{LABEL[v]}</button>
             ))}
           </div>
         )}
