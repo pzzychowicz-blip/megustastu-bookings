@@ -92,8 +92,30 @@ export function seedSampleBookings(ctx) {
   });
   return added;
 }
+// The sample bookings' ids all start with this, and that is what identifies them
+// — NOT the `_waSim` flag they also carry.
+//
+// `_waSim` is not in `sanitize`'s whitelist (booking-logic.js), so it is stripped
+// on every READ. It is written to Firebase and never comes back, which made
+// `prev.filter(b => !b._waSim)` a filter on a field that is always undefined:
+// it kept every row and cleared nothing, silently, from the first echo onwards.
+// The id survives because `sanitize` keeps `id` — so it is the marker that
+// actually exists on the data this has to match.
+//
+// Whitelisting `_waSim` was the alternative and is worse: it edits a SHARED prod
+// file to teach the production sanitiser about a sandbox-only field, and it
+// still would not match the rows already sitting in the database.
+const WA_SIM_ID_PREFIX = "wasim";
+export function isWaSimBooking(b) {
+  return !!b && (b._waSim === true || String(b.id || "").startsWith(WA_SIM_ID_PREFIX));
+}
 export function clearWaSimBookings(ctx) {
-  ctx.saveBookings((prev) => prev.filter((b) => !b._waSim));
+  ctx.saveBookings((prev) => {
+    const next = prev.filter((b) => !isWaSimBooking(b));
+    // Identity contract (v17.14.0): a pass that removes nothing returns its
+    // INPUT, so the caller's diff sees no change and skips the write.
+    return next.length === prev.length ? prev : next;
+  });
 }
 
 // Passthrough for the custom-message form / console __waSim.custom().

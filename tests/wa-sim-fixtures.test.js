@@ -79,3 +79,27 @@ describe("WA-SIM sample bookings are seedable without breaking the app", () => {
     expect(new Set(s.map((b) => b.id)).size).toBe(s.length);
   });
 });
+
+describe("clearWaSimBookings identifies the samples by something that survives a read", () => {
+  it("matches a sample row that has been through sanitize (no _waSim left)", async () => {
+    const { isWaSimBooking } = await import("../src/lib/wa-sim-scenarios.js");
+    const { sanitize } = await import("../src/lib/booking-logic.js");
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-10T12:00:00Z"));
+    const samples = sampleBookings();
+    vi.useRealTimers();
+    // What the app actually holds: the row as it comes back from Firebase.
+    const readBack = samples.map(sanitize);
+    expect(readBack.every((b) => b._waSim === undefined),
+      "if sanitize ever starts keeping _waSim this test is measuring the wrong " +
+      "thing — the point is that it does NOT").toBe(true);
+    expect(readBack.every(isWaSimBooking),
+      "clearWaSimBookings must still recognise its own rows after a round trip, " +
+      "or 'clear sample bookings' silently does nothing").toBe(true);
+  });
+
+  it("does not match an ordinary booking", async () => {
+    const { isWaSimBooking } = await import("../src/lib/wa-sim-scenarios.js");
+    expect(isWaSimBooking({ id: "mtlx64005nmd", name: "Ariadna Puig" })).toBe(false);
+    expect(isWaSimBooking(null)).toBe(false);
+  });
+});
