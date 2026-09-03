@@ -960,7 +960,15 @@ function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
               A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself. Only bookings completed from now on are affected.
             </div>
           </div>
-          <Toggle on={autoArchive} onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
+          {/* v17.15.4's rule, reaching the module at the 17.16.12 sync: a control
+              with no text content has NO name. The label is the visible heading
+              verbatim — a paraphrase would replace a name a voice-control user
+              can say with one that matches nothing on screen. The STATE is
+              aria-checked's job and must never be in the name. */}
+          <Toggle
+            label="Archive when the booking is completed"
+            on={autoArchive}
+            onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
         </div>
       </Collapsible>
     </div>

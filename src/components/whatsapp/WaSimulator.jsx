@@ -40,6 +40,13 @@ export function WaSimulator({ ctx, onClose }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // The heading this switch controls. Declared ONCE and used as both the
+  // visible text and the accessible name, so the name can never paraphrase the
+  // label it is supposed to repeat (v17.15.4's Label-in-Name rule).
+  const backendLabel = import.meta.env.DEV
+    ? "Backend mode (local Phase-1b pipeline)"
+    : "Live pipeline (server Gemini)";
+
   function toggleBackend() {
     const next = !backendOn;
     setBackendEnabled(next);
@@ -163,7 +170,7 @@ export function WaSimulator({ ctx, onClose }) {
       <Section>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>{import.meta.env.DEV ? "Backend mode (local Phase-1b pipeline)" : "Live pipeline (server Gemini)"}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)" }}>{backendLabel}</div>
             <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 2 }}>
               {backendOn
                 ? (import.meta.env.DEV
@@ -174,7 +181,7 @@ export function WaSimulator({ ctx, onClose }) {
                 : "OFF — scenarios write Firebase client-side (canned parses, no Gemini)."}
             </div>
           </div>
-          <Toggle on={backendOn} onClick={toggleBackend} />
+          <Toggle label={backendLabel} on={backendOn} onClick={toggleBackend} />
         </div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)" }}>{import.meta.env.DEV
           ? "ON: scenarios POST a Meta-shaped webhook to /api/wa-inbound (server parses — pre-baked drafts/links don't apply) and replies go through /api/wa-send."
