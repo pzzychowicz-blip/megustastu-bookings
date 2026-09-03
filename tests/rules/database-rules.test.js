@@ -856,6 +856,32 @@ describe("field shapes are validated (v17.16.1)", () => {
       await assertFails(writeBooking(staff(), "legacy", edit({ date: "01/09/2026" })));
     });
 
+    // THE COST OF THE CLAUSE, pinned so it reads as a decision rather than an
+    // oversight. A CREATE has no `data`, so the grandfather arm is unreachable
+    // there by construction — which means re-INTRODUCING a malformed value is
+    // refused even when it is a restoration of something that existed.
+    //
+    // The reachable path is undo-of-delete: `applyUndo` re-concats the snapshot,
+    // `persist` diffs a `prev` without the child against a `computed` with it,
+    // and `stampForWrite` has no `old` so it writes `baseUpdatedAt: 0`. The
+    // restore is refused, retried, and parked with Retry/Discard (v17.16.9) —
+    // visible and recoverable, not silent. Accepted: the alternative is either
+    // no pin at all, or normalising in `sanitize`, which would rewrite stored
+    // data and is the decision v17.16.5 explicitly declined.
+    //
+    // The array->keyed migration is the same shape (every row `baseUpdatedAt:0`)
+    // and is noted at that site in usePersistence.js.
+    it("refuses a RE-CREATE of a deleted malformed booking — undo's cost", async () => {
+      await seed((db) => db.ref("bookings/gone").set(stored({ date: "31/08/2026" })));
+      await assertSucceeds(staff().ref("bookings").update({ gone: null }));   // the delete
+      // Undo: same id, same fields, but now a create — baseUpdatedAt 0, no `data`.
+      await assertFails(writeBooking(staff(), "gone",
+        booking({ date: "31/08/2026", updatedAt: 7000, baseUpdatedAt: 0 })));
+      // The same undo of a WELL-FORMED booking is unaffected.
+      await assertSucceeds(writeBooking(staff(), "gone2",
+        booking({ date: "2026-08-31", updatedAt: 7000, baseUpdatedAt: 0 })));
+    });
+
     it("refuses a malformed value on a booking that had a valid one", async () => {
       await seed((db) => db.ref("bookings/ok").set(stored({ date: "2026-09-01" })));
       await assertFails(writeBooking(staff(), "ok", edit({ date: "31/08/2026" })));

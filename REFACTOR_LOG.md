@@ -18977,3 +18977,34 @@ was poisoned) → **+ New** → the form's date field reads `2026-09-03` → Sav
 the booking is on the server with `date: "2026-09-03"`, status `confirmed`, no
 parked write.
 
+### Commit 5 — /code-review: the create-path cost of the clause, recorded
+
+Two findings, one shape: the grandfather arm is unreachable on a CREATE **by
+construction** (a create has no `data` to match against), so re-introducing a
+malformed value is refused even when it is a restoration. Neither is a code
+defect and neither is fixed by changing behaviour — the alternatives are no pin
+at all, or normalising in `sanitize`, which rewrites stored data and is the
+decision v17.16.5 explicitly declined. What was missing was any record that the
+cost had been weighed.
+
+**Undo of a delete** is the reachable path. `applyUndo` re-concats the snapshot,
+`persist` sees a child that was absent and is now present, `stampForWrite` has no
+`old` and writes `baseUpdatedAt: 0`. Undoing the deletion of a malformed booking
+is therefore refused, retried and parked with Retry/Discard — visible and
+recoverable. Now pinned by a rules test that asserts both halves: the malformed
+re-create fails, and the same undo of a well-formed booking still succeeds.
+
+**The array→keyed migration** is the same shape, and its comment in
+`usePersistence.js` had stopped being true. It reasons that `sanitizeAll` leaves
+the rows "type-correct" and that only "one row the rules dislike" rejects the
+atomic patch — which BOUNDED the hazard while the rules checked type alone.
+Format is not normalised by `sanitize` (`b.date || ""`, `b.status ||
+"confirmed"`), and every row of that patch is a create, so the bound is gone.
+Unreachable in practice (the branch is `Array.isArray`-gated; PROD and DEV have
+been keyed since v15.5.0), so nothing observable changes — but the paragraph
+reads as a guarantee and had stopped being one, which is the class of defect
+v17.16.10 was entirely about.
+
+Rules suite 126 → 127; `npm test` 828. `database.rules.README.md` gains a "What
+the clause costs, and where" section naming both paths.
+

@@ -100,7 +100,7 @@ the moment somebody names the project.
 
 ### What the suite asserts
 
-126 tests as of v17.16.11, run on every PR by the `rules` job in
+127 tests as of v17.16.11, run on every PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
 the rig itself is pointed at a loopback emulator and a `demo-` project — and,
 since v17.16.7, that the root carries **no** `.write` key, which is asserted as
@@ -169,7 +169,7 @@ not need to be.
 
 ### What the suite proves
 
-121 → 126 tests. The two deliberate-acceptance entries (`"an unknown status"`,
+121 → 127 tests. The two deliberate-acceptance entries (`"an unknown status"`,
 `"a malformed date"`) and the `"accepts a badly FORMATTED … date and time"` test
 were **inverted with the rules**, in this file's established convention, not
 weakened. Both halves were proven against a sabotaged build:
@@ -181,6 +181,30 @@ weakened. Both halves were proven against a sabotaged build:
 
 That matters because the doubled-looking predicate is exactly what a later
 reader would "simplify".
+
+### What the clause costs, and where
+
+A CREATE has no `data`, so the grandfather arm is unreachable there **by
+construction** — re-introducing a malformed value is refused even when it is a
+restoration of something that existed. Two paths reach that, and both are
+accepted rather than overlooked:
+
+- **Undo of a delete.** `applyUndo` re-concats the snapshot, `persist` sees a
+  child that was absent and is now present, and `stampForWrite` writes
+  `baseUpdatedAt: 0`. Undoing the deletion of a malformed booking is therefore
+  refused, retried, and parked with Retry/Discard (v17.16.9) — visible and
+  recoverable, not silent. Pinned by *"refuses a RE-CREATE of a deleted
+  malformed booking — undo's cost"*.
+- **The lazy array→keyed migration** (`usePersistence.js`), whose every row
+  carries `baseUpdatedAt: 0`. A legacy array node holding one malformed row
+  would have the whole atomic patch refused, and `arrayShapeRef` holds every
+  booking write meanwhile. Unreachable — the branch is `Array.isArray`-gated and
+  both PROD and DEV have been keyed since v15.5.0 — and recorded in the comment
+  at that site, which until v17.16.11 reasoned that `sanitizeAll` bounded this.
+
+The alternative to both is normalising in `sanitize`, which would rewrite stored
+data on the next save — the decision v17.16.5 explicitly declined ("normalising
+a record that renders is a different decision").
 
 ### Deployment — app first, rules second
 
