@@ -266,16 +266,26 @@ export function InboxPanel({
         setActiveKey(list[next].phoneKey);
         return;
       }
-      // Letter shortcuts (ignore when a modifier is held so browser combos pass
-      // through). SHIFT is one of them, and leaving it out was a bug: none of
-      // the shortcuts below is a shift-combo, but the APP has some — Shift+D is
-      // the theme toggle, and it is deliberately checked ABOVE the global
-      // handler's `anyModal` early return so it keeps working over any modal,
-      // this panel included. Two window listeners, so `preventDefault` here
-      // does not stop the other one: Shift+D toggled the theme AND dismissed
-      // the open draft, and only the theme change looked intentional.
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      // Ignore when a modifier is held so browser combos pass through.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
+      // SHIFT belongs here too, but ONLY for the single-letter shortcuts.
+      //
+      // Why it belongs: none of the letters below is a shift-combo, but the APP
+      // has some — Shift+D is the theme toggle, deliberately checked ABOVE the
+      // global handler's `anyModal` early return so it keeps working over any
+      // modal, this panel included. These are two separate window listeners, so
+      // `preventDefault` here does not stop the other one: Shift+D toggled the
+      // theme AND dismissed the open draft.
+      //
+      // Why ONLY letters, which the first version of this fix got wrong: on a
+      // SPANISH keyboard — which is what the restaurant uses — "/" is Shift+7,
+      // and on a German one likewise. A blanket `e.shiftKey` bail therefore
+      // killed the "/" search shortcut for exactly the people this app is for,
+      // while testing perfectly on a US layout. A shifted NON-letter is just
+      // how that character is typed; a shifted letter is a combo aimed
+      // elsewhere.
+      if (e.shiftKey && /^[a-z]$/.test(k)) return;
       // The active conversation's PENDING new_booking draft enables A=Accept / D=Dismiss.
       const ac = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
       const draftPending = !!(ac && ac.draftStatus === "parsed" && ac.draftData && (ac.draftData.intent || "new_booking") === "new_booking");

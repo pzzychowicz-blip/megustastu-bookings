@@ -91,13 +91,15 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
   // its own state; only fires when not typing in an input/textarea).
   useEffect(() => {
     function onKey(e) {
-      // Shift belongs in this list for the same reason as InboxPanel's — see the
-      // note there. Neither of the two shortcuts below is a shift-combo, so a
-      // held Shift can only ever mean the key was meant for something else.
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const k = e.key.toLowerCase();
+      // Letters only, for the same two reasons as InboxPanel's copy — see the
+      // note there. Both shortcuts here happen to BE letters, so the narrower
+      // test costs nothing today and stops the next non-letter shortcut added
+      // to this handler from being silently unreachable on a Spanish keyboard.
+      if (e.shiftKey && /^[a-z]$/.test(k)) return;
       if (k === "e") { e.preventDefault(); setTplOpen((v) => !v); }
       // C → focus the reply box (no-op when the window is closed / disabled).
       else if (k === "c" && !disabled && areaRef.current) { e.preventDefault(); areaRef.current.focus(); }
