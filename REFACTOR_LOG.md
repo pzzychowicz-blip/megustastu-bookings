@@ -19366,3 +19366,44 @@ exactly the equal-count churn) fails 1.
 
 `npm test` 842 → 847. `ROADMAP.md`'s Deferred section is now empty. `CLAUDE.md`
 gains the child-key identity rule and has its drifted test count corrected.
+
+### Commit 4 — `/code-review` fix: the gate discarded placement progress
+
+Commit 3's measure was the clash count alone, and that was too narrow in a way
+the tests written with it could not see.
+
+A day whose clash is **unresolvable** — two `_locked` bookings on one table,
+which every walk-in and every drag-drop path can produce — rejected the *whole*
+pass, including the tables `applyOpt` had just found for a **different**,
+unplaced booking. Placing it does not change the clash count, so the gate threw
+it away, on that pass and on every pass after it. Measured, three bookings, one
+future date: without the gate the unplaced booking goes `[] → ["1A"]`; with the
+clash-only gate it stays `[]` forever.
+
+A duration extension lost the same way costs nothing — the auto-extend effect
+(`usePersistence.js`, line ~859) writes those itself. **Placement has no other
+writer**, so that one was a silent loss of a booking's table.
+
+The measure is now `badness(list,date)` = `[clashes, unplaced]`, compared
+**lexicographically**. Both entries are non-negative integers and neither can
+grow to offset the other, so the descent is still well-founded and the
+termination guarantee is unchanged. Clashes dominate deliberately: `applyOpt`
+genuinely leaves a booking unplaced when the day is over-full, and resolving a
+double-booking is this effect's entire purpose — a *summed* measure would refuse
+to separate two parties sharing a table in order to protect a table assignment.
+That distinction is now pinned, because the summed variant passed every other
+test in the file.
+
+**Outcome comparison, gate vs no gate**, 382 dirty days per branch: `resolved
+better 328 / 328`, `ended worse 0 / 0`, `non-terminating 0 / 0`, `unplaced
+regressed 0 / 0` — identical. The guarantee costs nothing in resolution quality.
+
+Proven against three sabotages: clash-count-only fails 1 of 19, no gate at all
+fails 4, a summed measure fails 1.
+
+Renamed `reducesClashes` → **`improvesDay`** in the same commit. After the
+widening it returned true for a pass that only places a booking, so the old name
+contradicted its own behaviour — the `hourLabel`/`cutoffLabel` lesson in
+reverse, and the kind of name that is read rather than checked.
+
+`npm test` 847 → 851.

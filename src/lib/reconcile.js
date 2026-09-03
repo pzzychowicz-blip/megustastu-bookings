@@ -22,12 +22,26 @@
 // (onValue/resync) stores merged data verbatim with no optimiser pass, so the
 // overlap persists until a later edit happens to re-run it.
 import { verifyClean, findConflicts, optimizerActiveFor, bookingsAfterAction,
-         dayBookingsSig, isLocked } from "./booking-logic";
+         dayBookingsSig, isLocked, isActive } from "./booking-logic";
 
-// v17.16.13: how many bookings on `date` are still in a clash. `findConflicts`
-// and `verifyClean` share one pair scan (`clashScan`), so this is the same
-// question `dirtyDates` asks, counted instead of thresholded.
-function clashCount(list,date){ return findConflicts(list,date).length; }
+// v17.16.13: how bad `date` still is, as a pair of counts that a pass must
+// walk DOWNWARD. `findConflicts` and `verifyClean` share one pair scan
+// (`clashScan`), so the first is the same question `dirtyDates` asks, counted
+// instead of thresholded; the second is how many active bookings still have no
+// table at all.
+//
+// The second count is not decoration — it is a `/code-review` fix. With clashes
+// alone, a day whose clash is UNRESOLVABLE (two `_locked` bookings on one
+// table, which every walk-in and drag-drop can produce) rejected the whole pass
+// — including the tables it had just found for a DIFFERENT, unplaced booking.
+// Measured: `u` goes from `[]` to `["1A"]` without the gate and stays `[]` with
+// it, on every pass, forever. A duration extension lost the same way costs
+// nothing (the auto-extend effect writes those itself), but placement has no
+// other writer, so that one was a silent loss of a booking's table.
+function badness(list,date){
+  return [ findConflicts(list,date).length,
+           list.filter(function(b){return b&&b.date===date&&isActive(b)&&(b.tables||[]).length===0;}).length ];
+}
 
 // Every date from today onward that has assigned tables and fails verifyClean.
 // Computed against the CURRENT snapshot; the resolution below runs against
@@ -51,10 +65,12 @@ export function dirtyDates(bookings,today){
 // branch could exit on its 20-iteration guard with the day still dirty. Both
 // write, both come back.
 //
-// So a date's pass is now accepted only if the number of bookings still in a
-// clash STRICTLY DECREASED. That count is a non-negative integer, so it can
-// decrease finitely many times: the loop terminates no matter what the
-// placement heuristics do, which is the property a tie-break cannot give you.
+// So a date's pass is now accepted only if it walks `badness(list,date)`
+// DOWNWARD — fewer bookings in a clash, or the same number in a clash and
+// fewer with no table at all. Both are non-negative integers and neither can
+// grow to offset the other, so the descent is well-founded: the loop
+// terminates no matter what the placement heuristics do, which is the property
+// a tie-break cannot give you.
 // A pass that merely swaps two equally-valid arrangements is discarded, and the
 // date is left honestly dirty rather than churned.
 //
@@ -68,9 +84,19 @@ export function dirtyDates(bookings,today){
 // It is deliberately not "accept only a CLEAN result": a partial fix is real
 // progress the restaurant wants (three clashes down to one), and demanding
 // perfection would discard it and leave all three.
-export function reducesClashes(before,after,date){
+// Named for what it ANSWERS, not for the first half of how it answers it: a
+// pass that places an unplaced booking without touching a clash returns true,
+// so `reducesClashes` (its name until the /code-review that widened the
+// measure) would have been a name contradicting its own behaviour — the
+// `hourLabel`/`cutoffLabel` lesson, in reverse.
+export function improvesDay(before,after,date){
   if(after===before) return false;
-  return clashCount(after,date)<clashCount(before,date);
+  const a=badness(before,date), b=badness(after,date);
+  // Lexicographic descent. Both entries are non-negative integers and neither
+  // can grow to compensate for the other, so the sequence is well-founded and
+  // the effect terminates whatever the placement heuristics do — which is the
+  // property a tie-break cannot give you.
+  return b[0]!==a[0] ? b[0]<a[0] : b[1]<a[1];
 }
 
 // Resolve `dirty` against `prev`. Returns {next, changed}.
@@ -103,10 +129,10 @@ export function reconcile(prev,dirty,blocks,autoOptimizer){
       // also runs `syncLiveDurations`, which can extend a seated party's
       // duration TODAY while iterating a future date, and that is a change on a
       // date this iteration is not about.
-      // v17.16.13: `reducesClashes` is the third gate, after identity and the day
+      // v17.16.13: `improvesDay` is the third gate, after identity and the day
       // signature. The signature says the day MOVED; only the clash count says
       // it moved in the right direction.
-      if(after!==next&&dayBookingsSig(after,d)!==dayBookingsSig(next,d)&&reducesClashes(next,after,d)){next=after;changed=true;}
+      if(after!==next&&dayBookingsSig(after,d)!==dayBookingsSig(next,d)&&improvesDay(next,after,d)){next=after;changed=true;}
     }else{
       // Optimiser OFF (manual mode, today after the cutoff): relocate ONLY the
       // newest non-locked conflicting booking, leaving manual arrangements
@@ -131,7 +157,7 @@ export function reconcile(prev,dirty,blocks,autoOptimizer){
         // v17.16.13: a relocation that does not reduce the clash count is not a
         // fix — it is the same day, rearranged. Stop rather than write it and
         // be handed it back on the next snapshot.
-        if(!reducesClashes(next,after,d)) break;
+        if(!improvesDay(next,after,d)) break;
         next=after;
         changed=true;
       }
