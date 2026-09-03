@@ -573,9 +573,13 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
 
 §2–§9 govern the moment work is about to land in `src/` with intent to ship — pure
 exploration, reading code, or "how does X work" needs none of the branch/PR machinery.
-**§0 and §1 are the exceptions**: the bootstrap is cheap by design, and the effort
-check belongs to plan mode whatever the plan turns out to be. The two governing rules
-at the top apply everywhere, always.
+**§0 and §1 are the exceptions**, with one part-exception inside §0. Its *checks* —
+the version-vs-REFACTOR_LOG read, the merged-PR default, the phrasing cues — are cheap
+by design and always run. Its *tools* are not: starting a dev server and a preview
+bridge for "how does X work" buys nothing, which is why §0 itself says planning,
+exploration and doc work may let the pair wait until edits begin. §1's effort check
+belongs to plan mode whatever the plan turns out to be. The two governing rules at the
+top apply everywhere, always.
 
 **Tooling-only changes** (`.claude/` skills/settings/hooks, CI config, this file) that
 never touch `src/` get no `__APP_SIGNATURE__` bump and no REFACTOR_LOG entry — those
