@@ -1,10 +1,10 @@
 ---
 name: mgt-workflow
-version: 4
-description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — session bootstrapping, plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. Also triggers on "/code-review, fix all findings, push and sum up the thread" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn), "/code-review and push", "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+version: 5
+description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
-# MGT Bookings — workflow contract (v4)
+# MGT Bookings — workflow contract (v5)
 
 Patryk is the sole developer and sole merger of this repo. This skill exists so its
 conventions get *applied* consistently, not re-explained every session. If anything
@@ -22,12 +22,45 @@ backed by something you ran, read or measured, and the report names it. This rep
 hardest-won lessons are all this shape: a synthetic `:active` press that measured the
 tooling rather than the app, an accessible name read out of an automation tree instead
 of computed by the browser, a perf fix aimed at a component that measured as noise, a
-crash-test finding withdrawn once StrictMode was off. Reasoning that *sounds* right is
-how each of those shipped. The two rules are not in tension — verifying first is what
-makes the questions you do ask real ones, and it is what keeps §5's one-run ship gate
-from turning "fix all findings" into "comply with all findings".
+crash-test finding withdrawn once StrictMode was off, a lint run read through `tail`
+that reported "0 errors" over an error. Reasoning that *sounds* right is how each of
+those shipped. The two rules are not in tension — verifying first is what makes the
+questions you do ask real ones, and it is what keeps §5's one-run ship gate from
+turning "fix all findings" into "comply with all findings".
 
-## 0. Session bootstrap — do you need last session's context?
+## 0. Session bootstrap
+
+### Bring the tools up first
+
+`npm run dev` (DEV Firebase — never `npm run preview`) **and** the Preview bridge
+(`preview_start` on the dev URL — the bare tool name, because the `mcp__<server>__`
+prefix is harness config that differs between sessions, and a stale one fails at the
+first instruction of the first step). CLAUDE.md asks for the pair at the start of
+*every* coding session, not only visual ones, and the reason is the second governing
+rule: with them up, any change can be checked live before it's called done;
+without them, "it should work" is the best sentence available. Tell him the localhost
+URL. Pure planning, exploration or doc work can let the pair wait until edits begin —
+but "I'll start it if I turn out to need it" is how a session ends with an unverified
+claim in it.
+
+**In a worktree, `preview_start` serves the MAIN checkout, not the one you're editing**
+(memory: `preview-server-worktree-prefix.md`). `npm --prefix` does *not* fix it — the
+launch config needs `sh -c "cd <worktree> && npm run dev"`, and a cache-busted fetch is
+what proves you're looking at the right tree rather than at main's.
+
+### Assume the previous PR merged
+
+A new session means the last version went out, unless the opening prompt says
+otherwise. He starts a session after finishing a unit of work, so a turn spent asking
+"did that merge?" is a turn spent on something he already knows — this is the
+session-start twin of the `sum up this thread` default (§9, memory
+`sum-up-thread-implies-merged.md`).
+
+It's a **default, not a belief**. §2's `gh pr list --state open --base main` is one
+command and settles it for real, so the rule is *don't spend a turn asking* — not
+*don't check*. Where the check and the default disagree, the check wins.
+
+### Do you need last session's context?
 
 CLAUDE.md is auto-loaded fresh into every session, so it is never stale as a *file* —
 but it can be **silent about unfinished business**: a decision made, a plan agreed, a
@@ -96,7 +129,7 @@ the task actually needs, and compare. Both mismatches matter, in both directions
 **Every plan ends with an effort handoff** as its final section — both lines, always:
 
 ```
-**Effort** — execute at `high` · `/code-review, fix all findings, push and sum up the thread` at `medium`
+**Effort** — execute at `high` · `/code-review and ship` at `medium`
 ```
 
 Executing an agreed plan is usually a step below the research that produced it: the
@@ -185,9 +218,9 @@ exactly once.
 
 ## 5. The ship checklist
 
-Set the branch up once, commit each change separately, ship the branch out in one run.
-Don't skip a step because it "doesn't apply this time" — confirm it doesn't, don't
-assume.
+Set the branch up once, commit each change separately as it lands, ship the branch out
+in one run. Don't skip a step because it "doesn't apply this time" — confirm it
+doesn't, don't assume.
 
 **Once, when the branch starts:**
 
@@ -205,24 +238,19 @@ assume.
    commit **extends that same entry** (§6). Never a second entry for one version.
 6. [ ] The other three living docs — CLAUDE.md · DESIGN.md · GLOSSARY.md — updated if
    *this* change made one of them stale (§7). Most commits touch one; some touch none.
-7. [ ] `npm run build` **and** `npm test` pass. Together ~1s, so run them per commit —
-   a `git bisect` should never land on a broken one. **Report the numbers, not the
-   verdict**: the test count, the main-bundle gz delta. "Build and tests pass" is the
-   sentence you can write without having run either, which is what makes it worthless;
-   a count that moved unexpectedly is a finding. Same for any figure you quote from a
-   doc — CLAUDE.md's own line counts say "re-measure rather than trust this number".
-8. [ ] Commit this one change (subject format below). **Only when he has explicitly
-   asked you to commit** — see §8.
+7. [ ] **Run the whole gate and report its numbers** — see "The gate" below.
+8. [ ] **Commit this one change** (subject format below), as it lands. Commits do not
+   wait for permission (§8); pushes always do.
 
    → Then loop back to step 2 for the next change.
 
 **Once, when the version is ready to go out:**
 
 9. [ ] **Nothing is pushed until the review has run over the branch diff.** You can't
-   invoke it — he types **`/code-review, fix all findings, push and sum up the
-   thread`**, and that one turn carries the work through review → verification → fixes
-   → build/test → commits → push → PR → thread summary. It is specified in full below.
-   Name the effort that turn wants (§1) when you hand the work back.
+   invoke it — he types **`/code-review and ship`**, and that one turn carries the work
+   through review → verification → fixes → gate → commits → push → PR → thread summary.
+   It is specified in full below. Name the effort that turn wants (§1) when you hand
+   the work back.
 10. [ ] He reviews and merges. **You never merge his PR** — not even if asked to
     "just finish it up".
 11. [ ] After merge, confirm the prod console boot banner / `window.__MGT_BUILD__`
@@ -247,7 +275,75 @@ Version first, then which slice of it (`phase N`, `correction round N`, `follow-
 `/code-review fixes`), then what it does. That prefix is what makes `git log --oneline`
 read as one version's story. Body ends with the Claude co-author trailer.
 
-### The ship run — `/code-review, fix all findings, push and sum up the thread`
+### The gate — what step 7 actually runs
+
+**All four, because that is exactly what CI's `verify` job runs.** A green run here and
+a green PR then mean the same thing; running two of four just means the PR is the first
+place the other two get tried.
+
+**Run this exact block — both lines.** It is the whole gate, filtered down to the four
+numbers worth reporting, so there is nothing left for you to trim by hand:
+
+```bash
+set -o pipefail
+npm run build 2>&1 | tail -3 && npm test 2>&1 | grep -E "Tests +[0-9]" && npm run lint 2>&1 | grep -E "✖.*problems" && npm run check:style 2>&1 | tail -1
+```
+
+Four lines out, in order: main-bundle gz size · test count · lint problem count · the
+style verdict. Measured on this repo: **0.1s · 1.8s · 4.0s · 0.3s** — about six seconds
+for all four, so run them per commit; a `git bisect` should never land on a broken one.
+`lint` is a **hard** gate at 0 errors (warnings don't block; there are ~71 by design).
+
+**`set -o pipefail` is load-bearing — without it this line lies.** A pipeline's exit
+status is its LAST element's, and every stage here ends in a filter that succeeds on
+empty input, so `&&` never short-circuits and the chain runs to the end reporting
+whatever the surviving stages say. Measured against a genuinely broken tree: the build
+failed, its errors were filtered away to nothing, and the run continued to print
+`Tests 494 passed (494)` — 323 tests silently *missing* from the run rather than
+failing, because the broken import took whole files out — then the style verdict, then
+**exit 0**. Three green-looking lines and a passing status over a tree that does not
+compile. `pipefail` makes the pipeline carry the *first* non-zero status instead, so
+the chain stops where it broke.
+
+**And `build` is tailed while `lint` is grepped — on purpose.** A build's useful output
+on failure is its error tail, so `tail -3` shows the gz line when it works and the
+error when it doesn't. `lint` is the opposite: `eslint` prints two trailing lines and
+the reassuring one is not the verdict — `0 errors and 1 warning potentially fixable
+with the --fix option` is about what `--fix` could *repair*, while `✖ N problems (E
+errors, W warnings)` is what CI gates on. `tail -2` shows the first and hides the
+second; two consecutive commits were verified that way and reported "0 errors" while
+carrying an error (CLAUDE.md's gotcha). A v5 eval run then did it again, typing
+`npm run lint 2>&1 | tail -8` with the correct grep eight lines away in this file,
+because it was batching three gates and trimmed all three the same way. **A prohibition
+you have to remember loses to a habit; a command you paste doesn't** — so paste the
+block above rather than assembling your own. Both of that block's own defects were
+found by running it against a broken tree, which is the only way either could have
+been: it was written, and verified, against a passing one.
+
+**A fifth gate, when the diff touches the rules.** Changed `database.rules.json`,
+`tests/rules/**`, `firebase.json` or `vitest.rules.config.js`? Also run
+`npm run test:rules` (121 tests against a local RTDB emulator). It is a **separate CI
+job**, so nothing in the four above will catch a rules regression — you'd find out
+after the push. It needs a JVM and a global `firebase-tools`; if it can't run where you
+are, say so plainly rather than reporting a gate you didn't clear. A new `<name>Rev`
+pair also joins `PAIRS` in the same PR (`database.rules.README.md`).
+
+**Report the numbers, not the verdict** — the test count, the lint problem count, the
+main-bundle gz delta. "Build and tests pass" is the sentence you can write without
+having run either, which is what makes it worthless; a count that moved unexpectedly is
+a finding in its own right. Same for any figure you quote from a doc — CLAUDE.md's own
+line counts say "re-measure rather than trust this number".
+
+**Red suite? Establish whose fault it is before you debug it.** A failure is not
+evidence that your change caused it. On 2026-09-02 a stale date literal in
+`tests/reconcile.test.js` turned `main` red — and every branch cut from it — for
+reasons having nothing to do with any work in flight; the real cost was distrusting the
+working tree first. So check whether the same test fails on `origin/main` before
+reading a line of your own diff. **Not with a bare `git stash`**: the stash stack is
+shared with every worktree and another session can pop yours. Use a throwaway commit,
+or run the failing file from a clean clone.
+
+### The ship run — `/code-review and ship`
 
 **One turn, start to finish.** The expensive part of a ship turn is context, not
 tokens spent thinking: reading the branch diff, the four living docs and the
@@ -287,15 +383,14 @@ nothing. Each finding lands in one of three buckets, and **all three are reporte
   become the back door through which a feature gets redesigned unasked.
 
 **No `AskUserQuestion` inside this run.** The phrase is the authorisation for the whole
-chain: review, fixes, build, commits, push, PR and summary. This is §8's one
-carve-out from ask-first, and the third bucket is what bounds it — the run can fix
-what's broken, never decide what the app should do. §8 governs everything outside it,
-unchanged.
+chain: review, fixes, gate, commits, push, PR and summary. This is §8's one carve-out
+from ask-first, and the third bucket is what bounds it — the run can fix what's broken,
+never decide what the app should do. §8 governs everything outside it, unchanged.
 
 Then, in order:
 
-1. **Build and test after the fixes, before the push.** `npm run build && npm test`.
-   Report the actual output (§5 step 7).
+1. **Run the full gate after the fixes, before the push** — all four, plus
+   `test:rules` if the rules moved. Report the actual output (see "The gate").
 2. **Push** (`git push -u origin <branch>`), then open the PR:
    `/opt/homebrew/bin/gh pr create --base main --head <branch> …`, body ending with
    the "Generated with Claude Code" line. If the branch
@@ -311,15 +406,17 @@ Then, in order:
 4. **Update both folders.** The summary as `MGT_Bookings_<topic>_Thread_Summary.md` in
    `/Users/patrykzychowicz/Desktop/megustastu-bookings context` (absolute path — a
    relative one silently targets the wrong place in a worktree), plus refreshed
-   `CLAUDE.md` and `REFACTOR_LOG.md` mirrors there. A `UserPromptSubmit` hook also
-   reminds on this, but the steps live here so the run doesn't depend on it firing.
+   `CLAUDE.md` and `REFACTOR_LOG.md` mirrors there. **Nothing reminds you of this step
+   here**: the `UserPromptSubmit` hook greps for "sum up this/the thread", which
+   `/code-review and ship` does not contain, so this list is the only thing standing
+   between the run and a stale context folder.
 5. **§9's two sum-up questions are checks here, not questions.** Whether PROD Firebase
    rules need the manual console step is answerable from the diff — a new persisted
    node or `<name>Rev` pair (`database.rules.README.md`) — so grep for it and state the
    answer. Unresolved threads are in the conversation you just had. Ask only what is
    genuinely undeterminable.
 6. **One closing report**: findings raised, fixed (with commit subjects), disproved
-   (with the evidence), deferred to ROADMAP; build and test output; the PR URL; the
+   (with the evidence), deferred to ROADMAP; the gate's numbers; the PR URL; the
    summary's path.
 
 `/code-review ultra` is a different thing — a billed, multi-agent cloud review **only
@@ -404,15 +501,20 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   and follow-up gets its own commit, however small. A commit carrying two features
   can't be reviewed, reverted or bisected independently; that separability is the
   entire point. Review fixes follow the same rule inside the ship run.
+- **Commit as you go; never push on your own.** These are two rules, not one. A
+  finished, green change gets its own commit **immediately, without asking** — waiting
+  for permission is what produces the bundled commit the rule above exists to prevent,
+  since the answer is always yes and by the time it arrives the next change is already
+  in the tree. **Push, PR and merge stay explicit every time**, never a standing
+  permission: a stray push once put a Vercel preview on PROD Firebase (memory:
+  `never-push-without-permission.md`). The ship-run phrase is that explicit ask, for
+  that run only.
 - **Never `--amend` or force-push** to fold a follow-up into an earlier commit. The
   separate-commit record *is* the deliverable. A fix to a made commit is a new commit.
 - **One version per branch, one branch per PR.** Many commits and features per branch,
   only ever one version.
 - **A previous PR open? Don't start the next *version*** (§2). Another commit on the
   open branch under the same version is fine; a second version in flight is not.
-- **Commit and push only when explicitly asked**, each time — never a standing
-  permission. Making edits and running the build does not imply "and now commit it."
-  The ship-run phrase is itself that explicit ask, for that run only.
 - **No push before the review has run** (§5).
 - **Never use `-i`/interactive git flags** — unsupported here; they hang or fail
   silently.
@@ -426,17 +528,19 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
 - **"give me the deployment version"** — a production-ready file with Firebase
   integration, auth, cleanup logic, logout.
 - **"give me changelog"** — a PDF changelog per `MGT_Changelog_Instructions.md`.
-- **"/code-review, fix all findings, push and sum up the thread"** — the ship run (§5),
-  end to end in one turn: review the branch diff → verify each finding → fix the ones
-  that survive, one commit each → build + test → push → open the PR → write the thread
-  summary into both folders → one closing report. No question mid-run; a finding that
-  would change shipped behaviour goes to ROADMAP.md instead of being built. You can't
-  invoke `/code-review` yourself, so if a push is due without one, ask him to issue the
-  phrase.
+- **"/code-review and ship"** — the ship run (§5), end to end in one turn: review the
+  branch diff → verify each finding → fix the ones that survive, one commit each →
+  full gate → push → open the PR → write the thread summary into both folders → one
+  closing report. No question mid-run; a finding that would change shipped behaviour
+  goes to ROADMAP.md instead of being built. You can't invoke `/code-review` yourself,
+  so if a push is due without one, ask him to issue the phrase.
 
-  **"/code-review and push"** is the older, shorter wording for the same thing. It
-  still triggers, and it now means the full run above — the flow changed, not just its
-  name, so habit shouldn't quietly buy the old two-turn behaviour.
+  **Older wordings name the same run** and still trigger it in full:
+  `/code-review, fix all findings, push and sum up the thread` (v4's, tail step
+  included — v5 spells that step "sum up **this** thread" everywhere, which is what §9
+  below and the `UserPromptSubmit` hook both use) and `/code-review and push` (v3's).
+  Only the name got shorter — habit shouldn't quietly buy back the old two-turn
+  behaviour.
 - **"sum up this thread"** — two modes, and which one applies is something you know
   rather than guess:
   - **Standalone** (the usual case): **the branch is already merged.** Assume so unless
@@ -469,9 +573,13 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
 
 §2–§9 govern the moment work is about to land in `src/` with intent to ship — pure
 exploration, reading code, or "how does X work" needs none of the branch/PR machinery.
-**§0 and §1 are the exceptions**: the bootstrap check is cheap by design, and the
-effort check belongs to plan mode whatever the plan turns out to be. The two governing
-rules at the top apply everywhere, always.
+**§0 and §1 are the exceptions**, with one part-exception inside §0. Its *checks* —
+the version-vs-REFACTOR_LOG read, the merged-PR default, the phrasing cues — are cheap
+by design and always run. Its *tools* are not: starting a dev server and a preview
+bridge for "how does X work" buys nothing, which is why §0 itself says planning,
+exploration and doc work may let the pair wait until edits begin. §1's effort check
+belongs to plan mode whatever the plan turns out to be. The two governing rules at the
+top apply everywhere, always.
 
 **Tooling-only changes** (`.claude/` skills/settings/hooks, CI config, this file) that
 never touch `src/` get no `__APP_SIGNATURE__` bump and no REFACTOR_LOG entry — those
