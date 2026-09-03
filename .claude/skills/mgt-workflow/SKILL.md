@@ -33,9 +33,11 @@ turning "fix all findings" into "comply with all findings".
 ### Bring the tools up first
 
 `npm run dev` (DEV Firebase — never `npm run preview`) **and** the Preview bridge
-(`mcp__Claude_Preview__preview_start` on the dev URL). CLAUDE.md asks for the pair at
-the start of *every* coding session, not only visual ones, and the reason is the second
-governing rule: with them up, any change can be checked live before it's called done;
+(`preview_start` on the dev URL — the bare tool name, because the `mcp__<server>__`
+prefix is harness config that differs between sessions, and a stale one fails at the
+first instruction of the first step). CLAUDE.md asks for the pair at the start of
+*every* coding session, not only visual ones, and the reason is the second governing
+rule: with them up, any change can be checked live before it's called done;
 without them, "it should work" is the best sentence available. Tell him the localhost
 URL. Pure planning, exploration or doc work can let the pair wait until edits begin —
 but "I'll start it if I turn out to need it" is how a session ends with an unverified
