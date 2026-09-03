@@ -34,6 +34,10 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue, set, update } from "firebase/database";
 import { db } from "../firebase";
 import { EMPTY_FORM } from "../lib/constants";
+// lib/day is the app's ONE answer to "what day is it". Hand-rolling it here as
+// `new Date().toISOString().slice(0,10)` gave the UTC date where every other
+// surface uses the LOCAL one — see the three call sites below.
+import { todayStr } from "../lib/day";
 import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible } from "../lib/whatsapp";
 import { backendEnabled, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { WA_SANDBOX } from "../lib/waSandbox";
@@ -317,8 +321,7 @@ export function useWhatsApp({
     let prefilledPhone = conv.phone || conv.phoneKey || "+";
     if (prefilledPhone && prefilledPhone.charAt(0) !== "+") prefilledPhone = "+" + prefilledPhone;
     const size = Number(d.size) || 2;
-    const today = new Date().toISOString().slice(0, 10);
-    const date = d.date || today;
+    const date = d.date || todayStr();
     const time = d.time || "13:00";
     // Seating preference from the parsed message (indoor/outdoor); "auto" when
     // the customer didn't state one — the default. (See mergeDraft / mockParse.)
@@ -400,10 +403,10 @@ export function useWhatsApp({
   function handleArchive(phoneKey) {
     const conv = conversations.find((c) => c.phoneKey === phoneKey);
     if (!conv) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const today = todayStr();
     if (conv.acceptedBookingId) {
       const booking = bookings.find((b) => b.id === conv.acceptedBookingId);
-      const isUpcoming = booking && booking.date && booking.date >= todayStr && booking.status !== "cancelled" && booking.status !== "completed";
+      const isUpcoming = booking && booking.date && booking.date >= today && booking.status !== "cancelled" && booking.status !== "completed";
       if (isUpcoming) { setConfirmArchive(phoneKey); return; } // warn before archiving an upcoming linked booking
     }
     doArchive(phoneKey);
@@ -491,7 +494,7 @@ export function useWhatsApp({
     }));
     setEditId(booking.id); setError(""); setSwapAffected(null);
     setReturnToInboxKey(conv.phoneKey);
-    setShowInbox(false); setShowForm(true); setViewDate(booking.date || new Date().toISOString().slice(0, 10));
+    setShowInbox(false); setShowForm(true); setViewDate(booking.date || todayStr());
   }
 
   // handleApplyModify: a customer "modify" request — open the LINKED booking in
