@@ -19225,3 +19225,185 @@ would miss. On today it still works (a confirmed card went to seated); on
 `holdSelection` re-verified after the change — one export, and the attribute
 goes on and comes off. Gate: 93.34 kB gz · 833 tests · 0 lint errors · style OK.
 A fresh tab boots v17.16.12 with an empty console.
+
+
+---
+
+## v17.16.13 — the identity a read invented
+
+**Date:** 2026-09-04 · **Branch:** `fix/v17.16.13-reconcile-oscillation` ·
+**Behavioural change:** yes — commit 2 stops the app writing rows it invented.
+**Files:** `src/lib/dbError.js`, `src/hooks/usePersistence.js`,
+`src/lib/revGuard.js`, `tests/db-error.test.js` (+ later commits' own files).
+
+`ROADMAP.md`'s whole Deferred section: the v15.6.1 reconciliation effect writing
+forever, and the write `.catch` that blamed a cause it never checked. They turned
+out to be one investigation — the second is why the first had been misdiagnosed.
+
+### Commit 1 — a rejected write says what it knows, and no more
+
+`update(ref(db,"bookings"),patch).catch(function(){ … })` took **no argument**,
+and the line it logged hard-coded `stale per-booking revision`.
+`revGuard.writeWithRev` was the same defect one file over with less excuse: it
+*had* `err`, passed it to `onReject`, and still logged a hard-coded
+`stale revision`. A third site — the legacy-array migration write in
+`usePersistence.js` — logged **nothing at all**, so a refused migration was
+invisible while `arrayShapeRef` held every booking write behind it.
+
+`describeWriteError(path, err)` (`src/lib/dbError.js`, pure, tested) names the
+path, the code and the SDK's own message. What it deliberately does **not** do is
+pick a cause: RTDB collapses every Security Rule refusal into one
+`PERMISSION_DENIED` and the error carries nothing separating a stale CAS base
+from a failed field `.validate` from rules that were never deployed. So it
+enumerates the three. The test asserts the *absence* of a single-cause claim,
+which is the actual regression to guard.
+
+This is `dbError.js`'s own reason for existing, one verb over: v17.5.1 added it
+because a failed *read* reported nothing and cost a release cycle. A failed
+*write* reported something confidently wrong, which is worse — it sends the next
+reader somewhere specific.
+
+**Measured, not reasoned.** Before: `[SAFE] bookings write rejected by server
+(stale per-booking revision)`. After, against the same DEV data:
+`[SAFE] bookings write REJECTED — PERMISSION_DENIED: Permission denied — a
+Security Rule refused it, and the error does not say which: …`. The ROADMAP
+entry had recorded that diagnosing the oscillation required temporarily
+re-instrumenting this very catch. It did — and with the catch fixed, the cause
+fell out in two more measurements (commit 2).
+
+`npm test` **833 → 837** (four in the new `tests/db-error.test.js`). The
+baseline is 833 and not the 828 `CLAUDE.md` states "as of v17.16.11" — v17.16.12
+added five and the figure was not re-measured, which is the drift that file's own
+line-count note warns about. Corrected there in commit 3.
+
+### Commit 2 — the identity a read invented
+
+**The root cause of the oscillation, and it is neither of the two candidate
+fixes `ROADMAP.md` proposed.**
+
+`sanitize` did `id: b.id || genId()`, and `sanitizeAll` mapped
+`Object.values(node)` — which **throws the RTDB key away**. So a
+`/bookings/{key}` child whose stored value carries no `id` field got a brand-new
+identity on *every single read*.
+
+That is v17.16.4's block-id defect (CT-2B-06) one collection over, and worse.
+There a `genId()` mint answered "what read was this" instead of "which block is
+this", and had to be replaced by a content hash because a block had no stored
+identity to recover. **A booking has one — it is the key** — and the code was
+discarding it two lines above the mint.
+
+**What it does, measured on DEV** (three keyless rows left by an earlier rules
+probe): every read invents ids → the write-diff sees a create → `stampForWrite`
+has no `old` so it stamps `baseUpdatedAt: 0` → **the per-`$id` rule ACCEPTS that
+for a create** → the row lands → the original keyless row is read again → a new
+id is minted. The node grew by one booking per pass:
+`total = 538 → 539 → 540 → 541` across four consecutive listener fires, with the
+reconciliation effect re-placing the phantoms each time and its own writes
+refused (`baseUpdatedAt` non-zero once a minted id was already in `prev`).
+
+So the reconciler was never oscillating. **It was doing its job correctly on
+data that changed underneath it on every read** — which is why the offline
+reproduction, run against a captured snapshot of the very same data, reaches a
+fixpoint in two passes. The ROADMAP entry's diagnosis stopped at the last thing
+visible from the console, and the console was reporting a "stale per-booking
+revision" (commit 1).
+
+**After, same data, same 20 seconds:** 537 rows, **1** listener fire, both
+unchanged; zero write rejections in 10s against 304 writes in 9s before.
+
+`sanitize(b, key)` now resolves `b.id || key || genId()`. The key is preferred
+over a mint and *not* over `b.id`: a row that states its own identity keeps it,
+which is every row this app has ever written. Only a row written by something
+else — an Admin-SDK backend, a console edit, a probe — reaches the `key` arm,
+and for those the key *is* the identity, because it is the path the write went
+to. The legacy ARRAY arm deliberately passes no key: an index is a position, not
+an identity (the v17.16.4 lesson — a stale index resolves to a DIFFERENT row).
+
+One thing found while changing the arity: `arr.map(sanitize)` had been passing
+the array **index** as the second argument all along. Harmless while `sanitize`
+took one parameter, and a live hazard the moment it took two. Both arms name
+their argument explicitly now rather than relying on arity.
+
+`npm test` 837 → 842.
+
+### Commit 3 — a pass that does not help is not written
+
+Commit 2 fixed what was actually happening. This is the guarantee that the
+effect cannot spin again if something else ever churns its input.
+
+Identity (v17.10.2 / v17.14.0) answers *did this pass change anything*. It
+cannot answer *did the change help* — and neither branch was asking. The
+optimiser branch ran `bookingsAfterAction` once and accepted any result whose
+day signature differed, with **no check on its output at all**; the manual
+branch could exit on its 20-iteration guard with the day still dirty, having
+reported `changed`. Both write. Both come straight back through the effect's
+`bookings` dep.
+
+`reducesClashes(before, after, date)` is the third gate: a date's pass is taken
+only if the number of bookings still in a clash **strictly decreased**. That
+count is a non-negative integer, so it can decrease finitely many times — the
+loop terminates whatever the placement heuristics do, which is the property a
+tie-break cannot give you. Deliberately not "accept only a CLEAN result": a
+partial fix (three clashes down to one) is real progress the restaurant wants,
+and demanding perfection would discard it and leave all three.
+
+**On the second half of "both".** The other candidate — a stable tie-break so
+two equally-valid arrangements cannot alternate — was **already shipped, in
+v17.16.5**: `optimise`'s day sort takes `id` as a fifth key precisely to remove
+the array-position dependence that made it non-total. Nothing further was
+changed there, because nothing measured says anything is left: 802 randomly
+generated dirty days (both branches, 3–9 bookings, a 3-table pool to force
+collisions) produced **zero** non-converging runs. Editing hand-tuned,
+byte-for-byte regression-proven placement heuristics on no evidence is the
+change this repo's rules exist to prevent.
+
+That is also why the gate is tested as a **predicate** rather than through
+`reconcile`: post-v17.16.5 no fixture we could find makes a placement pass
+rearrange a day without changing the clash count, so a reconcile-level test
+would pass identically with the gate removed. Proven against two sabotages —
+a gate that always accepts fails 2 of 15, and `<=` in place of `<` (accepting
+exactly the equal-count churn) fails 1.
+
+`npm test` 842 → 847. `ROADMAP.md`'s Deferred section is now empty. `CLAUDE.md`
+gains the child-key identity rule and has its drifted test count corrected.
+
+### Commit 4 — `/code-review` fix: the gate discarded placement progress
+
+Commit 3's measure was the clash count alone, and that was too narrow in a way
+the tests written with it could not see.
+
+A day whose clash is **unresolvable** — two `_locked` bookings on one table,
+which every walk-in and every drag-drop path can produce — rejected the *whole*
+pass, including the tables `applyOpt` had just found for a **different**,
+unplaced booking. Placing it does not change the clash count, so the gate threw
+it away, on that pass and on every pass after it. Measured, three bookings, one
+future date: without the gate the unplaced booking goes `[] → ["1A"]`; with the
+clash-only gate it stays `[]` forever.
+
+A duration extension lost the same way costs nothing — the auto-extend effect
+(`usePersistence.js`, line ~859) writes those itself. **Placement has no other
+writer**, so that one was a silent loss of a booking's table.
+
+The measure is now `badness(list,date)` = `[clashes, unplaced]`, compared
+**lexicographically**. Both entries are non-negative integers and neither can
+grow to offset the other, so the descent is still well-founded and the
+termination guarantee is unchanged. Clashes dominate deliberately: `applyOpt`
+genuinely leaves a booking unplaced when the day is over-full, and resolving a
+double-booking is this effect's entire purpose — a *summed* measure would refuse
+to separate two parties sharing a table in order to protect a table assignment.
+That distinction is now pinned, because the summed variant passed every other
+test in the file.
+
+**Outcome comparison, gate vs no gate**, 382 dirty days per branch: `resolved
+better 328 / 328`, `ended worse 0 / 0`, `non-terminating 0 / 0`, `unplaced
+regressed 0 / 0` — identical. The guarantee costs nothing in resolution quality.
+
+Proven against three sabotages: clash-count-only fails 1 of 19, no gate at all
+fails 4, a summed measure fails 1.
+
+Renamed `reducesClashes` → **`improvesDay`** in the same commit. After the
+widening it returned true for a pass that only places a booking, so the old name
+contradicted its own behaviour — the `hourLabel`/`cutoffLabel` lesson in
+reverse, and the kind of name that is read rather than checked.
+
+`npm test` 847 → 851.

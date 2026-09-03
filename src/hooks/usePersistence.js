@@ -31,7 +31,7 @@ import { ref, onValue, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { dbError, onDbError } from "../lib/dbError";
+import { dbError, onDbError, describeWriteError } from "../lib/dbError";
 // v17.16.2: the pure write-path core. Everything that decides WHETHER and in
 // what shape a booking reaches the server now lives in one testable module;
 // this hook keeps the refs, listeners, effects and setState. See its header.
@@ -464,8 +464,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const nowMs=Date.now();
       if(isDuplicatePatch(sig,lastPatchSigRef.current,nowMs)) return;
       lastPatchSigRef.current={sig:sig,at:nowMs};
-      update(ref(db,"bookings"),patch).catch(function(){
-        console.warn("[SAFE] bookings write rejected by server (stale per-booking revision) — resyncing + retry.");
+      update(ref(db,"bookings"),patch).catch(function(err){
+        // v17.16.13: the error is TAKEN now. This catch used to discard it and
+        // hard-code "stale per-booking revision", which is one of at least four
+        // things PERMISSION_DENIED can mean here — see describeWriteError.
+        console.warn(describeWriteError("bookings",err)+" Resyncing + retry.");
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
         markStale();
       });
@@ -621,7 +624,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // Object.assign order matters: a keyed row whose id happens to equal an
         // old integer index must WIN over that index's null, or the migration
         // would delete the very booking it is writing.
-        update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(){ migratedRef.current=false; });
+        // v17.16.13: this one logged NOTHING at all, so a refused migration was
+        // invisible — and a legacy array node that cannot migrate leaves
+        // `arrayShapeRef` holding every booking write forever (see v15.5.0).
+        update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(err){
+          console.warn(describeWriteError("bookings (legacy-array migration)",err)+" The array shape stays; booking writes remain held.");
+          migratedRef.current=false;
+        });
       }
       // v15.6.0: re-apply + persist any held user changes on top of this fresh snapshot
       // (after clearStale, so they don't re-hold). Without this, a live snapshot that

@@ -33,7 +33,7 @@
 
 import { ref, onValue, update } from "firebase/database";
 import { db } from "./../firebase";
-import { dbError } from "./dbError";
+import { dbError, describeWriteError } from "./dbError";
 
 // Subscribe `revRef.current` to <path>Rev. Plain assignment (not max): a
 // server rejection's rollback echo must be able to LOWER an optimistically
@@ -71,7 +71,11 @@ export function writeWithRev(path, value, revRef, onReject){
   patch[path] = value;
   patch[path + "Rev"] = nextRev;
   return update(ref(db), patch).catch(function(err){
-    console.warn("[SAFE] " + path + " write rejected by server (stale revision) — local state restored from the server echo.");
+    // v17.16.13: `err` was in hand here and the message threw it away, naming
+    // "stale revision" for what is equally often a failed .validate or an
+    // undeployed rule. The rollback claim stays — that one IS measured: the SDK
+    // rolls a rejected write back locally and re-fires the node's listeners.
+    console.warn(describeWriteError(path, err) + " Local state restored from the server echo.");
     if(onReject) onReject(err);
   });
 }
