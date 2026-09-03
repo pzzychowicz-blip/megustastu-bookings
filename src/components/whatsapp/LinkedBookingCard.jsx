@@ -4,10 +4,10 @@
 // collapsed it shrinks to a one-line strip. Holds the single source of truth for
 // the two booking actions — Open booking (blue) and Cancel booking (red).
 
-import { Reveal, mkSolidBtn, OutlineChip } from "../atoms";
+import { Reveal, mkSolidBtn, OutlineChip, SBadge } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { useCollapseState } from "../../hooks/useCollapseState";
-import { BLOCK_BG, R, T, FW, M, IC, H } from "../../lib/constants";
+import { T, FW, M, IC, H } from "../../lib/constants";
 import { LinkIcon } from "./WaIcons";
 import { ChevronRightIcon } from "../Icons";
 
@@ -22,7 +22,6 @@ const SUMMARY_MIN = 180;
 export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, defaultCollapsed }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed);
   if (!booking) return null;
-  const statusColor = BLOCK_BG[booking.status] || BLOCK_BG.confirmed;
   const canCancel = booking.status !== "cancelled" && booking.status !== "completed";
   const summary = (booking.name || "(no name)") + " · " + (booking.date || "?") + " · " + booking.time + " · " + booking.size + " pax";
 
@@ -92,7 +91,16 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
       style={{ marginBottom: 8, boxShadow: "var(--shadow-soft)" }}
       title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
         <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>Linked booking</span>
-        <span style={{ fontSize: T.micro, padding: "2px 8px", borderRadius: R.pill, background: statusColor, color: "var(--text-on-accent)", fontWeight: FW.bold, textTransform: "capitalize", flexShrink: 0 }}>{booking.status}</span>
+        {/* 17.16.12 sync: this was a hand-typed copy of SBadge — the same pill,
+            the same BLOCK_BG fill, the same capitalised status word — written
+            before v17.15.7 gave the atom its StatusIcon. Prod's branch has never
+            seen this file, so the mark never arrived and the module drew a
+            booking's status differently from List, Plan, Search and Customers,
+            which all take the atom. It is the atom now, which is also why
+            tests/a11y.test.js no longer needs an entry for this file: it stopped
+            indexing BLOCK_BG itself. Nothing scans for a copy of a component, so
+            the only defence is not keeping one. */}
+        <SBadge status={booking.status} />
         {/* v17.15.3: `minWidth: SUMMARY_MIN`, not 0. The collapsed row exists to
             show this line, and with `minWidth: 0` it was the only flexible item
             in a row of `flexShrink: 0` buttons, so it absorbed the ENTIRE
