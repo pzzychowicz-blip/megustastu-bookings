@@ -6,7 +6,12 @@ history (that's `REFACTOR_LOG.md`), no architecture notes (that's `CLAUDE.md`).
 
 **Keep this current.** When an item ships, delete its entry here in the same
 PR/commit that ships it — the shipped details go in `REFACTOR_LOG.md` instead.
-When new deferred work or an idea surfaces, add it here. The `mgt-workflow`
+An item that is SETTLED is deleted too, not annotated: a withdrawal ("it was not
+there") and a deliberate won't-fix ("it is there and is not worth a version")
+are both decisions rather than pending work, and an entry saying "we checked and
+there is nothing here" is not pending work either. The measurement and the
+decision go in `REFACTOR_LOG.md`, and any evergreen lesson in `CLAUDE.md`'s
+Gotchas. When new deferred work or an idea surfaces, add it here. The `mgt-workflow`
 skill is responsible for checking this file at the relevant points in a
 session and keeping it in sync.
 
@@ -14,71 +19,7 @@ session and keeping it in sync.
 
 ## Deferred
 
-### Crash test v17.15.7 — confirmed and unfixed
-
-The findings from the three adversarial QA sessions that are still open
-(`MGT_Bookings_CrashTest_Phase4_FixPlan_Handoff.md` in the context folder holds
-the full register and the reproductions). **v17.16.0 shipped CT-2C-01 and
-CT-2A-02; v17.16.1 shipped CT-2A-01 and CT-2A-03's server half; v17.16.2 shipped
-CT-2B-01, CT-2B-02 and CT-2B-03, and closed §7's `usePersistence` extraction** —
-seven of twenty-two; **v17.16.3 shipped CT-2B-04 and WITHDREW CT-2C-02** as not
-reproducible outside React StrictMode (measured; see `REFACTOR_LOG.md`), leaving
-thirteen; **v17.16.4 shipped CT-2B-09 and CT-2B-06 and WITHDREW CT-2B-07**
-(both predicates are `starts + 1 >= LIMIT`; measured, see `REFACTOR_LOG.md`),
-leaving ten; **v17.16.5 shipped CT-2B-05 and CT-2A-05, and CT-2A-03's client
-half — which closes that finding in both halves — leaving eight; v17.16.6
-shipped CT-2B-08 and CT-2A-11 and WITHDREW CT-2A-08 (the dedupe
-signature is (content, base), so two patches sharing one are indistinguishable
-to the server and have the same fate — measured, see `REFACTOR_LOG.md`), leaving
-five; v17.16.7 shipped CT-2A-04 and CT-2A-06 — the two P2s, and one structural
-change rather than two fixes — and SETTLED CT-2A-10 as a deliberate won't-fix
-(negligible on the v17.16.5 re-rating: every stamp derives from `Date.now()`, so
-reaching 2**53 needs a hand-written value from outside the app; the rules-suite
-pin stays, see `REFACTOR_LOG.md`), leaving two: CT-2A-07 and CT-2A-09;
-**v17.16.9 shipped CT-2A-07** — the decision it was waiting on was Patryk's
-(park, name, offer Retry) — leaving one; **v17.16.10 shipped CT-2A-09, the last
-of them, and settled the unrated duplicate-booking-id entry that had outlived
-CT-2A-11** (measured: zero duplicates and zero key/id divergence in 507 DEV
-bookings, and `buildPatch` keys its patch BY the id, so a collision overwrites
-rather than duplicating — see `REFACTOR_LOG.md`). **The register is now at zero
-open findings.** v17.16.6 also closed the `getBlockSlots` sibling of CT-2A-03, which
-is not in that count — it was raised in v17.16.5, after the register was
-written. **The count is of REGISTER findings only**, stated here because the
-running tally was off by one for two commits of v17.16.6 before anybody
-re-derived it.
-Delete an entry as its fix lands; the detail then goes in `REFACTOR_LOG.md`.
-
-**Every bullet below now carries its SETTLING OBSERVATION** — the single thing
-you would measure to decide whether it is worth a version, and what that
-measurement cost when it has already been made. That is the re-rating the
-previous entry at the foot of this section asked for; it has been done, so the
-entry is gone and its output is here, where the work is.
-
-**A finding that has been SETTLED is deleted from this file, not annotated in
-it** — this is a pending-work list, and an entry saying "we checked and there is
-nothing here" is not pending work. That covers both ways a finding settles: a
-WITHDRAWAL (it was not there — CT-2C-02, CT-2B-07, CT-2A-08) and a deliberate
-WON'T-FIX (it is there and is not worth a version — CT-2A-10, deleted in
-v17.16.7). The two are different judgements and neither is pending. The
-measurement and the decision go in `REFACTOR_LOG.md`, and any evergreen lesson
-in `CLAUDE.md`'s Gotchas.
-
-**`database.rules.json` — what remains after v17.16.7.**
-
-- **CT-2A-03 follow-on (P3) — the rules check TYPE, never FORMAT.** v17.16.1
-  validates `status`, `date` and `time` as strings and deliberately not against
-  a value set or a pattern. `sanitize` guarantees type but not well-formedness,
-  so a legacy `"31/08/2026"` or an unrecognised status is reachable in stored
-  data — and because `persist` sends ONE multi-path `update()` that RTDB applies
-  atomically, a single such booking would reject a whole optimiser reshuffle and
-  leave staff unable to save a day that looks normal. **Closing this means
-  auditing what PROD actually holds first**, then tightening against evidence;
-  it is not a rules edit on its own. Table ids are likewise unchecked against
-  the layout, which is correct — the layout is editable, so the rules would
-  duplicate it and go stale.
-
-**No client entries remain.** The last of them went in v17.16.10; the single
-rules item above is all this section still holds.
+_(nothing pending)_
 
 ## Designed, not implemented
 

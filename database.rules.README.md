@@ -100,7 +100,7 @@ the moment somebody names the project.
 
 ### What the suite asserts
 
-121 tests as of v17.16.8, run on every PR by the `rules` job in
+127 tests as of v17.16.11, run on every PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
 the rig itself is pointed at a loopback emulator and a `demo-` project — and,
 since v17.16.7, that the root carries **no** `.write` key, which is asserted as
@@ -125,6 +125,98 @@ the rules", which is a claim a hand-written list cannot make. A guard asserts
 the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
+
+## v17.16.11 — `date` and `status` get a FORMAT, without a data audit
+
+Closes the CT-2A-03 follow-on, the last entry in `ROADMAP.md`'s Deferred
+section. v17.16.1 validated these two as strings and deliberately not against a
+pattern or a value set, and recorded why: `sanitize` reads a stored value
+through unchanged (`date: b.date || ""`, `status: b.status || "confirmed"`) and
+writes it back on the next save, and `persist` sends ONE multi-path `update()`
+that RTDB applies **atomically** — so a single legacy `"31/08/2026"` would have
+had a whole optimiser reshuffle refused, leaving staff unable to save a day that
+looks perfectly normal. The entry said closing it meant auditing PROD first.
+
+**It did not, and that is the point of the shape.** Each predicate is
+
+```
+newData.isString() && (newData.val().matches(<pattern>) || newData.val() === data.val())
+```
+
+A value **carried through unchanged** is always allowed, whatever it is, so no
+record already in the database can make a day unsaveable. A value being
+**introduced or changed** must be well-formed — and on a create `data.val()` is
+null, so the pattern is the only way in. The hazard the entry named is removed
+rather than accepted, which is why no audit gates it.
+
+- `date` — `/^([0-9]{4}-[0-9]{2}-[0-9]{2})?$/`. An **optional group**, not an
+  alternation: `""` is a shape `sanitize` itself emits and must stay legal, and
+  the RTDB regex engine rejects `/^$|^…$/` outright ("unescaped ^, ^ can only
+  appear at the end") — found by running it, not by reading about it.
+- `status` — `/^(confirmed|pending|seated|completed|cancelled)$/`. The set comes
+  from `STATUS_COLORS`, `BookingFormModal`'s `statusTargets` and every
+  `updateStatus` call site, checked rather than remembered.
+- `time` — **still type-only, deliberately.** `isReadableTime` accepts `"9:30"`,
+  `"13:00:00"` and `":"` on purpose (v17.16.5: nothing currently working may
+  move), so the client's own output is wider than any pattern worth writing,
+  and a grandfather clause cannot help with values the app is still free to
+  produce.
+
+**DEV was audited anyway**, read-only over the REST API: 507 bookings, **0**
+malformed dates, **0** malformed times, 4 distinct statuses all valid. PROD was
+not read — Claude does not touch it — and with the grandfather clause it does
+not need to be.
+
+### What the suite proves
+
+121 → 127 tests. The two deliberate-acceptance entries (`"an unknown status"`,
+`"a malformed date"`) and the `"accepts a badly FORMATTED … date and time"` test
+were **inverted with the rules**, in this file's established convention, not
+weakened. Both halves were proven against a sabotaged build:
+
+- remove `|| newData.val() === data.val()` → the two carry-through tests fail
+  (2 failed / 124 passed);
+- widen both patterns to `/^.*$/` → the four refusal tests fail
+  (4 failed / 122 passed).
+
+That matters because the doubled-looking predicate is exactly what a later
+reader would "simplify".
+
+### What the clause costs, and where
+
+A CREATE has no `data`, so the grandfather arm is unreachable there **by
+construction** — re-introducing a malformed value is refused even when it is a
+restoration of something that existed. Two paths reach that, and both are
+accepted rather than overlooked:
+
+- **Undo of a delete.** `applyUndo` re-concats the snapshot, `persist` sees a
+  child that was absent and is now present, and `stampForWrite` writes
+  `baseUpdatedAt: 0`. Undoing the deletion of a malformed booking is therefore
+  refused, retried, and parked with Retry/Discard (v17.16.9) — visible and
+  recoverable, not silent. Pinned by *"refuses a RE-CREATE of a deleted
+  malformed booking — undo's cost"*.
+- **The lazy array→keyed migration** (`usePersistence.js`), whose every row
+  carries `baseUpdatedAt: 0`. A legacy array node holding one malformed row
+  would have the whole atomic patch refused, and `arrayShapeRef` holds every
+  booking write meanwhile. Unreachable — the branch is `Array.isArray`-gated and
+  both PROD and DEV have been keyed since v15.5.0 — and recorded in the comment
+  at that site, which until v17.16.11 reasoned that `sanitizeAll` bounded this.
+
+The alternative to both is normalising in `sanitize`, which would rewrite stored
+data on the next save — the decision v17.16.5 explicitly declined ("normalising
+a record that renders is a different decision").
+
+### Deployment — app first, rules second
+
+Unlike the three versions below, these rules are **not** safe to publish ahead
+of the app, and not because the client writes anything new — it does not. The
+grandfather clause is what makes an existing malformed record survive, and it is
+`sanitize` re-emitting that record **verbatim** that the clause recognises. Any
+client is fine on that count. The ordering here is the ordinary caution: publish
+after the app that was tested against it, at a quiet time, and confirm a save
+still lands on a busy day before walking away.
+
+---
 
 ## v17.16.8 — the WhatsApp sandbox nodes get grants, and a decided CAS shape
 

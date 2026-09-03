@@ -18738,3 +18738,273 @@ loaded, empty-array guard, legacy-array hold) local state has already advanced
 to `computed`. That is pre-existing — the old updater returned `computed`
 regardless of the outcome too — so it is out of scope for this diff and is not
 a regression.
+
+---
+
+## v17.16.11 — the date the app could not navigate away from
+
+**Date:** 2026-09-03 · **Branch:** `fix/v17.16.11-date-nav-crash` ·
+**Behavioural change:** yes — see commit 1. **Files:** `src/lib/day.js`,
+`src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/WeekView.jsx`, `tests/day.test.js`, `CLAUDE.md`, `ROADMAP.md`
+(+ commit 3's own files, recorded with it).
+
+The version that empties `ROADMAP.md`'s **Deferred** section. It set out to
+close the last thing in it — the CT-2A-03 follow-on, *"the rules check TYPE,
+never FORMAT"* — and the measurement moved the problem somewhere better.
+
+### Commit 1 — date navigation survives an unparseable `viewDate`
+
+**Found while measuring the ROADMAP item, not by looking for it.** The entry
+asks what happens when a booking holds a malformed `date`, so the first thing
+measured was what the pure functions do with one. `weekdayOf` returns Sunday,
+`hoursFor` falls back to `DEFAULT_DAY`, `dayDiff` returns `null` — all
+defensive, all fine. `addDays` throws.
+
+```
+addDays("31/08/2026", 1)  →  RangeError: Invalid time value
+addDays("", 1)            →  RangeError: Invalid time value
+```
+
+**It is reachable from stored data, and `""` is a shape the app produces
+itself.** `searchBookings` (`customers.js:426`) filters on name, phone and
+`anonymized` and never on whether the date is a date; `SearchPanel`'s `onPick`
+calls `goToDate(b.date)` with the booking's stored value. So the search results
+are a list of ways to put an arbitrary string into `viewDate`. `sanitize` writes
+`date: b.date || ""`, and `tests/rules/database-rules.test.js` lists a booking
+with no date under *"every booking shape the app itself produces"*.
+
+**The plan's account of the consequence was wrong in half, and the correction is
+the useful part.** It said the throw unmounts the tree into the v17.16.0
+`ErrorBoundary`. Measured live on DEV against two seeded bookings
+(`date: "31/08/2026"` and `date: ""`), with the pre-fix call sites temporarily
+restored one at a time:
+
+- **The arrows throw in an EVENT HANDLER**, which an error boundary does not
+  catch. `Uncaught RangeError: Invalid time value at addDays`, `#root` still
+  populated, page still drawn. The symptom is not a white screen — it is that
+  Next day, Previous day and `←`/`→` **silently stop working**, leaving you
+  stuck on that date with only the Today button and the date picker as a way
+  out. Quieter than a crash and harder to report.
+- **`WeekView` throws during RENDER**, which a boundary does catch. Opening the
+  More popover (`M`) from the poisoned date replaced the whole app with *"MGT
+  Bookings hit an error"* — `[MGT] render error caught by the boundary … at
+  WeekView`.
+
+Two paths, two different failures, from one throw. Worth stating because the
+fix's shape follows from it: the `WeekView` half is the severe one and it is
+**not** fixed by swapping `addDays` for a safe stepper, since `goMonth` throws on
+its own `toISOString()` rather than through `addDays` at all.
+
+**The fix.** `src/lib/day.js` gains one private stepper and two exports:
+
+- `stepUTC(dateStr, n)` — module-private, the step **without** the throw, `null`
+  when the answer cannot be a `YYYY-MM-DD`. It rejects on three measured
+  grounds, and the second and third are why guarding the *input* is not enough:
+  the input does not parse; the **step** falls off the representable range
+  (`"275760-09-13"` parses and `+1` day is NaN); or the step lands outside years
+  0001–9999, where `toISOString()` switches to the expanded `±YYYYYY` form and
+  `slice(0,10)` returns a truncated non-date — `addDays("9999-12-31", 1)` used to
+  return the string `"+010000-01"`. So it tests the OUTPUT.
+- `isReadableDate(v)` — "can the app navigate from this date", **defined as a
+  zero-day step succeeding**. The consumer's-requirement shape `isReadableTime`
+  established in v17.16.5 and `isReadableBlock` in v17.16.6, taken one step
+  further: the predicate *is* the operation, so the two cannot drift apart the
+  way two hand-written rules would. Deliberately **not** a
+  `^\d{4}-\d{2}-\d{2}$` pattern — `"2026-8-3"` parses and steps, so it navigates
+  today and must keep navigating, the same rule under which `isReadableTime`
+  keeps `"9:30"`.
+- `stepDate(dateStr, n)` — `addDays` for the four sites that step the *viewed*
+  date, anchoring on `todayStr()` when the date cannot be stepped.
+
+**`addDays` stays the strict public face** and is now implemented over
+`stepUTC`, throwing where it returns null. Every input the existing tests pin
+behaves identically; the only two that changed were already broken (the
+overflow, which threw before and throws now, and year 9999+1, which returned
+garbage and now throws). **Keeping the two functions apart is the point** — a
+caller wanting the strict answer wants `addDays`, a caller wanting the safe one
+wants `stepDate` — and `tests/day.test.js` pins that `addDays` still throws on
+every input `stepDate` absorbs, so the strict one cannot be quietly softened
+into the safe one.
+
+**`WeekView` takes ONE guard rather than four**, on the `anchor` its `ref` and
+`focus` both seed from. Every date operation in that component anchors on those
+two — `goWeek`/`moveFocus` via `addDays`, `goMonth` via its own `toISOString()`,
+`focusWithinWeek` via `weekDates(ref)` — so guarding the seed covers all four,
+where swapping the stepper would have covered two. A calendar cannot draw an
+unparseable date, so it opens on today.
+
+**Anchoring rather than refusing, deliberately.** Refusing the step at
+`goToDate` was the simpler guard and was rejected: it makes the bad booking
+unreachable, and the booking is the thing somebody has to go and repair — the
+v17.16.6 `BlockModal` rule. A silent no-op was rejected for the same reason
+v17.16.2 exists, where forward navigation quietly died once a year.
+
+**Not changed, and checked rather than assumed:** the day-announce effect
+(`App.jsx:3153`) already guards its own `new Date(viewDate+"T00:00:00Z")` with
+`Number.isFinite` and falls back to the raw string. It is the only other place
+`viewDate` meets a throwing date operation (`grep` over `src/` for `new Date(`,
+`toISOString`, `addDays` and `Date.parse` against `viewDate`).
+
+**Verification.** `tests/day.test.js` 21 → 29 tests; suite **817 → 825**, lint 0
+errors / 71 warnings, `check:style` OK, main bundle 92.79 kB gz. Live on DEV
+against both seeded bookings, with a `window.addEventListener('error')` counter
+armed: jump to the poisoned date, open the More popover (opens, Week/Month/Stats
+drawn), `→` lands on today+1 — **zero errors**, and the bad booking still shows
+its full action row, so it stays repairable. The pre-fix behaviour was
+reproduced first, one call site at a time, which is what established the
+event-handler / render split above.
+
+### Commit 2 — `date` and `status` get a FORMAT, and the audit stops being a precondition
+
+This is the ROADMAP item itself: *"the rules check TYPE, never FORMAT"*, the last
+entry in the **Deferred** section.
+
+**The entry's premise did not survive being measured.** It said closing this
+meant auditing what PROD holds first, because a format rule would refuse a stored
+`"31/08/2026"` — `sanitize` reads it through unchanged (`b.date || ""`,
+`status: b.status || "confirmed"`) and writes it back on the next save, and
+`persist` sends ONE multi-path `update()` that RTDB applies atomically, so one
+such booking would reject a whole optimiser reshuffle and leave staff unable to
+save a day that looks perfectly normal. That reasoning is correct and is
+preserved verbatim in the rules suite's own comment.
+
+**What changed is that the rule no longer has to choose.** Each predicate is
+
+```
+newData.isString() && (newData.val().matches(<pattern>) || newData.val() === data.val())
+```
+
+A value **carried through unchanged** is always allowed, whatever it is — which
+is exactly what `sanitize` does with a legacy record — so nothing already stored
+can make a day unsaveable. A value being **introduced or changed** must be
+well-formed, and on a create `data.val()` is null so the pattern is the only way
+in. The hazard is removed rather than accepted, which is why **no audit gates
+this**; the precondition the entry was waiting on turned out to be avoidable
+rather than unmet.
+
+- `date` — `/^([0-9]{4}-[0-9]{2}-[0-9]{2})?$/`.
+- `status` — `/^(confirmed|pending|seated|completed|cancelled)$/`, the set taken
+  from `STATUS_COLORS`, `BookingFormModal`'s `statusTargets` and every
+  `updateStatus` call site rather than from memory.
+- `time` — **still type-only, deliberately.** `isReadableTime` accepts `"9:30"`,
+  `"13:00:00"` and `":"` on purpose (v17.16.5), so the client's own output is
+  wider than any pattern worth writing — and a grandfather clause cannot help
+  with values the app is still free to produce.
+
+**Two things found by running it rather than reading about it.** The date pattern
+was first written `/^$|^[0-9]{4}-…$/` and the emulator refused to load the file
+at all: *"Illegal regular expression, unescaped ^, ^ can only appear at the end"*
+— RTDB's regex engine is a subset, so the empty case is an **optional group**,
+not an alternation. And `@firebase/rules-unit-testing` is declared in
+`package.json` but was **not installed** in this checkout, so `npm run test:rules`
+could not run at all until it was; a pre-existing environment gap, unrelated to
+this diff, recorded because the next person will hit it.
+
+**The audit was done anyway, on DEV**, read-only over the RTDB REST API with the
+signed-in ID token: **507 bookings, 0 malformed dates, 0 malformed times, 4
+distinct statuses** (`confirmed` 244, `completed` 203, `cancelled` 51,
+`pending` 9), every one of them valid. PROD was not read — Claude does not touch
+it — and with the grandfather clause it does not need to be.
+
+**Tests: 121 → 126.** The two deliberate-acceptance entries (`"an unknown
+status"`, `"a malformed date"`) and the `"accepts a badly FORMATTED … date and
+time"` test were **inverted with the rules**, in that file's established
+convention, and the long block comment explaining why format was unchecked was
+rewritten rather than deleted — its premise is what changed. Both halves proven
+against a sabotaged build, which is the only way to know a doubled-looking
+predicate is doing work:
+
+- drop `|| newData.val() === data.val()` → **2 failed / 124 passed**, exactly the
+  two carry-through tests;
+- widen both patterns to `/^.*$/` → **4 failed / 122 passed**, exactly the four
+  refusal tests.
+
+**Deploy: app first, rules second**, and needs the manual Firebase console step.
+### Commit 3 — `ROADMAP.md`'s Deferred section is empty
+
+Patryk's requirement for the session, and it took more than deleting the bullet.
+The section was ~65 lines, of which the bullet was 11: the rest was a running
+tally of the crash-test register (*"…leaving two: CT-2A-07 and CT-2A-09"*) and a
+statement of the convention for settling a finding. With the register at zero and
+the last entry closed, all of that describes entries that no longer exist — the
+"pointer that outlived what it pointed at" defect v17.16.10 is named for, one
+file over.
+
+So the tally is **deleted, not moved** (it is already in this log, version by
+version), and the one clause the file's own header lacked — that a settled
+finding is deleted whether it was withdrawn or a deliberate won't-fix, both being
+decisions rather than pending work — was folded **into** that header, where it
+applies to everything rather than to one section. `## Deferred` now reads
+`_(nothing pending)_`, matching `## Ideas`. `## Designed, not implemented` is
+untouched.
+
+Nothing from this version was added back: the navigation crash shipped in commit
+1 rather than becoming a new entry.
+
+### Commit 4 — /code-review fix: `openNew` must not seed a date the rules refuse
+
+**The one finding of the three that fails for a user**, and it exists because
+commits 1 and 2 met. Commit 1 deliberately KEEPS the search-jump that puts a
+booking's stored date into `viewDate` — the bad booking has to stay reachable to
+be repaired. Commit 2 made a malformed `date` illegal on a CREATE, where the
+grandfather clause structurally cannot apply. `openNew` sat between them,
+seeding the draft with `date: viewDate` verbatim.
+
+So: find a booking stored with `date: "31/08/2026"` in search, tap it, press
+**+ New**. The date field renders BLANK (an `<input type=date>` cannot display
+that string) while the draft holds it; `doSave`'s guard is `!f.date`, which a
+truthy `"31/08/2026"` passes; and the save is then refused by the server and
+parked. It flows on, too — `addFormToWaitlist` takes `date: f.date || viewDate`.
+
+**The seed is now the viewed date only when that is CANONICAL, else today**, and
+the test is `stepDate(viewDate, 0) === viewDate` rather than a fourth date
+predicate. A zero-day step returns a well-formed date or today, so it is an
+IDENTITY exactly for the dates an `<input type=date>` can render — and comparing
+rather than assigning is load-bearing: `"2026-8-3"` is readable and steppable but
+normalises to a DIFFERENT day, so assigning the step would put a date nobody
+chose into the form. Three tests pin that property (`tests/day.test.js`, 29 →
+32), because the idiom is not self-evident and `isReadableDate` is deliberately
+wider than it.
+
+`openEdit` is deliberately NOT given the same treatment: it must keep showing a
+malformed booking's own date, because carrying it through unchanged is what the
+grandfather clause permits and changing it in the form is the repair.
+
+**Verified live against the now-deployed DEV rules**, on the exact scenario:
+search-jump to the `"31/08/2026"` booking (nav date blank, so `viewDate` really
+was poisoned) → **+ New** → the form's date field reads `2026-09-03` → Save →
+the booking is on the server with `date: "2026-09-03"`, status `confirmed`, no
+parked write.
+
+### Commit 5 — /code-review: the create-path cost of the clause, recorded
+
+Two findings, one shape: the grandfather arm is unreachable on a CREATE **by
+construction** (a create has no `data` to match against), so re-introducing a
+malformed value is refused even when it is a restoration. Neither is a code
+defect and neither is fixed by changing behaviour — the alternatives are no pin
+at all, or normalising in `sanitize`, which rewrites stored data and is the
+decision v17.16.5 explicitly declined. What was missing was any record that the
+cost had been weighed.
+
+**Undo of a delete** is the reachable path. `applyUndo` re-concats the snapshot,
+`persist` sees a child that was absent and is now present, `stampForWrite` has no
+`old` and writes `baseUpdatedAt: 0`. Undoing the deletion of a malformed booking
+is therefore refused, retried and parked with Retry/Discard — visible and
+recoverable. Now pinned by a rules test that asserts both halves: the malformed
+re-create fails, and the same undo of a well-formed booking still succeeds.
+
+**The array→keyed migration** is the same shape, and its comment in
+`usePersistence.js` had stopped being true. It reasons that `sanitizeAll` leaves
+the rows "type-correct" and that only "one row the rules dislike" rejects the
+atomic patch — which BOUNDED the hazard while the rules checked type alone.
+Format is not normalised by `sanitize` (`b.date || ""`, `b.status ||
+"confirmed"`), and every row of that patch is a create, so the bound is gone.
+Unreachable in practice (the branch is `Array.isArray`-gated; PROD and DEV have
+been keyed since v15.5.0), so nothing observable changes — but the paragraph
+reads as a guarantee and had stopped being one, which is the class of defect
+v17.16.10 was entirely about.
+
+Rules suite 126 → 127; `npm test` 828. `database.rules.README.md` gains a "What
+the clause costs, and where" section naming both paths.
+

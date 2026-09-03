@@ -750,20 +750,18 @@ describe("field shapes are validated (v17.16.1)", () => {
     // know which ids are real without duplicating it and going stale.
     "an unknown table id":   { tables: ["Z9"] },
     // `sanitize` writes `date: b.date || ""`, so an empty date is REACHABLE in
-    // stored data. Refusing it would make every later write touching such a
-    // booking fail — the app unable to save, from a rules file deployed by hand.
+    // stored data AND is a shape the app itself emits. v17.16.11's pattern is
+    // an OPTIONAL group for exactly that reason — it matches "" as well as
+    // YYYY-MM-DD, so pinning the format did not make the app's own output
+    // illegal.
     "an empty date":         { date: "" },
     "no date at all":        { date: undefined },
-    // `status` is checked as a STRING but its VALUE set is deliberately not
-    // pinned: an unrecognised status is reachable in stored data (PlanView's
-    // v17.15.7 note says so), and pinning the set would refuse every write
-    // touching that booking. See ROADMAP.
-    "an unknown status":     { status: "teleported" },
     // Unpadded legacy times parse correctly in toMins and must keep working.
     "an unpadded time":      { time: "9:00" },
-    // FORMAT is deliberately NOT checked on `date` or `time`, only TYPE — see
-    // the block comment below. These two would be refused by a format rule.
-    "a malformed date":      { date: "31/08/2026" },
+    // FORMAT is still deliberately unchecked on `time`. v17.16.11 pinned `date`
+    // and `status` and deliberately NOT this one: `isReadableTime` accepts
+    // "9:30", "13:00:00" and ":" on purpose, so any pattern narrow enough to be
+    // worth having would refuse the client's own output.
     "a non-time string":     { time: "banana" },
   };
   for (const [label, patch] of Object.entries(accepted)) {
@@ -778,37 +776,116 @@ describe("field shapes are validated (v17.16.1)", () => {
     await assertFails(writeBooking(staff(), "bad", booking({ status: 7 })));
   });
 
-  // WHY `date` AND `time` ARE TYPE-ONLY, NOT FORMAT-CHECKED.
+  // WHY `date` AND `status` ARE NOW FORMAT-CHECKED, AND `time` IS NOT.
   //
-  // The first version of these rules matched them against
-  // /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ and /^[0-9]{1,2}:[0-9]{2}$/, and this
-  // version's own /code-review found the hazard. `sanitize` guarantees these
-  // fields are STRINGS (`b.date || ""`, `b.time || "13:00"`) and never that
-  // they are well-formed — so a value like "31/08/2026" already in the database
-  // survives a read unchanged and is written back on the next save.
+  // v17.16.1 checked all three as strings and no further, and said so here: a
+  // format rule would refuse a value like "31/08/2026" already in the database,
+  // which `sanitize` reads through unchanged (`b.date || ""`) and writes back on
+  // the next save. `persist` sends ONE multi-path update that RTDB applies
+  // ATOMICALLY, so an optimiser reshuffle touching that booking would have had
+  // the WHOLE day's write refused — a red banner and no way to save, on a day
+  // that looks perfectly normal. That hazard was real and the reasoning stands.
   //
-  // A format rule would refuse it, and `persist` sends ONE multi-path
-  // `update(ref(db,"bookings"), patch)` which RTDB applies ATOMICALLY (see
-  // "rejects a whole multi-path patch when ONE child is stale" above). An
-  // optimiser reshuffle writes every touched booking on a day in a single
-  // patch, so one such booking would reject the WHOLE day's write — the retry
-  // queue would replay it, fail again, and after MAX_RETRIES leave staff a red
-  // banner and no way to save, on a day that looks perfectly normal on screen.
+  // What v17.16.11 changed is that the rule no longer has to choose. Each of
+  // the two predicates is `matches(...) || newData.val() === data.val()`: a
+  // stored value CARRIED THROUGH UNCHANGED is always allowed, whatever it is,
+  // so no existing record can make a day unsaveable — while a value being
+  // INTRODUCED or CHANGED must be well-formed. On a create `data.val()` is null
+  // and the pattern is the only way through, which is what closes the door.
   //
-  // Type-only still fixes what CT-2A-03 actually reported: `toMins(t)` is
-  // `t.split(":")`, which THROWS on a number and merely returns NaN on a bad
-  // string. And it is the same reasoning already applied to `status` two rules
-  // above — checked as a string, never against its five known values, because
-  // unrecognised data is reachable and a rule that refuses it stops the
-  // restaurant working. Applying it to `status` and not to `date`/`time` was
-  // the inconsistency; this is it applied consistently.
+  // That is why this needed no audit of what PROD holds, which is what the
+  // ROADMAP entry had been waiting on: the grandfather clause makes the rule
+  // safe against data nobody has looked at. (DEV was audited anyway — 507
+  // bookings, zero malformed dates, zero malformed times, four distinct
+  // statuses all valid.)
   //
-  // Checking formats is a separate decision, and it needs evidence of what PROD
-  // actually holds — not a guess committed to a file that is deployed by hand
-  // with no staging. See ROADMAP.
-  it("accepts a badly FORMATTED but correctly TYPED date and time", async () => {
-    await assertSucceeds(writeBooking(staff(), "odd",
-      booking({ date: "31/08/2026", time: "half seven" })));
+  // `time` is deliberately NOT pinned. `isReadableTime` (booking-logic.js)
+  // accepts "9:30", "13:00:00" and ":" on purpose — the v17.16.5 rule that
+  // nothing currently working may move — so the client's own output is wider
+  // than any pattern worth writing, and a grandfather clause cannot help with
+  // values the app is still free to produce.
+
+  it("refuses a NEW booking whose date is malformed", async () => {
+    await assertFails(writeBooking(staff(), "new1", booking({ date: "31/08/2026" })));
+  });
+
+  it("refuses a NEW booking whose status is not one of the five", async () => {
+    await assertFails(writeBooking(staff(), "new2", booking({ status: "teleported" })));
+  });
+
+  it("accepts all five real statuses", async () => {
+    // The set comes from STATUS_COLORS / BookingFormModal's statusTargets /
+    // every updateStatus call site — checked, not remembered.
+    let i = 0;
+    for (const st of ["confirmed", "pending", "seated", "completed", "cancelled"]) {
+      await assertSucceeds(writeBooking(staff(), "st" + i++, booking({ status: st })));
+    }
+  });
+
+  // THE GRANDFATHER CLAUSE. This is the half that makes the pin safe, and each
+  // of these fails if `|| newData.val() === data.val()` is dropped from either
+  // predicate — which is the plausible "simplification" a later reader might
+  // make, seeing a rule that looks needlessly doubled.
+  describe("a booking already holding a malformed value stays saveable", () => {
+    const stored = (patch) => booking(Object.assign({ updatedAt: 5000 }, patch));
+    const edit   = (patch) => booking(Object.assign(
+      { updatedAt: 6000, baseUpdatedAt: 5000 }, patch));
+
+    it("carries a stored malformed DATE through an unrelated edit", async () => {
+      await seed((db) => db.ref("bookings/legacy").set(stored({ date: "31/08/2026" })));
+      // The optimiser moved its table. `sanitize` re-emits the date verbatim.
+      await assertSucceeds(writeBooking(staff(), "legacy",
+        edit({ date: "31/08/2026", tables: ["5A"] })));
+    });
+
+    it("carries a stored unknown STATUS through an unrelated edit", async () => {
+      await seed((db) => db.ref("bookings/legacy").set(stored({ status: "teleported" })));
+      await assertSucceeds(writeBooking(staff(), "legacy",
+        edit({ status: "teleported", size: 6 })));
+    });
+
+    it("lets a malformed value be REPAIRED to a valid one", async () => {
+      // The repair path has to work or the grandfather clause would be a trap.
+      await seed((db) => db.ref("bookings/legacy").set(stored({ date: "31/08/2026" })));
+      await assertSucceeds(writeBooking(staff(), "legacy", edit({ date: "2026-08-31" })));
+    });
+
+    it("refuses a malformed value being changed to a DIFFERENT malformed one", async () => {
+      // Carrying a value through is not the same as being free to write junk.
+      await seed((db) => db.ref("bookings/legacy").set(stored({ date: "31/08/2026" })));
+      await assertFails(writeBooking(staff(), "legacy", edit({ date: "01/09/2026" })));
+    });
+
+    // THE COST OF THE CLAUSE, pinned so it reads as a decision rather than an
+    // oversight. A CREATE has no `data`, so the grandfather arm is unreachable
+    // there by construction — which means re-INTRODUCING a malformed value is
+    // refused even when it is a restoration of something that existed.
+    //
+    // The reachable path is undo-of-delete: `applyUndo` re-concats the snapshot,
+    // `persist` diffs a `prev` without the child against a `computed` with it,
+    // and `stampForWrite` has no `old` so it writes `baseUpdatedAt: 0`. The
+    // restore is refused, retried, and parked with Retry/Discard (v17.16.9) —
+    // visible and recoverable, not silent. Accepted: the alternative is either
+    // no pin at all, or normalising in `sanitize`, which would rewrite stored
+    // data and is the decision v17.16.5 explicitly declined.
+    //
+    // The array->keyed migration is the same shape (every row `baseUpdatedAt:0`)
+    // and is noted at that site in usePersistence.js.
+    it("refuses a RE-CREATE of a deleted malformed booking — undo's cost", async () => {
+      await seed((db) => db.ref("bookings/gone").set(stored({ date: "31/08/2026" })));
+      await assertSucceeds(staff().ref("bookings").update({ gone: null }));   // the delete
+      // Undo: same id, same fields, but now a create — baseUpdatedAt 0, no `data`.
+      await assertFails(writeBooking(staff(), "gone",
+        booking({ date: "31/08/2026", updatedAt: 7000, baseUpdatedAt: 0 })));
+      // The same undo of a WELL-FORMED booking is unaffected.
+      await assertSucceeds(writeBooking(staff(), "gone2",
+        booking({ date: "2026-08-31", updatedAt: 7000, baseUpdatedAt: 0 })));
+    });
+
+    it("refuses a malformed value on a booking that had a valid one", async () => {
+      await seed((db) => db.ref("bookings/ok").set(stored({ date: "2026-09-01" })));
+      await assertFails(writeBooking(staff(), "ok", edit({ date: "31/08/2026" })));
+    });
   });
 
   it("a delete is still unconditional — child validates do not run for it", async () => {

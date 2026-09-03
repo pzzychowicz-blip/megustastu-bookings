@@ -563,7 +563,27 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // It is NOT a guarantee the write lands: `arr` is `sanitizeAll(val)`, so
         // these rows are type-correct but otherwise whatever the legacy node
         // held, and the patch below is atomic — one row the rules dislike
-        // rejects the whole migration, and the `.catch` below resets
+        // rejects the whole migration.
+        //
+        // v17.16.11 (/code-review) WIDENED what "a row the rules dislike"
+        // means, and the sentence above no longer bounds it on its own. The
+        // rules now pin the FORMAT of `date` and `status`, and `sanitize`
+        // normalises neither — it writes `b.date || ""` and
+        // `b.status || "confirmed"` VERBATIM. So a legacy array node holding
+        // one `date: "31/08/2026"` row now produces a row that is type-correct
+        // and still refused. The grandfather clause that makes such a row
+        // saveable everywhere else (`newData.val() === data.val()`) cannot
+        // help HERE: every row of this patch carries `baseUpdatedAt: 0`, i.e.
+        // it is a CREATE, and a create has no `data` to match against.
+        //
+        // Still unreachable in practice — this branch is `Array.isArray`-gated
+        // and both PROD and DEV have been keyed since v15.5.0 — so nothing
+        // observable changes, and the standing decision not to normalise in
+        // `sanitize` (v17.16.5: normalising a record that renders is a
+        // different decision) stands. Recorded because the paragraph above
+        // reads as a bound and has stopped being one.
+        //
+        // On any such rejection the `.catch` below resets
         // `migratedRef`, so the rejected write's rollback echo re-fires this
         // listener and it re-attempts on every snapshot. That is a write-reject
         // loop, the same class as the v17.10.2 reconciliation loop (CLAUDE.md

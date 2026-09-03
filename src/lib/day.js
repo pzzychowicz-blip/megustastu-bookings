@@ -94,10 +94,76 @@ export function dayDiff(fromDateStr, toDateStr) {
 // function is WeekView's own private `addDays`, moved out: the correct
 // implementation was the hidden one while the broken copy was the public
 // behaviour.
+//
+// v17.16.11 splits the arithmetic out into `stepUTC` below and leaves this the
+// strict public face it has always been. Every input the tests pin behaves
+// identically; the two that changed were both already broken, and are described
+// at `stepUTC`.
 export function addDays(dateStr, n) {
+  const out = stepUTC(dateStr, n);
+  if (out === null) throw new RangeError("Invalid time value");
+  return out;
+}
+
+// v17.16.11: the step, WITHOUT the throw — null when the answer cannot be a
+// "YYYY-MM-DD" date. Module-private, because a caller wanting the strict answer
+// wants `addDays` and a caller wanting the safe one wants `stepDate`; a third
+// spelling of the same arithmetic is what this exists to prevent.
+//
+// It rejects on three grounds and each was measured, not reasoned about:
+//   - the input does not parse at all (`""`, `"31/08/2026"`, `"not-a-date"`,
+//     `"20260803"`) — `toISOString()` on an Invalid Date throws;
+//   - the STEP falls off the representable range: `"275760-09-13"` parses fine
+//     and `+1` day throws, so guarding the input alone is not enough;
+//   - the step lands outside years 0001-9999, where `toISOString()` switches to
+//     the expanded `±YYYYYY` form and `slice(0,10)` returns a truncated string
+//     that is not a date. `addDays("9999-12-31", 1)` used to return the garbage
+//     `"+010000-01"`; it throws now, which is the honest answer and is why this
+//     tests the OUTPUT rather than trusting the range check above it.
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+function stepUTC(dateStr, n) {
+  if (typeof dateStr !== "string") return null;
   const d = new Date(dateStr);
+  if (!Number.isFinite(d.getTime())) return null;
   d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
+  if (!Number.isFinite(d.getTime())) return null;
+  const out = d.toISOString().slice(0, 10);
+  return YMD_RE.test(out) ? out : null;
+}
+
+// v17.16.11: can the app NAVIGATE from this date — the consumer's requirement,
+// not a format of its own, which is the shape `isReadableTime` established in
+// v17.16.5 and `isReadableBlock` in v17.16.6. It is defined AS the thing it
+// guards (a zero-day step succeeding), so the predicate and the operation
+// cannot drift apart the way two hand-written rules would.
+//
+// Deliberately NOT a `^\d{4}-\d{2}-\d{2}$` pattern: `"2026-8-3"` parses and
+// steps, so it navigates today and must keep navigating. Nothing that currently
+// works may move — the rule `isReadableTime` was written under, where `"9:30"`
+// is kept for exactly the same reason.
+export function isReadableDate(v) {
+  return stepUTC(v, 0) !== null;
+}
+
+// v17.16.11: `addDays` for the four sites that step the VIEWED date, anchoring
+// to today when the date they were handed cannot be stepped.
+//
+// `viewDate` is not always app-controlled. `SearchPanel`'s onPick calls
+// `goToDate(b.date)` with a booking's STORED date, and `searchBookings` filters
+// on name, phone and `anonymized` — never on whether the date is a date. So one
+// booking holding `date: ""` (a shape `sanitize` itself emits, and one the
+// security rules accept deliberately) put an unparseable string into `viewDate`,
+// and the next press of the arrow keys or the header chevrons threw out of
+// `addDays` and unmounted the whole app into the v17.16.0 ErrorBoundary.
+//
+// Anchoring on today rather than refusing the step is the point: the bad booking
+// stays reachable so somebody can go and repair it (the v17.16.6 BlockModal
+// rule), while the arrows walk you back out to a real day. A silent no-op was
+// the other option and is exactly the shape v17.16.2 removed, where forward
+// navigation quietly died once a year.
+export function stepDate(dateStr, n) {
+  const out = stepUTC(dateStr, n);
+  return out !== null ? out : addDays(todayStr(), n);
 }
 
 // NOW, expressed in minutes since midnight of `dateStr` — the one axis on which
