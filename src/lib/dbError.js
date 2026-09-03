@@ -48,3 +48,35 @@ export function dbError(path){
     subscribers.forEach(function(fn){ try{ fn(info); }catch{ /* never let a subscriber break reporting */ } });
   };
 }
+
+// ── v17.16.13: the same job for a rejected WRITE ─────────────────────────────
+//
+// `update(...).catch(function(){ ... })` took NO argument at all in
+// usePersistence, and the line it logged hard-coded ONE cause: "stale
+// per-booking revision". `revGuard.writeWithRev` had the error in hand and
+// still logged a hard-coded "stale revision". So a failed field `.validate`, a
+// create carrying a non-zero `baseUpdatedAt`, a rules deploy that has not
+// landed and a plain network failure all printed the same sentence, naming a
+// cause nothing had checked — the defect class this file already exists for,
+// one verb over.
+//
+// It is NOT fixable by guessing better. RTDB collapses every Security Rule
+// refusal into ONE code, `PERMISSION_DENIED`, and the error carries nothing
+// that separates a stale CAS base from a rule that rejected the shape. So the
+// honest line names the code, quotes the SDK's own message, and ENUMERATES what
+// that code can mean rather than picking one. An assertion nothing measured is
+// what cost a release cycle in v17.5.1 and an evening in v17.16.13: the
+// reconciliation-oscillation diagnosis had to re-instrument this very catch to
+// see `PERMISSION_DENIED` at all, because the app was busy blaming a revision.
+//
+// Pure and separately tested — the console call is the caller's.
+export function describeWriteError(path,err){
+  const code=(err&&err.code)||"unknown";
+  const msg=(err&&err.message)||String(err);
+  return "[SAFE] "+path+" write REJECTED — "+code+": "+msg+
+    (code==="PERMISSION_DENIED"
+      ? " — a Security Rule refused it, and the error does not say which:"+
+        " a stale CAS base (baseUpdatedAt / <node>Rev), a failed field .validate,"+
+        " or rules that have not been deployed all arrive as this one code."
+      : "");
+}

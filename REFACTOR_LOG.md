@@ -19225,3 +19225,53 @@ would miss. On today it still works (a confirmed card went to seated); on
 `holdSelection` re-verified after the change — one export, and the attribute
 goes on and comes off. Gate: 93.34 kB gz · 833 tests · 0 lint errors · style OK.
 A fresh tab boots v17.16.12 with an empty console.
+
+
+---
+
+## v17.16.13 — the identity a read invented
+
+**Date:** 2026-09-04 · **Branch:** `fix/v17.16.13-reconcile-oscillation` ·
+**Behavioural change:** yes — commit 2 stops the app writing rows it invented.
+**Files:** `src/lib/dbError.js`, `src/hooks/usePersistence.js`,
+`src/lib/revGuard.js`, `tests/db-error.test.js` (+ later commits' own files).
+
+`ROADMAP.md`'s whole Deferred section: the v15.6.1 reconciliation effect writing
+forever, and the write `.catch` that blamed a cause it never checked. They turned
+out to be one investigation — the second is why the first had been misdiagnosed.
+
+### Commit 1 — a rejected write says what it knows, and no more
+
+`update(ref(db,"bookings"),patch).catch(function(){ … })` took **no argument**,
+and the line it logged hard-coded `stale per-booking revision`.
+`revGuard.writeWithRev` was the same defect one file over with less excuse: it
+*had* `err`, passed it to `onReject`, and still logged a hard-coded
+`stale revision`. A third site — the legacy-array migration write in
+`usePersistence.js` — logged **nothing at all**, so a refused migration was
+invisible while `arrayShapeRef` held every booking write behind it.
+
+`describeWriteError(path, err)` (`src/lib/dbError.js`, pure, tested) names the
+path, the code and the SDK's own message. What it deliberately does **not** do is
+pick a cause: RTDB collapses every Security Rule refusal into one
+`PERMISSION_DENIED` and the error carries nothing separating a stale CAS base
+from a failed field `.validate` from rules that were never deployed. So it
+enumerates the three. The test asserts the *absence* of a single-cause claim,
+which is the actual regression to guard.
+
+This is `dbError.js`'s own reason for existing, one verb over: v17.5.1 added it
+because a failed *read* reported nothing and cost a release cycle. A failed
+*write* reported something confidently wrong, which is worse — it sends the next
+reader somewhere specific.
+
+**Measured, not reasoned.** Before: `[SAFE] bookings write rejected by server
+(stale per-booking revision)`. After, against the same DEV data:
+`[SAFE] bookings write REJECTED — PERMISSION_DENIED: Permission denied — a
+Security Rule refused it, and the error does not say which: …`. The ROADMAP
+entry had recorded that diagnosing the oscillation required temporarily
+re-instrumenting this very catch. It did — and with the catch fixed, the cause
+fell out in two more measurements (commit 2).
+
+`npm test` **833 → 837** (four in the new `tests/db-error.test.js`). The
+baseline is 833 and not the 828 `CLAUDE.md` states "as of v17.16.11" — v17.16.12
+added five and the figure was not re-measured, which is the drift that file's own
+line-count note warns about. Corrected there in commit 3.
