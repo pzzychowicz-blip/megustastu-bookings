@@ -532,8 +532,6 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // on a brand-new database.
   useEffect(function(){
     const unsub=onValue(ref(db,"bookings"),function(snap){
-
-
       const val=snap.val();
       // v15.5.0: Firebase returns an ARRAY only when the node has sequential
       // integer keys — exactly what the pre-v15.5.0 whole-array writes produced.
@@ -627,12 +625,12 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // old integer index must WIN over that index's null, or the migration
         // would delete the very booking it is writing.
         // v17.16.13: this one logged NOTHING at all, so a refused migration was
-      // invisible — and a legacy array node that cannot migrate leaves
-      // `arrayShapeRef` holding every booking write forever (see v15.5.0).
-      update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(err){
-        console.warn(describeWriteError("bookings (legacy-array migration)",err)+" The array shape stays; booking writes remain held.");
-        migratedRef.current=false;
-      });
+        // invisible — and a legacy array node that cannot migrate leaves
+        // `arrayShapeRef` holding every booking write forever (see v15.5.0).
+        update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(err){
+          console.warn(describeWriteError("bookings (legacy-array migration)",err)+" The array shape stays; booking writes remain held.");
+          migratedRef.current=false;
+        });
       }
       // v15.6.0: re-apply + persist any held user changes on top of this fresh snapshot
       // (after clearStale, so they don't re-hold). Without this, a live snapshot that
