@@ -18738,3 +18738,119 @@ loaded, empty-array guard, legacy-array hold) local state has already advanced
 to `computed`. That is pre-existing — the old updater returned `computed`
 regardless of the outcome too — so it is out of scope for this diff and is not
 a regression.
+
+---
+
+## v17.16.11 — the date the app could not navigate away from
+
+**Date:** 2026-09-03 · **Branch:** `fix/v17.16.11-date-nav-crash` ·
+**Behavioural change:** yes — see commit 1. **Files:** `src/lib/day.js`,
+`src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/WeekView.jsx`, `tests/day.test.js`, `CLAUDE.md`, `ROADMAP.md`
+(+ commit 3's own files, recorded with it).
+
+The version that empties `ROADMAP.md`'s **Deferred** section. It set out to
+close the last thing in it — the CT-2A-03 follow-on, *"the rules check TYPE,
+never FORMAT"* — and the measurement moved the problem somewhere better.
+
+### Commit 1 — date navigation survives an unparseable `viewDate`
+
+**Found while measuring the ROADMAP item, not by looking for it.** The entry
+asks what happens when a booking holds a malformed `date`, so the first thing
+measured was what the pure functions do with one. `weekdayOf` returns Sunday,
+`hoursFor` falls back to `DEFAULT_DAY`, `dayDiff` returns `null` — all
+defensive, all fine. `addDays` throws.
+
+```
+addDays("31/08/2026", 1)  →  RangeError: Invalid time value
+addDays("", 1)            →  RangeError: Invalid time value
+```
+
+**It is reachable from stored data, and `""` is a shape the app produces
+itself.** `searchBookings` (`customers.js:426`) filters on name, phone and
+`anonymized` and never on whether the date is a date; `SearchPanel`'s `onPick`
+calls `goToDate(b.date)` with the booking's stored value. So the search results
+are a list of ways to put an arbitrary string into `viewDate`. `sanitize` writes
+`date: b.date || ""`, and `tests/rules/database-rules.test.js` lists a booking
+with no date under *"every booking shape the app itself produces"*.
+
+**The plan's account of the consequence was wrong in half, and the correction is
+the useful part.** It said the throw unmounts the tree into the v17.16.0
+`ErrorBoundary`. Measured live on DEV against two seeded bookings
+(`date: "31/08/2026"` and `date: ""`), with the pre-fix call sites temporarily
+restored one at a time:
+
+- **The arrows throw in an EVENT HANDLER**, which an error boundary does not
+  catch. `Uncaught RangeError: Invalid time value at addDays`, `#root` still
+  populated, page still drawn. The symptom is not a white screen — it is that
+  Next day, Previous day and `←`/`→` **silently stop working**, leaving you
+  stuck on that date with only the Today button and the date picker as a way
+  out. Quieter than a crash and harder to report.
+- **`WeekView` throws during RENDER**, which a boundary does catch. Opening the
+  More popover (`M`) from the poisoned date replaced the whole app with *"MGT
+  Bookings hit an error"* — `[MGT] render error caught by the boundary … at
+  WeekView`.
+
+Two paths, two different failures, from one throw. Worth stating because the
+fix's shape follows from it: the `WeekView` half is the severe one and it is
+**not** fixed by swapping `addDays` for a safe stepper, since `goMonth` throws on
+its own `toISOString()` rather than through `addDays` at all.
+
+**The fix.** `src/lib/day.js` gains one private stepper and two exports:
+
+- `stepUTC(dateStr, n)` — module-private, the step **without** the throw, `null`
+  when the answer cannot be a `YYYY-MM-DD`. It rejects on three measured
+  grounds, and the second and third are why guarding the *input* is not enough:
+  the input does not parse; the **step** falls off the representable range
+  (`"275760-09-13"` parses and `+1` day is NaN); or the step lands outside years
+  0001–9999, where `toISOString()` switches to the expanded `±YYYYYY` form and
+  `slice(0,10)` returns a truncated non-date — `addDays("9999-12-31", 1)` used to
+  return the string `"+010000-01"`. So it tests the OUTPUT.
+- `isReadableDate(v)` — "can the app navigate from this date", **defined as a
+  zero-day step succeeding**. The consumer's-requirement shape `isReadableTime`
+  established in v17.16.5 and `isReadableBlock` in v17.16.6, taken one step
+  further: the predicate *is* the operation, so the two cannot drift apart the
+  way two hand-written rules would. Deliberately **not** a
+  `^\d{4}-\d{2}-\d{2}$` pattern — `"2026-8-3"` parses and steps, so it navigates
+  today and must keep navigating, the same rule under which `isReadableTime`
+  keeps `"9:30"`.
+- `stepDate(dateStr, n)` — `addDays` for the four sites that step the *viewed*
+  date, anchoring on `todayStr()` when the date cannot be stepped.
+
+**`addDays` stays the strict public face** and is now implemented over
+`stepUTC`, throwing where it returns null. Every input the existing tests pin
+behaves identically; the only two that changed were already broken (the
+overflow, which threw before and throws now, and year 9999+1, which returned
+garbage and now throws). **Keeping the two functions apart is the point** — a
+caller wanting the strict answer wants `addDays`, a caller wanting the safe one
+wants `stepDate` — and `tests/day.test.js` pins that `addDays` still throws on
+every input `stepDate` absorbs, so the strict one cannot be quietly softened
+into the safe one.
+
+**`WeekView` takes ONE guard rather than four**, on the `anchor` its `ref` and
+`focus` both seed from. Every date operation in that component anchors on those
+two — `goWeek`/`moveFocus` via `addDays`, `goMonth` via its own `toISOString()`,
+`focusWithinWeek` via `weekDates(ref)` — so guarding the seed covers all four,
+where swapping the stepper would have covered two. A calendar cannot draw an
+unparseable date, so it opens on today.
+
+**Anchoring rather than refusing, deliberately.** Refusing the step at
+`goToDate` was the simpler guard and was rejected: it makes the bad booking
+unreachable, and the booking is the thing somebody has to go and repair — the
+v17.16.6 `BlockModal` rule. A silent no-op was rejected for the same reason
+v17.16.2 exists, where forward navigation quietly died once a year.
+
+**Not changed, and checked rather than assumed:** the day-announce effect
+(`App.jsx:3153`) already guards its own `new Date(viewDate+"T00:00:00Z")` with
+`Number.isFinite` and falls back to the raw string. It is the only other place
+`viewDate` meets a throwing date operation (`grep` over `src/` for `new Date(`,
+`toISOString`, `addDays` and `Date.parse` against `viewDate`).
+
+**Verification.** `tests/day.test.js` 21 → 29 tests; suite **817 → 825**, lint 0
+errors / 71 warnings, `check:style` OK, main bundle 92.79 kB gz. Live on DEV
+against both seeded bookings, with a `window.addEventListener('error')` counter
+armed: jump to the poisoned date, open the More popover (opens, Week/Month/Stats
+drawn), `→` lands on today+1 — **zero errors**, and the bad booking still shows
+its full action row, so it stays repairable. The pre-fix behaviour was
+reproduced first, one call site at a time, which is what established the
+event-handler / render split above.

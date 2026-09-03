@@ -267,7 +267,7 @@ const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
-import { todayStr, addDays } from "./lib/day";
+import { todayStr, stepDate } from "./lib/day";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -277,7 +277,7 @@ import { todayStr, addDays } from "./lib/day";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:"MGT Bookings",
-  version:"17.16.10",
+  version:"17.16.11",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -3610,13 +3610,13 @@ function BookingApp({uid}){
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
-              onClick={function(){goToDate(addDays(viewDate,-1));}}
+              onClick={function(){goToDate(stepDate(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
               ><ChevronLeftIcon size={IC.chrome} /></button><button
-              onClick={function(){goToDate(addDays(viewDate,1));}}
+              onClick={function(){goToDate(stepDate(viewDate,1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"

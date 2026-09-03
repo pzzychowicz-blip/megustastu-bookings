@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import process from "node:process";
-import { todayStr, dayDiff, nowOn, addDays } from "../src/lib/day.js";
+import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate } from "../src/lib/day.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const REAL_TZ = process.env.TZ;
@@ -182,6 +182,103 @@ describe("addDays — the arrows, and the day they did nothing", () => {
       }
       expect(d).toBe("2027-01-01");
     });
+  });
+});
+
+// v17.16.11. The crash the CT-2A-03 follow-on audit turned up, which is a
+// CLIENT defect rather than the rules one it was filed under.
+//
+// `viewDate` is not always app-controlled: SearchPanel's onPick calls
+// `goToDate(b.date)` with a booking's STORED date, and `searchBookings` filters
+// on name, phone and `anonymized` and never on whether the date is a date. So
+// one booking holding `date: ""` — a shape `sanitize` itself emits, and one the
+// security rules accept deliberately — put an unparseable string into
+// `viewDate`, and the next arrow key threw out of `addDays` and unmounted the
+// whole app into the v17.16.0 ErrorBoundary.
+describe("stepDate — the arrows, when the date came from a booking", () => {
+  // The inputs measured to throw. `""` is the one that matters: it is reachable
+  // from data the app produces, not only from a hand-written record.
+  const unsteppable = ["", "31/08/2026", "not-a-date", "20260803", "2026-13-45"];
+
+  it("addDays still throws on every one of them", () => {
+    // Pinning that the STRICT function was not quietly softened into the safe
+    // one. Two functions, two jobs; collapsing them is the regression.
+    for (const d of unsteppable) expect(() => addDays(d, 1)).toThrow();
+  });
+
+  it("stepDate anchors on today instead of throwing", () => {
+    const today = todayStr();
+    for (const d of unsteppable) {
+      expect(stepDate(d, 1)).toBe(addDays(today, 1));
+      expect(stepDate(d, -1)).toBe(addDays(today, -1));
+    }
+  });
+
+  it("stepDate is addDays for every date that IS steppable", () => {
+    // The other half, and the one a careless guard breaks: normal navigation
+    // must be byte-for-byte what it was.
+    withTZ("Atlantic/Canary", () => {
+      let d = "2026-01-01";
+      for (let i = 0; i < 365; i++) {
+        const next = addDays(d, 1);
+        expect(stepDate(d, 1)).toBe(next);
+        expect(stepDate(next, -1)).toBe(d);
+        d = next;
+      }
+    });
+  });
+
+  it("keeps navigating from a loosely-formatted date that already navigates", () => {
+    // `"2026-8-3"` is not `YYYY-MM-DD` but it parses and it steps, so it works
+    // today and must keep working. This is why the predicate is not a pattern —
+    // the `isReadableTime` rule, where `"9:30"` is kept for the same reason.
+    expect(isReadableDate("2026-8-3")).toBe(true);
+    expect(stepDate("2026-8-3", 1)).toBe(addDays("2026-8-3", 1));
+  });
+});
+
+describe("isReadableDate — defined as the operation it guards", () => {
+  it("agrees with addDays about every input, in both directions", () => {
+    // The contract: readable IFF addDays does not throw. Written as an
+    // equivalence rather than two lists, so the predicate cannot drift from the
+    // function the way two hand-written rules would.
+    const cases = ["2026-08-31", "2026-8-3", "2026-01-01", "1970-01-01",
+                   "", "31/08/2026", "not-a-date", "20260803", "2026-13-45",
+                   "275760-09-13", "9999-12-31"];
+    for (const d of cases) {
+      let threw = false;
+      try { addDays(d, 0); } catch { threw = true; }
+      expect(isReadableDate(d)).toBe(!threw);
+    }
+  });
+
+  it("rejects a non-string, including the values that parse as dates", () => {
+    // `new Date(null)` is the epoch and `new Date(20260803)` is a valid instant,
+    // so a bare parse check would call both readable.
+    for (const v of [null, undefined, 20260803, 0, {}, ["2026-08-31"]]) {
+      expect(isReadableDate(v)).toBe(false);
+    }
+  });
+
+  it("rejects a date that parses but cannot be stepped", () => {
+    // "275760-09-13" is the maximum representable date: it parses, and +1 day
+    // is NaN. So a bare `Number.isFinite(new Date(v).getTime())` predicate would
+    // have called it readable and left the crash reachable from a date that
+    // looks fine — which is the whole reason the predicate is defined as the
+    // step succeeding rather than as the input parsing.
+    expect(Number.isFinite(new Date("275760-09-13").getTime())).toBe(true);
+    expect(() => addDays("275760-09-13", 1)).toThrow();
+    expect(isReadableDate("275760-09-13")).toBe(false);
+    expect(stepDate("275760-09-13", 1)).toBe(addDays(todayStr(), 1));
+  });
+
+  it("rejects a step that lands outside the four-digit years", () => {
+    // `addDays("9999-12-31", 1)` used to return the string "+010000-01" — ten
+    // characters of the expanded ±YYYYYY form, which is not a date and which
+    // every consumer would have gone on treating as one.
+    expect(isReadableDate("9999-12-31")).toBe(true);      // the date itself is fine
+    expect(() => addDays("9999-12-31", 1)).toThrow();     // its successor is not
+    expect(stepDate("9999-12-31", 1)).toBe(addDays(todayStr(), 1));
   });
 });
 
