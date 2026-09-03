@@ -18854,3 +18854,70 @@ drawn), `→` lands on today+1 — **zero errors**, and the bad booking still sh
 its full action row, so it stays repairable. The pre-fix behaviour was
 reproduced first, one call site at a time, which is what established the
 event-handler / render split above.
+
+### Commit 2 — `date` and `status` get a FORMAT, and the audit stops being a precondition
+
+This is the ROADMAP item itself: *"the rules check TYPE, never FORMAT"*, the last
+entry in the **Deferred** section.
+
+**The entry's premise did not survive being measured.** It said closing this
+meant auditing what PROD holds first, because a format rule would refuse a stored
+`"31/08/2026"` — `sanitize` reads it through unchanged (`b.date || ""`,
+`status: b.status || "confirmed"`) and writes it back on the next save, and
+`persist` sends ONE multi-path `update()` that RTDB applies atomically, so one
+such booking would reject a whole optimiser reshuffle and leave staff unable to
+save a day that looks perfectly normal. That reasoning is correct and is
+preserved verbatim in the rules suite's own comment.
+
+**What changed is that the rule no longer has to choose.** Each predicate is
+
+```
+newData.isString() && (newData.val().matches(<pattern>) || newData.val() === data.val())
+```
+
+A value **carried through unchanged** is always allowed, whatever it is — which
+is exactly what `sanitize` does with a legacy record — so nothing already stored
+can make a day unsaveable. A value being **introduced or changed** must be
+well-formed, and on a create `data.val()` is null so the pattern is the only way
+in. The hazard is removed rather than accepted, which is why **no audit gates
+this**; the precondition the entry was waiting on turned out to be avoidable
+rather than unmet.
+
+- `date` — `/^([0-9]{4}-[0-9]{2}-[0-9]{2})?$/`.
+- `status` — `/^(confirmed|pending|seated|completed|cancelled)$/`, the set taken
+  from `STATUS_COLORS`, `BookingFormModal`'s `statusTargets` and every
+  `updateStatus` call site rather than from memory.
+- `time` — **still type-only, deliberately.** `isReadableTime` accepts `"9:30"`,
+  `"13:00:00"` and `":"` on purpose (v17.16.5), so the client's own output is
+  wider than any pattern worth writing — and a grandfather clause cannot help
+  with values the app is still free to produce.
+
+**Two things found by running it rather than reading about it.** The date pattern
+was first written `/^$|^[0-9]{4}-…$/` and the emulator refused to load the file
+at all: *"Illegal regular expression, unescaped ^, ^ can only appear at the end"*
+— RTDB's regex engine is a subset, so the empty case is an **optional group**,
+not an alternation. And `@firebase/rules-unit-testing` is declared in
+`package.json` but was **not installed** in this checkout, so `npm run test:rules`
+could not run at all until it was; a pre-existing environment gap, unrelated to
+this diff, recorded because the next person will hit it.
+
+**The audit was done anyway, on DEV**, read-only over the RTDB REST API with the
+signed-in ID token: **507 bookings, 0 malformed dates, 0 malformed times, 4
+distinct statuses** (`confirmed` 244, `completed` 203, `cancelled` 51,
+`pending` 9), every one of them valid. PROD was not read — Claude does not touch
+it — and with the grandfather clause it does not need to be.
+
+**Tests: 121 → 126.** The two deliberate-acceptance entries (`"an unknown
+status"`, `"a malformed date"`) and the `"accepts a badly FORMATTED … date and
+time"` test were **inverted with the rules**, in that file's established
+convention, and the long block comment explaining why format was unchecked was
+rewritten rather than deleted — its premise is what changed. Both halves proven
+against a sabotaged build, which is the only way to know a doubled-looking
+predicate is doing work:
+
+- drop `|| newData.val() === data.val()` → **2 failed / 124 passed**, exactly the
+  two carry-through tests;
+- widen both patterns to `/^.*$/` → **4 failed / 122 passed**, exactly the four
+  refusal tests.
+
+**Deploy: app first, rules second**, and needs the manual Firebase console step.
