@@ -36,6 +36,7 @@ import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
 import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight } from "./atoms";
 import { CloseIcon } from "./Icons";
+import { todayStr } from "../lib/day";
 
 // Mon-first display order; `i` is the underlying getDay() index stored in
 // recurrence.days. Sun is at the end (index 0).
@@ -47,7 +48,7 @@ const DAY_LABELS = [
 export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   const err = validateReminderDraft(draft);
   const rec = draft.recurrence || {};
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const today = todayStr();
   // The open/close animation, the scrim, the body-scroll lock, the dialog
   // semantics and the focus trap all come from `Overlay` now — it reads the
   // wrapping <ModalPresence> itself.
@@ -76,11 +77,11 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
   function setType(t) {
     let newRec;
     if (t === "once") {
-      newRec = { type: "once", date: rec.date || todayStr, days: rec.days || [] };
+      newRec = { type: "once", date: rec.date || today, days: rec.days || [] };
     } else {
       newRec = {
         type: "weekly",
-        date: rec.date || todayStr,
+        date: rec.date || today,
         days: rec.days && rec.days.length ? rec.days : [new Date().getDay()]
       };
     }
@@ -241,7 +242,7 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
               id={fid}
               type="date"
               value={rec.date || ""}
-              min={todayStr}
+              min={today}
               onChange={(e) => setDate(e.target.value)}
               className="mgt-hover-scale"
               style={mkInp()}
@@ -276,7 +277,15 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
           borderRadius: R.card,
           border: "1px solid var(--border-soft)"
         }}>
-          <Toggle on={draft.active} onClick={toggleActive} />
+          {/* "Reminder status", not "Reminder active" (/code-review): the only
+              visible labelling here is the sibling span, which reads "Active"
+              or "Inactive", and a name containing the word "active" matches
+              the visible text in one state and contradicts it in the other —
+              a voice user reading "Inactive" off the screen could not say it.
+              A name that contains NEITHER word satisfies both states, and
+              keeps the rule this version is built on: aria-checked carries the
+              state, the name never does. */}
+          <Toggle label="Reminder status" on={draft.active} onClick={toggleActive} />
           <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi }}>
             {draft.active ? "Active" : "Inactive"}
           </span>

@@ -259,8 +259,11 @@ explaining why is usually the one to read.
 - **`mkInp` / `mkBtn` return *style objects*** (not JSX) — usage is `<input style={mkInp()}>` /
   `<button style={mkBtn({...})}>`. (Note: the sibling Scheduling app's equivalents return JSX;
   Bookings differs. Don't assume a `className`/prop passthrough — it isn't there.)
-- Prefer the **`Toggle` atom** (`Toggle({ on, onClick })`) over `<input type="checkbox">` for
+- Prefer the **`Toggle` atom** (`Toggle({ on, onClick, label })`) over `<input type="checkbox">` for
   booleans (native checkbox is fine only for multi-select grids / native forms).
+  **`label` is required** and has no default — it is the switch's accessible
+  name, the build fails without it, and the accessibility section below says
+  what to put in it (and what a `.map` must put in it instead).
 
 ---
 
@@ -306,7 +309,19 @@ explaining why is usually the one to read.
   timeline and the floor plan, i.e. **during service**) carried no marks at all,
   so the same five decisions looked different in three places. `StatusIcon`
   (`Icons.jsx`) is now the single source all three read — the List card, the edit
-  form's Status row, the popup. **It is exported as a COMPONENT, not as the bare
+  form's Status row, the popup. v17.11.0 added the timeline block's rail and
+  v17.15.7 the **floor-plan table**, which closes the last surface where a
+  status was colour and nothing else. That one took four versions longer than
+  the timeline's for no better reason than that a table is smaller than a
+  block, and it was the worse of the two: a block at least carries the guest's
+  name, a table carries a table id. **The plan's mark also had to learn a rule
+  the flat surfaces never needed — on a rotated SVG glyph, only the CENTRE
+  COLUMN is rotation-invariant.** `TableGlyph` counter-rotates its label group
+  so children stay upright, but a child is drawn translated and NOT rotated, so
+  a mark offset to a corner lands on a different edge of the shape at every
+  table rotation. Anything counter-rotated to stay readable must also be
+  centred; that is why the id pill has always sat there, and the mark now sits
+  directly under it. **It is exported as a COMPONENT, not as the bare
   map**: a plain const export from that file breaks Fast Refresh
   (`react-refresh/only-export-components` is a lint ERROR and CI gates on zero),
   and a call site should ask for "the mark for this status" rather than hold a
@@ -380,6 +395,22 @@ explaining why is usually the one to read.
   amber ink (3.76 / 3.12, clears the 3:1 button bar), and this. Patryk chose this,
   informed. The note now lives beside `EXEMPT_FLOOR` so the record says what it
   actually blesses; the floors still gate a regression.
+- **v17.16.10: the status MARK is a recorded exemption too, under a different
+  criterion.** v17.11.0 put `StatusIcon` on the timeline block's rail and
+  v17.15.7 on the floor-plan table, both to stop status being carried by colour
+  alone. The mark is `BLOCK_INK` on `BLOCK_BG` — the same pairs as above — but
+  text is WCAG 1.4.3 and a mark is a **graphical object, 1.4.11, bar 3:1**, so
+  the exemption above does not simply extend over it. Re-measured in v17.16.10
+  and three of six are under: the numbers, and why no new `EXEMPT_FLOOR` entry
+  was added, live beside the other two notes in `tests/contrast.test.js` rather
+  than being restated here. **Patryk's decision was record-don't-change**, and
+  the reason is a rule worth carrying: a halo or outline on the mark is a NEW
+  treatment, and it would have to reach the timeline rail, `SBadge` and the plan
+  table in one version or the app ends up with two status vocabularies that
+  disagree. What keeps it defensible is narrower than the argument above and
+  does not inherit from it — the mark was never the only carrier, since the fill
+  remains and both `PlanView`'s `ariaLabel` and `STATUS_LABEL` name the status
+  in words.
 - **Accent = primary action or current selection. Nothing else (v17.8.0).** It is
   not for identity and not for decoration. `--tbl-out-rgb` used to be byte-identical
   to `--accent`, so nine outdoor table pills painted the accent on every screen at
@@ -457,12 +488,29 @@ explaining why is usually the one to read.
   role, one hue, whatever treatment carries it.
 
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
-  where a tag competes inside a busy row (ListView's `manual`/`locked`/`★`/the
-  seated counter, the reminder's time chip). **OUTLINE** — no fill, a **2px**
+  where a tag competes inside a busy row (the reminder's time chip).
+  **OUTLINE** — no fill, a **2px**
   border in the semantic hue, text in the same family — where a chip stands
   alone as a count or a disclosure (Customers' visits/no-shows,
   `BookingFormModal`'s Regular/no-show buttons). **TEXT** where the colour
   carries itself unaided.
+  **v17.15.5 moved the List card's flag row from SOLID to TEXT, and the rule is
+  what moved it.** "Match whatever sits next to you" is not a preference for
+  fills; it is a preference for ONE treatment per row, and it points wherever
+  the row goes. That row was seven solid pills because each pill was next to six
+  others; it is now icon-led text throughout — `LockIcon`, `StarIcon`,
+  `NoShowIcon`, `DepositIcon` at `IC.control`, in `TimelineBlock`'s own rail
+  order — so the same rule now makes text the right answer for all of them.
+  What the change is really about is that a booking should not have two visual
+  vocabularies: the block spent v17.9.0–v17.11.0 becoming an icon rail and the
+  card was still printing words in coloured pills. **The ink is now what the
+  fill used to be** — `--warn-text` for the two problems (repeat no-shows,
+  running late), `--success-text` for money taken and for the still-running
+  seated counter, `--text-secondary` for the settled facts. Those six pairings
+  against the two card fills are measured in `tests/contrast.test.js`
+  (6.73–9.69:1 across both themes): **a card is a text-bearing surface the
+  moment a fill comes off a label on it**, and neither `check:style` nor the
+  registry's coverage guard can see that pairing arrive on its own.
   **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
   beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
   50%, transparent)`. The border and the text are the same statement at two
@@ -493,16 +541,37 @@ explaining why is usually the one to read.
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border
   pixel; do not "restore" the fill.
+- **v17.15.6: "match whatever sits next to you" has a SECOND half — SCALE.**
+  v17.15.5 answered the treatment question for the List card's flag row and
+  stopped there, which left `SBadge` — correctly still SOLID — sized for the row
+  it used to be in. Measured on the card: name `T.title`/~24px, **badge ~27px**,
+  `SizeRing` 18px, flags ~16px. The one element carrying a fill was also the
+  tallest thing in the row, taller than the name it follows, so the row read as
+  a status pill with some text around it rather than a booking with a status.
+  The badge is `T.small` + `2px 8px` now (~20px, between the ring and the
+  flags); the fill, the rim, the shadow and the `IC.control` mark all stay,
+  because the status is not a flag — a flag says what is UNUSUAL about a
+  booking, this says what the booking IS, and the fill is what the card and the
+  timeline block share. The icon stays `IC.control` for the same
+  match-your-neighbours reason in the other direction: the flags beside it are
+  `IC.control`, so the marks stay one size and only the pill comes down.
+  **Treatment and scale are two separate answers, and settling one does not
+  settle the other.**
 - The SOLID/TEXT pair in full: **solid** — the fill carries the colour, text is `--text-on-accent`,
-  the rim is neutral `--border-glass` (the v17.7.0 status-label decision:
-  `SBadge`, `manual`, `locked`, `★`, the seated `N min`); or **plain text** —
+  the rim is `RIM_SOLID` (the v17.7.0 status-label decision —
+  `SBadge` is what still wears it, and since v17.15.5 it wears its
+  `StatusIcon` too, so the card names a status in the same mark the block
+  does; this sentence said `--border-glass` until v17.15.6, which is the
+  token the badge's three hand-written COPIES carried — the doc had been
+  describing the drift rather than the atom); or **plain text** —
   the colour carries itself, no fill, no border. The third shape — pale
   semantic fill + border in the matching hue + bold text in a third shade of
   it — is banned. It encodes one signal three times and is the stock badge
   every framework ships. **Which of the two you pick is decided by context,
-  not taste: match whatever sits next to you.** ListView's `no-show ×N` /
-  `N min late` / `€N deposit` share a row with four solid tags, so they are
-  solid; `Table free · HH:MM`, `This device` and the reminder banner's time sit
+  not taste: match whatever sits next to you.** ListView's flag row is the
+  worked example of that rule MOVING (see above): its tags were solid while the
+  row was solid, and went to text when the row did. `Table free · HH:MM`,
+  `This device` and the reminder banner's time sit
   among plain text (and each already has a plain-text twin elsewhere — the
   waitlist string is printed verbatim by `WaitAvailBanner`), so they are text.
   Clickable chips are the documented exception: `BookingFormModal`'s
@@ -617,8 +686,14 @@ explaining why is usually the one to read.
   `--shadow-popover` (floating surfaces — `StatusToasts`, matching the
   quick-status popup). **Triage each site by one question: does the ELEMENT's own
   fill flip with the theme?** A MIX counts as "no" — `BLOCK_BG[status]` spans
-  three invariant fills and two that flip, so `SBadge` and the timeline's status
-  swatch take `--shadow-flat`. Genuine remaining exceptions are **rings and
+  three invariant fills and two that flip, so `SBadge`, the timeline's status
+  swatch and (v17.16.5) the PLAN legend's take `--shadow-flat`. The plan one is
+  worth its own clause: it was covered by this rule from the day the rule was
+  written and simply never swept, because it did not exist yet when the sweep
+  ran and arrived in v17.15.7 as a copy of the timeline chip with one line
+  missing. **A rule stated in this file does not apply itself to a site added
+  after it** — when you copy a component, diff it against its twin rather than
+  against your memory of the twin. Genuine remaining exceptions are **rings and
   glows** (`0 0 0 3px …`: the connection dot, the focus and selection rings),
   which are not drop shadows at all.
   **And a literal can hide behind a `const`** — `StatusToasts`' `toastShadow`
@@ -847,6 +922,61 @@ staff select the phone number off that card; its click opens a modal that covers
 the scroll anyway. **A synthetic click cannot reproduce this** — the tool's
 mousedown and mouseup are back-to-back, so the focus-scroll lands after the click;
 it needs the ~100ms gap of a real finger.
+
+**A control with no text content has NO NAME unless someone gives it one, and
+nothing about looking at it says so** (v17.15.4). The `Toggle` atom drew a 48×26
+pill out of two coloured divs and nothing else — no text, no role, no state — so
+all twenty on-off controls in the app announced as "button", indistinguishable
+from each other and from the buttons beside them. Settings is built almost
+entirely out of it. It is a `role="switch"` with `aria-checked` and a **required
+`label`** now.
+
+Three things that generalise past this atom:
+
+- **`role="switch"`, not `aria-pressed`.** A switch is a state that stays; a
+  toggle button is an action you just took. Every one of these writes a setting.
+- **The label names what the control DOES, never its state.** The state is
+  `aria-checked`'s job, and a name that flips with the value ("Active" /
+  "Inactive") makes one control read as two. `ReminderEditor`'s switch sits
+  beside exactly that text and is named "Reminder active" regardless.
+- **A control rendered from a `.map` must name the ITEM.** Three of the twenty
+  are per-reminder, per-standing-rule and per-size-band, and a static label
+  there is not one name but N identical ones — the same defect one level down.
+  **In the source it is one string; only the running page shows it as three.**
+  The size-band switch nearly shipped static and was caught by reading the
+  computed names out of the live app, which is this section's standing method
+  and the only thing that catches this shape.
+
+**A control WITH text can be just as unnamed, and it hides better.** The
+Opening-hours row was swept in the same pass for that reason: seven buttons
+reading "Open" and seven reading "copy → all", with the weekday in a sibling
+`<span>` that names nothing. An element with content is named BY that content —
+and a `title` is a *description*, not a name, so the copy button's tooltip
+("Copy this day's hours to all days") never said which day either. Both carry an
+`aria-label` naming the weekday.
+
+**But an `aria-label` must EXTEND the visible text, never replace it** (WCAG
+2.5.3, Label in Name) — and the first fix here broke that in the act of fixing
+the other thing, which is why the rule is written down. Voice control matches on
+the accessible NAME, so "copy → all" was sayable while its name came from its
+content, and stopped being sayable the moment the name became the sentence
+"Copy Mon's hours to all days" — two of the same words, far apart, matching
+nothing. It is `"copy → all (Mon)"`: **the visible label leads and the
+disambiguator follows.** `Mon: Open` is the same rule satisfied by accident, and
+the third case shows the trap has a second face — `ReminderEditor`'s switch is
+labelled only by a sibling reading "Active" or "Inactive", so ANY name
+containing one of those words contradicts the visible text in the other state.
+Its name is "Reminder status", which contains neither and is sayable in both.
+A paraphrase always reads as an improvement in review; ask instead whether
+someone could say what they can see.
+
+**Why this survived v17.12.0 and v17.13.0's gate**, which is the more useful
+lesson than the fix: both passes went after the surfaces that hold *bookings* —
+the card, the block, the floor-plan table, the form field. An atom that draws a
+small pill is not where anyone looks for a missing name. `tests/a11y.test.js`
+now sweeps every `<Toggle` call site for a `label`, using a brace-aware tag
+walker rather than a line grep (two of the call sites are multi-line, which is
+the v17.15.2 miss again).
 
 **`inert` removes a subtree from the accessibility tree as well as the tab
 order.** So a live region inside an inert region goes SILENT — which is why

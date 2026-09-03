@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap, stampGuestSeed,
+  resolveGuestId,
   searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
   regularChipLabel,
 } from "../src/lib/customers.js";
@@ -25,6 +26,41 @@ describe("normalizePhone / formatPhone / hasRealPhone", () => {
     expect(normalizePhone("")).toBe("");
     expect(normalizePhone(null)).toBe("");
     expect(normalizePhone("+")).toBe("+");
+  });
+  // CT-2B-04 (v17.16.3): the "+" counts wherever it sits ahead of the digits.
+  // Before this, only index 0 counted, so a bracketed country code produced a
+  // DIFFERENT identity from the same number written without brackets — one
+  // person as two customers, with visits, no-show count and history split
+  // between them.
+  it("keeps the + when punctuation precedes it (a bracketed country code)", () => {
+    expect(normalizePhone("(+34) 600 123 456")).toBe("+34600123456");
+    expect(normalizePhone("[+34] 600-123-456")).toBe("+34600123456");
+    expect(normalizePhone("tel: +34 600 123 456")).toBe("+34600123456");
+    // …and the same number written plainly still agrees with it, which is the
+    // whole point — these are one customer.
+    expect(normalizePhone("(+34) 600 123 456")).toBe(normalizePhone("+34 600 123 456"));
+  });
+  it("ignores a + that FOLLOWS a digit, and never removes one", () => {
+    // A country-code marker precedes the number; a later "+" is an extension,
+    // a typo, or two numbers in one field — not a reason to re-key anybody.
+    expect(normalizePhone("600 123 456+2")).toBe("6001234562");
+    expect(normalizePhone("600123456")).toBe("600123456");
+  });
+  it("can only ever ADD a +, never drop one (the merge-not-split property)", () => {
+    // This is what makes it safe to change a key every customer identity is
+    // derived from: the fix can fuse two records that were always one person,
+    // and cannot split one person into two. Old rule = charAt(0) === "+".
+    const cases = [
+      "+34600123456", "(+34) 600 123 456", "600123456", "", "+", "  +34 600  ",
+      "600+123", "tel: +34 600", "0034600123456", "+++34600",
+    ];
+    for (const c of cases) {
+      const oldHadPlus = String(c).trim().charAt(0) === "+";
+      const nowHasPlus = normalizePhone(c).charAt(0) === "+";
+      expect(!oldHadPlus || nowHasPlus).toBe(true);
+      // digits are untouched by the change
+      expect(normalizePhone(c).replace(/\D/g, "")).toBe(String(c).replace(/\D/g, ""));
+    }
   });
   it("format inserts a space after the country code", () => {
     expect(formatPhone("+34600123456")).toBe("+34 600123456");
@@ -202,6 +238,33 @@ describe("matchesIdentity", () => {
     expect(matchesIdentity(bk({ phone: "", guestId: "gB" }), ident)).toBe(true);
     expect(matchesIdentity(bk({ phone: "", guestId: "gC" }), ident)).toBe(false);
     expect(matchesIdentity(bk({ phone: "", guestId: null }), { phone: "", guestIds: [] })).toBe(false);
+  });
+  // v17.16.5 (CT-2B-05). The scenario, end to end: Ana books with a phone and
+  // picks a phone-less "Bea" from the name dropdown, minting one guestId across
+  // both. `guestPhoneAlias` then folds Bea's group onto Ana's number, so Bea's
+  // phone-less bookings appear under Ana. That is the mis-join. The part this
+  // fixes is a booking of Bea's that carries her OWN number: the index shows it
+  // as a separate customer, and the delete used to take it anyway.
+  it("never reaches a booking through a guestId when it carries a different real phone", () => {
+    const ident = { phone: "+34600111222", guestIds: ["gA"] };
+    const beaOwnNumber = bk({ phone: "+34600999888", guestId: "gA" });
+    expect(matchesIdentity(beaOwnNumber, ident)).toBe(false);
+    // Deliberately still reached — for a CORRECT join these ARE the customer,
+    // and "all data" has to mean all of it.
+    expect(matchesIdentity(bk({ phone: "", guestId: "gA" }), ident)).toBe(true);
+    // The dial prefix is not a phone: the form seeds the field with it, so
+    // reading "+34" as a different number would exclude the customer's own
+    // bookings from their own delete.
+    expect(matchesIdentity(bk({ phone: "+34", guestId: "gA" }), ident)).toBe(true);
+    // Same number, any formatting, is the customer — the phone branch above
+    // already matched, and this must not fall into the new exclusion.
+    expect(matchesIdentity(bk({ phone: "+34 600 111 222", guestId: "gA" }), ident)).toBe(true);
+  });
+  it("the exclusion needs a phone on BOTH sides to bite", () => {
+    // A row keyed by guestId alone (no booking in the group has a number) must
+    // keep reaching its bookings — there is no key to differ from.
+    const ident = { phone: "", guestIds: ["gA"] };
+    expect(matchesIdentity(bk({ phone: "+34600999888", guestId: "gA" }), ident)).toBe(true);
   });
   it("does not treat an absent guestId as a wildcard", () => {
     // Both sides missing the key must not match — the trap that would fuse every
@@ -475,5 +538,96 @@ describe("stampGuestSeed", () => {
     const src = bk({ id: "b1", phone: "" });
     stampGuestSeed([src], draft);
     expect(src.guestId).toBeFalsy();
+  });
+
+  // v17.16.4 (CT-2B-09): the no-op identity contract, the same one
+  // `bookingsAfterAction` states. The two early returns above always had it;
+  // these are the cases that reach the list and change nothing in it.
+  it("returns the INPUT array when it reaches the list and stamps nothing", () => {
+    // Already stamped — which is EVERY retry, since the replay-safety guard is
+    // what makes a held write safe to re-apply.
+    const done = [bk({ id: "b1", phone: "", guestId: "gb1" })];
+    expect(stampGuestSeed(done, draft)).toBe(done);
+    // Joined to someone else — left alone, so again nothing was written.
+    const other = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(stampGuestSeed(other, draft)).toBe(other);
+    // The seed booking is not in this list at all (a concurrent delete, or a
+    // replay on fresh data that no longer holds it).
+    const absent = [bk({ id: "b2", phone: "" })];
+    expect(stampGuestSeed(absent, draft)).toBe(absent);
+    expect(stampGuestSeed([], draft)).toEqual([]);
+  });
+
+  it("still returns a NEW array when it does stamp", () => {
+    // The other half of the contract: identity must mean something in both
+    // directions, or a caller gating on it silently drops a real write.
+    const list = [bk({ id: "b1", phone: "" })];
+    expect(stampGuestSeed(list, draft)).not.toBe(list);
+  });
+});
+
+// ── v17.16.6 (CT-2B-08): which group does the SAVED booking join? ─────────────
+// The half `stampGuestSeed` above does not answer. It refuses to re-home a seed
+// that has since been joined — correctly — and before this the draft went on
+// carrying the id minted when the name was picked, so the new booking landed in
+// a group of one beside the group the operator meant to join, with nothing on
+// screen distinguishing that from success.
+describe("resolveGuestId", () => {
+  const draft = { guestId: "gb1", guestSeed: "b1" };
+
+  it("adopts the id the seed has acquired since the draft was minted", () => {
+    // THE finding. Another device joined this guest through a different booking
+    // of theirs between the pick and the Save, so the seed carries an id that is
+    // not the deterministic "g"+seedId this draft minted.
+    const list = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(resolveGuestId(list, draft)).toBe("gOTHER");
+  });
+
+  it("keeps the minted id when the seed is still unjoined", () => {
+    // The ordinary path, and the one that must not move: `stampGuestSeed` is
+    // about to write this very id onto the seed, so the two agree.
+    const list = [bk({ id: "b1", phone: "" })];
+    expect(resolveGuestId(list, draft)).toBe("gb1");
+  });
+
+  it("agrees with stampGuestSeed in BOTH directions, which is the point", () => {
+    // The defect was the two halves disagreeing, so the property worth pinning
+    // is that they cannot: whatever id the seed ends up with is the id the new
+    // booking gets.
+    [[], [bk({ id: "b1", phone: "" })], [bk({ id: "b1", phone: "", guestId: "gOTHER" })]]
+      .forEach((list) => {
+        const after = stampGuestSeed(list, draft);
+        const seed = after.find((b) => b.id === "b1");
+        const resolved = resolveGuestId(list, draft);
+        if (seed) expect(resolved).toBe(seed.guestId);
+        else expect(resolved).toBe("gb1");   // nothing to join
+      });
+  });
+
+  it("stands on the draft when there is no seed to reconcile against", () => {
+    // bookAgain on a booking that already had an id, and every edit (openEdit
+    // sets guestSeed: null) — there is no second party to the decision.
+    const list = [bk({ id: "b1", phone: "", guestId: "gOTHER" })];
+    expect(resolveGuestId(list, { guestId: "gADOPTED" })).toBe("gADOPTED");
+  });
+
+  it("stands on the mint when the seed is no longer in the list", () => {
+    // Deleted meanwhile, or a replay on fresh data that no longer holds it:
+    // there is no group left to join, so the newcomer starts its own.
+    expect(resolveGuestId([bk({ id: "b2", phone: "" })], draft)).toBe("gb1");
+    expect(resolveGuestId([], draft)).toBe("gb1");
+  });
+
+  it("returns null for a draft carrying no guest identity at all", () => {
+    // Every ordinary phone booking. The call site writes this straight into the
+    // booking, so `undefined` would be a different value from today's `null`.
+    expect(resolveGuestId([], { guestSeed: "b1" })).toBe(null);
+    expect(resolveGuestId([], {})).toBe(null);
+    expect(resolveGuestId([], null)).toBe(null);
+  });
+
+  it("survives a list holding holes, like every other pass over `prev`", () => {
+    expect(resolveGuestId([null, bk({ id: "b1", phone: "", guestId: "gOTHER" })], draft)).toBe("gOTHER");
+    expect(resolveGuestId(null, draft)).toBe("gb1");
   });
 });

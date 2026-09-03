@@ -27,6 +27,7 @@ import {
   DUR_TIERS,
   TURN_BUFFER
 } from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
+import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -44,34 +45,41 @@ export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++
 // changes, a booking near midnight compared against a post-rollover `nowMins`
 // would compute a large negative `lateBy` (harmlessly → null here, but any future
 // consumer of the raw minutes must account for it).
-export function lateState(b,todayStr,nowMins,cfg){
+export function lateState(b,today,nowMins,cfg){
   if(!cfg||!cfg.lateEnabled) return null;
   // v17.0.0: PENDING flags late too (Patryk-confirmed "same as confirmed") —
   // an unconfirmed request past its time needs staff attention just the same.
-  if(!b||(b.status!=="confirmed"&&b.status!=="pending")||b.date!==todayStr) return null;
-  var lateBy=lateMins(b,nowMins);
+  if(!b||(b.status!=="confirmed"&&b.status!=="pending")||b.date!==today) return null;
+  var lateBy=lateMins(b,nowMins,today);
   if(lateBy>=cfg.lateNoShowMin) return "noshow";
   if(lateBy>=cfg.lateWarnMin) return "warn";
   return null;
 }
 // v16.1.1: minutes a booking is past its start time. Single source for the
 // "N min late" arithmetic (was duplicated in the App banner + the ListView tag).
-export function lateMins(b,nowMins){return nowMins-toMins(b.time);}
+export function lateMins(b,nowMins,today){return nowOn(b.date,today,nowMins)-toMins(b.time);}
 // v16.3.0: table-turn prediction. Which of TODAY'S SEATED bookings are about to
 // free their table? Returns [{id, name, tables, inMin}] for seated bookings whose
 // scheduled end (start + duration) is 0 < end−now ≤ windowMin (default 15),
 // sorted soonest-first. OVERSTAYERS (end already passed) are excluded — the
 // overlap-warning machinery covers them, and "free in ~N" would be a lie for an
 // open-ended overstay. cfg-gated by the caller (freeSoonEnabled). Same
-// no-midnight-wraparound assumption as lateState (bookings don't start past
-// midnight, so an end up to ~01:30 stays same-side of `nowMins`).
-export function freeingSoon(bookings,todayStr,nowMins,windowMin){
+// v17.16.2 (CT-2B-02): the old note here claimed a no-midnight-wraparound
+// assumption "same as lateState", and it was false in a way worth keeping.
+// An end up to ~01:30 does stay same-side of the BOOKING's own midnight — and
+// that says nothing about `nowMins`, which after midnight is measured from the
+// NEXT day's. So a party seated 23:30-00:30 was never offered as freeing soon.
+// `nowOn` puts both on the booking's ruler. The date filter is gone rather than
+// replaced because this function is SELF-BOUNDING (0 < inMin <= win), so a stale
+// seated booking falls out on its own — which is exactly why lateState, which is
+// unbounded backwards, keeps its filter.
+export function freeingSoon(bookings,today,nowMins,windowMin){
   var win=windowMin||15;
   var out=[];
   (bookings||[]).forEach(function(b){
-    if(!b||b.status!=="seated"||b.date!==todayStr) return;
+    if(!b||b.status!=="seated") return;
     var end=toMins(b.time)+(b.duration||90);
-    var inMin=end-nowMins;
+    var inMin=end-nowOn(b.date,today,nowMins);
     if(inMin>0&&inMin<=win) out.push({id:b.id,name:b.name,tables:(b.tables||[]).slice(),inMin:inMin});
   });
   out.sort(function(a,b){return a.inMin-b.inMin;});
@@ -149,6 +157,77 @@ export function stayedMins(b){
 }
 export function toMins(t){var p=t.split(":");return Number(p[0])*60+Number(p[1]);}
 export function toTime(m){return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");}
+// v17.16.2: MOVED here from usePersistence.js, where it had been module-private
+// since v15.1.0 — the one function in the repo that ever put "now" and a booking
+// on a common axis, locked inside the one file no test could reach. It lives
+// here because it needs the `hoursFor` LIVE BINDING, which day.js must not take
+// (day.js imports nothing so constants.js may import it; see that file's header).
+//
+// Has `dateStr`'s closing moment already passed? A booking's closing moment is
+// its OWN date's per-weekday close (may be 24/25, i.e. past midnight) in minutes
+// since that date's midnight; `nowOn` puts now on the same ruler. Returns the
+// close-in-minutes when it has passed, else null — including for a future date,
+// whose projected `now` is negative and so can never reach a close of 6..25.
+//
+// This is now also the LIVENESS guard for the two functions that grow a seated
+// booking (`liveBarDur`, `syncLiveDurations`). It replaced a `b.date === today`
+// filter in both, and replacing it with nothing would have been a runaway: a
+// booking left `seated` from three weeks ago has a real elapsed time of 30240
+// minutes, which the old filter hid and a bare axis fix would have written to
+// the database as its duration.
+// v17.16.2: minutes a SEATED party has been at the table, on the booking's own
+// axis, capped at that day's close.
+//
+// The cap is the bound that makes dropping the old `b.date === today` filter
+// safe, and it is a CAP rather than a skip for a reason found by a test: skipping
+// made the figure jump back to the stored duration the moment close passed, and
+// made an existing test time-dependent (it fails after 22:00 and passes before).
+// Capping matches auto-complete's own formula exactly, so the live number and
+// the frozen one agree at the boundary instead of stepping. A booking left
+// seated three weeks ago reads its own day's full service, once, and then stops
+// — not 30240 minutes and rising.
+// v17.16.2 (/code-review): is this seated booking still LIVE — i.e. may its
+// duration grow? Today's, always (auto-complete owns it after close, and the cap
+// below keeps the figure honest in the gap). Another day's, only while that day
+// is still open, which is what a 24/25 close means and what the midnight fix
+// exists for.
+//
+// Dropping `b.date === today` without this let `syncLiveDurations` rewrite
+// HISTORICAL records: a booking left seated three weeks ago has a capped elapsed
+// of 540 against a stored 90, so the next unrelated save emitted a patch child
+// for it. The cap bounds the VALUE; it never authorised the WRITE. It also grew
+// the atomic multi-path update, where one malformed historical booking can
+// reject an otherwise valid save.
+export function seatedIsLive(b,today,nowM){
+  return b.date===today||pastCloseMins(b.date,today,nowM)===null;
+}
+export function seatedElapsed(b,today,nowM){
+  var closeMins=hoursFor(b.date).close*60;
+  return Math.min(nowOn(b.date,today,nowM),closeMins)-toMins(b.time);
+}
+export function pastCloseMins(dateStr,todayS,nowMins){
+  var nm=nowOn(dateStr,todayS,nowMins);
+  var closeMins=hoursFor(dateStr).close*60;
+  return nm>=closeMins?closeMins:null;
+}
+// v17.16.12: can this booking still be SEATED, or would the app undo it?
+// The close-time auto-complete (usePersistence) maps over EVERY booking, not
+// just today's, so on a day whose close has passed a manual "seated" is flipped
+// straight back to "completed" on the next 15s tick — measured on the iPhone at
+// 0.1s frames: the block went green and was grey again 200ms later, with a
+// "Tables re-optimised." banner on the way past. Every surface that OFFERS
+// seated therefore asks this first (the quick-status popup, the List card's
+// status buttons, the edit form's Status row, the S shortcut).
+//
+// It is deliberately `pastCloseMins(...) !== null` and not its own idea of what
+// "past" means: the whole point is to be EXACTLY the auto-complete's condition.
+// Two conditions that merely agree today are two conditions, and the one that
+// drifts is the one nobody is looking at. Completed and cancelled stay offered
+// on a past day — correcting yesterday's record is real, and seated is the only
+// one the app takes back.
+export function seatingClosed(dateStr,todayS,nowMins){
+  return pastCloseMins(dateStr,todayS,nowMins)!==null;
+}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 // ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
 // The separation between bookings (Settings → General; off by default, so
@@ -173,7 +252,30 @@ export function bookEnd(b){return toMins(b.time)+((b&&b.duration)||90)+TURN_BUFF
 export function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
 // ── Booking sanitisation / diffing ────────────────────────────────────────────
-export function sanitize(b){if(!b||typeof b!=="object") return null;var t=b.time||"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:b.scheduledTime||t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
+// v17.16.5 (CT-2A-03, client half): is this value a time the rest of the app can
+// READ? `sanitize` has always guarded truthiness — `b.time || "13:00"` — and
+// every consumer needs something `toMins` can take apart. The gap between the
+// two is not academic: `toMins` is `t.split(":")` at 83 call sites, so a stored
+// `time: 2000` survives sanitisation (a number is truthy), reaches the first
+// consumer and throws `t.split is not a function`. v17.16.0's error boundary
+// contains that crash; it does not make the day usable. And it is reachable
+// from the server, because v17.16.1's per-field rules deliberately check TYPE
+// and not FORMAT — the two halves of one finding, and this is the client half.
+//
+// The predicate is deliberately the CONSUMER'S requirement rather than a format
+// of its own: readable means `toMins` yields a finite number. That is the
+// narrowest possible guard — a value only stops being kept if it already throws
+// or already produces NaN today — so nothing that currently works can move. The
+// cost of that choice, stated rather than hidden: `":"` reads as 00:00 and is
+// therefore KEPT, because it is not a crash. Times outside the day (`"25:99"`
+// reads as 1599) are kept for the same reason; normalising them would rewrite a
+// record that renders, which is a different decision and not this one.
+export function isReadableTime(v){
+  if(typeof v!=="string") return false;
+  var p=v.split(":");
+  return p.length>=2&&Number.isFinite(Number(p[0]))&&Number.isFinite(Number(p[1]));
+}
+export function sanitize(b){if(!b||typeof b!=="object") return null;var t=isReadableTime(b.time)?b.time:"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:isReadableTime(b.scheduledTime)?b.scheduledTime:t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
   // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
   // it survives reads; legacy no-shows (history entry only) are counted by
   // customers.js isNoShow's history fallback — no migration needed.
@@ -238,7 +340,7 @@ export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var 
 //
 // Returns the SAME object when an id is already present, so a settled node keeps
 // its per-block references across snapshots.
-export function sanitizeBlock(bl){
+export function sanitizeBlock(bl,legacyId){
   if(!bl||typeof bl!=="object") return null;
   // /code-review: the mint goes in the SOURCE, not the target. As
   // `Object.assign({id:genId()},bl)` it was silently discarded whenever `bl`
@@ -249,7 +351,62 @@ export function sanitizeBlock(bl){
   // it would produce is this version's own bug back again: two blocks sharing a
   // falsy id make removeBlock's `bl.id !== block.id` drop BOTH, and BlockModal
   // and DaySheet key their rows on it.
-  return bl.id?bl:Object.assign({},bl,{id:genId()});
+  return bl.id?bl:Object.assign({},bl,{id:legacyId||genId()});
+}
+// v17.16.4 (CT-2B-06): the DETERMINISTIC seed `sanitizeBlocks` hands the mint
+// for a block read out of a legacy, id-less node.
+//
+// The defect a random mint produced: `genId()` answers "what read was this",
+// not "which block is this", so two reads of the SAME unchanged node disagreed
+// about every id in it. `removeBlock` filters on `bl.id!==block.id`, and
+// `BlockModal` holds the block object it was handed when it opened — so a
+// resync landing between opening the list and tapping Unblock left the modal
+// naming an id that no longer existed anywhere, and the removal silently did
+// nothing. Fails safe (a no-op, never the wrong block) and self-limiting (the
+// first successful `saveBlocks` persists ids and the node stops being legacy)
+// — which is why it is a P3 and not a fix to the identity itself.
+//
+// Deriving from CONTENT rather than from array position is the load-bearing
+// choice, and it is about what happens when the node is NOT frozen. An index
+// seed is stable only while nothing is inserted or removed; if a stale index
+// ever did resolve, it would resolve to a DIFFERENT block, turning a harmless
+// no-op into unblocking the wrong table. A content key cannot: it either finds
+// the same block or finds none.
+//
+// The `n` ordinal is what keeps two IDENTICAL blocks distinguishable, which is
+// the whole point of v17.15.3's ids and is pinned in the tests. It is the
+// v17.15.2 ordinal in a much narrower role — there it WAS the identity of every
+// block, here it only seeds the mint for a block that has no stored identity —
+// and the case it used to get wrong is now benign: when two blocks agree on
+// every field, "the wrong one" and "the right one" are the same block.
+//
+// The separator is an ASCII control character for `undoKey`'s reason — `reason`
+// is free staff-entered text — written as the escape and never the raw byte,
+// which is invisible in every editor, grep and diff.
+//
+// /code-review: the invariant `removeBlock` actually depends on is that every id
+// in ONE `sanitizeBlocks` result is distinct, and a content hash alone does not
+// give it. `hash36` is 32-bit, so two blocks with DIFFERENT content can share a
+// hash — constructed, not argued: two `reason` strings on the same table and
+// window both hash to `dqduwy`, and since the ordinal counts identical CONTENT
+// keys each got ordinal 1, i.e. one id for two different blocks. That is
+// precisely the v17.15.3 defect this file exists to prevent, reintroduced by its
+// own fix. The first draft also claimed the `bl_` shape "can never collide with
+// a real minted id" on the grounds that `genId()` contains no "_" — true of
+// `genId()` ids and FALSE of a previously-minted `bl_…_n` that has since been
+// persisted by `saveBlocks`. Both paths close the same way: the ordinal is now
+// "first one not already taken", against a set seeded with the ids the node
+// already stores. Identical siblings still get _1, _2 — the common case is
+// unchanged — and determinism is untouched, since the scan is left-to-right
+// over a stable array.
+var BLOCK_KEY_FIELDS=["tableId","date","allDay","from","to","reason"];
+function blockContentKey(bl){
+  return BLOCK_KEY_FIELDS.map(function(k){return String(bl[k]===undefined?"":bl[k]);}).join("\u001f");
+}
+function hash36(s){
+  var h=2166136261;
+  for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}
+  return (h>>>0).toString(36);
 }
 // RTDB hands back an array only for sequential integer keys, an object otherwise
 // (and null for an absent node) — both read sites passed through the same
@@ -257,7 +414,26 @@ export function sanitizeBlock(bl){
 export function sanitizeBlocks(val){
   if(!val) return [];
   var arr=Array.isArray(val)?val:Object.values(val);
-  return arr.map(sanitizeBlock).filter(Boolean);
+  // v17.16.4: `.map(sanitizeBlock)` is deliberately no longer point-free — the
+  // seed needs the whole array, and passing map's (value,index,array) straight
+  // through would have made `index` the legacyId.
+  //
+  // `used` is seeded with the ids the node ALREADY stores, then every minted id
+  // is added to it, so the result cannot contain a duplicate by either route —
+  // a 32-bit hash collision between two different blocks, or a mint landing on
+  // a real stored id. See the note above `blockContentKey` for why that is the
+  // invariant rather than the hash. `Object.create(null)` because a stored id is
+  // data and "__proto__" must be an ordinary key here.
+  var used=Object.create(null);
+  arr.forEach(function(bl){if(bl&&typeof bl==="object"&&bl.id) used[bl.id]=true;});
+  return arr.map(function(bl){
+    if(!bl||typeof bl!=="object"||bl.id) return sanitizeBlock(bl);
+    var base="bl_"+hash36(blockContentKey(bl));
+    var n=1;
+    while(used[base+"_"+n]) n++;
+    used[base+"_"+n]=true;
+    return sanitizeBlock(bl,base+"_"+n);
+  }).filter(Boolean);
 }
 
 // ── Table classification ──────────────────────────────────────────────────────
@@ -285,11 +461,61 @@ export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}
 export function isActive(b){return b.status!=="cancelled"&&b.status!=="completed";}
 
 // ── Slot/busy/assignment checks ───────────────────────────────────────────────
+// v17.16.6 (/code-review) — the malformed-block predicate, EXPORTED because it
+// has two consumers and the first version guarded only one.
+//
+// `getBlockSlots` was given the guard and `TimelineView`'s `BlockBar` was not:
+// it filters `dayBlocks` by date alone and then calls `toMins(bl.from)` itself,
+// so an unreadable block still threw — during RENDER, where the error boundary
+// unmounts the whole tree. The placement path was safe and the day was still
+// unusable, which is the failure the fix was written to remove, relocated to a
+// worse place. Two consumers of one rule, kept in step by nothing: the shape
+// this repo has now hit with the settings-tab list, the modal-visibility lists
+// and the four dismissal Sets.
+//
+// **Only the consumers that COMPUTE with `from`/`to` filter on this.** `DaySheet`
+// and `BlockModal` merely print the two strings, so a malformed block renders as
+// nonsense text and cannot crash — and `BlockModal` is where somebody goes to
+// REMOVE it, so hiding it there would take away the only repair. "An unreadable
+// block is not a block" is a statement about scheduling, not about visibility.
+//
+// `!bl` is included so the predicate is usable at both sites: `TimelineView`'s
+// own filter dereferences `bl.date` too, and a null element there threw exactly
+// as `getBlockSlots` did.
+export function isReadableBlock(bl){
+  if(!bl) return false;
+  return bl.allDay?true:(isReadableTime(bl.from)&&isReadableTime(bl.to));
+}
 export function getBlockSlots(blocks,date){
   // v15.0.0: an all-day block spans the BLOCK'S date's hours, not the active
   // view-day's — hoursFor(date) keeps it correct when date ≠ viewDate.
   var h=hoursFor(date);
-  return blocks.filter(function(bl){return bl.date===date;}).map(function(bl){
+  // v17.16.6 — the `getBlockSlots` sibling of CT-2A-03. v17.16.5 made `sanitize`
+  // guarantee that a booking's `time` is something `toMins` can read; a table
+  // BLOCK's `from`/`to` reach the same `toMins` two lines below and had no such
+  // guard, so a stored `from: 2000` throws `t.split is not a function` in the
+  // placement path exactly as a booking used to. Reachability is identical to
+  // the booking case — `tableBlocks` carries no per-field `.validate`, so any
+  // non-app writer can put one there — and v17.16.0's error boundary contains
+  // that crash without making the day usable.
+  //
+  // **The guard is HERE and not in `sanitizeBlock`, which is the whole decision.**
+  // That function is a MINT, not a whitelist (its header says so, and says not
+  // to "finish" it by copying `sanitize`'s shape): it exists to give a block an
+  // identity, and `reason` survives only because nothing there drops unknown
+  // fields. Defaulting an unreadable `from` there would hand the block a time
+  // window nobody entered and then persist it on the next `saveBlocks`, which is
+  // stored data silently rewritten. An unreadable block is not a block, so the
+  // consumer skips it.
+  //
+  // The cost, stated rather than hidden: the table is silently UNDER-blocked —
+  // it will be offered to the optimiser and to walk-ins for minutes somebody
+  // meant to protect. That is strictly better than the day being unusable, and
+  // it is the direction that leaves the stored record alone for whoever comes to
+  // repair it. An `allDay` block never reads `from`/`to` and is unaffected.
+  return blocks.filter(function(bl){
+    return isReadableBlock(bl)&&bl.date===date;
+  }).map(function(bl){
     var s=bl.allDay?h.open*60:toMins(bl.from);
     var e=bl.allDay?h.gridClose*60:toMins(bl.to);
     return {tables:[bl.tableId],s:s,e:e};
@@ -311,9 +537,16 @@ export function getBusy(slots,s,e){var busy=new Set();slots.forEach(function(sl)
 // checks, which is exactly the placement scope. The overstay branch returns
 // nowM+1+buffer for the same reason: the party is still at the table, so the
 // turnaround has not started yet.
-export function occupancyEnd(b,nowM){
+// v17.16.2 (CT-2B-02): `nowM` arrives on TODAY's axis and every value it is
+// compared with here is on `b.date`'s, so after midnight the overstay branch
+// could not fire — a party seated 23:30 still at the table at 00:30 had
+// `e`(1470) > `nowM`(30), the slot read FREE, and canAssign offered their table
+// to a walk-in. `nowOn` is the whole fix; the returned minute stays on b.date's
+// axis, which is what the callers' `s`/`e` are built from.
+export function occupancyEnd(b,nowM,today){
   var e=bookEnd(b);
-  if(b.status==="seated"&&e<=nowM) return padEnd(nowM+1);
+  var nm=nowOn(b.date,today,nowM);
+  if(b.status==="seated"&&e<=nm) return padEnd(nm+1);
   return e;
 }
 export function canAssign(ids,slots,s,e){
@@ -588,7 +821,32 @@ export function optimise(bookings,date,blocks){
   var completed=bookings.filter(function(b){return b&&b.date===date&&b.status==="completed"&&(b.tables||[]).length>0;});
   var baseSlots=completed.map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
   if(blocks) baseSlots=baseSlots.concat(getBlockSlots(blocks,date));
-  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;return toMins(a.time)-toMins(b.time);});
+  // v17.16.5 (CT-2A-05): `id` is the FIFTH key, and it is what makes this a
+  // total order. The four above it — locked first, larger party first, a stated
+  // preference before "auto", earlier start first — leave real ties, and
+  // `Array.prototype.sort` is stable, so a tie fell through to ARRAY POSITION:
+  // the order the list happened to arrive in decided who got which table.
+  //
+  // Measured over 200 shuffled days (see REFACTOR_LOG): on a varied day the
+  // assignment differs in 13/200, and on the shape a service actually has —
+  // parties of 2 and 4, on the hour and half hour, nearly all "auto", which is
+  // exactly where these four keys tie — in 138/200. Which table you get was a
+  // coin flip on two days in three. Whether you get one was not: the number of
+  // UNPLACED bookings differed in 0/200 in both scenarios, so this buys
+  // determinism and costs nothing in placement quality.
+  //
+  // You cannot regress from "undefined", which is what array position is here —
+  // but the replacement is meaningful rather than merely stable: `genId()` is a
+  // base36 timestamp, so ordering by id orders by CREATION, and the party who
+  // booked first is served first among equals. It is also the only key here
+  // guaranteed unique, so the sort has no remaining tie to fall through.
+  //
+  // The later passes need no key of their own. The swap pass's `others.sort` is
+  // just as partial, but it sorts a list DERIVED from `day`, and
+  // `Array.prototype.sort` is stable — the same property that made the defect
+  // is what propagates the fix, so one total order at the top settles all of
+  // them. Verified: after this, both scenarios above are 0/200.
+  var day=bookings.filter(function(b){return b&&b.date===date&&isActive(b);}).sort(function(a,b){var la=isLocked(a)?0:1,lb=isLocked(b)?0:1;if(la!==lb) return la-lb;if(b.size!==a.size) return b.size-a.size;var pa=a.preference!=="auto"?0:1,pb=b.preference!=="auto"?0:1;if(pa!==pb) return pa-pb;var ta=toMins(a.time),tb=toMins(b.time);if(ta!==tb) return ta-tb;return String(a.id)<String(b.id)?-1:(String(a.id)>String(b.id)?1:0);});
   // First pass
   var assigned=_runGreedy(day,baseSlots);
   // Swap pass — v15.9.0: data-driven via PRIORITIES.swapRules (was the MGT-only
@@ -666,14 +924,20 @@ export function applyOpt(bookings,date,blocks){
 // When the auto-optimizer is OFF (after 15:00 today), we do not reshuffle other
 // bookings. We only find a free slot for the booking being added/edited.
 export function optimizerActiveFor(date,autoOptimizerState){
-  var today=new Date().toISOString().slice(0,10);
+  var today=todayStr();
   if(date===today&&autoOptimizerState===false) return false;
   return true;
 }
+// v17.16.2 (CT-2B-02): was `b.date===today`, which no-op'd across midnight so a
+// party seated 23:30 stopped accruing at 00:00. The filter is replaced by, not
+// merely removed from, the liveness test: `pastCloseMins === null` means this
+// booking's own day is still open, which covers yesterday's party under a 24/25
+// close AND still excludes one left seated three weeks ago, whose true elapsed
+// time is 30240 minutes and would otherwise be written as its duration.
 export function syncLiveDurations(bookings,today,nowM){
   return bookings.map(function(b){
-    if(b.date===today&&b.status==="seated"){
-      var elapsed=nowM-toMins(b.time);
+    if(b.status==="seated"&&seatedIsLive(b,today,nowM)){
+      var elapsed=seatedElapsed(b,today,nowM);
       if(elapsed>(b.duration||90)) return Object.assign({},b,{duration:elapsed,customDur:elapsed});
     }
     return b;
@@ -690,13 +954,34 @@ export function syncLiveDurations(bookings,today,nowM){
 //   (3) shifted window [now, scheduledEnd] would overlap an active booking on
 //       any shared table (per user rule 3a: don't shift).
 // Otherwise returns {newTime, newDuration, oldTime, direction}.
-export function applySeatedShift(booking,nowM,allBookings){
+// v17.16.2 (CT-2B-01): `nowM` arrived on TODAY's axis while every value below is
+// on `booking.date`'s. Seating a 23:30 booking at 00:30 gave nowM=30 against a
+// scheduledEnd of 1470, so the `nowM>=scheduledEnd` guard did not fire and this
+// returned newDuration = 1470-30 = **1440** — a 24-hour reservation, written to
+// the database. Its conflict scan excludes completed bookings, so nothing at
+// 00:30 stood in the way.
+export function applySeatedShift(booking,nowM,allBookings,today){
   if(!booking||!booking.time) return null;
   var scheduledStart=toMins(booking.time);
   var scheduledDur=booking.duration||90;
   var scheduledEnd=scheduledStart+scheduledDur;
-  if(nowM===scheduledStart) return null;
-  if(nowM>=scheduledEnd) return null;
+  var nm=nowOn(booking.date,today,nowM);
+  // A start time is stored as HH:MM against the booking's own date, so a shift
+  // to a moment OUTSIDE that date cannot be REPRESENTED: toTime wraps modulo 24,
+  // and `now` must therefore fall inside [0, 1440) of the booking's own day.
+  //
+  // BOTH ends are load-bearing (/code-review). Past the end: writing "00:15"
+  // onto yesterday's booking moves it a full day into the past. Before the
+  // start: seating a booking dated TOMORROW projects `now` NEGATIVE, and the
+  // first version of this guard only checked the upper bound — so seating a
+  // 13:00 booking on tomorrow's date at 23:00 today gave nm = -60, cleared
+  // every remaining guard (newDuration 930 is inside the clamp), and wrote
+  // `toTime(-60)` = **"-1:00"** as the booking's time. The pre-v17.16.2 code was
+  // safe here by accident: its `nowM >= scheduledEnd` test fired on the
+  // unprojected 1380, so the axis fix REMOVED that protection.
+  if(!Number.isFinite(nm)||nm<0||nm>=1440) return null;
+  if(nm===scheduledStart) return null;
+  if(nm>=scheduledEnd) return null;
   var myTables=booking.tables||[];
   if(myTables.length>0){
     var conflict=allBookings.some(function(other){
@@ -708,11 +993,17 @@ export function applySeatedShift(booking,nowM,allBookings){
       if(!shared) return false;
       var os=toMins(other.time);
       var oe=os+(other.duration||90);
-      return overlaps(nowM,scheduledEnd,os,oe);
+      return overlaps(nm,scheduledEnd,os,oe);
     });
     if(conflict) return null;
   }
-  return {newTime:toTime(nowM),newDuration:scheduledEnd-nowM,oldTime:booking.time,direction:nowM<scheduledStart?"early":"late"};
+  var newDuration=scheduledEnd-nm;
+  // Second line of defence, at the one point this reaches the database. The
+  // shared axis above makes it unreachable; a duration the schedule cannot mean
+  // should still be refused where it would be written, not only where it is
+  // computed.
+  if(!Number.isFinite(newDuration)||newDuration<=0||newDuration>1440) return null;
+  return {newTime:toTime(nm),newDuration:newDuration,oldTime:booking.time,direction:nm<scheduledStart?"early":"late"};
 }
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
@@ -768,7 +1059,7 @@ function sameBookings(a,b){
 // as immutable — none of them mutates it today (all read via map/filter/find),
 // and the returned array may now BE the caller's own input.
 export function bookingsAfterAction(updatedBks,date,blocks,changedId,forceReassign,autoOptimizerState){
-  var today=new Date().toISOString().slice(0,10);
+  var today=todayStr();
   var d=new Date();var nowM=d.getHours()*60+d.getMinutes();
   var synced=syncLiveDurations(updatedBks,today,nowM);
   var out=computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptimizerState);
@@ -814,14 +1105,64 @@ var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
 // made `["1+2"]` and `["1","2"]` the same key, and `notes` is free text that can
 // contain either. A collision reads as "nothing changed": for undo that means a
 // snapshot is never taken, for `dayBookingsSig` below that a real reshuffle is
-// discarded. No text field in the app can produce a control character, and the
-// key is only ever compared — never stored, never shown.
+// discarded. The key is only ever compared — never stored, never shown.
+//
+// v17.16.6 (CT-2A-11): that comment used to end "No text field in the app can
+// produce a control character", and **it was an assertion nothing enforced and
+// nothing was true of**. `notes` is a `<textarea>`, `sanitize` writes
+// `b.notes || ""` verbatim, and a paste carries whatever bytes it carries. The
+// choice was to make the sentence true or to delete it; making it true is now
+// `escSep` below, so the guarantee is a property of this function rather than a
+// claim about the rest of the app — which is the version of it that cannot rot
+// when somebody adds a field.
+//
+// **It ESCAPES rather than strips, and that distinction is the whole fix.**
+// Stripping the separator bytes out of each value would close the boundary-shift
+// collision by opening an identical one a character away: `"a\u001fb"` and
+// `"ab"` would map to the same key, so an edit between them reads as "nothing
+// changed" — the very failure this exists to prevent, differing only in which
+// pair of values triggers it. Caret escaping is injective, so no two distinct
+// field sets can share a key at all, and the cost is nothing.
+//
+// The escape prefix is \u001b (ESC, the natural choice and outside the four
+// separators), and it escapes ITSELF first by being inside the replaced range:
+// every \u001b in the output is a prefix, never data. `+0x40` is caret notation
+// — \u001b..\u001f map to [ \ ] ^ _ — so a decoder is unambiguous even though
+// nothing decodes: the key is compared, and injectivity is the only property
+// asked of it.
 var K_ARR="\u001f", K_FLD="\u001e", K_REC="\u001d", K_LST="\u001c";
+// `no-control-regex` exists to catch a control character that got into a pattern
+// by ACCIDENT — a pasted byte, a mistyped escape. Here the characters are the
+// entire subject: this is the one regex in the app whose job is to find them.
+// Disabled with the reason rather than worked around, because every alternative
+// is worse: a char-by-char loop runs on every field of every booking through
+// `dayBookingsSig`, and `new RegExp("[\\u001b-\\u001f]")` is flagged by the same
+// rule while hiding the range from a reader.
+// eslint-disable-next-line no-control-regex
+var SEP_RE=/[\u001b-\u001f]/g;
+function escSep(v){
+  return String(v).replace(SEP_RE,function(c){
+    return "\u001b"+String.fromCharCode(c.charCodeAt(0)+0x40);
+  });
+}
 function undoKey(b){
   return UNDO_FIELDS.map(function(k){
     var v=b[k];
-    if(Array.isArray(v)) return v.slice().sort().join(K_ARR);
-    return (v===undefined||v===null)?"":String(v);
+    // /code-review: the null/undefined collapse is `join`'s and had to be kept.
+    // `Array.prototype.join` renders a null or undefined element as the EMPTY
+    // STRING, while `escSep` reaches it through `String(v)` and renders the word
+    // "null" — so swapping the join for a map silently made `tables: [null]` and
+    // `tables: ["null"]` one key. That is a NEW collision, in the function this
+    // version exists to remove one from, and it was asymmetric with the very
+    // next line, which has always spelled the two out. RTDB returns a sparse
+    // array as `["1A", null, "2"]` and `sanitize` only checks `Array.isArray`,
+    // so the null side is reachable; a table named "null" is permitted by
+    // `idOk`. Rare together, and the point is that the escape had to be a pure
+    // ADDITION to the old key, not a re-spelling of it.
+    if(Array.isArray(v)) return v.slice().sort().map(function(x){
+      return (x===undefined||x===null)?"":escSep(x);
+    }).join(K_ARR);
+    return (v===undefined||v===null)?"":escSep(v);
   }).join(K_FLD);
 }
 export function undoSnapshots(prev,next){
@@ -1005,10 +1346,18 @@ export function pct(mins){var totalMins=(GRID_CLOSE-OPEN)*60;return ((mins-OPEN*
 // `nowMins`. NB: ListView's similarly-shaped inline `liveDur` has different
 // semantics (pinned-to-plan end-time) and is intentionally NOT consolidated
 // here — that lives in ListView and is a separate concern.
-export function liveBarDur(b,nowMins){
-  if(b&&b.status==="seated"){
-    var elapsed=nowMins-toMins(b.time);
-    return Math.max(15,elapsed);
+// v17.16.2 (CT-2B-02): `nowMins-toMins(b.time)` mixed axes, so a seated booking
+// on ANY past date measured negative and clamped to the 15-minute floor — a
+// party an hour into their meal drawn as a fifteen-minute block. Bounded by
+// pastCloseMins for syncLiveDurations' reason: past its own day's close a
+// booking shows its STORED duration, which auto-complete has already frozen at
+// the close, rather than growing without limit.
+export function liveBarDur(b,nowMins,today){
+  // Same liveness test as syncLiveDurations, so the bar drawn and the duration
+  // stored can never disagree: a booking the writer will not touch shows the
+  // value the writer left.
+  if(b&&b.status==="seated"&&seatedIsLive(b,today,nowMins)){
+    return Math.max(15,seatedElapsed(b,today,nowMins));
   }
   return b?b.duration:0;
 }

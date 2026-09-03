@@ -28,8 +28,7 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { DEFAULT_WEEK_HOURS, setWeekHours, setActiveDayHours } from "../lib/constants";
 import { dbError } from "../lib/dbError";
-
-const TODAY = () => new Date().toISOString().slice(0, 10);
+import { todayStr } from "../lib/day";
 
 // Clamp ONE day. Bounds mirror the v14.5.0 single-pair editor: open 6–22,
 // close (open+1)–25 (close may run past midnight). `closed` coerced to boolean.
@@ -86,7 +85,7 @@ export function useOperatingHours(viewDate){
   // Apply the ACTIVE view-day's hours to the live bindings on every render so the
   // timeline/forms (which read OPEN/CLOSE at render time) repaint when viewDate
   // changes. Module-side-effect only — no setState — so it's safe in render.
-  setActiveDayHours(viewDate || TODAY());
+  setActiveDayHours(viewDate || todayStr());
 
   // Persist one day (partial patch merged onto the current day). Writes the whole
   // {days} object so the node always carries the new shape.
@@ -100,7 +99,7 @@ export function useOperatingHours(viewDate){
     next[k] = sanitizeDay({ ...weekHours[k], ...(patch || {}) });
     setWeekHours(next);
     setWH(next);
-    setActiveDayHours(viewDate || TODAY());
+    setActiveDayHours(viewDate || todayStr());
     writeWithRev("settings/operatingHours", { days: next }, revRef);
   }
 
@@ -115,7 +114,7 @@ export function useOperatingHours(viewDate){
     for(let i = 0; i < 7; i++) next[i] = { ...clean };
     setWeekHours(next);
     setWH(next);
-    setActiveDayHours(viewDate || TODAY());
+    setActiveDayHours(viewDate || todayStr());
     writeWithRev("settings/operatingHours", { days: next }, revRef);
   }
 

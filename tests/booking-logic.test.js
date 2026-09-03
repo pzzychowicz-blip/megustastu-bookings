@@ -14,19 +14,24 @@ import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
-  comboCap, comboCapBest, sanitize, sanitizeAll, diffBooking,
+  comboCap, comboCapBest, sanitize, sanitizeAll, isReadableTime, diffBooking,
   lateState, lateMins, freeingSoon, daySummary, rangeStats,
-  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots,
-  findBest, findFreeSlot, applyOpt, bookingsAfterAction,
+  verifyClean, findConflicts, findClashes, canAssign, getBusy, getBlockSlots, isReadableBlock,
+  findBest, findFreeSlot, applyOpt, optimise, bookingsAfterAction,
   applySeatedShift, rankCombosContaining, comboExistsFor,
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
+  liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
+import { todayStr } from "../src/lib/day.js";
+import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
-const today = new Date().toISOString().slice(0, 10);
+// v17.16.2: same source as the app. Derived with toISOString() this drifted
+// one day from the code under test between 00:00 and 01:00 every summer.
+const today = todayStr();
 
 function mk(o) {
   return Object.assign({
@@ -98,6 +103,83 @@ describe("combo capacity", () => {
   });
 });
 
+// v17.16.5 (CT-2A-05): the optimiser's answer must not depend on the order the
+// bookings arrived in. It did — `optimise`'s four sort keys are not a total
+// order and `Array.sort` is stable, so a tie fell through to array position,
+// and array order is not the same on two devices (one that just created a
+// booking has it appended; one that received it by snapshot has it key-sorted).
+//
+// The fixture is deliberately the shape that TIES: same size, same start, same
+// "auto" preference — which is also the shape a real service has. On the
+// measured 200-day harness this scenario differed in 138/200 before the id key
+// and 0/200 after.
+describe("optimise is order-invariant", () => {
+  const D = "2026-09-10";
+  const party = (id, time, size) => sanitize({
+    id, name: id, date: D, time, size, duration: 90,
+    preference: "auto", status: "confirmed",
+  });
+  const day = () => [
+    party("b01", "20:00", 2), party("b02", "20:00", 2), party("b03", "20:00", 2),
+    party("b04", "20:00", 4), party("b05", "20:00", 4), party("b06", "20:30", 2),
+    party("b07", "20:30", 2), party("b08", "20:30", 4),
+  ];
+  const sig = (res) => Object.keys(res).sort()
+    .map((k) => k + ":" + (res[k] || []).slice().sort().join("+")).join("|");
+
+  // Every case below asserts PLACEMENT before it asserts invariance, and that
+  // order is the point (/code-review). `sig({})` is the empty string, so an
+  // `optimise` that assigns NOBODY produces one identical signature for every
+  // ordering and satisfies invariance perfectly — proven, not argued: with
+  // `var assigned={}` substituted for the greedy pass, both of these tests
+  // passed. **Invariance is a property of the answer, so there has to be an
+  // answer first**, or the strongest possible regression reads as green.
+  const placed = (res, n) => {
+    const got = Object.keys(res).filter((k) => (res[k] || []).length > 0);
+    expect(got.length).toBe(n);
+    return res;
+  };
+
+  it("gives the same assignment however the list is ordered", () => {
+    const base = sig(placed(optimise(day(), D, []), 8));
+    expect(base).not.toBe("");
+    expect(sig(placed(optimise(day().reverse(), D, []), 8))).toBe(base);
+    // A rotation and a swap of two tied neighbours — the two ways a real array
+    // diverges (an append landing elsewhere than the key sort would put it).
+    const rot = day(); rot.push(rot.shift());
+    expect(sig(placed(optimise(rot, D, []), 8))).toBe(base);
+    const sw = day(); const t = sw[0]; sw[0] = sw[2]; sw[2] = t;
+    expect(sig(placed(optimise(sw, D, []), 8))).toBe(base);
+  });
+
+  // Every permutation, not a handful. A sampled shuffle can pass by luck on a
+  // build with no tie-break — the first draft of this test did exactly that,
+  // and a test that cannot fail is worse than none because it reports coverage
+  // it does not have. Five fully-tied parties is 120 orderings, which settles it
+  // exhaustively and runs in milliseconds.
+  it("gives one answer across all 120 orderings of a fully tied day", () => {
+    const tied = [
+      party("b01", "20:00", 2), party("b02", "20:00", 2), party("b03", "20:00", 2),
+      party("b04", "20:00", 2), party("b05", "20:00", 2),
+    ];
+    const perms = (a) => a.length <= 1 ? [a] : a.flatMap((x, i) =>
+      perms(a.slice(0, i).concat(a.slice(i + 1))).map((p) => [x].concat(p)));
+    const all = perms(tied);
+    expect(all.length).toBe(120);
+    const answers = new Set(all.map((p) => sig(placed(optimise(p, D, []), 5))));
+    expect(answers.size).toBe(1);
+    // NOT `answers.has(sig(optimise(tied, …)))`: `tied` is one of the 120, and
+    // the line above already says there is exactly one answer, so that check
+    // could never fail — the vacuous-assertion trap this whole test exists to
+    // avoid, one line further down. What is actually worth pinning is that the
+    // single answer places every party on a distinct table, i.e. that the five
+    // tied parties were resolved rather than collapsed onto one another.
+    const only = [...answers][0];
+    const tables = only.split("|").map((e) => e.split(":")[1]);
+    expect(new Set(tables).size).toBe(5);
+  });
+});
+
 describe("sanitize / sanitizeAll", () => {
   it("null-safe, applies defaults, clamps deposit ≥ 0", () => {
     expect(sanitize(null)).toBe(null);
@@ -109,6 +191,45 @@ describe("sanitize / sanitizeAll", () => {
     expect(s.tables).toEqual([]);
     expect(sanitize({ deposit: -50 }).deposit).toBe(0);
     expect(sanitize({ deposit: 20 }).deposit).toBe(20);
+  });
+  // v17.16.5 (CT-2A-03, client half). `toMins` is `t.split(":")` at 83 call
+  // sites, so a stored time that is not a readable string is a crash, not a
+  // wrong value — and it is reachable from the server, where the rules check
+  // type and deliberately not format.
+  it("keeps only a time toMins can read; every other shape takes the default", () => {
+    // The exact reproduction: a number is truthy, so it used to survive.
+    expect(sanitize({ time: 2000 }).time).toBe("13:00");
+    expect(() => toMins(sanitize({ time: 2000 }).time)).not.toThrow();
+    expect(sanitize({ time: true }).time).toBe("13:00");
+    expect(sanitize({ time: { h: 13 } }).time).toBe("13:00");
+    expect(sanitize({ time: ["13:00"] }).time).toBe("13:00");
+    // Silent rather than throwing, and just as unusable: toMins("31/08/2026") is NaN.
+    expect(sanitize({ time: "31/08/2026" }).time).toBe("13:00");
+    // scheduledTime carries the same guard, and falls back to the sanitised
+    // time rather than to the literal — a booking moved to 19:00 whose
+    // scheduledTime is junk must not claim it was scheduled for 13:00.
+    expect(sanitize({ time: "19:00", scheduledTime: 9 }).scheduledTime).toBe("19:00");
+    expect(sanitize({ time: 2000, scheduledTime: 2000 }).scheduledTime).toBe("13:00");
+  });
+  // The guard is the CONSUMER'S requirement, not a format of its own: nothing
+  // that reads today may move. These are the values that would break if someone
+  // "tightened" it into a /^\d{2}:\d{2}$/ pattern.
+  it("does not move a value that already reads", () => {
+    expect(sanitize({ time: "9:30" }).time).toBe("9:30");
+    expect(sanitize({ time: "13:00:00" }).time).toBe("13:00:00");
+    expect(sanitize({ time: "13:0" }).time).toBe("13:0");
+    // Kept deliberately, and recorded at the predicate: neither crashes, so
+    // neither is this fix's business. ":" reads as 00:00, "25:99" as 1599.
+    expect(sanitize({ time: ":" }).time).toBe(":");
+    expect(sanitize({ time: "25:99" }).time).toBe("25:99");
+  });
+  it("isReadableTime answers for the consumer", () => {
+    expect(isReadableTime("13:00")).toBe(true);
+    expect(isReadableTime(2000)).toBe(false);
+    expect(isReadableTime("")).toBe(false);
+    expect(isReadableTime("1300")).toBe(false);
+    expect(isReadableTime(null)).toBe(false);
+    expect(isReadableTime(undefined)).toBe(false);
   });
   it("preserves the updatedAt stamp; reads both array and keyed shapes", () => {
     expect(sanitize({ updatedAt: 12345 }).updatedAt).toBe(12345);
@@ -134,7 +255,7 @@ describe("diffBooking", () => {
 describe("lateState / lateMins", () => {
   const cfg = { lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20 };
   it("lateMins = now − start", () => {
-    expect(lateMins({ time: "13:00" }, 810)).toBe(30);
+    expect(lateMins({ date: D, time: "13:00" }, 810, D)).toBe(30);
   });
   it("confirmed/pending today cross warn then noshow thresholds", () => {
     const b = mk({ date: D, time: "13:00", status: "confirmed" });
@@ -233,6 +354,95 @@ describe("canAssign / getBusy / getBlockSlots", () => {
     const s = getBlockSlots(blocks, D);
     expect(s).toEqual([{ tables: ["7"], s: 840, e: 900 }]);
   });
+
+  // v17.16.6 — the getBlockSlots sibling of CT-2A-03. A block's from/to reach
+  // the same `toMins` a booking's `time` does, and `sanitizeBlock` is a MINT
+  // rather than a whitelist, so nothing upstream guarantees they are readable.
+  // Before this the call threw `t.split is not a function` and took the whole
+  // placement path with it — every scan that consults blocks.
+  it("skips a block whose from/to `toMins` cannot read, instead of throwing", () => {
+    const bad = { tableId: "7", date: D, allDay: false, from: 2000, to: 2100 };
+    const good = { tableId: "2", date: D, allDay: false, from: "14:00", to: "15:00" };
+    expect(() => getBlockSlots([bad], D)).not.toThrow();
+    // The survivor is what matters: one malformed block must not cost the others.
+    expect(getBlockSlots([bad, good], D)).toEqual([{ tables: ["2"], s: 840, e: 900 }]);
+  });
+
+  it("skips it whichever end is unreadable, and for every unreadable shape", () => {
+    const shapes = [
+      { from: 2000, to: "15:00" },
+      { from: "14:00", to: 2100 },
+      { from: null, to: "15:00" },
+      { from: "14:00", to: undefined },
+      { from: "", to: "15:00" },
+      { from: "14:00", to: {} },
+      { from: "not a time", to: "15:00" },
+    ];
+    shapes.forEach((sh) => {
+      const bl = Object.assign({ tableId: "7", date: D, allDay: false }, sh);
+      expect(() => getBlockSlots([bl], D)).not.toThrow();
+      expect(getBlockSlots([bl], D)).toEqual([]);
+    });
+  });
+
+  it("leaves an allDay block alone — it never reads from/to", () => {
+    // The skip must not widen into blocks the defect cannot reach: an allDay
+    // block spans hoursFor(date) and its from/to are ignored, so a malformed
+    // pair there is not a reason to stop protecting the table all day.
+    const bl = { tableId: "7", date: D, allDay: true, from: 2000, to: null };
+    const s = getBlockSlots([bl], D);
+    expect(s).toHaveLength(1);
+    expect(s[0].tables).toEqual(["7"]);
+    expect(Number.isFinite(s[0].s) && Number.isFinite(s[0].e)).toBe(true);
+  });
+
+  // v17.16.6 (/code-review): the guard shipped on ONE of two consumers. BlockBar
+  // (TimelineView) filters dayBlocks by date alone and then calls toMins(bl.from)
+  // itself, so an unreadable block still threw — during RENDER, where the error
+  // boundary unmounts the whole app. The predicate is exported and shared now,
+  // and this is the guard that fails if a third consumer appears without it.
+  it("EVERY consumer that computes with bl.from/bl.to filters on the predicate", () => {
+    const files = ["src/lib/booking-logic.js", "src/components/TimelineView.jsx",
+      "src/components/PlanView.jsx", "src/components/DaySheet.jsx",
+      "src/components/BlockModal.jsx", "src/components/ManualModal.jsx",
+      "src/components/WalkinForm.jsx", "src/App.jsx"];
+    const offenders = [];
+    files.forEach((f) => {
+      const src = readFileSync(new URL("../" + f, import.meta.url), "utf8");
+      // Does this file hand a block's own from/to to toMins itself, rather than
+      // going through getBlockSlots? If so it must know about the predicate.
+      const computes = /toMins\(\s*b[a-z]*\.(from|to)\s*\)/.test(src);
+      if (computes && !src.includes("isReadableBlock")) offenders.push(f);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it("isReadableBlock answers for a null block and for allDay", () => {
+    expect(isReadableBlock(null)).toBe(false);
+    expect(isReadableBlock(undefined)).toBe(false);
+    // allDay never reads from/to, so a malformed pair there is not a reason to
+    // stop protecting the table all day.
+    expect(isReadableBlock({ allDay: true, from: 2000, to: null })).toBe(true);
+    expect(isReadableBlock({ allDay: false, from: "14:00", to: "15:00" })).toBe(true);
+    expect(isReadableBlock({ allDay: false, from: 2000, to: "15:00" })).toBe(false);
+    expect(isReadableBlock({ allDay: false, from: "14:00", to: undefined })).toBe(false);
+  });
+
+  it("keeps every readable time the app already accepts", () => {
+    // The guard is `toMins` yields a finite number — the consumer's own
+    // requirement — and NOT a format of its own, for `isReadableTime`'s stated
+    // reason: nothing that currently works may move. "9:30" and "13:00:00" are
+    // not what the picker emits and both read fine today.
+    const keep = [
+      ["9:30", "10:30", 570, 630],
+      ["13:00:00", "14:00:00", 780, 840],
+      [":", "1:00", 0, 60],
+    ];
+    keep.forEach(([from, to, es, ee]) => {
+      const bl = { tableId: "7", date: D, allDay: false, from, to };
+      expect(getBlockSlots([bl], D)).toEqual([{ tables: ["7"], s: es, e: ee }]);
+    });
+  });
 });
 
 describe("findBest (MGT single/combo contracts)", () => {
@@ -292,6 +502,42 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     expect(out[0].tables).toEqual([]);
     expect(out[0]._conflict).toBe(true);
   });
+  // ── v17.15.5: a FINISHED booking's tables are a historical record ────────
+  // These pin the layer `doSaveEdit` disagreed with. App's own fix (a completed
+  // or cancelled booking is never handed to the optimiser and never has its
+  // tables blanked) is the caller's half; this is the half that was already
+  // right and must stay right, because the App fix is written to agree with it.
+  it("applyOpt never moves a completed booking, whatever else it reshuffles", () => {
+    const done = mk({ status: "completed", tables: ["7"], size: 4, time: "13:00" });
+    // A live booking that the optimiser WOULD like to put on table 7.
+    const live = mk({ status: "confirmed", tables: [], size: 4, time: "13:00" });
+    const out = applyOpt([done, live], D, []);
+    const d = out.find((x) => x.id === done.id);
+    expect(d.tables, "a party that has already left did sit where they sat")
+      .toEqual(["7"]);
+    expect(d.status).toBe("completed");
+  });
+  it("applyOpt does not refill a completed booking whose tables were blanked", () => {
+    // Why blanking one upstream is unrecoverable rather than merely untidy —
+    // this is what turned an edit into "No tables available at this time".
+    const out = applyOpt([mk({ status: "completed", tables: [], size: 4 })], D, []);
+    expect(out[0].tables).toEqual([]);
+    expect(out[0]._conflict, "and it is not even flagged as a conflict").toBe(false);
+  });
+  it("a completed booking keeps its tables through a size change", () => {
+    const done = mk({ date: today, status: "completed", tables: ["7"], size: 4, _locked: true });
+    const bigger = Object.assign({}, done, { size: 6 });
+    const out = bookingsAfterAction([bigger], today, [], done.id, true, true);
+    expect(out[0].tables, "a size edit must not relocate a finished visit")
+      .toEqual(["7"]);
+  });
+  it("a cancelled booking keeps its tables through a size change", () => {
+    const gone = mk({ date: today, status: "cancelled", tables: ["5A"], size: 2 });
+    const bigger = Object.assign({}, gone, { size: 4 });
+    const out = bookingsAfterAction([bigger], today, [], gone.id, true, true);
+    expect(out[0].tables).toEqual(["5A"]);
+  });
+
   it("bookingsAfterAction OFF-path (today + optimizer off) preserves tables", () => {
     const b = mk({ date: today, status: "confirmed", tables: ["7"], size: 4 });
     const out = bookingsAfterAction([b], today, [], null, false, false);
@@ -434,7 +680,7 @@ describe("verifyClean / findConflicts", () => {
 describe("applySeatedShift", () => {
   it("shifts start to now and pins the original end", () => {
     const b = mk({ time: "13:00", duration: 90, tables: ["7"] }); // scheduled 13:00–14:30
-    const r = applySeatedShift(b, 795, [b]); // now 13:15
+    const r = applySeatedShift(b, 795, [b], D); // now 13:15
     expect(r).toBeTruthy();
     expect(r.newTime).toBe("13:15");
     expect(r.newDuration).toBe(75);       // 870 − 795
@@ -550,6 +796,86 @@ describe("undoSnapshots / applyUndo", () => {
   it("treats table ORDER as equivalent (a reorder is not a move)", () => {
     const two = mk({ id: "t", tables: ["1A", "1B"] });
     expect(undoSnapshots([two], [{ ...two, tables: ["1B", "1A"] }])).toEqual([]);
+  });
+
+  // v17.16.6 (CT-2A-11): the separator is no longer reachable FROM THE DATA.
+  //
+  // The source comment used to assert "No text field in the app can produce a
+  // control character", which nothing enforced and which was false — `notes` is
+  // a <textarea> and `sanitize` writes it verbatim. `idOk`
+  // (LayoutSettings.jsx:81) forbids only "|" in a table id, and neither
+  // `settings/layout` nor `bookings` validates field FORMAT server-side, so a
+  // value carrying one is reachable exactly as a malformed `time` is.
+  //
+  // The ARRAY join is where a SINGLE poisoned value collides. The field join has
+  // fixed arity, so shifting content across one boundary changes the separator
+  // count and cannot collide without a second poisoned field — which is why the
+  // reachable case here is the same shape as the v17.10.2 defect that introduced
+  // these separators ("1+2" vs ["1","2"]), with the separator that replaced it.
+  const SEP = "\u001f";  // K_ARR — written as the escape, never the raw byte
+  it("does not collapse a poisoned table id and a two-table set into one key", () => {
+    const one = mk({ id: "k", tables: ["a" + SEP + "b"] });
+    const two = { ...one, tables: ["a", "b"] };
+    // Two genuinely different table sets. Before this both joined to the same
+    // string, undoKey read "nothing changed", and NO UNDO SNAPSHOT WAS TAKEN —
+    // the action became silently un-undoable.
+    expect(undoSnapshots([one], [two]).map((x) => x.id)).toEqual(["k"]);
+    expect(undoSnapshots([two], [one]).map((x) => x.id)).toEqual(["k"]);
+    // dayBookingsSig gates the reconciliation effect on the same key, where the
+    // same collision discards a real reshuffle instead.
+    expect(dayBookingsSig([one], one.date)).not.toBe(dayBookingsSig([two], two.date));
+  });
+
+  it("separates a poisoned preferredTables the same way", () => {
+    // The other array field in UNDO_FIELDS, and it holds table ids too.
+    const one = mk({ id: "k", preferredTables: ["a" + SEP + "b"] });
+    const two = { ...one, preferredTables: ["a", "b"] };
+    expect(undoSnapshots([one], [two]).map((x) => x.id)).toEqual(["k"]);
+  });
+
+  it("ESCAPES rather than strips, so it opens no collision of its own", () => {
+    // The distinction that decided the fix. Stripping the bytes out would map
+    // "a<SEP>b" and "ab" onto one key — the identical failure one character
+    // away, and the one an injective escape cannot produce.
+    const withSep = mk({ id: "k", notes: "a" + SEP + "b" });
+    const without = { ...withSep, notes: "ab" };
+    expect(undoSnapshots([withSep], [without]).map((x) => x.id)).toEqual(["k"]);
+    // ESC is itself inside the escaped range, so data cannot forge an escape:
+    // a literal ESC becomes ESC-"[" and a literal "[" stays "[".
+    const esc = mk({ id: "k", notes: "a\u001bb" });
+    const forged = { ...esc, notes: "a[b" };
+    expect(undoSnapshots([esc], [forged]).map((x) => x.id)).toEqual(["k"]);
+  });
+
+  it("renders a null array element as join always did, not as \"null\"", () => {
+    // /code-review. Swapping `join` for `.map(escSep)` changed how a null or
+    // undefined ELEMENT stringifies: join gives "", String(v) gives "null" —
+    // so [null] and ["null"] became one key, a NEW collision in the function
+    // this version exists to remove one from. RTDB returns a sparse array as
+    // ["1A", null, "2"] and sanitize only checks Array.isArray, so the null
+    // side is reachable; `idOk` permits a table literally named "null".
+    const holed = mk({ id: "k", tables: [null] });
+    const named = { ...holed, tables: ["null"] };
+    expect(undoSnapshots([holed], [named]).map((x) => x.id)).toEqual(["k"]);
+    expect(dayBookingsSig([holed], holed.date)).not.toBe(dayBookingsSig([named], named.date));
+    // ...and undefined the same way, against its own spelling
+    const undef = mk({ id: "k", tables: [undefined] });
+    const uname = { ...undef, tables: ["undefined"] };
+    expect(undoSnapshots([undef], [uname]).map((x) => x.id)).toEqual(["k"]);
+    // The escape must be a pure ADDITION to the old key: a hole still collapses
+    // to nothing, exactly as join rendered it.
+    expect(dayBookingsSig([holed], holed.date))
+      .toBe(dayBookingsSig([mk({ id: "k", tables: [undefined] })], holed.date));
+  });
+
+  it("leaves every ordinary value exactly where it was", () => {
+    // The guarantee that matters more than the collision: nothing WITHOUT a
+    // control character may change behaviour. An unchanged booking still reads
+    // unchanged, and a real edit still reads as one.
+    const plain = mk({ id: "k", name: "Nunez-O'Brien", notes: "window seat, 2 high chairs" });
+    expect(undoSnapshots([plain], [{ ...plain }])).toEqual([]);
+    expect(undoSnapshots([plain], [{ ...plain, notes: "window seat" }]).map((x) => x.id)).toEqual(["k"]);
+    expect(dayBookingsSig([plain], plain.date)).toBe(dayBookingsSig([{ ...plain }], plain.date));
   });
 
   it("applyUndo replaces existing bookings and re-adds deleted ones", () => {
@@ -1077,11 +1403,367 @@ describe("sanitizeBlock / sanitizeBlocks", () => {
     expect(sanitizeBlock("nope")).toBe(null);
   });
 
+  // ── v17.16.4 (CT-2B-06): the mint is deterministic for a LEGACY node ───────
+  // A random mint answers "what read was this", not "which block is this", so
+  // two reads of one unchanged node disagreed about every id — and removeBlock
+  // filters on an id BlockModal captured at open time. A resync in between made
+  // Unblock a silent no-op.
+  it("gives one unchanged legacy node the SAME ids on every read", () => {
+    const node = () => [Object.assign({}, base), Object.assign({}, base, { from: "18:00", to: "19:00" })];
+    const first = sanitizeBlocks(node()).map((b) => b.id);
+    const second = sanitizeBlocks(node()).map((b) => b.id);
+    expect(second).toEqual(first);
+  });
+
+  it("survives the round trip that used to no-op: open, resync, unblock", () => {
+    const node = () => [Object.assign({}, base), Object.assign({}, base, { from: "18:00", to: "19:00" })];
+    const captured = sanitizeBlocks(node())[0];        // BlockModal holds this
+    const afterResync = sanitizeBlocks(node());        // a fresh snapshot lands
+    const next = afterResync.filter((bl) => bl.id !== captured.id);  // removeBlock
+    expect(next).toHaveLength(1);
+    expect(next[0].from).toBe("18:00");
+  });
+
+  it("keys the seed on CONTENT, not on array position", () => {
+    // Position would be stable only while nothing is inserted. If a stale index
+    // ever resolved it would resolve to a DIFFERENT block — unblocking the
+    // wrong table, which is worse than the no-op it replaces. A content key
+    // either finds the same block or finds none.
+    const b1 = Object.assign({}, base);
+    const b2 = Object.assign({}, base, { tableId: "5A" });
+    const before = sanitizeBlocks([b1, b2]);
+    const after = sanitizeBlocks([b2, b1]);
+    expect(after.find((b) => b.tableId === "3").id).toBe(before.find((b) => b.tableId === "3").id);
+    expect(after.find((b) => b.tableId === "5A").id).toBe(before.find((b) => b.tableId === "5A").id);
+  });
+
+  it("distinguishes blocks that differ ONLY in reason", () => {
+    // `reason` is free staff-entered text and is in the key, which is why the
+    // separator is a control character rather than a printable one.
+    const out = sanitizeBlocks([
+      Object.assign({}, base, { reason: "deep clean" }),
+      Object.assign({}, base, { reason: "private party" }),
+    ]);
+    expect(out[0].id).not.toBe(out[1].id);
+  });
+
+  it("never collides with a genId() id, and leaves a real id alone", () => {
+    const minted = sanitizeBlocks([Object.assign({}, base)])[0].id;
+    expect(minted).toContain("_");          // genId() output contains no "_"
+    const real = sanitizeBlocks([Object.assign({ id: "abc123" }, base)])[0];
+    expect(real.id).toBe("abc123");
+  });
+
+  it("keeps the single-argument mint RANDOM — addBlock has nothing to derive from", () => {
+    // App's addBlock calls sanitizeBlock(block) directly on a brand-new block,
+    // which has no stored identity. Two new blocks that happen to be identical
+    // must still be two blocks.
+    expect(sanitizeBlock(Object.assign({}, base)).id)
+      .not.toBe(sanitizeBlock(Object.assign({}, base)).id);
+  });
+
+  // /code-review: the invariant removeBlock depends on is that every id in ONE
+  // result is distinct. A content hash alone does not give it, and both ways it
+  // can fail end in the v17.15.3 defect — one id for two blocks, so unblocking
+  // either drops BOTH.
+  it("never mints an id that COLLIDES with one the node already stores", () => {
+    // Reachable once a minted id has been persisted by saveBlocks and a
+    // pre-v17.15.3 client later writes an id-less block beside it. The first
+    // draft asserted this was impossible because genId() contains no "_" —
+    // true of genId() ids, false of a minted one that has since been stored.
+    const legacy = Object.assign({}, base);
+    const minted = sanitizeBlocks([Object.assign({}, legacy)])[0].id;
+    const out = sanitizeBlocks([Object.assign({ id: minted }, base), legacy]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).toBe(minted);
+    expect(out[1].id).not.toBe(minted);
+  });
+
+  it("gives two blocks whose content HASHES collide two different ids", () => {
+    // hash36 is 32-bit, so this is constructed rather than argued: these two
+    // reason strings on the same table and window hash identically. With the
+    // ordinal counting identical CONTENT keys, both took ordinal 1.
+    const A = Object.assign({}, base, { reason: "deep clean 149599" });
+    const B = Object.assign({}, base, { reason: "deep clean 312382" });
+    const out = sanitizeBlocks([A, B]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).not.toBe(out[1].id);
+    // ...and removing one leaves the other, which is the property that matters.
+    expect(out.filter((bl) => bl.id !== out[0].id)).toHaveLength(1);
+  });
+
+  it("keeps every id in one result distinct, mixed node included", () => {
+    const out = sanitizeBlocks([
+      Object.assign({ id: "real1" }, base),
+      Object.assign({}, base),
+      Object.assign({}, base),
+      Object.assign({}, base, { reason: "deep clean 149599" }),
+      Object.assign({}, base, { reason: "deep clean 312382" }),
+    ]);
+    const ids = out.map((b) => b.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("stays compatible with getBlockSlots", () => {
     // The consumer that matters: minted blocks must still produce slots.
     const out = sanitizeBlocks([Object.assign({}, base)]);
     const slots = getBlockSlots(out, "2026-08-26");
     expect(slots).toHaveLength(1);
     expect(slots[0].tables).toEqual(["3"]);
+  });
+});
+
+// ── v17.16.2 · one time axis (CT-2B-01 / CT-2B-02) ───────────────────────────
+//
+// Every function here used to subtract `toMins(b.time)` — minutes since midnight
+// of the BOOKING's date — from `nowMins`, minutes since midnight of TODAY. The
+// two agree only while the booking is today's, which is why none of this was
+// visible in eight years of daytime use and all of it is wrong after midnight.
+//
+// These need a past-midnight close (24/25) to be reachable, which Settings
+// permits and Me Gustas Tú does not currently use. The hours are set directly
+// and MUST be restored — the TURN_BUFFER precedent above, same reason: a leaked
+// close would silently change every later test in the file.
+describe("v17.16.2 — now and a booking on one axis", () => {
+  const YDAY = "2099-06-15";   // = D, the fixture date
+  const TMRW = "2099-06-16";   // "today" while yesterday's party is still seated
+  const lateClose = { open: 13, close: 25 };  // closes at 01:00
+
+  function withClose25(fn) {
+    const week = { 0: lateClose, 1: lateClose, 2: lateClose, 3: lateClose, 4: lateClose, 5: lateClose, 6: lateClose };
+    setWeekHours(week);
+    try { return fn(); } finally { setWeekHours(DEFAULT_WEEK_HOURS); }
+  }
+
+  // A party seated 23:30, an hour into their meal at 00:30 the next day.
+  const seated2330 = () => mk({ date: YDAY, time: "23:30", duration: 60, status: "seated", tables: ["7"] });
+
+  describe("liveBarDur", () => {
+    it("draws an hour as an hour, not as the 15-minute floor", () => {
+      withClose25(() => {
+        // 30 = 00:30 on TMRW. Projected onto YDAY that is minute 1470.
+        expect(liveBarDur(seated2330(), 30, TMRW)).toBe(60);
+        // What it returned before: max(15, 30 − 1410) = 15.
+        expect(Math.max(15, 30 - toMins("23:30"))).toBe(15);
+      });
+    });
+    it("is unchanged for a booking on today", () => {
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, status: "seated" });
+      expect(liveBarDur(b, 840, YDAY)).toBe(60);        // 14:00, one hour in
+      expect(liveBarDur(b, 790, YDAY)).toBe(15);        // 13:10 → the floor
+    });
+    it("returns the stored duration for a booking that is not seated", () => {
+      expect(liveBarDur(mk({ date: YDAY, duration: 90 }), 840, YDAY)).toBe(90);
+    });
+  });
+
+  describe("seatedElapsed — the cap that replaces the old date filter", () => {
+    it("caps at the booking's own close instead of rising forever", () => {
+      // Three weeks on, a booking left seated reads its day's service once and
+      // stops. Uncapped this is 30240 minutes and climbing, and syncLiveDurations
+      // would write it to the database as the party's duration.
+      const stale = mk({ date: YDAY, time: "13:00", status: "seated" });
+      expect(seatedElapsed(stale, "2099-07-06", 600)).toBe(22 * 60 - 13 * 60); // 540
+    });
+    it("agrees with auto-complete at the boundary rather than stepping", () => {
+      // auto-complete freezes duration at closeMins − start; the live figure must
+      // arrive at the same number, or the block jumps at closing time.
+      const b = mk({ date: YDAY, time: "21:00", status: "seated" });
+      const atClose = seatedElapsed(b, YDAY, 22 * 60);
+      const afterClose = seatedElapsed(b, YDAY, 23 * 60);
+      expect(atClose).toBe(60);
+      expect(afterClose).toBe(60);
+    });
+  });
+
+  describe("occupancyEnd — the table that read FREE while someone sat at it", () => {
+    it("holds the table through an overstay that began yesterday", () => {
+      withClose25(() => {
+        const b = seated2330();               // ends 00:30, i.e. minute 1470
+        // At 00:45 the party has overstayed. On the shared axis now is 1485,
+        // so the slot must extend past it and read BUSY.
+        expect(occupancyEnd(b, 45, TMRW)).toBeGreaterThan(1485);
+        // The old reading: e(1470) > nowM(45), so the overstay branch never
+        // fired and getBusy saw the table as free for a walk-in.
+        expect(1470 > 45).toBe(true);
+      });
+    });
+    it("leaves a future query alone — the guest is expected to have left", () => {
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, status: "seated" });
+      expect(occupancyEnd(b, 600, YDAY)).toBe(toMins("13:00") + 90); // 10:00, before it starts
+    });
+  });
+
+  describe("applySeatedShift — CT-2B-01, the one that reached the database", () => {
+    it("no longer writes a 24-hour booking", () => {
+      withClose25(() => {
+        const b = seated2330();
+        const r = applySeatedShift(b, 30, [b], TMRW); // seated at 00:30
+        // Now IS the scheduled end on the shared axis, so there is nothing to
+        // shift. Before: newDuration = 1470 − 30 = 1440.
+        expect(r).toBe(null);
+      });
+    });
+    it("refuses a shift it could not represent, rather than moving the booking a day back", () => {
+      withClose25(() => {
+        // Seated at 00:15 off a 23:30 booking that runs to 01:00. There IS room
+        // to shift, but the new start would be minute 1455 of YDAY, and a start
+        // is stored as HH:MM against its own date — toTime wraps to "00:15",
+        // which on YDAY is 24 hours in the past.
+        const b = mk({ date: YDAY, time: "23:30", duration: 90, status: "seated", tables: ["7"] });
+        expect(applySeatedShift(b, 15, [b], TMRW)).toBe(null);
+      });
+    });
+    it("still shifts normally within a single day", () => {
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, tables: ["7"] });
+      const r = applySeatedShift(b, 795, [b], YDAY);
+      expect(r.newTime).toBe("13:15");
+      expect(r.newDuration).toBe(75);
+      expect(r.direction).toBe("late");
+    });
+    it("refuses a duration the schedule cannot mean (the second line of defence)", () => {
+      // The axis fix makes this unreachable; it guards the one point that writes.
+      const b = mk({ date: YDAY, time: "13:00", duration: 90, tables: ["7"] });
+      expect(applySeatedShift(b, NaN, [b], YDAY)).toBe(null);
+    });
+  });
+
+  describe("syncLiveDurations / freeingSoon across midnight", () => {
+    it("keeps accruing a party seated before midnight", () => {
+      withClose25(() => {
+        const b = seated2330();
+        const out = syncLiveDurations([b], TMRW, 45); // 00:45 — 75 min in
+        expect(out[0].duration).toBe(75);
+        // Before, the `b.date === today` filter made this a no-op forever.
+        expect(syncLiveDurations([b], TMRW, 45)[0].duration).not.toBe(60);
+      });
+    });
+    it("offers a table freeing at 00:45 to the freeing-soon list", () => {
+      withClose25(() => {
+        const b = mk({ date: YDAY, time: "23:30", duration: 75, status: "seated", tables: ["7"] });
+        // 00:35 → 10 minutes before their 00:45 end.
+        const out = freeingSoon([b], TMRW, 35, 15);
+        expect(out.map((x) => x.inMin)).toEqual([10]);
+      });
+    });
+    it("still ignores a booking whose end is long past", () => {
+      expect(freeingSoon([mk({ date: YDAY, time: "13:00", status: "seated" })], "2099-07-06", 600, 15)).toEqual([]);
+    });
+  });
+
+  describe("pastCloseMins — now public, and the same answers as before", () => {
+    it("reports the close once it has passed, and null before", () => {
+      expect(pastCloseMins(YDAY, YDAY, 22 * 60)).toBe(1320);
+      expect(pastCloseMins(YDAY, YDAY, 21 * 60)).toBe(null);
+    });
+    it("is null for a future date, whose close cannot have passed", () => {
+      expect(pastCloseMins(TMRW, YDAY, 600)).toBe(null);
+    });
+    it("fires for yesterday once its own close is reached", () => {
+      withClose25(() => {
+        expect(pastCloseMins(YDAY, TMRW, 30)).toBe(null);   // 00:30, close is 01:00
+        expect(pastCloseMins(YDAY, TMRW, 75)).toBe(1500);   // 01:15, passed
+      });
+    });
+  });
+
+  // v17.16.12: every surface that OFFERS "seated" asks this first. The point is
+  // that it is EXACTLY the close-time auto-complete's own condition — two
+  // conditions that merely agree today are two conditions, and the app offering
+  // a status it then takes back is what this version exists to stop.
+  describe("seatingClosed", () => {
+    it("is the exact negation of pastCloseMins being null", () => {
+      // Pinned as an identity, not as a set of remembered answers: the guarantee
+      // is that the two can never drift, and only this shape states that.
+      for (const [d, t, n] of [
+        [YDAY, YDAY, 22 * 60], [YDAY, YDAY, 21 * 60],
+        [TMRW, YDAY, 600], [YDAY, TMRW, 30], [YDAY, TMRW, 75],
+      ]) {
+        expect(seatingClosed(d, t, n)).toBe(pastCloseMins(d, t, n) !== null);
+      }
+    });
+    it("closes seating on a past day and leaves a future one open", () => {
+      expect(seatingClosed(YDAY, TMRW, 600)).toBe(true);
+      expect(seatingClosed(TMRW, YDAY, 600)).toBe(false);
+    });
+    it("closes seating TODAY once the day's own close has passed", () => {
+      // The restaurant closes at 22:00 in the seed, and the auto-complete fires
+      // for today too — so a 22:30 tap on today's booking is just as futile.
+      expect(seatingClosed(YDAY, YDAY, 21 * 60 + 59)).toBe(false);
+      expect(seatingClosed(YDAY, YDAY, 22 * 60)).toBe(true);
+    });
+    it("follows a PAST-MIDNIGHT close rather than the date rollover", () => {
+      withClose25(() => {
+        // Yesterday's service runs to 01:00. At 00:30 it is a new calendar day
+        // and seating is still open; at 01:15 it is not.
+        expect(seatingClosed(YDAY, TMRW, 30)).toBe(false);
+        expect(seatingClosed(YDAY, TMRW, 75)).toBe(true);
+      });
+    });
+  });
+
+  describe("lateMins", () => {
+    it("measures against the booking's own midnight", () => {
+      withClose25(() => {
+        // A 23:45 booking, nobody arrived, now 00:15 the next day → 30 min late.
+        expect(lateMins({ date: YDAY, time: "23:45" }, 15, TMRW)).toBe(30);
+      });
+    });
+  });
+});
+
+// ── v17.16.2 /code-review — two regressions the axis fix introduced ──────────
+//
+// Both were found by reviewing the diff rather than by any failing test, and
+// both are the same shape: a guard that USED to hold for an incidental reason
+// stopped holding once `now` was projected. Worth pinning precisely because the
+// old code was safe by accident, so nothing pointed at either.
+describe("v17.16.2 /code-review — regressions of the axis fix", () => {
+  const D2 = "2099-06-15";
+  const YEST = "2099-06-14";
+  const LATER = "2099-07-06";
+
+  // Seating a booking dated in the FUTURE projects `now` NEGATIVE. The first
+  // guard only bounded the upper end, so every remaining test passed and
+  // toTime(-60) wrote "-1:00" as the booking's time.
+  it("refuses to shift a booking dated in the future, instead of writing a negative time", () => {
+    const b = mk({ date: D2, time: "13:00", duration: 90, tables: ["7"] });
+    // now = 23:00 on the day BEFORE the booking
+    expect(applySeatedShift(b, 1380, [b], YEST)).toBe(null);
+  });
+  it("still refuses past the other end of the day", () => {
+    const b = mk({ date: YEST, time: "23:30", duration: 90, status: "seated", tables: ["7"] });
+    expect(applySeatedShift(b, 15, [b], D2)).toBe(null);
+  });
+  it("and still shifts normally inside the booking's own day", () => {
+    const b = mk({ date: D2, time: "13:00", duration: 90, tables: ["7"] });
+    expect(applySeatedShift(b, 795, [b], D2).newTime).toBe("13:15");
+  });
+
+  // Dropping `b.date === today` let syncLiveDurations rewrite HISTORICAL
+  // records: the cap bounded the value (540 vs a stored 90) but never
+  // authorised the write.
+  it("leaves a booking left seated on a past day completely alone", () => {
+    const stale = mk({ date: D2, time: "13:00", status: "seated", duration: 90, tables: ["7"] });
+    const out = syncLiveDurations([stale], LATER, 600);
+    expect(out[0]).toBe(stale);            // same reference — no patch child
+    expect(out[0].duration).toBe(90);
+  });
+  it("still grows today's seated booking", () => {
+    const b = mk({ date: D2, time: "13:00", status: "seated", duration: 30, tables: ["7"] });
+    expect(syncLiveDurations([b], D2, 15 * 60)[0].duration).toBe(120);
+  });
+  it("draws the stored duration for a stale booking, so the bar and the write agree", () => {
+    const stale = mk({ date: D2, time: "13:00", status: "seated", duration: 90 });
+    expect(liveBarDur(stale, 600, LATER)).toBe(90);
+  });
+
+  describe("seatedIsLive", () => {
+    it("is true for today at any hour, because auto-complete owns the gap", () => {
+      expect(seatedIsLive(mk({ date: D2 }), D2, 23 * 60)).toBe(true);
+    });
+    it("is false for a past day whose close has gone", () => {
+      expect(seatedIsLive(mk({ date: D2 }), LATER, 600)).toBe(false);
+    });
   });
 });

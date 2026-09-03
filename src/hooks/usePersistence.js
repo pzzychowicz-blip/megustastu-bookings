@@ -19,24 +19,27 @@
 // prop and the seam disappears.
 
 import { useState, useRef, useEffect } from "react";
-import { ref, onValue, set, get, update, goOnline } from "firebase/database";
+// v17.16.7: `set` is gone from this import. It had exactly one caller left —
+// the legacy array→keyed migration below — and that became an `update()` when
+// the rules stopped granting a whole-node write on /bookings (CT-2A-04), so
+// THIS FILE's only write verb is now `update`. Not the app's: `usePresence.js`
+// still uses `set`, `push`, `remove` and `onDisconnect` on `presence/{key}`,
+// which is why that node needed a grant of its own when the root one went. An
+// audit of what writes Firebase starts from the four call sites named in
+// `database.rules.README.md`, never from this import.
+import { ref, onValue, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
-import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry } from "../lib/booking-logic";
-import { hoursFor } from "../lib/constants";
+import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError, onDbError } from "../lib/dbError";
-
-// v15.2.0: heartbeat-gap threshold for the freshness/resync gate. A foreground
-// tab ticks the heartbeat every 10s; a backgrounded tab's timers throttle to
-// ~60s. 90s is above both, so normal operation never trips it — but any real
-// OS sleep / lid-close (minutes-to-hours of a frozen event loop) does. See the
-// "Freshness / resync gate" block below.
-const STALE_GAP_MS = 90000;
-
-// v15.4.0: how many times a blocked/rejected user write is auto-replayed on
-// freshly-resynced data before giving up and surfacing a red error. ~3 covers
-// the realistic stale-wake / concurrent-reject cases without looping forever.
-const MAX_RETRIES = 3;
+// v17.16.2: the pure write-path core. Everything that decides WHETHER and in
+// what shape a booking reaches the server now lives in one testable module;
+// this hook keeps the refs, listeners, effects and setState. See its header.
+import {
+  buildPatch, patchSignature, isDuplicatePatch,
+  isStaleGap, retryDecision, describeWrite, STALE_GAP_MS, MAX_RETRIES,
+} from "../lib/write-path";
+import { todayStr } from "../lib/day";
 
 // v17.10.1: how long `.info/connected` may stay false, with the page in the
 // FOREGROUND, before we reset the SDK's reconnect backoff ourselves.
@@ -79,32 +82,23 @@ const RECONNECT_KICK_MAX_MS = 120000;
 // transport that can never work always will.
 const LOAD_TIMEOUT_MS = 15000;
 
-// v15.1.0: has `dateStr`'s closing moment already passed? Used by the
-// auto-extend effect (to skip) and the auto-complete effect (to trigger).
-// A booking's closing moment is its OWN date's per-weekday close (hoursFor —
-// may be 24/25, i.e. past midnight), expressed in minutes since that date's
-// midnight. "Now" on the same axis is dayDiff*1440 + nowMins (all-UTC date
-// strings, the app's date convention). Returns the close-in-minutes when it
-// has passed, else null (also null for future dates). hoursFor is called at
-// run time per the constants.js live-binding rule.
-function pastCloseMins(dateStr, todayStr, nowMins){
-  const dayDiff=Math.round((Date.parse(todayStr)-Date.parse(dateStr))/86400000);
-  if(dayDiff<0) return null; // future date — its close can't have passed
-  const closeMins=hoursFor(dateStr).close*60;
-  return (dayDiff*1440+nowMins)>=closeMins?closeMins:null;
-}
-
-// v15.5.0: content signature of a booking EXCLUDING its `updatedAt` stamp, so the
-// write-diff only flags bookings whose actual fields changed (not ones that merely
-// carry a fresher server stamp). Booking objects are plain JSON values and unchanged
-// ones are Object.assign({},b) copies (identical key order), so a stringify compare
-// is stable here. `bookingChanged` is the diff predicate the per-node write uses.
-function contentKey(b){const c=Object.assign({},b);delete c.updatedAt;return JSON.stringify(c);}
-function bookingChanged(a,b){return contentKey(a)!==contentKey(b);}
 
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
   const [tableBlocks, setTableBlocks] = useState([]);
+  // v17.16.10 (CT-2A-09): ref mirrors, so a save can compute from the live
+  // snapshot WITHOUT performing its Firebase write inside a setState updater.
+  // The shape is useWaitlist.js's, verbatim: compute from the ref, assign the
+  // ref, setState, then write — all as plain statements.
+  //
+  // INVARIANT, and the only thing that can break this: every `setBookings` /
+  // `setTableBlocks` in this file assigns its mirror on the line above it.
+  // There are four `setBookings` and three `setTableBlocks`. A new set site
+  // that forgets one hands the NEXT save a stale `prev`, which the diff would
+  // then read as "these fields changed back" — so it would write, not merely
+  // skip.
+  const bookingsRef=useRef([]);
+  const blocksRef=useRef([]);
   // v17.3.0: has the FIRST bookings snapshot arrived from Firebase? Drives the
   // "⟳ Loading bookings…" floating toast in App — before this flips true the
   // screen shows an empty [] state that looks ready but isn't (a real gap on a
@@ -203,6 +197,69 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // re-running them on fresh data is safe. Value-form / silent writes (the auto
   // effects) never queue; replaying a precomputed stale array would re-write stale data.
   const pendingRetriesRef=useRef([]);
+  // v17.16.9 (CT-2A-07): where a write goes once its automatic retries are spent.
+  //
+  // It used to go nowhere — `drainPending`'s give-up branch set a banner naming
+  // no booking and dropped the item. The user's change was gone, and the only
+  // thing said about it was "Couldn't save a change after several attempts".
+  //
+  // **The register's account of WHY that is bad does not survive running it,
+  // and the correction is worth keeping.** CT-2A-07 says the optimistic
+  // `setBookings` is never reverted, so "screen and server disagree until the
+  // next echo silently reverts it". They do not: `drainPending` is called from
+  // exactly two places — `resync().then` and the live `bookings` onValue — and
+  // BOTH set local state to server truth and call `clearStale()` immediately
+  // before it, in the same React commit. So by the time the give-up branch
+  // runs, the change has already been reverted. Verified live (v17.16.9): with
+  // the retries forced to fail, the card was back to "Confirmed" the moment the
+  // banner appeared, with no further echo. The defect is therefore not a
+  // divergence but a SILENT DISCARD — the change visibly snaps back and nothing
+  // says which one it was. That makes naming it the whole repair rather than
+  // half of one.
+  //
+  // A parked write is KEPT, NAMED and actionable. `parkedRef` holds the updater
+  // functions (which is where functions belong — `setState` would treat one as
+  // an updater); `parkedWrites` is the render-side mirror the banner reads, and
+  // holds labels only. The two are written together, never separately.
+  const parkedRef=useRef([]);
+  const [parkedWrites,setParkedWrites]=useState([]);
+  // Bails out of the render when the labels are unchanged — the same
+  // return-the-same-reference contract `bookingsAfterAction` and `useDismissals`
+  // keep, and the reason `drainPending` can call this unconditionally.
+  function syncParked(){
+    const next=parkedRef.current.map(function(p){return p.label;});
+    setParkedWrites(function(prev){
+      if(prev.length===next.length&&prev.every(function(v,i){return v===next[i];})) return prev;
+      return next;
+    });
+  }
+  // Hand the parked writes back to the automatic queue for a fresh round of
+  // attempts, on freshly-resynced data. `tries` resets to 0 because this is a
+  // new decision by a person, not a continuation of the run that gave up — and
+  // because a retry that could only ever make one attempt would be a button that
+  // usually does nothing. If the fresh round also fails they park again, so this
+  // cannot loop without somebody pressing it.
+  function retryParked(){
+    if(!parkedRef.current.length) return;
+    const items=parkedRef.current;
+    parkedRef.current=[];
+    syncParked();
+    items.forEach(function(it){ it.tries=0; pendingRetriesRef.current.push(it); });
+    markStale(); // resync → clearStale → drainPending replays them on fresh data
+  }
+  // Accept the loss: stop offering to retry these, and clear the banner.
+  //
+  // The first version also called `markStale()` here, to pull server truth back
+  // over the optimistically-shown change — which is what the finding describes
+  // and what the screen does not do. Since local state IS already server truth
+  // at park time (see above), that resync reverted nothing and cost a round
+  // trip plus a "⟳ Syncing the latest data…" toast for a button whose whole
+  // meaning is "stop". Dropping the items is the entire operation.
+  function discardParked(){
+    if(!parkedRef.current.length) return;
+    parkedRef.current=[];
+    syncParked();
+  }
   function clearStale(){
     staleRef.current=false;
     lastBeatRef.current=Date.now();
@@ -222,9 +279,20 @@ export function usePersistence({ autoOptimizer, nowMins }){
     if(!queue.length) return;
     pendingRetriesRef.current=[];
     queue.forEach(function(item){
-      if(item.tries<MAX_RETRIES) saveBookings(item.fn,false,item.tries+1);
-      else setWriteWarning("Couldn't save a change after several attempts — please re-check and try again.");
+      const d=retryDecision(item.tries);
+      // The label rides along: a retry is the SAME user change, so it keeps the
+      // name computed for the first attempt. That is also what closes the race
+      // below — a retry is dispatched from a promise callback, where React
+      // defers the render that would compute a fresh one.
+      if(d.action==="retry") saveBookings(item.fn,false,d.tries,item.label);
+      // v17.16.9: PARK, don't drop. See parkedRef above for what dropping cost.
+      // No `setWriteWarning` here any more: the parked banner carries the message,
+      // and a dismissible red banner beside an undismissable one saying the same
+      // thing is two notices for one fault. The red banner keeps its other three
+      // callers (not loaded, empty-array refusal, blocks rejected) unchanged.
+      else parkedRef.current=parkedRef.current.concat([item]);
     });
+    syncParked();
   }
   // Force-pull the server's current bookings + tableBlocks, replace local state,
   // then lift the gate. Runs ONLY when connected: an offline get() can resolve
@@ -236,6 +304,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const bVal=snaps[0].val();
       arrayShapeRef.current=Array.isArray(bVal); // v15.5.0: keep the migration/shape gate fresh
       const bArr=bVal?sanitizeAll(bVal):[];
+      bookingsRef.current=bArr;
       setBookings(bArr);
       setBookingsReady(true); // v17.3.0: a resync pull also proves data is present
       if(firstLoadCount.current===null) firstLoadCount.current=bArr.length;
@@ -243,7 +312,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // v17.15.3: the SECOND block read site, and it has to mint ids too — a
       // resync that skipped it would hand the app id-less blocks after every
       // sleep/wake, i.e. exactly when the tablet has been closed all afternoon.
-      setTableBlocks(sanitizeBlocks(tVal));
+      const tArr=sanitizeBlocks(tVal);
+      blocksRef.current=tArr;
+      setTableBlocks(tArr);
       // v16.0.0: re-anchor the blocks revision-CAS ref to the true server value —
       // the rev onValue may have been dead through the stale window.
       const rVal=snaps[2].val();
@@ -293,17 +364,48 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // it was blocked by the stale gate. Callers gate their success UI (the "saved"
   // flash / closing the form) on the result so a refused write is never shown as
   // saved. `tryN` (internal) tracks auto-retry attempts; callers omit it.
-  function saveBookings(next,isSilent,tryN){
+  function saveBookings(next,isSilent,tryN,carriedLabel){
     tryN=tryN||0;
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
     // resynced data (resync() drains the queue), and (v15.6.0) shown optimistically.
-    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip();
+    if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip();
     if(staleRef.current){
       console.warn("[SAFE] bookings write held — local data may be stale; queued for resync + retry, shown optimistically.");
       if(typeof next==="function"&&!isSilent){
-        pendingRetriesRef.current.push({fn:next,tries:tryN});
+        // v17.16.9: the item carries a LABEL, so that if the automatic retries are
+        // exhausted the parked-write banner can say which change it is holding.
+        // It is filled in below rather than here: this branch never runs the
+        // updater, so `prev`/`computed` — the only things that know what changed —
+        // exist only inside the setBookings call.
+        //
+        // **That fill is not synchronous, and on the RETRY path it loses a race.**
+        // A retry is dispatched from inside `resync().then`, so React defers the
+        // render that would fill the label; the next `get()` can resolve from the
+        // local cache one microtask later, drain again, and park the item while
+        // `label` is still null. Measured, not reasoned about: the console read
+        // `parking: null tries 1` BETWEEN the two fills, and the banner said "A
+        // change" for a booking it could name.
+        //
+        // `carriedLabel` is what closes it — a retry inherits the name computed
+        // for the first attempt, which is the right name anyway (it is the same
+        // change, and the FIRST `prev` is the version the card still shows). So
+        // only the first attempt computes one, and that one is dispatched from a
+        // discrete event handler, which React flushes before yielding to the
+        // microtask that could drain. The failure mode if that ever stopped
+        // holding is the banner saying "A change" — degraded, not wrong.
+        // v17.16.10 (CT-2A-09): `prev` and `computed` are in hand HERE now, so
+        // the label is computed before the item is pushed rather than mutated
+        // into it from inside an updater. The race the note above describes —
+        // a drain seeing `label` still null — is structurally unreachable once
+        // the fill is synchronous. `carriedLabel` STAYS: it is still the right
+        // name for a retry (the first `prev` is the version the card shows),
+        // and removing a working defence is not this commit's job.
+        const prevHeld=bookingsRef.current;
+        const computedHeld=next(prevHeld);
+        const item={fn:next,tries:tryN,label:carriedLabel||describeWrite(prevHeld,computedHeld)};
+        pendingRetriesRef.current.push(item);
         // v15.6.0: optimistic show. Apply the user's change to LOCAL state NOW so it's
         // visible immediately — previously a held write stayed invisible until resync
         // finished (1–2s+), which read as "my tap did nothing / didn't save". We still
@@ -311,44 +413,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // resync() replays this queued function on FRESH data (and reconciles it into
         // the fresh-data state set, flicker-free). Value-form (doSave) + silent (auto-
         // effect) writes don't reach this branch, so they keep their existing behaviour.
-        setBookings(next);
+        bookingsRef.current=computedHeld;
+        setBookings(computedHeld);
       }
       markStale();
       return false;
     }
     let dispatched=true;
-    // v15.5.0: stamp a booking for a child write — a monotonic `updatedAt` that is
-    // (a) strictly above this device's last issued stamp (survives StrictMode's
-    // double-invoke: the 2nd write gets a higher stamp, so the rule accepts it
-    // rather than rejecting an equal one), and (b) strictly above the booking's
-    // own last-seen server value (survives cross-device clock skew: a behind-clock
-    // device still writes a stamp the server will accept). Returns a copy — never
-    // mutates React state; the real value lands back via the onValue echo.
-    // v16.0.0: also carries `baseUpdatedAt` (the CAS base — see the ref block
-    // above). Per-write metadata only: `sanitize` deliberately does NOT whitelist
-    // it, so it never enters app state; each write overwrites the whole child,
-    // refreshing the stored copy.
-    function stampForWrite(b,old){
-      const t=Math.max(Date.now(),(old&&Number(old.updatedAt)||0)+1,lastStampRef.current+1);
-      lastStampRef.current=t;
-      return Object.assign({},b,{updatedAt:t,baseUpdatedAt:old?(Number(old.updatedAt)||0):0});
-    }
-    // Diff prev vs computed → a multi-path patch of ONLY changed children
-    // ({id: stampedBooking}) plus deletions ({id: null}). Empty patch ⇒ no write.
-    function buildPatch(prev,computed){
-      const prevById={};
-      (prev||[]).forEach(function(b){ if(b&&b.id!=null) prevById[b.id]=b; });
-      const seen={};
-      const patch={};
-      computed.forEach(function(b){
-        if(!b||b.id==null) return;
-        seen[b.id]=true;
-        const old=prevById[b.id];
-        if(!old||bookingChanged(old,b)) patch[b.id]=stampForWrite(b,old);
-      });
-      Object.keys(prevById).forEach(function(id){ if(!seen[id]) patch[id]=null; });
-      return patch;
-    }
     function persist(prev,computed){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
@@ -366,7 +437,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // keyed shape lands (arrayShapeRef clears) the queued retry succeeds.
       if(arrayShapeRef.current){
         console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
         markStale();
         dispatched=false;return;
       }
@@ -375,7 +446,12 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // server-side instead of racing on a single array node. A rejection (a stale
       // per-booking stamp on one of the children fails the rule → the whole atomic
       // update is refused) → resync + replay the function on fresh data (v15.4.0).
-      const patch=buildPatch(prev,computed);
+      // v17.16.2: the diff and the stamping are lib/write-path.js now. The
+      // monotonic counter is THREADED through rather than hidden in the closure —
+      // the ref stays here, the arithmetic became testable.
+      const built=buildPatch(prev,computed,lastStampRef.current,Date.now());
+      const patch=built.patch;
+      lastStampRef.current=built.lastStamp;
       if(!Object.keys(patch).length) return; // nothing actually changed — skip the write
       // v16.0.0: StrictMode dedupe — the dev double-invoked updater calls persist()
       // twice with the same prev/computed. The two patches differ ONLY in their
@@ -384,24 +460,35 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // signature within the window is the SAME write: dispatching it again would
       // be server-rejected by the CAS (base already consumed) → resync churn on
       // every dev write. Skipping a byte-identical re-dispatch is prod-safe.
-      const sig=Object.keys(patch).sort().map(function(id){return id+"="+(patch[id]===null?"null":contentKey(patch[id]));}).join("|");
+      const sig=patchSignature(patch);
       const nowMs=Date.now();
-      if(sig===lastPatchSigRef.current.sig&&nowMs-lastPatchSigRef.current.at<2000) return;
+      if(isDuplicatePatch(sig,lastPatchSigRef.current,nowMs)) return;
       lastPatchSigRef.current={sig:sig,at:nowMs};
       update(ref(db,"bookings"),patch).catch(function(){
         console.warn("[SAFE] bookings write rejected by server (stale per-booking revision) — resyncing + retry.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
         markStale();
       });
     }
-    // Always run through the functional updater so persist() has `prev` (the live
-    // in-memory snapshot, reflecting other devices' echoes) to diff against — for
-    // BOTH the function form (user actions) and the value form (auto-effects).
-    setBookings(function(prev){
-      const computed=(typeof next==="function")?next(prev):next;
-      persist(prev,computed);
-      return computed;
-    });
+    // v17.16.10 (CT-2A-09): this was a `setBookings(prev => { persist(...); return
+    // computed; })` — the updater-side write CLAUDE.md's own gotcha row forbids,
+    // and the one this file had always done. `prev` still comes from the live
+    // in-memory snapshot (other devices' echoes included); it comes from the
+    // mirror instead of from React.
+    //
+    // Two things this fixes beyond the rule. React invokes an updater during
+    // RENDER, not at the call — it only appeared synchronous here because React
+    // eagerly evaluates the first update on an idle fiber, an internal
+    // optimisation that also runs the updater a second time when the render
+    // arrives. `dispatched` is read on the line below, so the whole
+    // return-a-boolean contract every caller gates its "Booking saved." on was
+    // resting on that. And the double invocation is the dev double-dispatch
+    // `lastPatchSigRef` exists to absorb.
+    const prev=bookingsRef.current;
+    const computed=(typeof next==="function")?next(prev):next;
+    bookingsRef.current=computed;
+    setBookings(computed);
+    persist(prev,computed);
     return dispatched;
   }
   // Returns TRUE if dispatched, FALSE if blocked by the stale gate (so callers can
@@ -409,7 +496,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // (rare, low-stakes); on a stale-block the caller simply re-does the action.
   function saveBlocks(next,isSilent){
     // v15.2.0/v15.4.0: same staleness gate as saveBookings — held, not errored.
-    if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip();
+    if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip();
     if(staleRef.current){
       console.warn("[SAFE] tableBlocks write held — local data may be stale; resyncing first.");
       markStale();
@@ -427,11 +514,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
         if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
       });
     }
-    if(typeof next==="function"){
-      setTableBlocks(function(prev){const computed=next(prev);persist(computed);return computed;});
-    } else {
-      setTableBlocks(next);persist(next);
-    }
+    // v17.16.10 (CT-2A-09): same conversion as saveBookings, and it also
+    // collapses the two branches — the value form and the function form differ
+    // only in how `computed` is obtained.
+    const computed=(typeof next==="function")?next(blocksRef.current):next;
+    blocksRef.current=computed;
+    setTableBlocks(computed);
+    persist(computed);
     return true;
   }
   // Firebase real-time listeners — read only, never write back.
@@ -448,6 +537,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const isArrayShape=Array.isArray(val);
       arrayShapeRef.current=isArrayShape;
       const arr=val?sanitizeAll(val):[];
+      bookingsRef.current=arr;
       setBookings(arr);
       if(firstLoadCount.current===null){
         firstLoadCount.current=arr.length;
@@ -457,15 +547,81 @@ export function usePersistence({ autoOptimizer, nowMins }){
       setBookingsReady(true); // v17.3.0: first snapshot landed — drop the loading toast
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
       // v15.5.0: one-time lazy migration legacy-array → per-booking child nodes.
-      // Write the keyed object once; the echo comes back as an object so isArrayShape
-      // flips false and this never re-fires. Gated on connected (an offline set()
-      // would queue unverifiably) and migratedRef (a single attempt per session).
+      // Write the keyed children once; the echo comes back as an object so
+      // isArrayShape flips false and this never re-fires. Gated on connected (an
+      // offline write would queue unverifiably) and migratedRef (a single
+      // attempt per session).
       if(isArrayShape&&arr.length>0&&!migratedRef.current&&isConnectedRef.current){
         migratedRef.current=true;
         const keyed={};
         const now=Date.now();
-        arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1}); });
-        set(ref(db,"bookings"),keyed).catch(function(){ migratedRef.current=false; });
+        // v17.16.1: `baseUpdatedAt:0` is REQUIRED here now. The rules' create
+        // branch (database.rules.json, CT-2A-01) stopped accepting any numeric
+        // `updatedAt` and now demands `baseUpdatedAt === 0` — which is what a
+        // genuine create looks like and what `stampForWrite` writes when it has
+        // no `old`. Without it every child of this migration write is refused.
+        // It is NOT a guarantee the write lands: `arr` is `sanitizeAll(val)`, so
+        // these rows are type-correct but otherwise whatever the legacy node
+        // held, and the patch below is atomic — one row the rules dislike
+        // rejects the whole migration.
+        //
+        // v17.16.11 (/code-review) WIDENED what "a row the rules dislike"
+        // means, and the sentence above no longer bounds it on its own. The
+        // rules now pin the FORMAT of `date` and `status`, and `sanitize`
+        // normalises neither — it writes `b.date || ""` and
+        // `b.status || "confirmed"` VERBATIM. So a legacy array node holding
+        // one `date: "31/08/2026"` row now produces a row that is type-correct
+        // and still refused. The grandfather clause that makes such a row
+        // saveable everywhere else (`newData.val() === data.val()`) cannot
+        // help HERE: every row of this patch carries `baseUpdatedAt: 0`, i.e.
+        // it is a CREATE, and a create has no `data` to match against.
+        //
+        // Still unreachable in practice — this branch is `Array.isArray`-gated
+        // and both PROD and DEV have been keyed since v15.5.0 — so nothing
+        // observable changes, and the standing decision not to normalise in
+        // `sanitize` (v17.16.5: normalising a record that renders is a
+        // different decision) stands. Recorded because the paragraph above
+        // reads as a bound and has stopped being one.
+        //
+        // On any such rejection the `.catch` below resets
+        // `migratedRef`, so the rejected write's rollback echo re-fires this
+        // listener and it re-attempts on every snapshot. That is a write-reject
+        // loop, the same class as the v17.10.2 reconciliation loop (CLAUDE.md
+        // Gotchas). Unreachable on PROD (the node has been keyed since v15.5.0,
+        // and this branch is gated on `Array.isArray`), so nothing observable
+        // changes — but a recovery path left knowingly broken is how a service
+        // is lost years later, by someone who reads the code and believes it
+        // works.
+        //
+        // v17.16.7: this was `set(ref(db,"bookings"), keyed)` — a WHOLE-NODE
+        // write, which is precisely the capability CT-2A-04 is about, so it
+        // could not be excepted from the fix: a grant wide enough to permit it
+        // is a grant wide enough to permit the finding. `/bookings` now carries
+        // no `.write` and `/bookings/$bid` does, so the migration became a
+        // multi-path `update()` of CHILDREN instead — the legacy integer keys
+        // nulled, the keyed rows written, in one atomic patch with exactly the
+        // semantics `set` had. Afterwards the app makes no whole-node
+        // `bookings` write anywhere, so the rules and the client agree rather
+        // than the rules merely tolerating the client.
+        //
+        // Leaving it denied was the alternative and it is not benign: the hold
+        // at the top of `persist` (`arrayShapeRef`) blocks EVERY booking write
+        // until the keyed shape echoes, so a legacy array node would leave the
+        // app permanently read-only for bookings rather than merely
+        // unmigrated.
+        const nulls={};
+        // The old keys, taken from the SNAPSHOT rather than from `arr` — RTDB
+        // returns an array only for sequential integer keys, so these are
+        // 0..n-1, and `arr` carries the bookings' own ids, which are what the
+        // new keys are. Reading the indices off the snapshot keeps the two
+        // sides of the patch independent: a row `sanitizeAll` dropped still has
+        // its slot cleared instead of being silently carried over as a hole.
+        Object.keys(val).forEach(function(k){ nulls[k]=null; });
+        arr.forEach(function(b){ keyed[b.id]=Object.assign({},b,{updatedAt:Math.max(now,Number(b.updatedAt)||0)+1,baseUpdatedAt:0}); });
+        // Object.assign order matters: a keyed row whose id happens to equal an
+        // old integer index must WIN over that index's null, or the migration
+        // would delete the very booking it is writing.
+        update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(){ migratedRef.current=false; });
       }
       // v15.6.0: re-apply + persist any held user changes on top of this fresh snapshot
       // (after clearStale, so they don't re-hold). Without this, a live snapshot that
@@ -484,7 +640,9 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // removeBlock can match on identity instead of on the field set (which two
       // duplicate blocks share — see booking-logic). It also owns the array-vs-
       // object-vs-null shrug this line used to spell out, shared with resync().
-      setTableBlocks(sanitizeBlocks(val));
+      const bl=sanitizeBlocks(val);
+      blocksRef.current=bl;
+      setTableBlocks(bl);
       blocksLoaded.current=true;
       clearStale(); // v15.2.0: a live server snapshot proves the local data is current
     },dbError("tableBlocks"));
@@ -645,7 +803,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       if(gap>STALE_GAP_MS) gapTrip();
       kickIfStuck();
     },10000);
-    function onResume(){ if(Date.now()-lastBeatRef.current>STALE_GAP_MS) gapTrip(); }
+    function onResume(){ if(isStaleGap(lastBeatRef.current,Date.now())) gapTrip(); }
     function onVis(){ if(document.visibilityState==="visible") onResume(); }
     window.addEventListener("focus",onResume);
     window.addEventListener("pageshow",onResume);
@@ -665,20 +823,25 @@ export function usePersistence({ autoOptimizer, nowMins }){
   const lastExtend=useRef("");
   useEffect(function(){
     if(!bookingsLoaded.current) return; // no work to do until initial read lands
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     let needsUpdate=false;
     const updated=bookings.map(function(b){
-      if(b.date!==today||b.status!=="seated") return b;
+      if(b.status!=="seated") return b;
       // v15.1.0: a seated booking past its date's close belongs to the
       // auto-complete effect below — skip it here so the same 15s tick
       // doesn't extend it and then immediately complete it (one write, not two).
       if(pastCloseMins(b.date,today,nowMins)!==null) return b;
-      const elapsed=nowMins-toMins(b.time);
+      const elapsed=seatedElapsed(b,today,nowMins);
       if(elapsed>b.duration){needsUpdate=true;return Object.assign({},b,{duration:elapsed,customDur:elapsed});}
       return b;
     });
     if(!needsUpdate) return;
-    const seated=bookings.filter(function(b){return b.date===today&&b.status==="seated";});
+    // v17.16.2: this gate must cover exactly the set the pass above touches.
+    // It filtered on `b.date===today` while the pass now keys on the booking's
+    // own close, so under a 24/25 close a yesterday-only extension produced an
+    // EMPTY key that never changed — and the second tick onward was suppressed.
+    // The repo's own v17.10.2 lesson: a gate narrower than its pass.
+    const seated=bookings.filter(function(b){return b.status==="seated"&&pastCloseMins(b.date,today,nowMins)===null;});
     const key=seated.map(function(b){return b.id+":"+nowMins;}).join(",");
     if(key===lastExtend.current) return;
     lastExtend.current=key;
@@ -700,7 +863,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // at the midnight date rollover itself.
   useEffect(function(){
     if(!bookingsLoaded.current) return; // no work to do until initial read lands
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     let needsUpdate=false;
     const updated=bookings.map(function(b){
       if(b.status!=="seated") return b;
@@ -721,6 +884,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
+    parkedWrites, retryParked, discardParked,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
     // v17.5.1 diagnosis surface — see the load-watchdog effect above.
     loadStalled, readError, hasConnected,

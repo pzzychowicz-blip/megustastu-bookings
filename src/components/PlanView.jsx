@@ -32,17 +32,26 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, RIM_SOLID } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { beginHold } from "../lib/holdSelection";
+import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn, Reveal } from "./atoms";
+import { mkBtn, Reveal, SBadge } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
+import { todayStr } from "../lib/day";
 
 // Neutral (free) table fill — theme tokens, matches the editor's look.
 const FREE_FILL = "var(--bg-card)";
 const FREE_STROKE = "var(--fp-outline)";
+
+// v17.15.7: the status mark's TOP edge inside TableGlyph's counter-rotated <g> —
+// the id pill's bottom (y=9) plus 2. Units are centimetres, so at IC.control the
+// mark ends at y=25: inside the 60cm tables sanitizeFloorPlan actually places,
+// outside the editor's 30cm floor, exactly like the freeing-soon pill above it.
+const MARK_TOP = 11;
 
 // v17.1.0 perf: React.memo — function props are App's stable VA wrappers.
 // `layout` (the whole config object) is already a prop, so a layout edit busts
@@ -71,8 +80,8 @@ export const PlanView = memo(function PlanView({
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
   const h = hoursFor(date);
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const isToday = date === todayStr;
+  const today = todayStr();
+  const isToday = date === today;
   const openM = (h.closed ? 13 : h.open) * 60;
   // v17.5.0: the upper bound is now GRID_CLOSE (one hour past closing), not
   // CLOSE — matching the Timeline axis exactly, which is what lets TimeAxis
@@ -310,6 +319,7 @@ export const PlanView = memo(function PlanView({
   // touch long-press → quick status (RMB parity for tablets, the timeline's 400ms).
   function startPress(id) {
     clearPress();
+    beginHold();   // v17.16.12 — see lib/holdSelection
     pressRef.current = setTimeout(() => {
       pressRef.current = null;
       const b = targetBookingFor(id);
@@ -379,8 +389,14 @@ export const PlanView = memo(function PlanView({
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
                 <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
-                {/* v17.7.0: solid, like every other status label (see SBadge). */}
-                <span style={{ fontSize: T.small, fontWeight: FW.semi, padding: "4px 10px", borderRadius: R.pill, textTransform: "capitalize", background: BLOCK_BG[b.status] || BLOCK_BG.confirmed, color: BLOCK_INK[b.status] || BLOCK_INK.confirmed, border: "1px solid var(--border-glass)" }}>{b.status}</span>
+                {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
+                    pointed at `SBadge`. That comment ("solid, like every other
+                    status label") was true about the fill and silently false
+                    about everything else: the atom gained `StatusIcon` in
+                    v17.15.5 and this copy could not follow it, so the popover
+                    named a status with a word while the block behind it named
+                    the same status with a mark. */}
+                <SBadge status={b.status} />
               </div>
             );
           })}
@@ -398,8 +414,34 @@ export const PlanView = memo(function PlanView({
   })() : null;
 
   // ── Legend + slider row ─────────────────────────────────────────────────────
+  // v17.15.6 argued AGAINST a mark here, and the argument was sound on its own
+  // terms: "the plan draws no icons — a mark here would promise the room shows
+  // something it does not." v17.15.7 changed the FACT that argument rested on.
+  // The room draws the mark now (see the table glyph below), so a colour-only
+  // key beside a colour-and-mark room would explain the half that never needed
+  // explaining — the sentence v17.11.0 wrote about the timeline's legend,
+  // arriving here one view later.
+  //
+  // The three chips are exactly the three marks a table can draw: `completed`
+  // never occupies (completed = table free) and `cancelled` is filtered out of
+  // `day`, so this key is COMPLETE rather than merely short.
+  //
+  // Still deliberately not `SBadge`: this keys a FILL, and SBadge is a
+  // BOOKING's badge. The day-queue popover above is the opposite case — its
+  // rows are bookings, so they take the atom. `IC.inline` rather than the
+  // glyph's `IC.control`, matching TimelineView's legend: a key is read once,
+  // a mark on the plan is scanned during service.
+  //
+  // v17.16.5: `--shadow-flat`, which the TimelineView twin has carried since
+  // v17.11.0. v17.15.7 matched that chip in every other respect — inline-flex,
+  // the 4px gap, `StatusIcon` at `IC.inline` — and left this one line out of
+  // scope, so the two legends were byte-identical but for a shadow. Two chips
+  // that are the same chip should not need a reader to work out whether the
+  // difference means anything; it did not.
   const legend = ["seated", "confirmed", "pending"].map((s) => (
-    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize" }}>{s}</span>
+    <span key={s} style={{ fontSize: T.small, padding: "2px 8px", borderRadius: R.pill, background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", border: RIM_SOLID, fontWeight: FW.semi, textTransform: "capitalize", boxShadow: "var(--shadow-flat)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <StatusIcon status={s} size={IC.inline} />{s}
+    </span>
   ));
 
   return (
@@ -488,12 +530,30 @@ export const PlanView = memo(function PlanView({
               // room full of identical "Table 5A" buttons. It describes the
               // table at the SELECTED time, exactly like the fill it mirrors.
               const occ = occupying[t.id];
+              // v17.15.7: hoisted, because the spoken label and the drawn mark
+              // must not disagree about whether this table is blocked — they
+              // are two renderings of one fact, and `fillFor` reads it a third
+              // time. See the mark below for why the precedence matters.
+              const blocked = isBlocked(t.id);
+              // v17.15.7 /code-review: the status the MARK draws, and it must
+              // fall back exactly where `fillFor` does. `sanitize` writes
+              // `status: b.status || "confirmed"`, so ANY truthy string survives
+              // a read, and the security rules impose no shape validation on a
+              // booking's fields — an unrecognised status is reachable. `fillFor`
+              // answers it with `BLOCK_BG[b.status] || BLOCK_BG.confirmed`;
+              // `StatusIcon` answers it with null. Without this line the table
+              // is painted confirmed-amber and carries NO mark — a colour-only
+              // status, i.e. precisely the defect this version exists to remove,
+              // in the one case nobody would think to look at. The fill already
+              // asserts "confirmed" here; the mark agreeing with it is strictly
+              // better than the mark being absent.
+              const markStatus = occ ? (BLOCK_BG[occ.status] ? occ.status : "confirmed") : null;
               // /code-review: the occupant clause is `describeBooking` with the
               // table dropped — the table is already the subject of this
               // sentence. Same source as the List card and the timeline block,
               // so the three cannot word a booking differently.
               const a11yLabel = "Table " + t.id + ", " + (
-                isBlocked(t.id) ? "blocked"
+                blocked ? "blocked"
                   : occ ? describeBooking(occ, { tables: false })
                     : resetting[t.id] ? "free after turnaround"
                       : "free"
@@ -519,6 +579,53 @@ export const PlanView = memo(function PlanView({
                     const b = targetBookingFor(t.id);
                     if (b) setQuick(b);
                   }}>
+                  {/* v17.15.7: the status MARK — a second channel for a fill that
+                      was the status and nothing else. The same WCAG 1.4.1 defect
+                      v17.11.0 fixed on the timeline block, sitting unnoticed four
+                      versions longer on the view where it bites hardest: a block
+                      at least carries the guest's name, a table carries a table id.
+
+                      Drawn ONLY where the fill says a status. `isBlocked` wins in
+                      `fillFor`, and a blocked table CAN still hold a booking — so
+                      keyed on `occ` alone this would paint a mark on top of the red
+                      stripes, contradicting its own fill, and `blocked` is not a
+                      booking status anyway. Free and resetting each already have a
+                      second channel (the neutral fill; the dashed rim). What is
+                      left is seated / confirmed / pending — exactly the legend's
+                      three chips, because `completed` never occupies (completed =
+                      table free) and `cancelled` is filtered out of `day`.
+
+                      BELOW the id pill, which owns y ±9, mirroring the freeing-soon
+                      pill above it. Centre, never a corner: TableGlyph's inner <g>
+                      cancels the rotation, so a child is drawn TRANSLATED but not
+                      ROTATED — a corner offset lands on a different edge of the
+                      shape at every table rotation, while the centre column is the
+                      one place rotation cannot move it. That is why the id pill
+                      already lives there.
+
+                      `color` on the wrapper rather than on the icon, because `Svg`
+                      in Icons.jsx destructures `size`/`stroke`/`children` and DROPS
+                      every other prop — no style, x, y or pointerEvents reaches the
+                      element, which is what makes this <g> structural rather than
+                      decoration. Same currentColor arrangement as the timeline
+                      block, whose ink its children inherit. Without the `color`,
+                      currentColor would resolve to the inherited S.text and paint
+                      near-black on a saturated fill in light mode — silent, and it
+                      would look deliberate.
+
+                      No transition, and that is the honest answer rather than a
+                      missing one: the mark MOUNTS and unmounts with the occupant,
+                      and CSS cannot fade an element that is not there, so easing it
+                      in while it snaps out is the one-way transition DESIGN.md
+                      bans. The fill still fades over M.status, so for one M.status
+                      the fill is mid-way while the mark is already the new one —
+                      exactly what the timeline block does. */}
+                  {!blocked && markStatus ? (
+                    <g transform={"translate(" + (-IC.control / 2) + "," + MARK_TOP + ")"}
+                      style={{ color: BLOCK_INK[markStatus] || "var(--text-on-accent)", pointerEvents: "none" }}>
+                      <StatusIcon status={markStatus} size={IC.control} />
+                    </g>
+                  ) : null}
                   {soon != null ? (
                     <g transform="translate(0,-22)">
                       <rect x={-22} y={-9} width={44} height={16} rx={8} fill="var(--tl-block-warn-soon)" />
@@ -536,7 +643,7 @@ export const PlanView = memo(function PlanView({
       </div>
       {popover}
       {quick ? (
-        <QuickStatusPopup booking={quick} late={late} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
+        <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
       ) : null}
     </div>
   );

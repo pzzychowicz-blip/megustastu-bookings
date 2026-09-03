@@ -20,9 +20,17 @@
 
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
+import { seatingClosed } from "../lib/booking-logic";
+import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { NoShowIcon, StatusIcon } from "./Icons";
 
-export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
+export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose }) {
+  // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
+  // so the finger that opened it is sitting on the card it just conjured. Until
+  // that finger lifts, every control here is inert — see useArmAfterRelease for
+  // the measurements. Hooks run before the early return below, which is why
+  // this line is above it and not beside the other consts.
+  const armed = useArmAfterRelease();
   if (!booking) return null;
   // v17.0.0 correction: portalled to <body>. The popup mounts inside SlideView,
   // whose transform (while a view-slide runs/settles) turns this position:fixed
@@ -30,12 +38,16 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
   // on the scroller, not the screen. A body portal always centers on the viewport.
   return createPortal(
     <div
-      onClick={onClose}
+      onClick={() => { if (armed) onClose(); }}
       className="mgt-scrim-in"
       style={{
         position: "fixed", inset: 0, zIndex: 300,
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--tl-popup-scrim)"
+        background: "var(--tl-popup-scrim)",
+        // v17.16.12: the card below has carried these since v17.10.1; the SCRIM
+        // had not, and it is what the finger is on for most of the screen when
+        // a centred card appears under a hold. A scrim is never a copy target.
+        WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none"
       }}
     >
       <div
@@ -63,6 +75,12 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
             ? ["confirmed", "cancelled"]
             : ["confirmed", "seated", "completed", "cancelled"])
             .filter((st) => st !== booking.status)
+            // v17.16.12: never offer a status the app will take straight back.
+            // On a day whose close has passed, the close-time auto-complete
+            // flips a manual "seated" to "completed" on the next 15s tick — so
+            // the tap read as broken rather than as refused. Same gating idiom
+            // as the pending branch above.
+            .filter((st) => st !== "seated" || !seatingClosed(booking.date, today, nowMins))
             // v17.10.0: this popup is the surface staff use DURING service (a
             // long-press on the timeline or the floor plan), and it was the one
             // place the same five decisions carried no mark at all — so the
@@ -81,6 +99,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                   display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
                 }}
                 onClick={() => {
+                  if (!armed) return;
                   onStatus(booking.id, st);
                   onClose();
                 }}
@@ -100,6 +119,7 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
                 display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
               }}
               onClick={() => {
+                if (!armed) return;
                 onNoShow(booking.id);
                 onClose();
               }}

@@ -215,7 +215,16 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
       <span style={{ width: 40, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{label}</span>
+      {/* v17.15.4: the same fault as the Toggle atom's, one control over, and
+          it is why the sweep did not stop at `<Toggle`. This pill HAS text, so
+          it reads as named — but its text is its whole accessible name, and
+          the weekday is a sibling <span>. Seven rows, seven buttons announcing
+          "Open", with nothing saying which day. It stays a plain button rather
+          than becoming a switch: "Open" and "Closed" are two states of a day,
+          not on and off of one thing, and the row's steppers appear or vanish
+          with it. */}
       <button onClick={() => onChange({ closed: !closed })} className="mgt-hover-scale"
+        aria-label={label + ": " + (closed ? "Closed" : "Open")}
         style={{ ...pill, background: closed ? "var(--bg-stepper)" : "var(--suggest-bg)", color: closed ? "var(--text-muted)" : "var(--success-text)" }}>
         {closed ? "Closed" : "Open"}
       </button>
@@ -230,7 +239,25 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
       )}
+      {/* Its `title` was a DESCRIPTION, not a name — an element with text
+          content is named by that text, so this was the third identical
+          announcement in the row: seven "copy → all" buttons, and the tooltip
+          said "this day" without ever saying which.
+          /code-review: the first fix wrote the name as a sentence ("Copy Mon's
+          hours to all days") and thereby BROKE what it was fixing, in the other
+          direction. WCAG 2.5.3 (Label in Name) needs the visible text inside
+          the accessible name, because voice control matches on the name: the
+          old name WAS "copy → all", so "click copy all" worked, and a sentence
+          that merely contains those two words far apart does not. The visible
+          label leads and the weekday disambiguates. The `title` is gone with
+          it — beside an aria-label it is announced as a description, so the
+          button read as two near-identical sentences. The `title` STAYS, and
+          now earns its keep: it is a sighted mouse user's only explanation of
+          what "copy → all" does, and against a short identifying name it is a
+          description rather than an echo, which is the pair those two
+          properties exist to be. */}
       <button onClick={onCopyAll} className="mgt-hover-scale" title="Copy this day's hours to all days"
+        aria-label={"copy → all (" + label + ")"}
         style={{ ...pill, marginLeft: "auto", background: "var(--bg-stepper)", color: "var(--accent)", fontWeight: FW.semi }}>
         copy → all
       </button>
@@ -284,7 +311,7 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
               Defaults to your system setting.
             </div>
           </div>
-          <Toggle on={isDark} onClick={onToggleDark} />
+          <Toggle label="Dark mode" on={isDark} onClick={onToggleDark} />
         </div>
         {/* v17.0.0 correction: per-device max app width. The 1.08 hover lift
             overflowed the viewport when the fixed 1600 exceeded the screen —
@@ -310,7 +337,7 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
               Turns off transitions and wipes. Helps on slower tablets.
             </div>
           </div>
-          <Toggle on={reduceMotion} onClick={onToggleReduceMotion} />
+          <Toggle label="Reduce animations" on={reduceMotion} onClick={onToggleReduceMotion} />
         </div>
         {/* v17.10.1: per-device offline shell. Default ON. It is a DEVICE
             setting, not an account one — see lib/serviceWorker.js for why
@@ -326,7 +353,7 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
               <code style={{ fontSize: T.body }}> ?sw=off </code> on the end of the address to switch this off.
             </div>
           </div>
-          <Toggle on={swEnabled} onClick={onToggleSw} />
+          <Toggle label="Work offline" on={swEnabled} onClick={onToggleSw} />
         </div>
         {/* v17.1.2: per-device Plan-view gesture switch (localStorage, theme
             pattern) — gates wheel/pinch zoom, drag pan and double-tap reset. */}
@@ -337,7 +364,7 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
               Scroll/pinch to zoom, drag to pan and double-tap to reset in the Plan view.
             </div>
           </div>
-          <Toggle on={planGestures} onClick={onTogglePlanGestures} />
+          <Toggle label="Plan zoom and pan" on={planGestures} onClick={onTogglePlanGestures} />
         </div>
         {/* v17.5.0: per-device navigation lock (localStorage, theme pattern —
             but default OFF, so only the "1" is stored). Turns the app shell
@@ -349,7 +376,7 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
               Keeps the title bar and the date row in place while the timeline, list or plan scrolls underneath. Best on a tablet or desktop; on a phone those rows wrap and can take most of the screen.
             </div>
           </div>
-          <Toggle on={navLocked} onClick={onToggleNavLock} />
+          <Toggle label="Lock navigation" on={navLocked} onClick={onToggleNavLock} />
         </div>
         {/* v17.5.0: Split View master switch. While OFF the long-press / RMB
             gesture on a view button does nothing at all — same shape as "Plan
@@ -361,7 +388,7 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
               Right-click or press and hold a view button (Timeline, List, Plan) to show two views at once. Tablet and desktop only. Which two views you pick is remembered per device.
             </div>
           </div>
-          <Toggle on={splitEnabled} onClick={onToggleSplitEnabled} />
+          <Toggle label="Split view" on={splitEnabled} onClick={onToggleSplitEnabled} />
         </div>
         {/* v17.2.0: per-device Timeline zoom/follow settings (localStorage,
             theme pattern — App's tlSettings/onSetTlSetting). Zoom values step
@@ -567,7 +594,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Split the day Summary into Afternoon / Evening.
             </div>
           </div>
-          <Toggle on={se} onClick={() => onSaveShifts({ enabled: !se })} />
+          <Toggle label="Shifts" on={se} onClick={() => onSaveShifts({ enabled: !se })} />
         </div>
         <Reveal show={se}>{se ? (
           <div style={{ marginTop: 14 }}>
@@ -594,7 +621,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Automatically stops reshuffling at a daily cutoff and resumes overnight.
             </div>
           </div>
-          <Toggle on={oas} onClick={() => onSaveOptimizer({ autoSwitch: !oas })} />
+          <Toggle label="Auto-optimiser" on={oas} onClick={() => onSaveOptimizer({ autoSwitch: !oas })} />
         </div>
         <AutoHeight>{oas ? (
           <div style={{ marginTop: 14 }}>
@@ -686,7 +713,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Keeps a table free for a while after each booking, so parties are not booked back to back.
             </div>
           </div>
-          <Toggle on={bd.turnaroundEnabled === true} onClick={() => onSaveBookingDefaults({ turnaroundEnabled: bd.turnaroundEnabled !== true })} />
+          <Toggle label="Separation between bookings" on={bd.turnaroundEnabled === true} onClick={() => onSaveBookingDefaults({ turnaroundEnabled: bd.turnaroundEnabled !== true })} />
         </div>
         <AutoHeight>{bd.turnaroundEnabled === true ? (
           <div style={{ marginTop: 14 }}>
@@ -717,7 +744,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Highlight confirmed bookings past their time and offer a one-tap no-show.
             </div>
           </div>
-          <Toggle on={bd.lateEnabled} onClick={() => onSaveBookingDefaults({ lateEnabled: !bd.lateEnabled })} />
+          <Toggle label="Running late" on={bd.lateEnabled} onClick={() => onSaveBookingDefaults({ lateEnabled: !bd.lateEnabled })} />
         </div>
         <AutoHeight>{bd.lateEnabled ? (
           <div style={{ marginTop: 14, display: "flex", gap: 18, flexWrap: "wrap" }}>
@@ -745,7 +772,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Warn when an overstaying seated party runs into the next booking on its table, with a one-tap reassign.
             </div>
           </div>
-          <Toggle on={bd.overlapWarnEnabled !== false} onClick={() => onSaveBookingDefaults({ overlapWarnEnabled: bd.overlapWarnEnabled === false })} />
+          <Toggle label="Overlap warnings" on={bd.overlapWarnEnabled !== false} onClick={() => onSaveBookingDefaults({ overlapWarnEnabled: bd.overlapWarnEnabled === false })} />
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
           <div style={{ textAlign: "left" }}>
@@ -754,7 +781,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Suggest a table reshuffle when the day's layout could seat parties more efficiently.
             </div>
           </div>
-          <Toggle on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
+          <Toggle label="Reshuffle suggestions" on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
         </div>
       </Section>
       {/* v16.3.0: Table turns — predict which seated tables free up in the next
@@ -768,7 +795,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
               Show which seated tables are about to free up (a "freeing soon" line and a timeline countdown).
             </div>
           </div>
-          <Toggle on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
+          <Toggle label="Table turns" on={bd.freeSoonEnabled !== false} onClick={() => onSaveBookingDefaults({ freeSoonEnabled: bd.freeSoonEnabled === false })} />
         </div>
         {/* v16.3.0 correction: prediction window — how far ahead "freeing soon"
             looks. Revealed only while the feature is on. 5–60 min, 5-min steps. */}
@@ -795,7 +822,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
                 Weekly repeat bookings, auto-created for the next few weeks. Create one with "Repeat weekly" on the booking form.
               </div>
             </div>
-            <Toggle on={recurring.enabled !== false} onClick={() => onSetRecurringEnabled(recurring.enabled === false)} />
+            <Toggle label="Standing bookings" on={recurring.enabled !== false} onClick={() => onSetRecurringEnabled(recurring.enabled === false)} />
           </div>
           <AutoHeight>{recurring.enabled !== false ? (
             <div style={{ marginTop: 12 }}>
@@ -809,7 +836,15 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + r.size + " pax"}</div>
                       <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>
                     </div>
-                    <Toggle on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
+                    {/* v17.15.4: the ONE Toggle in the app that repeats. A
+                        static label would give every rule in the list the same
+                        name, which is the defect this version fixes reappearing
+                        one level down — so it carries the rule's own identity,
+                        the two lines to its left. Not " · paused": that is the
+                        state, and aria-checked already says it. */}
+                    <Toggle
+                      label={"Standing booking: " + (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time}
+                      on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
                     <button
                       onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
                       className="mgt-hover-scale mgt-press"

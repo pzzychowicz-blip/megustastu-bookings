@@ -14847,6 +14847,156 @@ finger" lesson, met from the other side.
 Build clean, **575 tests**, `check:style` OK (including marker placement), lint
 0 errors / 47 warnings.
 
+### Closing the ROADMAP entry: every repeating control in Table priorities
+
+v17.15.4 named every `Toggle` in the app and left one entry behind — the
+priorities editor renders three controls per size band with a fixed name, so
+the three bands that ship by default give nine buttons three names between
+them. Sweeping the panel found the entry had **understated it**: the `Stepper`
+beside those buttons renders `−` and `+` as its entire content, and there are
+**thirteen** of them in this tab, i.e. twenty-six controls announcing as one of
+two characters. That is a worse defect than the one the entry described.
+
+- **`Stepper` takes a required `label`** — no default, for `ModalTitle`'s
+  `background` reason. That made all thirteen call sites answer for
+  themselves, which is why the Tables and Combos steppers were named here too
+  even though those sections are otherwise deferred: a required prop does not
+  let you scope it.
+- **`bandName` / `comboName` / `swapName`** hoisted to module scope. Five kinds
+  of control now need a row's identity, and a sixth hand-written copy of
+  `"party of " + b.min + " to " + b.max` is how they drift.
+- Named: the band ✕, the Try-first segments, the Prefer/Avoid chip row's
+  move-up / move-down / remove / add (which repeat per chip **and** per band),
+  the Prefer/Avoid button, both `<select>`s and the two remove ✕s. The
+  cross-zone Require chips gained `aria-pressed`, which they never published.
+
+**Label in Name applies to some of these and not others, and the split matters.**
+`−` and `+` are glyphs doing an icon's job — there is no word a voice-control
+user can say, so a descriptive name only adds reach. The Try-first segments DO
+have words ("Table order", "Indoor", "Outdoor"), so they are
+`opt[1] + " (" + bandName(b) + ")"`: **visible label first, disambiguator
+after**, which is the correction v17.15.4's own `/code-review` had to make.
+
+**Four guards, each proven against known-bad input — and two of the four did
+not bite on the first attempt.** The counted-match guard passed with one of the
+size band's paired steppers reverted to a literal, because `has()` is satisfied
+by a single match and the sibling still matched; it counts occurrences now
+(1 / 2 / 3 / 2). The other miss was in the *negative test*, not the guard: the
+probe used `label={"…"}` against a call site written `label="…"`, so it edited
+nothing and the green result meant nothing. **A guard proven by a probe that
+did not apply is not proven** — check the probe changed the file before
+believing the failure it did not produce.
+
+Verified last by reading the computed accessible names out of the running page,
+which is the only place the repetition is visible: 274 named controls, and
+every priorities control distinct — `"Decrease party of 1 to 1: smallest party
+size"`, `"Remove 7 from Avoid (party of 1 to 1)"`, `"Indoor (party of 1 to 1)"`.
+
+That same live read turned up what the entry becomes: the four banners' per-row
+✕, the Tables/Combos buttons, and `ListView`'s own card actions at `Assign` ×10
+on a ten-booking day. `ROADMAP.md` carries them, with the open question about
+the last one (a `listitem` ancestor names the booking, so context may be
+enough for a screen reader while a voice-control user still has ten targets).
+
+### A finished booking's tables are a record — the question, and what it turned up
+
+The question was narrow: **does editing Duration on a Completed booking let the
+optimiser reassign it?** The answer is **no**, on two independent grounds —
+`applyOpt` returns a completed booking as `{...b, _conflict:false}` and never
+recomputes its tables, and `needsR` (the flag that triggers reassignment) is
+built from size / time / date / preference / `_clearManual` / preferred-tables,
+so duration does not reach it. Verified live afterwards: a duration-only save on
+a completed booking leaves its tables untouched.
+
+**Tracing it found the neighbouring edit broken in two different ways**, and the
+static read got the more serious one wrong first. Reading the code predicted
+only the second case below; driving the actual app produced the first.
+
+- **A LOCKED completed booking is reassigned by the optimiser.** `unlockForOpt`
+  rewrites the status to `"confirmed"` *before* `bookingsAfterAction` — that is
+  exactly what it is for — so `applyOpt`'s completed guard never sees a
+  completed booking, the optimiser places it, and the restore one line later
+  puts `"completed"` back on top of the new tables. **Measured live: changing a
+  completed party from 4 to 5 moved it from table 7 to tables 1A + 1B.** The
+  app rewrote where a party that had already left had been sitting. This
+  reaches every walk-in, every drag-drop and every manual assign, since all
+  three set `_locked`.
+- **An UNLOCKED completed booking cannot be edited at all.** `tables: []` is
+  written, `applyOpt` will not refill a completed booking, and the capacity
+  guard rejects the save — **measured live: "No tables available at this time —
+  see suggestions below."** for a change of party size on a finished visit, with
+  the error blaming the restaurant being full.
+
+Both are the same disagreement — `applyOpt` treats a finished booking's tables
+as a record and `doSaveEdit` did not — so one flag settles it. `editFinished`
+keys on **`f.status`, not `orig.status`**: walking a completed booking back to
+confirmed in the same save should return it to normal placement, and
+seating→completing one in the same save should pin the table it was actually
+sat at. An explicit manual assignment or an explicit clear still wins, because
+those are the user saying so rather than the optimiser deciding.
+
+`unlockForOpt` is **hoisted out of `buildNext`** in the same commit: the
+identical condition was written twice, once to unlock and once to restore, and
+two copies of a condition that must agree is how they stop agreeing. The
+restore now reads the flag instead of re-deriving it.
+
+**What the static read missed, and why.** The prediction covered the
+`tables: []` path and stopped there, because `applyOpt`'s completed guard looks
+conclusive on its own — it is, but only for a booking that is still marked
+completed when it arrives, and `unlockForOpt` exists precisely to change that
+mark. **A guard that keys on a field is only as good as the code that has not
+already rewritten the field.** Four tests pin the pure half (`applyOpt` moves
+nothing, refills nothing, and `bookingsAfterAction` preserves tables through a
+size change for both finished statuses); the App half was verified in DEV,
+including a confirmed booking still reassigning normally (table 6 → i2 + i3) so
+the fix did not simply switch the optimiser off.
+
+### `/code-review` fixes
+
+**1. Every "+ Add" button appends an IDENTICAL default row, so a name built
+from row content is not one name.** `addBand` appends `{min:2,max:2}`,
+`addRule` appends `declared[0].key` at 2–8, `addSwap` appends `tables[0].id`
+at 4→2 — all three fixed. So pressing **"+ Add size rule" twice** produces two
+rows that are character-for-character identical, and `bandName(b)` gave all
+~8 controls in one row the same name as their twins in the other. **This is
+the defect the whole sweep is about, reproduced one level down by the most
+obvious action in the panel, in two clicks.** The three row-namers take their
+ordinal now (`"size rule 2, party of 2 to 2"`), which is the only part of a row
+guaranteed to differ. The same collision reached **v17.15.4's own `Toggle`**,
+whose label was `"Party of " + b.min + " to " + b.max + ": try joined tables…"`
+— it takes `bandName(b, i)` too, and its guard was re-pinned. Verified live by
+adding a second band and reading every computed name off the page: 49 size-rule
+controls, **zero duplicated names anywhere**.
+
+**2. The `editFinished` fix was half applied — the capacity guard still refused
+a finished booking with no tables.** That guard means "the optimiser could not
+place this", and a finished booking is never offered to the optimiser; but a
+booking whose tables are already `[]` carries `[]` through, so the guard read
+it as a placement failure and rejected the save with the same
+restaurant-is-full message the fix exists to remove. Reachable ordinarily: a
+booking the app cannot place carries `_conflict` with `tables: []` and shows
+"No table assigned" — cancel it, then correct its party size, and the edit is
+refused over a table it never had. `!editFinished` added. The DISPLACEMENT
+guard above it is deliberately left active: a time or duration edit on a
+finished booking does change the `baseSlots` it contributes to `optimise`, so
+it can still displace live bookings and should still say so.
+
+**3. The clash flag said "warn" while its own border said "danger".** The card
+border for a clash is `--card-overdue-border` (red), and the marker was
+`--warn-text` — the same amber as `no-show ×N` and `N min late`, so the most
+severe state on the card was drawn in the colour of the two lesser ones and the
+card encoded one severity two ways. It is `--danger-text`, registered in
+`tests/contrast.test.js` alongside its three siblings (8.31:1 light, 6.73:1
+dark).
+
+**A guard added in this version needed fixing by the same review that added
+it.** The counted stepper guard broke when the `Toggle` adopted `bandName`,
+because `label={bandName(b, i) + ": ` then matched three call sites rather than
+two — the regex was measuring "uses the row namer", not "is a stepper". It
+matches the stepper's own suffixes now. A fourth guard pins all three
+row-namers to taking `(…, i)`, proven by reverting `swapName` to its
+content-only form (three failures) and back.
+
 ### Docs
 
 `DESIGN.md` takes the design decisions (the two shipped replacements for the
@@ -15217,3 +15367,3861 @@ Three new guards in `tests/a11y.test.js` and one in `tests/booking-logic.test.js
 each proven against known-bad input. **588 tests**, build clean, `check:style` OK,
 lint 0 errors.
 
+
+---
+
+## v17.15.4 — the switch that had no name
+
+**Date:** 2026-08-27 · **Branch:** `fix/v17.15.4-toggle-switch-role` ·
+**Behavioural change:** none for a sighted user — nothing moves, nothing
+changes colour, no control gains or loses a state. Every one of the twenty
+on-off controls in the app gains an accessible name and a published state.
+**Files:** `src/components/atoms.jsx` · `Settings.jsx` · `LayoutSettings.jsx` ·
+`Reminders.jsx` · `ReminderEditor.jsx` · `ManualModal.jsx` ·
+`BookingFormModal.jsx` · `tests/a11y.test.js` · `CLAUDE.md` · `DESIGN.md` ·
+`ROADMAP.md` · `src/App.jsx` (version).
+
+### What was wrong
+
+`Toggle` rendered a bare `<button>` whose entire content was two coloured
+`<div>`s. No text, no `role`, no `aria-checked`, no name. Every switch in the
+app therefore announced as **"button"** — nothing about what it controlled,
+nothing about whether it was on. Twenty call sites: the whole of Settings →
+General and Settings → App, the reminder list and its editor, `ManualModal`'s
+Swap busy, the booking form's Repeat weekly, and `LayoutSettings`' per-band
+combos-first.
+
+### Why it survived the two versions that existed to catch it
+
+This is the part worth keeping. v17.12.0 shipped ~40 accessibility fixes and
+v17.13.0 built the gate behind them, and **both went after the surfaces that
+hold bookings** — the List card, the timeline block, the floor-plan table, the
+form field. An atom that draws a 48×26 pill is not where anyone looks for a
+missing name, and there is nothing on screen to say it is missing. The
+generalisation now in `CLAUDE.md`'s Gotchas and `DESIGN.md`: **a control with no
+text content has no name unless someone gives it one.**
+
+### The fix
+
+`role="switch"` + `aria-checked={!!on}` + `aria-label={label}`, with `label`
+**required and defaulted to nothing** — `ModalTitle`'s `background` reasoning: a
+default would be a silent twenty-first answer to a question each call site has
+to answer for itself. The atom cannot force a caller to name it, so the build
+does (below).
+
+Three decisions inside that:
+
+**`role="switch"`, not `aria-pressed`.** A switch is a state that stays; a
+toggle button is an action you just took. Every one of these writes a setting.
+
+**The role subscribes to nothing, and costs nothing.** Checked BEFORE it went
+on, per the v17.12.0 lesson that put `[role="button"]`'s transform rules onto
+the floor-plan tables and teleported them: `src/index.css` has no
+`[role="switch"]` rule at all. And it stays a `<button>` ELEMENT, so
+`user-select: none`, the 0.96 press dip and the transform transition — all
+written against the `button` element selector — still reach it. Measured live:
+tag `BUTTON`, `user-select: none`, transition intact, 48×26 unchanged.
+
+**The label names what the switch CONTROLS, never its state.** `aria-checked`
+carries the state, and a name that flips with the value makes one control read
+as two. `ReminderEditor`'s switch sits beside the words "Active"/"Inactive" and
+is named "Reminder active" in both.
+
+### What live measurement found that source review did not
+
+Two things, both only visible in the running app:
+
+**1. Three switches are rendered from a `.map`,** so a static label is not one
+name but N identical ones — this version's own defect, one level down. The
+size-band switch nearly shipped that way. **In the source it is one string
+inside a loop; only the rendered page shows it as three.** Reading the computed
+names out of the live app gave
+`["Try joined tables before single tables" × 3]`, and it is now
+`"Party of 1 to 1: try joined tables…"` and so on, off the band's own heading.
+The reminder and standing-booking switches were already per-item.
+
+**2. `"Reminder: " + r.text` printed the word "undefined"** for a legacy row
+DEV still holds, where the visible `{r.text}` renders nothing.
+`validateReminderDraft` has required text since it shipped, so nothing can
+create another — the point is that the row is already in the data. Guarded, and
+whitespace-collapsed, since the text comes from a `rows={2}` textarea. Not
+truncated: two long reminders can share any prefix you would cut at, and the
+name is the only thing telling their switches apart.
+
+### The same fault, one control over
+
+The sweep did not stop at `<Toggle`, because a control **with** text can be just
+as unnamed and hides better. `DayHoursRow` renders seven buttons reading "Open"
+and seven reading "copy → all", and an element with content is named BY that
+content — the weekday lives in a sibling `<span>`. The copy button's `title` is
+a *description*, not a name, so its tooltip ("Copy this day's hours to all
+days") never said which day either. Both now carry a weekday-prefixed
+`aria-label`. The Open/Closed pill stays a plain button rather than becoming a
+switch: "Open" and "Closed" are two states of a day, not on and off of one
+thing, and the row's steppers appear and vanish with it.
+
+`LayoutSettings`' priorities editor has three more repeated names (the ✕ and the
+Table order / Indoor / Outdoor segmented buttons, once per band) — out of scope
+here, logged in `ROADMAP.md`.
+
+### The gate
+
+`tests/a11y.test.js` gains eight assertions and `openingTagsOf()`, a brace-aware
+walker returning **every** `<Toggle …>` opening tag whole. A line grep cannot do
+this job — two of the twenty call sites are multi-line, which is v17.15.2's own
+miss repeating — so the sweep reads tags, not lines. It asserts: the atom's own
+button carries all three attributes (scoped to the function, since
+`Collapsible`'s button comes first in the file and the first version of this
+check measured that instead); it is not `aria-pressed`; it is still a
+`<button>`; **every** call site under `src/components` passes a `label`; the
+three list-rendered ones pass a dynamic one; no two literal labels collide in
+one file; and the sweep is finding call sites at all, so it cannot pass
+triumphantly on zero files.
+
+**Six known-bad inputs, each run and each observed to fail** — a call site
+stripped of its label, `role="switch"` removed, `aria-checked={!!on}` weakened
+to `{on}`, `<button>` swapped for `<div>`, the size-band label flattened to a
+literal, and two Settings switches given the same name. Plus three fixture
+cases proving `openingTagsOf` finds all tags rather than the first, reads a
+multi-line tag whole (with the line-grep failure asserted alongside it), and
+does not let `<ToggleGroup` answer for `<Toggle`.
+
+### Verification
+
+Live in DEV: Chrome's own accessibility tree reports `switch "Dark mode"`,
+`switch "Reduce animations"`, `switch "Work offline"`, `switch "Plan zoom and
+pan"`, `switch "Lock navigation"`, `switch "Split view"` — computed names and
+roles from the browser, not attributes read back. `aria-checked` flips
+`true → false → true` on click with the knob travelling 24px → 3px → 24px, so
+the switch works in both directions. All eight General-tab switches, all six
+reminder rows, the reminder editor, Swap busy and the three size bands measured
+by name and state.
+
+**600 tests** (was 588), build clean, `check:style` OK, lint 0 errors. Main
+bundle 90.08 → **90.20 kB gz** (+120 B, the label strings).
+
+### `/code-review` fixes
+
+**1. An `aria-label` that PARAPHRASES the visible text is a regression, and it
+reads as an improvement.** The copy button's name was written as the sentence
+"Copy Mon's hours to all days" — which fixed the ambiguity and broke WCAG 2.5.3
+(Label in Name) in the same stroke. Voice control matches on the accessible
+NAME: while the name came from the button's content it *was* "copy → all", so
+"click copy all" worked; the sentence contains those two words far apart and
+matches nothing, so the fix took away a way of operating the button that had
+been there before it. It is `"copy → all (Mon)"` now — **the visible label
+leads, the disambiguator follows.** `Mon: Open` satisfied the same rule by
+accident. The `title` stays and finally earns its place: against a short
+identifying name it is a description rather than an echo, which is the pair
+those two properties exist to be.
+
+**2. The same trap has a second face, and it is why "Reminder active" is now
+"Reminder status".** That switch has no text of its own; its only visible
+labelling is a sibling rendering `draft.active ? "Active" : "Inactive"`. Any
+name containing one of those two words matches the screen in one state and
+contradicts it in the other — a voice user reading "Inactive" could not say it.
+A name containing NEITHER is sayable in both, and it keeps this version's own
+rule that `aria-checked` carries the state and the name never does.
+
+**3. The sweep read one directory while claiming to cover the app.**
+`withToggle` was built from `src/components` alone — the repo's recorded fault
+class, a guard NARROWER than the rule it gates. `Toggle` is a plain export
+importable anywhere and `App.jsx` renders its own inline confirm dialogs and
+header controls, so a switch added there would have shipped unnamed with the
+build green, walking straight past the gate built to stop it. It walks all of
+`src/` recursively now, `atoms.jsx` included. Proven by planting an unlabelled
+`<Toggle>` in `App.jsx` and watching the sweep name the file.
+
+One more guard (**53 in `a11y.test.js`, 600 total**) carrying the general form
+of finding 1 — the accessible name of a control with visible text must contain
+that text — plus the rewritten assertion for the copy button. Three more
+known-bad inputs run and observed to fail: the paraphrased name written back,
+the state word returned to the reminder switch, and an unlabelled `<Toggle>`
+planted in `App.jsx`, which the old one-directory sweep could not see.
+
+---
+
+## v17.15.5 — one booking, one vocabulary
+
+**Date:** 2026-08-27 · **Branch:** `feat/v17.15.5-list-timeline-parity` ·
+**Behavioural change:** the List card's flag row changes appearance (solid
+coloured pills → icon-led plain text) and the status badge gains its mark; no
+data, no write path and no keyboard behaviour moves. **Files:**
+`src/components/ListView.jsx` · `atoms.jsx` · `tests/contrast.test.js` ·
+`DESIGN.md` · `src/App.jsx` (version).
+
+### What was wrong
+
+`TimelineView` spent v17.9.0 through v17.11.0 turning a block's markers into an
+icon rail — status, deposit, preferred, locked, repeat-no-show, overstaying,
+double-booked — each a drawn mark at `IC.control` with a real accessible name,
+in a fixed order, argued through three versions of measurement.
+
+`ListView` never followed. The same facts were seven solid coloured pills
+printing words: `[manual] [locked] [★5A+5B] [no-show ×3] [12 min late]
+[€40 deposit] [35 min]`. **One booking, two visual vocabularies** — a host
+switching views had to learn both, and in Split View they sit side by side.
+
+### The change
+
+Icon + its number, no fill. The marks and their order come from
+`TimelineBlock`'s own `allFlags` (deposit → preferred → locked →
+repeat-no-show), so a booking reads the same left-to-right in either view.
+
+**What the card keeps that the block cannot.** A 36px block has room for a
+glyph, so the deposit AMOUNT, the no-show COUNT and the preferred TABLE IDS
+live only in its hover title. The card has the width, so they stay on screen.
+Reducing them to bare glyphs would have been consistency bought by levelling
+down — the same mistake v17.9.0 caught when it dimmed the one legible element
+on a block to match the illegible ones.
+
+**Three flags get no mark, deliberately:** `manual`, `N min late` and the
+duration counter have no counterpart on a block (late is an amber BORDER
+there, the duration is the block's live width, `manual` is not drawn at all).
+`LateIcon` exists — it is the notification strip's Running-late mark — and was
+left out anyway: **an icon that means something in one view and nothing in the
+other is worse than no icon**, and the comment at its site says so, because the
+next reader will otherwise re-litigate it.
+
+**The status badge keeps its word and gains its mark.** `SBadge` already used
+`BLOCK_BG`/`BLOCK_INK`, so the fill was never the difference — the difference
+was that the block says the status with a glyph and the card said it with a
+word. It now says both. Icon-only was rejected: v17.11.0 put `StatusIcon` on
+the block *because* colour alone is not a status (a WCAG 1.4.1 failure three
+review passes found independently), and dropping List's word to match would
+have run that argument backwards on the one view that had it right.
+
+### The gap in the other direction
+
+Comparing the two views closely turned up something the change was not looking
+for: **Timeline draws a double-booking and the List card drew nothing at all.**
+`ClashIcon`, a 3px danger border and a `ClashBand` across the contested minutes
+on the block; on the card, no marker, no border, nothing — while the card is
+the surface staff read a day from.
+
+That is the fault v17.11.0 called out as unique in this app — the one place it
+asserted something FALSE rather than merely omitting it — surviving on the
+third surface for four versions after the other two were fixed. The data was
+already there and already memoised: App's `clashMap`, which `TimelineView` has
+taken as `clashes` since v17.11.0, needed passing to one more component.
+
+The card now carries a `ClashIcon` flag reading `double-booked` and takes the
+overdue red at 3px, **outranking the overstay warning and the late timer** —
+mirroring the block's own precedence, and for the block's own reason: those two
+are predictions, a clash is the schedule already being wrong. It reuses the
+overdue red rather than adding a fifth card border colour, because making the
+BORDER the distinguishing signal is the colour-only-status mistake v17.11.0
+exists to have fixed; the marker is what tells them apart.
+
+`findClashes` can return a pair whose `tables` is EMPTY (`canAssign` also
+rejects a pair taking two or more tables from one join cluster, and those sets
+need not intersect), so the table clause is conditional exactly as
+`TimelineBlock`'s is — unreachable in the default layout by pigeonhole, and
+reachable with a join group of four.
+
+### The party-size ring, and a guard doing its job
+
+`SIZE_RING` was a module const in `TimelineView.jsx`, shared with `WaitGhost`.
+The card printed `4 pax` instead, so the ring gained a third consumer and moved
+to `atoms.jsx` as `SizeRing` — a style object imported from one view into
+another is not sharing, it is coupling.
+
+**The rim could not travel with it.** `--rim-solid-strong` is white at 0.55 and
+that is a recorded measurement against a SATURATED BLOCK FILL: white at 0.3 is
+1.21:1 on pending, i.e. absent. On the List card's `--bg-card-strong` — alpha
+over the sheet, so near white in light — 0.55 white is close to invisible. So
+`rim` is a prop: the block and the ghost pass nothing and keep the recorded
+value byte-for-byte, and the card passes `--chip-neutral-border`, which already
+existed as `color-mix(--text-secondary 50%)` and is DESIGN.md's own rule that an
+outline's border is its ink at half strength. Copying the block's rim across
+would have been "a quieter version of X dims X, it does not re-specify X" run
+backwards.
+
+**`tests/contrast.test.js` caught the move, which is the point of it.** The
+first cut put the default on the function signature; `ringAlpha()` anchors on
+`const SIZE_RING` and reads the white rule out of the DECLARATION, so it threw
+— "The party-size ring was renamed or moved — re-anchor `ringAlpha()` on it
+rather than deleting this guard" — instead of silently measuring nothing. Both
+halves were done: the default went back inside the declaration where the guard
+can see it, and the guard was re-pointed at `atoms.jsx`. It was then re-proven
+against known-bad input (rim weakened to `--rim-solid`: ten failures; restored:
+612 pass), because a re-anchored guard that no longer bites is worse than a
+deleted one.
+
+### The pairing nothing could have seen
+
+Taking the fills off makes the CARD the text-bearing surface, and
+`--warn-text` / `--success-text` / `--text-secondary` on `--bg-card-strong` /
+`--bg-card-dim` is a pairing **neither guard in this repo can detect**:
+`check:style` sees literals, and `tests/contrast.test.js`'s coverage check sees
+a list of token PREFIXES that `--bg-card-*` does not match. That is precisely
+the blind spot which shipped the notification strip's danger sections at
+3.03:1 in v17.15.0 and the offline pane at 3.13:1 in v17.15.2.
+
+So all six were measured before the code was written, not after:
+
+| ink on card | light | dark |
+|---|---|---|
+| `--text-secondary` | 7.53 | 7.59 / 8.08 |
+| `--warn-text` | 6.79 | 7.58 / 8.07 |
+| `--success-text` | 7.13 | 9.10 / 9.69 |
+
+All clear AA with room; all six are registered. The two card fills are alpha
+over the sheet, so in light they composite to the same white and the rows are
+identical **by construction** — kept apart anyway, because the day one of them
+stops being alpha is the day that stops being true.
+
+**The measuring script got it wrong first, in this repo's own recorded way.**
+Its first run reported 1.40–2.32:1 in dark — every pairing far below AA. The
+cause was not the colours: `indexOf('[data-theme="dark"]')` matched the
+**comment on line 32 of `src/index.css` that mentions the selector**, so the
+dark block was never read and every dark ink silently fell back to its light
+value. `tests/contrast.test.js` anchors on `'[data-theme="dark"] {'` — with
+the brace — for exactly this reason. It is the same trap `tests/csp.test.js`
+hit in v17.15.1: **prose that names the thing a regex hunts for is
+indistinguishable from the thing**, and here it produced six alarming numbers
+that would have "justified" retuning three inks that were never wrong.
+
+### Docs
+
+`DESIGN.md`'s "Three label treatments" clause cited this exact row as the
+worked example of SOLID. It is rewritten rather than deleted, because the row
+is now the worked example of the rule MOVING: "match whatever sits next to
+you" is not a preference for fills, it is a preference for one treatment per
+row, and it points wherever the row goes. `atoms.jsx`'s `OutlineChip` comment
+cited the same row and was corrected in the same commit — a stale example is
+quoted with confidence.
+
+---
+
+## v17.15.6 — the ROADMAP's `Deferred` section, cleared
+
+**Date:** 2026-08-27
+**Branch:** `fix/v17.15.6-deferred-roadmap`
+**Behavioural change:** one visual (the status badge's scale); the rest is
+accessible NAMES, which change nothing a mouse user can see.
+
+`ROADMAP.md` carried three deferred entries, all left behind by v17.15.5. This
+version closes all three and a fourth that surfaced while planning it.
+
+### 1. `SBadge` sits down in its row
+
+v17.15.5 moved the List card's flag row from SOLID to TEXT under `DESIGN.md`'s
+**"match whatever sits next to you"**, and closed only half the loop. It settled
+what TREATMENT the neighbours wear and left the badge sized for the row it used
+to be in. Measured live on the card, before:
+
+| element | type | box height | surface |
+|---|---|---|---|
+| guest name | `T.title` 17, bold | 20 | none |
+| **`SBadge`** | `T.body` 12 + `4px 10px` | **~27** | fill + `RIM_SOLID` + `--shadow-flat` |
+| `SizeRing` | 18×18, `T.micro` 10 | 18 | transparent + hairline rim |
+| flag | `T.small` 11 + `IC.control` 14 | 14 | none |
+| time (right) | `T.lead` 14, bold | 16.5 | none |
+
+So the one element carrying a fill was also the **tallest thing in the row** —
+taller than the 17px name it follows — and the row read as a status pill with a
+booking around it rather than a booking with a status. `T.body`→`T.small` and
+`4px 10px`→`2px 8px` puts it at a **measured 20px**: level with the name's box,
+one step above the ring, above the flags.
+
+**Three things deliberately did not change**, and each is load-bearing:
+
+- **The fill, `RIM_SOLID` and `--shadow-flat`.** The status is not a flag. A
+  flag says what is UNUSUAL about a booking; this says what the booking IS, and
+  the fill is the vocabulary the card shares with `TimelineBlock` (whose
+  `STATUS_LABEL` reads from the same place). Dropping it to TEXT would have made
+  the card and the block name one attribute two ways again — the exact defect
+  v17.15.5 existed to close.
+- **`IC.control`.** The flags beside it are `IC.control` too, so the MARKS stay
+  one size across the row and only the pill comes down. `IC.inline` would have
+  shrunk the wrong half.
+- **The colour pair**, which is why this needed no contrast work: the tokens are
+  untouched, and 11px and 12px are both "normal text" for WCAG, so it is the
+  same 4.5:1 threshold either way. **A smaller size never relaxes a threshold** —
+  worth stating, because it is the kind of thing that gets assumed.
+
+`DESIGN.md` gains the rule this establishes: **treatment and scale are two
+separate answers to "match your neighbours", and settling one does not settle
+the other.** The same edit corrects that clause's claim that the solid rim is
+`--border-glass` — `SBadge` ships `RIM_SOLID`, and `--border-glass` is what its
+three hand-written COPIES carried, so the doc had been describing the drift
+rather than the atom.
+
+### 2. The icon reaches the badge's hand-written copies
+
+`SBadge` gained `StatusIcon` in v17.15.5 and **three** hand-written copies of it
+could not follow — ROADMAP named two, and the sweep found the third:
+
+| site | what it is |
+|---|---|
+| `PlanView.jsx:383` | the per-table day-queue popover |
+| `CustomersSettings.jsx:96` | a customer's booking-history row |
+| `SearchPanel.jsx:48` | a search result row (**not in ROADMAP**) |
+
+All three now render `<SBadge status={b.status} />`.
+
+**Doing the resize FIRST is what made this a near-invisible diff.** ROADMAP had
+flagged the unification as "not a pure find-replace" because both dense rows use
+`T.small` against the atom's `T.body`, so adoption would have grown them. After
+§1 the atom IS `T.small` — the exact size the copies already were — so each site
+changes only by gaining the mark and swapping `--border-glass` for `RIM_SOLID`.
+The concern that deferred this entry was dissolved by the other half of the same
+version rather than worked around.
+
+**Every one of the three carried a comment asserting parity with the atom** —
+"solid, like every other status label (see SBadge)", and in `SearchPanel` the
+fuller "the same fill, text and metrics as SBadge". Each was true when written
+and silently false afterwards. **A comment claiming parity with an atom is not
+parity with it**, and it is worse than no comment: it tells the next reader the
+question has been settled.
+
+`PlanView`'s **legend** (`:402`) is deliberately NOT converted, and the reason is
+recorded at the site: it is a key for what the FILL painted on the floor plan
+means, and the plan draws no icons — a mark there would promise the room shows
+something it does not. The popover above it is the opposite case, because its
+rows are bookings.
+
+**Verified live** (DEV, 375px and desktop): all three render the mark, and the
+Customers history row — the one with no `flex:1` child, and the reason ROADMAP
+asked for measurement — reports **`scrollWidth - clientWidth === 0`** on every
+row at 375px. No `flexWrap` was needed. Dead `BLOCK_BG`/`BLOCK_INK` imports
+pruned from the two files that lost their last use (lint is a hard gate);
+`PlanView` keeps both for the occupancy fill and the legend.
+
+Bundle: 333.55 → **333.32 kB** (90.42 → 90.39 kB gz).
+
+### 3. The notification strip's per-row controls carry their row
+
+The four banners each rendered one dismiss ✕ per row with a **single static
+`aria-label`** — "Dismiss this alert" / "…this warning" / "…this double-booking
+warning". One string in the source; six identically-named buttons on a busy
+evening.
+
+**These are the case with no fallback, and that is what makes them decidable
+differently from `ListView`'s card actions (§6).** A `BannerRows` row is a bare
+`<div>` with no role and no name, so a control inside it inherits nothing. A
+List card is a named `role="listitem"`. That single structural difference is the
+whole of the argument on both sides.
+
+| control | name |
+|---|---|
+| Late ✕ | `"Dismiss the running-late alert for " + who` |
+| Late **No show** | `"No show (" + who + ")"` |
+| Overlap ✕ | `"Dismiss the overstay warning for " + sb.name` |
+| Wait ✕ | `"Dismiss the table-free alert for " + who` |
+| Wait **Book** | `"Book (" + who + ", " + w.size + " pax)"` |
+| Clash ✕ | `"Dismiss the double-booking warning for " + first.name + " and " + later.name` |
+
+**The sweep deliberately did not stop at the ✕**, and the two kinds of control
+take differently-shaped names. An icon-only ✕ has no visible text, so it takes a
+whole sentence. **No show** and **Book** have words — so they read as named
+already, and the fix is that the visible label must LEAD with the party only
+disambiguating after it. That is v17.15.4's own `/code-review` finding (WCAG
+2.5.3): a name that paraphrases the visible text stops a voice-control user
+saying what they can read.
+
+Two rows are left alone and both are pinned so a later "consistency" pass cannot
+add a redundant label: **Overlap's Reassign** and **Clash's Assign** already put
+a name in their VISIBLE text.
+
+The clash ✕ names the **pair**, matching `clashRowId`'s own identity — the
+dismissal Set is keyed by pair precisely because "Pau vs Rita" and "Rita vs a
+third party" are different things, so a name mentioning one booking would
+describe something other than what the button dismisses.
+
+`who` is derived once per row and read by both the sentence and the button, so
+the two can never disagree about what a party is called — including the
+`"(no name)"` fallback, which a waitlist genuinely produces.
+
+**Four guards in `tests/a11y.test.js`, each proven against known-bad input.**
+Reverting the wait ✕ to its old literal fails two of them; replacing "No show
+(Miriam)" with the plausible-looking **"Mark Miriam as a no-show"** fails the
+2.5.3 one — which is the point, because that string reads as an improvement in
+review and is the exact mistake v17.15.4 shipped.
+
+### 4. `LayoutSettings`' Tables and Combos sections
+
+v17.15.5 closed the **priorities editor** at the bottom of this file. The Tables
+and Combos sections sit ABOVE it and were untouched — same file, same defect,
+one scroll apart.
+
+What hid them: these buttons are icon-only with a `title`, and **`title` IS the
+accessible name when there is nothing else**. So unlike `<Toggle>`, which had no
+name at all, these read as named while giving thirteen buttons the name "Rename
+table". The v17.15.5 precedent applies unchanged — the short `title` stays as
+the tooltip, an `aria-label` carries the row.
+
+Named: rename/remove table (`t.id`), the join-group chips' move-left /
+move-right / remove (`id` alone — `sanitizeLayout` enforces single-group
+membership, so a table is in exactly one group), add-to-group and remove-group
+(`group.join(" + ")`), and remove-mega-combo (`mc.ids.join(" + ")`).
+
+The **zone toggle** is the one with visible words ("Indoor"/"Outdoor"), so it
+takes the 2.5.3 shape — `"Outdoor (table 1A)"`. It is also named for the STATE
+rather than the transition: "Make table 1A indoor" would contradict the visible
+label in one of its two states, the same reason `ReminderEditor`'s switch is
+called "Reminder status".
+
+**Deliberately left static, and pinned so a later sweep does not "finish the
+job":** Save name / Cancel / Remove anyway are gated on `editId` /
+`pendingRemove`, both single-valued, so exactly one is ever on screen.
+
+#### The worst instance in the app, and only the running page showed it
+
+Reading computed names out of the live app — not the source — turned up
+something more severe than anything ROADMAP listed. **Three** `PICK_CHIP` lists
+render the same table ids as a bare `<button>7</button>`:
+
+| list | what tapping it does |
+|---|---|
+| the open group picker | add 7 to **this** group |
+| the "Ungrouped" row | start a **new** group from 7 |
+| the priorities picker | add 7 to a prefer/avoid list |
+
+The Ungrouped row is **always rendered**. So opening either picker puts two
+buttons named "7" on screen **that do different things** — not merely ambiguous
+the way ten "Assign" buttons are, but actively misleading, and one click away.
+Each now leads with the visible id and states its action (`"7 — add to the group
+5A + 5B"`, `"7 — start a new joined group"`).
+
+**This is the entry's own rule paying out.** In the source the three lists are
+three separate `.map`s that look nothing alike; on the page they are one row of
+identical buttons.
+
+#### Checked and NOT a defect
+
+The sweep also flagged `"Assign tables for Marco Rossi"` twice. That is a
+multi-table booking drawing one timeline block per table row, each with its own
+assign handle — **same name, same booking, identical action**, so pressing
+either does exactly the same thing. Duplicate names for genuinely equivalent
+controls are not a fault, and renaming them by table would invent a distinction
+the app does not have.
+
+Five guards, one proven by deleting a chip's label and watching it fail.
+
+### 5. `Reminders`' per-row Edit / Delete
+
+v17.15.4 named the switch in this row and **stopped at the switch**, so a list of
+five reminders still offered five buttons called "Edit" and five called
+"Delete" — and Delete is the one control in that row where picking the wrong
+target cannot be undone.
+
+The name expression moved out of the `Toggle`'s prop into `rname`, read by all
+three controls, so they cannot disagree about what a reminder is called. Its two
+v17.15.4 guards travel with it: `String(r.text || "(no text)")` (a bare concat
+renders the word "undefined" for the one legacy textless row DEV holds) and the
+whitespace collapse (the text is a textarea's and can contain newlines). Still
+not truncated — two long reminders can share any prefix you would cut at.
+
+Edit and Delete have visible words, so they take the 2.5.3 shape: `"Edit (Call
+the fish supplier before they close)"`.
+
+**Verified live in DEV** — three reminders, nine controls, all uniquely named
+and all agreeing:
+
+```
+Reminder: Call the fish supplier before they close
+Edit (Call the fish supplier before they close)
+Delete (Call the fish supplier before they close)
+```
+
+### 6. The two table multi-selects — a name AND a state
+
+Sweeping the live page after §4 left exactly two families of bare-id button: the
+**"Add a combo"** picker and the priorities editor's **"Require"** row. Thirteen
+buttons each, both on screen at once, all twenty-six announcing nothing but a
+table id.
+
+"Add a combo" was missing more than a name. **Selection there is carried by an
+accent fill and nothing else**, so with no `aria-pressed` you cannot tell which
+tables you have picked — and picking tables is the entire control. v17.15.5 had
+already answered exactly this for `Require` and stopped at that one row, so the
+fix is applying this file's own existing decision rather than making a new one.
+
+`aria-pressed` and not `role="switch"`, per the rule the `Toggle` atom records: a
+switch is a state that STAYS, while these are selections inside a set being
+assembled.
+
+**The guard is the invariant, not a count.** The first draft asserted "there are
+two `aria-pressed`" and failed immediately — there are three, because v17.15.5's
+zone-order segments are one. A count would need bumping every time a segmented
+control is added, which is the moment it stops meaning anything. It now walks
+every `<button>` whose style paints `on ? "var(--accent)"` and requires each to
+expose `aria-pressed`: **a control that paints itself selected must say it is.**
+
+#### Result, measured live
+
+The Layout tab fully expanded — Tables, Joined tables, Combos and Table
+priorities all open:
+
+| | before | after |
+|---|---|---|
+| visible buttons | 443 | 443 |
+| with no accessible name | 0 | 0 |
+| named by a bare table id | 26 | **0** |
+| sharing a name with another button | 26 | **0** |
+
+### 7. The List card's actions stay named by their ancestor — decided, not overlooked
+
+Measured live on a 10-booking day: **Assign ×10, Delete ×10, cancelled ×10,
+completed ×9, seated ×8**. Sixty controls, five names — by a long way the
+largest instance of this pattern in the app, and the one ROADMAP explicitly said
+to make a judgement about before touching.
+
+**They are left as they are.** The card is a `role="listitem"` carrying
+`describeBooking(b)`, so a screen-reader user has been told whose booking it is
+before reaching any button. Renaming all sixty would repeat the guest on every
+control — measurably more verbose in the app's most-used view, for exactly the
+users the change would be for. No WCAG SC is failed either way: 2.5.3 is
+satisfied (the visible text IS the name), and voice control falls back to
+numbered overlays when names collide.
+
+**The rule this settles, which is what makes every other case in this version
+decidable:**
+
+> A repeated control inside a **named** listitem may lean on that ancestor.
+> A control in a **bare** row may not.
+
+That is the whole difference between this section and §3. It is the reason the
+four banners' ✕s were renamed and these sixty were not, and it now lives in
+`CLAUDE.md`'s Gotchas row rather than being re-derived next time.
+
+**A decision needs a pin, because "nobody renamed these" and "somebody decided
+not to" look identical in source.** `tests/a11y.test.js` asserts the card's
+`aria-label` and `role="listitem"` are present (they are what the buttons lean
+on) and that the action row carries no per-card labels. Proven by adding
+`aria-label={"Assign tables for " + b.name}` — the exact edit a later sweep
+would make — and watching it fail.
+
+### 8. The double-booked marker, exercised live at last
+
+`ClashIcon` on the List card, the strip's Double-booked section and the
+timeline's `ClashBand` all shipped in v17.15.5 **having never rendered**. ROADMAP
+said a clash cannot be built through the UI; that was checked and is true —
+`dropOnTable` (App.jsx) tests blocks, seated holds and `canAssign` before both
+its move and its swap branch, and the assign modal marks an occupied table busy.
+
+**Method.** Two overlapping `_locked` `confirmed` bookings written straight into
+DEV `bookings` — Pau Estevez 14:30–16:00 and Rita Camps 15:30–17:00, both on
+table 3. Both `_locked`, so the reconciler cannot resolve it, which is the
+all-locked case the marker exists for.
+
+The SDK route failed in a way worth recording: importing `firebase_database.js`
+from Vite's dep cache gives a **second module instance**, so `ref()` builds a
+`Path` from one copy while the cached `Database` uses the other —
+`childPathObj.split is not a function`. A trivial `set()` on a fresh key still
+succeeds, which makes it look like the connection is fine. **The REST API
+sidesteps it entirely**: `PUT /bookings/{id}.json?auth=<idToken>`, with the token
+off `auth.currentUser` (a property read, so no class boundary is crossed). The
+per-`$bid` rule allows a create on a numeric `updatedAt` alone.
+
+**Everything renders, and all of it is correct:**
+
+| surface | result |
+|---|---|
+| List card | `double-booked` flag in `--danger-text` + red card border, on both cards |
+| Strip | "Pau Estevez (14:30) and Rita Camps (15:30) are both on table 3." |
+| Strip action | **Assign Rita Camps** — the LATER booking, matching the reconciler's newest-first tie-break |
+| Timeline blocks | 3px `rgb(220,38,38)` border on both, outranking the late state |
+| `ClashBand` | 4px, danger red, **left 275 → 311** |
+
+The band's geometry is the contract stated exactly. The blocks span Pau 203–311
+and Rita 275–383, so the band runs **from the later booking's start to the
+earlier one's end** — its right edge is the precise pixel where Pau's booking
+finishes, which is the fact Rita's block is painting over.
+
+**And it doubles as the first live proof of v17.14.0's no-op identity
+contract.** Two `_locked` bookings on one table is *the* case that spun the
+reconciliation effect from v15.6.1 to v17.10.2 — `applyOpt` copies a locked
+booking's tables through, so no reshuffle can separate them. Measured: **zero
+console warnings in six seconds** with both bookings live and the day visible.
+
+It also exercised §3's names end to end. The five strip controls now read:
+
+```
+Dismiss the double-booking warning for Pau Estevez and Rita Camps
+No show (Pau Estevez)          Dismiss the running-late alert for Pau Estevez
+No show (Rita Camps)           Dismiss the running-late alert for Rita Camps
+```
+
+Before this version those were `No show`, `No show`, `Dismiss this alert`,
+`Dismiss this alert` — three collisions in one pane.
+
+The two bookings (and a stray root `__probe` key from the SDK diagnosis) are
+**left in DEV**. It is a scratch database and cleaning it is not work.
+
+### Docs
+
+`ROADMAP.md`'s **`Deferred` section is now empty.** `CLAUDE.md`'s
+`.map`-rendered-control row gained the ancestor rule, the `title`-is-a-name
+trap and the `aria-pressed` requirement; `DESIGN.md` gained the treatment-vs-scale
+rule and lost a stale `--border-glass` claim. `GLOSSARY.md` needed nothing — no
+new user-visible surface, only names for existing ones.
+
+**Verification:** `npm run build` + `npm test` (**640 passing**, up from 625) +
+`npm run check:style` + lint (0 errors) green on every commit. Fourteen new
+guards in `tests/a11y.test.js`, five of them proven against known-bad input.
+Main bundle 333.55 → 333.51 kB (90.42 → 90.46 kB gz).
+
+### 9. `/code-review` fixes
+
+Three findings, all confirmed, all fixed.
+
+**1. The decision pin was built out of guessed spellings.** §7's `hasnt` trio
+matched string SHAPES — `aria-label={"Assign…" + b.name`. Run against four
+renames a later sweep would plausibly write, it **missed two**: `"Set " + s + …`
+(the literal `s` cannot match the capital S of "Set") and `"Mark " + b.name + "
+as " + s`, the most natural phrasing of the lot. And `hasnt()`, unlike `has()`,
+does **not** throw when its pattern matches nothing — so a pattern that can never
+fire passes silently forever. That is the tautology this file's own header exists
+to prevent, in the one guard of this version that had not been proven against
+known-bad input.
+
+It is STRUCTURAL now: find the action row's buttons (`onClick={stopped(`) and
+require that none carries an `aria-label` at all. No spelling to guess. Both
+previously-missed renames are now caught — verified by injecting each.
+
+**2. `ClashBanner` had no `(no name)` fallback** — the only one of the four
+banners without it (Late and WaitAvail via `who`, Overlap inline). `sanitize`
+writes `name: b.name || ""` and the booking form does not require a name, so two
+nameless bookings clashing gave the dismiss button the accessible name
+`"…warning for  and "`. **The fix for ambiguity had reintroduced ambiguity in
+its own worst case.** `firstWho`/`laterWho` now guard it, and the visible
+sentence and the Assign button read those same values rather than re-deriving
+them — or the pane would say "(no name)" while the button beside it said
+nothing.
+
+Verified live by blanking both names in DEV: `"Dismiss the double-booking
+warning for (no name) and (no name)"`. (Two genuinely anonymous bookings still
+produce two identical late-row names. That is the honest limit of the data —
+nothing distinguishes them — and it is what the visible sentence already says.)
+
+**3. An `aria-label` overrides `title`, and that cost the disabled Remove button
+its reason.** With one table left the button is disabled and its `title` reads
+"A layout needs at least one table" — which WAS its accessible name before §4.
+Adding `aria-label={"Remove table " + t.id}` took the name and left the reason in
+`title`, where announcement is inconsistent across AT. It bought nothing in
+exchange: the button is disabled only when ONE table exists, so there is exactly
+one of them on screen and nothing to disambiguate. The disabled branch carries
+the reason in the label now.
+
+**The rule: adding a name must never cost a name that was already saying more.**
+`title` is not a safe place to leave information once anything else names the
+element.
+
+Two new guards (the nameless-booking fallback across all four banners; the
+structural pin), both proven against known-bad input. **641 tests.**
+
+
+---
+
+## v17.15.7 — the floor plan says its status out loud
+
+**Date:** 2026-08-29 · **Branch:** `fix/v17.15.7-plan-status-mark` ·
+**Files:** `src/components/PlanView.jsx`, `tests/a11y.test.js`, `src/App.jsx`
+(version), CLAUDE.md, DESIGN.md, GLOSSARY.md, ROADMAP.md ·
+**Behavioural change:** yes — a new mark on every occupied floor-plan table and
+on the three legend chips · **646 tests** (+5).
+
+### What was wrong
+
+`PlanView` encoded a booking's status as **table fill colour and nothing else**.
+That is WCAG 1.4.1, and it is the same defect v17.11.0 fixed on the timeline
+block by adding `StatusIcon` to its flag rail — left standing here four versions
+longer, on the view where it costs more: a timeline block at least carries the
+guest's name, a floor-plan table carries a table id.
+
+The day-queue popover badge was already right (v17.15.6 swapped it to `SBadge`).
+The visible symptom Patryk reported was the **legend**, which carried an explicit
+v17.15.6 comment arguing *against* a mark: "the plan draws no icons — a mark here
+would promise the room shows something it does not." That argument was sound **on
+its own terms**, which is why the fix was not to overrule it but to change the
+fact it rested on. Marking the legend alone would have been the half-measure the
+comment correctly predicted.
+
+### Three decisions, each load-bearing
+
+**1. `!blocked && occ`, not `occ`.** `isBlocked` wins in `fillFor`, and a blocked
+table **can still hold a booking**. Keyed on the occupant alone the mark painted
+on top of the red stripe pattern, contradicting its own fill — and `blocked` is
+not a booking status. `blocked` is hoisted so the mark, the fill and the existing
+`ariaLabel` read ONE value rather than calling `isBlocked` three times and
+risking disagreement. Verified live: a booked table blocked across its own
+minutes draws stripes, zero marks, and speaks "Table 1B, blocked".
+
+**2. Centre, never a corner.** `TableGlyph`'s inner `<g>` counter-rotates so
+children stay upright — but a child is therefore drawn **translated and not
+rotated**, so a corner offset lands on a different edge of the shape at every
+table rotation. The centre column is the one place rotation cannot move it,
+which is why the id pill has always sat there. Verified on table 7 at
+`rotate(330)`: mark upright, centred, inside the shape.
+
+**3. `color` on the wrapping `<g>`, not on the icon.** `Svg` (`Icons.jsx`)
+destructures `size` / `stroke` / `children` and **drops every other prop**, so no
+`style`, `x`, `y` or `pointerEvents` reaches the element — which is what makes
+the wrapper structural rather than decoration. Without the `color` there,
+`currentColor` resolves to the inherited `S.text` and paints near-black ink on a
+saturated fill in light mode: silent, and it looks deliberate. Measured live as
+`rgb(255,255,255)`.
+
+**No transition, and that is the answer rather than an omission.** The mark
+mounts and unmounts with the occupant, and CSS cannot fade an element that is not
+there — easing it in while it snaps out is precisely the one-way transition
+`DESIGN.md` bans. The fill still fades over `M.status`, so for one `M.status` the
+fill is mid-way while the mark is already the new one. The timeline block does
+exactly the same thing.
+
+### The test that would have caught it
+
+Nothing in `tests/` so much as mentioned `StatusIcon`, which is why both halves
+went unseen. The new guard is a **registry with a coverage sweep**, and its
+discriminator is structural rather than a guessed spelling: `BLOCK_BG[expr]` is a
+status being *painted*, `BLOCK_BG.pending` is the colour *borrowed* for something
+that is not a status (App's waitlist count badge, `WaitlistPanel`'s title,
+`WalkinForm`'s "Add to waitlist"). The sweep found exactly six painting files and
+correctly excluded all three borrowers.
+
+It records a **count per file**, not one mark per site — two real sites index
+`BLOCK_BG` for an *animation* rather than an indicator (`ListView`'s
+`.mgt-wipe-ltr` status wash, `BookingFormModal`'s save flash), and a rule firing
+on those gets muted within a day. The count is what stops a file passing on
+**half** a fix, which is the exact failure mode this version exists to avoid.
+Proven against known-bad input: run against pre-change `PlanView.jsx` it fails
+twice (`expected +0 to be 2`).
+
+### Verified live (DEV, `npm run dev`)
+
+All three marked statuses on real tables (confirmed ✓, pending ⌛, seated chair);
+free, resetting and blocked unmarked; the blocked-with-occupant case above;
+rotation at 330°; the pending → confirmed swap reading as one change with the
+fill; left-click still opening the day-queue popover with **no** `[role="button"]`
+teleport (the new `<g>` carries no role); `aria-hidden`, `pointer-events: none`
+and mark-inside-shape all measured; console clean.
+
+### One thing measured and recorded rather than fixed
+
+**Non-text contrast (WCAG 1.4.11) of the white mark**, composited over the plan
+card: **pending 1.83:1 light / 2.20:1 dark, confirmed 2.92:1 light / 3.58:1 dark,
+seated 4.59:1 / 4.58:1.** Three of six are under the 3:1 a graphical object
+wants. This is **not new** — it is the app's existing status vocabulary, already
+shipping identically on the timeline block's rail and in `SBadge` — and the
+recorded `--block-pending` / `--block-confirmed` text exemptions (floors 1.75 and
+2.8) are consistent with these numbers. Changing it means a halo or an outline on
+the mark, i.e. a new treatment, which belongs in its own version. Left as
+Patryk's decision, on ROADMAP.
+
+Also corrected while measuring: **`--block-seated` is NOT theme-invariant**
+(`rgba(24,111,56,.85)` light vs `rgba(32,152,76,.85)` dark) — `confirmed` and
+`pending` are, and all three inks are `#ffffff` in both themes. The planning note
+that "BLOCK_BG are theme-invariant solids" was true of two of the three.
+
+### `/code-review` fixes
+
+**1. The mark had no fallback; the fill it must agree with does.** `sanitize`
+writes `status: b.status || "confirmed"`, so **any truthy string survives a read**,
+and `database.rules.json` validates no booking field shapes — an unrecognised
+status is reachable, not hypothetical. `fillFor` answers it with
+`BLOCK_BG[b.status] || BLOCK_BG.confirmed`; `StatusIcon` answers it with `null`.
+So a booking with `status: "foo"` painted a **confirmed-amber table carrying no
+mark whatsoever** — precisely the colour-only status this version exists to
+remove, reintroduced in the one case nobody would think to look at, and
+indistinguishable on screen from an ordinary confirmed booking.
+
+`markStatus` mirrors `fillFor`'s fallback. The fill already asserts "confirmed"
+there, so a mark agreeing with it is strictly better than a mark being absent —
+the invariant is that the two channels never disagree, not that either is right
+about a malformed status.
+
+Both fallbacks are pinned **together** in `tests/a11y.test.js`, because it is
+their agreement that matters rather than either alone: if `fillFor` ever stops
+falling back, the mark's fallback becomes the thing that disagrees. Proven
+against known-bad input — reverting `markStatus` to `occ.status` fails the new
+assertion.
+
+**2. `jsxFilesUnder` was defined twice, byte for byte, in one file.** The new
+sweep copied the walker the Toggle sweep already had, in a different `describe`
+scope — two file-walkers that must agree about which files a coverage sweep can
+see, with nothing keeping them in step. Narrow one later and the other keeps
+reporting OK over a different set of files, which lint, `check:style` and the
+contrast registry are all structurally unable to notice. This is the
+`clampStep` / `OutlineChip` defect in the gate's own back yard. One module-scope
+`srcFilesMatching(re)`, two call sites.
+
+**647 tests.**
+
+---
+
+## v17.16.0 — two taps, one booking
+
+**Date:** 2026-08-31 · **Branch:** `feat/v17.16.0-save-guard-error-boundary` ·
+**Files:** `src/lib/submitGuard.js` (new), `src/App.jsx`,
+`src/hooks/useWalkin.js`, `tests/submit-guard.test.js` (new), CLAUDE.md ·
+**Behavioural change:** yes — a second tap on Save no longer creates a second
+booking · **684 tests** (+37).
+
+The first version to act on the v17.15.7 crash test (`MGT BOOKINGS — CRASH TEST
+- ADVERSARIAL QA.md`, three sessions, 22 confirmed findings). It carries the two
+P1 client defects; the `database.rules.json` findings ship separately, because
+that file is applied by hand in the PROD console and a rules change buried
+inside a feature release is a change nobody reviews as a rules change.
+
+### 1 · CT-2C-01 — tapping Save twice creates two bookings
+
+**The finding.** Two clicks 200 ms apart produced two confirmed reservations on
+two different tables. Three synchronous clicks produced three. The walk-in form
+has the identical shape. This was the most reachable defect in the whole crash
+test: no unusual state, no stale device, no second client — a fingertip.
+
+**Why nothing caught it.** Every safeguard behaved correctly. Each click is a
+fresh `doSave` minting a fresh `genId()`, so the per-`$id` CAS, the write
+guards, the capacity check and the optimiser all saw two genuinely distinct,
+genuinely valid creates and had no reason to think they were related. A search
+for `isSaving` / `savingRef` / `inFlight` / `submitting` across `src/` returned
+nothing: there was no re-entry guard anywhere in the app, and the Save button's
+`disabled` tracks form validity, never an in-flight save.
+
+**Why `disabled` is not the fix**, which is the part worth carrying forward.
+Both save paths dispatch and then call `setShowForm(false)` — but the modal does
+not leave immediately. `Overlay` self-animates its close through
+`ModalPresence`, holding the subtree mounted for `EXIT_MS` (`M.dur.move` 240 +
+`EXIT_PAD` 20 = **260 ms**). For that quarter-second the form is fading out and
+its Save button is still in the DOM, still hit-testable, still wired to the same
+handler. A 200 ms second tap lands on a live button inside a modal that is
+already closing. **Any fix that depends on React having re-rendered is racing
+the exit animation.** This one is a synchronous ref check at the top of the
+dispatch path, so it cannot be raced.
+
+**`src/lib/submitGuard.js`** — `READY` / `DISPATCHED` / `mayDispatch(state)`.
+A pure module rather than a ref inline in each hook, for the reason this repo
+keeps rediscovering: two surfaces with the same rule written out twice is the
+condition that produces the next disagreement. Three sequencing rules, and each
+is a real failure if broken:
+
+1. **CHECK first**, at the top of the handler, before any validation. Placed
+   after it, a second tap still passes whenever the first left the draft
+   valid — which on a double-tap it always does, so the bug would be intact.
+2. **ARM only after a dispatch actually happened**, on the line that closes the
+   form. Armed on a validation return, the user cannot correct a field and press
+   Save again. Armed *before* the write, a throw inside it leaves the form open
+   and permanently unable to save.
+3. **RESET on OPEN**, not on close and not on a timer. `openForm` (App.jsx) and
+   `openWalkin` (useWalkin.js) are each their surface's single door — and not
+   by coincidence worth leaning on quietly: both are already the one place that
+   snapshots the unsaved-changes baseline, and CLAUDE.md records that every open
+   path must go through them for exactly that reason. Verified rather than
+   assumed: all four `setShowForm(true)` sites call `openForm` first.
+
+**The BUTTON's handler is guarded too, not only `doSave`** (added by this
+version's `/code-review`). `save()` / `saveWalkin()` are what the Save and Seat
+buttons call, and both can raise the kitchen-busy confirm and **return before
+the guarded function is reached**. On a double-tap the first tap's booking is
+already in `bookings`, which is exactly what pushes `getKitchenLoad` over
+`KITCHEN_TABLE_LIMIT` — so with the default limit of 3 and one existing booking
+in the window, the second tap raised "Kitchen busy" for a booking that had
+already been written, over a form that had already closed. `doSave` then refused
+the duplicate correctly, so nothing was lost; but the stray dialog was produced
+by the very tap this fix exists to make inert. The kitchen round-trip is
+unaffected, because its Confirm button re-enters `doSave()` directly with the
+guard still `READY`.
+
+**No time window, deliberately.** A window would have to outlast the exit
+animation and undercut a plausible second booking, and picking that number means
+the guard silently stops guarding on a device having a slow frame. "Until this
+surface is opened again" is the exact statement of the bug and needs no clock.
+
+**`mayDispatch` is `!== DISPATCHED`, not `=== READY`**, so it **fails open**: an
+uninitialised ref or a state a later version invents answers "go ahead". That
+costs at worst the duplicate this guard prevents. The inverse spelling fails
+closed, and a Save button that silently does nothing is the worse of the two —
+invisible, and unrecoverable without a reload, where a duplicate is at least on
+screen for somebody to delete.
+
+**`tests/submit-guard.test.js` (18).** The predicate, then the invariant over a
+model that includes the exit window (a model without it cannot reproduce the bug
+at all) across 500 seeded random sequences, then a source sweep of the four call
+sites — because `mayDispatch` correct-and-unwired is exactly the shape of the
+defect it was written for. Proven to fail without the fix, in all three ways it
+could be removed: neutering the predicate fails 5, deleting the arm fails 2,
+moving the check below validation fails 1.
+
+### 2 · CT-2A-02 — no error boundary anywhere
+
+**The finding.** `componentDidCatch` / `getDerivedStateFromError` /
+`ErrorBoundary` / `onerror` matched **nothing** across `src/`, and `main.jsx`
+rendered `<App/>` bare. React's contract for an uncaught render error is to
+unmount the whole tree, so any throw in render or in one of ~30 effects left
+`#root` empty: a white screen on a tablet, mid-service, with no route back but
+a reload nobody is prompted to do.
+
+**The boot watchdog does not cover it**, and this is worth stating because it
+looks like it should. `index.html`'s watchdog fires once, at T+10s, gated on
+`root.children.length === 0` — it answers "did the app never mount", which is a
+different question from "did it mount and then throw". By the time a boundary is
+needed it has long since decided the boot was fine and stood down.
+
+**Why a P1 on its own.** It fixes no bug; it changes what every *other* bug
+costs. The crash test found seven reachable throw sites without looking hard —
+`dirtyDates → verifyClean → toMins` (an effect that runs on every snapshot),
+`daySummary → toMins`, `findClashes → toMins`, `describeBooking(null)`,
+`bookEnd({})`, `comboCap(null)`, `clashRowId(null)` — several reachable from a
+single malformed booking, which CT-2A-03 shows the server will happily store.
+
+**Two recoveries, because they fail differently.** *Try again* clears `hasError`
+and re-renders — the cheap first move for a transient cause, since it restarts
+without re-fetching the app; a deterministic one throws straight back, costing
+nothing and telling the user something true. *Reload app* re-fetches from the
+server. The copy says outright that neither fixes a malformed booking sitting in
+the database, rather than sending someone round the same loop a third time.
+
+**Neither resumes the session, and the first version of the copy said it did.**
+Caught by this version's own `/code-review` rather than by review of the diff:
+React unmounts the errored subtree, so clearing `hasError` is a FRESH MOUNT and
+every `useState` in `BookingApp` returns to its initializer. Measured on the dev
+server with a one-shot throw — the app sat on 2026-09-07 in List view before the
+crash and came back on today's date in Timeline after Try again. Only the
+sign-in survives, and that is Firebase auth persistence, not anything the
+boundary does. The copy had promised "Try again first — it keeps you on the same
+day", which would have returned a member of staff to today mid-service believing
+they were still on Saturday's sheet: a false statement on the one surface whose
+entire job is to say something true about what just happened. The claim was
+repeated in the file header, in CLAUDE.md and in this entry, all corrected
+together, and the test now pins the ABSENCE of the promise rather than the
+wording — the wording is free to change and the promise is not.
+
+**Focus, not `role="alert"`.** A live region added to the DOM already holding its
+message announces nothing (CLAUDE.md's own live-region rule), and this surface is
+created holding its message by definition. The panel is `tabIndex={-1}` and
+focuses itself through a callback ref.
+
+**Thin dependencies, deliberately.** Token scales plus `mkBtn`/`mkSolidBtn`,
+which return plain style *objects* and cannot throw — and no component. A surface
+that renders only once the component tree has failed should not be built out of
+that tree. It is also not an `Overlay`: there is no app behind it to dim, so no
+scrim and no `role="dialog"`.
+
+**A defect the test found, not the review.** `getDerivedStateFromError` first
+read `(error && error.message)` — truthiness — and `new Error()` has a message of
+`""`, which is falsy, so it fell through to the value and rendered the bare word
+`"Error"`: exactly the noise that branch exists to prevent. It tests
+`typeof error.message === "string"` now. A message-less throw is not a case
+anyone pictures while reading the line.
+
+**`tests/error-boundary.test.js` (19).** This repo has no jsdom and does not want
+one, and did not need one: an error boundary's whole decision is a static method
+plus a `render()` that branches on one state field, so the tests construct the
+class directly and read the returned element tree (React elements are plain
+objects), mounting nothing. Proven to fail without the fix in three ways:
+rendering the boundary *beside* `<App/>` rather than around it fails 1, removing
+`getDerivedStateFromError` fails 6, dropping the Reload button fails 1. CLAUDE.md's
+"no UI/component tests" line was corrected in the same commit — with the bar for
+repeating the trick, so it does not read as a general licence.
+
+### 3 · Two CLAUDE.md claims the crash test found false
+
+Both are in the auto-loaded architecture record, which is the file everything
+else in this repo is checked against — so a confident wrong sentence here has a
+long half-life and gets quoted rather than verified.
+
+**CT-2A-09 — "All hooks are converted as of v16.0.0 — never reintroduce the
+updater-side write."** False of the most important write path in the app.
+`saveBookings` / `saveBlocks` (`usePersistence.js`) call `persist(prev,computed)`
+— which performs the `update()` — from inside their `setBookings` updater, and
+always have. Verified directly rather than taken from the crash-test register.
+
+The row is corrected rather than deleted, because *why the predicted corruption
+has not happened* is the useful part: v15.5.0's per-child diff `update()` is
+idempotent, where the whole-node concat `set()` behind the v16.0.0 incident is
+not, and StrictMode's double-dispatch is separately caught by `lastPatchSigRef`'s
+2 s content+base signature. Two defences — either of which could be edited away
+by somebody who read the old row and believed the shape was already gone. It is
+**mitigated, not structurally removed**, and now says so.
+
+**The `dbError` listener count — "All 16 listeners pass it."** Stale since
+v17.5.1. The real figure is **18** (17 in `hooks/` + `attachRev` in
+`revGuard.js`), and all 18 do pass it.
+
+Worth recording because of *how* the recount went wrong twice. The crash-test
+hand-off gave the figure as 20, which is what `grep -c "onValue("` reports — and
+two of those matches are inside `dbError.js`'s own header, where the comment
+explains the rule by naming the call. The repo already has a Gotchas row for
+exactly this ("prose that names the thing a regex hunts for is indistinguishable
+from the thing", `tests/csp.test.js`, v17.15.1), and it was walked into again
+while correcting a different count. A 12-line grep window then falsely flagged
+four listeners as missing the callback; widening it cleared all four.
+
+### 4 · The other twenty findings, on ROADMAP
+
+Every confirmed-but-unfixed finding now has an entry, grouped under
+**Crash test v17.15.7 — confirmed and unfixed**, keyed by ID so a commit message
+and a ROADMAP line refer to the same thing. They were deliberately not written
+during the three attack sessions: twenty entries added before a plan existed
+would have been noise, and they would have muddied a clean tooling PR.
+
+The grouping is by **deploy risk**, not by severity, because that is what decides
+what ships together: the four `database.rules.json` findings (CT-2A-01, -03's
+server half, -04, -06) are marked as Version B and carry the note that each fix
+updates its `PROBE:` test deliberately rather than by weakening an assertion. The
+client findings follow in rough value order, then the nine P3s.
+
+Three entries carry an **open question for Patryk** rather than a fix, because
+each is a decision rather than a change: CT-2A-01's tombstone-versus-
+`baseUpdatedAt === 0`; CT-2B-04's one-line normalisation, which retroactively
+re-keys customers already split in PROD; and CT-2B-05's "what should Delete
+customer & all data reach after a mis-join".
+
+Also folded in: the rules-suite-in-CI entry now warns that `test:rules` prepends
+an Apple-Silicon Homebrew JDK path which does not exist on `ubuntu-latest`, so
+the explicit pin silently becomes a no-op there (rig `/code-review`, CR-2). And
+the standing recommendation the crash test says outlives every fix — **extract
+the pure core of `usePersistence.js`** — is recorded as its own item: 737 lines
+that decide whether a booking reaches the server have never been executed by a
+test, which is the single reason the report's confidence rating is 55% and not
+higher.
+
+### Verification
+
+```
+npm run build       336.40 kB / 91.39 kB gz   (+2.32 kB raw, +0.79 kB gz)
+npm test            684 passed (22 files)
+npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
+npm run check:style OK
+```
+
+---
+
+## v17.16.1 — a deleted booking stays deleted
+
+**Date:** 2026-08-31 · **Branch:** `fix/v17.16.1-rules-resurrection-shapes` ·
+**Files:** `database.rules.json`, `tests/rules/database-rules.test.js`,
+`src/hooks/usePersistence.js`, `src/lib/revGuard.js`, `src/App.jsx` (version),
+CLAUDE.md, `database.rules.README.md`, ROADMAP.md ·
+**Behavioural change:** server-side — two classes of write the rules used to
+accept are now refused · **101 rules tests** (+23); the app suite is unchanged at
+**684**.
+
+The second half of the v17.15.7 crash-test response, split from v17.16.0 for one
+reason: **`database.rules.json` is applied by hand in the production console, and
+a rules change buried inside a feature release is a change nobody reviews as a
+rules change.** Its own branch, its own PR, its own deploy note.
+
+### 1 · CT-2A-01 — a deleted booking could be resurrected
+
+The `$bid` validate read
+`!newData.exists() || (hasChild('updatedAt') && isNumber(…) && (!data.exists() || <CAS>))`,
+and the `!data.exists()` disjunct was the hole: once the booking was gone the CAS
+branch was never reached, so **any** write carrying a numeric `updatedAt`
+recreated it — including an offline device's queued edit naming a
+`baseUpdatedAt` that had been deleted.
+
+It came back **holding its old table**. If that table had since been reassigned
+the day was genuinely double-booked; in the commoner case a party that cancelled
+simply reappeared as live, with nothing on screen saying so. That is the one
+place the crash test found this app asserting something FALSE rather than merely
+omitting something.
+
+**The fix is the create branch requiring `baseUpdatedAt === 0`** — exactly what
+`stampForWrite` writes when it has no `old`, i.e. a genuine create. A stale edit
+carries the deleted version's stamp and satisfies neither branch. Chosen over a
+`deletedAt` tombstone, which would have changed the data shape, the delete path,
+every read that counts bookings, and would have needed a pruning story on a free
+plan with no backups.
+
+### 2 · CT-2A-03's server half — fields have shapes
+
+`name` · `date` · `time` · `size` · `duration` · `status` · `tables` each get a
+`.validate`. Every one is **"if PRESENT, must be the right shape"**, never "must
+be present": `sanitize` fills every gap on read, and a required field the app
+later stopped writing would be a rejected write in production — which is not a
+failing test, it is staff unable to save a booking.
+
+**Every rule checks TYPE, never FORMAT** — one decision applied consistently,
+and the version's own `/code-review` is what made it consistent:
+
+- **`status` is a string, not one of five.** An unrecognised status is reachable
+  in stored data (PlanView's own v17.15.7 note says so), and pinning the set
+  would refuse every write touching such a booking.
+- **`date` and `time` are strings, not patterns.** They were patterns first
+  (`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`, `^[0-9]{1,2}:[0-9]{2}$`) and the review
+  caught the hazard. `sanitize` guarantees these are strings and never that they
+  are well-formed, so a legacy `"31/08/2026"` survives a read and is written
+  back on the next save — and `persist` sends ONE multi-path `update()` that
+  RTDB applies **atomically**, so a single such booking would reject a whole
+  optimiser reshuffle. The retry queue would replay it, fail again, and after
+  `MAX_RETRIES` leave staff a red banner and no way to save a day that looks
+  perfectly normal on screen. Type-only still fixes what CT-2A-03 reported:
+  `toMins(t)` is `t.split(":")`, which THROWS on a number and merely returns NaN
+  on a bad string. **The inconsistency is the lesson** — the `status` reasoning
+  was written down two rules above and then not applied to its own neighbours.
+- **Table ids are not checked against the layout**, which is editable in
+  Settings → Layout — the rules would duplicate it and go stale.
+
+Checking formats is a separate decision needing evidence of what PROD holds, not
+a guess committed to a file deployed by hand with no staging. On ROADMAP.
+
+### The test that makes this safe to deploy
+
+The existing PROBE assertions were **inverted, never weakened** — that is what
+the `PROBE:` convention exists to force, and eleven of them fail against the old
+rules, which is the proof the change does something.
+
+But a rules file goes to production BY HAND, so "my fixture passes" is not the
+question. The suite now imports the app's own **`sanitize`** and pushes thirteen
+real booking shapes through the real rules: an ordinary booking, a walk-in, an
+anonymized booking, pending, no tables, no date, no time, a completed visit with
+`stayedMin`, a cancelled no-show, a mega-combo across three tables, one with a
+deposit and notes, a recurring occurrence, and a joined phone-less guest — plus
+an edit through the CAS branch. If a rule is ever too strict for something the
+app can legitimately produce, it fails there rather than on the tablet.
+
+### 3 · CT-2A-06 and CT-2A-04 — corrected, not fixed, and why
+
+`revGuard.js`'s header said a wipe was covered because "the rev child's rule
+still enforces +1". True of that function, which always sends both keys; **false
+of the rules**, where it read as a guarantee — a client that calls `remove()` and
+omits the rev is not constrained by the rev's rule at all. CLAUDE.md carried the
+same claim. Both corrected.
+
+Neither CT-2A-06 nor CT-2A-04 is fixable by adding a rule, and that is the
+finding worth keeping: **RTDB write permission cascades from the root's
+`.write: auth != null` and cannot be revoked lower down** — measured, a child
+`".write": false` on `bookings` does not deny the delete. Closing them means
+moving `.write` off the root and granting it per path, which was measured too and
+carries two hazards: deleting the **last** booking would be refused (the natural
+predicate is false when the node empties), and **every ungranted path becomes
+unwritable** — `presence` failed immediately, the one node documented as
+deliberately having no rules of its own. Deferred with all of that recorded.
+
+### One code path changed with the rules
+
+`usePersistence`'s lazy array→keyed migration (v15.5.0) wrote each child with
+`updatedAt` and no `baseUpdatedAt`, so the new create branch would have refused
+it. It writes `baseUpdatedAt: 0` now. Unreachable on PROD — the node has been
+keyed since v15.5.0 and the branch is gated on `Array.isArray` — but a recovery
+path left knowingly broken is how a service is lost years later, by someone who
+reads the code and believes it works.
+
+### Deployment — rules can go first, or at any time
+
+Unlike v16.0.0 (app first, rules second) and v15.5.0 (a hard cutover), this needs
+no coordination: every client from v16.0.0 onward already writes the shapes and
+stamps these rules require, which the thirteen `sanitize` shapes assert rather
+than assume. Publish `database.rules.json` in the console; nothing else. Rollback
+is re-publishing the previous rules from git. See `database.rules.README.md`.
+
+### Verification
+
+```
+npm run build       336.42 kB / 91.40 kB gz   (version line only)
+npm test            684 passed (22 files)
+npm run test:rules  101 passed (+23)
+npm run lint        0 errors, 71 warnings     (the pre-existing baseline)
+npm run check:style OK
+```
+
+Eleven rules tests fail against the pre-v17.16.1 rules file — the change is
+proven, not asserted.
+
+---
+
+## v17.16.2 — one time axis
+
+**Date:** 2026-08-31 · **Branch:** `fix/v17.16.2-time-axis-write-path` ·
+**Files:** `src/lib/day.js` (new), `tests/day.test.js` (new), `src/App.jsx`
+(version) · **Behavioural change:** none yet — this commit adds the primitives
+the following commits sweep onto.
+
+The third instalment of the v17.15.7 crash-test response, and the first that is
+not a fix in itself. Three of the eighteen open findings are one defect wearing
+three faces: **the app has no single answer to "what day is it", and none at all
+to "how do now and a booking share an axis".**
+
+`nowMins` is minutes since LOCAL midnight of today (`useNowMins`, via
+`getHours()*60+getMinutes()`). `toMins(b.time)` is minutes since midnight of
+**`b.date`**. They are the same number only while `b.date === today`, and every
+`nowMins - toMins(b.time)` in the codebase — there are many — silently assumed
+they always were.
+
+### 1 · `src/lib/day.js`
+
+Three functions, and the file imports **nothing**. That is structural rather than
+tidy: `constants.js` needs `todayStr()` for `EMPTY_FORM`, and `booking-logic.js`
+imports `constants.js`, so anything imported here could close that loop. A helper
+needing a live binding belongs in `booking-logic.js` instead.
+
+- **`todayStr(now?)`** — today in the LOCAL timezone, replacing 44 copies of
+  `new Date().toISOString().slice(0,10)`, which answers the question in **UTC**.
+- **`dayDiff(from, to)`** — whole days between two date-only strings.
+- **`nowOn(dateStr, today, nowMins)`** — now, in minutes since `dateStr`'s
+  midnight. The one axis on which it may be compared with `toMins(b.time)`.
+
+`nowOn` is not invented here. **Exactly one function in the repo already got this
+right** — `pastCloseMins`, module-private inside `usePersistence.js`, which
+projects with `dayDiff*1440 + nowMins`. It was private because the file it lives
+in has never been executed by a test, which is the same sentence as §7 of the
+crash-test hand-off. This makes the expression public; the later commits make the
+file testable.
+
+### 2 · Why the UTC/local split is seasonal, and why that matters
+
+Me Gustas Tú is in the Canaries: **WEST (UTC+1) from late March to late October,
+WET (UTC+0) the rest of the year.** So the app disagreed with the wall clock for
+the first hour of every local day for eight months a year, and agreed perfectly
+for the other four — the shape of a defect that survives years of use unreported.
+Measured on the dev machine at `GMT+0100`: at 23:05 local it agrees, and 55
+minutes later it would not have.
+
+### 3 · The distinction the sweep must not blur
+
+The app's other UTC date handling is **correct and stays**. A date-only string
+parses as UTC midnight, so `new Date(dateStr).getUTCDay()` is the real weekday
+(ten sites), and `Date.parse` on two such strings is an exact multiple of
+86400000 — which is precisely what makes `dayDiff` immune to DST, where local
+midnights would make one spring day 23 hours and round to zero. Pinned in both
+directions against the 2026 EU transitions. Only deriving today from the current
+**instant** was ever wrong.
+
+### 4 · Verification
+
+`tests/day.test.js`, **14 tests**, TZ-deterministic: they set `process.env.TZ`
+(Node honours it at runtime) rather than passing or failing by machine, because
+this whole class of defect exists only in certain zones in certain months, and a
+TZ-agnostic test would be testing nothing.
+
+Both halves proven against a sabotaged build rather than asserted: reverting
+`todayStr` to `toISOString().slice(0,10)` fails the two divergence cases, and
+dropping `nowOn`'s day term fails three including the CT-2B-01 reconstruction.
+
+### 5 · CT-2B-03 — the sweep (commit 2/4)
+
+**Files:** 17 (`src/App.jsx` ×19 sites, `useWalkin` ×4, `useReminders` ×3,
+`booking-logic` / `useWaitlist` / `usePersistence` / `useKeyboardShortcuts` /
+`useAutoOptimizer` ×2 each, and one apiece in `constants`, `reminders`,
+`useOperatingHours`, `TimelineView`, `PlanView`, `WalkinForm`, `WeekView`,
+`ReminderEditor`, `LayoutSettings`) · **Behavioural change:** "today" is now the
+LOCAL date everywhere it is derived from the current instant.
+
+`constants.js` gains its **first ever import** to do it. That is safe only
+because `day.js` imports nothing — the property was chosen for exactly this, and
+must not be given away later.
+
+Two sites the sweep's own regex could not see, both found by widening it
+afterwards rather than by trusting the count:
+
+- **`src/lib/reminders.js`** spelled it `var now=new Date();var todayStr=now.toISOString()…`,
+  and then read `now.getHours()` two lines below. A UTC date and a local clock
+  compared inside one function — CT-2B-03 in miniature, in the file the register
+  never named. A once-reminder for the true today skipped the past-times check
+  entirely for that hour.
+- **The 45th match was `day.js`'s own comment**, which quotes the expression it
+  replaced. The repo's recorded "prose that names the thing a regex hunts for is
+  indistinguishable from the thing" trap (`tests/csp.test.js`, v17.15.1), walked
+  into again by the commit that removes the thing.
+
+`useOperatingHours`'s `const TODAY = () => …` was left a bare alias by the sweep
+and is gone; its three call sites read `todayStr()` directly.
+
+### 6 · The sweep created three runtime crashes, and lint caught two
+
+`PlanView`, `ReminderEditor` and `App.jsx` each declared `const todayStr = <the
+old expression>`. Substituting the call produced **`const todayStr = todayStr();`**
+— a TDZ self-reference that throws `Cannot access 'todayStr' before
+initialization` the moment the component renders. `npm run build` passed, `npm
+test` passed (698), and the app was dead in two of its three views.
+
+`no-unused-vars` flagged the first two, because the shadowed import was then
+unused in those files. **It could not flag the third**: `App.jsx` uses the import
+at eighteen other sites, so the import was legitimately used and the self-
+reference was invisible to every gate the repo has. It was found by grepping for
+the shape (`(const|let|var) todayStr =`) after the first two appeared — the
+lesson being that two instances of a mechanical error mean you look for the
+third, rather than fixing the two the tool named.
+
+This is the documented "a `const` used above its declaration blanks the whole
+app, and lint and build both pass" gotcha, reached from a new direction: not by
+moving a declaration, but by a rename colliding with one.
+
+Verified live rather than argued: `npm run dev` on DEV Firebase, all three
+affected surfaces rendered (Timeline 505 bookings, Plan's floor grid, the New
+reminder editor), console clean, and the reminder date field's `min` reading
+`2026-08-31` from the new helper. Build 335.17 kB / 91.36 kB gz (−1.25 kB raw:
+44 long expressions became one call). Lint back at the exact standing baseline,
+**71 problems, 0 errors**.
+
+### 7 · CT-2B-01 + CT-2B-02 — the shared axis (commit 3/4)
+
+**Files:** `src/lib/booking-logic.js`, `src/App.jsx`, `src/hooks/usePersistence.js`,
+`TimelineView`, `ListView`, `LateBanner`, `WalkinForm`,
+`tests/booking-logic.test.js` · **Behavioural change:** yes, after midnight and
+on any past date · **716 tests** (+18).
+
+Seven functions took a bare `nowMins` and compared it against `toMins(b.time)`.
+Four now take `today` as well (`liveBarDur`, `occupancyEnd`, `applySeatedShift`,
+`lateMins` — 14 call sites); three already had it and were using it as a FILTER
+rather than as an axis (`lateState`, `freeingSoon`, `syncLiveDurations`).
+
+`pastCloseMins` moved out of `usePersistence` into `booking-logic.js`, which is
+the point of the whole version: the one function that was already right stops
+being private to the one file no test can reach.
+
+**`lateState` deliberately keeps its `b.date !== today` filter.** The asymmetry
+with `freeingSoon`, which loses its, is principled: `freeingSoon` is
+SELF-BOUNDING (`0 < inMin <= win`), so a stale seated booking falls out on its
+own, while "late" is unbounded backwards and a booking from a fortnight ago would
+read "20160 min late" for ever. Widening it correctly means deciding how long
+lateness stays interesting, which is a product decision and not a bug fix.
+
+### 8 · The bound had to be a CAP, and a test is what said so
+
+The first version guarded `liveBarDur` and `syncLiveDurations` with
+`pastCloseMins(...) === null` — live only until that day's close. It made an
+existing test **time-dependent**: `a seated party past its duration is a change,
+not a no-op` passes before 22:00 and fails after it, and the suite was being run
+at 23:36.
+
+That is the right complaint. Skipping makes the figure jump back to the stored
+duration the instant close passes; **capping** at close matches auto-complete's
+own `closeMins - toMins(b.time)` exactly, so the live number and the frozen one
+meet instead of stepping. `seatedElapsed(b, today, nowM)` is that cap, and it is
+what makes dropping the old `b.date === today` filter safe — without it a booking
+left seated three weeks ago has a true elapsed time of 30240 minutes, which
+`syncLiveDurations` would have written to the database as the party's duration.
+
+### 9 · Three defects the diff did not contain
+
+- **`applySeatedShift` cannot represent a past-midnight start.** A start is
+  stored as `HH:MM` against the booking's own date and `toTime` wraps modulo 24,
+  so shifting a 23:30 booking to 00:15 would write "00:15" onto YESTERDAY — a
+  full day into the past. Fixing the axis alone would have replaced a 24-hour
+  duration with a 24-hour displacement. It refuses instead, keeping the scheduled
+  time, which is imprecise rather than false. The plan's `newDuration` clamp is
+  kept as the second line of defence at the one point this reaches the database.
+- **The auto-extend effect's dedupe key was narrower than its own pass.** The
+  pass now keys on the booking's close; the key still filtered `b.date===today`,
+  so under a 24/25 close a yesterday-only extension produced an EMPTY key that
+  never changed and every tick after the first was suppressed. The repo's own
+  v17.10.2 lesson, one file over.
+- **Three completion paths recorded a 15-minute visit.** `doSave`'s truncation,
+  `doSave`'s `stayedMin` stamp and `updateStatus`'s all computed
+  `now - toMins(b.time)` with no projection — the register's "completing records
+  `stayedMin = 15`". Found by seating a booking in DEV and watching what happened
+  next, not by reading the diff.
+
+`ListView`'s `elapsedMin` turned out to be `liveBarDur`'s seated branch **byte for
+byte**, so it reuses it rather than becoming a fourth copy of the same arithmetic
+(and inherits the cap for free). The file header's note that `liveDur` differs
+still holds — that is the end-time pinning on the next line, not this.
+
+Two parameters named `todayStr` in `booking-logic.js` were renamed to `today`:
+they shadow the newly-imported function of that name. Harmless as written, and
+exactly the shape that produced three crashes one commit earlier.
+
+### 10 · Verification
+
+18 new tests, all reachable only under a past-midnight close (24/25), which
+Settings permits and Me Gustas Tú does not currently use — the hours are set
+directly and restored, on the TURN_BUFFER precedent in the same file. Reverting
+the projections fails **7** of them across all five functions.
+
+Live on DEV: 505 bookings, both views render, six timeline blocks, no `NaN`
+anywhere in the document, console clean, and `lateMins` producing real figures
+(520 / 400 / 280 / 160) through the new prop. 716 tests, 0 lint errors,
+335.61 kB / 91.49 kB gz.
+
+### 11 · The write path under test (commit 4/4)
+
+**Files:** `src/lib/write-path.js` (new), `tests/write-path.test.js` (new),
+`src/hooks/usePersistence.js` (753 → 705 lines) · **Behavioural change:** none
+intended; the bodies moved verbatim and were then parameterised ·
+**747 tests** (+31).
+
+§7 of the crash-test hand-off, and the reason it outlives the fixes: **737 lines
+that decide whether a booking reaches the server had never been executed by a
+test.** Everything the report says about the retry queue, the stale gate, the
+resync and the dedupe window was established by *reading the code* — which is
+also why it rates its own confidence at 55%. Two sessions reached this
+independently, 2A because the retry logic could not be attacked from outside and
+2B because `pastCloseMins` was locked in the same file.
+
+Moved: `contentKey`, `bookingChanged`, `stampForWrite`, `buildPatch`,
+`patchSignature`, `isDuplicatePatch`, `isStaleGap`, `retryDecision`, and the
+`STALE_GAP_MS` / `MAX_RETRIES` / `DEDUPE_WINDOW_MS` constants.
+
+**The monotonic stamp is THREADED, not hidden.** `buildPatch(prev, computed,
+lastStamp, nowMs)` returns `{patch, lastStamp}`, so the ref stays in the hook
+where refs belong and the arithmetic becomes something a test can drive. That
+change is what surfaced a property the old closure made invisible: **every child
+of one patch gets a distinct, ascending stamp**, which cannot come from the wall
+clock (they share a millisecond) and only ever came from the counter.
+
+**What deliberately did NOT move:** the refs, the listeners, the effects, every
+`setState`. Restructuring the write path was explicitly ruled out for this
+version — it already carries three behavioural fixes, and a bisect has to be able
+to tell them apart. Rewriting the write path is also how this repo has lost
+production data twice.
+
+### 12 · What the tests pin, and what a wrong premise cost
+
+31 tests, and the ones worth naming assert what four major versions of comments
+have claimed: the stamp clears BOTH bars (the device counter, for StrictMode;
+the booking's stored value, for clock skew); `baseUpdatedAt` carries the stored
+stamp on an update and **0 on a create**, which is the v16.0.0 CAS that closed
+the 2026-07-05 incident and which v17.16.1's rules now require explicitly; an
+empty diff produces no write; a deletion becomes `{id: null}`; the dedupe window
+admits a genuine change and refuses a byte-identical redispatch; the retry cap
+terminates.
+
+Proven against a sabotaged build, three ways: dropping the device-counter bar
+fails 4, always claiming CAS base 0 — the 2026-07-05 hole exactly — fails 2, and
+an off-by-one retry cap fails 2.
+
+One test was wrong rather than the code, and it is the useful one. "The signature
+is stable across the fresh stamps" first drove two patches with counters of 0 and
+50 against a clock of 1000 — the clock wins both times, so the stamps were
+*equal* and the premise never held. The real StrictMode case is the second invoke
+sharing the millisecond with a counter already advanced PAST the clock. Left in
+the comment, because a test that cannot fail for its stated reason is worse than
+no test.
+
+### 13 · Verification
+
+Live end-to-end on DEV, which is the only thing that proves an extracted write
+path still writes: a new booking created through the form, **505 → 506 bookings
+after a full reload**, no refusal banner, console clean. Local state alone would
+have looked identical before the reload.
+
+`npm run build` 335.96 kB / 91.64 kB gz · `npm test` **747 passed (24 files)** ·
+`npm run lint` 0 errors, 71 warnings (the standing baseline) · `npm run
+check:style` OK.
+
+### 14 · The day the Next-day button did nothing (commit 5/5)
+
+**Files:** `src/lib/day.js`, `src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/WeekView.jsx`, `tests/day.test.js` · **Behavioural change:** date
+navigation works on the spring-forward day · **752 tests** (+5).
+
+**Not from the crash-test register.** Found while widening the CT-2B-03 sweep's
+regex afterwards, because the four broken sites spell the same mistake a
+different way — which is the argument for widening it rather than trusting the
+count of 44.
+
+The two header arrows and the two arrow KEYS hand-rolled
+`new Date(viewDate); d.setDate(d.getDate() + n)`. `new Date(dateStr)` is UTC
+midnight; `setDate`/`getDate` read and write LOCAL components. On the
+spring-forward day the local day is 23 hours, so +1 local day lands BEFORE the
+next UTC midnight and `toISOString().slice(0,10)` reads back the day you started
+on. Measured in `Atlantic/Canary`: **`2026-03-29 → next` returned `2026-03-29`.**
+Forward navigation was dead for that day, once a year.
+
+**The correct implementation already existed and was the hidden one.**
+`WeekView.jsx` had a private `addDays` doing it in UTC throughout; it now lives
+in `day.js` and WeekView imports it. Everything already using `setUTCDate` — the
+recurring-occurrence generator, every WeekView grid step — was checked and is
+unaffected, so no data path was ever wrong. The **public behaviour was a broken
+hand-rolled copy of a correct private helper**, which is the same shape as
+`hourLabel`/`cutoffLabel` in reverse.
+
+Five tests, including the naive expression asserted alongside the fix so the
+difference is visible, and a property test stepping all 365 days of a DST year
+in both directions: a step must always move, and must round-trip. Verified live
+on DEV — Next day took 2026-03-29 → 2026-03-30, and ← took it back.
+
+Worth recording: the first live attempt pressed → and the date did **not** move,
+which looked like the fix failing. Focus was still in the date input, so
+`isTyping` had correctly swallowed the key. The app was right and the test of it
+was wrong — the same shape as the write-path test whose premise never held.
+
+### 15 · Docs
+
+`CLAUDE.md`: `lib/day.js` and `lib/write-path.js` in the file-structure block;
+`booking-logic.js` gains the shared-axis paragraph (`pastCloseMins` moved in,
+`seatedElapsed`, why `lateState` keeps its filter while `freeingSoon` loses its,
+why `applySeatedShift` refuses rather than shifts); `usePersistence.js` records
+753 → 705 and where its core went; the test count 684 → **752** across 24 files.
+
+One new **Gotchas** row, which is the rule the whole version encodes:
+*`nowMins` and `b.time` are only the same axis when `b.date === today`* — with
+the two traps beyond the arithmetic, that dropping a date filter needs a BOUND
+and that some values (a start time) cannot be re-expressed on another day's axis
+at all.
+
+`ROADMAP.md`: CT-2B-01 / CT-2B-02 / CT-2B-03 deleted; the §7 extraction marked
+DONE with the note that **the crash test's 55% confidence rating is now the thing
+to revisit**, since having the write path under test was the condition it set;
+`EMPTY_FORM.date`'s module-load evaluation added as a new P3 (not reachable in a
+saved booking — all three `openForm` sites set `date` — so it is a tidy-up, not a
+bug). Header count four → seven of twenty-two.
+
+`DESIGN.md` and `GLOSSARY.md`: no change. Nothing visual, and no new
+user-visible surface or control to name.
+
+### 16 · `/code-review` — two regressions the axis fix introduced
+
+Both found by reading the diff, neither by a failing test, and **both the same
+shape: a guard that used to hold for an INCIDENTAL reason stopped holding once
+`now` was projected.** That is the risk this kind of change carries, and it is
+why the review mattered more than the 752 passing tests did.
+
+**1 · `applySeatedShift` wrote a negative time (data corruption).** The new guard
+bounded only the upper end (`nm >= 1440`). Seating a booking dated **tomorrow**
+projects `now` NEGATIVE: at 23:00 today, `nowOn(tomorrow, today, 1380)` = −60,
+which cleared `nm === scheduledStart`, cleared `nm >= scheduledEnd` (−60 >= 870
+is false) and produced `newDuration` 930, inside the clamp. `toTime(-60)` is
+**`"-1:00"`** — written to the database as the booking's time, where
+`toMins("-1:00")` is −60 and the block renders off-grid. Confirmed by direct
+call, not argued.
+
+The pre-v17.16.2 code was safe here **by accident**: its `nowM >= scheduledEnd`
+test fired on the UNPROJECTED 1380. So the axis fix removed a protection nothing
+in the file pointed at. The guard is now `nm < 0 || nm >= 1440` — a shift must
+land inside the booking's own day, because that is the only day its `HH:MM` can
+mean.
+
+**2 · `syncLiveDurations` rewrote historical records.** Dropping
+`b.date === today` was correct for the midnight case and wrong for every day
+before it: a booking left `seated` three weeks ago (a device offline at closing
+time) has a capped elapsed of 540 against a stored 90, so **the next unrelated
+save emitted a patch child for it** — `bookingsAfterAction` runs
+`syncLiveDurations` on EVERY save. It also grew the atomic multi-path `update()`,
+where one malformed historical booking can reject an otherwise valid save (the
+documented CT-2A-03 hazard).
+
+**The cap bounded the VALUE; it never authorised the WRITE** — that distinction
+is the fix. `seatedIsLive(b,today,nowM)` = today's booking, or another day's
+whose close has not passed, which is exactly what a 24/25 close means and all
+the midnight fix ever needed. `liveBarDur` shares the test, so the bar drawn and
+the duration stored cannot disagree.
+
+8 tests, both proven against a sabotaged build: restoring the upper-bound-only
+guard fails the future-booking case, dropping the liveness test fails the
+historical-write case. **760 tests**, 0 lint errors, 335.90 kB / 91.63 kB gz.
+
+## v17.16.3 — two findings that were not there
+
+**Date:** 2026-09-01 · **Branch:** `fix/v17.16.3-phone-plus-normalisation` ·
+**Files:** `ROADMAP.md`, `CLAUDE.md`, `src/App.jsx` (version),
+`src/lib/customers.js`, `tests/customers.test.js` · **Behavioural change:** two
+records that were one person now read as one customer (CT-2B-04) — a READ-side
+re-keying, with no write and no migration.
+
+The fourth instalment of the v17.15.7 crash-test response, and the first whose
+opening move is to **delete** work rather than do it. Two findings were taken
+off the register because they were measured and are not defects. Both had been
+written up as verified, and both were verified against something other than the
+app.
+
+### 1 · The three view buttons do NOT share one accessible name
+
+The entry read: `ViewSwitcher.jsx:129` puts a `title` and no `aria-label` on the
+Timeline / List / Plan buttons, and "read out of the LIVE accessibility tree, all
+three report that same string as their name" — so the app's primary navigation
+announces as three identically-named controls describing a secondary gesture, and
+none is sayable by voice control. It carried its own caveat: *the buttons do have
+visible text, so `title` should only be a fallback, and the mechanism was not
+pinned down.*
+
+The caveat was the correct instinct. Chrome, asked through CDP
+`Accessibility.getPartialAXTree`:
+
+```
+#a  name= "Timeline"  from= contents  desc= "Right-click or hold to add to a split view"
+#b  name= "Plan"      from= contents  desc= "Right-click or hold to add to a split view"
+```
+
+The name comes from **contents** and the `title` lands in **description**,
+exactly as the accname spec requires — `title` is a name of last resort and loses
+to both contents and `aria-label`. Measured twice: on the button's `outerHTML`
+copied from the live DOM, then again with the whole of `src/index.css` loaded, in
+case a rule suppressed the text node. Same answer.
+
+What produced the finding is the browser-automation pane, whose tree prints
+`title` in the name position. A three-button control probe settles it without
+reference to this app at all:
+
+```
+<button title="PROBE_TITLE_A">PROBE_TEXT_A</button>   → pane: "PROBE_TITLE_A"
+                                                      → Chrome: "PROBE_TEXT_A"
+```
+
+`find("Timeline")` matching nothing is the same artifact, and it is what the
+original session read as corroboration.
+
+**Had this been "fixed", it would have introduced the defect it was filed
+against.** The natural fix is an `aria-label` per button — which REPLACES a
+working, visible-text-derived name with a paraphrase, i.e. the v17.15.4
+Label-in-Name finding, reintroduced by someone who believed they were fixing one.
+
+The same entry's incidental claim that the `p` key had not switched views is also
+wrong: pressed at top level it goes Timeline → Plan. `useKeyboardShortcuts.js:256`
+binds `p` to the preferred-tables picker **while a modal is open**, which is the
+state it was observed in.
+
+### 2 · CT-2C-02 — focus restoration works; StrictMode was being measured
+
+The entry read: focus restoration never works, on any modal, because "the opener
+sits inside a subtree marked `inert`, an inert element cannot take focus, and the
+call is a silent no-op", verified on "+ New" and Settings, with the fix being to
+restore focus after `inert` is lifted.
+
+**The stated mechanism does not survive a timestamp.** `inert` is lifted when the
+modal stack pops; `Overlay` unmounts one exit animation later, so the restore
+fires 263 ms after the attribute is gone, with no inert ancestor:
+
+```
+inert OFF  HEADER          t=12437.2
+focus()    BUTTON:+ New    t=12700.4   inertAnc=null   took=true
+```
+
+Setting `inert` on the header with the opener focused does not blur it in Chrome
+either — checked in isolation across a microtask, a task and a frame.
+
+With `<React.StrictMode>` removed from `main.jsx`, restoration **works in five of
+six attempts** — "+ New", Settings warm, Settings first-open after a reload,
+Settings on a genuinely cold `React.lazy` chunk that mounted through its Suspense
+fallback (`node_modules/.vite` cleared and the server restarted, so
+`Settings.jsx` was absent from the resource list at open), and a
+"+ New" → Settings sequence.
+
+**The sixth is recorded here because it is the only thing that could re-open
+this.** The first Settings open of that session DID fail — the restore targeted
+`<body>` — and it was not reproducible: four later attempts passed, including the
+deliberately cold one built to reproduce it. So the withdrawal rests on "five of
+six, and the mechanism the entry blamed is disproved", not on a clean sweep.
+Anyone who sees focus land on `<body>` after a modal closes in production should
+start from that unexplained run rather than from this entry's conclusion.
+
+Restoring StrictMode brings the failure straight back, and prints its own cause:
+
+```
+focus DIV:New bookingC   ← mount 1 focuses the dialog
+focus BUTTON:+ New       ← mount 1 CLEANUP restores the opener — the mechanism works
+focus DIV:New bookingC   ← mount 2 re-focuses the dialog
+```
+
+`Overlay` stores `document.activeElement` on the way in. StrictMode's second
+setup re-reads it **after** the first pass has already focused the dialog, so the
+ref ends up holding the dialog rather than the opener; the dialog is detached at
+close, `document.contains(prev)` is false, and no restore is attempted at all —
+focus falls to `<body>`, which is indistinguishable on screen from a restore that
+ran and failed. StrictMode is dev-only, so production never runs that path.
+
+This was **not** confirmed against a production build: `npm run preview` points at
+PROD Firebase and is Patryk's to run. Removing StrictMode from the dev build is
+the correct proxy, since it is the only thing that differs in effect behaviour;
+`main.jsx` was reverted byte-for-byte afterwards.
+
+### What the two have in common
+
+Both were filed as *verified*, and in both the verification instrument was the
+thing that was wrong — a tool's summary of the accessibility tree in the first,
+a dev-only React mode in the second. The register's own confidence rating is what
+this argues about, not these two entries: a finding that names an observation
+("all three report the same name") is worth more than one that names a conclusion,
+because the observation is the part that can be re-run. Both traps are recorded as
+`CLAUDE.md` Gotchas rows, which is where they will be looked for.
+
+`ROADMAP.md`: both entries deleted, the register count corrected to fourteen open
+with CT-2C-02 marked withdrawn, and a line stating that a withdrawn finding is
+**deleted** from that file rather than annotated in it — it is a pending-work
+list, and "we checked and there is nothing here" is not pending work.
+
+### 3 · CT-2B-04 — a bracketed country code was a second customer
+
+`normalizePhone` kept the `+` only when it sat at index 0:
+
+```js
+const hasPlus = s.charAt(0) === "+";
+```
+
+So `"(+34) 600 123 456"` normalised to `"34600123456"` while
+`"+34 600 123 456"` gave `"+34600123456"` — **two identities for one person**,
+which is a different customer everywhere identity is read: visits and no-show
+counts split between the halves, the repeat-no-show marker trips at 2 and so may
+never fire, the Regular chip needs 2 and may never show, and "Delete customer &
+all data" reaches only the half that was clicked. Every other kind of punctuation
+was already stripped correctly; only the plus's POSITION was wrong. A bracketed
+country code is an ordinary way to write a number, so this is reachable by
+someone simply typing it the way it is printed on a card.
+
+The `+` now counts wherever it sits **ahead of the digits**:
+
+```js
+const plusAt = s.indexOf("+");
+const firstDigit = s.search(/\d/);
+const hasPlus = plusAt !== -1 && (firstDigit === -1 || plusAt < firstDigit);
+```
+
+**There is no migration, and that is a property of the data model rather than a
+decision.** Nothing persists a normalised phone: `sanitize` stores
+`phone: b.phone || ""` and `cleanPhoneOf` (App.jsx) only blanks the placeholder,
+so a booking holds the string exactly as it was typed. Identity is DERIVED at
+read time — `identityKey` → `normalizePhone(b.phone)`, and `customerIndex` keys on
+that — so the fix re-keys on the next load, with no write, no rules change and no
+console step. The ROADMAP entry had recorded this as needing a decision because it
+"retroactively re-keys customers already split in PROD"; it does, and the re-keying
+is the fix rather than a cost of it.
+
+**A `+` AFTER a digit is still ignored, and that asymmetry is the safety
+argument.** A country-code marker precedes the number; a later `+` is an
+extension, a typo, or two numbers in one field. Because the new predicate is
+strictly WEAKER than the old one — `charAt(0) === "+"` implies `plusAt === 0`,
+which implies `plusAt < firstDigit` — the change can only ever ADD a plus, never
+drop one. So it can fuse two records that were always one customer, and **cannot
+split one customer into two**. That direction is what makes it safe to change a
+key every identity in the app is derived from, and it is pinned as its own test
+rather than left as an argument.
+
+The WA sandbox's `whatsapp.js` keeps its own copy of this primitive until the
+merge, at which point it must import from here (the v16.0.0 complementarity
+contract). The two are now one commit apart, so whoever does that merge should
+take this version, not the sandbox's.
+
+3 new tests (47 in `tests/customers.test.js`, **763** in the suite), proven
+against two sabotages: restoring `charAt(0) === "+"` fails the bracketed-code
+test, and forcing `hasPlus = false` fails **12** tests across the customer layer —
+the second is what makes the merge-not-split property a live guard rather than a
+tautology, since it holds trivially under the first. Verified in the browser
+against the module as Vite serves it: three spellings of one number
+(`"+34 600 123 456"`, `"(+34) 600 123 456"`, `"+34600123456"`) produce one
+`customerIndex` row with 3 visits, where the old rule produced 2 rows.
+
+---
+
+## v17.16.4 — the P3 tail
+
+**Date:** 2026-09-01 · **Branch:** `fix/v17.16.4-p3-cluster` ·
+**Files:** `src/App.jsx` (version), `src/lib/customers.js`,
+`tests/customers.test.js`, `REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** none in this commit — `stampGuestSeed` returns the same
+CONTENT it always did; only the array's identity changed.
+
+The fifth instalment of the v17.15.7 crash-test response, clearing the register's
+P3 tail: two small fixes and one more withdrawal.
+
+### 1 · CT-2B-09 — a pass that stamps nothing returns a fresh array
+
+`stampGuestSeed(list, f)` is the back-stamp that writes a newly minted `guestId`
+onto the booking it was derived from. Its two early returns — no list, or a draft
+missing either key — already handed the input back. The `.map` below them did
+not, so the two cases that reach the list and change **none** of it returned a new
+array claiming something had happened:
+
+- the seed booking already carries a `guestId`. This is not an edge case, it is
+  **every retry** — the `!b.guestId` guard is precisely what makes a held or
+  replayed write safe to re-apply, so the common path through this function on
+  the recovery route was the one that lied;
+- `guestSeed` names a booking no longer in `prev` (a concurrent delete, or a
+  replay on data that no longer holds it).
+
+That is the exact shape v17.14.0 removed from `bookingsAfterAction` and made a
+stated contract — *a no-op returns its INPUT array, not a copy* — surviving in the
+same save path, one function along.
+
+**It was harmless today, and the reason is worth writing down rather than
+trusting.** Both call sites (`buildNext`, `applyBase` in `doSave`) feed the result
+straight into their own `.map`/`.filter`, which rebuild the array regardless, so
+the identity never reached `persist`; and `persist` diffs on CONTENT anyway. It is
+fixed because a helper that cannot answer "did I write anything" makes the next
+caller — one that *does* gate on identity, which is what the contract exists for —
+impossible to write correctly. The mitigation was two layers deep and neither was
+put there for this.
+
+`stamped` is a boolean flag rather than a content compare, unlike
+`bookingsAfterAction`'s `sameBookings`: this pass knows structurally whether it
+wrote, so there is nothing to diff.
+
+**Tests** (`tests/customers.test.js`, +2): the three no-write cases return the
+input by reference, and the write case still returns a new array — both
+directions, because identity that only holds one way silently drops a real write
+in a caller that gates on it. Proven against a sabotaged build (`return out;`),
+which fails the first and passes the second.
+
+### 2 · CT-2B-06 — a legacy block's id was a property of the READ
+
+`sanitizeBlock` mints an `id` on any table block that has none, at both read
+sites. The mint was `genId()`, which answers *what read was this*, not *which
+block is this* — so two reads of one **unchanged** legacy node disagreed about
+every id in it.
+
+`BlockModal` holds the block object it was handed when it opened; `removeBlock`
+filters on `bl.id !== block.id`. A resync landing between the two therefore left
+the modal naming an id that no longer existed anywhere, and Unblock silently did
+nothing. Nothing on screen distinguishes that from a slow write.
+
+The seed is now the block's own **content** — the field set plus an ordinal among
+identical siblings, `bl_<hash>_<n>` — so two reads of an unchanged node agree.
+Three things about the shape:
+
+- **Content, not array position.** An index seed is stable only while nothing is
+  inserted or removed, and this is the one place where the difference is not
+  academic: a stale index that *did* resolve would resolve to a DIFFERENT block,
+  turning a harmless no-op into unblocking the wrong table. A content key either
+  finds the same block or finds none. Pinned by a test that reverses the array.
+- **`addBlock` keeps `genId()`.** It calls `sanitizeBlock(block)` with one
+  argument on a brand-new block, which has no stored identity to derive from —
+  and two new blocks that happen to be identical must still be two blocks. The
+  seed is a second parameter for exactly that reason, and the single-argument
+  behaviour is pinned separately.
+- **The v17.15.2 ordinal is back, narrowly.** CLAUDE.md said "the ordinal
+  machinery is gone", and that is corrected rather than deleted: there it was the
+  IDENTITY of every block, which is what made it wrong; here it only seeds the
+  mint for a block that has no identity of its own. Its old failure mode is
+  benign in this role — when two blocks agree on every field, "the wrong one" and
+  "the right one" are the same block. `reason` is in the key (free staff text),
+  so the separator is an ASCII control character per `undoKey`'s rule, written as
+  the `\u001f` escape and never the raw byte.
+
+This does **not** heal a legacy node — it makes the race harmless instead. That
+matches the finding's own rating: it fails safe and is self-limiting, since the
+first successful `saveBlocks` persists the ids and the node stops being legacy. A
+write-back migration was considered and rejected as disproportionate: it would
+add a write to a read path in `usePersistence`, for a P3.
+
+It also corrects the reasoning CLAUDE.md gave for having no migration — "the
+first add or remove persists every id and the node self-heals". The **remove** is
+the operation a legacy node breaks, so healing depended on the one path that
+could not run.
+
+**Tests** (`tests/booking-logic.test.js`, +6): one unchanged node gives the same
+ids twice; the open-resync-unblock round trip removes the right block and leaves
+the other; a reversed array keeps each block's id; two blocks differing only in
+`reason` stay distinct; a minted id never looks like a `genId()` one and a real
+id is left alone; and the single-argument mint is still random. Four of the six
+fail against a build with the seed removed — the other two pin properties the fix
+must not break, which a random mint also satisfies.
+
+### 3 · CT-2B-07 withdrawn — both predicates are `starts + 1 >= LIMIT`
+
+The entry read: the kitchen-busy chip fires at `starts >= KITCHEN_TABLE_LIMIT`
+while the confirm fires at `starts + 1 >= LIMIT`, so with the limit at 3 and
+exactly two existing starts the dialog appears with no busy chip to explain it —
+on both the booking and the walk-in path.
+
+The `+ 1` is on the line above the comparison, on both surfaces:
+
+```
+BookingFormModal.jsx:474  const kitchenStarts = kitchenLoad ? kitchenLoad.starts + 1 : 1;
+BookingFormModal.jsx:475  const kitchenBusy   = kitchenLoad && kitchenStarts >= KITCHEN_TABLE_LIMIT;
+App.jsx:2203              if (load.starts + 1 >= KITCHEN_TABLE_LIMIT && !confirmKitchen)
+
+WalkinForm.jsx:193        const wKitchenStarts = wKitchenLoad.starts + 1;
+WalkinForm.jsx:195        const wKitchenBusy   = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
+useWalkin.js:152          if (load.starts + 1 >= KITCHEN_TABLE_LIMIT && !confirmKitchen)
+```
+
+The two are the same predicate, and their inputs are the same too — checked
+argument by argument rather than assumed, since a chip and a save handler
+computing the same thing from different data is the defect that would be left if
+they were not. Booking form: both `getKitchenLoad(bookings, <date>, <time>,
+customDur || getDur(size), editId)`. Walk-in: both `getKitchenLoad(bookings,
+todayStr(), wf.time || nowTime(), wf.customDur || getDur(size), null)`; the
+form's `wDate`/`wTime`/`wDur` at `WalkinForm.jsx:72-78` are the same three
+expressions the handler recomputes. The empty-time case agrees as well: the chip
+goes falsy on a null `kitchenLoad`, and `save()` returns to `doSave()` before
+reaching the kitchen branch.
+
+**The third withdrawal in two versions, and it has the same shape as the other
+two** — a finding that names a CONCLUSION rather than an observation. This one
+read one line of a two-line expression; v17.16.3's read a browser-automation
+tree that prints `title` where Chrome computes `contents`, and a dev build whose
+StrictMode double-invokes the effect being measured. In each case the claim was
+true of what was actually examined and false of the app.
+
+Against eight fixed, three withdrawn is a high enough rate that "confirmed" in
+the register is not a fact about the app. `ROADMAP.md`'s stale
+`### The recommendation that outlives the fixes — DONE in v17.16.2` — a shipped
+entry that survived only because it pointed at the crash test's 55% self-rating —
+is replaced in this commit by the pending job that observation implies: re-rate
+the ten remaining findings by the single observation that would settle each,
+before spending a version on any of them. The 55% rating's own condition (extract
+the pure core of `usePersistence.js` so its claims become testable) was met in
+v17.16.2, and the rating lives in the §25 report rather than in this repo.
+
+**No code changed in this commit.**
+
+### 4 · `/code-review` fix — the deterministic mint could still produce ONE id for TWO blocks
+
+Caught in review, in section 2's own fix. The invariant `removeBlock` depends on
+is that **every id in one `sanitizeBlocks` result is distinct**, and a content
+hash does not give it:
+
+- **`hash36` is 32-bit.** Two blocks with DIFFERENT content can share a hash —
+  constructed rather than argued: `reason` "deep clean 149599" and "deep clean
+  312382" on the same table and window both hash to `dqduwy`. The ordinal counted
+  identical CONTENT keys, so each took 1, and the two different blocks came out
+  as one id. That is the v17.15.3 defect — unblocking either drops BOTH —
+  reintroduced by the commit fixing its neighbour.
+- **A minted id can land on a stored one.** The first draft's comment claimed the
+  `bl_` shape "can never collide with a real minted id" because `genId()` output
+  contains no `_`. True of `genId()` ids and false of a `bl_…_n` that `saveBlocks`
+  has since persisted — which is what happens the first time a legacy node
+  heals. An id-less block written beside it later collides.
+
+Both close the same way: the ordinal is now **the first one not already taken**,
+against a `used` set seeded with the ids the node already stores. Identical
+siblings still get `_1`, `_2`, so the common path is unchanged, and determinism
+is untouched — the scan is left-to-right over a stable array.
+
+The general shape is worth keeping: **a derived id needs the distinctness
+invariant asserted directly, not inferred from the derivation.** The hash and the
+ordinal each looked sufficient; what the consumer needs is the property, and the
+only thing that guarantees it is checking.
+
+**Tests** (+3): a mint never collides with a stored id; the constructed hash-
+collision pair gets two ids and removing one leaves the other; and every id in a
+mixed node is distinct. All three fail against the pre-review logic.
+
+**Verification for the version:** `npm run build` + `npm test` (774 tests, 24
+files) + `npm run check:style` + `eslint` (0 errors) after every commit. Main
+bundle 335.97 → 336.49 kB (gzip 91.66 → 91.87, +0.21 kB) — the deterministic
+seed and its comments.
+
+---
+
+## v17.16.5 — the findings that survived a second measurement
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.5-re-rated-findings` ·
+**Files:** `src/App.jsx` (version), `src/lib/booking-logic.js`,
+`src/lib/customers.js`, `src/lib/constants.js`, `src/components/PlanView.jsx`,
+`tests/booking-logic.test.js`, `tests/customers.test.js`, `tests/day.test.js`,
+`tests/reconcile.test.js`, `CLAUDE.md`, `DESIGN.md`, `REFACTOR_LOG.md`,
+`ROADMAP.md` · **Behavioural change:** yes, in **five** places — a malformed
+stored `time` no longer crashes the app; "Delete customer & all data" no longer
+reaches a booking carrying a different real phone; the booking form's
+"Regular · N past visits" and no-show chips stop counting that same booking,
+because `matchCustomerFor` shares the predicate the delete uses; the optimiser's
+answer no longer depends on the order the bookings arrived in; and the
+new-booking form's default date follows the clock across midnight. **The first
+draft of this line said three** — it named the changes that were designed and
+missed the two that came with them, which is exactly what this field is for, and
+`/code-review` caught it.
+
+The sixth instalment of the v17.15.7 crash-test response, and the first to start
+where `ROADMAP.md` said it should: **re-rate the open findings before spending a
+version on any of them.** Three of the register's findings had already been
+measured and withdrawn against eight fixed, which is a high enough rate that
+"confirmed" in the register was not a fact about the app. So every item below was
+re-measured first, and the version is what the measurements chose — including one
+finding whose numbers came back very different from the filed ones, and one break
+that was not in the register at all because it did not exist when the register
+was written.
+
+It also closes `ROADMAP.md`'s "re-rate the ten open findings" entry, which is why
+that entry is gone from the file: the job it asked for is done, and its output —
+the single observation that would settle each remaining finding — now sits on the
+bullets themselves, where the work is, rather than in a note about the work.
+Three of those bullets were re-rated DOWN in the process (CT-2A-05 before it was
+measured, CT-2A-10 to negligible, CT-2A-09 to low-value/high-risk) and one up
+(CT-2A-07, now the most valuable P3).
+
+### 0 · The suite was red on `main`, and had been since the day before
+
+Found by running `npm test` on a clean checkout before touching anything.
+`tests/reconcile.test.js` opened with:
+
+```js
+const D = "2026-09-01";                    // a future date
+const today = new Date().toISOString().slice(0, 10);
+```
+
+`dirtyDates` only looks at dates `>= today`, so the fixture had to BE in the
+future. On 2026-09-02 it stopped being, `dirtyDates` correctly ignored the whole
+day, and the assertion that a clash is found failed. CI gates every PR on `npm
+test`, so `main` was red and so was every branch cut from it.
+
+**A test that passes for a while and then fails for a reason having nothing to do
+with the code it guards is worse than a missing test**, because the first
+response to it is to distrust the change in front of you — which is exactly what
+happened here, for the few minutes it took to reproduce it on a stashed tree.
+`D` is now `addDays(today, 30)`, through the same helper the app navigates dates
+with, so it cannot expire and cannot land on the DST day a hand-rolled
+`setDate(getDate()+n)` would (v17.16.2's own finding).
+
+The rest of the suite was swept for the same shape. The other date literals are
+arithmetic fixtures — `dayDiff("2026-03-28", "2026-03-30")` is testing DST, not
+the future — and the only other file mixing a live clock with dates derives them
+from it. This was the one.
+
+### 1 · CT-2A-03, client half — `sanitize` guaranteed truthiness, not readability
+
+Every claim in the register reproduced exactly, which is worth saying because two
+of the three re-measurements in this version did not:
+
+| stored | sanitised to | then |
+|---|---|---|
+| `time: 2000` | `2000` (a number is truthy) | `toMins` throws `t.split is not a function` |
+| `time: "31/08/2026"` | kept | `toMins` → `NaN`, silently |
+| `size: "many"` | `2` | a party of two |
+| `duration: "long"` | `90` | ninety minutes |
+| `tables: "3"` | `[]` | no table |
+| `status: "weird"` | kept | `isActive` returns **true** |
+
+Only the first row is a crash, and `toMins` is `t.split(":")` at 83 call sites,
+so it is a crash in whichever view happens to read the booking first. v17.16.0's
+error boundary contains it; it does not make the day usable, and a member of
+staff meeting a recovery panel mid-service has no way to know which booking did
+it. It is reachable from the server, because v17.16.1's per-field rules check
+TYPE and deliberately not FORMAT — the two halves of one finding.
+
+**The guard is the CONSUMER'S requirement, not a format of its own.** `time` and
+`scheduledTime` are kept only if `toMins` can read them: a string that splits on
+`":"` into two finite numbers. That is the narrowest guard that closes the crash,
+and it was chosen over a `/^\d{2}:\d{2}$/` pattern deliberately — a pattern would
+also move `"9:30"`, `"13:00:00"` and `"13:0"`, all of which read correctly today,
+and **the one rule this function cannot break is that nothing currently working
+may move.** Pinned in both directions, since a guard that only rejects is half a
+guard.
+
+The cost of that choice is stated at the predicate rather than hidden: `":"`
+reads as 00:00 and is therefore KEPT, and `"25:99"` reads as 1599 and is kept
+too. Neither crashes, so neither is this fix's business. Normalising an
+out-of-day time would rewrite a record that renders, which is a different
+decision and wants its own version.
+
+`scheduledTime` falls back to the SANITISED time rather than to the literal
+`"13:00"` — a booking moved to 19:00 whose `scheduledTime` is junk must not go on
+to claim it was scheduled for one o'clock.
+
+**The sibling this did not touch**, recorded in `ROADMAP.md`: `getBlockSlots`
+calls `toMins(bl.from)` on a table block, and `sanitizeBlock` is a MINT rather
+than a whitelist — its header says so in terms, and says not to "finish" it by
+copying `sanitize`'s shape. So the same class is open one file over, and the fix
+there belongs at the consumer, not in the mint.
+
+### 2 · CT-2B-05 — the Customers list said two people; the delete acted on one
+
+The scenario is one wrong tap. Ana books with a phone, and while typing her
+booking the operator picks a phone-less "Bea" from the name dropdown — which
+mints one `guestId` across both. `guestPhoneAlias` then folds Bea's group onto
+Ana's number, so Bea's phone-less bookings appear under Ana. That much is
+inherent in a mis-join and nothing automatic can unpick it.
+
+What is not inherent: `customerIndex` keys on the phone FIRST, so a booking of
+Bea's carrying her OWN number was already displayed as a **separate customer with
+a separate number** — while `matchesIdentity` still reached it through the shared
+`guestId`, so "Delete customer & all data" on Ana anonymised it. The list and the
+delete disagreed, and a wrong join is invisible, so the operator had no way to
+know that deleting Ana was about to take a record belonging to somebody else.
+
+A booking carrying its own real phone is now never reached through a `guestId`.
+Three details:
+
+- **`hasRealPhone`, not `b.phone`.** The booking form seeds the field with the
+  dial prefix, so `"+34"` means *no phone* rather than a different one, and
+  reading it as different would have excluded the customer's own bookings from
+  their own delete — the fix causing a worse version of the bug it fixes.
+- **The exclusion needs a phone on BOTH sides.** A row keyed by `guestId` alone
+  has no key to differ from, and must keep reaching its bookings.
+- **The predicate is shared, and the note that shipped with it said otherwise.**
+  `matchCustomerFor` filters with `matchesIdentity`, so the same exclusion moves
+  the booking form's "Regular · N past visits" and no-show chips. That is the
+  right answer — `customerIndex` and `noShowMap` both key a booking with its own
+  phone under that phone, so all three agree now where the chips and the delete
+  were the two that did not — but it was designed as a delete-scope fix and
+  documented as one, and `/code-review` found the gap. **A predicate with two
+  callers has two blast radii**, and the comment at the site now names both.
+- **The phone-LESS bookings in the group are still taken, and that is the
+  deliberate half.** For a CORRECT join they are the customer and "all data" has
+  to mean all of it. The alternative — matching only a booking's own key — would
+  leave a genuinely phone-less guest's earlier bookings behind, with their name
+  and notes intact, on every correct join, to guard against the rare wrong one.
+  They also stay visible on both rows under a name a human can read, which is the
+  case somebody can still catch.
+
+### 3 · CT-2A-05 — the register's numbers were wrong in both directions
+
+Filed as "assignment differs in **1000/1000** shuffled days; unplaced count
+differs in **2/1000**". Re-measured over 200 shuffled days per scenario, on days
+of 8–17 bookings:
+
+| day shape | assignment differs | unplaced differs |
+|---|---|---|
+| varied (sizes 1–8, quarter-hour starts, mixed preferences) | 13/200 | **0/200** |
+| clustered (parties of 2 and 4, on the hour and half hour, nearly all "auto") | **138/200** | **0/200** |
+| either, after the fix | **0/200** | 0/200 |
+
+Both filed numbers were off, and the gap between the two scenarios is the whole
+explanation: `optimise` sorts by locked-first, size descending, stated preference
+before "auto", then start time, and a tie needs two bookings agreeing on all
+four. A varied day rarely produces one; **the shape a real service has produces
+them constantly** — which is why the clustered figure is the one that matters and
+why the varied figure alone would have argued for closing the finding.
+
+So the finding's true shape is not "the optimiser is not order-invariant" but
+**which table you get was a coin flip on two days in three, and whether you get
+one never was.** That is a better finding than the one filed, and it is what made
+the tie-break easy to justify: it buys determinism and costs nothing in placement
+quality, rather than trading one against the other.
+
+`id` is the fifth sort key. You cannot regress from "undefined", which is what
+array position is here — but the replacement is meaningful rather than merely
+stable: `genId()` is a base36 timestamp, so ordering by id orders by CREATION,
+and among equals the party who booked first is placed first. It is also the only
+key guaranteed unique, so the sort has no remaining tie to fall through.
+
+**The later passes needed no key of their own.** The swap pass's `others.sort` is
+just as partial, but it sorts a list DERIVED from `day`, and `Array.prototype.sort`
+is stable — the same property that caused the defect is what propagates the fix,
+so one total order at the top settles all of them. That is what the 0/200 confirms.
+
+**Two tests, and BOTH had to be rewritten before they were worth having — the
+second time by `/code-review`, after the first rewrite.** The first draft
+asserted that one hand-picked shuffle gives the same answer, and it PASSED
+against a build with the tie-break removed: that permutation simply did not
+discriminate. It became all **120** orderings of five fully-tied parties,
+asserting exactly one distinct answer.
+
+That was still not enough, and the reason is worth more than the fix. `sig({})`
+is the empty string, so **an `optimise` that places NOBODY produces one identical
+signature for every ordering and satisfies invariance perfectly.** Substituting
+`var assigned={}` for the greedy pass — the strongest regression this function
+can suffer — left both tests green. Invariance is a property of the ANSWER, so
+there has to be an answer first: every case now asserts placement (`placed(res,
+n)`) before it asserts sameness, and the 120-permutation case additionally
+requires the five tied parties to land on five DISTINCT tables, so a collapse
+cannot masquerade as agreement. Both sabotages now fail both tests.
+
+The same pass removed a third line that could not fail:
+`answers.has(sig(optimise(tied, …)))`, where `tied` is one of the 120 and the
+line above already asserts there is exactly one answer. **The trap this test was
+rewritten to escape had been reintroduced one line below the escape** — which is
+the honest summary of why a test's failure mode has to be constructed rather than
+reasoned about.
+
+### 4 · `EMPTY_FORM.date` was evaluated once, at module load
+
+`constants.js` builds the object at import, so an app left open across midnight —
+a tablet in a restaurant, which is how this one is used — offered yesterday as
+the new-booking default for the whole of the next service. Not reachable in a
+saved booking (all three `openForm` call sites pass a date explicitly), which is
+why it was a P3.
+
+A **getter**, because that keeps every consumer unchanged: `Object.assign` and
+object spread both read an accessor and copy its result, so the call sites and
+the `form` / `formRef` / `formBaseline` initializers all keep receiving a plain
+string. It is fixed rather than left because a default that is silently wrong is
+a trap for the next call site added, which will not know it has to set the field.
+
+**The test had the same defect as CT-2A-05's**, caught the same way: within one
+process on one day, a value frozen at import and a value recomputed on read are
+identical, so `expect(EMPTY_FORM.date).toBe(todayStr())` passes on the very build
+this fixes. It moves the clock across midnight under fake timers instead — the
+defect itself, reproduced.
+
+### 5 · The Plan legend chip's missing shadow
+
+One line. v17.15.7 gave the plan legend its status marks by copying the
+TimelineView chip, and copied everything but `boxShadow: var(--shadow-flat)` —
+leaving two chips that are the same chip differing by one declaration, which
+makes a reader work out whether the difference means something.
+
+It did not, and `DESIGN.md` had already decided it: the shadow triage asks
+whether the ELEMENT's own fill flips with the theme, a MIX counts as "no", and
+`BLOCK_BG[status]` is named there as exactly such a mix. **The rule covered this
+chip from the day it was written and simply never swept it, because the chip did
+not exist yet.** `DESIGN.md` now names the third site and the lesson: a rule
+stated there does not apply itself to a site added afterwards — when you copy a
+component, diff it against its twin rather than against your memory of the twin.
+
+### Verification
+
+`npm run build` + `npm test` + `npm run check:style` + `eslint` (0 errors) after
+every commit, and again after the `/code-review` pass — which returned five
+findings, all fixed in this branch: the two vacuous-test holes and the
+never-failing assertion above, the shared-predicate blast radius, a stray comment
+indent, and this entry's own Behavioural-change field, which said three when the
+release changes five things. **783 tests, 24 files** — up from 774 with one failing: +9 new
+(5 booking-logic, 2 customers, 2 day) and the red one repaired. Every new
+assertion was proven against a sabotaged build — the truthiness guard restored,
+the identity exclusion deleted, the fifth sort key removed, the getter turned
+back into a value — and each failed the intended test and only that one.
+
+Main bundle 336.49 → 336.83 kB (gzip 91.87 → **91.97, +0.10 kB**), nearly all of
+it comments.
+
+**Verified in the browser** (DEV, `localhost:5177` on this worktree), because
+the first draft of this paragraph said the shadow "does not need to be" — a chip
+copied from a twin, matching a rule already written down. That is precisely the
+reasoning that produced the missing line in the first place, so it was measured
+instead. All three plan legend chips compute `rgba(0,0,0,0.35) 0 1px 3px`, which
+is `--shadow-flat` resolved in dark; the token is theme-split, and forcing
+`data-theme="light"` gives `rgba(0,0,0,0.1) 0 1px 3px` on both legends. The
+timeline's five chips read identically, so the two keys now differ in nothing.
+
+The other four changes are pure functions with no rendering surface, and their
+verification is the 783-test suite above.
+
+---
+
+## v17.16.6 — the halves that disagreed
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.6-p3-findings` ·
+**Files:** `src/App.jsx` (version), `src/lib/customers.js`,
+`src/lib/booking-logic.js`, `tests/customers.test.js`,
+`tests/booking-logic.test.js`, `tests/write-path.test.js`, `CLAUDE.md`,
+`REFACTOR_LOG.md`, `ROADMAP.md` ·
+**Behavioural change:** yes, in three places (commit 4 changes none) — a booking joined to a phone-less
+guest now joins the group that guest is actually in, rather than the one the
+draft was minted against; a table block the app cannot read is skipped rather
+than crashing every path that consults blocks; and an undo snapshot is taken for
+a table move between a poisoned id and a two-table set, where before it was
+silently not.
+
+The seventh instalment of the v17.15.7 crash-test response. Scope was Patryk's:
+the two confirmed P3s, plus settling CT-2A-08 one way or the other, plus
+CT-2A-11 — and CT-2A-11 on the narrower of the two options offered, which is the
+one that does not touch stored data.
+
+### 1 · CT-2B-08 — the second join that looked exactly like the first
+
+Picking an unjoined phone-less guest from the booking form's NAME dropdown is
+the one moment a `guestId` is minted (`BookingFormModal.jsx:189`). It writes
+`guestId = "g" + <that guest's latest booking id>` into the draft and records
+that booking in `guestSeed`. On save, `stampGuestSeed` writes the same id back
+onto the seed and the two become one customer.
+
+`stampGuestSeed` has always refused a seed that already carries an id — the
+`!b.guestId` guard, which is what makes a retry safe and what stops a booking
+already joined to somebody being silently re-homed. **Nothing reconsidered the
+draft.** So when another device joined that same guest in between — through a
+*different* booking of theirs, which is the only way the ids can differ, since
+the mint is deterministic in the seed's id — the seed kept `"g"+<other id>`, the
+new booking was written with the id minted at pick time, and it landed in a group
+of ONE beside the group the operator meant to join.
+
+The two halves of one decision disagreeing, with nothing on screen to tell that
+apart from success. Confirmed by reading: `App.jsx:2100` wrote
+`guestId: f.guestId || null` verbatim.
+
+`resolveGuestId(list, f)` is the missing half, a sibling of `stampGuestSeed` in
+`customers.js`. **The seed wins**, on principle rather than convenience: it is
+the existing group and this booking is the newcomer asking to be let in;
+adopting in the other direction would re-home a booking already joined to
+somebody, which is the exact thing `stampGuestSeed`'s guard exists to prevent.
+
+**Where it is called is load-bearing.** Not on the `nb` object, which is built
+once at Save time so that a replayed write cannot duplicate the booking, but
+inside `buildNext`, where `prev` is — so a held or retried write re-reads a
+`prev` that may have acquired the id since the first attempt. `newId` is
+untouched, so the stable-id property that comment relies on is unaffected.
+
+Seven tests. The one that matters is not either half in isolation but that they
+**cannot disagree**: for each of the three shapes of `prev`, whatever id
+`stampGuestSeed` leaves on the seed is the id `resolveGuestId` gives the new
+booking. Proven against a sabotaged build (`return f.guestId` — the pre-fix
+behaviour): three of the seven fail, and only those three.
+
+### 2 · The `getBlockSlots` sibling of CT-2A-03
+
+v17.16.5 made `sanitize` guarantee that a booking's `time` is something `toMins`
+can read. A table BLOCK's `from`/`to` reach that same `toMins`, from
+`getBlockSlots`, and had no such guard — so a stored `from: 2000` threw
+`t.split is not a function` in the placement path exactly as a booking used to,
+and took every scan that consults blocks with it. Reachability is identical to
+the booking case: `tableBlocks` carries no per-field `.validate`, so any non-app
+writer can put one there, and v17.16.0's error boundary contains the crash
+without making the day usable.
+
+**Where the guard goes was the decision, and it went to the CONSUMER.**
+`sanitizeBlock` is a MINT, not a whitelist — its own header says so and says not
+to "finish" it by copying `sanitize`'s shape. Defaulting an unreadable `from`
+there would hand the block a time window nobody entered and then PERSIST it on
+the next `saveBlocks`: stored data silently rewritten, which is the one thing
+this arc of versions has consistently refused to do. An unreadable block is not
+a block, so `getBlockSlots` skips it.
+
+**The cost is stated at the site rather than hidden.** The table is silently
+UNDER-blocked — offered to the optimiser and to walk-ins for minutes somebody
+meant to protect. That is strictly better than the day being unusable, and it is
+the direction that leaves the record intact for whoever comes to repair it.
+
+Four tests, in two pairs, and the second pair is the more interesting one: two
+prove the skip (proven against the restored pre-fix filter — exactly those two
+fail, across the whole 794-test suite, so nothing else silently depended on the
+throw), and two prove it does **not** widen. An `allDay` block never reads
+`from`/`to`, so a malformed pair there is not a reason to stop protecting the
+table all day; and `"9:30"`, `"13:00:00"` and `":"` still read, because the
+predicate is `isReadableTime` — `toMins` yielding a finite number, the
+consumer's own requirement — and deliberately not a format of its own. Same
+reasoning, and the same stated cost, as v17.16.5's booking half.
+
+### 3 · CT-2A-11 — the comment that was not true of anything
+
+v17.10.2 replaced `undoKey`'s `"|"` and `"+"` separators with ASCII control
+characters, because the old ones were reachable FROM THE DATA — a table id need
+only avoid `"|"`, so a venue naming a joined table `"1+2"` made `["1+2"]` and
+`["1","2"]` one key. The replacement carried a sentence: *"No text field in the
+app can produce a control character."*
+
+**Nothing enforced it and nothing was true of it.** `notes` is a `<textarea>`
+and `sanitize` writes `b.notes || ""` verbatim; `idOk` (`LayoutSettings.jsx:81`)
+is `s.length > 0 && s.indexOf("|") < 0` and nothing more; and neither
+`settings/layout` nor `bookings` validates field FORMAT server-side, so a value
+carrying one is reachable exactly as a malformed `time` is. The choice was to
+delete the sentence or to make it true. `escSep` makes it true, and makes it a
+property of this one function rather than a claim about the rest of the app —
+the version of the guarantee that cannot rot when somebody adds a field.
+
+**It escapes; it does not strip — and the option first written down said strip.**
+Removing the bytes would close the boundary-shift collision by opening an
+identical one a character away: `"aSEPb"` and `"ab"` map to the same key, so an
+edit between them reads as "nothing changed". That is the same failure this
+exists to prevent, differing only in which pair of values triggers it. Caret
+escaping (ESC prefix, `+0x40`, ESC itself inside the replaced range so data
+cannot forge one) is injective and costs nothing. Reported as a departure from
+the wording rather than made quietly.
+
+**Which join actually collides was worth establishing rather than assuming.**
+Only the ARRAY one, where a single poisoned value suffices — the same shape as
+the v17.10.2 defect that introduced these separators. The field join has FIXED
+arity, so shifting content across one boundary changes the separator count; a
+collision there needs a *second* poisoned field. Measured with a standalone
+probe against the pre-fix key before either test was written: array collision
+`true`, the natural single-field construction `false`. The test asserts the
+reachable one and the comment records why the other is not it.
+
+Five tests, and two sabotages that fail different ones — the un-escaped key
+fails the two collision tests, the stripping variant fails the escape test and
+neither of those. The fifth is the guarantee that matters more than the
+collision: nothing WITHOUT a control character changes behaviour, in either
+direction.
+
+`clashRowId` and `blockContentKey` were checked and deliberately left. The first
+joins `genId()` ids, which are base36. The second does take free staff text
+(`reason`), but v17.16.4's `used` set already guarantees distinct block ids by
+construction, so a key collision there costs an ordinal and never an identity.
+
+### 4 · CT-2A-08 — withdrawn, on an argument rather than on a shrug
+
+`ROADMAP.md` asked for one observation: *construct a lasting divergence, or close
+the finding.* The claim was that the 2 s StrictMode dedupe can swallow a
+legitimate A→B→A write when no echo lands in between. It has survived two
+versions without anybody constructing one, which is weak evidence and was
+honestly recorded as such.
+
+There is a stronger reason, and it took reading `contentKey` to see it. **A
+signature is `(content, baseUpdatedAt)` per child** — `contentKey` deletes
+`updatedAt` and nothing else, so the CAS base is inside the signature. Two
+patches that share a signature are therefore *indistinguishable to the server*:
+same content, same claimed base, so the rule reaches the same verdict on both.
+
+That turns "we could not build one" into a complete case analysis:
+
+- **The earlier patch landed.** The server already holds exactly what the
+  swallowed one wanted. Nothing is lost. (An intermediate B cannot also have
+  landed: its base was consumed by the first write, so the CAS refuses it.)
+- **The earlier patch was rejected.** The swallowed one carries the identical
+  base, so it would have been rejected too — and `update().catch` has already
+  queued the retry and tripped `markStale`, so the recovery is armed.
+- **It was never dispatched.** Then `lastPatchSigRef` was never set and there is
+  nothing to collide with.
+
+There is no fourth outcome, and the base not advancing is itself the precondition
+(`persist` passes `computed` to `setBookings`, and the stamp lives only in the
+patch — the real value returns via the echo).
+
+**So the finding closes, and the commit that closes it adds a guard rather than a
+fix.** What would MAKE CT-2A-08 real is `baseUpdatedAt` leaving the signature —
+a perfectly plausible future tidy-up of `contentKey`, sitting one line from the
+`delete c.updatedAt` that is meant to be there. Sabotaged that way, the whole
+802-test suite lost **exactly one test**: the one written here. The property the
+argument rests on was, until now, guarded by nothing.
+
+Four tests: the base is in the signature; A→B→A with an echo between is not
+deduped; A→B→A with the base frozen IS deduped *and the swallowed patch is
+byte-identical to the one already sent*, which is the harmlessness pinned rather
+than asserted; and the whole-patch comparison, so a repeat spread across
+different children is covered by the same analysis.
+
+**A count correction.** The running tally in `ROADMAP.md` was off by one through
+commits 2 and 3 of this version, because the `getBlockSlots` sibling was
+subtracted from it — and that entry is not a register finding, having been raised
+in v17.16.5 after the register was written. Corrected here, with the tally now
+naming the five that remain (CT-2A-04, CT-2A-06, CT-2A-07, CT-2A-09, CT-2A-10)
+instead of only counting them, so the next drift is visible rather than
+arithmetic. Not amended into the earlier commits: the separate-commit record is
+the deliverable, and a wrong number corrected in the open is worth more than a
+clean one rewritten.
+
+### 5 · The lint error commit 3 shipped, and the line that hid it
+
+`npm run lint` is a **hard CI gate at 0 errors**. Commit 3's `SEP_RE` matches the
+ESC-to-US control range, which trips `no-control-regex` — a real error, present
+in commits 3 and 4, and it would have failed CI on the PR.
+
+**The verification said otherwise, twice, because it read the wrong line.**
+`eslint` prints two trailing lines and only the second is the verdict:
+
+```
+0 errors and 1 warning potentially fixable with the `--fix` option    <- about --fix
+N problems (1 error, 71 warnings)                                     <- the gate
+```
+
+Piping through `tail -2` surfaces the first and hides the second, so "0 errors"
+was reported from a sentence that never claimed it. Exactly the family this repo
+keeps re-learning — the synthetic `:active` press, the accessible name read out
+of an automation tree — where the thing that was wrong was the instrument.
+`main` was checked as a control and reads `71 problems (0 errors)`, which is what
+this branch reads again now. A Gotchas row was added: grep for `problems`, never
+`tail`.
+
+The rule itself is right, and the code is the exception it cannot know about:
+`SEP_RE` is the one regex in the app whose *job* is to find control characters.
+It carries an inline disable with the reason rather than a workaround, because
+every alternative is worse — a char-by-char loop runs over every field of every
+booking through `dayBookingsSig`, and a `new RegExp` built from the same escapes
+is flagged by the same rule while hiding the range from a reader.
+
+**Not amended into commit 3.** The separate-commit record is the deliverable.
+Commits 3 and 4 are green on build, test and `check:style` and red on lint; a
+bisect landing there gets a lint failure and this entry explaining it, which is
+more honest than a history that never had the mistake.
+
+### 6 · `/code-review` — the guard that covered one of two consumers
+
+Commit 2 put the malformed-block guard in `getBlockSlots` and said the sibling
+was closed. **It was not.** `TimelineView`'s `BlockBar` builds `dayBlocks` with a
+date filter alone and then calls `toMins(bl.from)` itself, so a block the app
+cannot read still threw — during RENDER, where React's contract unmounts the
+whole tree and v17.16.0's error boundary takes over. The placement path went
+safe and the day stayed unusable: the crash **moved somewhere worse** rather
+than closing, since a render throw kills the app where a placement throw killed
+one scan.
+
+That is the shape this repo keeps meeting — one rule, two consumers, kept in
+step by nothing (the settings-tab list, the five modal-visibility lists, the
+four dismissal Sets). So the predicate is now `isReadableBlock`, EXPORTED, and
+both sites read it; `tests/booking-logic.test.js` scans every file that hands a
+block's own `from`/`to` to `toMins` and fails if it has not heard of it. That
+guard was proven against the shipped code: reverted, it names
+`src/components/TimelineView.jsx` and nothing else.
+
+**Measured live, on DEV, on real data rather than argued.** A malformed block
+(`from: 2000`, `to: 2100`, table 3, today) was written straight into
+`tableBlocks` through the rev CAS, which the app's own writer cannot produce:
+
+| build | result |
+|---|---|
+| with the filter | day renders normally, BLOCKED bar for the *valid* block still drawn, no console error |
+| filter reverted (control) | `#root` replaced by **"MGT Bookings hit an error"** — the whole app |
+
+The block is deliberately left in the DEV database. It is a scratch database by
+policy, and it is now a standing fixture for exactly this regression.
+
+**Where the line falls, and why it is not "filter everywhere".** Only the
+consumers that COMPUTE with `from`/`to` filter on the predicate. `DaySheet` and
+`BlockModal` concatenate the two strings for display: they cannot crash, and
+`BlockModal` is the surface somebody uses to REMOVE the bad block, so hiding it
+there would take away the only repair. "An unreadable block is not a block" is a
+statement about scheduling, not about visibility.
+
+`!bl` is folded into the predicate because `TimelineView`'s filter dereferences
+`bl.date` too, so the shared version has to survive a null element that the old
+`getBlockSlots` filter would equally have thrown on.
+
+### 7 · `/code-review` — the escape had to be an addition, not a re-spelling
+
+Commit 3 swapped `undoKey`'s array `join` for `.map(escSep).join`, and in doing
+so changed something the escape was never meant to touch.
+`Array.prototype.join` renders a `null` or `undefined` ELEMENT as the empty
+string; `escSep` reaches it through `String(v)` and renders the word `"null"`.
+So `tables: [null]` and `tables: ["null"]` became **one key** — a NEW collision,
+in the function this version exists to remove one from, and asymmetric with the
+scalar branch on the very next line, which has always spelled the two out.
+
+Reachable on the null side without contrivance: RTDB returns a sparse array as
+`["1A", null, "2"]` when the stored keys are 0 and 2, and `sanitize` only checks
+`Array.isArray`. A table literally named `"null"` is permitted by `idOk`. Both
+at once is unlikely — and the point is not the odds. **An escape is only safe
+if it is a pure ADDITION to the old key**: the moment it also re-spells values
+that were never in its range, it is a different key function and has to be
+argued from scratch.
+
+Measured with a standalone probe against both spellings before the fix: old
+`join` gives `[null]` → `""` and `["null"]` → `"null"` (distinct); the mapped
+version gives both → `"null"` (equal). The fix restores `join`'s own semantics
+inside the map, so a hole collapses to nothing exactly as it always did, and the
+test asserts that identity as well as the separation — pinned against the
+un-restored build, where it is the only failure.
+
+---
+
+## v17.16.7 — the grant that could not be revoked
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.7-root-write-grant` ·
+**Behavioural change:** none in the app's UI. The SERVER refuses three things it
+used to permit. · **Firebase rules:** **YES — a manual console publish is
+required**, and it can go first or at any time (see `database.rules.README.md`).
+
+The eighth instalment of the v17.15.7 crash-test response, and the first to take
+a P2. Five register findings were open; this closes the two highest-rated of
+them, which the register had always described as ONE structural change rather
+than two fixes.
+
+### What was wrong
+
+`database.rules.json` granted `".write": "auth != null"` at the ROOT. Two
+findings followed from that single line:
+
+- **CT-2A-04** — an authenticated client could delete the entire `/bookings`
+  node in one call. `.validate` is not evaluated when `newData` does not exist,
+  and `/bookings` itself carried no rule; only `/bookings/$bid` did.
+- **CT-2A-06** — a whole-node `remove()` bypassed the rev CAS completely: node
+  gone, rev left behind. `revGuard.js` and `CLAUDE.md` had both claimed the rev
+  child's rule covered wipes; v17.16.1 corrected the claim and left the hole.
+
+Neither could be fixed by adding a rule, and that is the fact the whole version
+turns on: **RTDB write permission cascades from wherever it is granted and
+cannot be revoked lower down.** Measured against the emulator before this
+version, a child `".write": false` on `bookings` does not deny the delete.
+
+### What was done
+
+One deletion, then a set of additions.
+
+1. **The root `.write` is gone.** `.read` is untouched — one signed-in account
+   still reads the whole database, which is the single-restaurant trust model
+   and was never what these findings were about. What changed is WHERE
+   `auth != null` is asked, not what it asks.
+2. **`/bookings` carries no grant; `/bookings/$bid` carries it.** The app has
+   only ever written children — v15.5.0's diff-write is a multi-path `update()`
+   under `/bookings` — so a per-child grant covers every real write while a
+   whole-node `set` or `remove` has nothing to stand on. **Deleting ONE booking
+   is unaffected**, which is the capability that had to survive.
+3. **The rev CAS moved from `.validate` to `.write`** on all twelve pairs, node
+   and `<name>Rev` alike. The predicate is unchanged character for character;
+   what changes is that **`.write` is evaluated for a delete and `.validate` is
+   not.** That is the entirety of CT-2A-06.
+4. **`presence/$key` gains an explicit `auth != null`.** Identical permission to
+   what it always inherited — but the thing it inherited FROM is gone.
+
+### Two things closed that nobody was aiming at
+
+- **A deep write that skips the rev.** Ancestor `.validate` rules are not
+  re-evaluated for a write landing below them, so `tableBlocks/0/from` could be
+  rewritten with the rev untouched. `.write` at `tableBlocks` *is* consulted for
+  a descendant write, so the CAS now reaches it.
+- **Arbitrary top-level nodes.** A path with no rule now has no grant. The
+  writable surface is exactly the enumerated one, which turns "add a persisted
+  node and forget its rule" from a silent gap in PROD into a write that fails
+  immediately in DEV.
+
+### The two hazards the ROADMAP entry named
+
+The entry had been re-rated twice and both hazards were real when measured. One
+of them **does not arise in the shape that shipped**, and that is worth
+recording rather than quietly enjoying.
+
+1. *"Deleting the last booking would be refused."* True of the predicate that
+   had been probed — `newData.exists() || !data.exists()` placed on the
+   `bookings` NODE, which is false exactly when the node empties. It does not
+   arise here **because no predicate was put on `/bookings` at all**: the grant
+   moved DOWN to `$bid`, where a delete is an ordinary child write and the
+   emptiness of the parent is nobody's business. The hazard was an artefact of
+   the fix that had been imagined, not of the finding.
+2. *"Every path not explicitly granted becomes unwritable."* Real, and it is now
+   the model. So the writable surface was **enumerated from the source rather
+   than assumed**: four call sites write anything at all — `usePersistence.js`
+   (the bookings diff-write, and the legacy migration below), `revGuard.js` (all
+   twelve rev pairs) and `usePresence.js`. Each has a grant; each is exercised.
+
+   **`/code-review` found the scope that sentence quietly claimed.** The
+   enumeration is of this branch's `src/`, and the DEV database has a second
+   writer: the `wa-sandbox` branch, a parallel Vercel deployment forced onto DEV
+   Firebase, writes `conversations`, `messages`, `templates` and
+   `settings/whatsapp` — none granted, and its own copy of the rules file has no
+   rule for any of them, because it relied on the root grant like everything
+   else. Publishing to DEV therefore denies every WhatsApp write while booking
+   sync in the same app keeps working, and reads keep succeeding, so the sandbox
+   looks populated and silently refuses to save.
+
+   Not fixed here, and the reason is the boundary the ship run draws: granting
+   those four would ship rules for an unshipped module and would pre-decide
+   whether they get a rev CAS, which the Rule of law says they must. It is a
+   ROADMAP entry against the WA merge instead. **The lesson is about the
+   sentence, not the sandbox** — "enumerated from the source" is only as wide as
+   the tree you enumerated, and this repo has a second tree that writes the same
+   database.
+
+### The one app change, and why it could not be excepted
+
+`usePersistence`'s lazy array→keyed migration (v15.5.0) wrote the whole
+`/bookings` node with `set()`. That is *precisely* the capability CT-2A-04 is
+about, so it could not be carved out of the rule — a grant wide enough to permit
+it is a grant wide enough to permit the finding.
+
+It is a multi-path `update()` now: the legacy integer keys nulled and the keyed
+children written in the same atomic patch, which the rules permit and which the
+tests pin from both sides — "the new form works" being only half of it, since
+the finding would still be open if the old form were also still permitted.
+Afterwards **the app makes no whole-node `bookings` write at all**, so the rules
+and the client agree exactly rather than the rules merely tolerating the client;
+`set` left `usePersistence`'s Firebase import with it, which is the check that
+the last caller really was the last.
+
+Two ordering details are load-bearing, and both are the kind that would look
+like tidying to a later reader. The old keys come off the SNAPSHOT rather than
+off the sanitised array, so a row `sanitizeAll` dropped still has its slot
+cleared instead of surviving as a hole in a node that is supposed to be keyed.
+And the keyed rows are `Object.assign`ed OVER the nulls, not under them: a
+booking whose id happens to equal an old integer index would otherwise be
+deleted by the very patch that writes it.
+
+Leaving it denied was considered and rejected. The path is unreachable on PROD
+(keyed since v15.5.0, gated on `Array.isArray`) — but the failure would not have
+been benign: `arrayShapeRef` (`usePersistence.js:309`) holds **every** booking
+write until the migration echoes, so a legacy array node would leave the app
+permanently read-only for bookings. And the comment at that exact site, written
+in v17.16.1, already says why: *a recovery path left knowingly broken is how a
+service is lost years later.*
+
+### Verification
+
+Everything above was measured against the emulator BEFORE the rules file was
+written, using a machine-generated candidate and a throwaway probe — 119 of 120
+assertions green, the one failure being the probe's own helper (`seed` returns
+nothing) on the line after an `assertSucceeds` that had already passed. The
+shipped `database.rules.json` was then hand-written for readability and proved
+**order-insensitively identical** to that candidate before anything was
+committed, so no predicate could drift between what was probed and what ships.
+
+`tests/rules/database-rules.test.js`: **101 → 109**. Three `PROBE:`s became
+closed assertions — inverted with the rules, never weakened, which is what that
+convention exists to force. The bare-remove sweep runs over `revPairsIn`'s own
+walked list rather than a typed one, so a thirteenth pair is covered without
+this file being edited.
+
+### CT-2A-10 settled as a deliberate won't-fix, and deleted from ROADMAP
+
+Not shipped, not withdrawn — a third thing, and the file that tracks these had
+only had words for the first two. `2**53` freezes a booking's stamp (`old + 1
+=== old`, so `stampForWrite` stops advancing and only a delete clears it). It is
+real, it is pinned in the rules suite, and the v17.16.5 re-rating measured why it
+is negligible: every stamp derives from `Date.now()` (~1.7e12), so reaching
+`2**53` needs a hand-written value from outside the app — at which point the same
+writer can do worse things more directly.
+
+Patryk's call, this version: **the decision has been made, so it is not pending
+work.** The entry is deleted from `ROADMAP.md`, the rules-suite pin stays exactly
+where it is, and the reasoning lives here.
+
+`ROADMAP.md`'s own paragraph on this was widened to say so, because it read "a
+WITHDRAWN finding is deleted from this file, not annotated in it" and a
+won't-fix is not a withdrawal — the first says *it was not there*, the second
+says *it is there and is not worth a version*. Different judgements; neither is
+pending work. Left un-widened, the next won't-fix would have been annotated in
+place, which is how a pending-work list turns into a register.
+
+### Two stale figures, corrected while re-verifying the file
+
+Every remaining `ROADMAP.md` entry was re-checked against the source rather than
+re-read, which is what turned these up. Neither is load-bearing; both are the
+kind of number that gets quoted with confidence.
+
+- `CLAUDE.md` said **783 tests as of v17.16.5**. It is **805**, and had been
+  wrong for two versions — the same drift the file's own line-count note warns
+  about ("re-measure rather than trust this number"). The parenthetical about
+  running the build first was re-measured too: without `dist`, 804 pass and 1 is
+  skipped.
+- `ROADMAP.md` and `database.rules.README.md` both said the rules suite is **78
+  tests**. It was 101 before this version and is **109** after it.
+
+The entries themselves all stand, verified: no `paint-order` treatment ships
+(the contrast decision is still yours); `.github/workflows/ci.yml` still has no
+JVM step; `database.rules.json` contains zero `matches(` calls, so the rules
+still check type and never format; `drainPending`'s give-up branch still only
+sets a warning; `persist` is still called from inside the `setBookings` updater;
+and there is no `InboxPanel` in `src/components`.
+
+### `/code-review` — a comment that made the audit it exists to support harder
+
+Dropping `set` from `usePersistence`'s Firebase import was annotated "The app
+now reaches Firebase through `update` and `get` only." Wrong twice.
+`usePresence.js` uses `set`, `push`, `remove` and `onDisconnect`; and the very
+import being annotated also pulls `onValue` and `goOnline`, used 3 and 1 times
+in that file, so the narrower reading fails too.
+
+**What makes it worth a commit rather than a typo fix is who reads it.** The
+per-path rules make "what writes Firebase, and where" a question anybody adding
+a node now has to answer, and this comment answers it wrongly in the direction
+that hides `usePresence` — the one node whose grant this version had to add by
+hand. Same class as the `revGuard.js` header v17.16.1 corrected: a comment
+stating a guarantee nothing enforces.
+
+### `/code-review` — the rollback command names a tag that does not exist
+
+The new section's rollback line read `git show v17.16.6:database.rules.json`.
+**The repo has no version tags at all** — `git tag --list 'v17*'` is empty, and
+the pre-existing instance one section down (`v17.16.0`, added by v17.16.1) fails
+with `fatal: invalid object name`. Both are corrected to a form that resolves.
+
+It survived a version because the sentence offers "or any commit before this
+one" as an alternative, and that half works. The half that does not is the one
+somebody reaches for under pressure: these rules are pasted into a console by
+hand with no staging, so this is the recovery path for a change that can leave
+staff unable to save a booking.
+
+---
+
+## v17.16.8 — the grants that had to decide something first
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.8-wa-node-grants` ·
+**Behavioural change (MGT Bookings):** none — no `src/` change but the version
+line. **Files:** `database.rules.json`, `tests/rules/database-rules.test.js`,
+`database.rules.README.md`, `CLAUDE.md`, `ROADMAP.md`, `src/App.jsx` (version).
+Plus two commits on the `wa-sandbox` branch, which is not this PR.
+
+### What this closes
+
+v17.16.7 deleted the root `.write` grant, which was the right fix for CT-2A-04
+and CT-2A-06 and had one consequence it recorded and deliberately did not act
+on: four paths that only the `wa-sandbox` branch writes — `conversations`,
+`messages`, `templates`, `settings/whatsapp` — had no rule of their own and
+were left unwritable. Root `.read` is untouched, so the sandbox **looked
+populated and silently refused to save**.
+
+That version's stated reason for deferring was that granting them "would ship
+rules for an unshipped module and pre-decide whether they get a rev CAS, which
+the Rule of law says they must". **The objection was to shipping a CAS shape
+nobody had thought about, not to the grants.** So this version thinks about it.
+
+### The shape differs per node, and the reason is measured, not stylistic
+
+`api/_lib/rtdb.js` on `wa-sandbox` writes `conversations/{phoneKey}` and
+`messages/{phoneKey}/{msgId}` through **firebase-admin** — and Admin SDK writes
+bypass security rules entirely. A CAS on those two would bind the browser and
+not the backend doing most of the writing: a pin that looks like a guarantee
+while guaranteeing nothing, which is the defect this repo already records
+against `test:rules`' openjdk prefix. They get a per-child grant in the
+`presence` shape and no CAS.
+
+`templates` and `settings/whatsapp` have exactly one writer each — the client —
+so both get real rev pairs (`templatesRev`, `whatsappRev`).
+
+**This is the second CAS exemption, and unlike `presence` it is real data**, so
+`CLAUDE.md`'s closing sentence ("ONLY for genuinely ephemeral, per-connection
+-owned nodes — never for real data") was corrected rather than quoted around.
+The exemption test is no longer *is this ephemeral* but **can a rule bind every
+writer of this node**: `presence` passes the old test, these pass the new one,
+and a node with only client writers passes neither and gets its CAS.
+
+### The grant sits one level above where it looks like it should
+
+`conversations/$phoneKey` and `messages/$phoneKey`, not `$phoneKey/$mid`. Write
+permission cascades DOWN, so one grant covers the per-message writes *and* the
+delete-this-conversation call, while the whole-node wipe stays denied. That last
+part is the whole of CT-2A-06 still holding: `clearAllWaData()` did
+`set(ref(db,"conversations"), null)`, and granting that back for two nodes would
+have spent v17.16.7's win six days after shipping it. The sandbox client deletes
+per key instead.
+
+### Verification
+
+| | |
+|---|---|
+| `npm run test:rules` | **109 → 120 passed** |
+| `npm run build` | clean · 92.14 kB gz (unchanged — no `src/` change but the version line) |
+| `npm test` | 805 passed (24 files) — unchanged, as expected |
+
+The +11 was reconciled rather than accepted: **7** new tests in the WhatsApp
+group, **4** from the rev-pair sweep picking the two new pairs up automatically
+(2 pairs × 2 tests). `revPairsIn` derives `PAIRS` from the rules file, so
+neither the sweep nor its `>= 12` floor needed editing — which is the property
+that rule was written for.
+
+### Counts corrected while here
+
+`109 tests` → `120` in `ROADMAP.md`, `database.rules.README.md` and `CLAUDE.md`;
+`the twelve <name>Rev pairs` → `fourteen` in `CLAUDE.md`. Two "twelve"
+references were deliberately **left**: they are inside the v17.16.7 sections and
+are correct as history. A third, in the test file's "every write shape the app
+actually performs" comment, is correct for a different reason — it counts what
+*this branch's app* writes, where the two new pairs belong to `wa-sandbox` — and
+now carries a note saying so, because twelve and fourteen sitting a few lines
+apart in one file is exactly the shape somebody "corrects".
+
+### `/code-review` — two findings, both confirmed
+
+1. **The new WhatsApp group pinned the wipe and not the REPLACE.** The bookings
+   group two screens up already names why that is half a test — "replacing is
+   the same capability wearing a different verb" — and the same is true of
+   `conversations` and `messages`: a `set()` naming one child drops every other
+   one, and each child it *does* name satisfies `$phoneKey`. Measured before
+   writing the test: the replace is already refused, so this pins existing
+   behaviour rather than changing a rule. **120 → 121.**
+
+2. **`clearAllWaData()` built its paths from a FIELD, not from the key** —
+   a real bug, introduced by this version's own sandbox commit and caught here.
+   The conversations listener does `Object.values(val)` and groups by
+   `c.phoneKey`, **discarding the snapshot keys**; that field comes out of each
+   row's body and is not guaranteed to equal the key the row is stored under,
+   because `api/_lib/rtdb.js` writes at `sanitizeKey(phoneKey)` (mapping
+   `. # $ [ ] /` to `_`). So `"conversations/" + c.phoneKey` could name a path
+   that does not exist: the delete succeeds against nothing and the real row
+   survives a hard reset. **That is the "it does not fail, it silently
+   RE-TARGETS the write" hazard that file's own header is about, reproduced one
+   file over by someone who had just read it.** Fixed with a
+   `conversationKeysRef` holding the snapshot keys — which also picks up rows
+   the listener DROPS (it skips any body with no `phoneKey`), so the per-key
+   reset now clears strictly more than the first rewrite would have, and the
+   same set the old whole-node null did.
+
+   Accepted and commented rather than fixed: the reset clears what the
+   listeners have seen, so calling it before the first snapshot is a no-op
+   where the whole-node null was unconditional. The button is inside the
+   DEV-gated simulator, which only renders once the inbox has data.
+
+---
+
+## v17.16.9 — the change that was thrown away without being named
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.9-parked-writes` ·
+**Behavioural change:** yes — an exhausted write is now kept, named and
+retryable instead of dropped. **Files:** `src/hooks/usePersistence.js`,
+`src/lib/write-path.js`, `src/components/AppBanners.jsx`, `src/App.jsx`,
+`tests/write-path.test.js`, plus the four living docs.
+
+### What this closes
+
+**CT-2A-07**, the highest-value remaining crash-test finding, and the one that
+had stayed open because it needed a decision rather than a repair.
+
+`drainPending`'s give-up branch was one line: set a red banner reading
+*"Couldn't save a change after several attempts — please re-check and try
+again"*, and drop the queued item. The user's change was gone, and the only
+thing the app said about it named no booking, offered no way to retry, and
+could be dismissed.
+
+### The finding's stated mechanism does not survive running it
+
+CT-2A-07 says the optimistic `setBookings` is never reverted, so *"screen and
+server disagree until the next echo silently reverts it"* — an unbounded
+window in which the app asserts a booking state the server does not have. That
+is what the fix was designed against, and the first draft of the banner copy
+said exactly that: *"shown here but not saved to the server."*
+
+**It is wrong.** `drainPending` is called from exactly two places —
+`resync().then` and the live `bookings` `onValue` — and *both* set local state
+to server truth and call `clearStale()` immediately before it, in the same
+React commit (`usePersistence.js` lines 280/292/295 and 477/484/548). So by the
+time the give-up branch runs, the change has already been reverted.
+
+Measured, not reasoned about: with the retries forced to fail, the card read
+`Confirmed` the moment the banner appeared, with no further echo.
+
+So there is no divergence to describe. The defect is a **silent discard** — the
+change visibly snaps back and nothing says which one it was. That makes naming
+it the whole repair rather than half of one, and it removed a `markStale()`
+from `discardParked` that would have resynced to revert something already
+reverted.
+
+### What ships
+
+A parked write is **kept, named and actionable**. `parkedRef` holds the updater
+functions; `parkedWrites` is the render-side mirror holding labels only. The
+existing "Couldn't save" section grows two controls — **Retry** (a fresh round
+of automatic attempts on freshly-resynced data) and **Discard** (accept the
+loss and clear the banner).
+
+It stays in that section rather than becoming its own, and that is structural:
+the strip's collapsed tally is one icon + count **per section**, so a second
+section would have to wear a second mark — the `ClashIcon` lesson — and "a
+write that could not be saved" is not a different category from "couldn't
+save".
+
+`MAX_RETRIES` is unchanged. It still bounds the *automatic* attempts, which is
+what it was always for; what changed is what happens after them.
+
+### Two bugs the live run found in the fix itself
+
+**1 · The label lost a race, and the banner said "A change".** The label is
+computed inside the `setBookings` updater, because the stale-gate branch never
+runs the updater itself and only `prev`/`computed` know what changed. That fill
+is not synchronous. A retry is dispatched from inside `resync().then`, so React
+defers the render that would fill it, and the next `get()` — resolving from the
+local cache one microtask later — drains again and parks the item while `label`
+is still `null`. The console read `parking: null tries 1` **between** the two
+fills.
+
+The first fix was a `useEffect` on `[bookings]` re-mirroring the labels. It
+worked, and it cost **three lint warnings** — one unused directive plus two
+`Cannot call impure function during render` on pre-existing `Date.now()` lines
+the rule had not previously flagged. Isolated by deleting the effect and
+re-linting: 8 warnings → 5, the baseline. So it was replaced by
+**`carriedLabel`**: a retry inherits the name computed for the first attempt,
+which is the right name anyway (same change; the *first* `prev` is the version
+the card still shows). Only the first attempt computes one, and that one is
+dispatched from a discrete event handler, which React flushes before yielding.
+Back to 71 warnings, 0 errors.
+
+**2 · The label named a booking that was not on screen.** `describeWrite` read
+`computed` over `prev` — the values being saved — which sounds right and is
+wrong here: the write was undone, so the card still shows the previous version.
+Seating a 19:30 booking shifts its time to now, so the banner named
+*"P3 Smoke Test, 15:05"* for a card reading *19:30*. It reads `prev` over
+`computed` now, falling back to `computed` for a create, which has no previous
+version.
+
+Both were found by watching the app, not by reading it. Neither would have
+failed a build.
+
+### `changedIds` — one diff, not two
+
+The label needs to know which children a write would touch, and a write is
+parked at three sites, only one of which has a patch in hand. Rather than a
+second copy of the diff loop — which is how the banner ends up naming a
+different booking from the one the patch carries — `buildPatch`'s own loop was
+extracted as `changedIds` and `buildPatch` now consumes it. Proven shared
+rather than merely adjacent: sabotaging `changedIds` to drop deletions breaks
+an existing `buildPatch` test (`nulls a removed child`) as well as two new ones.
+
+### A DEV-only false alarm, recorded because it is useful
+
+Under StrictMode the double-invoked updater can dispatch two `update()` calls
+whose CAS bases differ (one pre-resync, one post-resync), so they escape the 2s
+`patchSignature` dedupe and the stale one is correctly rejected — four times,
+and the write parks. **On unmodified v17.16.8, six consecutive ordinary status
+changes each raised the old banner**, so this is pre-existing DEV behaviour and
+not a regression; it is also what made the fix easy to demonstrate side by
+side. With StrictMode off, one forced failure parks exactly one item, Retry
+lands the change, `parkedWrites` returns to `[]` and the strip disappears.
+
+It does contradict CLAUDE.md's description of `lastPatchSigRef` as making the
+write path "StrictMode-proof" — see `ROADMAP.md`.
+
+### `/code-review` — two findings, both confirmed, both introduced here
+
+**1 · The extraction was not equivalent on a duplicate id.** `buildPatch`'s new
+lookup was built from every entry in `computed` (last wins), where the original
+loop only ever stamped the occurrences that DIFFERED from `prev`. With
+`prev = [{id:"x",size:2}]` and `computed = [{id:"x",size:4},{id:"x",size:2}]`,
+the original wrote size 4 and the extraction wrote size 2 — silently discarding
+the edit. Reproduced by running the pre-refactor function beside the new one:
+*"OLD writes size: 4  NEW writes size: 2"*.
+
+**The key sets are identical, which is exactly why the new agreement test could
+not see it** — it compares `Object.keys(patch)`. Duplicate ids are a state this
+repo already tracks as reachable (a `genId()` collision, `ROADMAP.md`), so an
+equivalence contract has to hold there too. Fixed by making the shared pass
+(`diffChanged`) record only the CHANGED occurrences, which also removed the
+double `bookingChanged` evaluation the naive fix would have cost on the hot
+write path. Pinned by a value test, not a key test.
+
+**2 · A parked write hid a concurrent `writeWarning`.** The section rendered
+the parked message *instead of* the warning and swapped Dismiss for
+Retry/Discard — so a second, unrelated failure was neither shown nor
+dismissable, and reappeared out of context when the parked write was resolved.
+The in-code comment asserted they "cannot both be rendered", which was true of
+the rendering and false of the states: `writeWarning` has three other callers
+(not loaded, empty-array refusal, **blocks rejected**), none related to
+parking. Concretely — a booking write parks, the user then edits a table block,
+`saveBlocks`' rev-CAS is rejected, and the block edit is lost with the app
+saying nothing.
+
+Both lines render now, parked first, with Dismiss alongside Retry/Discard
+whenever there is a warning to dismiss. Verified live by parking a write and
+then raising an independent warning: both sentences and all three buttons.
+
+### Verification
+
+| | |
+|---|---|
+| `npm run build` | clean · **92.68 kB gz** main bundle (main: 92.13, +0.55) |
+| `npm test` | **817 passed** (24 files), from 805 — 12 new in `write-path.test.js` |
+| sabotage checks | describeWrite reading `prev`-over-`computed` reversed → 1 fail; `changedIds` dropping deletions → 3 fails, one of them a pre-existing `buildPatch` test |
+| `npm run lint` | **71 problems (0 errors, 71 warnings)** — the baseline exactly, read off the `problems` line |
+| `npm run check:style` | OK |
+| live, DEV | park · label · Retry (lands, banner clears) · Discard (drops, banner clears) · ordinary path unaffected; and the same six clicks on v17.16.8 for the before/after |
+
+The whole verification rig — a `window.__FORCE_STALE__` lever, `MAX_RETRIES` at
+1, four `console.log`s and a StrictMode removal — was added, used and removed;
+`git diff` against `origin/main` touches neither `main.jsx` nor any of it.
+
+---
+
+## v17.16.10 — the pointers that outlived what they pointed at
+
+**Date:** 2026-09-02 · **Branch:** `fix/v17.16.10-ref-mirror-and-doc-truth` ·
+**Behavioural change:** see each commit below. **Files:** `src/App.jsx`,
+`CLAUDE.md`, `ROADMAP.md`, `tests/contrast.test.js` (+ the CT-2A-09 commit's
+own files, recorded with it).
+
+A version carrying four scopes Patryk chose together: three that correct or
+settle a claim, and one structural fix. The first three change no shipped
+behaviour at all — which is the point of grouping them, since each one is a
+sentence somebody would otherwise quote with confidence.
+
+### Commit 1 — the three claims in CLAUDE.md that were false
+
+**None of these was found by reading the code looking for bugs.** All three were
+found by checking a claim against the thing it described, which is the only way
+this class shows up: a wrong sentence in a file that is auto-loaded into every
+session reads exactly like a right one.
+
+**(1) The dangling ROADMAP pointer.** The Gotchas row on naming a control
+rendered from a `.map` ended *"Still open in `LayoutSettings`' priorities editor
+— see ROADMAP"*. Measured: the priorities editor's two control groups both carry
+`aria-pressed` **and** an identity-bearing `aria-label` — the zone-mode segments
+(`LayoutSettings.jsx:840`, named `"Indoor (Party of 2 to 2)"` and so on) and the
+`mixedRequire` chips (`LayoutSettings.jsx:932`, `"5A — require in cross-zone
+combos"`), each with the v17.15.6 comment that put it there. And `ROADMAP.md`
+holds no matching entry — `grep -in 'layoutsettings\|aria-pressed\|priorit'`
+returns nothing.
+
+So the work shipped in v17.15.6 and the ROADMAP entry was correctly deleted with
+it; what nobody deleted was the pointer *to* that entry, one file over. **A
+pointer to nothing reads as open work**, and this is the same shape the row it
+sits in is about: one fact written in two places, and the half that goes stale
+is the half nobody is looking at.
+
+**(2) "StrictMode-proof".** The v15.5.0 paragraph describes `stampForWrite` as
+clock-skew-proof *and* StrictMode-proof, "the dev double-write gets a higher
+stamp → accepted, no spurious reject". True of the rule that paragraph
+describes, where acceptance required `updatedAt` **greater than** stored — and
+v16.0.0 replaced greater-than with a CAS requiring `baseUpdatedAt` to **equal**
+it. Under CAS a higher stamp guarantees nothing. The clause now says which rule
+it belongs to and points at the paragraph that superseded it.
+
+**(3) `lastPatchSigRef` "dedupes StrictMode's dev double-dispatch".** The
+claim ROADMAP had already flagged, and it is unqualified where the code is
+conditional. `contentKey` deletes `updatedAt` and nothing else
+(`write-path.js`), so `patchSignature` keeps `baseUpdatedAt` — the signature is
+(content, base). StrictMode's double-invoked updater can read two different
+`prev` values, one pre-resync and one post-resync, so the two dispatches carry
+**different bases**, produce different signatures, escape the 2s window, and the
+stale one is correctly rejected by the CAS. Measured on unmodified v17.16.8 and
+recorded under v17.16.9: six consecutive ordinary status changes each exhausted
+the retries and raised the write-error banner in DEV.
+
+Corrected rather than "fixed", which is the decision the ROADMAP entry itself
+predicted: the change that would make the sentence true — dropping
+`baseUpdatedAt` from the signature — is exactly what v17.16.6 pinned **against**
+under CT-2A-08, because it is what makes two patches indistinguishable to the
+server. So the code is right and the sentence was wrong. Dev-only; the rejected
+write is the redundant one.
+
+**(4)** `App.jsx` re-measured at **3879** lines (`wc -l`), against the `~3754 as
+of v17.15.2` the block claimed — the drift its own note tells the reader to
+expect. The test count was checked the same way and needed no change: 817 in 24
+files, exactly as stated.
+
+### Commit 2 — the status mark's non-text contrast, recorded rather than changed
+
+The `Deferred` item v17.15.7 left at the top of `ROADMAP.md`, settled by
+measurement plus Patryk's call.
+
+**Re-measured before deciding, and the first measurement was wrong.** The
+instrument read `--card` for the backdrop; that token does not exist, so the
+`|| "#fff"` fallback hardcoded a white base in *both* themes and the dark
+column came back flat (1.82 / 2.90 / 3.01 against ROADMAP's 2.20 / 3.58 /
+4.58). The theme *was* flipping — `--block-seated` changed with it — which is
+what made the reading look plausible. Re-run against the repo's own `BASE`
+constant (`{light: #fff, dark: rgb(36,37,42)}`, "the extreme of each theme"):
+
+|           | light | dark |
+|---|---|---|
+| pending   | 1.82 | 2.20 |
+| confirmed | 2.90 | 3.58 |
+| seated    | 4.52 | 4.56 |
+
+which matches ROADMAP's recorded figures within rounding. **ROADMAP's numbers
+were right and the new measurement was wrong**, and it was wrong in the way
+this file keeps recording: check the instrument before the app.
+
+**The decision (Patryk's): record it, do not change it.** The mark is
+`BLOCK_INK[status]` on `BLOCK_BG[status]` — the app's existing status
+vocabulary, already shipping identically on the timeline rail and in `SBadge`.
+A `paint-order: stroke` halo or a `--block-*` outline is a new treatment that
+has to reach every status surface in one version, or the app grows two
+vocabularies that disagree; that is its own release.
+
+The note went beside the existing exemption paragraphs in
+`tests/contrast.test.js`, where the two earlier ones live, and it makes two
+points those do not. The criterion is **different** — text is 1.4.3, a mark is
+1.4.11 and the bar is 3:1 — so the exemption above does not simply extend to
+cover it. And **no `EXEMPT_FLOOR` entry was added**: the mark reuses tokens the
+registry already carries (`--block-confirmed` / `--block-pending` exempt at
+2.8 / 1.75, `--block-seated` a `label` at the full 4.5, clearing it at 4.52),
+so a regression in exactly these pairs already fails the build. A second entry
+would be a second answer to one question.
+
+What is *not* inherited from the text argument is stated at the site: the mark
+was never the only carrier. The fill remains, `PlanView`'s `ariaLabel` names the
+status in words, and `STATUS_LABEL` puts it in the block's accessible name. The
+mark removes a colour-only failure; it is not asked to survive alone.
+
+### Commit 3 — duplicate booking ids: the scan nobody had run
+
+The `ROADMAP` bullet asked for one settling observation — *"whether any two ids
+in PROD coincide at all"*. It is deleted on two independent grounds, one
+measured and one structural.
+
+**Measured (DEV, 507 bookings, via the app's own authenticated handle):**
+
+| | |
+|---|---|
+| duplicate `id` fields | **0** |
+| children whose RTDB key ≠ their own `id` field | **0** |
+| children with no `id` field | **0** |
+| node shape | keyed object (not a legacy array) |
+
+**Structural, and this is the stronger half.** `buildPatch` writes
+`patch[id] = r.booking` (`write-path.js`) into a node that *is* `/bookings/{id}`
+— so two bookings sharing an id address the same child, and a `genId()`
+collision **overwrites rather than duplicating**. Two same-id bookings cannot
+coexist as separate children at all. The only shape that produces a duplicate in
+the in-memory array is two DIFFERENT keys whose `id` fields agree, because
+`sanitizeAll` is `Object.values(...)` and throws the keys away — and that
+requires an out-of-band write, since nothing in the app can author it. That is
+the divergence the second row above measures, and it is zero.
+
+**A hypothesis raised and killed in the same pass.** The id-length histogram
+showed suffixes of 3, 0 and even −4 characters, which read as `genId()`'s
+`Math.random().toString(36).slice(2, 6)` sometimes returning fewer than four —
+which would have put the collision odds well above the bullet's stated figure.
+Inspecting the outliers disproved it: every short id is a hand-seeded DEV
+fixture (`clashaaa` / `clashbbb` from clash testing, the `rvmt0astu5*` run
+staged for the user manual, `pzh6`), and the 24-character ones are documented
+recurring-occurrence ids. All 481 genuine `genId()` outputs are exactly four.
+Confirmed independently at 5,000,000 samples: `{"4": 5000000}`, zero short. So
+`36⁴ = 1,679,616` given the same millisecond, exactly as the bullet said.
+
+**No code change.** A guard would defend a state the storage shape makes
+unreachable, on the hottest read path in the app.
+
+**The PROD half is Patryk's**, since Claude never touches PROD. Signed in, in
+the browser console:
+
+```js
+const fb = await import('/src/firebase.js');
+const tok = await fb.auth.currentUser.getIdToken();
+const raw = await (await fetch(fb.db.app.options.databaseURL + '/bookings.json?auth=' + tok)).json();
+const e = Object.entries(raw), ids = e.map(([k, v]) => String(v && v.id !== undefined ? v.id : k));
+console.log({
+  children: e.length,
+  keyVsIdMismatch: e.filter(([k, v]) => v && v.id !== undefined && String(v.id) !== String(k)).map(([k]) => k),
+  duplicates: [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))],
+});
+```
+
+Both lists empty is the same answer DEV gave.
+
+### Commit 4 — CT-2A-09: the write leaves the setState updater
+
+**Files:** `src/hooks/usePersistence.js`. The last open crash-test register
+finding, and the one ROADMAP rated *low value, high risk* — "worth doing only as
+its own version, with nothing else riding along". It is the last commit of this
+branch for exactly that reason: the three before it change no shipped behaviour,
+so a bisect can tell them apart from this one.
+
+`saveBookings` and `saveBlocks` called `persist(...)` — which performs the
+Firebase `update()` — from **inside** their `setState` updater, the shape
+`CLAUDE.md`'s own gotcha row has forbidden since v16.0.0 while this file did it.
+v17.16.0 corrected the row's claim that the shape was gone; this removes the
+shape. Both now use `useWaitlist.js`'s pattern verbatim: compute from a ref
+mirror, assign the mirror, `setState`, then write — all plain statements.
+
+**Two things it fixes beyond obeying the rule**, neither of which is why it was
+filed:
+
+React invokes an updater during **render**, not at the call. It only *looked*
+synchronous here because React eagerly evaluates the first update on an idle
+fiber — an internal optimisation, not a contract. `saveBookings` returns a
+`dispatched` boolean that `persist`'s guard branches set and that is read on the
+very next line, and **every caller gates its "Booking saved." on that return**.
+The whole contract was resting on an implementation detail. And the same eager
+path invokes the updater a *second* time when the render arrives, which is the
+dev double-dispatch `lastPatchSigRef` exists to absorb.
+
+It also makes the v17.16.9 parked-write label synchronous. That comment explains
+at length that the label must be filled inside the updater because "`prev` /
+`computed` … exist only inside the setBookings call" — no longer true, so the
+label is computed before the item is pushed and the documented race (a drain
+seeing `label` still null) is unreachable. **`carriedLabel` stays**: it is still
+the right name for a retry, and removing a working defence is not this commit's
+job.
+
+**The invariant that replaces the mitigation**, stated at the ref declarations:
+every `setBookings` / `setTableBlocks` in the file assigns its mirror on the
+line above it — **four and three respectively, counted rather than assumed** (a
+first draft of that comment said "four of each"). A new set site that forgets
+one hands the next save a stale `prev`, and the diff would read that as fields
+changing *back*, so it would write rather than skip.
+
+### Verification — measured against the real server, not reasoned about
+
+Rewriting this path is how the repo has lost production data twice, so it was
+exercised live in DEV rather than trusted to the suite.
+
+| | |
+|---|---|
+| `npm run build` | main bundle 339.21 kB, **92.67 kB gz** (baseline 92.68) |
+| `npm test` | **817 passed**, 24 files |
+| `npm run check:style` | OK |
+| `npx eslint src` | **71 problems, 0 errors** — byte-identical to the pre-change baseline, measured by stashing the change and re-running |
+
+Live, against DEV Firebase:
+
+- **A form save lands.** `P3 Smoke Test` edited to Seated → server `status`
+  `confirmed` → `seated`, `updatedAt` `1788359547299` → `1788363527629`.
+- **The mirror chains, which is the property that could actually have broken.**
+  Two back-to-back quick actions (Confirmed, then Completed) with no server
+  round-trip between them: the second write's `baseUpdatedAt` came back as
+  **1788363576345 — exactly the first write's `updatedAt`**. So the second diff
+  was computed against the post-first-write snapshot. A stale mirror would have
+  carried the pre-Confirmed base and been rejected by the CAS; no rejection, no
+  resync, and no `[SAFE]` line in the console.
+- **`saveBlocks` lands.** Blocking table 6 took `tableBlocks` 13 → 14 and
+  `tableBlocksRev` 98 → 99, i.e. the revGuard CAS advanced by exactly +1, with
+  the new block carrying a minted `id`.
+
+**One false alarm, recorded because it would otherwise be re-found.** Adding two
+`useRef`s to a live hook changes its hook order, so the first HMR swap threw
+*"React has detected a change in the order of Hooks"* and the error boundary
+caught it — position 72, `useState` → `useRef`. It also left one stale render
+where the timeline drew blank. Both are HMR artefacts of editing a mounted hook:
+every clean load renders correctly and the console errors carry the *pre-reload*
+module timestamps. Checked rather than assumed, because "it's just HMR" is
+exactly what a real regression would also look like for one screenshot.
+
+### Commit 5 — the contrast decision, recorded where design decisions live
+
+A follow-up to commit 2 rather than part of it: the measurement and the
+`EXEMPT_FLOOR` reasoning belong in `tests/contrast.test.js`, but the *decision*
+is a design decision, and `DESIGN.md` owns those. It joins the amber-exemption
+bullet it sits beside, and deliberately **points at the test file instead of
+repeating its numbers** — a rule answered in two files is the defect all three
+living docs warn about, and the one that goes stale is the copy nobody is
+reading.
+
+What it adds beyond a pointer is the rule the decision establishes: a halo or
+outline on the mark is a new treatment that must reach the timeline rail,
+`SBadge` and the plan table in one version, or the app ships two status
+vocabularies that disagree.
+
+### Commit 6 — `/code-review` pass
+
+Two findings, both in this branch's own diff, both confirmed and both cosmetic;
+**no correctness defect was found in the conversion**, and the checking that
+established it is worth recording because it is the part a reader would want to
+re-run.
+
+- `ROADMAP.md` — the v17.16.10 tally nested a `**zero**` inside an already-open
+  bold span, so the one sentence in the file that says how many findings remain
+  rendered with literal asterisks. Re-split so each emphasis closes.
+- `usePersistence.js` — the scripted edit had wrapped the invariant comment
+  mid-clause ("hands the next / save a stale `prev`"), which is the sentence a
+  developer adding a fifth set site would read to learn the rule.
+
+**What was checked and cleared.** The one way a ref mirror can genuinely differ
+from a React updater is a NON-idempotent transform applied twice: the updater is
+re-run from the base state, so React discards the first result, whereas the
+mirror has already advanced and the second call would compound. It is not
+reachable here, and each site was opened rather than assumed — the two
+effect-driven callers (which StrictMode double-invokes) both carry idempotency
+guards already, `reconcile` returning `prev` when nothing moved and the
+recurring generator skipping an occurrence it can already see; and the one true
+concat, `doSave`'s, runs `applyBase`, which filters `newId` out before
+concatenating. Those guards exist because the write path has always had to
+survive a retry replay, so the property the conversion needs was already paid
+for.
+
+**Two latent bugs the conversion fixes that were not why it was filed.** Both
+are reads of a value set inside a deferred updater, on the line after the call:
+`saveBookings`' `dispatched` (which every caller gates "Booking saved." on) and
+the reconciliation effect's `changed` (which gates `flashSyncFix`). Both worked
+only because React eagerly evaluates the first update on an idle fiber. They are
+now set synchronously.
+
+**Also confirmed unchanged, and left alone:** on a `persist` refusal (not
+loaded, empty-array guard, legacy-array hold) local state has already advanced
+to `computed`. That is pre-existing — the old updater returned `computed`
+regardless of the outcome too — so it is out of scope for this diff and is not
+a regression.
+
+---
+
+## v17.16.11 — the date the app could not navigate away from
+
+**Date:** 2026-09-03 · **Branch:** `fix/v17.16.11-date-nav-crash` ·
+**Behavioural change:** yes — see commit 1. **Files:** `src/lib/day.js`,
+`src/App.jsx`, `src/hooks/useKeyboardShortcuts.js`,
+`src/components/WeekView.jsx`, `tests/day.test.js`, `CLAUDE.md`, `ROADMAP.md`
+(+ commit 3's own files, recorded with it).
+
+The version that empties `ROADMAP.md`'s **Deferred** section. It set out to
+close the last thing in it — the CT-2A-03 follow-on, *"the rules check TYPE,
+never FORMAT"* — and the measurement moved the problem somewhere better.
+
+### Commit 1 — date navigation survives an unparseable `viewDate`
+
+**Found while measuring the ROADMAP item, not by looking for it.** The entry
+asks what happens when a booking holds a malformed `date`, so the first thing
+measured was what the pure functions do with one. `weekdayOf` returns Sunday,
+`hoursFor` falls back to `DEFAULT_DAY`, `dayDiff` returns `null` — all
+defensive, all fine. `addDays` throws.
+
+```
+addDays("31/08/2026", 1)  →  RangeError: Invalid time value
+addDays("", 1)            →  RangeError: Invalid time value
+```
+
+**It is reachable from stored data, and `""` is a shape the app produces
+itself.** `searchBookings` (`customers.js:426`) filters on name, phone and
+`anonymized` and never on whether the date is a date; `SearchPanel`'s `onPick`
+calls `goToDate(b.date)` with the booking's stored value. So the search results
+are a list of ways to put an arbitrary string into `viewDate`. `sanitize` writes
+`date: b.date || ""`, and `tests/rules/database-rules.test.js` lists a booking
+with no date under *"every booking shape the app itself produces"*.
+
+**The plan's account of the consequence was wrong in half, and the correction is
+the useful part.** It said the throw unmounts the tree into the v17.16.0
+`ErrorBoundary`. Measured live on DEV against two seeded bookings
+(`date: "31/08/2026"` and `date: ""`), with the pre-fix call sites temporarily
+restored one at a time:
+
+- **The arrows throw in an EVENT HANDLER**, which an error boundary does not
+  catch. `Uncaught RangeError: Invalid time value at addDays`, `#root` still
+  populated, page still drawn. The symptom is not a white screen — it is that
+  Next day, Previous day and `←`/`→` **silently stop working**, leaving you
+  stuck on that date with only the Today button and the date picker as a way
+  out. Quieter than a crash and harder to report.
+- **`WeekView` throws during RENDER**, which a boundary does catch. Opening the
+  More popover (`M`) from the poisoned date replaced the whole app with *"MGT
+  Bookings hit an error"* — `[MGT] render error caught by the boundary … at
+  WeekView`.
+
+Two paths, two different failures, from one throw. Worth stating because the
+fix's shape follows from it: the `WeekView` half is the severe one and it is
+**not** fixed by swapping `addDays` for a safe stepper, since `goMonth` throws on
+its own `toISOString()` rather than through `addDays` at all.
+
+**The fix.** `src/lib/day.js` gains one private stepper and two exports:
+
+- `stepUTC(dateStr, n)` — module-private, the step **without** the throw, `null`
+  when the answer cannot be a `YYYY-MM-DD`. It rejects on three measured
+  grounds, and the second and third are why guarding the *input* is not enough:
+  the input does not parse; the **step** falls off the representable range
+  (`"275760-09-13"` parses and `+1` day is NaN); or the step lands outside years
+  0001–9999, where `toISOString()` switches to the expanded `±YYYYYY` form and
+  `slice(0,10)` returns a truncated non-date — `addDays("9999-12-31", 1)` used to
+  return the string `"+010000-01"`. So it tests the OUTPUT.
+- `isReadableDate(v)` — "can the app navigate from this date", **defined as a
+  zero-day step succeeding**. The consumer's-requirement shape `isReadableTime`
+  established in v17.16.5 and `isReadableBlock` in v17.16.6, taken one step
+  further: the predicate *is* the operation, so the two cannot drift apart the
+  way two hand-written rules would. Deliberately **not** a
+  `^\d{4}-\d{2}-\d{2}$` pattern — `"2026-8-3"` parses and steps, so it navigates
+  today and must keep navigating, the same rule under which `isReadableTime`
+  keeps `"9:30"`.
+- `stepDate(dateStr, n)` — `addDays` for the four sites that step the *viewed*
+  date, anchoring on `todayStr()` when the date cannot be stepped.
+
+**`addDays` stays the strict public face** and is now implemented over
+`stepUTC`, throwing where it returns null. Every input the existing tests pin
+behaves identically; the only two that changed were already broken (the
+overflow, which threw before and throws now, and year 9999+1, which returned
+garbage and now throws). **Keeping the two functions apart is the point** — a
+caller wanting the strict answer wants `addDays`, a caller wanting the safe one
+wants `stepDate` — and `tests/day.test.js` pins that `addDays` still throws on
+every input `stepDate` absorbs, so the strict one cannot be quietly softened
+into the safe one.
+
+**`WeekView` takes ONE guard rather than four**, on the `anchor` its `ref` and
+`focus` both seed from. Every date operation in that component anchors on those
+two — `goWeek`/`moveFocus` via `addDays`, `goMonth` via its own `toISOString()`,
+`focusWithinWeek` via `weekDates(ref)` — so guarding the seed covers all four,
+where swapping the stepper would have covered two. A calendar cannot draw an
+unparseable date, so it opens on today.
+
+**Anchoring rather than refusing, deliberately.** Refusing the step at
+`goToDate` was the simpler guard and was rejected: it makes the bad booking
+unreachable, and the booking is the thing somebody has to go and repair — the
+v17.16.6 `BlockModal` rule. A silent no-op was rejected for the same reason
+v17.16.2 exists, where forward navigation quietly died once a year.
+
+**Not changed, and checked rather than assumed:** the day-announce effect
+(`App.jsx:3153`) already guards its own `new Date(viewDate+"T00:00:00Z")` with
+`Number.isFinite` and falls back to the raw string. It is the only other place
+`viewDate` meets a throwing date operation (`grep` over `src/` for `new Date(`,
+`toISOString`, `addDays` and `Date.parse` against `viewDate`).
+
+**Verification.** `tests/day.test.js` 21 → 29 tests; suite **817 → 825**, lint 0
+errors / 71 warnings, `check:style` OK, main bundle 92.79 kB gz. Live on DEV
+against both seeded bookings, with a `window.addEventListener('error')` counter
+armed: jump to the poisoned date, open the More popover (opens, Week/Month/Stats
+drawn), `→` lands on today+1 — **zero errors**, and the bad booking still shows
+its full action row, so it stays repairable. The pre-fix behaviour was
+reproduced first, one call site at a time, which is what established the
+event-handler / render split above.
+
+### Commit 2 — `date` and `status` get a FORMAT, and the audit stops being a precondition
+
+This is the ROADMAP item itself: *"the rules check TYPE, never FORMAT"*, the last
+entry in the **Deferred** section.
+
+**The entry's premise did not survive being measured.** It said closing this
+meant auditing what PROD holds first, because a format rule would refuse a stored
+`"31/08/2026"` — `sanitize` reads it through unchanged (`b.date || ""`,
+`status: b.status || "confirmed"`) and writes it back on the next save, and
+`persist` sends ONE multi-path `update()` that RTDB applies atomically, so one
+such booking would reject a whole optimiser reshuffle and leave staff unable to
+save a day that looks perfectly normal. That reasoning is correct and is
+preserved verbatim in the rules suite's own comment.
+
+**What changed is that the rule no longer has to choose.** Each predicate is
+
+```
+newData.isString() && (newData.val().matches(<pattern>) || newData.val() === data.val())
+```
+
+A value **carried through unchanged** is always allowed, whatever it is — which
+is exactly what `sanitize` does with a legacy record — so nothing already stored
+can make a day unsaveable. A value being **introduced or changed** must be
+well-formed, and on a create `data.val()` is null so the pattern is the only way
+in. The hazard is removed rather than accepted, which is why **no audit gates
+this**; the precondition the entry was waiting on turned out to be avoidable
+rather than unmet.
+
+- `date` — `/^([0-9]{4}-[0-9]{2}-[0-9]{2})?$/`.
+- `status` — `/^(confirmed|pending|seated|completed|cancelled)$/`, the set taken
+  from `STATUS_COLORS`, `BookingFormModal`'s `statusTargets` and every
+  `updateStatus` call site rather than from memory.
+- `time` — **still type-only, deliberately.** `isReadableTime` accepts `"9:30"`,
+  `"13:00:00"` and `":"` on purpose (v17.16.5), so the client's own output is
+  wider than any pattern worth writing — and a grandfather clause cannot help
+  with values the app is still free to produce.
+
+**Two things found by running it rather than reading about it.** The date pattern
+was first written `/^$|^[0-9]{4}-…$/` and the emulator refused to load the file
+at all: *"Illegal regular expression, unescaped ^, ^ can only appear at the end"*
+— RTDB's regex engine is a subset, so the empty case is an **optional group**,
+not an alternation. And `@firebase/rules-unit-testing` is declared in
+`package.json` but was **not installed** in this checkout, so `npm run test:rules`
+could not run at all until it was; a pre-existing environment gap, unrelated to
+this diff, recorded because the next person will hit it.
+
+**The audit was done anyway, on DEV**, read-only over the RTDB REST API with the
+signed-in ID token: **507 bookings, 0 malformed dates, 0 malformed times, 4
+distinct statuses** (`confirmed` 244, `completed` 203, `cancelled` 51,
+`pending` 9), every one of them valid. PROD was not read — Claude does not touch
+it — and with the grandfather clause it does not need to be.
+
+**Tests: 121 → 126.** The two deliberate-acceptance entries (`"an unknown
+status"`, `"a malformed date"`) and the `"accepts a badly FORMATTED … date and
+time"` test were **inverted with the rules**, in that file's established
+convention, and the long block comment explaining why format was unchecked was
+rewritten rather than deleted — its premise is what changed. Both halves proven
+against a sabotaged build, which is the only way to know a doubled-looking
+predicate is doing work:
+
+- drop `|| newData.val() === data.val()` → **2 failed / 124 passed**, exactly the
+  two carry-through tests;
+- widen both patterns to `/^.*$/` → **4 failed / 122 passed**, exactly the four
+  refusal tests.
+
+**Deploy: app first, rules second**, and needs the manual Firebase console step.
+### Commit 3 — `ROADMAP.md`'s Deferred section is empty
+
+Patryk's requirement for the session, and it took more than deleting the bullet.
+The section was ~65 lines, of which the bullet was 11: the rest was a running
+tally of the crash-test register (*"…leaving two: CT-2A-07 and CT-2A-09"*) and a
+statement of the convention for settling a finding. With the register at zero and
+the last entry closed, all of that describes entries that no longer exist — the
+"pointer that outlived what it pointed at" defect v17.16.10 is named for, one
+file over.
+
+So the tally is **deleted, not moved** (it is already in this log, version by
+version), and the one clause the file's own header lacked — that a settled
+finding is deleted whether it was withdrawn or a deliberate won't-fix, both being
+decisions rather than pending work — was folded **into** that header, where it
+applies to everything rather than to one section. `## Deferred` now reads
+`_(nothing pending)_`, matching `## Ideas`. `## Designed, not implemented` is
+untouched.
+
+Nothing from this version was added back: the navigation crash shipped in commit
+1 rather than becoming a new entry.
+
+### Commit 4 — /code-review fix: `openNew` must not seed a date the rules refuse
+
+**The one finding of the three that fails for a user**, and it exists because
+commits 1 and 2 met. Commit 1 deliberately KEEPS the search-jump that puts a
+booking's stored date into `viewDate` — the bad booking has to stay reachable to
+be repaired. Commit 2 made a malformed `date` illegal on a CREATE, where the
+grandfather clause structurally cannot apply. `openNew` sat between them,
+seeding the draft with `date: viewDate` verbatim.
+
+So: find a booking stored with `date: "31/08/2026"` in search, tap it, press
+**+ New**. The date field renders BLANK (an `<input type=date>` cannot display
+that string) while the draft holds it; `doSave`'s guard is `!f.date`, which a
+truthy `"31/08/2026"` passes; and the save is then refused by the server and
+parked. It flows on, too — `addFormToWaitlist` takes `date: f.date || viewDate`.
+
+**The seed is now the viewed date only when that is CANONICAL, else today**, and
+the test is `stepDate(viewDate, 0) === viewDate` rather than a fourth date
+predicate. A zero-day step returns a well-formed date or today, so it is an
+IDENTITY exactly for the dates an `<input type=date>` can render — and comparing
+rather than assigning is load-bearing: `"2026-8-3"` is readable and steppable but
+normalises to a DIFFERENT day, so assigning the step would put a date nobody
+chose into the form. Three tests pin that property (`tests/day.test.js`, 29 →
+32), because the idiom is not self-evident and `isReadableDate` is deliberately
+wider than it.
+
+`openEdit` is deliberately NOT given the same treatment: it must keep showing a
+malformed booking's own date, because carrying it through unchanged is what the
+grandfather clause permits and changing it in the form is the repair.
+
+**Verified live against the now-deployed DEV rules**, on the exact scenario:
+search-jump to the `"31/08/2026"` booking (nav date blank, so `viewDate` really
+was poisoned) → **+ New** → the form's date field reads `2026-09-03` → Save →
+the booking is on the server with `date: "2026-09-03"`, status `confirmed`, no
+parked write.
+
+### Commit 5 — /code-review: the create-path cost of the clause, recorded
+
+Two findings, one shape: the grandfather arm is unreachable on a CREATE **by
+construction** (a create has no `data` to match against), so re-introducing a
+malformed value is refused even when it is a restoration. Neither is a code
+defect and neither is fixed by changing behaviour — the alternatives are no pin
+at all, or normalising in `sanitize`, which rewrites stored data and is the
+decision v17.16.5 explicitly declined. What was missing was any record that the
+cost had been weighed.
+
+**Undo of a delete** is the reachable path. `applyUndo` re-concats the snapshot,
+`persist` sees a child that was absent and is now present, `stampForWrite` has no
+`old` and writes `baseUpdatedAt: 0`. Undoing the deletion of a malformed booking
+is therefore refused, retried and parked with Retry/Discard — visible and
+recoverable. Now pinned by a rules test that asserts both halves: the malformed
+re-create fails, and the same undo of a well-formed booking still succeeds.
+
+**The array→keyed migration** is the same shape, and its comment in
+`usePersistence.js` had stopped being true. It reasons that `sanitizeAll` leaves
+the rows "type-correct" and that only "one row the rules dislike" rejects the
+atomic patch — which BOUNDED the hazard while the rules checked type alone.
+Format is not normalised by `sanitize` (`b.date || ""`, `b.status ||
+"confirmed"`), and every row of that patch is a create, so the bound is gone.
+Unreachable in practice (the branch is `Array.isArray`-gated; PROD and DEV have
+been keyed since v15.5.0), so nothing observable changes — but the paragraph
+reads as a guarantee and had stopped being one, which is the class of defect
+v17.16.10 was entirely about.
+
+Rules suite 126 → 127; `npm test` 828. `database.rules.README.md` gains a "What
+the clause costs, and where" section naming both paths.
+
+
+---
+
+## v17.16.12 — the press that did two things
+
+**Date:** 2026-09-03 · **Branch:** `fix/v17.16.12-ios-touch-drag` ·
+**Behavioural change:** yes — see commits 1, 3 and 4.
+**Files:** `src/components/TimelineView.jsx`, `src/App.jsx` (+ later commits'
+own files, recorded with them).
+
+Four defects reported from live service: three on the iPhone PWA (iOS 26.5.2)
+and one — a booking left frozen after a drag-to-swap — on more than one device.
+
+### Commit 1 — a drag always tears itself down
+
+Two independent faults in `TimelineBlock`'s drag, which together produce the
+single symptom Patryk described: a block that is **both misdrawn and
+unclickable** until the page is refreshed.
+
+**`didLong` was reset on one input path only.** It is set in `beginDrag` and was
+cleared *only* in `onTouchStart` — so a MOUSE drag set it and nothing ever put it
+back, and `handleClick` returned early for the whole life of that component
+instance. Reached by every drag that leaves the block mounted: a refused drop, a
+drop back on its own row, or a swap that keeps one of the booking's tables. The
+reset moved to `onDragPointerDown`, above its early returns, because that is the
+one event every input path fires.
+
+**Reproduced and then re-measured, on the same coordinates.** With the reset
+removed, a click on a block opened *Edit booking*; after dragging that block back
+onto its own row, the identical click did nothing. With the reset in place and
+the drag confirmed to have genuinely armed (temporary instrumentation logged
+`beginDrag` and `endDrag active=true target=1A home=1A`), the click after the
+drag opened *Edit booking*.
+
+**`endDrag` dispatched before it cleared.** `onDropOnTable` reaches App's
+`dropOnTable`, which walks up to 8 candidate table sets running a full
+`bookingsAfterAction` trial on each; a throw in there is a throw inside a React
+EVENT HANDLER, which no error boundary catches. With the dispatch above the two
+`setState`s, one such throw skipped both and left `dragDy` non-null for good —
+the block keeping its `translateY`, `zIndex: 30`, 0.85 opacity and drag shadow.
+Teardown now runs first and the dispatch last, so the block's resting state does
+not depend on whether the drop succeeded. Measured with a throw injected into
+`dropOnTable`: `[drag] drop on 1A failed` logged and the block came back clean
+and clickable.
+
+**`onLostPointerCapture` is the third way a drag can end.** `beginDrag` captures
+the pointer on the block, and capture is released implicitly when the element
+leaves the document — exactly what a reshuffle re-parenting the booking mid-drag
+does. Measured firing on the normal path too, after `pointerup`, where it
+re-clears already-cleared state and commits nothing.
+
+**What could NOT be measured here, and why it is recorded rather than claimed:**
+the stranded *visual* state. `dragDy` is only ever set from inside a
+`requestAnimationFrame`, and the browser-automation drag completes within a
+single frame, so `endDrag` cancels that rAF before it runs — the synthetic drag
+never lifts the block at all. A real drag spans hundreds of milliseconds and many
+frames. So the misdrawn half rests on control flow and on the device report, not
+on a reproduction, and the `didLong` half is the one that was reproduced.
+
+### Commit 2 — a hold-opened popup ignores the press that opened it
+
+`QuickStatusPopup` mounts at 400ms into a press-and-hold, as a viewport-CENTRED
+card portalled to `<body>`, while the finger is still down. Whatever ends up
+under that finger is something nobody aimed at, and the release lands on it: on
+the scrim, whose only job is `onClose`, so the popup closes itself the instant it
+appears; or on one of its own buttons, so a status change or the cancel-booking
+confirm fires from a gesture meant only to OPEN the menu.
+
+**Both faces are in the 15s iPhone recording, 0.1s frames.** At t=2.0s a popup
+opened on Beatriz and was gone by t=2.3s with nothing changed. At t=3.8s a popup
+opened on Rachel and the "Cancel booking?" confirm was already up at t=4.0s —
+200ms, faster than a person can read a card and aim at a button.
+
+**v17.10.1 had recorded this exact shape on Android** and fixed only the
+SELECTION half of it (the OS text-selection landing on the popup's button
+labels). The ACTIVATION half was left, and it is the half that changes a booking.
+
+New `src/hooks/useArmAfterRelease.js`: the surface is inert until the pointer
+that opened it has been released. Not a delay — the release itself is the signal,
+so a 300ms hold and a 3s hold behave identically. Listeners are capture-phase
+(the card calls `stopPropagation`), `pointerdown` is included because a new press
+means the opening one is long over, and the 2s timeout is a pure backstop against
+a surface that could otherwise stay inert forever.
+
+**`SplitMenu` takes the same hook**, not a copy of the logic: it is
+QuickStatusPopup's shell opened by the same 450ms hold, and it had the same
+defect. The scrims of both also gained the `user-select`/`touch-callout`
+suppression the CARDS have carried since v17.10.1 — the scrim is what the finger
+is on for most of the screen when a centred card appears under a hold, and a
+scrim is never a copy target.
+
+**Verified in the browser for regressions only** — right-click opens the popup,
+a scrim click closes it, and "Seated" applies the status and closes it (the
+booking went confirmed → seated with the seated-shift moving 13:00 → 14:02).
+The BLOCKING half cannot be exercised by browser automation, which cannot hold a
+press across frames; it needs the device.
+
+### Commit 3 — no surface offers a status the app takes straight back
+
+On a day whose close has passed, tapping **Seated** turned the block green and
+it was grey again 200ms later, with a "Tables re-optimised." banner on the way
+past — measured on 2 wrz in the iPhone recording, frames 11.8 → 12.0. The
+close-time auto-complete (`usePersistence`) maps over EVERY booking, not just
+today's, so `pastCloseMins` is non-null for any past date and the manual status
+is reverted on the next 15s tick. The tap read as broken rather than as refused.
+
+New pure `seatingClosed(dateStr, todayS, nowMins)` in `booking-logic.js`,
+**defined as `pastCloseMins(...) !== null`** and deliberately not as its own idea
+of what "past" means: being exactly the auto-complete's own condition is the
+point, because two conditions that merely agree today are two conditions and the
+one that drifts is the one nobody is looking at. Pinned in the tests as that
+identity rather than as a set of remembered answers.
+
+**Four surfaces offer `seated`, not three**, and each filters its own list —
+the three lists differ deliberately today and unifying them would be a keyboard
+and UI behaviour change smuggled into a fix:
+
+* `QuickStatusPopup` (Timeline and Plan), which gains `today` / `nowMins`;
+* `ListView`'s status buttons;
+* `BookingFormModal`'s `statusTargets`, keyed on the **draft's** date rather than
+  the viewed one, because that form can move a booking to another day and the
+  question is whether the day it ends up on has closed;
+* the **`S` shortcut** — the one an audit of components alone would miss, and
+  leaving it is exactly how the app comes to disagree with itself.
+
+`completed` and `cancelled` stay reachable on a past day: correcting yesterday's
+record is real, and `seated` is the only one the app takes back.
+
+**Verified live, both directions.** On 2026-09-02 the popup offers
+`["Confirmed","Cancelled"]`; on 2026-09-03 it still offers
+`["Seated","Completed","Cancelled"]` plus No show. Suite 828 → 832.
+
+### Commit 4 — the OS selection callout during our own hold
+
+Holding a timeline block on the iPhone raised WebKit's selection UI — handles
+plus a **Kopiuj / Sprawdź / Tłumacz** bar — on top of the quick-status popup.
+v17.10.1 had already met this on Android and answered it with `user-select:
+none` on CONTROLS (`button, [role="button"]` in `index.css`, plus the block and
+the popup card inline). That is the right at-rest rule, and its own comment
+said "iOS does not show this today, but nothing prevented it".
+
+**It is not enough, and the screenshot is why: the selection did not land on the
+element under the finger.** It landed in the HEADER, a thousand pixels from the
+block being held. Which node WebKit picks when a long-press begins on
+unselectable content is not something this app can predict — so naming one more
+node would have been a guess, and CLAUDE.md rules out the other obvious move
+(widening the rule to a container) because the List card's phone number must
+stay copyable: staff select it to ring a party.
+
+So the guard is scoped by **time** instead of by element. `lib/holdSelection`'s
+`beginHold()` puts `data-holding` on `<html>` for the duration of one of OUR
+holds, and `html[data-holding] *` makes the whole document unselectable while it
+is there. At rest nothing changes at all.
+
+**Measured in the browser**: the `<h1>` computes `user-select: auto` before a
+hold, `none` during one, and `auto` again after the release — so selectability
+returns exactly as it was, which is the property the phone-number exception
+needs. `beginHold` is **self-terminating** (capture-phase `once` listeners for
+pointerup / pointercancel / touchend / touchcancel, plus a 3s backstop), because
+a hold has five exits per surface and an attribute stuck on `<html>` would leave
+the whole app permanently unselectable — a worse bug than the one being fixed.
+It also clears any range the gesture already made, since making things
+unselectable does not dismiss a selection that already exists.
+
+Wired at the three hold sites: `TimelineBlock`'s `onTouchStart`, `PlanView`'s
+`startPress`, `ViewSwitcher`'s `startPress`. `html[data-holding] *` joins
+`tests/stylesheet.test.js`' CRITICAL_SELECTORS — remove the rule and `beginHold`
+still sets the attribute while nothing whatsoever happens, which is that list's
+entry criterion exactly.
+
+**Not verified on the device.** The callout is a UA behaviour and no synthetic
+press can raise it — CLAUDE.md's own recorded lesson. What is verified is the
+mechanism: the attribute goes on, the computed style flips, both come back.
+Whether iOS still finds something to select needs the phone.
+
+### Commit 5 — `/code-review` fixes
+
+**Verified on the device first.** Patryk retested v17.16.12 on the iPhone PWA
+and reports all four reported behaviours correct, which closes the one thing
+commit 4 shipped unverified: whether iOS still finds something to select during
+a hold. It does not.
+
+**The 2s backstop was a second way to ARM, not a backstop.** `useArmAfterRelease`
+mounts 400–450ms into a hold and no further pointer event arrives while the
+finger is down — so any hold past ~2.4s armed the surface *mid-press*, and its
+release then activated whatever the centred card had put under the finger. The
+exact misfire the hook exists to prevent, reachable in Plan and on the split
+menu, where nothing dismisses the surface mid-hold; `TimelineBlock` escaped only
+because its own 800ms drag-arm closes the popup first. Raised to 10s, and the
+reasoning is now written down: **escapability never depended on the timer.**
+`pointerdown` is in the arming list, so a viewer facing an inert popup taps it
+once — that tap's `pointerdown` arms it and the same tap's `pointerup` closes it
+on the scrim. The timer's only job is to keep inertness finite.
+
+**The `onLostPointerCapture` comment claimed a case it cannot cover.** It
+justified itself with a mid-drag re-parent, and that case needs no net *and*
+could not be served by this handler: React unmounts the Fragment in the old row,
+so `dragDy` dies with the component and nothing can strand, and the node is
+detached before `lostpointercapture` fires, where React's root-container
+listener does not see it. The handler is kept — it is correct belt-and-braces
+for capture lost while the element stays mounted, and the teardown is idempotent
+— but the comment now says what it actually covers. Same defect class this file
+keeps recording: an ordering or a blast radius nobody reproduced, written into a
+comment the next reader trusts.
+
+**`endHold` is module-private.** Nothing outside `holdSelection.js` imported it,
+and an outside caller would end a hold the module is still tracking — leaving
+the release listeners live and `armed` out of step with the attribute on
+`<html>`. Starting a hold is the only thing a call site should be able to say.
+
+**Also measured during the review, closing the last untested path**: the `S`
+shortcut, the fourth `seated` surface and the one an audit of components alone
+would miss. On today it still works (a confirmed card went to seated); on
+2026-09-02 it is correctly refused (a completed card stayed completed).
+`holdSelection` re-verified after the change — one export, and the attribute
+goes on and comes off. Gate: 93.34 kB gz · 833 tests · 0 lint errors · style OK.
+A fresh tab boots v17.16.12 with an empty console.

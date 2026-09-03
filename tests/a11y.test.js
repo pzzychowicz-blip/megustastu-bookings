@@ -84,12 +84,32 @@ function count(src, re) {
   return (src.match(re) || []).length;
 }
 
+// Every file under `src/` whose comment-stripped source matches `re`, as
+// [path-relative-to-src, stripped source] pairs.
+//
+// /code-review (v17.15.7): this walk existed TWICE, byte for byte, in two
+// different describe scopes — the Toggle sweep and the status-fill sweep — and
+// a third guard would have made three. Two file-walkers that must agree about
+// which files a coverage sweep can see, with nothing keeping them in step, is
+// the `clampStep` / `OutlineChip` defect in this file's own back yard: narrow
+// one of them later and the other keeps reporting OK on a different set of
+// files. Lint cannot see it, check:style cannot see it, and neither can the
+// contrast registry.
+function srcFilesMatching(re) {
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(dir, e.name))
+      : /\.jsx?$/.test(e.name) ? [join(dir, e.name)] : []);
+  return walk(SRC)
+    .map((f) => [f.slice(SRC.length + 1), stripComments(readFileSync(f, "utf8")).join("\n")])
+    .filter(([, src]) => re.test(src));
+}
+
 // The full text of an element's OPENING tag, however long it is — JSX inline
 // style objects here run to hundreds of characters and grow. It walks to the
 // `>` that closes the tag, tracking brace depth and quotes so a `>` inside an
 // expression container (`a > b`, an arrow function) does not end it early.
-function openingTag(src, open) {
-  const start = src.indexOf(open);
+function openingTag(src, open, from = 0) {
+  const start = src.indexOf(open, from);
   if (start < 0) throw new Error("a11y.test: no " + open + " found");
   let depth = 0, quote = null;
   for (let i = start; i < src.length; i++) {
@@ -105,6 +125,21 @@ function openingTag(src, open) {
     "rather than widening a window — a guard that stops seeing the attribute it " +
     "guards still passes."
   );
+}
+
+// Every `<Name ...>` opening tag in a file, whole. A LINE-based grep cannot do
+// this job and the v17.15.2 entry says why: that version fixed eight alert
+// panes with one and missed four whose two tokens sat on separate lines. Two of
+// this version's own twenty call sites are multi-line, so a line grep would
+// have reported them missing and a line grep aimed at the fixed shape would
+// have reported them present. `[\s/>]` after the name so `<ToggleGroup` never
+// answers for `<Toggle`.
+function openingTagsOf(src, name) {
+  const re = new RegExp("<" + name + "[\\s/>]", "g");
+  const out = [];
+  let m;
+  while ((m = re.exec(src)) !== null) out.push(openingTag(src, "<" + name, m.index));
+  return out;
 }
 
 describe("landmarks and headings (WCAG 1.3.1, 2.4.1)", () => {
@@ -550,6 +585,689 @@ describe("every modal is Overlay's modal (WCAG 4.1.2, 2.4.3)", () => {
   });
 });
 
+describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.1, 4.1.2)", () => {
+  // v17.15.4. `Toggle` was a bare <button> whose entire content was two
+  // coloured divs — no text, no role, no state — so every on/off control in
+  // the app announced as "button", twenty of them, indistinguishable from each
+  // other and from the buttons around them. Settings is almost entirely built
+  // out of it.
+  //
+  // It survived v17.12.0 AND v17.13.0's gate, and the reason is worth stating
+  // because it is how the next one will survive too: both passes went after the
+  // surfaces that hold BOOKINGS — the card, the block, the floor-plan table,
+  // the form field — and an atom that draws a 48×26 pill is not where anyone
+  // looks for a missing name. The generalisation is not "check the atoms"; it
+  // is that **a control with no text content has no name unless someone gives
+  // it one**, and nothing about looking at it says so.
+  //
+  // These assertions are deliberately in two halves. The atom half is one
+  // shape in one file. The call-site half is a SWEEP, because `label` has no
+  // default: the atom cannot make a caller name it, so the build has to.
+  // /code-review: this read `src/components` only, while its own failure
+  // message claimed "every <Toggle> in the app" — the repo's recorded fault
+  // class, a guard NARROWER than the rule it gates. `Toggle` is a plain export
+  // importable from anywhere, and `App.jsx` already renders its own inline
+  // confirm dialogs and header controls; a switch added there would have
+  // shipped unnamed with the build green, which is exactly the defect this
+  // version exists to remove, walking past the gate built to stop it. It walks
+  // all of `src/` now. `atoms.jsx` is NOT excluded either — an atom composing
+  // Toggle has the same obligation as any other caller.
+  const withToggle = srcFilesMatching(/<Toggle[\s/>]/);
+
+  // atoms.jsx is a multi-export file and `Collapsible`'s header button comes
+  // FIRST, so a file-wide search here measures the wrong control — which is
+  // what the first version of this block did, and it failed loudly only
+  // because `Collapsible` happens to have a button too. Scope to the function.
+  const toggleStart = Atoms.indexOf("export function Toggle(");
+  const nextExport = Atoms.indexOf("export function", toggleStart + 10);
+  const ToggleFn = Atoms.slice(toggleStart, nextExport < 0 ? Atoms.length : nextExport);
+
+  it("the atom's own button carries role=switch, aria-checked and aria-label", () => {
+    expect(toggleStart, "atoms.jsx must export a Toggle").toBeGreaterThan(-1);
+    const tag = openingTag(ToggleFn, "<button");
+    expect(tag, "the role goes on the control, not on a wrapper").toMatch(/role="switch"/);
+    expect(tag, "aria-checked publishes the state").toMatch(/aria-checked=\{!!on\}/);
+    // The coercion is not decoration: `on` arrives as `r.active`, `draft.active`
+    // and `bd.lateEnabled`, any of which can be undefined — and a bare
+    // `aria-checked={on}` then omits the attribute entirely, leaving a switch
+    // that renders as off and reports no state at all.
+    expect(tag, "the name the caller supplies").toMatch(/aria-label=\{label\}/);
+    has(ToggleFn, "label in the signature", /function Toggle\(\{[^}]*\blabel\b/,
+      "a prop read but not destructured is a silent undefined");
+  });
+
+  it("it is a switch, NOT aria-pressed", () => {
+    hasnt(ToggleFn, "aria-pressed", /aria-pressed/,
+      "a toggle button reports an action you took; a switch reports a state " +
+      "that stays. Every one of these writes a setting");
+  });
+
+  it("it stays a <button> element, so the stylesheet's button rules still reach it", () => {
+    // The v17.12.0 lesson in its other direction. A role SUBSCRIBES an element
+    // to the rules written for it — and src/index.css has no `[role="switch"]`
+    // rule, which was checked before the role went on. What the role must not
+    // do is cost the element the rules it already had: `user-select: none`, the
+    // 0.96 press dip and the transform transition are all written against the
+    // `button` ELEMENT selector, which a <div role="switch"> would not match.
+    expect(openingTag(ToggleFn, "<button"), "Toggle must remain a real <button>")
+      .toMatch(/^<button\b/);
+  });
+
+  it("every <Toggle> in the app passes a label", () => {
+    const unnamed = [];
+    for (const [file, src] of withToggle) {
+      for (const tag of openingTagsOf(src, "Toggle")) {
+        if (!/\blabel=/.test(tag)) unnamed.push(file + ": " + tag.slice(0, 90));
+      }
+    }
+    expect(
+      unnamed,
+      "a Toggle with no `label` announces as an unnamed switch — which is most " +
+      "of what this version exists to fix. Name what the switch CONTROLS, never " +
+      "its state: the state is aria-checked's job, and a name that flips with " +
+      "the value makes one control read as two."
+    ).toEqual([]);
+  });
+
+  it("a Toggle rendered from a list names the ITEM, not the control", () => {
+    // The half of this that source review misses and the live page shows in
+    // one line. Three of the twenty switches are rendered inside a `.map` —
+    // one per reminder, one per standing-booking rule, one per party-size band
+    // — so a static label there is not one name, it is N identical names, and
+    // it is precisely the defect this version exists to fix, reappearing one
+    // level down. The size-band one nearly shipped that way; what caught it
+    // was reading the rendered names out of the running app, where the
+    // repetition is three identical strings, rather than out of the source,
+    // where it is one string inside a loop.
+    //
+    // A regex cannot reliably tell "inside a .map" from "beside one", so this
+    // does not try. It pins the three known list-rendered call sites to a
+    // DYNAMIC label, which is the property that makes them per-item.
+    for (const [file, marker] of [
+      ["components/Reminders.jsx", /<Toggle\s+label=\{"Reminder: "/],
+      ["components/Settings.jsx", /<Toggle\s+label=\{"Standing booking: "/],
+      ["components/LayoutSettings.jsx", /<Toggle label=\{bandName\(b, i\)/],
+    ]) {
+      const src = withToggle.find(([f]) => f === file);
+      expect(src, file + " must still render a Toggle").toBeTruthy();
+      has(src[1], file + " list Toggle", marker,
+        "this switch is rendered once per item, so its label must carry the " +
+        "item's own identity — a string literal here gives every row in the " +
+        "list the same name");
+    }
+  });
+
+  it("no two Toggles in one file share a literal label", () => {
+    // The copy-paste case the rule above cannot see. Settings alone holds
+    // fourteen of these and they are edited by duplicating the row above.
+    const clashes = [];
+    for (const [file, src] of withToggle) {
+      const seen = new Map();
+      for (const tag of openingTagsOf(src, "Toggle")) {
+        const m = /\blabel="([^"]+)"/.exec(tag);
+        if (!m) continue;
+        if (seen.has(m[1])) clashes.push(file + ': two switches both named "' + m[1] + '"');
+        seen.set(m[1], true);
+      }
+    }
+    expect(clashes, "two switches with one name is one switch as far as a " +
+      "screen reader is concerned").toEqual([]);
+  });
+
+  it("the sweep is actually finding call sites", () => {
+    // Without this the assertion above passes triumphantly on zero files the
+    // day someone renames the atom.
+    const total = withToggle.reduce((n, [, src]) => n + openingTagsOf(src, "Toggle").length, 0);
+    expect(withToggle.length, "several components use Toggle").toBeGreaterThanOrEqual(5);
+    expect(total, "and there are ~20 switches between them").toBeGreaterThanOrEqual(15);
+  });
+
+  it("every Stepper call site names what it steps", () => {
+    // v17.15.5. The `Stepper` in LayoutSettings renders two buttons whose entire
+    // content is `−` and `+`. Thirteen call sites, so twenty-six controls all
+    // announcing as one of two characters — the Toggle defect one control over,
+    // and bigger, because seven of the thirteen are inside a `.map`.
+    //
+    // `label` is required and has no default, so the atom itself is what makes
+    // an unnamed stepper unreachable; this guards the CALL SITES, which is the
+    // half a required prop cannot enforce in plain JS.
+    const src = read("components/LayoutSettings.jsx");
+    const tags = openingTagsOf(src, "Stepper").filter((t) => !/^<Stepper\b[^>]*\bvalue=\{value\}/.test(t));
+    expect(tags.length, "LayoutSettings should still render ~13 steppers")
+      .toBeGreaterThanOrEqual(12);
+    const unlabelled = tags.filter((t) => !/\blabel=/.test(t));
+    expect(unlabelled, "a Stepper with no `label` announces as \u2212 and + — name " +
+      "what it steps, and carry the item's identity where it repeats")
+      .toEqual([]);
+  });
+
+  it("a Stepper rendered from a list names the ITEM", () => {
+    // Same rule as the list-rendered Toggle above, and the same reason a regex
+    // cannot decide "inside a .map": these are pinned by name. Each of the four
+    // repeating groups must build its label from the ROW, not from a literal —
+    // `bandName` / `comboName` / `swapName` / the table id.
+    const src = read("components/LayoutSettings.jsx");
+    // COUNTED, not merely present. `has()` is satisfied by a single match, so
+    // reverting ONE of a pair to a literal would slip through — proven: with
+    // the size band's "smallest party size" made static, its sibling "largest"
+    // still matched and the assertion passed. Each row-namer is pinned to how
+    // many steppers it must label.
+    for (const [what, re, n] of [
+      ["per-table capacity", /label=\{"seats at table " \+ t\.id\}/g, 1],
+      ["size-band party size", /label=\{bandName\(b, i\) \+ ": (?:smallest|largest) party size"\}/g, 2],
+      ["combo-rule party size", /label=\{comboName\(r, i\) \+ ": /g, 3],
+      ["swap-rule party size", /label=\{swapName\(r, i\) \+ ": /g, 2],
+    ]) {
+      expect(count(src, re),
+        "LayoutSettings " + what + ": this stepper is rendered once per row, so " +
+        "every one of them must build its label from the row's own identity — a " +
+        "literal gives every row in the list the same name").toBe(n);
+    }
+  });
+
+  it("the priorities editor's repeating buttons carry their row's identity", () => {
+    // The ROADMAP entry v17.15.4 left behind. Three bands ship by default, so
+    // each of these was one string in the source and three identical names on
+    // the page: the \u2715, the Table order / Indoor / Outdoor segmented buttons,
+    // the Prefer/Avoid chips' move and remove controls, and the two <select>s.
+    const src = read("components/LayoutSettings.jsx");
+    for (const [what, re] of [
+      ["band remove", /aria-label=\{"Remove " \+ bandName\(b, i\)\}/],
+      ["zone-order segment", /aria-label=\{opt\[1\] \+ " \(" \+ bandName\(b, i\) \+ "\)"\}/],
+      ["combo rule remove", /aria-label=\{"Remove " \+ comboName\(r, i\)\}/],
+      ["combo select", /aria-label=\{"Combo for rule " \+ \(i \+ 1\)\}/],
+      ["swap select", /aria-label=\{"Table to free, swap rule " \+ \(i \+ 1\)\}/],
+      ["swap remove", /aria-label=\{"Remove " \+ swapName\(r, i\)\}/],
+      ["chip move up", /aria-label=\{"Move " \+ id \+ " up in " \+ label \+ rowIn\}/],
+      ["chip remove", /aria-label=\{"Remove " \+ id \+ " from " \+ label \+ rowIn\}/],
+    ]) {
+      has(src, "priorities " + what, re,
+        "rendered once per rule/band, so the name must identify which one");
+    }
+  });
+
+  it("a priorities row is named by its ORDINAL, not by its contents alone", () => {
+    // /code-review, v17.15.5. `addBand`, `addRule` and `addSwap` each append a
+    // FIXED default — {min:2,max:2}, declared[0].key with 2-8, tables[0].id
+    // with 4->2 — so pressing "+ Add size rule" twice yields two rows that are
+    // character-for-character identical. A name built from row CONTENT then
+    // gives every control in one row the same name as its twin, which is this
+    // whole sweep's defect one level down, reachable in two clicks.
+    const src = read("components/LayoutSettings.jsx");
+    for (const [what, re] of [
+      ["bandName", /const bandName = \(b, i\) =>[^;]*\(i \+ 1\)/],
+      ["comboName", /const comboName = \(r, i\) =>[^;]*\(i \+ 1\)/],
+      ["swapName", /const swapName = \(r, i\) =>[^;]*\(i \+ 1\)/],
+    ]) {
+      has(src, what, re,
+        "must take its row index and put it in the name — two rows with the " +
+        "same contents are two rows, and every add button creates one");
+    }
+  });
+
+  it("the zone-order segments lead with their VISIBLE text", () => {
+    // WCAG 2.5.3 (Label in Name), which v17.15.4's own /code-review caught this
+    // repo breaking while it thought it was fixing something. These three
+    // buttons DO have words — "Table order", "Indoor", "Outdoor" — so a name
+    // like "Try first: Indoor (party of 2 to 2)" would stop "click Indoor"
+    // working. `opt[1]` must come FIRST, with the band in parentheses after it.
+    const src = read("components/LayoutSettings.jsx");
+    has(src, "zone-order segment", /aria-label=\{opt\[1\] \+ " \("/,
+      "the visible label leads and the disambiguator follows — never a " +
+      "paraphrase, and never the disambiguator first");
+  });
+
+  it("the Opening-hours row names its buttons per weekday", () => {
+    // The same fault one control over, and the reason the sweep did not stop at
+    // `<Toggle`: these two buttons HAVE text, so they read as named. But an
+    // element with content is named BY that content, and the weekday is a
+    // sibling <span> — seven rows announcing "Open" and seven announcing
+    // "copy → all", with nothing saying which day either belongs to.
+    const Settings = read("components/Settings.jsx");
+    has(Settings, "Open/Closed pill", /aria-label=\{label \+ ": " \+ \(closed \? "Closed" : "Open"\)\}/,
+      "the day is what distinguishes one of these seven from the next");
+    // /code-review: the first version of this name was the sentence "Copy Mon's
+    // hours to all days", which fixed the ambiguity and broke WCAG 2.5.3 in the
+    // same stroke — the button's visible text is "copy → all", voice control
+    // matches on the NAME, and the old name-from-content was exactly that
+    // string, so "click copy all" worked BEFORE the fix and not after. The
+    // visible label leads; the weekday only disambiguates.
+    has(Settings, "copy → all", /aria-label=\{"copy → all \(" \+ label \+ "\)"\}/,
+      "the visible text must stay INSIDE the accessible name, or a voice-control " +
+      "user can read the button and not say it");
+  });
+
+  it("no accessible name in the app hides its own visible text", () => {
+    // The general form of the finding above, for the two buttons whose visible
+    // text and aria-label are both literals in the source. A name that replaces
+    // the visible text rather than extending it is a 2.5.3 failure, and it
+    // looks like an improvement in review — which is how it shipped.
+    const Settings = read("components/Settings.jsx");
+    for (const [visible, tag] of [["Open", /aria-label=\{label \+ ": " \+ \(closed \? "Closed" : "Open"\)\}/],
+                                  ["copy → all", /aria-label=\{"copy → all \(/]]) {
+      has(Settings, '"' + visible + '" stays in its name', tag,
+        "the accessible name must contain the visible label, not paraphrase it");
+    }
+    // ReminderEditor's switch has no text of its own; its only visible
+    // labelling is a sibling reading "Active" or "Inactive", so a name
+    // containing either word matches one state and contradicts the other.
+    hasnt(Reminder, "state word in the name", /label="Reminder (active|inactive)"/i,
+      "a name that contains neither word is sayable in both states — and " +
+      "aria-checked is what carries the state, never the name");
+    has(Reminder, "Reminder status", /label="Reminder status"/, "the name that works in both states");
+  });
+});
+
+describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
+  // The other half of the ROADMAP entry v17.15.5 opened. v17.15.5 closed the
+  // priorities editor at the bottom of this file; these sit ABOVE it and were
+  // untouched — the same file, the same defect, one scroll apart.
+  //
+  // These buttons are ICON-ONLY with a `title`, so `title` was their entire
+  // accessible name. That is what made them invisible to the earlier sweeps:
+  // a control with a `title` does not LOOK unnamed the way `<Toggle>` did.
+  const src = read("components/LayoutSettings.jsx");
+
+  it("every repeating Tables/Combos control carries its row", () => {
+    for (const [what, re] of [
+      ["rename table", /aria-label=\{"Rename table " \+ t\.id\}/],
+      // The disabled branch carries the REASON in the name too (/code-review):
+      // an aria-label overrides `title`, so leaving the reason there alone
+      // silently dropped it from what the button announces.
+      ["remove table", /aria-label=\{tables\.length <= 1\s*\n?\s*\? "Remove table " \+ t\.id \+ " \(unavailable/],
+      ["chip move left", /aria-label=\{"Move " \+ id \+ " left in its joined group"\}/],
+      ["chip move right", /aria-label=\{"Move " \+ id \+ " right in its joined group"\}/],
+      ["chip remove", /aria-label=\{"Remove " \+ id \+ " from its joined group"\}/],
+      ["add to group", /aria-label=\{"Add a table to the group " \+ group\.join\(" \+ "\)\}/],
+      ["remove group", /aria-label=\{"Remove the group " \+ group\.join\(" \+ "\)\}/],
+      ["remove mega combo", /aria-label=\{"Remove the cross-group combo " \+ mc\.ids\.join\(" \+ "\)\}/],
+    ]) {
+      has(src, what, re,
+        "rendered once per table / group / combo, so the name must say WHICH — " +
+        "`title` alone gave thirteen buttons one name and looked named doing it");
+    }
+  });
+
+  it("the zone toggle leads with its visible text (WCAG 2.5.3)", () => {
+    // The one control in these two sections that HAS words. Its visible text is
+    // "Indoor" or "Outdoor", so a name like "Change zone for table 3" would fix
+    // the ambiguity and break voice control in the same stroke.
+    has(src, "zone toggle", /aria-label=\{\(indoor \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
+      "the visible word leads and the table only disambiguates");
+  });
+
+  it("a name says what a control IS, never what it does next", () => {
+    // The zone toggle flips between two real values. Naming it for the ACTION
+    // ("Make table 3 indoor") would mean the name contradicts the screen in one
+    // of its two states — the same reason ReminderEditor's switch is called
+    // "Reminder status" rather than "Reminder active".
+    hasnt(src, "action-shaped zone name", /aria-label=\{"(Make|Change|Set|Switch) /,
+      "name the state, not the transition — a name that describes the NEXT " +
+      "state disagrees with the visible label in one of the two states");
+  });
+
+  it("the three PICK_CHIP lists say what tapping the id DOES", () => {
+    // Found by reading computed names out of the running page — the only thing
+    // that shows it, and the rule this whole ROADMAP entry keeps re-proving.
+    //
+    // Three lists render the same table ids as a bare `<button>7</button>`:
+    // add-to-this-group, start-a-new-group, and add-to-a-prefer/avoid-list. The
+    // "Ungrouped" row is ALWAYS rendered, so opening either picker puts two
+    // buttons named "7" on screen **doing different things**. That is worse than
+    // the ambiguity the other cases have — those repeat one action, these
+    // collide across actions — and it is one click away.
+    const chips = openingTagsOf(src, "button").filter((t) => /\bstyle=\{PICK_CHIP\}/.test(t));
+    expect(chips.length, "there should still be three PICK_CHIP lists").toBe(3);
+    const unnamed = chips.filter((t) => !/\baria-label=/.test(t));
+    expect(unnamed, "a bare table id is the SAME name in all three lists, and " +
+      "two of them can be on screen at once doing different things").toEqual([]);
+    // The visible id leads (2.5.3), then what the tap does.
+    for (const [what, re] of [
+      ["add to group", /aria-label=\{id \+ " — add to the group " \+ group\.join\(" \+ "\)\}/],
+      ["new group", /aria-label=\{id \+ " — start a new joined group"\}/],
+      ["priorities add", /aria-label=\{id \+ " — add to " \+ label \+ rowIn\}/],
+    ]) {
+      has(src, "PICK_CHIP " + what, re,
+        "the visible id leads and the ACTION follows — these three collide on " +
+        "the id, so the action is the only thing that separates them");
+    }
+  });
+
+  it("the two table multi-selects carry both a name AND a state", () => {
+    // The last bare-id lists, both 13 buttons, both on screen at once — so
+    // "Add a combo"'s 1A and "Require"'s 1A announced identically.
+    //
+    // "Add a combo" was missing its STATE too: selection is carried by an
+    // accent fill and nothing else, so without `aria-pressed` you cannot tell
+    // which tables you have picked, and picking tables IS the control.
+    // v17.15.5 had already answered this for `Require` and stopped there.
+    for (const [what, re] of [
+      ["add-combo name", /aria-label=\{t\.id \+ " — include in the new combo"\}/],
+      ["require name", /aria-label=\{id \+ " — require in cross-zone combos"\}/],
+    ]) {
+      has(src, what, re, "two 13-button lists share the ids and the screen");
+    }
+    // Not a magic count — the actual invariant. In this file a SELECTED control
+    // is drawn as `on ? "var(--accent)" : …`, and that fill is the only signal
+    // it has. So: every button that paints itself selected must SAY it is.
+    // A count would have to be bumped whenever a segmented control is added,
+    // which is the moment the guard stops meaning anything (there is already a
+    // third `aria-pressed` here — v17.15.5's zone-order segments — and an
+    // earlier draft of this test asserted 2 and failed on it).
+    const selectors = openingTagsOf(src, "button")
+      .filter((t) => /\bon \? "var\(--accent\)"/.test(t));
+    expect(selectors.length, "the file should still have selection buttons")
+      .toBeGreaterThanOrEqual(3);
+    const mute = selectors.filter((t) => !/\baria-pressed=/.test(t));
+    expect(mute, "a button that paints itself selected must SAY it is — the " +
+      "accent fill is the only other signal, and colour alone is not a state")
+      .toEqual([]);
+  });
+
+  it("a single-instance control is deliberately left static", () => {
+    // Not everything in a `.map` repeats on screen. `editId` and
+    // `pendingRemove` are single-valued, so Save name / Cancel / Remove anyway
+    // are one-at-a-time and a literal is CORRECT there. Pinned so a later sweep
+    // does not "finish the job" by adding names that say nothing.
+    for (const [what, re] of [
+      ["save name", /title="Save name"/],
+      ["cancel rename", /title="Cancel"/],
+    ]) {
+      has(src, what, re,
+        "gated on a single-valued state, so exactly one is ever on screen — " +
+        "a static name is right, and adding an id would be noise");
+    }
+  });
+});
+
+describe("a banner row's controls carry their row (v17.15.6)", () => {
+  // The ROADMAP entry v17.15.5 left behind, for the four notification-strip
+  // banners. Each renders one dismiss ✕ per row with a single static
+  // `aria-label` — one string in the source, and on a busy evening six
+  // identically-named buttons on the page.
+  //
+  // These are the case with NO fallback, which is why they are decided the
+  // opposite way to ListView's card actions two describes below: a `BannerRows`
+  // row is a bare <div> with no role and no name, so a control inside it
+  // inherits nothing. A List card is a named `role="listitem"`, and that is the
+  // entire difference between the two decisions.
+  const Late = read("components/LateBanner.jsx");
+  const Overlap = read("components/OverlapBanner.jsx");
+  const Wait = read("components/WaitAvailBanner.jsx");
+  const Clash = read("components/ClashBanner.jsx");
+
+  it("no banner names a control with a bare literal any more", () => {
+    for (const [name, src] of [["LateBanner", Late], ["OverlapBanner", Overlap],
+                               ["WaitAvailBanner", Wait], ["ClashBanner", Clash]]) {
+      hasnt(src, name + " static dismiss", /aria-label="Dismiss this/,
+        "one row per late booking / warning / waiting party, so a literal here " +
+        "is not one name — it is N identical ones, and a banner row has no " +
+        "named ancestor to fall back on the way a List card does");
+    }
+  });
+
+  it("every banner's ✕ builds its name from the row", () => {
+    for (const [what, src, re] of [
+      ["late", Late, /aria-label=\{"Dismiss the running-late alert for " \+ who\}/],
+      ["overlap", Overlap, /aria-label=\{"Dismiss the overstay warning for " \+ \(sb\.name/],
+      ["wait", Wait, /aria-label=\{"Dismiss the table-free alert for " \+ who\}/],
+      // The clash ✕ names the PAIR, matching clashRowId's own identity — the
+      // dismissal Set is keyed by pair for exactly this reason, so a name
+      // mentioning one booking would describe a different thing from the one
+      // the button dismisses.
+      ["clash", Clash, /aria-label=\{"Dismiss the double-booking warning for " \+ firstWho \+ " and " \+ laterWho\}/],
+    ]) {
+      has(src, what + " dismiss", re, "the row's subject must be in the name");
+    }
+  });
+
+  it("a banner ACTION with visible text leads with it (WCAG 2.5.3)", () => {
+    // The sweep does not stop at the ✕. `LateBanner`'s "No show" and
+    // `WaitAvailBanner`'s "Book" are also one per row — but they HAVE words, so
+    // they read as named and the fix is shaped differently: the visible label
+    // must come FIRST and the party only disambiguate, or a voice-control user
+    // can read the button and not say it. Same finding v17.15.4's own
+    // /code-review made against "copy → all".
+    has(Late, "No show", /aria-label=\{"No show \(" \+ who \+ "\)"\}/,
+      "the visible text leads; the guest follows in parentheses");
+    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ w\.size \+ " pax\)"\}/,
+      "the visible text leads; the party follows in parentheses");
+    // Overlap's Reassign and Clash's Assign are deliberately untouched: their
+    // visible text already contains a name, so it differs per row on its own.
+    // Pinned so a later "consistency" pass does not add a redundant label that
+    // would then be free to drift from the text beside it.
+    for (const [what, src, re] of [
+      ["Reassign", Overlap, /\{"Reassign " \+ w\.next\}<\/button>/],
+      ["Assign", Clash, /\{"Assign " \+ laterWho\}<\/button>/],
+    ]) {
+      has(src, what + " names itself", re,
+        "this button's VISIBLE text is already per-row, so it needs no label");
+    }
+  });
+
+  it("every banner name survives a nameless booking", () => {
+    // /code-review. `sanitize` writes `name: b.name || ""` and the booking form
+    // does not require a name, so an empty name is reachable data — and a name
+    // built by concatenation then announces "…warning for  and ", identifying
+    // nothing. Three of the four banners guarded it; ClashBanner did not, so
+    // the fix for ambiguity reintroduced ambiguity in its own worst case.
+    for (const [what, src] of [["LateBanner", Late], ["OverlapBanner", Overlap],
+                               ["WaitAvailBanner", Wait], ["ClashBanner", Clash]]) {
+      has(src, what + " nameless fallback", /\|\| "\(no name\)"/,
+        "an empty name is reachable data, and a button announcing a blank is " +
+        "exactly the ambiguity these names exist to remove");
+    }
+    // ClashBanner names TWO parties, so it needs two — and the visible sentence
+    // and the Assign button must read the same guarded values, or the pane says
+    // "(no name)" while the button beside it says nothing at all.
+    expect(count(Clash, /\|\| "\(no name\)"/g), "one per party in the pair").toBe(2);
+    for (const re of [/const msg = firstWho \+/, /\{"Assign " \+ laterWho\}/]) {
+      has(Clash, "guarded value reused", re,
+        "the sentence and the button must read the same guarded name as the " +
+        "dismiss label, not re-derive it");
+    }
+  });
+
+  it("the name comes from ONE expression, not a second copy", () => {
+    // `who` exists so the sentence in the row and the name on the button cannot
+    // disagree about what the party is called — including the "(no name)"
+    // fallback, which a waitlist really does produce.
+    for (const [what, src] of [["LateBanner", Late], ["WaitAvailBanner", Wait]]) {
+      has(src, what + " who", /const who = \w+\.name \|\| "\(no name\)";/,
+        "derive the display name once per row and read it everywhere in that row");
+    }
+    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ w\.size \+ " pax/,
+      "the visible sentence must read the same expression the button's name does");
+  });
+});
+
+describe("a reminder row's three controls share one name (v17.15.6)", () => {
+  // v17.15.4 named the switch in this row and stopped there, so five reminders
+  // still offered five buttons called "Edit" and five called "Delete" — and
+  // Delete is the one control here where the wrong target cannot be undone.
+  const src = read("components/Reminders.jsx");
+
+  it("the reminder's display name is derived ONCE", () => {
+    has(src, "rname", /const rname = String\(r\.text \|\| "\(no text\)"\)\.replace\(\/\\s\+\/g, " "\)\.trim\(\);/,
+      "three controls in this row name the same reminder; a second copy of the " +
+      "expression is a second answer, and the two would drift");
+    expect(count(src, /String\(r\.text \|\| "\(no text\)"\)/g),
+      "exactly one copy of the guarded expression").toBe(1);
+  });
+
+  it("all three controls read it", () => {
+    for (const [what, re] of [
+      ["toggle", /label=\{"Reminder: " \+ rname\}/],
+      ["edit", /aria-label=\{"Edit \(" \+ rname \+ "\)"\}/],
+      ["delete", /aria-label=\{"Delete \(" \+ rname \+ "\)"\}/],
+    ]) {
+      has(src, what, re, "rendered once per reminder, so it must say which one");
+    }
+  });
+
+  it("Edit and Delete lead with their visible text (WCAG 2.5.3)", () => {
+    // Both have words on them, so the name extends the visible label rather
+    // than replacing it — "Delete the 09:00 prep reminder" would read as an
+    // improvement and stop "click Delete" working.
+    hasnt(src, "paraphrased action name", /aria-label=\{"(Remove|Modify|Change|Open) /,
+      "the visible word leads and the reminder follows in parentheses");
+  });
+});
+
+describe("the List card's actions stay named by their ancestor (v17.15.6)", () => {
+  // A DECISION pin, not a fix — the only one in this file, and it is here
+  // because the alternative is invisible: nothing about six statically-named
+  // buttons says somebody weighed them and chose to leave them.
+  //
+  // Measured live on a 10-booking day: Assign x10, Delete x10, cancelled x10,
+  // completed x9, seated x8. Sixty controls, five names.
+  //
+  // They are LEFT, and the whole argument is one structural fact: the card is a
+  // `role="listitem"` carrying `describeBooking(b)`, so a screen-reader user
+  // has already been told whose booking this is before reaching any button.
+  // Renaming all sixty would repeat the guest on every control — measurably
+  // more verbose in the app's most-used view, for exactly the users the change
+  // would be for. No WCAG SC is failed either way (2.5.3 is satisfied: the
+  // visible text IS the name), and voice control falls back to numbered
+  // overlays when names collide.
+  //
+  // The contrast with the four banners two describes up is the entire rule, and
+  // it is worth stating as one sentence: **a repeated control inside a NAMED
+  // listitem may rely on that ancestor; a control in a bare row may not.**
+  it("the card is what carries the booking's identity", () => {
+    has(List, "card aria-label", /aria-label=\{describeBooking\(b\)\}/,
+      "this is what the action buttons rely on instead of naming themselves — " +
+      "remove it and sixty controls lose their context at once");
+    has(List, "card is a listitem", /role="listitem"/,
+      "the ancestor must be a real list item, or there is no context to inherit");
+  });
+
+  it("the action buttons are deliberately NOT renamed", () => {
+    // /code-review. The first version of this pin guessed at STRING SHAPES —
+    // three regexes like `aria-label={"Assign…" + b.name`. Run against four
+    // renames a later sweep would plausibly write, it missed two: `"Set " + s +
+    // …` (the literal `s` cannot match the capital S of "Set") and `"Mark " +
+    // b.name + " as " + s`, which is the most natural phrasing of all.
+    //
+    // And `hasnt()`, unlike `has()`, does NOT throw when its pattern matches
+    // nothing — so a pattern that can never fire passes silently forever. A pin
+    // built out of guessed spellings is the tautology this file's header exists
+    // to prevent, in the one guard of this version that was not proven against
+    // known-bad input.
+    //
+    // So it is STRUCTURAL instead: find the action row's buttons and require
+    // that none of them carries an `aria-label` at all. No spelling to guess,
+    // and it catches all four candidates plus any phrasing nobody has thought
+    // of yet.
+    const actions = openingTagsOf(List, "button")
+      .filter((t) => /\bonClick=\{stopped\(/.test(t));
+    expect(actions.length, "the card's action row should still hold ~5 buttons " +
+      "wrapped in `stopped()` — if this drops to 0 the guard has stopped " +
+      "looking at anything").toBeGreaterThanOrEqual(4);
+    const named = actions.filter((t) => /\baria-label=/.test(t));
+    expect(named, "DECIDED in v17.15.6, not overlooked: the card is a named " +
+      "listitem carrying describeBooking, so these inherit the booking. " +
+      "Renaming all sixty repeats the guest on every control and is measurably " +
+      "more verbose for the users it is for. Change it only deliberately — and " +
+      "rewrite this test's reasoning if you do").toEqual([]);
+  });
+});
+
+describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => {
+  // The defect this catches, stated once: v17.11.0 put StatusIcon on the
+  // timeline block because `BLOCK_BG[b.status]` and nothing else is a 1.4.1
+  // failure — and the identical defect sat on the FLOOR PLAN for four more
+  // versions, on the view where it bites hardest (a block at least carries the
+  // guest's name; a table carries a table id). Nothing anywhere in tests/ so
+  // much as mentioned StatusIcon, so both halves of that were invisible.
+  //
+  // The discriminator is STRUCTURAL, not a guessed spelling: `BLOCK_BG[expr]`
+  // is a status being PAINTED — the value comes from a booking — while
+  // `BLOCK_BG.pending` is the colour being BORROWED for something that is not a
+  // status (App's waitlist count badge, WaitlistPanel's title pill, WalkinForm's
+  // "Add to waitlist"). Only the first kind owes a mark, and only the first kind
+  // can be found without guessing at spellings — the trap v17.15.6's
+  // /code-review named.
+  //
+  // Per-FILE with a recorded COUNT, not one mark per `BLOCK_BG[` site. Two real
+  // sites index it for an ANIMATION rather than an indicator — ListView's
+  // .mgt-wipe-ltr status wash and BookingFormModal's save flash — and a rule
+  // demanding a mark beside those gets muted within a day. The count is what
+  // stops a file passing on HALF a fix: PlanView has two surfaces, and marking
+  // only the legend is the exact half-measure v17.15.7 exists to avoid.
+  const PAINTS_STATUS = {
+    "components/PlanView.jsx":         { marks: 2, what: "the table glyph (v17.15.7) and the legend chip" },
+    "components/TimelineView.jsx":     { marks: 2, what: "the block's flag rail and the legend chip" },
+    "components/ListView.jsx":         { marks: 1, what: "the card's status buttons" },
+    "components/BookingFormModal.jsx": { marks: 1, what: "the edit form's Status row" },
+    "components/QuickStatusPopup.jsx": { marks: 1, what: "the four status buttons" },
+    "components/atoms.jsx":            { marks: 1, what: "SBadge" },
+  };
+
+  // Comments stripped, for this file's standing reason: PlanView's own mark
+  // carries a paragraph naming `fillFor` and `isBlocked`, and a guard that
+  // reads it is measuring the documentation.
+  const painting = srcFilesMatching(/BLOCK_BG\[/);
+
+  it("every surface that indexes BLOCK_BG by status is registered", () => {
+    const unregistered = painting.map(([rel]) => rel).filter((rel) => !(rel in PAINTS_STATUS));
+    expect(unregistered, "a new surface paints a booking's status as a fill: " +
+      unregistered.join(", ") + " — register it above with the number of marks it " +
+      "draws, so the next check can measure it").toEqual([]);
+  });
+
+  it("the registry cannot rot into a list of files that stopped painting", () => {
+    const found = new Set(painting.map(([rel]) => rel));
+    const stale = Object.keys(PAINTS_STATUS).filter((rel) => !found.has(rel));
+    expect(stale, "registered but no longer indexes BLOCK_BG: " + stale.join(", ") +
+      " — drop the entry rather than leaving a guard pointed at nothing").toEqual([]);
+  });
+
+  it("each of them draws exactly the marks it is recorded as drawing", () => {
+    for (const [rel, src] of painting) {
+      const want = PAINTS_STATUS[rel];
+      if (!want) continue;   // the first test owns that failure
+      expect(count(src, /<StatusIcon\b/g),
+        rel + " should draw " + want.marks + " status mark(s) — " + want.what +
+        ". A fill IS the status on these surfaces, and colour alone is WCAG " +
+        "1.4.1. Added a surface? Say so above. Removed one? Say that too.").toBe(want.marks);
+    }
+  });
+
+  it("the plan's mark is drawn only where the FILL says a status", () => {
+    // `isBlocked` wins in fillFor, and a blocked table CAN still hold a booking.
+    // Without this clause a red-striped table draws a mark contradicting its own
+    // fill — and `blocked` is not a booking status.
+    has(Plan, "blocked outranks the occupant", /\{!blocked && markStatus \?/,
+      "the mark must mirror fillFor's precedence, or the two disagree on the one " +
+      "table where it matters");
+  });
+
+  it("the plan's mark falls back exactly where the FILL falls back", () => {
+    // /code-review (v17.15.7): `sanitize` writes `status: b.status || "confirmed"`
+    // and the security rules validate no booking field shapes, so an unrecognised
+    // status is reachable. `fillFor` answers it with `|| BLOCK_BG.confirmed`;
+    // `StatusIcon` answers it with null. Without a matching fallback the table is
+    // painted confirmed-amber and carries NO mark — a colour-only status, which is
+    // the exact defect this describe exists to catch, in the one case nobody looks
+    // at. The two fallbacks are pinned TOGETHER because it is their AGREEMENT that
+    // matters, not either one alone.
+    has(Plan, "fillFor's fallback", /BLOCK_BG\[b\.status\] \|\| BLOCK_BG\.confirmed/,
+      "if fillFor stops falling back to confirmed, the mark's fallback below is " +
+      "now the thing that disagrees — change both or neither");
+    has(Plan, "the mark's fallback", /BLOCK_BG\[occ\.status\] \? occ\.status : "confirmed"/,
+      "an unrecognised status must draw the mark its fill already claims, or the " +
+      "fill says confirmed while the mark says nothing at all");
+  });
+
+  it("the sweep is actually finding surfaces", () => {
+    // The tautology guard this file was built on: if the regex stops matching,
+    // every check above passes by looking at nothing.
+    expect(painting.length, "if this drops the guard has stopped looking")
+      .toBeGreaterThanOrEqual(6);
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST
@@ -570,6 +1288,31 @@ describe("the gate proves itself", () => {
 
   it("openingTag() throws rather than returning a truncated tag", () => {
     expect(() => openingTag("x <main style={{a: 1}", "<main")).toThrow();
+  });
+
+  // v17.15.4. The Toggle sweep is the first check here that walks a whole file
+  // looking for MISSING attributes rather than asserting one present shape, so
+  // it has two ways to rot into a tautology: find nothing, or read only part of
+  // each tag. Both are exercised against input that must fail.
+  it("openingTagsOf() finds EVERY tag, not just the first", () => {
+    const src = '<Toggle label="a" /> x <Toggle on={b} /> y <Toggle label={c} />';
+    const tags = openingTagsOf(src, "Toggle");
+    expect(tags.length).toBe(3);
+    expect(tags.filter((t) => !/\blabel=/.test(t)).length, "the middle one is unnamed").toBe(1);
+  });
+
+  it("openingTagsOf() reads a MULTI-LINE tag whole", () => {
+    // The v17.15.2 miss, reproduced: a line-based grep for `<Toggle.*label`
+    // calls this one unnamed. Two of the app's real call sites are this shape.
+    const src = '<Toggle\n  label="Swap busy"\n  on={x}\n/>';
+    const tags = openingTagsOf(src, "Toggle");
+    expect(tags.length).toBe(1);
+    expect(/\blabel=/.test(tags[0]), "the label is on line 2").toBe(true);
+    expect(/<Toggle.*label=/.test(src), "a line-based grep would have missed it").toBe(false);
+  });
+
+  it("openingTagsOf() does not let <ToggleGroup answer for <Toggle", () => {
+    expect(openingTagsOf('<ToggleGroup on={x} />', "Toggle").length).toBe(0);
   });
 
   it("count() distinguishes one heading from two", () => {

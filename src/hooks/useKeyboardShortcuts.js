@@ -19,6 +19,8 @@ import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
 import { SETTINGS_TABS } from "../components/SettingsChrome";
+import { todayStr, stepDate } from "../lib/day";
+import { seatingClosed } from "../lib/booking-logic";
 // WA sandbox: gates the I (inbox) / X (simulator) keys, exactly like the
 // toolbar button — a non-sandbox build must expose no WhatsApp surface.
 //
@@ -330,7 +332,12 @@ export function useKeyboardShortcuts(ctx){
           if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
           // v17.0.0: a PENDING card can only be confirmed (or cancelled) — S/C
           // are no-ops on it, matching the List/RMB button gating.
-          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"seated");return;}
+          // v17.16.12: …and neither can a booking on a day whose close has
+          // passed — the auto-complete would flip it straight back, so the key
+          // would look broken rather than refused. Same predicate as the popup,
+          // the List card and the edit form; this is the fourth surface, and
+          // leaving it out is exactly how the app comes to disagree with itself.
+          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending"&&!seatingClosed(sel.date,K.today,K.nowMins)) K.updateStatus(sel.id,"seated");return;}
           if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
           if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
           if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
@@ -346,7 +353,7 @@ export function useKeyboardShortcuts(ctx){
       if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
       if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
       if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
-      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(new Date().toISOString().slice(0,10));return;}
+      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(todayStr());return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
       // WhatsApp sandbox: I → open the inbox ("w" was taken by Walk-in).
@@ -357,11 +364,11 @@ export function useKeyboardShortcuts(ctx){
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
-      if(k==="ArrowLeft"){e.preventDefault();const d1=new Date(K.viewDate);d1.setDate(d1.getDate()-1);K.goToDate(d1.toISOString().slice(0,10));return;}
-      if(k==="ArrowRight"){e.preventDefault();const d2=new Date(K.viewDate);d2.setDate(d2.getDate()+1);K.goToDate(d2.toISOString().slice(0,10));return;}
+      if(k==="ArrowLeft"){e.preventDefault();K.goToDate(stepDate(K.viewDate,-1));return;}
+      if(k==="ArrowRight"){e.preventDefault();K.goToDate(stepDate(K.viewDate,1));return;}
       // ── Timeline-only shortcuts ──
       if(K.view==="timeline"){
-        const today=new Date().toISOString().slice(0,10);
+        const today=todayStr();
         const isToday=K.viewDate===today;
         if(k==="f"||k==="F"){
           if(isToday){

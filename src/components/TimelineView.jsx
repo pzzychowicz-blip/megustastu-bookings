@@ -42,14 +42,15 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip } from "./atoms";
+import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
 import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
+import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
@@ -83,43 +84,12 @@ const HOUR_PILL = {
 };
 
 // ── The party-size ring (v17.9.0) ────────────────────────────────────────────
-// Shared by TimelineBlock and WaitGhost, for the reason the ghost exists at all:
-// it is a DIMMED copy of the block, so anything the block specifies twice can
-// drift out from under it. HOUR_PILL above is here for the same reason.
-//
-// The border alpha is 0.55, not `--blk-rule`'s 0.3, and the measurement is worth
-// recording because it sets the ceiling. A white rule at 0.3 over the block
-// fills is 1.43:1 confirmed and **1.21:1 pending** — not "subtle", absent; the
-// ring simply did not render on the yellow blocks. 0.55 takes that to 1.82 /
-// 1.38 / 2.78 seated / 2.97 cancelled.
-//
-// It does NOT reach WCAG 1.4.11's 3:1 for a component boundary on the two amber
-// fills, and it cannot: pure white over the pending yellow tops out at 1.98:1.
-// This is the same wall the amber exemption in constants.js records, hit one
-// element further down — and the same answer applies, because the two ways out
-// are both worse. A dark ring clears 3:1 and reads as DISABLED next to the
-// white-inked name it encircles (tried and reverted at block level for exactly
-// this, one commit after it shipped). An opaque fill clears it and turns a count
-// into a second status chip competing with the time. So: transparent ring, best
-// achievable white, number recorded. The DIGIT inside is `--text-on-accent` at
-// the name's own contrast, which is what has to be legible.
-//
-// v17.13.0: `--rim-solid-strong`, not a literal. The old comment here said the
-// alpha was hand-written "because BLOCK_BG is theme-invariant", which is a
-// reason not to use --border-glass (that token FLIPS) and was read as a reason
-// not to use a token at all — so the same white rim ended up written out 26
-// times across twelve files at 0.2 and twice more at 0.55. A token declared in
-// :root ONLY is theme-invariant too, which is the property that was wanted.
-// The 0.55 above is still the recorded measurement; it now lives beside its
-// sibling in index.html, and tests/contrast.test.js resolves it from there.
-const SIZE_RING = {
-  flexShrink: 0, boxSizing: "border-box",
-  width: 18, height: 18, borderRadius: R.pill,
-  border: "1px solid var(--rim-solid-strong)", background: "transparent",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  fontSize: T.micro, fontWeight: FW.semi, lineHeight: 1,
-  fontVariantNumeric: "tabular-nums", position: "relative"
-};
+// v17.15.5: `SIZE_RING` moved to atoms.jsx as the `SizeRing` component — the
+// List card is now a third consumer, and a style object imported from one view
+// into another is not sharing, it is coupling. The recorded 0.55 white rim, and
+// the measurements behind it, travelled with it; the block and the ghost pass
+// no `rim` and are unchanged.
+
 
 // ── How wide a block must be before it may wear a start-time chip (v17.9.0) ──
 // Everything on a block except the name is flexShrink:0, so the name gets
@@ -208,8 +178,8 @@ function BlockFlag({ title, children }) {
   );
 }
 
-function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
-  const d = liveBarDur(b, nowMins);
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
+  const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
   const w = Math.max((d / totalMins) * 100, 0.5) + "%";
@@ -382,6 +352,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
     try { el.setPointerCapture(pid); } catch { /* no-op */ }
   }
   function onDragPointerDown(e) {
+    // v17.16.12: the click-suppression flag is re-armed HERE — on the one event
+    // every input path fires, and ABOVE the early returns. It was set in
+    // `beginDrag` and cleared ONLY in `onTouchStart`, so a MOUSE drag set it and
+    // nothing ever put it back: `handleClick` then returned early for the whole
+    // life of the component instance, and the block sat there looking perfectly
+    // normal while refusing to open the edit form until a page refresh. Reached
+    // by every drag that leaves the block mounted — a refused drop, a drop back
+    // on its own row, or a swap that keeps one of the booking's tables.
+    // The ordering is pointerdown → move → beginDrag(true) → pointerup → click,
+    // so the click that ENDS a drag is still suppressed; only the next press
+    // starts clean. (`onTouchStart` keeps its own reset — both write `false`,
+    // so the two cannot disagree, and touch has a second entry point in the
+    // 400ms press timer.)
+    didLong.current = false;
     if (!onDropOnTable || !tableAtY) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     dragRef.current = { y0: e.clientY, pid: e.pointerId, el: e.currentTarget, active: false };
@@ -430,12 +414,29 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
     }
     const d = dragRef.current;
     dragRef.current = null;
-    if (d && d.active) {
-      const target = commit ? tableAtY(e.clientY) : null;
-      if (target && target !== homeTable) onDropOnTable(b.id, target);
-    }
+    // v17.16.12: TEAR DOWN FIRST, DISPATCH LAST — and the order is the fix.
+    // `onDropOnTable` reaches App's `dropOnTable`, which walks up to 8 candidate
+    // table sets running a full `bookingsAfterAction` trial on each; a throw
+    // anywhere in there is a throw inside a React EVENT HANDLER, which no error
+    // boundary catches (CLAUDE.md's Gotchas). With the dispatch sitting ABOVE
+    // these two setStates, one such throw skipped both and left `dragDy`
+    // non-null for good: the block kept its `translateY`, `zIndex: 30`, 0.85
+    // opacity and drag shadow AND kept `didLong` true — misdrawn and unclickable
+    // at once, from one cause, curable only by a page refresh. Clearing first
+    // makes the block's resting state independent of whether the drop succeeds.
+    // The target is READ before the clear (it measures live row geometry, which
+    // the pending setState has not touched yet) and USED after it.
+    const target = d && d.active && commit ? tableAtY(e.clientY) : null;
     setDragDy(null);
     if (setDragHover) setDragHover(null);
+    if (target && target !== homeTable) {
+      // Swallowed deliberately, and only here: the teardown above has already
+      // run, so the block recovers either way, and an uncaught handler error
+      // would be just as silent in production while risking the batch these
+      // setStates are in. The console line is what makes it findable.
+      try { onDropOnTable(b.id, target); }
+      catch (err) { console.error("[drag] drop on " + target + " failed", err); }
+    }
   }
 
   // v15.8.0: status-change overlay. `anim` ('wipe' Confirmed→Seated / 'fill'
@@ -454,6 +455,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
   ) : null;
 
   function onTouchStart(e) {
+    // v17.16.12: nothing in the document is selectable for the duration of this
+    // hold — see lib/holdSelection for why the at-rest `user-select` rule on
+    // controls could not be enough. Self-terminating on release, so there is no
+    // matching call here or on any of the four other paths out of a hold.
+    beginHold();
     didLong.current = false;
     const t = e.touches[0];
     touchStartPos.current = { x: t.clientX, y: t.clientY };
@@ -551,6 +557,19 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
       onPointerMove={onDragPointerMove}
       onPointerUp={(e) => endDrag(e, true)}
       onPointerCancel={(e) => endDrag(e, false)}
+      /* v17.16.12: the third way a drag can end — belt-and-braces for capture
+         lost while this element STAYS MOUNTED, which is the only case it can
+         actually help with. /code-review corrected the first version of this
+         comment, which justified itself with a mid-drag re-parent (a reshuffle
+         moving the booking to another row): that case needs no net and this
+         handler could not provide one anyway. React unmounts the Fragment in
+         the old row, so `dragDy` is destroyed with the component and nothing
+         can strand — and the node is detached before `lostpointercapture`
+         fires, where React's root-container listener does not see it. Kept
+         because it costs nothing and the teardown is idempotent: on the normal
+         path it fires AFTER `pointerup`, by which point `dragRef` is null, so
+         it re-clears already-cleared state and commits nothing. */
+      onLostPointerCapture={(e) => endDrag(e, false)}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
@@ -680,12 +699,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, totalMins, warnings, clash = 
             ring is the same fact at a glance and it is flexShrink:0, so it
             survives. Transparent fill: it is a count, not a status, and a
             filled pill here would compete with the time chip. */}
-        {showRing ? (
-          <span
-            title={b.size + " guest" + (b.size === 1 ? "" : "s")}
-            style={{ ...SIZE_RING, marginLeft: 6 }}
-          >{b.size}</span>
-        ) : null}
+        {showRing ? <SizeRing n={b.size} style={{ marginLeft: 6 }} /> : null}
       </span>
       {/* v17.9.0: the flag rail — the four markers that used to be appended to
           the label string, plus the ★ that was floating on the left. Order is
@@ -1097,7 +1111,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
           minWidth: 0, fontSize: T.small, fontWeight: FW.bold,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
         }}>{g.name}</span>
-        {showRing ? <span style={{ ...SIZE_RING, marginLeft: 6 }}>{g.size}</span> : null}
+        {showRing ? <SizeRing n={g.size} style={{ marginLeft: 6 }} /> : null}
       </span>
     </div>
   );
@@ -1125,6 +1139,9 @@ export const TimelineView = memo(function TimelineView({
   // callback had two names across three views and the next surface would have
   // guessed wrong and got a silently missing button. One input, one name.
   onNew = null, emptyWalkin = null, dayClosed = false, isEmpty = false,
+  // v17.16.2: TODAY (App's single `todayStr()`), which is NOT `date` — that is
+  // the day being VIEWED. liveBarDur needs both to put now on a booking's axis.
+  today = "",
   late = {}, freeing = {}, onNoShow = () => {},
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
@@ -1154,7 +1171,7 @@ export const TimelineView = memo(function TimelineView({
   const [quickStatus, setQuickStatus] = useState(null);
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
-  const isToday = date === new Date().toISOString().slice(0, 10);
+  const isToday = date === today;
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const gridW = Math.max(320, totalMins * zoom * 1.2);
   // v16.0.0: px-per-minute estimate for the time-chip decision (gridW is a
@@ -1216,7 +1233,12 @@ export const TimelineView = memo(function TimelineView({
   }
 
   const day = bookings.filter((b) => b.date === date && b.status !== "cancelled");
-  const dayBlocks = blocks.filter((bl) => bl.date === date);
+  // v17.16.6 (/code-review): filtered through the SAME predicate getBlockSlots
+  // uses, because BlockBar below calls toMins(bl.from) itself. Guarding only the
+  // placement path left an unreadable block throwing during RENDER, where the
+  // error boundary unmounts the whole app — the day stayed unusable and the
+  // crash simply moved somewhere worse.
+  const dayBlocks = blocks.filter((bl) => isReadableBlock(bl) && bl.date === date);
 
   // ── v17.15.3: the waitlist ghost's departure ────────────────────────────────
   // A ghost draws one CELL per matched table, so the tracked identity is the
@@ -1249,7 +1271,11 @@ export const TimelineView = memo(function TimelineView({
   waitGhosts.forEach((g) => {
     (g.tables || []).forEach((t) => { ghostCells.push({ key: g.id + GHOST_SEP + t, table: t, g: g }); });
   });
-  const { renderIds: ghostRenderIds, openIds: ghostOpenIds } = useRevealRows(
+  // `openIds` is deliberately NOT destructured. v17.15.3's own /code-review
+  // replaced the one place that read it with the `!cell` test documented at the
+  // WaitGhost call site below, and left the binding behind — where it was an
+  // unused variable, i.e. a lint ERROR, and lint is a hard CI gate here.
+  const { renderIds: ghostRenderIds } = useRevealRows(
     ghostCells.map((c) => c.key), date
   );
   const ghostByKey = new Map(ghostCells.map((c) => [c.key, c]));
@@ -1287,7 +1313,7 @@ export const TimelineView = memo(function TimelineView({
   // the per-block part is only what each block needs, and the worst one decides.
   const confirmedDay = day.filter((b) => b.status === "confirmed" || b.status === "pending");
   const chipsOn = confirmedDay.length > 0 && confirmedDay.every(function (b) {
-    return liveBarDur(b, nowMins) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
+    return liveBarDur(b, nowMins, today) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
   });
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
@@ -1526,7 +1552,7 @@ export const TimelineView = memo(function TimelineView({
             // entirely OUTSIDE the grid — an absolutely-positioned child still
             // counts toward the scroller's scrollWidth, so it added a strip of
             // empty scroll past the end of the day that grew with zoom.
-            const tStart = toMins(b.time) + liveBarDur(b, nowMins);
+            const tStart = toMins(b.time) + liveBarDur(b, nowMins, today);
             const tEnd = Math.min(tStart + turnBuffer, GRID_CLOSE * 60);
             const tMins = tEnd - tStart;
             tail = tMins <= 0 ? null : (
@@ -1570,7 +1596,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1591,7 +1617,7 @@ export const TimelineView = memo(function TimelineView({
       marginTop: 4, boxSizing: "border-box"
     }}>
       <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
     </div>
   ) : null;
 
@@ -1812,6 +1838,8 @@ export const TimelineView = memo(function TimelineView({
     <QuickStatusPopup
       booking={quickStatus.booking}
       late={late}
+      today={today}
+      nowMins={nowMins}
       onStatus={onStatus}
       onNoShow={onNoShow}
       onClose={() => setQuickStatus(null)} />

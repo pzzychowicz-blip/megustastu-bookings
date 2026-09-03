@@ -46,8 +46,9 @@ this file.
 ## 2. Booking statuses
 
 Five statuses, one flag. `StatusIcon` (`Icons.jsx`) is the single source of the
-mark for each — the List card, the edit form's Status row and the quick-status
-popup all read it, so they cannot drift.
+mark for each — the List card, the edit form's Status row, the quick-status
+popup, the timeline block and (v17.15.7) the floor-plan table all read it, so
+they cannot drift.
 
 | What you see | Correct term | What it does |
 |---|---|---|
@@ -80,7 +81,8 @@ however many fire — that is the whole point of it.
 | Green "Waitlist — table free" rows | **waitlist availability** section (`WaitAvailBanner.jsx`) | A waiting party a table now fits. Offers Book. |
 | "Reminder(s)" rows | **reminder banner** (`useReminders.jsx`) | A reminder inside its fire window. Snooze / Done. |
 | "Working offline" | **offline section** (`appBannerSections`) | The socket is down; edits queue. |
-| "Couldn't save" | **write-error section** | A write was refused after retries. |
+| "Couldn't save" | **write-error section** | A write was refused. Carries either a transient warning with a **Dismiss**, or a **parked write** with **Retry** and **Discard**. |
+| "P3 Smoke Test, 19:30 — not saved, and undone", with **Retry** / **Discard** | **parked write** (`parkedWrites`, `usePersistence.js`) | A change whose automatic retries ran out. It is kept and named instead of dropped: **Retry** runs a fresh round of attempts on resynced data, **Discard** accepts the loss. The change is already undone on screen — the banner names it so you know what to redo. |
 | "Couldn't load bookings" | **load-failure section** | The initial read failed. Permanent until reload. |
 | "Closed this day" | **closed-day section** | The viewed weekday has no opening hours. Suppresses the empty-day prompt. |
 | "Tables could be reshuffled" | **inefficiency section** | The optimiser could do better. Offers Reshuffle. |
@@ -137,11 +139,12 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | The drawn room | **floor plan** (`layout.floorPlan`) | Tables, walls and doors, in cm. |
 | One drawn table | **table glyph** (`TableGlyph`, `FloorGlyphs.jsx`) | Shape, size, rotation, per-side chairs. Operable — Enter/Space when it has an `onClick`. |
 | The colour filling a table | **occupancy fill** | seated · confirmed · pending · free · blocked, at the selected minute. |
+| The small white mark under a table's id | **status mark** (`StatusIcon`, v17.15.7) | The occupant's status as a SHAPE, so the fill is never the only signal. Drawn only where the fill names a status — never on blocked, free or resetting. |
 | Diagonal hatching | **blocked** | A table block covers this minute. |
 | The scrolling ruler under a fixed centre marker | **time axis** (`TimeAxis.jsx`) | Scrub the day. Snaps to 15 min on idle; tap to scroll a time to centre. |
 | The pill in the middle of the header row | **selected-time badge** | The minute the fills are drawn for. Sits exactly on the axis's centre marker. |
 | "Now" button | **now button** | Jumps the selection to the current minute and re-centres the tape. Today only. |
-| seated / confirmed / pending swatches, top right | **legend** | What the fills mean. |
+| seated / confirmed / pending swatches, top right | **legend** | What the fills mean. Each chip carries its status mark, because the room draws one. The three are the complete set a table can show. |
 | "free in about N minutes" pill | **freeing-soon pill** (`freeingSoon`, `freeSoonWindow`) | A table about to turn over. |
 | Dashed muted outline | **resetting** | The table is inside its turnaround buffer. |
 | "Walk-in here" in the tap popover | **walk-in shortcut** | Offered on **free** tables today only. |
@@ -172,6 +175,7 @@ The distinction is load-bearing: a **modal** is a dialog (scrim, focus trap,
 | Floating message, bottom centre | **status toast** (`StatusToasts.jsx`) | **One slot** — the highest-priority live toast only, crossfading in place. `role="status"`. |
 | "Booking cancelled · Undo" | **undo pill** | The one toast you act on. `undoSecs` in settings. |
 | "Nothing booked for this day yet" + two buttons | **empty-day prompt** (`EmptyDay.jsx`) | Renders **nothing** on a closed day — the strip's closed-day section is that case's empty state. |
+| "MGT Bookings hit an error" + Try again / Reload app | **error screen** (`ErrorBoundary.jsx`, v17.16.0) | What the app shows instead of a white screen when a render throws. Deliberately **not** a modal: there is no app behind it to dim, so it is a plain centred card on `--bg-app` with no scrim and no `Overlay`. Not a live region either — it moves focus instead. |
 
 ### What `Overlay` actually is
 

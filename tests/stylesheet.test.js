@@ -70,6 +70,13 @@ const CRITICAL_SELECTORS = [
   ".mgt-skip",                        // the skip link is hidden BY this rule
   ".mgt-skip:focus",                  // …and revealed by this one
   ".mgt-detent",                      // TimeAxis snap
+  // v17.16.12 — the transient hold guard (lib/holdSelection sets the
+  // attribute; this rule is the whole of what the attribute DOES). Missing,
+  // `beginHold` still sets `data-holding` on <html> and nothing at all
+  // happens: no error, no visual change, and the iOS selection callout the
+  // guard exists to suppress comes back during every press-and-hold. The
+  // textbook entry for this list.
+  "html[data-holding] *",
   // v17.15.0 — SlideView's three entrance classes. It mounts with
   // `animating: true` and leaves that state ONLY on `animationend`, so a
   // missing rule means the event never comes and the view wrapper keeps

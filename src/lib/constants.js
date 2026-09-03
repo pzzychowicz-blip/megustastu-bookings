@@ -26,6 +26,11 @@
 //     can't generate (each {ids, cap}). Appended to the auto combos in order.
 // buildLayout(DEFAULT_LAYOUT) reproduces the pre-Phase-4 VALID_COMBOS (40, ordered)
 // + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
+// WA sandbox: explicit ".js" — this file is in the Node ESM chain reached from
+// src/lib/whatsapp.js via booking-logic.js (api/_lib + the :3999 harness import it).
+// Node ESM does not resolve extensionless specifiers; Vite does not care either way.
+import { todayStr } from "./day.js";
+
 export var DEFAULT_LAYOUT={
   tables:[
     {id:"1A",capacity:2,zone:"outdoor"},{id:"1B",capacity:2,zone:"outdoor"},
@@ -744,7 +749,20 @@ export var REVEAL_EXIT_MS = exitHold("reveal");
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that
 // still needs the same stamp written BACK to it, and is draft-only — doSave
 // consumes it and it is never persisted.
-export var EMPTY_FORM={name:"",phone:"+",date:new Date().toISOString().slice(0,10),time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
+// v17.16.5: `date` is a GETTER, not a value. This object is built once at module
+// load, so an app left open across midnight — a tablet in a restaurant, which is
+// how this one is used — held yesterday's date as the new-booking default for
+// the rest of the next service.
+//
+// Not currently reachable in a saved booking: all three `openForm` call sites
+// (`openNew`, `bookAgain`, `bookFromWaitlist`) set `date` explicitly, which is
+// what made it a P3 rather than a bug. It is fixed as a getter because that
+// keeps every consumer unchanged — `Object.assign` and object spread both READ
+// an accessor and copy its result, so the ~six call sites and the `form` /
+// `formRef` / `formBaseline` initializers all keep taking a plain string — and
+// because a default that is silently wrong is a trap for the next call site
+// added, which will not know it has to set the field.
+export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here

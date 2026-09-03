@@ -32,7 +32,7 @@
 import { mkBtn } from "./atoms";
 import { AlertIcon, OfflineIcon, SwapIcon, ClosedIcon } from "./Icons";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { BTN, R, T, FW } from "../lib/constants";
+import { BTN, R, T, FW, H, SP } from "../lib/constants";
 
 // A section body: the row under a section header. The mark and title live in the
 // header the strip draws, so a one-line banner supplies only its sentence and
@@ -53,7 +53,29 @@ function body(children, extra) {
   );
 }
 
-export function appBannerSections({ isOnline, writeWarning, onDismissWarning, ineffShow, onDismissIneff, onReshuffle, loadFailed, readError, hasConnected, dayClosed }) {
+// v17.16.9 (CT-2A-07): what the "Couldn't save" section says when it is holding
+// a PARKED write — one whose automatic retries ran out.
+//
+// The wording is the whole point of the fix, and the first draft of it was
+// WRONG in a way only running the app showed. It said the change was "shown
+// here but not saved to the server", from the finding's own account of the
+// defect: an optimistic `setBookings` that nothing reverts. Measured live, the
+// card had already snapped back to the saved value — `drainPending` is only
+// ever called from the two places that have just set local state to server
+// truth, in the same commit. So there is no divergence to describe; the change
+// is simply GONE, which is why naming it matters more, not less. The old
+// message was "Couldn't save a change after several attempts — please re-check
+// and try again": no booking named, for a change the user had just watched
+// disappear.
+function parkedMessage(labels) {
+  if (labels.length > 1) return labels.length + " changes were not saved and have been undone.";
+  // A label can be null — `describeWrite` returns null for an empty diff, and a
+  // booking whose name and time are both blank falls back to its id. Neither is
+  // worth a worse sentence than "a change".
+  return (labels[0] || "A change") + " — not saved, and undone.";
+}
+
+export function appBannerSections({ isOnline, writeWarning, onDismissWarning, parkedWrites, onRetryParked, onDiscardParked, ineffShow, onDismissIneff, onReshuffle, loadFailed, readError, hasConnected, dayClosed }) {
   const out = [];
 
   // v17.8.0 (strip audit): this used to be a floating TOAST. It is the one
@@ -89,7 +111,26 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
 
   // The ⚠ glyphs are gone: the dot already says "attention", and a glyph plus a
   // coloured dot plus coloured text is three signals for one message.
-  if (writeWarning) out.push({
+  // v17.16.9: parked writes share this section with the red hard-failure banner
+  // — same category, same mark, and the strip's tally is per SECTION, so a
+  // second one would need a second icon to say anything (the `ClashIcon`
+  // lesson).
+  //
+  // **They are two INDEPENDENT states and both can be live**, which the first
+  // version of this got wrong: it rendered the parked message INSTEAD of
+  // `writeWarning`, and swapped Dismiss for Retry/Discard, so a concurrent
+  // warning was neither shown nor dismissable — it just reappeared later, out
+  // of context, when the parked write was resolved. Concretely: a booking write
+  // parks, then a `tableBlocks` write is rejected and calls `setWriteWarning`;
+  // the block edit is lost and the app never says so. `writeWarning` has three
+  // other callers (not loaded, empty-array refusal, blocks rejected), none of
+  // them related to parking.
+  //
+  // So both lines render when both are set, the parked one first — it is the
+  // one that persists and the one with actions — and Dismiss appears alongside
+  // Retry/Discard whenever there is a warning to dismiss.
+  const parked = parkedWrites || [];
+  if (writeWarning || parked.length) out.push({
     id: "writeError",
     // v17.15.0: was --status-offline, which is #ff3b30 in BOTH themes while
     // --danger-bg inverts — measured 3.03:1 in light and 4.31:1 in dark, i.e.
@@ -97,14 +138,36 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, in
     // fill it sits on: 7.09:1 / 8.05:1. Same token the modal InlineAlert takes.
     tone: "var(--danger-text)", tint: "var(--danger-bg)",
     icon: AlertIcon,
-    title: "Couldn't save", count: 1,
+    title: "Couldn't save", count: parked.length || 1,
     node: body(
       <>
-        <span style={{ flex: 1, minWidth: 0, color: "var(--danger-text)" }}>{writeWarning}</span>
-        <button
-          className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, background: "var(--app-btn-slate-dim)", minHeight: 32, padding: "4px 12px" })}
-          onClick={onDismissWarning}>Dismiss</button>
+        <span style={{ flex: 1, minWidth: 0, color: "var(--danger-text)", display: "grid", gap: SP.tight }}>
+          {parked.length ? <span>{parkedMessage(parked)}</span> : null}
+          {writeWarning ? <span>{writeWarning}</span> : null}
+        </span>
+        {/* Retry takes the banner-primary orange every other in-flow banner
+            uses for its act-on-this control (Reassign, Assign, No show).
+            Discard keeps the neutral slate the Dismiss beside it has — and is
+            deliberately NOT BTN.cancel, which in this app is red and means
+            cancel the BOOKING. */}
+        {parked.length ? (
+          <button
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, background: BTN.orange, minHeight: H.compact, padding: "4px 12px" })}
+            onClick={onRetryParked}>Retry</button>
+        ) : null}
+        {parked.length ? (
+          <button
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, background: "var(--app-btn-slate-dim)", minHeight: H.compact, padding: "4px 12px" })}
+            onClick={onDiscardParked}>Discard</button>
+        ) : null}
+        {writeWarning ? (
+          <button
+            className="mgt-hover-scale"
+            style={mkBtn({ fontSize: T.body, background: "var(--app-btn-slate-dim)", minHeight: H.compact, padding: "4px 12px" })}
+            onClick={onDismissWarning}>Dismiss</button>
+        ) : null}
       </>
     )
   });

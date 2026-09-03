@@ -25,6 +25,7 @@
 import { useRef, useEffect } from "react";
 import { S, BTN, T, IC } from "../lib/constants";
 import { mkBtn, Presence } from "./atoms";
+import { beginHold } from "../lib/holdSelection";
 import { CloseIcon, SplitSideIcon, SplitStackIcon, SwapIcon } from "./Icons";
 
 const ORD = ["timeline", "list", "plan"];
@@ -56,6 +57,7 @@ export function ViewSwitcher({
   function startPress(v, e) {
     if (!gesturesOn || e.pointerType !== "touch") return;
     clearPress();
+    beginHold();   // v17.16.12 — see lib/holdSelection
     didLongRef.current = false;
     startRef.current = { x: e.clientX, y: e.clientY };
     // Window-level release listeners: see the header note — the popup's scrim

@@ -41,14 +41,16 @@ import {
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
-  undoSnapshots, applyUndo
+  undoSnapshots, applyUndo,
+  seatedElapsed
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
+import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
@@ -265,6 +267,7 @@ const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
+import { todayStr, stepDate } from "./lib/day";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -291,7 +294,7 @@ const __APP_SIGNATURE__={
   app:"MGT Bookings",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.15.3-wa-sandbox",
+  version:"17.16.12-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
@@ -819,7 +822,7 @@ function BookingApp({uid}){
   },[setModal]);
   const blockTarget = modalOpen.block || null;
   const setBlockTarget = setModalFns.block;
-  const [viewDate, setViewDate] = useState(new Date().toISOString().slice(0,10));
+  const [viewDate, setViewDate] = useState(todayStr());
   const showForm = !!modalOpen.form;
   const setShowForm = setModalFns.form;
   const [form, setForm] = useState(EMPTY_FORM);
@@ -865,7 +868,12 @@ function BookingApp({uid}){
   // read a FRESH draft): this one is read during render to derive formDirty, so
   // a ref would be the wrong tool — a ref write wouldn't repaint.
   const [formBaseline, setFormBaseline] = useState(EMPTY_FORM);
-  function openForm(next){setFormBaseline(next);setForm(next);}
+  // v17.16.0: the commit-once guard resets HERE, and nowhere else. This is
+  // already the one door every open path goes through (it sets the
+  // unsaved-changes baseline), so the guard cannot be left armed by a path
+  // that forgot it — see src/lib/submitGuard.js, sequencing rule 3.
+  const saveGuardRef = useRef(READY);
+  function openForm(next){saveGuardRef.current=READY;setFormBaseline(next);setForm(next);}
   // Which surface the discard confirm is asking about: "form" | "walkin" |
   // "manual" | "reminder" | "block" | "settings" | null. One shared modal, six
   // callers as of v17.8.0.
@@ -969,6 +977,11 @@ function BookingApp({uid}){
   // current-time read, and the dep arrays of usePersistence + useReminders.
   // Phase D3 (v14.1.10). See ./hooks/useNowMins.js.
   const { nowMins } = useNowMins();
+  // v17.16.2: TODAY, once per render, for everything that has to put `nowMins`
+  // and a booking on one axis (liveBarDur / occupancyEnd / applySeatedShift /
+  // lateMins all take it now). A plain string, so passing it into a React.memo'd
+  // view compares by value and cannot churn the memo.
+  const today = todayStr();
   // ── Optimizer thermostat hook ───────────────────────────────────────────────
   // Auto-off at 15:00 for today's shift; auto-on at new-day-start (before 15:00).
   // Daily-reset refs (autoFlippedRef / autoOnRef) keyed by today's ISO date so
@@ -1013,6 +1026,7 @@ function BookingApp({uid}){
     bookings, tableBlocks,
     saveBookings, saveBlocks,
     isOnline, writeWarning, setWriteWarning,
+    parkedWrites, retryParked, discardParked,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
     loadStalled, readError, hasConnected, forceReconnect,
     firstLoadCount,
@@ -1167,7 +1181,7 @@ function BookingApp({uid}){
   // changed ref each render). Keyed on [bookings, nowMins]: recomputes on a data
   // change or the 15s tick, stays referentially stable across keystrokes/toggles.
   const liveBookings=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     return syncLiveDurations(bookings,today,nowMins);
   },[bookings,nowMins]);
   const winW=useWinW();
@@ -1524,7 +1538,7 @@ function BookingApp({uid}){
   // v17.1.0 perf: useMemo (was a per-render IIFE) — a fresh object every render
   // would defeat the React.memo on the views it feeds.
   const overlapWarnings=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
     const warnings={};
     const active=bookings.filter(function(b){return b.date===today&&b.status!=="cancelled"&&b.status!=="completed"&&(b.tables||[]).length>0;});
@@ -1556,7 +1570,7 @@ function BookingApp({uid}){
   // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
   // React.memo — cheapness was never the point, identity is).
   const lateMap=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
     const map={};
     bookings.forEach(function(b){
@@ -1596,7 +1610,7 @@ function BookingApp({uid}){
   // Today-only + recomputed per render (nowMins ticks every 15s) — the lateMap
   // pattern; trivially cheap.
   const freeingList=useMemo(function(){
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     if(viewDate!==today||!bookingDefaults.freeSoonEnabled) return EMPTY_ARR;
     return freeingSoon(bookings,today,nowMins,bookingDefaults.freeSoonWindow||15);
   },[bookings,nowMins,viewDate,bookingDefaults]);
@@ -1625,7 +1639,7 @@ function BookingApp({uid}){
   // waits out the post-sleep stale window and re-runs once fresh data arrives.
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const dirty=dirtyDates(bookings,today);
     if(!dirty.length) return;
     let changed=false;
@@ -1663,7 +1677,7 @@ function BookingApp({uid}){
       blocks:tableBlocks,
       autoOptimizer:autoOptimizer,
       nowMins:nowMins,
-      todayStr:new Date().toISOString().slice(0,10),
+      todayStr:todayStr(),
       matchWin:generalSettings.waitMatchWin,
       prev:waitAvailRef.current
     });
@@ -1694,7 +1708,7 @@ function BookingApp({uid}){
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     if(!recurring.enabled||!recurring.rules.length) return;
-    const today=new Date().toISOString().slice(0,10);
+    const today=todayStr();
     const horizonDays=recurring.horizonWeeks*7;
     const existing={};
     bookings.forEach(function(b){ if(b.recurringId&&b.recurringDate) existing[b.recurringId+"|"+b.recurringDate]=true; });
@@ -1777,7 +1791,7 @@ function BookingApp({uid}){
       name:wf.name||"",
       phone:cleanPhoneOf(wf.phone),
       size:Number(wf.size)||2,
-      date:new Date().toISOString().slice(0,10),
+      date:todayStr(),
       prefTime:wf.time||null,
       notes:wf.notes||""
     });
@@ -1822,7 +1836,7 @@ function BookingApp({uid}){
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");
       a.href=url;
-      a.download="mgt-backup-"+new Date().toISOString().slice(0,10)+".json";
+      a.download="mgt-backup-"+todayStr()+".json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1855,7 +1869,23 @@ function BookingApp({uid}){
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
   }
 
-  function openNew(){pendingWaitlistRef.current=null;openForm(Object.assign({},EMPTY_FORM,{date:viewDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  // v17.16.11 (/code-review): the seed is the viewed date only when that is a
+  // CANONICAL "YYYY-MM-DD", else today. `viewDate` is not always app-controlled
+  // — SearchPanel's onPick puts a booking's stored date into it verbatim, and
+  // that path is deliberately preserved so a malformed booking stays reachable
+  // for repair — and this version's rules pin refuses a malformed `date` on a
+  // CREATE, where the grandfather clause cannot apply. Without this the form
+  // showed a BLANK date field (an <input type=date> cannot render "31/08/2026")
+  // while the draft held the string, `doSave`'s `!f.date` guard passed it
+  // because it is truthy, and the save was rejected by the server and parked.
+  // It also flows on: `addFormToWaitlist` takes `f.date || viewDate`.
+  //
+  // `stepDate(d,0) === d` is the canonical test rather than a fourth date
+  // predicate: a zero-day step returns a well-formed date or today, so it is
+  // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
+  // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
+  // rather than assigning is what stops the form inventing a date nobody chose.
+  function openNew(){pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
   function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
@@ -1997,7 +2027,7 @@ function BookingApp({uid}){
         if(seatingNow&&timeUntouched){
           // Use live-synced bookings so overstaying seated guests' tables are
           // correctly treated as occupied when the overlap guard runs.
-          seatedShift=applySeatedShift(orig,nowMins,liveBookings);
+          seatedShift=applySeatedShift(orig,nowMins,liveBookings,today);
         }
         const needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
         const prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
@@ -2010,7 +2040,12 @@ function BookingApp({uid}){
         // v16.2.0: truncate to the actual span ONLY when the booking was SEATED
         // before this save. A direct Confirmed → Completed edit keeps the form's
         // scheduled duration (mirrors the updateStatus quick-action gate).
-        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const nowMinsLocal=now.getHours()*60+now.getMinutes();const startMins=toMins(f.time);const actualDur=Math.max(15,nowMinsLocal-startMins);saveDur=actualDur;saveCustDur=actualDur;}
+        // v17.16.2 (CT-2B-02): was `nowMinsLocal - toMins(f.time)`, which mixes
+        // an axis measured from TODAY's midnight with one measured from the
+        // BOOKING's — so completing a booking dated anything but today clamped to
+        // the 15-minute floor. seatedElapsed projects and caps at that day's
+        // close, so this agrees with what auto-complete would have written.
+        if(f.status==="completed"&&orig&&orig.status==="seated"&&!f.customDur){const now=new Date();const actualDur=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(now),now.getHours()*60+now.getMinutes()));saveDur=actualDur;saveCustDur=actualDur;}
         // v17.6.0: record how long they ACTUALLY stayed, so the List card can
         // show it after the visit (booking-logic's stayedMins). Computed for
         // EVERY seated→completed save, including the `f.customDur` case the
@@ -2020,7 +2055,9 @@ function BookingApp({uid}){
         let saveStayed=orig?(Number(orig.stayedMin)||0):0;
         if(f.status==="completed"&&orig&&orig.status==="seated"){
           const nowD=new Date();
-          saveStayed=Math.max(15,(nowD.getHours()*60+nowD.getMinutes())-toMins(f.time));
+          // Same axis fix as the truncation above — the register's "completing
+          // records stayedMin = 15".
+          saveStayed=Math.max(15,seatedElapsed({date:f.date,time:f.time},todayStr(nowD),nowD.getHours()*60+nowD.getMinutes()));
         }
         // Apply seated shift (if any) to the values we'll write. Overrides plan
         // numbers above — the shift always wins over default-duration logic.
@@ -2032,6 +2069,43 @@ function BookingApp({uid}){
         }
         const clearM=!!f._clearManual;
         const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
+        // ── v17.15.5: a FINISHED booking's tables are a historical record ────
+        // Completed and cancelled bookings are the two `applyOpt` refuses to
+        // place — it copies them straight through. `doSaveEdit` did not agree
+        // with it, and the disagreement produced two different bugs depending
+        // on one flag nothing in the form shows you:
+        //
+        //   • LOCKED (every walk-in, every drag-drop, every manual assign) —
+        //     `unlockForOpt` rewrites the status to "confirmed" BEFORE
+        //     `bookingsAfterAction`, precisely so the optimiser will consider a
+        //     booking it would otherwise skip. That makes `applyOpt`'s
+        //     completed guard miss it, the optimiser reassigns it, and the
+        //     restore below puts "completed" back on top of the NEW tables.
+        //     Measured live: changing a completed party from 4 to 5 moved it
+        //     from table 7 to tables 1A + 1B — i.e. the app rewrote where a
+        //     party that has already left had sat.
+        //   • NOT LOCKED — `tables: []` is written, `applyOpt` will not refill
+        //     a completed booking, and the capacity guard below rejects the
+        //     save with "No tables available at this time". Measured live: a
+        //     completed booking's party size cannot be changed at all, and the
+        //     error blames the restaurant being full.
+        //
+        // Both directions are the same disagreement, so one flag settles it:
+        // while the booking is being SAVED as finished, its tables are carried
+        // through verbatim and it is never handed to the optimiser. An explicit
+        // manual assignment (`mt`) or an explicit clear (`clearM`) still wins —
+        // those are the user saying so, which is different from the optimiser
+        // deciding on its own.
+        //
+        // It keys on `f.status`, not `orig.status`: walking a completed booking
+        // back to confirmed in the same save SHOULD return it to normal
+        // placement, and seating→completing one in the same save should pin the
+        // table it was actually sat at.
+        const editFinished=f.status==="completed"||f.status==="cancelled";
+        // Hoisted out of buildNext: this exact expression was written twice —
+        // once to unlock and once to restore — and two copies of a condition
+        // that must agree is how they stop agreeing.
+        const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM&&!editFinished;
         // v17.4.0: the diff string is computed ONCE — it feeds the history entry
         // AND the undo gate below. diffBooking returns the sentinel "saved (no
         // field changes)" when nothing moved, which is exactly when undo must
@@ -2069,14 +2143,13 @@ function BookingApp({uid}){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
-              const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM;
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:(!needsR?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||editFinished)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
           });
           let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
-          if(wasSeatedLocked&&needsR&&!mt.length&&!clearM){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+          if(unlockForOpt){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
           return out;
         }
         // /code-review perf: buildNext runs a full optimiser pass (expensive on
@@ -2093,7 +2166,17 @@ function BookingApp({uid}){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — this change would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
-        if(!mt.length&&needsR){
+        // v17.15.5 (/code-review): `!editFinished`. This guard means "the
+        // optimiser could not place the booking", and a finished booking is
+        // never offered to the optimiser at all — its tables are carried
+        // through. Without the exclusion the fix above is only half applied:
+        // a booking whose tables are ALREADY empty carries `[]` through, the
+        // guard reads that as a placement failure, and the save is rejected
+        // with a message about the restaurant being full. Reachable by ordinary
+        // use — a booking the app could not place shows "No table assigned"
+        // and carries `_conflict` with `tables: []`; cancel it, then correct
+        // its party size, and the edit is refused for a table it never had.
+        if(!mt.length&&needsR&&!editFinished){
           const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }
@@ -2110,6 +2193,10 @@ function BookingApp({uid}){
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
         if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
+        // v17.16.0: armed only HERE — after the write is dispatched, on the
+        // line that closes the form. Every early return above leaves the form
+        // open with an error and the guard READY, so Save still works.
+        saveGuardRef.current=DISPATCHED;
         setShowForm(false);setViewDate(f.date);
   }
   function doSaveNew(f,v){
@@ -2156,7 +2243,15 @@ function BookingApp({uid}){
           }
           return base;
         }
-        function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([nb]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
+        // v17.16.6 (CT-2B-08): the guest id is resolved against `prev` HERE rather
+        // than baked into `nb` above, because `nb` is built once at Save time while
+        // this runs again on every replay. The draft's id was minted when the name
+        // was picked; if the seed has been joined since — by another device, through
+        // a different booking of the same guest — adopting the seed's id is what
+        // keeps the two in one group. See `resolveGuestId` for why the seed wins.
+        // `newId` is untouched, so the stable-id property the comment above relies
+        // on is unaffected.
+        function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([Object.assign({},nb,{guestId:resolveGuestId(prev,f)})]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
         // /code-review perf: prev-identity memo — one optimiser pass shared by
         // the guard check + the immediate dispatch (see the edit path above).
         const buildNextMemo=memoByPrev(buildNext);
@@ -2186,9 +2281,18 @@ function BookingApp({uid}){
         // panel) — remove the entry now the booking is dispatched (a held write
         // shows optimistically + auto-retries, so the intent stands either way).
         if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
+        // v17.16.0: armed only HERE — after the write is dispatched, on the
+        // line that closes the form. Every early return above leaves the form
+        // open with an error and the guard READY, so Save still works.
+        saveGuardRef.current=DISPATCHED;
         setShowForm(false);setViewDate(f.date);
   }
   function doSave(){
+    // v17.16.0: has this open of the form already dispatched a save? The form is
+    // still mounted and clickable for EXIT_MS while it fades out, so a second tap
+    // lands on a live Save button — see src/lib/submitGuard.js. Checked before
+    // validation: a refused save must not depend on the draft being valid.
+    if(!mayDispatch(saveGuardRef.current)) return;
     // v17.0.0: apply the pending/confirm status override to a CLONE of the form
     // so every downstream read (status write, diffBooking history, completed-
     // duration gate, flash condition) sees the effective status uniformly.
@@ -2216,12 +2320,22 @@ function BookingApp({uid}){
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
+      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
   }
   function save(statusOverride){
+    // v17.16.0: the guard is checked HERE as well as in doSave, because this is
+    // the button's handler and it can return before doSave is ever reached. On a
+    // double-tap the first tap's booking is already in `bookings`, so the kitchen
+    // load below is one higher — enough to cross KITCHEN_TABLE_LIMIT and raise
+    // "Kitchen busy" for a booking that has already been written, over a form
+    // that has already closed. doSave would then refuse the duplicate correctly,
+    // but the stray dialog would have been produced by the very tap this fix
+    // exists to make inert. The kitchen round-trip is unaffected: its Confirm
+    // button re-enters doSave() directly, with the guard still READY.
+    if(!mayDispatch(saveGuardRef.current)) return;
     // v17.0.0: record the override FIRST — the kitchen-confirm path re-enters
     // doSave() without args, so the intent must survive the modal round-trip.
     statusOverrideRef.current=statusOverride||null;
@@ -2315,14 +2429,14 @@ function BookingApp({uid}){
     if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
     const size=src.size||2;
     const s=toMins(src.time);
-    const e=Math.max(occupancyEnd(src,nowMins),s+1);
+    const e=Math.max(occupancyEnd(src,nowMins,today),s+1);
     const blockSlots=getBlockSlots(tableBlocks,src.date);
     const busyBlocked=getBusy(blockSlots,s,e);
     if(busyBlocked.has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
     // Day's other active bookings (completed = free, the v16.0.0 rule) + the
     // tables held by SEATED parties over the span — those are immovable.
     const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
-    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins));};
+    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins,today));};
     const seatedOn=new Set();
     dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
     // 1. Candidate table sets at the target, in PURE optimizer order (round 4,
@@ -2375,8 +2489,8 @@ function BookingApp({uid}){
       const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
       const otherSize=other.size||2;
       if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
-        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins),os+1);
-        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins)};}).concat(blockSlots);
+        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
+        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(blockSlots);
         if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
           // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
           // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
@@ -2569,6 +2683,9 @@ function BookingApp({uid}){
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
     listDay:listDaySorted,selectedListId:selectedListId,setSelectedListId:setSelectedListId,
+    // v17.16.12: the S shortcut is the fourth surface that offers `seated`, so
+    // it needs the same two values the other three read seatingClosed with.
+    today:today,nowMins:nowMins,
     bumpListFocus:bumpListFocus, // v17.3.1: ↑/↓ scrolls the focused card into view
     openEdit:openEdit,updateStatus:updateStatus,
     // v14.4.0: N → new reminder while the Settings Reminders tab is open.
@@ -2630,8 +2747,9 @@ function BookingApp({uid}){
         // scheduled duration unchanged — otherwise the block balloons to hours
         // on the timeline (e.g. completing a 13:00 booking at 21:00 → 8h block).
         if(status==="completed"&&x.status==="seated"){
-          const startMins=toMins(x.time);
-          const actualDur=Math.max(15,nowM-startMins);
+          // v17.16.2 (CT-2B-02): `nowM - toMins(x.time)` mixed axes. A party
+          // seated before midnight and completed after it recorded 15 minutes.
+          const actualDur=Math.max(15,seatedElapsed(x,today,nowM));
           extra.duration=actualDur;
           extra.customDur=actualDur;
           // v17.6.0: stamp the real stay so the List card can show it after the
@@ -2640,7 +2758,7 @@ function BookingApp({uid}){
           extra.stayedMin=actualDur;
         }
         if(status==="seated"&&x.status!=="seated"){
-          const shift=applySeatedShift(x,nowM,b);
+          const shift=applySeatedShift(x,nowM,b,today);
           if(shift){
             extra.time=shift.newTime;
             extra.duration=shift.newDuration;
@@ -2703,8 +2821,8 @@ function BookingApp({uid}){
   // PREV side removes that false positive and keeps the delta bounded to what
   // the action actually moved.
   function undoDelta(prev,post){
-    const todayStr=new Date().toISOString().slice(0,10);
-    return undoSnapshots(syncLiveDurations(prev,todayStr,nowMins),post);
+    const today=todayStr();
+    return undoSnapshots(syncLiveDurations(prev,today,nowMins),post);
   }
   function armUndo(snapshots,primaryId,kind,noShow){
     if(!snapshots||!snapshots.length) return;
@@ -2735,7 +2853,7 @@ function BookingApp({uid}){
       // duration stays correct. If a booking created since the action now
       // collides, the v15.6.1 reconciliation effect resolves it — the same
       // path that handles offline merges.
-      const today=new Date().toISOString().slice(0,10);
+      const today=todayStr();
       return syncLiveDurations(applyUndo(b,snaps),today,nowMins);
     });
     if(ok){
@@ -2858,7 +2976,7 @@ function BookingApp({uid}){
   // currently fits (waitAvail) AND not ✕-dismissed this session. Today-only —
   // a future-date fit isn't operationally urgent (it stays in the panel + badge).
   const waitBannerEntries=useMemo(function(){
-    const todayStr2=new Date().toISOString().slice(0,10);
+    const todayStr2=todayStr();
     return (viewDate===todayStr2?dayWaiting:waitlist.filter(function(w){return w&&w.status==="waiting"&&w.date===todayStr2;}).slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);}))
       .filter(function(w){return !!waitAvail[w.id]&&!waitNotifyDismissed.has(w.id);});
   },[dayWaiting,waitlist,viewDate,waitAvail,waitNotifyDismissed]);
@@ -3009,7 +3127,7 @@ function BookingApp({uid}){
   // declaration in a render body is a TDZ ReferenceError that blanks the app
   // while build and lint both pass — CLAUDE.md's gotcha, and this is the second
   // time in this one version that moving a line has been the fix.)
-  const isViewToday=viewDate===new Date().toISOString().slice(0,10);
+  const isViewToday=viewDate===todayStr();
 
   // ── v17.11.0: naming the day, for the two sections that cross dates ────────
   // The strip sits DIRECTLY under the date navigator, so a bare time in it reads
@@ -3064,6 +3182,15 @@ function BookingApp({uid}){
       isOnline:isOnline,
       writeWarning:writeWarning,
       onDismissWarning:function(){setWriteWarning(null);},
+      // v17.16.9 (CT-2A-07): a write whose automatic retries ran out is PARKED
+      // rather than dropped, and the "Couldn't save" section grows the two
+      // controls that resolve it. It stays in that section rather than becoming
+      // its own: the strip's collapsed tally is one icon+count per SECTION, so a
+      // second section would have to wear a second mark, and "a write that could
+      // not be saved" is not a different category from "couldn't save".
+      parkedWrites:parkedWrites,
+      onRetryParked:retryParked,
+      onDiscardParked:discardParked,
       ineffShow:ineffShow,
       onDismissIneff:function(){setDismissedIneff(viewDate);},
       onReshuffle:function(){setConfirmReshuffle(true);},
@@ -3084,7 +3211,7 @@ function BookingApp({uid}){
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
     hasLate?[{id:"late",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:LateIcon,
       title:"Running late",count:Object.keys(lateBannerMap).length,
-      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
+      node:<LateBanner lateMap={lateBannerMap} bookings={bookings} nowMins={nowMins} today={today} onNoShow={function(id){doCancelBooking(id,true);}} onDismiss={dismissLateRow} />}]:[],
     reminderCount?[{id:"reminders",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:BellRingIcon,
       title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
@@ -3308,6 +3435,7 @@ function BookingApp({uid}){
   const timelineEl=<TimelineView
     bookings={bookings}
     date={viewDate}
+    today={today}
     onEdit={VA.onEdit}
     onManual={VA.onManual}
     onStatus={VA.onStatus}
@@ -3342,9 +3470,17 @@ function BookingApp({uid}){
     isEmpty={isEmptyDay}
     dayClosed={dayClosed}
     currency={generalSettings.currency} />;
+  // v17.15.5: `clashes` is the SAME memo TimelineView takes. The List card drew
+  // nothing at all for a double-booking, which is the one fault where this app
+  // asserted something FALSE rather than merely omitting it — the argument that
+  // put ClashBanner and the block's marker in v17.11.0, applied to the third
+  // surface. It is built from `clashPairs` and not the dismiss-filtered list:
+  // dismissing a strip row quiets the row, it does not make the double-booking
+  // stop being true.
   const listEl=<ListView
     bookings={bookings}
     date={viewDate}
+    today={today}
     onEdit={VA.onEdit}
     onStatus={VA.onStatus}
     onDelete={VA.onDelete}
@@ -3352,6 +3488,7 @@ function BookingApp({uid}){
     nowMins={nowMins}
     warnings={overlapWarnings}
     late={lateMap}
+    clashes={clashMap}
     onNoShow={VA.onNoShow}
     selectedId={selectedListId}
     focusReq={listFocusReq}
@@ -3429,7 +3566,7 @@ function BookingApp({uid}){
     date={viewDate}
     splitHour={dayShifts.split}
     shiftsEnabled={dayShifts.enabled}
-    isToday={viewDate===new Date().toISOString().slice(0,10)}
+    isToday={viewDate===todayStr()}
     open={summaryOpen}
     freeing={freeingList}
     hoursSig={weekHours}
@@ -3499,6 +3636,7 @@ function BookingApp({uid}){
     onClose={requestCloseManual} />:null}</ModalPresence>;
 
   const walkinModal=<ModalPresence show={showWalkin}>{showWalkin?<WalkinForm
+    today={today}
     draft={walkinForm}
     setDraft={setWalkinForm}
     error={walkinError}
@@ -3623,13 +3761,13 @@ function BookingApp({uid}){
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
           style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()-1);goToDate(d.toISOString().slice(0,10));}}
+              onClick={function(){goToDate(stepDate(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Previous day"
               title="Previous day (←)"
               ><ChevronLeftIcon size={IC.chrome} /></button><button
-              onClick={function(){const d=new Date(viewDate);d.setDate(d.getDate()+1);goToDate(d.toISOString().slice(0,10));}}
+              onClick={function(){goToDate(stepDate(viewDate,1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
@@ -3640,8 +3778,8 @@ function BookingApp({uid}){
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
               className="mgt-hover-scale"
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==new Date().toISOString().slice(0,10)} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
-              onClick={function(){goToDate(new Date().toISOString().slice(0,10));}}
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
+              onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
               Today is visible); the flex:1 Summary sibling absorbs the width change.
@@ -3755,6 +3893,8 @@ function BookingApp({uid}){
               isMobile={isMobile}
               currency={generalSettings.currency}
               regularMin={generalSettings.regularMin}
+              today={today}
+              nowMins={nowMins}
               onSave={function(){save();}}
               onSavePending={function(){save("pending");}}
               onSaveConfirm={function(){save("confirmed");}}
@@ -3767,7 +3907,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){setConfirmDel(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={new Date().toISOString().slice(0,10)} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -3789,7 +3929,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,new Date().toISOString().slice(0,10),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

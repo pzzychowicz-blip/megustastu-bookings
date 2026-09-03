@@ -16,7 +16,9 @@
 // (matchCustomerByPhone here is a strict SUPERSET: it adds noShowCount /
 // noShowBookings to the return object; existing WA consumers ignore them.)
 
-// Phone normalisation: strip all non-digits except a single leading +.
+// Phone normalisation: strip all non-digits, keeping a single + when it comes
+// ahead of them (v17.16.3 — "leading" used to mean index 0, which split
+// "(+34) 600…" from "+34 600…"; see the note on the function).
 // Used for matching customers across bookings (and WA conversations) — the
 // same normaliser must run everywhere so keys line up.
 // v17.4.0: findPhoneOverlaps (bottom of file) needs the interval + duration
@@ -31,8 +33,27 @@ import { overlaps, toMins, getDur } from "./booking-logic.js";
 export function normalizePhone(p) {
   if (!p) return "";
   const s = String(p).trim();
-  const hasPlus = s.charAt(0) === "+";
   const digits = s.replace(/[^\d]/g, "");
+  // v17.16.3 (CT-2B-04): the "+" counts wherever it sits AHEAD OF THE DIGITS,
+  // not only at index 0. It used to be `s.charAt(0) === "+"`, so
+  // "(+34) 600 123 456" normalised to "34600123456" while "+34 600 123 456"
+  // gave "+34600123456" — two identities for one person, splitting their
+  // visits, no-show count and history, and leaving "Delete customer & all
+  // data" reaching only the half you clicked. Every other kind of
+  // punctuation was already stripped correctly; only the plus's POSITION was
+  // wrong, so a bracketed country code — which is how a lot of people write
+  // one — was the whole of the bug.
+  //
+  // A "+" AFTER a digit is deliberately still ignored: a country-code marker
+  // precedes the number, and anything later is something else (an extension,
+  // a typo, two numbers in one field). So this only ever ADDS a "+" where the
+  // old code dropped one — never removes one — which means it can merge two
+  // records that were one customer and can never split a customer in two.
+  // That direction is what makes it safe to change a key everything is
+  // derived from; it is pinned in tests/customers.test.js.
+  const plusAt = s.indexOf("+");
+  const firstDigit = s.search(/\d/);
+  const hasPlus = plusAt !== -1 && (firstDigit === -1 || plusAt < firstDigit);
   return (hasPlus ? "+" : "") + digits;
 }
 
@@ -99,12 +120,71 @@ export function identityKey(b) {
 // `!b.guestId` is what makes a replay safe — a retry on fresh data finds the
 // stamp already there and leaves it alone — and it also means a booking already
 // belonging to another group is never silently re-homed.
+// v17.16.4 (CT-2B-09): a call that stamps NOTHING returns the array it was
+// given. Both early returns above already did; the `.map` did not, so the two
+// cases where the pass reaches the list and changes none of it — the seed
+// booking already carries a `guestId` (the replay-safety guard on the line
+// below, i.e. every retry), or `guestSeed` names a booking no longer in `prev`
+// — handed back a fresh array saying "something changed" when nothing had.
+// That is the exact shape v17.14.0 removed from `bookingsAfterAction` and made
+// a stated contract, in the same save path. Harmless today only because the
+// write diff compares CONTENT: `stampGuestSeed` runs inside doSave's
+// buildNext/applyBase, whose own `.map`/`.filter` rebuild the array regardless,
+// so the identity never reaches `persist`. It is fixed anyway because the next
+// caller may gate on identity — which is what the contract is for — and because
+// a helper that cannot answer "did I do anything" makes that caller impossible
+// to write correctly. `stamped` is a flag rather than a content compare because
+// this pass KNOWS structurally whether it wrote: there is nothing to diff.
 export function stampGuestSeed(list, f) {
   if (!Array.isArray(list) || !f || !f.guestSeed || !f.guestId) return list;
-  return list.map(function (b) {
+  var stamped = false;
+  var out = list.map(function (b) {
     if (!b || b.id !== f.guestSeed || b.guestId) return b;
+    stamped = true;
     return Object.assign({}, b, { guestId: f.guestId });
   });
+  return stamped ? out : list;
+}
+
+// resolveGuestId — which guest group does the booking being SAVED belong to?
+// v17.16.6 (CT-2B-08). `stampGuestSeed` above is the other half of one decision
+// and it only ever answers half of it: it refuses to re-home a seed that already
+// carries an id, which is right, and then nothing reconsiders the id the DRAFT is
+// carrying. So the two halves could disagree.
+//
+// The sequence. Picking an unjoined phone-less guest from the name dropdown mints
+// `guestId = "g" + <that booking's id>` into the draft and records the booking in
+// `guestSeed` (BookingFormModal). Between that moment and Save, another device can
+// join the same guest — through a DIFFERENT booking of theirs, which is the only
+// way the ids differ, since the mint is deterministic in the seed's id. The seed
+// now carries `"g"+<other id>`; `stampGuestSeed` correctly leaves it alone; and
+// the new booking was still written with the id minted at pick time. It lands in a
+// group of ONE, beside the group the operator meant to join, and **nothing on
+// screen distinguishes that from success** — which is the whole reason this is
+// worth a function rather than a comment.
+//
+// Resolving against the seed's LIVE state is what closes it, and it has to happen
+// where `prev` is: inside doSave's `buildNext`, not on the `nb` object built once
+// above it. That also makes a held/retried write correct for free — the replay
+// re-reads a `prev` that may have acquired the id since the first attempt.
+//
+// The seed WINS on principle, not for convenience: it is the existing group, and
+// this booking is the newcomer asking to be let in. Adopting in the other
+// direction would re-home a booking already joined to somebody, which is exactly
+// what `stampGuestSeed`'s `!b.guestId` guard exists to prevent.
+//
+// No seed (`bookAgain` on a booking that already had an id; an ordinary phone
+// booking; an edit, where `openEdit` sets `guestSeed: null`) means there is
+// nothing to reconcile against and the draft's own value stands. A seed that is
+// no longer in `list` — deleted meanwhile — is the same case: the mint stands
+// because there is no group left to join.
+export function resolveGuestId(list, f) {
+  if (!f) return null;
+  if (!f.guestId || !f.guestSeed) return f.guestId || null;
+  var seed = (Array.isArray(list) ? list : []).find(function (b) {
+    return b && b.id === f.guestSeed;
+  });
+  return (seed && seed.guestId) ? seed.guestId : f.guestId;
 }
 
 // isNoShow — did this booking end as a no-show?
@@ -157,6 +237,38 @@ export function matchesIdentity(b, ident) {
   // must reach every id the row is showing, or "delete all data" leaves some.
   const gids = Array.isArray(o.guestIds) ? o.guestIds : (o.guestId ? [o.guestId] : []);
   if (key && b.phone && normalizePhone(b.phone) === key) return true;
+  // v17.16.5 (CT-2B-05): a booking carrying its OWN real phone is never reached
+  // through a guestId. `customerIndex` keys on the phone FIRST, so such a
+  // booking is already displayed as a different customer with a different
+  // number — and the guestId union made deleting either row anonymise both.
+  // The list said two people and the delete acted on one, which is the whole of
+  // the defect: a wrong join is invisible, so the operator has no way to know
+  // that "Delete customer & all data" on Ana is about to take Bea's record too.
+  //
+  // What this does NOT do is protect the phone-LESS bookings in the group, and
+  // that is the deliberate half. For a CORRECT join they are the same person and
+  // "all data" has to mean all of it; for a wrong one they stay visible on the
+  // row, under a name a human can read, which is the case somebody can still
+  // catch. The alternative — matching only a booking's own key — would leave a
+  // genuinely phone-less guest's earlier bookings behind with their name and
+  // notes intact, breaking the promise on every correct join to guard against
+  // the rare wrong one.
+  //
+  // `hasRealPhone`, not `b.phone`: the form seeds the field with the dial
+  // prefix, so "+34" means no phone rather than a different one, and reading it
+  // as different would exclude bookings that belong to the customer.
+  //
+  // **This predicate is not only the delete's** (/code-review). `matchCustomerFor`
+  // below filters with it, so the same exclusion decides the booking form's
+  // "Regular · N past visits" and no-show chips: after a mis-join those counts
+  // stop including a booking that carries a different real number. That is the
+  // RIGHT answer and the one `customerIndex` and `noShowMap` already give — both
+  // key a booking with its own phone under that phone — so the three now agree
+  // where before the chips and the delete were the two that did not. It is
+  // written down because the change was designed as a delete-scope fix, and the
+  // next person editing this for a delete-scope reason would otherwise move what
+  // the form asserts about a customer without knowing it.
+  if (hasRealPhone(b.phone) && key && normalizePhone(b.phone) !== key) return false;
   return !!(b.guestId && gids.indexOf(b.guestId) !== -1);
 }
 

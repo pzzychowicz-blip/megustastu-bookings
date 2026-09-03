@@ -867,6 +867,24 @@ button, [role="button"] {
   user-select: none;
   -webkit-touch-callout: none;
 }
+/* v17.16.12: the same suppression, scoped by TIME rather than by element, for
+   the duration of one of OUR press-and-hold gestures. Set by lib/holdSelection
+   on touchstart and removed the instant the finger lifts, so nothing about
+   what is selectable AT REST changes — the List card's phone number stays
+   copyable, which is the exception the rule above exists to protect.
+   Why it is needed on top of that rule: on iOS a long-press beginning on
+   unselectable content does not necessarily select the element under the
+   finger. Measured on iOS 26.5.2 — holding a timeline block raised the
+   selection UI over the HEADER, a thousand pixels away — so a fix that names
+   one more node is a guess. This one cannot miss, because during a hold there
+   is nothing anywhere to select.
+   `!important` is deliberate: this is a transient, global override, and losing
+   silently to a future rule is exactly how the v17.10.1 half-fix happened. */
+html[data-holding] * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
 /* v14.3.0: .mgt-hover-scale hover-lift — ported from MGT Scheduling so
    both apps share one hover identity. Opt-in per element via
    className="mgt-hover-scale". Primary interactive surfaces lift 8% on
