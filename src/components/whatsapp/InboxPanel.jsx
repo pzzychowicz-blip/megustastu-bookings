@@ -409,14 +409,27 @@ export function InboxPanel({
             Order (Patryk, 2026-07-16): Select, then Needs action, then the
             search box (search sits on the right). */}
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
+              sync: on these three controls selection is carried by an accent
+              fill and NOTHING else, so without the attribute a screen-reader
+              user cannot tell which of them are on. `aria-pressed`, not
+              `role="switch"` — a switch is a state that STAYS (the Toggle
+              atom), these are modes and filters you enter and leave.
+              The NAME must not flip with the state, or one control reads as
+              two. This one has no text at all, so its flipping `title` WAS its
+              name; the static aria-label outranks `title` and demotes the
+              flipping text to a description, which is where it belongs. */}
           <button
             onClick={() => { if (selectMode) exitSelectMode(); else setSelectMode(true); }}
             title={selectMode ? "Exit selection" : "Select conversations"}
+            aria-pressed={selectMode}
+            aria-label="Select conversations"
             className="mgt-hover-scale mgt-press"
             style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: selectMode ? "var(--wa-green)" : "transparent", color: selectMode ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (selectMode ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px", minHeight: 36, minWidth: 36, cursor: "pointer", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
           ><SelectIcon size={IC.chrome} /></button>
           <button
             onClick={() => setNeedsAction((v) => !v)}
+            aria-pressed={needsAction}
             title="Show only conversations that need a response"
             className="mgt-hover-scale mgt-press"
             style={{ flexShrink: 0, background: needsAction ? "var(--wa-green)" : "transparent", color: needsAction ? "var(--text-on-accent)" : "var(--text-muted)", border: "1px solid " + (needsAction ? "var(--wa-green)" : "var(--border-soft)"), borderRadius: R.pill, padding: "8px 14px", minHeight: 36, fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}

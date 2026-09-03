@@ -120,6 +120,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
         <button
           onClick={() => setTplOpen((v) => !v)}
+          aria-pressed={tplOpen}
           title="Templates"
           className="mgt-hover-scale mgt-press"
           style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "var(--shadow-btn)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
