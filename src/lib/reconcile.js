@@ -24,6 +24,11 @@
 import { verifyClean, findConflicts, optimizerActiveFor, bookingsAfterAction,
          dayBookingsSig, isLocked } from "./booking-logic";
 
+// v17.16.13: how many bookings on `date` are still in a clash. `findConflicts`
+// and `verifyClean` share one pair scan (`clashScan`), so this is the same
+// question `dirtyDates` asks, counted instead of thresholded.
+function clashCount(list,date){ return findConflicts(list,date).length; }
+
 // Every date from today onward that has assigned tables and fails verifyClean.
 // Computed against the CURRENT snapshot; the resolution below runs against
 // whatever `prev` the save updater is handed, which is the same split the
@@ -35,6 +40,37 @@ export function dirtyDates(bookings,today){
       .map(function(b){return b.date;})
   ));
   return dates.filter(function(d){return !verifyClean(bookings,d);});
+}
+
+// v17.16.13 — the TERMINATION GUARANTEE, on top of the identity contract.
+//
+// Identity answers "did this pass change anything". It cannot answer "did the
+// change HELP", and a pass that rearranges a day without resolving it is
+// accepted, written, and re-enters through the effect's `bookings` dep. The
+// optimiser branch had no `verifyClean` check on its OUTPUT at all; the manual
+// branch could exit on its 20-iteration guard with the day still dirty. Both
+// write, both come back.
+//
+// So a date's pass is now accepted only if the number of bookings still in a
+// clash STRICTLY DECREASED. That count is a non-negative integer, so it can
+// decrease finitely many times: the loop terminates no matter what the
+// placement heuristics do, which is the property a tie-break cannot give you.
+// A pass that merely swaps two equally-valid arrangements is discarded, and the
+// date is left honestly dirty rather than churned.
+//
+// This is defence in depth, not the fix for what was actually happening —
+// v17.16.13's oscillation was `sanitizeAll` minting a fresh identity on every
+// read (see the commit and `CLAUDE.md`), and reconcile was behaving correctly
+// on data that changed underneath it. It is here because the effect writes to
+// the bookings node unattended, and "correct as long as its input is stable"
+// was an assumption nothing enforced.
+//
+// It is deliberately not "accept only a CLEAN result": a partial fix is real
+// progress the restaurant wants (three clashes down to one), and demanding
+// perfection would discard it and leave all three.
+export function reducesClashes(before,after,date){
+  if(after===before) return false;
+  return clashCount(after,date)<clashCount(before,date);
 }
 
 // Resolve `dirty` against `prev`. Returns {next, changed}.
@@ -67,7 +103,10 @@ export function reconcile(prev,dirty,blocks,autoOptimizer){
       // also runs `syncLiveDurations`, which can extend a seated party's
       // duration TODAY while iterating a future date, and that is a change on a
       // date this iteration is not about.
-      if(after!==next&&dayBookingsSig(after,d)!==dayBookingsSig(next,d)){next=after;changed=true;}
+      // v17.16.13: `reducesClashes` is the third gate, after identity and the day
+      // signature. The signature says the day MOVED; only the clash count says
+      // it moved in the right direction.
+      if(after!==next&&dayBookingsSig(after,d)!==dayBookingsSig(next,d)&&reducesClashes(next,after,d)){next=after;changed=true;}
     }else{
       // Optimiser OFF (manual mode, today after the cutoff): relocate ONLY the
       // newest non-locked conflicting booking, leaving manual arrangements
@@ -89,6 +128,10 @@ export function reconcile(prev,dirty,blocks,autoOptimizer){
         // back the tables it already had. Only expressible since 1/n made a
         // no-op return its input.
         if(after===next) break;
+        // v17.16.13: a relocation that does not reduce the clash count is not a
+        // fix — it is the same day, rearranged. Stop rather than write it and
+        // be handed it back on the next snapshot.
+        if(!reducesClashes(next,after,d)) break;
         next=after;
         changed=true;
       }

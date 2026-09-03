@@ -19325,3 +19325,44 @@ took one parameter, and a live hazard the moment it took two. Both arms name
 their argument explicitly now rather than relying on arity.
 
 `npm test` 837 → 842.
+
+### Commit 3 — a pass that does not help is not written
+
+Commit 2 fixed what was actually happening. This is the guarantee that the
+effect cannot spin again if something else ever churns its input.
+
+Identity (v17.10.2 / v17.14.0) answers *did this pass change anything*. It
+cannot answer *did the change help* — and neither branch was asking. The
+optimiser branch ran `bookingsAfterAction` once and accepted any result whose
+day signature differed, with **no check on its output at all**; the manual
+branch could exit on its 20-iteration guard with the day still dirty, having
+reported `changed`. Both write. Both come straight back through the effect's
+`bookings` dep.
+
+`reducesClashes(before, after, date)` is the third gate: a date's pass is taken
+only if the number of bookings still in a clash **strictly decreased**. That
+count is a non-negative integer, so it can decrease finitely many times — the
+loop terminates whatever the placement heuristics do, which is the property a
+tie-break cannot give you. Deliberately not "accept only a CLEAN result": a
+partial fix (three clashes down to one) is real progress the restaurant wants,
+and demanding perfection would discard it and leave all three.
+
+**On the second half of "both".** The other candidate — a stable tie-break so
+two equally-valid arrangements cannot alternate — was **already shipped, in
+v17.16.5**: `optimise`'s day sort takes `id` as a fifth key precisely to remove
+the array-position dependence that made it non-total. Nothing further was
+changed there, because nothing measured says anything is left: 802 randomly
+generated dirty days (both branches, 3–9 bookings, a 3-table pool to force
+collisions) produced **zero** non-converging runs. Editing hand-tuned,
+byte-for-byte regression-proven placement heuristics on no evidence is the
+change this repo's rules exist to prevent.
+
+That is also why the gate is tested as a **predicate** rather than through
+`reconcile`: post-v17.16.5 no fixture we could find makes a placement pass
+rearrange a day without changing the clash count, so a reconcile-level test
+would pass identically with the gate removed. Proven against two sabotages —
+a gate that always accepts fails 2 of 15, and `<=` in place of `<` (accepting
+exactly the equal-count churn) fails 1.
+
+`npm test` 842 → 847. `ROADMAP.md`'s Deferred section is now empty. `CLAUDE.md`
+gains the child-key identity rule and has its drifted test count corrected.
