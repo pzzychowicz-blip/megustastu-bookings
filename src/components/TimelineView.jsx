@@ -557,14 +557,18 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       onPointerMove={onDragPointerMove}
       onPointerUp={(e) => endDrag(e, true)}
       onPointerCancel={(e) => endDrag(e, false)}
-      /* v17.16.12: the third way a drag can end. `beginDrag` captures the
-         pointer on this element, and capture is released IMPLICITLY when the
-         element leaves the document — which is exactly what a re-parent (a
-         reshuffle moving the booking to another row mid-drag) does. Without
-         this the block would never see its `pointerup` and would strand in the
-         lifted state. On the normal path `lostpointercapture` fires AFTER
-         `pointerup`, by which point `dragRef` is null, so this second call
-         re-clears already-cleared state and commits nothing. */
+      /* v17.16.12: the third way a drag can end — belt-and-braces for capture
+         lost while this element STAYS MOUNTED, which is the only case it can
+         actually help with. /code-review corrected the first version of this
+         comment, which justified itself with a mid-drag re-parent (a reshuffle
+         moving the booking to another row): that case needs no net and this
+         handler could not provide one anyway. React unmounts the Fragment in
+         the old row, so `dragDy` is destroyed with the component and nothing
+         can strand — and the node is detached before `lostpointercapture`
+         fires, where React's root-container listener does not see it. Kept
+         because it costs nothing and the teardown is idempotent: on the normal
+         path it fires AFTER `pointerup`, by which point `dragRef` is null, so
+         it re-clears already-cleared state and commits nothing. */
       onLostPointerCapture={(e) => endDrag(e, false)}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",

@@ -34,7 +34,12 @@ const BACKSTOP_MS = 3000;
 
 let armed = false;
 
-export function endHold() {
+// Module-private (/code-review): nothing outside this file imports it, and an
+// outside caller would end a hold the module is still tracking — leaving the
+// registered release listeners live and `armed` out of step with the attribute
+// on <html>. Ending a hold is this module's own business; starting one is the
+// only thing a call site should be able to say.
+function endHold() {
   if (!armed) return;
   armed = false;
   document.documentElement.removeAttribute(ATTR);

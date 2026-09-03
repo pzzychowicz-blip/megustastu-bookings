@@ -19182,3 +19182,46 @@ entry criterion exactly.
 press can raise it — CLAUDE.md's own recorded lesson. What is verified is the
 mechanism: the attribute goes on, the computed style flips, both come back.
 Whether iOS still finds something to select needs the phone.
+
+### Commit 5 — `/code-review` fixes
+
+**Verified on the device first.** Patryk retested v17.16.12 on the iPhone PWA
+and reports all four reported behaviours correct, which closes the one thing
+commit 4 shipped unverified: whether iOS still finds something to select during
+a hold. It does not.
+
+**The 2s backstop was a second way to ARM, not a backstop.** `useArmAfterRelease`
+mounts 400–450ms into a hold and no further pointer event arrives while the
+finger is down — so any hold past ~2.4s armed the surface *mid-press*, and its
+release then activated whatever the centred card had put under the finger. The
+exact misfire the hook exists to prevent, reachable in Plan and on the split
+menu, where nothing dismisses the surface mid-hold; `TimelineBlock` escaped only
+because its own 800ms drag-arm closes the popup first. Raised to 10s, and the
+reasoning is now written down: **escapability never depended on the timer.**
+`pointerdown` is in the arming list, so a viewer facing an inert popup taps it
+once — that tap's `pointerdown` arms it and the same tap's `pointerup` closes it
+on the scrim. The timer's only job is to keep inertness finite.
+
+**The `onLostPointerCapture` comment claimed a case it cannot cover.** It
+justified itself with a mid-drag re-parent, and that case needs no net *and*
+could not be served by this handler: React unmounts the Fragment in the old row,
+so `dragDy` dies with the component and nothing can strand, and the node is
+detached before `lostpointercapture` fires, where React's root-container
+listener does not see it. The handler is kept — it is correct belt-and-braces
+for capture lost while the element stays mounted, and the teardown is idempotent
+— but the comment now says what it actually covers. Same defect class this file
+keeps recording: an ordering or a blast radius nobody reproduced, written into a
+comment the next reader trusts.
+
+**`endHold` is module-private.** Nothing outside `holdSelection.js` imported it,
+and an outside caller would end a hold the module is still tracking — leaving
+the release listeners live and `armed` out of step with the attribute on
+`<html>`. Starting a hold is the only thing a call site should be able to say.
+
+**Also measured during the review, closing the last untested path**: the `S`
+shortcut, the fourth `seated` surface and the one an audit of components alone
+would miss. On today it still works (a confirmed card went to seated); on
+2026-09-02 it is correctly refused (a completed card stayed completed).
+`holdSelection` re-verified after the change — one export, and the attribute
+goes on and comes off. Gate: 93.34 kB gz · 833 tests · 0 lint errors · style OK.
+A fresh tab boots v17.16.12 with an empty console.
