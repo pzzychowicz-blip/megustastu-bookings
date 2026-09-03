@@ -154,6 +154,52 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     ).toBe(true);
   });
 
+  it("every relative import in the Node ESM chain carries its .js extension", () => {
+    // The 17.16.12 sync's own break, generalised so the next one cannot be new.
+    //
+    // src/lib/whatsapp.js is imported by the BACKEND — api/_lib/inbound-core.js
+    // and the :3999 harness — so every file reachable from it through relative
+    // imports is loaded by Node ESM, which does NOT resolve an extensionless
+    // specifier. Vite does not care either way, so the whole class is invisible
+    // to the build, to lint, and to the running app: prod's v17.4.1 added an
+    // extensionless "./booking-logic" to customers.js and killed the backend
+    // outright, and prod's v17.16.2 did it again with "./day" in constants.js,
+    // a file the sandbox had never had to touch before.
+    //
+    // Pinning the two known files would have missed the second one, because the
+    // second one was a file joining the chain rather than a file changing. So
+    // this WALKS the chain: whatever prod adds next is already covered, and the
+    // failure names the exact import to fix.
+    const seen = new Set();
+    const bad = [];
+    const walk = (rel) => {
+      if (seen.has(rel)) return;
+      seen.add(rel);
+      const src = read(rel);
+      const dir = rel.slice(0, rel.lastIndexOf("/"));
+      // Both `import ... from "./x"` and `export ... from "./x"`.
+      const re = /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s+"(\.[^"]*)"/g;
+      let m;
+      while ((m = re.exec(src)) !== null) {
+        const spec = m[1];
+        if (!spec.endsWith(".js")) { bad.push(rel + ' -> "' + spec + '"'); continue; }
+        walk(dir + "/" + spec.replace(/^\.\//, ""));
+      }
+    };
+    walk("src/lib/whatsapp.js");
+
+    // Tautology guard: if the walk stops finding files, every assertion above
+    // passes by looking at nothing. The chain is whatsapp -> customers ->
+    // booking-logic -> constants -> day, so four hops beyond the entry point.
+    expect(seen.size, "the ESM walk should reach the whole lib chain — if this " +
+      "drops the guard has stopped looking").toBeGreaterThanOrEqual(5);
+
+    expect(bad, "a relative import with no .js extension in the chain the WA " +
+      "backend loads: " + bad.join(", ") + " — Node ESM cannot resolve it, and " +
+      "nothing else in the repo will tell you (build, lint and the browser app " +
+      "are all fine). Add the extension.").toEqual([]);
+  });
+
   it("the phone primitives are still imported from customers.js, with the explicit extension", () => {
     // The complementarity contract: ONE phone-identity primitive, never two.
     // The `.js` is load-bearing — this file is imported by Node ESM server code.
