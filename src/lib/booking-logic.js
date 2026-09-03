@@ -275,7 +275,37 @@ export function isReadableTime(v){
   var p=v.split(":");
   return p.length>=2&&Number.isFinite(Number(p[0]))&&Number.isFinite(Number(p[1]));
 }
-export function sanitize(b){if(!b||typeof b!=="object") return null;var t=isReadableTime(b.time)?b.time:"13:00";return {id:b.id||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:isReadableTime(b.scheduledTime)?b.scheduledTime:t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
+// v17.16.13: `key` is the RTDB child key this row was stored under, and it is
+// the identity of LAST RESORT — `b.id || key || genId()`. It used to be
+// `b.id || genId()` with the key not passed at all, and `sanitizeAll` mapped
+// `Object.values(node)`, which THROWS THE KEY AWAY. So a `/bookings/{key}`
+// child whose stored value carries no `id` field got a brand-new identity on
+// every single read.
+//
+// That is the v17.16.4 block-id defect (CT-2B-06) one collection over, and
+// worse: there a `genId()` mint answered "what read was this" instead of "which
+// block is this" and had to be replaced by a content hash, because a block had
+// no stored identity to recover. A booking HAS one — it is the key — and the
+// code was discarding it two lines above the mint.
+//
+// Measured live against DEV (v17.16.13, three keyless rows left by an earlier
+// rules probe): every read invented ids, the write-diff saw a create, and
+// because `stampForWrite` had no `old` it stamped `baseUpdatedAt: 0` — which
+// the per-$id rule ACCEPTS for a create. So the row landed, the original
+// keyless row was read again, a new id was minted, and the node grew by one
+// booking per pass: `total=538 → 539 → 540 → 541` across four consecutive
+// listener fires, with the reconciliation effect re-placing the phantoms each
+// time. That effect writing forever is what `ROADMAP.md` recorded as an
+// oscillating reconciler; the reconciler was doing its job on data that changed
+// underneath it every read.
+//
+// The key is preferred over a mint and NOT over `b.id`: a row that states its
+// own identity keeps it, which is every row this app has ever written (the app
+// writes `id` inside the object AND uses it as the key, so the two agree). Only
+// a row written by something else — an Admin-SDK backend, a console edit, a
+// probe — reaches the `key` arm, and for those the key is the true identity by
+// definition, since it is the path the write went to.
+export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=isReadableTime(b.time)?b.time:"13:00";return {id:b.id||key||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:isReadableTime(b.scheduledTime)?b.scheduledTime:t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
   // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
   // it survives reads; legacy no-shows (history entry only) are counted by
   // customers.js isNoShow's history fallback — no migration needed.
@@ -314,7 +344,19 @@ export function sanitize(b){if(!b||typeof b!=="object") return null;var t=isRead
   updatedAt:Number(b.updatedAt)||0};}
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
 export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
-export function sanitizeAll(arr){if(!arr) return [];if(!Array.isArray(arr)){var vals=Object.values(arr);return vals.map(sanitize).filter(Boolean);}return arr.map(sanitize).filter(Boolean);}
+// v17.16.13: the keyed-object arm walks ENTRIES, not values, so each row can be
+// told the key it was stored under. `.map(sanitize)` was also passing the array
+// INDEX as sanitize's second argument all along — harmless while sanitize took
+// one parameter, and a live hazard the moment it took two, so both arms name
+// their argument explicitly rather than relying on arity. The legacy ARRAY arm
+// deliberately passes no key: an integer index is a position, not an identity
+// (the v17.16.4 lesson — a stale index resolves to a DIFFERENT row), and that
+// node is converted by the v15.5.0 migration on first load anyway.
+export function sanitizeAll(arr){
+  if(!arr) return [];
+  if(!Array.isArray(arr)) return Object.entries(arr).map(function(e){return sanitize(e[1],e[0]);}).filter(Boolean);
+  return arr.map(function(b){return sanitize(b);}).filter(Boolean);
+}
 
 // ── Table-block identity (v17.15.3) ───────────────────────────────────────────
 // A block gets a real `id` the way a booking does (`sanitize` above reads

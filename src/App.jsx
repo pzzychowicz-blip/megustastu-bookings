@@ -294,7 +294,7 @@ const __APP_SIGNATURE__={
   app:"MGT Bookings",
   // Sandbox build marker — WhatsApp module under local test, NOT a release.
   // The formal version bump happens on "give me the deployment version".
-  version:"17.16.12-wa-sandbox",
+  version:"17.16.13-wa-sandbox",
   sandbox:"WhatsApp inbox + simulator (localhost only)",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",

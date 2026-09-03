@@ -10,7 +10,7 @@
 // Dates use a fixed FUTURE day so optimizerActiveFor(date, …) is always true and
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
@@ -237,6 +237,58 @@ describe("sanitize / sanitizeAll", () => {
     expect(arr.map((b) => b.id)).toEqual(["a", "b"]);
     const keyed = sanitizeAll({ x: { id: "x" }, y: { id: "y" } });
     expect(keyed.length).toBe(2);
+  });
+});
+
+describe("sanitizeAll — the RTDB key IS the identity of last resort (v17.16.13)", () => {
+  // `sanitize` did `id: b.id || genId()` and `sanitizeAll` mapped
+  // `Object.values(node)`, throwing the key away. So a /bookings/{key} child
+  // whose stored value carries no `id` field got a NEW identity on every read.
+  //
+  // Measured live on DEV: the write-diff saw a create, `stampForWrite` had no
+  // `old` so it stamped `baseUpdatedAt: 0`, the per-$id rule ACCEPTS that for a
+  // create, and the node grew by one booking per pass — 538 -> 541 across four
+  // consecutive listener fires. What `ROADMAP.md` recorded as an oscillating
+  // reconciler was the reconciler working correctly on data that changed
+  // underneath it every read.
+  const keylessRow = { name: "Probe", date: "2026-09-05", time: "20:00", size: 2, tables: ["3"] };
+
+  it("two reads of ONE unchanged node agree about every id", () => {
+    const node = { zznav_probe: { ...keylessRow }, real: { id: "real", ...keylessRow } };
+    const a = sanitizeAll(node);
+    const b = sanitizeAll(node);
+    expect(a.map((x) => x.id)).toEqual(b.map((x) => x.id));
+  });
+
+  it("a keyless row takes the key it was stored under", () => {
+    expect(sanitizeAll({ zznav_probe: { ...keylessRow } })[0].id).toBe("zznav_probe");
+  });
+
+  it("a row that states its own id keeps it, even when the key differs", () => {
+    // Every row this app has ever written states its id AND uses it as the key,
+    // so the two agree. Only a row written by something else — an Admin-SDK
+    // backend, a console edit, a rules probe — reaches the key arm at all.
+    expect(sanitizeAll({ somekey: { id: "mine", ...keylessRow } })[0].id).toBe("mine");
+  });
+
+  it("ids stay UNIQUE across a node mixing keyed, keyless and colliding rows", () => {
+    const ids = sanitizeAll({
+      a: { id: "a", ...keylessRow },
+      b: { ...keylessRow },
+      c: { ...keylessRow },
+    }).map((x) => x.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it("the legacy ARRAY arm does NOT take the index as an identity", () => {
+    // An index is a position, not an identity (the v17.16.4 lesson: a stale
+    // index resolves to a DIFFERENT row). That node is converted by the v15.5.0
+    // migration on first load anyway.
+    const [row] = sanitizeAll([{ ...keylessRow }]);
+    expect(row.id).not.toBe("0");
+    expect(row.id).not.toBe(0);
+    expect(typeof row.id).toBe("string");
+    expect(row.id.length).toBeGreaterThan(3);
   });
 });
 
@@ -572,11 +624,30 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     // syncLiveDurations extends `duration`/`customDur`. Both are in the compared
     // field set on purpose — a narrower compare would report "no change" and the
     // extension would be discarded, which is the v17.10.2 lesson this reuses.
-    const start = "00:00";
-    const list = [mk({ id: "s", date: today, status: "seated", time: start, duration: 1, customDur: 1, tables: ["7"], _conflict: false })];
-    const out = bookingsAfterAction(list, today, [], null, false, false);
-    expect(out).not.toBe(list);
-    expect(out[0].duration).toBeGreaterThan(1);
+    //
+    // The CLOCK IS FROZEN, and that is not tidiness. The fixture starts at
+    // "00:00" with `duration: 1`, and the extension is elapsed-since-start — so
+    // "extended past 1" needs `nowMins >= 2`, i.e. this test FAILED for the
+    // first two minutes after local midnight and passed the other 1438. Caught
+    // by running it at 00:00 on 2026-09-04: the file was red at 00:00 and green
+    // at 00:03, with nothing changed in between. Same family as the stale date
+    // literal that turned `main` red on 2026-09-02 (CLAUDE.md's Gotchas), in
+    // its time-of-day variant — and worse to diagnose, because it heals itself
+    // within two minutes and points at whatever change is in flight.
+    //
+    // Noon on the test's OWN date, so `today` still matches and the assertion
+    // no longer depends on when the suite happens to run.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(today + "T12:00:00"));
+    try {
+      const start = "00:00";
+      const list = [mk({ id: "s", date: today, status: "seated", time: start, duration: 1, customDur: 1, tables: ["7"], _conflict: false })];
+      const out = bookingsAfterAction(list, today, [], null, false, false);
+      expect(out).not.toBe(list);
+      expect(out[0].duration).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
