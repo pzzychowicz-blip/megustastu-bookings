@@ -91,7 +91,10 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
   // its own state; only fires when not typing in an input/textarea).
   useEffect(() => {
     function onKey(e) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Shift belongs in this list for the same reason as InboxPanel's — see the
+      // note there. Neither of the two shortcuts below is a shift-combo, so a
+      // held Shift can only ever mean the key was meant for something else.
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const k = e.key.toLowerCase();

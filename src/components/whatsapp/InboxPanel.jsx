@@ -266,8 +266,15 @@ export function InboxPanel({
         setActiveKey(list[next].phoneKey);
         return;
       }
-      // Letter shortcuts (ignore when a modifier is held so browser combos pass through).
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Letter shortcuts (ignore when a modifier is held so browser combos pass
+      // through). SHIFT is one of them, and leaving it out was a bug: none of
+      // the shortcuts below is a shift-combo, but the APP has some — Shift+D is
+      // the theme toggle, and it is deliberately checked ABOVE the global
+      // handler's `anyModal` early return so it keeps working over any modal,
+      // this panel included. Two window listeners, so `preventDefault` here
+      // does not stop the other one: Shift+D toggled the theme AND dismissed
+      // the open draft, and only the theme change looked intentional.
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const k = e.key.toLowerCase();
       // The active conversation's PENDING new_booking draft enables A=Accept / D=Dismiss.
       const ac = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
