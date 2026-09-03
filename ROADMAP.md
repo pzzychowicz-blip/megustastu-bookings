@@ -19,7 +19,36 @@ session and keeping it in sync.
 
 ## Deferred
 
-_(nothing pending)_
+- **The reconciliation effect does not converge on some data — it OSCILLATES.**
+  The v15.6.1 post-sync reconciliation effect can write forever. Measured
+  2026-09-03 against DEV by instrumenting `persist()` in `usePersistence.js`:
+  **304 writes in 9 seconds, `isSilent` true on every one**, cycling the same
+  four bookings; the captured sample is one booking moving `tables ["4"] ->
+  ["3"]` with status, duration and every other field identical — so the next
+  pass moves it back. Each pass genuinely changed something, so
+  `bookingsAfterAction` returns a fresh array and the effect writes again; the
+  back-to-back writes are then refused by the per-booking CAS
+  (`PERMISSION_DENIED`), which surfaces as a looping "Resolved a table conflict
+  after syncing." banner and a stream of `[SAFE] bookings write rejected`.
+  **v17.10.2's identity contract is necessary but not sufficient here** — it
+  answers "did this pass change anything", and the answer is yes; what is wrong
+  is that the change was to an EQUIVALENT placement. Two candidate fixes: give
+  placement a stable tie-break so two equally-valid solutions cannot alternate,
+  or stop re-running on a date whose CONFLICT SET is unchanged after a pass.
+  Reproduced on plain v17.16.12 with no WhatsApp module present, so it is not a
+  sandbox artefact — though a WA-sandbox session is where it was found, and the
+  polluted DEV data is what made it visible.
+
+- **`usePersistence`'s write `.catch` discards the error and states a cause it
+  never checked.** `update(ref(db,"bookings"),patch).catch(function(){ ... })`
+  takes no argument, and the line it logs hard-codes "stale per-booking
+  revision". A failed field `.validate`, a create carrying a non-zero
+  `baseUpdatedAt`, a rules deploy that has not landed, and a plain network
+  failure all print the same sentence blaming a stale revision. Diagnosing the
+  entry above required temporarily re-instrumenting that catch to see
+  `PERMISSION_DENIED` at all. Take the error, log its code, and keep the
+  stale-revision wording for the case that actually is one. Same defect class as
+  the overclaims `CLAUDE.md` records elsewhere: an assertion nothing measured.
 
 ## Designed, not implemented
 

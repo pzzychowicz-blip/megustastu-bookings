@@ -10,7 +10,7 @@
 // Dates use a fixed FUTURE day so optimizerActiveFor(date, …) is always true and
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
@@ -572,11 +572,30 @@ describe("optimise / applyOpt / bookingsAfterAction", () => {
     // syncLiveDurations extends `duration`/`customDur`. Both are in the compared
     // field set on purpose — a narrower compare would report "no change" and the
     // extension would be discarded, which is the v17.10.2 lesson this reuses.
-    const start = "00:00";
-    const list = [mk({ id: "s", date: today, status: "seated", time: start, duration: 1, customDur: 1, tables: ["7"], _conflict: false })];
-    const out = bookingsAfterAction(list, today, [], null, false, false);
-    expect(out).not.toBe(list);
-    expect(out[0].duration).toBeGreaterThan(1);
+    //
+    // The CLOCK IS FROZEN, and that is not tidiness. The fixture starts at
+    // "00:00" with `duration: 1`, and the extension is elapsed-since-start — so
+    // "extended past 1" needs `nowMins >= 2`, i.e. this test FAILED for the
+    // first two minutes after local midnight and passed the other 1438. Caught
+    // by running it at 00:00 on 2026-09-04: the file was red at 00:00 and green
+    // at 00:03, with nothing changed in between. Same family as the stale date
+    // literal that turned `main` red on 2026-09-02 (CLAUDE.md's Gotchas), in
+    // its time-of-day variant — and worse to diagnose, because it heals itself
+    // within two minutes and points at whatever change is in flight.
+    //
+    // Noon on the test's OWN date, so `today` still matches and the assertion
+    // no longer depends on when the suite happens to run.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(today + "T12:00:00"));
+    try {
+      const start = "00:00";
+      const list = [mk({ id: "s", date: today, status: "seated", time: start, duration: 1, customDur: 1, tables: ["7"], _conflict: false })];
+      const out = bookingsAfterAction(list, today, [], null, false, false);
+      expect(out).not.toBe(list);
+      expect(out[0].duration).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
