@@ -22,7 +22,7 @@ import {
   isLocked, isActive, isIn, comboOk, undoSnapshots, applyUndo, syncLiveDurations,
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
-  liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins,
+  liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -1663,6 +1663,41 @@ describe("v17.16.2 — now and a booking on one axis", () => {
       withClose25(() => {
         expect(pastCloseMins(YDAY, TMRW, 30)).toBe(null);   // 00:30, close is 01:00
         expect(pastCloseMins(YDAY, TMRW, 75)).toBe(1500);   // 01:15, passed
+      });
+    });
+  });
+
+  // v17.16.12: every surface that OFFERS "seated" asks this first. The point is
+  // that it is EXACTLY the close-time auto-complete's own condition — two
+  // conditions that merely agree today are two conditions, and the app offering
+  // a status it then takes back is what this version exists to stop.
+  describe("seatingClosed", () => {
+    it("is the exact negation of pastCloseMins being null", () => {
+      // Pinned as an identity, not as a set of remembered answers: the guarantee
+      // is that the two can never drift, and only this shape states that.
+      for (const [d, t, n] of [
+        [YDAY, YDAY, 22 * 60], [YDAY, YDAY, 21 * 60],
+        [TMRW, YDAY, 600], [YDAY, TMRW, 30], [YDAY, TMRW, 75],
+      ]) {
+        expect(seatingClosed(d, t, n)).toBe(pastCloseMins(d, t, n) !== null);
+      }
+    });
+    it("closes seating on a past day and leaves a future one open", () => {
+      expect(seatingClosed(YDAY, TMRW, 600)).toBe(true);
+      expect(seatingClosed(TMRW, YDAY, 600)).toBe(false);
+    });
+    it("closes seating TODAY once the day's own close has passed", () => {
+      // The restaurant closes at 22:00 in the seed, and the auto-complete fires
+      // for today too — so a 22:30 tap on today's booking is just as futile.
+      expect(seatingClosed(YDAY, YDAY, 21 * 60 + 59)).toBe(false);
+      expect(seatingClosed(YDAY, YDAY, 22 * 60)).toBe(true);
+    });
+    it("follows a PAST-MIDNIGHT close rather than the date rollover", () => {
+      withClose25(() => {
+        // Yesterday's service runs to 01:00. At 00:30 it is a new calendar day
+        // and seating is still open; at 01:15 it is not.
+        expect(seatingClosed(YDAY, TMRW, 30)).toBe(false);
+        expect(seatingClosed(YDAY, TMRW, 75)).toBe(true);
       });
     });
   });

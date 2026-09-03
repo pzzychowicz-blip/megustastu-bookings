@@ -31,7 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, seatingClosed } from "../lib/booking-logic";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
@@ -514,7 +514,11 @@ export const ListView = memo(function ListView({
         // is more this way", not what the button does. IC.control, not
         // IC.inline: these are marks ON a control, and the Assign button beside
         // them in this same row has always been IC.control.
+        // v17.16.12: `seated` is dropped once that day's close has passed — the
+        // close-time auto-complete would flip it back within one tick, so the
+        // button could only ever look broken. See seatingClosed.
         const statusBtns = (b.status === "pending" ? ["confirmed"] : ["confirmed", "seated", "completed"])
+          .filter((s) => s !== "seated" || !seatingClosed(b.date, today, nowMins))
           .filter((s) => s !== b.status)
           .map((s) => (
             <button

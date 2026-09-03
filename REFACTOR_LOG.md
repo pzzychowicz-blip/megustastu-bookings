@@ -19008,3 +19008,220 @@ v17.16.10 was entirely about.
 Rules suite 126 → 127; `npm test` 828. `database.rules.README.md` gains a "What
 the clause costs, and where" section naming both paths.
 
+
+---
+
+## v17.16.12 — the press that did two things
+
+**Date:** 2026-09-03 · **Branch:** `fix/v17.16.12-ios-touch-drag` ·
+**Behavioural change:** yes — see commits 1, 3 and 4.
+**Files:** `src/components/TimelineView.jsx`, `src/App.jsx` (+ later commits'
+own files, recorded with them).
+
+Four defects reported from live service: three on the iPhone PWA (iOS 26.5.2)
+and one — a booking left frozen after a drag-to-swap — on more than one device.
+
+### Commit 1 — a drag always tears itself down
+
+Two independent faults in `TimelineBlock`'s drag, which together produce the
+single symptom Patryk described: a block that is **both misdrawn and
+unclickable** until the page is refreshed.
+
+**`didLong` was reset on one input path only.** It is set in `beginDrag` and was
+cleared *only* in `onTouchStart` — so a MOUSE drag set it and nothing ever put it
+back, and `handleClick` returned early for the whole life of that component
+instance. Reached by every drag that leaves the block mounted: a refused drop, a
+drop back on its own row, or a swap that keeps one of the booking's tables. The
+reset moved to `onDragPointerDown`, above its early returns, because that is the
+one event every input path fires.
+
+**Reproduced and then re-measured, on the same coordinates.** With the reset
+removed, a click on a block opened *Edit booking*; after dragging that block back
+onto its own row, the identical click did nothing. With the reset in place and
+the drag confirmed to have genuinely armed (temporary instrumentation logged
+`beginDrag` and `endDrag active=true target=1A home=1A`), the click after the
+drag opened *Edit booking*.
+
+**`endDrag` dispatched before it cleared.** `onDropOnTable` reaches App's
+`dropOnTable`, which walks up to 8 candidate table sets running a full
+`bookingsAfterAction` trial on each; a throw in there is a throw inside a React
+EVENT HANDLER, which no error boundary catches. With the dispatch above the two
+`setState`s, one such throw skipped both and left `dragDy` non-null for good —
+the block keeping its `translateY`, `zIndex: 30`, 0.85 opacity and drag shadow.
+Teardown now runs first and the dispatch last, so the block's resting state does
+not depend on whether the drop succeeded. Measured with a throw injected into
+`dropOnTable`: `[drag] drop on 1A failed` logged and the block came back clean
+and clickable.
+
+**`onLostPointerCapture` is the third way a drag can end.** `beginDrag` captures
+the pointer on the block, and capture is released implicitly when the element
+leaves the document — exactly what a reshuffle re-parenting the booking mid-drag
+does. Measured firing on the normal path too, after `pointerup`, where it
+re-clears already-cleared state and commits nothing.
+
+**What could NOT be measured here, and why it is recorded rather than claimed:**
+the stranded *visual* state. `dragDy` is only ever set from inside a
+`requestAnimationFrame`, and the browser-automation drag completes within a
+single frame, so `endDrag` cancels that rAF before it runs — the synthetic drag
+never lifts the block at all. A real drag spans hundreds of milliseconds and many
+frames. So the misdrawn half rests on control flow and on the device report, not
+on a reproduction, and the `didLong` half is the one that was reproduced.
+
+### Commit 2 — a hold-opened popup ignores the press that opened it
+
+`QuickStatusPopup` mounts at 400ms into a press-and-hold, as a viewport-CENTRED
+card portalled to `<body>`, while the finger is still down. Whatever ends up
+under that finger is something nobody aimed at, and the release lands on it: on
+the scrim, whose only job is `onClose`, so the popup closes itself the instant it
+appears; or on one of its own buttons, so a status change or the cancel-booking
+confirm fires from a gesture meant only to OPEN the menu.
+
+**Both faces are in the 15s iPhone recording, 0.1s frames.** At t=2.0s a popup
+opened on Beatriz and was gone by t=2.3s with nothing changed. At t=3.8s a popup
+opened on Rachel and the "Cancel booking?" confirm was already up at t=4.0s —
+200ms, faster than a person can read a card and aim at a button.
+
+**v17.10.1 had recorded this exact shape on Android** and fixed only the
+SELECTION half of it (the OS text-selection landing on the popup's button
+labels). The ACTIVATION half was left, and it is the half that changes a booking.
+
+New `src/hooks/useArmAfterRelease.js`: the surface is inert until the pointer
+that opened it has been released. Not a delay — the release itself is the signal,
+so a 300ms hold and a 3s hold behave identically. Listeners are capture-phase
+(the card calls `stopPropagation`), `pointerdown` is included because a new press
+means the opening one is long over, and the 2s timeout is a pure backstop against
+a surface that could otherwise stay inert forever.
+
+**`SplitMenu` takes the same hook**, not a copy of the logic: it is
+QuickStatusPopup's shell opened by the same 450ms hold, and it had the same
+defect. The scrims of both also gained the `user-select`/`touch-callout`
+suppression the CARDS have carried since v17.10.1 — the scrim is what the finger
+is on for most of the screen when a centred card appears under a hold, and a
+scrim is never a copy target.
+
+**Verified in the browser for regressions only** — right-click opens the popup,
+a scrim click closes it, and "Seated" applies the status and closes it (the
+booking went confirmed → seated with the seated-shift moving 13:00 → 14:02).
+The BLOCKING half cannot be exercised by browser automation, which cannot hold a
+press across frames; it needs the device.
+
+### Commit 3 — no surface offers a status the app takes straight back
+
+On a day whose close has passed, tapping **Seated** turned the block green and
+it was grey again 200ms later, with a "Tables re-optimised." banner on the way
+past — measured on 2 wrz in the iPhone recording, frames 11.8 → 12.0. The
+close-time auto-complete (`usePersistence`) maps over EVERY booking, not just
+today's, so `pastCloseMins` is non-null for any past date and the manual status
+is reverted on the next 15s tick. The tap read as broken rather than as refused.
+
+New pure `seatingClosed(dateStr, todayS, nowMins)` in `booking-logic.js`,
+**defined as `pastCloseMins(...) !== null`** and deliberately not as its own idea
+of what "past" means: being exactly the auto-complete's own condition is the
+point, because two conditions that merely agree today are two conditions and the
+one that drifts is the one nobody is looking at. Pinned in the tests as that
+identity rather than as a set of remembered answers.
+
+**Four surfaces offer `seated`, not three**, and each filters its own list —
+the three lists differ deliberately today and unifying them would be a keyboard
+and UI behaviour change smuggled into a fix:
+
+* `QuickStatusPopup` (Timeline and Plan), which gains `today` / `nowMins`;
+* `ListView`'s status buttons;
+* `BookingFormModal`'s `statusTargets`, keyed on the **draft's** date rather than
+  the viewed one, because that form can move a booking to another day and the
+  question is whether the day it ends up on has closed;
+* the **`S` shortcut** — the one an audit of components alone would miss, and
+  leaving it is exactly how the app comes to disagree with itself.
+
+`completed` and `cancelled` stay reachable on a past day: correcting yesterday's
+record is real, and `seated` is the only one the app takes back.
+
+**Verified live, both directions.** On 2026-09-02 the popup offers
+`["Confirmed","Cancelled"]`; on 2026-09-03 it still offers
+`["Seated","Completed","Cancelled"]` plus No show. Suite 828 → 832.
+
+### Commit 4 — the OS selection callout during our own hold
+
+Holding a timeline block on the iPhone raised WebKit's selection UI — handles
+plus a **Kopiuj / Sprawdź / Tłumacz** bar — on top of the quick-status popup.
+v17.10.1 had already met this on Android and answered it with `user-select:
+none` on CONTROLS (`button, [role="button"]` in `index.css`, plus the block and
+the popup card inline). That is the right at-rest rule, and its own comment
+said "iOS does not show this today, but nothing prevented it".
+
+**It is not enough, and the screenshot is why: the selection did not land on the
+element under the finger.** It landed in the HEADER, a thousand pixels from the
+block being held. Which node WebKit picks when a long-press begins on
+unselectable content is not something this app can predict — so naming one more
+node would have been a guess, and CLAUDE.md rules out the other obvious move
+(widening the rule to a container) because the List card's phone number must
+stay copyable: staff select it to ring a party.
+
+So the guard is scoped by **time** instead of by element. `lib/holdSelection`'s
+`beginHold()` puts `data-holding` on `<html>` for the duration of one of OUR
+holds, and `html[data-holding] *` makes the whole document unselectable while it
+is there. At rest nothing changes at all.
+
+**Measured in the browser**: the `<h1>` computes `user-select: auto` before a
+hold, `none` during one, and `auto` again after the release — so selectability
+returns exactly as it was, which is the property the phone-number exception
+needs. `beginHold` is **self-terminating** (capture-phase `once` listeners for
+pointerup / pointercancel / touchend / touchcancel, plus a 3s backstop), because
+a hold has five exits per surface and an attribute stuck on `<html>` would leave
+the whole app permanently unselectable — a worse bug than the one being fixed.
+It also clears any range the gesture already made, since making things
+unselectable does not dismiss a selection that already exists.
+
+Wired at the three hold sites: `TimelineBlock`'s `onTouchStart`, `PlanView`'s
+`startPress`, `ViewSwitcher`'s `startPress`. `html[data-holding] *` joins
+`tests/stylesheet.test.js`' CRITICAL_SELECTORS — remove the rule and `beginHold`
+still sets the attribute while nothing whatsoever happens, which is that list's
+entry criterion exactly.
+
+**Not verified on the device.** The callout is a UA behaviour and no synthetic
+press can raise it — CLAUDE.md's own recorded lesson. What is verified is the
+mechanism: the attribute goes on, the computed style flips, both come back.
+Whether iOS still finds something to select needs the phone.
+
+### Commit 5 — `/code-review` fixes
+
+**Verified on the device first.** Patryk retested v17.16.12 on the iPhone PWA
+and reports all four reported behaviours correct, which closes the one thing
+commit 4 shipped unverified: whether iOS still finds something to select during
+a hold. It does not.
+
+**The 2s backstop was a second way to ARM, not a backstop.** `useArmAfterRelease`
+mounts 400–450ms into a hold and no further pointer event arrives while the
+finger is down — so any hold past ~2.4s armed the surface *mid-press*, and its
+release then activated whatever the centred card had put under the finger. The
+exact misfire the hook exists to prevent, reachable in Plan and on the split
+menu, where nothing dismisses the surface mid-hold; `TimelineBlock` escaped only
+because its own 800ms drag-arm closes the popup first. Raised to 10s, and the
+reasoning is now written down: **escapability never depended on the timer.**
+`pointerdown` is in the arming list, so a viewer facing an inert popup taps it
+once — that tap's `pointerdown` arms it and the same tap's `pointerup` closes it
+on the scrim. The timer's only job is to keep inertness finite.
+
+**The `onLostPointerCapture` comment claimed a case it cannot cover.** It
+justified itself with a mid-drag re-parent, and that case needs no net *and*
+could not be served by this handler: React unmounts the Fragment in the old row,
+so `dragDy` dies with the component and nothing can strand, and the node is
+detached before `lostpointercapture` fires, where React's root-container
+listener does not see it. The handler is kept — it is correct belt-and-braces
+for capture lost while the element stays mounted, and the teardown is idempotent
+— but the comment now says what it actually covers. Same defect class this file
+keeps recording: an ordering or a blast radius nobody reproduced, written into a
+comment the next reader trusts.
+
+**`endHold` is module-private.** Nothing outside `holdSelection.js` imported it,
+and an outside caller would end a hold the module is still tracking — leaving
+the release listeners live and `armed` out of step with the attribute on
+`<html>`. Starting a hold is the only thing a call site should be able to say.
+
+**Also measured during the review, closing the last untested path**: the `S`
+shortcut, the fourth `seated` surface and the one an audit of components alone
+would miss. On today it still works (a confirmed card went to seated); on
+2026-09-02 it is correctly refused (a completed card stayed completed).
+`holdSelection` re-verified after the change — one export, and the attribute
+goes on and comes off. Gate: 93.34 kB gz · 833 tests · 0 lint errors · style OK.
+A fresh tab boots v17.16.12 with an empty console.

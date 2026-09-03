@@ -20,6 +20,7 @@ import { validateReminderDraft } from "../lib/reminders";
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
 import { SETTINGS_TABS } from "../components/SettingsChrome";
 import { todayStr, stepDate } from "../lib/day";
+import { seatingClosed } from "../lib/booking-logic";
 
 // v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
 // NB: in List view with a booking focused, S marks it Seated (that check runs
@@ -315,7 +316,12 @@ export function useKeyboardShortcuts(ctx){
           if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
           // v17.0.0: a PENDING card can only be confirmed (or cancelled) — S/C
           // are no-ops on it, matching the List/RMB button gating.
-          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"seated");return;}
+          // v17.16.12: …and neither can a booking on a day whose close has
+          // passed — the auto-complete would flip it straight back, so the key
+          // would look broken rather than refused. Same predicate as the popup,
+          // the List card and the edit form; this is the fourth surface, and
+          // leaving it out is exactly how the app comes to disagree with itself.
+          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending"&&!seatingClosed(sel.date,K.today,K.nowMins)) K.updateStatus(sel.id,"seated");return;}
           if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
           if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
           if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
