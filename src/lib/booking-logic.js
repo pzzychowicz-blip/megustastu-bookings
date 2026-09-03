@@ -210,6 +210,24 @@ export function pastCloseMins(dateStr,todayS,nowMins){
   var closeMins=hoursFor(dateStr).close*60;
   return nm>=closeMins?closeMins:null;
 }
+// v17.16.12: can this booking still be SEATED, or would the app undo it?
+// The close-time auto-complete (usePersistence) maps over EVERY booking, not
+// just today's, so on a day whose close has passed a manual "seated" is flipped
+// straight back to "completed" on the next 15s tick — measured on the iPhone at
+// 0.1s frames: the block went green and was grey again 200ms later, with a
+// "Tables re-optimised." banner on the way past. Every surface that OFFERS
+// seated therefore asks this first (the quick-status popup, the List card's
+// status buttons, the edit form's Status row, the S shortcut).
+//
+// It is deliberately `pastCloseMins(...) !== null` and not its own idea of what
+// "past" means: the whole point is to be EXACTLY the auto-complete's condition.
+// Two conditions that merely agree today are two conditions, and the one that
+// drifts is the one nobody is looking at. Completed and cancelled stay offered
+// on a past day — correcting yesterday's record is real, and seated is the only
+// one the app takes back.
+export function seatingClosed(dateStr,todayS,nowMins){
+  return pastCloseMins(dateStr,todayS,nowMins)!==null;
+}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 // ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
 // The separation between bookings (Settings → General; off by default, so

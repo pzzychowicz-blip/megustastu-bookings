@@ -641,7 +641,7 @@ export const PlanView = memo(function PlanView({
       </div>
       {popover}
       {quick ? (
-        <QuickStatusPopup booking={quick} late={late} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
+        <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
       ) : null}
     </div>
   );

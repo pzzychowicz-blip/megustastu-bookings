@@ -1828,6 +1828,8 @@ export const TimelineView = memo(function TimelineView({
     <QuickStatusPopup
       booking={quickStatus.booking}
       late={late}
+      today={today}
+      nowMins={nowMins}
       onStatus={onStatus}
       onNoShow={onNoShow}
       onClose={() => setQuickStatus(null)} />

@@ -2565,6 +2565,9 @@ function BookingApp({uid}){
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
     listDay:listDaySorted,selectedListId:selectedListId,setSelectedListId:setSelectedListId,
+    // v17.16.12: the S shortcut is the fourth surface that offers `seated`, so
+    // it needs the same two values the other three read seatingClosed with.
+    today:today,nowMins:nowMins,
     bumpListFocus:bumpListFocus, // v17.3.1: ↑/↓ scrolls the focused card into view
     openEdit:openEdit,updateStatus:updateStatus,
     // v14.4.0: N → new reminder while the Settings Reminders tab is open.
@@ -3758,6 +3761,8 @@ function BookingApp({uid}){
               isMobile={isMobile}
               currency={generalSettings.currency}
               regularMin={generalSettings.regularMin}
+              today={today}
+              nowMins={nowMins}
               onSave={function(){save();}}
               onSavePending={function(){save("pending");}}
               onSaveConfirm={function(){save("confirmed");}}

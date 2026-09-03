@@ -20,10 +20,11 @@
 
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
+import { seatingClosed } from "../lib/booking-logic";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
 import { NoShowIcon, StatusIcon } from "./Icons";
 
-export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClose }) {
+export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose }) {
   // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
   // so the finger that opened it is sitting on the card it just conjured. Until
   // that finger lifts, every control here is inert — see useArmAfterRelease for
@@ -74,6 +75,12 @@ export function QuickStatusPopup({ booking, late = {}, onStatus, onNoShow, onClo
             ? ["confirmed", "cancelled"]
             : ["confirmed", "seated", "completed", "cancelled"])
             .filter((st) => st !== booking.status)
+            // v17.16.12: never offer a status the app will take straight back.
+            // On a day whose close has passed, the close-time auto-complete
+            // flips a manual "seated" to "completed" on the next 15s tick — so
+            // the tap read as broken rather than as refused. Same gating idiom
+            // as the pending branch above.
+            .filter((st) => st !== "seated" || !seatingClosed(booking.date, today, nowMins))
             // v17.10.0: this popup is the surface staff use DURING service (a
             // long-press on the timeline or the floor plan), and it was the one
             // place the same five decisions carried no mark at all — so the

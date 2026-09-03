@@ -19104,3 +19104,38 @@ a scrim click closes it, and "Seated" applies the status and closes it (the
 booking went confirmed → seated with the seated-shift moving 13:00 → 14:02).
 The BLOCKING half cannot be exercised by browser automation, which cannot hold a
 press across frames; it needs the device.
+
+### Commit 3 — no surface offers a status the app takes straight back
+
+On a day whose close has passed, tapping **Seated** turned the block green and
+it was grey again 200ms later, with a "Tables re-optimised." banner on the way
+past — measured on 2 wrz in the iPhone recording, frames 11.8 → 12.0. The
+close-time auto-complete (`usePersistence`) maps over EVERY booking, not just
+today's, so `pastCloseMins` is non-null for any past date and the manual status
+is reverted on the next 15s tick. The tap read as broken rather than as refused.
+
+New pure `seatingClosed(dateStr, todayS, nowMins)` in `booking-logic.js`,
+**defined as `pastCloseMins(...) !== null`** and deliberately not as its own idea
+of what "past" means: being exactly the auto-complete's own condition is the
+point, because two conditions that merely agree today are two conditions and the
+one that drifts is the one nobody is looking at. Pinned in the tests as that
+identity rather than as a set of remembered answers.
+
+**Four surfaces offer `seated`, not three**, and each filters its own list —
+the three lists differ deliberately today and unifying them would be a keyboard
+and UI behaviour change smuggled into a fix:
+
+* `QuickStatusPopup` (Timeline and Plan), which gains `today` / `nowMins`;
+* `ListView`'s status buttons;
+* `BookingFormModal`'s `statusTargets`, keyed on the **draft's** date rather than
+  the viewed one, because that form can move a booking to another day and the
+  question is whether the day it ends up on has closed;
+* the **`S` shortcut** — the one an audit of components alone would miss, and
+  leaving it is exactly how the app comes to disagree with itself.
+
+`completed` and `cancelled` stay reachable on a past day: correcting yesterday's
+record is real, and `seated` is the only one the app takes back.
+
+**Verified live, both directions.** On 2026-09-02 the popup offers
+`["Confirmed","Cancelled"]`; on 2026-09-03 it still offers
+`["Seated","Completed","Cancelled"]` plus No show. Suite 828 → 832.

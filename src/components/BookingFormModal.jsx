@@ -41,7 +41,7 @@ import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
-  optimizerActiveFor
+  optimizerActiveFor, seatingClosed
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
@@ -69,6 +69,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = 2, // v17.0.0: settings/general
+  today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -570,7 +571,14 @@ export function BookingFormModal({
     if(form.status==="pending") return ["confirmed"];
     const base=["confirmed","seated","completed","cancelled"];
     const sat=form.status==="seated"||form.status==="completed";
-    return (sat?base:base.concat(["pending"])).filter(function(s){return s!==form.status;});
+    // v17.16.12: keyed on the DRAFT's date, not the viewed one — this form can
+    // move a booking to another day, and the question is whether the day it
+    // will END UP on has already closed. Offering "seated" there is offering
+    // something the close-time auto-complete undoes on the next tick.
+    const noSeat=seatingClosed(form.date,today,nowMins);
+    return (sat?base:base.concat(["pending"]))
+      .filter(function(s){return s!==form.status;})
+      .filter(function(s){return s!=="seated"||!noSeat;});
   })();
   const quickStatusBtns=editId?<Section style={{position:"relative"}}>{statusFlash?(
         <div key={statusFlash.k} className="mgt-wipe-ltr" style={{position:"absolute",inset:0,borderRadius:R.card,pointerEvents:"none",zIndex:0,background:statusFlash.color,opacity:0.5}} />
