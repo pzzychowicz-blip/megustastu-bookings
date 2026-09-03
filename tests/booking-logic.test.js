@@ -240,6 +240,58 @@ describe("sanitize / sanitizeAll", () => {
   });
 });
 
+describe("sanitizeAll — the RTDB key IS the identity of last resort (v17.16.13)", () => {
+  // `sanitize` did `id: b.id || genId()` and `sanitizeAll` mapped
+  // `Object.values(node)`, throwing the key away. So a /bookings/{key} child
+  // whose stored value carries no `id` field got a NEW identity on every read.
+  //
+  // Measured live on DEV: the write-diff saw a create, `stampForWrite` had no
+  // `old` so it stamped `baseUpdatedAt: 0`, the per-$id rule ACCEPTS that for a
+  // create, and the node grew by one booking per pass — 538 -> 541 across four
+  // consecutive listener fires. What `ROADMAP.md` recorded as an oscillating
+  // reconciler was the reconciler working correctly on data that changed
+  // underneath it every read.
+  const keylessRow = { name: "Probe", date: "2026-09-05", time: "20:00", size: 2, tables: ["3"] };
+
+  it("two reads of ONE unchanged node agree about every id", () => {
+    const node = { zznav_probe: { ...keylessRow }, real: { id: "real", ...keylessRow } };
+    const a = sanitizeAll(node);
+    const b = sanitizeAll(node);
+    expect(a.map((x) => x.id)).toEqual(b.map((x) => x.id));
+  });
+
+  it("a keyless row takes the key it was stored under", () => {
+    expect(sanitizeAll({ zznav_probe: { ...keylessRow } })[0].id).toBe("zznav_probe");
+  });
+
+  it("a row that states its own id keeps it, even when the key differs", () => {
+    // Every row this app has ever written states its id AND uses it as the key,
+    // so the two agree. Only a row written by something else — an Admin-SDK
+    // backend, a console edit, a rules probe — reaches the key arm at all.
+    expect(sanitizeAll({ somekey: { id: "mine", ...keylessRow } })[0].id).toBe("mine");
+  });
+
+  it("ids stay UNIQUE across a node mixing keyed, keyless and colliding rows", () => {
+    const ids = sanitizeAll({
+      a: { id: "a", ...keylessRow },
+      b: { ...keylessRow },
+      c: { ...keylessRow },
+    }).map((x) => x.id);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it("the legacy ARRAY arm does NOT take the index as an identity", () => {
+    // An index is a position, not an identity (the v17.16.4 lesson: a stale
+    // index resolves to a DIFFERENT row). That node is converted by the v15.5.0
+    // migration on first load anyway.
+    const [row] = sanitizeAll([{ ...keylessRow }]);
+    expect(row.id).not.toBe("0");
+    expect(row.id).not.toBe(0);
+    expect(typeof row.id).toBe("string");
+    expect(row.id.length).toBeGreaterThan(3);
+  });
+});
+
 describe("diffBooking", () => {
   it("reports changed fields, else a no-change note", () => {
     const orig = mk({ name: "Ann", size: 2, time: "13:00" });

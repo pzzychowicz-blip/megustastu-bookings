@@ -533,6 +533,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   useEffect(function(){
     const unsub=onValue(ref(db,"bookings"),function(snap){
 
+
       const val=snap.val();
       // v15.5.0: Firebase returns an ARRAY only when the node has sequential
       // integer keys — exactly what the pre-v15.5.0 whole-array writes produced.

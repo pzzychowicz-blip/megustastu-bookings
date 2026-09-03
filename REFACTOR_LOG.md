@@ -19275,3 +19275,53 @@ fell out in two more measurements (commit 2).
 baseline is 833 and not the 828 `CLAUDE.md` states "as of v17.16.11" — v17.16.12
 added five and the figure was not re-measured, which is the drift that file's own
 line-count note warns about. Corrected there in commit 3.
+
+### Commit 2 — the identity a read invented
+
+**The root cause of the oscillation, and it is neither of the two candidate
+fixes `ROADMAP.md` proposed.**
+
+`sanitize` did `id: b.id || genId()`, and `sanitizeAll` mapped
+`Object.values(node)` — which **throws the RTDB key away**. So a
+`/bookings/{key}` child whose stored value carries no `id` field got a brand-new
+identity on *every single read*.
+
+That is v17.16.4's block-id defect (CT-2B-06) one collection over, and worse.
+There a `genId()` mint answered "what read was this" instead of "which block is
+this", and had to be replaced by a content hash because a block had no stored
+identity to recover. **A booking has one — it is the key** — and the code was
+discarding it two lines above the mint.
+
+**What it does, measured on DEV** (three keyless rows left by an earlier rules
+probe): every read invents ids → the write-diff sees a create → `stampForWrite`
+has no `old` so it stamps `baseUpdatedAt: 0` → **the per-`$id` rule ACCEPTS that
+for a create** → the row lands → the original keyless row is read again → a new
+id is minted. The node grew by one booking per pass:
+`total = 538 → 539 → 540 → 541` across four consecutive listener fires, with the
+reconciliation effect re-placing the phantoms each time and its own writes
+refused (`baseUpdatedAt` non-zero once a minted id was already in `prev`).
+
+So the reconciler was never oscillating. **It was doing its job correctly on
+data that changed underneath it on every read** — which is why the offline
+reproduction, run against a captured snapshot of the very same data, reaches a
+fixpoint in two passes. The ROADMAP entry's diagnosis stopped at the last thing
+visible from the console, and the console was reporting a "stale per-booking
+revision" (commit 1).
+
+**After, same data, same 20 seconds:** 537 rows, **1** listener fire, both
+unchanged; zero write rejections in 10s against 304 writes in 9s before.
+
+`sanitize(b, key)` now resolves `b.id || key || genId()`. The key is preferred
+over a mint and *not* over `b.id`: a row that states its own identity keeps it,
+which is every row this app has ever written. Only a row written by something
+else — an Admin-SDK backend, a console edit, a probe — reaches the `key` arm,
+and for those the key *is* the identity, because it is the path the write went
+to. The legacy ARRAY arm deliberately passes no key: an index is a position, not
+an identity (the v17.16.4 lesson — a stale index resolves to a DIFFERENT row).
+
+One thing found while changing the arity: `arr.map(sanitize)` had been passing
+the array **index** as the second argument all along. Harmless while `sanitize`
+took one parameter, and a live hazard the moment it took two. Both arms name
+their argument explicitly now rather than relying on arity.
+
+`npm test` 837 → 842.
