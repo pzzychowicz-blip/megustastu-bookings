@@ -18921,3 +18921,23 @@ predicate is doing work:
   refusal tests.
 
 **Deploy: app first, rules second**, and needs the manual Firebase console step.
+### Commit 3 — `ROADMAP.md`'s Deferred section is empty
+
+Patryk's requirement for the session, and it took more than deleting the bullet.
+The section was ~65 lines, of which the bullet was 11: the rest was a running
+tally of the crash-test register (*"…leaving two: CT-2A-07 and CT-2A-09"*) and a
+statement of the convention for settling a finding. With the register at zero and
+the last entry closed, all of that describes entries that no longer exist — the
+"pointer that outlived what it pointed at" defect v17.16.10 is named for, one
+file over.
+
+So the tally is **deleted, not moved** (it is already in this log, version by
+version), and the one clause the file's own header lacked — that a settled
+finding is deleted whether it was withdrawn or a deliberate won't-fix, both being
+decisions rather than pending work — was folded **into** that header, where it
+applies to everything rather than to one section. `## Deferred` now reads
+`_(nothing pending)_`, matching `## Ideas`. `## Designed, not implemented` is
+untouched.
+
+Nothing from this version was added back: the navigation crash shipped in commit
+1 rather than becoming a new entry.
