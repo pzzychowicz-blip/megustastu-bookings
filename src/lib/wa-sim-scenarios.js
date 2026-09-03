@@ -56,7 +56,19 @@ export function sampleBookings() {
     makeBooking({ id: "wasimM2", name: "WA-SIM Maria López", phone: PH.maria, date: isoPlus(-35), time: "14:00", size: 2, status: "completed", tables: ["i3"], _manual: false, _locked: false }),
     // Tom Richards — 1 completed + 1 upcoming (link target for cancel)
     makeBooking({ id: "wasimT1", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(-7), time: "21:30", size: 3, status: "completed", tables: ["2", "3"], _manual: false, _locked: false }),
-    makeBooking({ id: "wasimT2", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(2), time: "21:30", size: 3, status: "confirmed", tables: ["2", "3"], _manual: true, _locked: true }),
+    // tables 3+4, NOT 2+3. `isoPlus(2)` and Klaus's `nextDow(6)` are the same
+    // date whenever today is a Thursday, and both bookings are `_locked` — which
+    // is the ONE conflict the v15.6.1 reconciliation effect cannot resolve
+    // (applyOpt copies a locked booking's tables through verbatim, so no
+    // reshuffle separates them). Seeded, it put the app in a permanent loop:
+    // reconcile, write, get refused by the per-booking CAS, resync, repeat —
+    // measured at >1000 PERMISSION_DENIED writes a minute, on prod as well as
+    // here, since the fixtures land in the shared DEV database. Klaus needs
+    // 1A+1B+2 for a party of 8, so Tom moves off table 2. Pinned across all
+    // seven weekdays in tests/wa-sim-fixtures.test.js — the collision only
+    // happened on Thursdays, so a test that ran on the current day would have
+    // reported it clean six times out of seven.
+    makeBooking({ id: "wasimT2", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(2), time: "21:30", size: 3, status: "confirmed", tables: ["3", "4"], _manual: true, _locked: true }),
     // Sofía García — upcoming (link target for modify)
     makeBooking({ id: "wasimS1", name: "WA-SIM Sofía García", phone: PH.sofia, date: isoPlus(3), time: "20:30", size: 4, status: "confirmed", tables: ["5A", "5B"], _manual: true, _locked: true }),
     // Extra upcoming link targets (cancel / modify / running-late / add-person).
