@@ -351,6 +351,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     try { el.setPointerCapture(pid); } catch { /* no-op */ }
   }
   function onDragPointerDown(e) {
+    // v17.16.12: the click-suppression flag is re-armed HERE — on the one event
+    // every input path fires, and ABOVE the early returns. It was set in
+    // `beginDrag` and cleared ONLY in `onTouchStart`, so a MOUSE drag set it and
+    // nothing ever put it back: `handleClick` then returned early for the whole
+    // life of the component instance, and the block sat there looking perfectly
+    // normal while refusing to open the edit form until a page refresh. Reached
+    // by every drag that leaves the block mounted — a refused drop, a drop back
+    // on its own row, or a swap that keeps one of the booking's tables.
+    // The ordering is pointerdown → move → beginDrag(true) → pointerup → click,
+    // so the click that ENDS a drag is still suppressed; only the next press
+    // starts clean. (`onTouchStart` keeps its own reset — both write `false`,
+    // so the two cannot disagree, and touch has a second entry point in the
+    // 400ms press timer.)
+    didLong.current = false;
     if (!onDropOnTable || !tableAtY) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     dragRef.current = { y0: e.clientY, pid: e.pointerId, el: e.currentTarget, active: false };
@@ -399,12 +413,29 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     }
     const d = dragRef.current;
     dragRef.current = null;
-    if (d && d.active) {
-      const target = commit ? tableAtY(e.clientY) : null;
-      if (target && target !== homeTable) onDropOnTable(b.id, target);
-    }
+    // v17.16.12: TEAR DOWN FIRST, DISPATCH LAST — and the order is the fix.
+    // `onDropOnTable` reaches App's `dropOnTable`, which walks up to 8 candidate
+    // table sets running a full `bookingsAfterAction` trial on each; a throw
+    // anywhere in there is a throw inside a React EVENT HANDLER, which no error
+    // boundary catches (CLAUDE.md's Gotchas). With the dispatch sitting ABOVE
+    // these two setStates, one such throw skipped both and left `dragDy`
+    // non-null for good: the block kept its `translateY`, `zIndex: 30`, 0.85
+    // opacity and drag shadow AND kept `didLong` true — misdrawn and unclickable
+    // at once, from one cause, curable only by a page refresh. Clearing first
+    // makes the block's resting state independent of whether the drop succeeds.
+    // The target is READ before the clear (it measures live row geometry, which
+    // the pending setState has not touched yet) and USED after it.
+    const target = d && d.active && commit ? tableAtY(e.clientY) : null;
     setDragDy(null);
     if (setDragHover) setDragHover(null);
+    if (target && target !== homeTable) {
+      // Swallowed deliberately, and only here: the teardown above has already
+      // run, so the block recovers either way, and an uncaught handler error
+      // would be just as silent in production while risking the batch these
+      // setStates are in. The console line is what makes it findable.
+      try { onDropOnTable(b.id, target); }
+      catch (err) { console.error("[drag] drop on " + target + " failed", err); }
+    }
   }
 
   // v15.8.0: status-change overlay. `anim` ('wipe' Confirmed→Seated / 'fill'
@@ -520,6 +551,15 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       onPointerMove={onDragPointerMove}
       onPointerUp={(e) => endDrag(e, true)}
       onPointerCancel={(e) => endDrag(e, false)}
+      /* v17.16.12: the third way a drag can end. `beginDrag` captures the
+         pointer on this element, and capture is released IMPLICITLY when the
+         element leaves the document — which is exactly what a re-parent (a
+         reshuffle moving the booking to another row mid-drag) does. Without
+         this the block would never see its `pointerup` and would strand in the
+         lifted state. On the normal path `lostpointercapture` fires AFTER
+         `pointerup`, by which point `dragRef` is null, so this second call
+         re-clears already-cleared state and commits nothing. */
+      onLostPointerCapture={(e) => endDrag(e, false)}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,

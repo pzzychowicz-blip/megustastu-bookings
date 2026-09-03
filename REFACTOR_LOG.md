@@ -19008,3 +19008,61 @@ v17.16.10 was entirely about.
 Rules suite 126 → 127; `npm test` 828. `database.rules.README.md` gains a "What
 the clause costs, and where" section naming both paths.
 
+
+---
+
+## v17.16.12 — the press that did two things
+
+**Date:** 2026-09-03 · **Branch:** `fix/v17.16.12-ios-touch-drag` ·
+**Behavioural change:** yes — see commits 1, 3 and 4.
+**Files:** `src/components/TimelineView.jsx`, `src/App.jsx` (+ later commits'
+own files, recorded with them).
+
+Four defects reported from live service: three on the iPhone PWA (iOS 26.5.2)
+and one — a booking left frozen after a drag-to-swap — on more than one device.
+
+### Commit 1 — a drag always tears itself down
+
+Two independent faults in `TimelineBlock`'s drag, which together produce the
+single symptom Patryk described: a block that is **both misdrawn and
+unclickable** until the page is refreshed.
+
+**`didLong` was reset on one input path only.** It is set in `beginDrag` and was
+cleared *only* in `onTouchStart` — so a MOUSE drag set it and nothing ever put it
+back, and `handleClick` returned early for the whole life of that component
+instance. Reached by every drag that leaves the block mounted: a refused drop, a
+drop back on its own row, or a swap that keeps one of the booking's tables. The
+reset moved to `onDragPointerDown`, above its early returns, because that is the
+one event every input path fires.
+
+**Reproduced and then re-measured, on the same coordinates.** With the reset
+removed, a click on a block opened *Edit booking*; after dragging that block back
+onto its own row, the identical click did nothing. With the reset in place and
+the drag confirmed to have genuinely armed (temporary instrumentation logged
+`beginDrag` and `endDrag active=true target=1A home=1A`), the click after the
+drag opened *Edit booking*.
+
+**`endDrag` dispatched before it cleared.** `onDropOnTable` reaches App's
+`dropOnTable`, which walks up to 8 candidate table sets running a full
+`bookingsAfterAction` trial on each; a throw in there is a throw inside a React
+EVENT HANDLER, which no error boundary catches. With the dispatch above the two
+`setState`s, one such throw skipped both and left `dragDy` non-null for good —
+the block keeping its `translateY`, `zIndex: 30`, 0.85 opacity and drag shadow.
+Teardown now runs first and the dispatch last, so the block's resting state does
+not depend on whether the drop succeeded. Measured with a throw injected into
+`dropOnTable`: `[drag] drop on 1A failed` logged and the block came back clean
+and clickable.
+
+**`onLostPointerCapture` is the third way a drag can end.** `beginDrag` captures
+the pointer on the block, and capture is released implicitly when the element
+leaves the document — exactly what a reshuffle re-parenting the booking mid-drag
+does. Measured firing on the normal path too, after `pointerup`, where it
+re-clears already-cleared state and commits nothing.
+
+**What could NOT be measured here, and why it is recorded rather than claimed:**
+the stranded *visual* state. `dragDy` is only ever set from inside a
+`requestAnimationFrame`, and the browser-automation drag completes within a
+single frame, so `endDrag` cancels that rAF before it runs — the synthetic drag
+never lifts the block at all. A real drag spans hundreds of milliseconds and many
+frames. So the misdrawn half rests on control flow and on the device report, not
+on a reproduction, and the `didLong` half is the one that was reproduced.
