@@ -70,9 +70,11 @@ session and keeping it in sync.
   `MGT BOOKINGS — CRASH TEST - ADVERSARIAL QA.md`, register prefix `CT-WA-…`,
   aimed at what that one has no sections for: a public webhook, an Admin-SDK
   server that bypasses the rules entirely, prompt injection through the Gemini
-  parse, a send path that reaches real customers, and per-message cost. **Run it
-  after the next `wa-sandbox` prod sync** — the branch is 91 commits behind, so
-  findings against it would age before they were read.
+  parse, a send path that reaches real customers, and per-message cost.
+  **Ready to run now** — verified 2026-09-05: `wa-sandbox` is at
+  `17.16.13-wa-sandbox`, sitting directly on `main`'s HEAD, 0 commits behind, so
+  findings will be against code that is current. (The plan said to wait for a
+  prod sync; the sync had already happened.)
 
 - **WhatsApp Cloud API integration (Phase 1b).** Designed but not built — see
   `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the
@@ -93,11 +95,6 @@ session and keeping it in sync.
   `writeWithRev` and turned `clearAllWaData()` into a per-key delete loop must
   survive the re-merge onto the new prod baseline, or the sandbox will write
   shapes the published rules refuse. See `database.rules.README.md` § v17.16.8.
-
-- **`wa-sandbox` is 91 commits behind `main`** (at `17.15.3-wa-sandbox` against
-  v17.16.8). Surfaced in v17.16.8 while hardening the client there; noted rather
-  than acted on, because re-merging onto a new prod baseline is the explicit
-  "Update with the production version" flow and not something to do in passing.
 
 ## Ideas
 
