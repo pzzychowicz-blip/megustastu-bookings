@@ -25,12 +25,20 @@
 // before Shortcuts: General and Layout are what the restaurant is, Customers and
 // Reminders are what it holds, App is how you look at it, and Shortcuts is
 // reference rather than settings at all.
+// v18.0.0 phase 3: three tabs are `settingsWrite`, and gating them HERE is what
+// makes that capability enforced on the client at all — every control on those
+// three writes a `settings/*` node, so the tab is the natural boundary and the
+// alternative was a guard on each of ~10 save functions. `customers` and
+// `vouchers` stay ungated because READING them is not a capability; the
+// destructive actions inside them carry their own (customerDelete,
+// voucherIssue, voucherVoid). `app` is per-user preferences and `shortcuts` is
+// reference, so neither is a restaurant setting at all.
 export const SETTINGS_TABS = [
-  { id: "general",   label: "General" },
-  { id: "layout",    label: "Layout" },
+  { id: "general",   label: "General",   cap: "settingsWrite" },
+  { id: "layout",    label: "Layout",    cap: "settingsWrite" },
   { id: "customers", label: "Customers" },
   { id: "vouchers",  label: "Vouchers" },
-  { id: "reminders", label: "Reminders" },
+  { id: "reminders", label: "Reminders", cap: "settingsWrite" },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
   // v18.0.0 phase 3: the 8th tab, and the FIRST one that is not always there.

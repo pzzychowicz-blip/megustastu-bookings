@@ -337,7 +337,10 @@ export function useKeyboardShortcuts(ctx){
           if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending"&&!seatingClosed(sel.date,K.today,K.nowMins)) K.updateStatus(sel.id,"seated");return;}
           if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
           if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
-          if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
+          // v18.0.0 phase 3: through App's `requestDelete`, which carries the
+          // bookingDelete gate. The keyboard is the surface an audit of
+          // components misses — the same reason `seated` is checked here.
+          if(k==="d"||k==="D"){e.preventDefault();K.requestDelete(sel.id);return;}
         }
       }
       // v17.0.0: three views — slide direction follows the view order (T·L·P).

@@ -109,6 +109,27 @@ export const RULE_ENFORCED = Object.freeze(grantSet(
   CAPABILITIES.filter(function (c) { return c.enforced; }).map(function (c) { return c.id; })
 ));
 
+// ── The capabilities a person can actually LACK ─────────────────────────────
+// `staff` is the floor — an absent role reads as staff — and extras only ADD,
+// so every account holds at least `ROLE_GRANTS.staff` BY CONSTRUCTION. A client
+// gate on anything in that set is therefore dead code today, and the gates
+// worth writing are exactly the complement.
+//
+// DERIVED rather than hand-listed, and that is the whole point: promoting a
+// capability above staff later changes this set automatically, and
+// `tests/roles.test.js` asserts every member of it has a gate — so the change
+// fails the build instead of silently shipping an ungated action.
+export const GATED_CAPS = CAP_IDS.filter(function (id) { return !ROLE_GRANTS.staff[id]; });
+
+// The capability's own label, lower-cased for the middle of a sentence — the
+// refusal a person actually reads ("You don't have permission to delete
+// bookings."). One source with `CAPABILITIES`, so the panel and the refusal
+// cannot come to call the same capability two different things.
+export function capLabel(id) {
+  const c = CAPABILITIES.find(function (x) { return x.id === id; });
+  return c ? c.label.toLowerCase() : "do that";
+}
+
 // ── An absent role reads as `staff` ─────────────────────────────────────────
 // Both an account with no `/roles` row at all and a self-registered stub whose
 // `role` is still `null`. Useful on a first shift, harmless until an admin says

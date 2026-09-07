@@ -13,8 +13,12 @@
 //   4. an admin cannot strip their own admin, which is what makes "there is
 //      always at least one admin" true without a counter node.
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   CAPABILITIES, CAP_IDS, ROLES, ROLE_GRANTS, RULE_ENFORCED, ALWAYS_ENFORCED,
+  GATED_CAPS, capLabel,
   can, isAdminEntry, effectiveRole, sanitizeRole, sanitizeRoles,
   sanitizeInvite, sanitizeInvites, normalizeEmail, wouldRemoveOwnAdmin,
   matchInvite, applyInviteFields, userRows, displayName,
@@ -373,5 +377,69 @@ describe("inviteIdFor — an email is not a legal RTDB key", () => {
     // write the SAME path, so the second is refused by the CAS instead of
     // creating a duplicate invitation nobody can tell apart.
     expect(inviteIdFor("ana@b.c")).toBe(inviteIdFor("  ANA@B.C  "));
+  });
+});
+
+// ── Every capability that CAN be absent has a gate (v18.0.0 phase 3) ─────────
+//
+// The bug this exists for: `can()` shipped gating the Admin tab and nothing
+// else, so with enforcement ON a staff account still had every button, every
+// popup, every drag and every keyboard shortcut. It was reported from the
+// keyboard, which is simply where it showed first.
+//
+// The guard is possible because the set is DERIVED. `staff` is the floor and
+// extras only ADD, so every account holds `ROLE_GRANTS.staff` by construction
+// and only the complement can ever be missing. Promote a capability above staff
+// later and it joins `GATED_CAPS` automatically — and this test fails until it
+// has a gate, instead of shipping an ungated action.
+describe("GATED_CAPS — the capabilities a person can actually lack", () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+  const read = (p) => readFileSync(join(ROOT, p), "utf8");
+  const App = read("src/App.jsx");
+  const Chrome = read("src/components/SettingsChrome.jsx");
+
+  it("is exactly the complement of the staff floor", () => {
+    expect(GATED_CAPS.slice().sort()).toEqual(
+      CAP_IDS.filter((id) => !ROLE_GRANTS.staff[id]).slice().sort());
+    // Every capability staff HAS is ungated on purpose — a gate there is a
+    // branch that can never run.
+    Object.keys(ROLE_GRANTS.staff).forEach((id) => expect(GATED_CAPS).not.toContain(id));
+  });
+
+  it("names the six the app actually gates", () => {
+    // Pinned so a change to the level map is a deliberate edit here too.
+    expect(GATED_CAPS).toEqual([
+      "bookingDelete", "voucherIssue", "voucherVoid",
+      "settingsWrite", "customerDelete", "settingsAdmin",
+    ]);
+  });
+
+  it("every one of them is gated — by a tab capability or by refused()", () => {
+    // Two mechanisms, deliberately: a whole TAB is the natural boundary for
+    // `settingsWrite` (every control on those three writes a settings node,
+    // where the alternative was a guard on ten save functions), and an ACTION
+    // guard is right for the rest. What matters is that neither is missing.
+    const tabCaps = [...Chrome.matchAll(/cap:\s*"([A-Za-z]+)"/g)].map((m) => m[1]);
+    const refusedCaps = [...App.matchAll(/refused\("([A-Za-z]+)"\)/g)].map((m) => m[1]);
+    const guarded = new Set([...tabCaps, ...refusedCaps]);
+    const ungated = GATED_CAPS.filter((c) => !guarded.has(c));
+    expect(ungated).toEqual([]);
+  });
+
+  it("refused() is reachable from the KEYBOARD, not only from buttons", () => {
+    // The surface an audit of components misses, and the one this bug was
+    // reported from. The `D` shortcut goes through App's `requestDelete`, which
+    // carries the gate — it must not call `setConfirmDel` directly again.
+    const kb = read("src/hooks/useKeyboardShortcuts.js");
+    expect(kb).toContain("K.requestDelete(sel.id)");
+    expect(kb).not.toMatch(/K\.setConfirmDel\(sel\.id\)/);
+  });
+
+  it("capLabel reads the capability's own label, so a refusal cannot drift", () => {
+    expect(capLabel("bookingDelete")).toBe("delete bookings");
+    expect(capLabel("settingsWrite")).toBe("change settings");
+    // Unknown ids still make a sentence rather than printing "undefined".
+    expect(capLabel("nope")).toBe("do that");
+    CAP_IDS.forEach((id) => expect(capLabel(id).length).toBeGreaterThan(0));
   });
 });

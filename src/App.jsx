@@ -274,6 +274,7 @@ import { useWaitlist } from "./hooks/useWaitlist";
 // vouchers are.
 import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
+import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 import { normalizeCode, isRedeemedBy, voucherState, isUnsettled } from "./lib/vouchers";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
@@ -857,6 +858,11 @@ function BookingApp({uid}){
   // v17.0.0 correction: drag&drop feedback toast — {text, good} or null.
   const [dragMsg, setDragMsg] = useState(null);
   const dragMsgTimer = useRef(null);
+  // v18.0.0 phase 3: the capability refusal. Its own slot rather than a reuse of
+  // `dragMsg`, which means one specific thing ("drag&drop feedback") and would
+  // have stopped meaning it.
+  const [permMsg, setPermMsg] = useState(null);
+  const permMsgTimer = useRef(null);
   const manualTarget = modalOpen.manual || null;
   const setManualTarget = setModalFns.manual;
   const [dismissedIneff, setDismissedIneff] = useState(null);
@@ -1809,7 +1815,7 @@ function BookingApp({uid}){
   // `guestId` is cleared alongside the personal fields: it is the only thing
   // still binding the anonymized bookings into a customer, so leaving it would
   // leave the deleted guest sitting in the list under "Data removed".
-  function deleteCustomer(ident){
+  function deleteCustomer(ident){if(refused("customerDelete")) return;
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
@@ -2370,6 +2376,25 @@ function BookingApp({uid}){
   // The dragged booking becomes _manual+_locked so the optimizer never undoes
   // a hand-placed drag. Refusals surface via the dragMsg floating toast;
   // success messages are gated on the saveBookings `ok` boolean (v15.4.0).
+  // ── v18.0.0 phase 3: the capability gate, at the ACTION ─────────────────────
+  // Returns TRUE when the action must not proceed, and says so on screen. It
+  // guards the action rather than each control, so the button, the keyboard
+  // shortcut, the quick-status popup and a drag are covered by one line — which
+  // is the four-surfaces lesson this file already records for `seated`.
+  //
+  // Only the six capabilities in `GATED_CAPS` are worth guarding: `staff` is the
+  // floor and extras only ADD, so every account holds the staff set by
+  // construction and a gate on `bookingStatus` could never fire.
+  //
+  // It REFUSES rather than doing nothing. A control that silently no-ops reads
+  // as broken, which is the v17.16.12 lesson about `seated` after close.
+  function refused(cap){
+    if(can(cap)) return false;
+    setPermMsg("You don't have permission to "+capLabel(cap)+".");
+    clearTimeout(permMsgTimer.current);
+    permMsgTimer.current=setTimeout(function(){setPermMsg(null);},3500);
+    return true;
+  }
   function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
   function dropOnTable(id,targetId){
     const src=liveBookings.find(function(b){return b.id===id;});
@@ -2519,7 +2544,12 @@ function BookingApp({uid}){
     if(seatedOcc){flashDragMsg(seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them.");return;}
     flashDragMsg("Can't re-seat the parties there without stranding one — use Manual assign.");
   }
-  function delBooking(id){const target=bookings.find(function(x){return x.id===id;});
+  // The confirm dialog's ONE door. `delBooking` below is the guarantee; this is
+  // so a staff member is refused at the point of intent rather than after
+  // reading a "this cannot be undone" dialog and tapping Delete.
+  function requestDelete(id){if(refused("bookingDelete")) return;setConfirmDel(id);}
+  function delBooking(id){if(refused("bookingDelete")) return;
+    const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
     // skipDates so the generator never resurrects it. Done BEFORE the booking
     // delete and UNGATED by the delete's `ok` — if the delete is held/auto-
@@ -2620,7 +2650,7 @@ function BookingApp({uid}){
     // list — a cycle over the unfiltered one would step onto the Admin tab the
     // render side refuses to show. `setRolesFor` is escapeAction's target for
     // the capability grid.
-    can:can,setRolesFor:setRolesFor,
+    can:can,setRolesFor:setRolesFor,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
     reminderEditor:reminderEditor,setReminderEditor:setReminderEditor,
     saveReminderFromEditor:saveReminderFromEditor,
@@ -3394,7 +3424,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -3405,7 +3435,7 @@ function BookingApp({uid}){
       onWalkin:function(tableId){R.current.openWalkin(tableId);},
       onManual:function(id){R.current.setManualTarget(id);},
       onBlock:function(id){R.current.setBlockTarget(id);},
-      onDelete:function(id){R.current.setConfirmDel(id);},
+      onDelete:function(id){R.current.requestDelete(id);},
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
       onNew:function(){R.current.openNew();},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
@@ -3880,6 +3910,7 @@ function BookingApp({uid}){
                 undoInfo={undoInfo}
                 onUndo={undoLastAction}
                 undoNote={reshuffled&&optimizerActiveFor(viewDate,autoOptimizer)?"tables re-optimised":""}
+                permMsg={permMsg}
                 dragMsg={dragMsg}
                 reshuffled={reshuffled}
                 reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
@@ -3942,7 +3973,7 @@ function BookingApp({uid}){
               onOpenManualAssign={function(target){setManualTarget(target);}}
               onOpenHistory={function(){setShowHistory(true);}}
               onRequestCancel={function(id){setConfirmCancel(id);}}
-              onRequestDelete={function(id){setConfirmDel(id);}}
+              onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
               standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
@@ -4031,8 +4062,8 @@ function BookingApp({uid}){
             onDeleteCustomer={deleteCustomer}
             vouchers={vouchers}
             voucherDefaults={voucherDefaults}
-            onIssueVoucher={issueVoucher}
-            onVoidVoucher={voidVoucher}
+            onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}
+            onVoidVoucher={function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}}
             onSaveVoucherDefaults={saveVoucherDefaults}
             tab={settingsTab}
             setTab={setSettingsTab}
