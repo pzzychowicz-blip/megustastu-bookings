@@ -19,82 +19,68 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **Measure what a full `bookings` read costs.** Firebase console → Realtime
-  Database → Usage: stored data, and downloaded bytes/day. One click, PROD-safe,
-  Patryk-side. It decides whether the archive below is built at all, and whether
-  capping `history` gets most of the benefit on its own. Nothing else waits on it.
+_(nothing pending)_
 
 ## Designed, not implemented
 
-> The four entries below are one approved plan, written 2026-09-05 against
-> v17.16.13. **The plan is
-> `…/megustastu-bookings context/MGT_Bookings_Production_Roadmap_Plan.md`** — data
-> shapes, security rules, hook points, the reasoning behind each choice, and the
-> eleven decisions already settled. These entries say what is pending; that file
-> says how. Revise it there, not here.
+> The five entries below are one approved plan, written 2026-09-07 against
+> v17.16.13 and shipping as **one release, v18.0.0**, on one branch across seven
+> sessions. **The plan is
+> `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`** — phase order and
+> why it is forced, data shapes, security rules, hook points, and the decisions
+> already settled. It supersedes `MGT_Bookings_Production_Roadmap_Plan.md`
+> (2026-09-05), which stays on disk as the record of the four-version split and
+> the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
+> entries say what is pending; that file says how. Revise it there, not here.
 
-- **Vouchers (planned v17.17.0).** 8th persisted collection, `/vouchers/{CODE}`
+- **Vouchers (v18.0.0 phase 1).** 8th persisted collection, `/vouchers/{CODE}`
   keyed by the code itself so uniqueness is structural, per-child `updatedAt` CAS
   like `/bookings`, a redemption ledger keyed by booking id (idempotent under the
   retry queue). Balance carries over across visits; 12-month default expiry on a
-  new `settings/voucherDefaults` node. 7th Settings tab. The case to not lose:
-  the close-time auto-complete must never redeem — nobody is there to answer.
+  new `settings/voucherDefaults` node. 7th Settings tab. **Manual entry** — a
+  number typed in rather than generated, through the same normaliser and the same
+  create-only rule, with `origin: "manual"|"generated"` on the record; a number is
+  never released, which is why a voucher is voided and never deleted. The case to
+  not lose: the close-time auto-complete must never redeem — nobody is there to
+  answer.
 
-- **Admin layer (planned v17.18.0).** `/roles/{uid}` + `/invites`, three levels
-  named `staff`/`manager`/`admin` in code and UI alike, per-user `extras` granted
-  on top of a role (an object keyed by capability — rules cannot search an
-  array). Self-registration on first sign-in plus admin invitations; a
-  fully-automatic invitation claim is **not expressible in RTDB rules** and would
-  need a backend. Ships with `settings/admin.enforceRoles` **off**, which is what
-  makes the rules deploy rolling-safe. Never fewer than one admin, enforced in
-  the rules and not only in the panel.
+- **Tenant configuration layer (v18.0.0 phase 2).** `VITE_TENANT` selects a config
+  module under `src/tenants/`, each exporting `{ firebaseConfig, profile }`; the
+  `import.meta.env.DEV` split is preserved exactly, so localhost can never reach
+  any tenant's production database. One `APP_NAME` constant replaces four
+  hand-typed copies of the app's own name, one of which had already drifted to a
+  third spelling. `.firebaserc` + `npm run rules:deploy` make the rules deploy
+  repeatable, without removing this release's own manual console step.
 
-- **Admin backend: module switches + README (planned v17.19.0).**
-  `settings/admin.modules` as the on/off registry — the WhatsApp switch ships
-  **off**, and the same mechanism is the multi-tenancy lever under
-  project-per-restaurant. Integrations section shows which server-side secrets
-  are *set*, never their values: **no Meta or Gemini token may go in RTDB**, which
-  every signed-in account can read. `README.md` is stale in the same pass (says
-  v16; the app is v17.16.13).
+- **Roles and the Admin tab (v18.0.0 phase 3).** `/roles/{uid}` + `/invites`,
+  three levels named `staff`/`manager`/`admin` in code and UI alike, per-user
+  `extras` granted on top of a role (an object keyed by capability — rules cannot
+  search an array). The UI asks `can(cap)`, never `role === "admin"`. Ships with
+  `settings/admin.enforceRoles` **off**, which is what makes the rules deploy
+  rolling-safe. Never fewer than one admin, enforced in the rules and not only in
+  the panel. The Admin tab is admin-only at both layers, whole tab and every
+  control.
 
-- **Bookings archive (planned v17.20.0, conditional).** Gated on the measurement
-  above. Move terminal bookings older than a configurable cut-off (default 3
-  months, clamped 3–24) to `/archive/{YYYY-MM}/{id}`, lazily read, never passed
-  to `saveBookings`. Chosen over windowing the query because the write path's
-  diff derives deletions from `prev`, so a partial array reaching it is a
-  data-losing hazard class — and windowing fixes neither `resync()` nor the
-  reconciler's scan past month-end. `doBackup` and the WA backend's customer
-  lookup both read `/bookings` and would need the archive too.
+- **Module registry and Integrations (v18.0.0 phase 4).** `settings/admin.modules`
+  as the on/off registry — the WhatsApp switch ships **off**, and the same
+  mechanism is the multi-tenancy lever under project-per-restaurant. Integrations
+  shows which server-side secrets are *set*, never their values: **no Meta or
+  Gemini token may go in RTDB**, which every signed-in account can read.
 
-- **Adversarial crash test for the WhatsApp module.** Same instrument as
-  `MGT BOOKINGS — CRASH TEST - ADVERSARIAL QA.md`, register prefix `CT-WA-…`,
-  aimed at what that one has no sections for: a public webhook, an Admin-SDK
-  server that bypasses the rules entirely, prompt injection through the Gemini
-  parse, a send path that reaches real customers, and per-message cost.
-  **Ready to run now** — verified 2026-09-05: `wa-sandbox` is at
-  `17.16.13-wa-sandbox`, sitting directly on `main`'s HEAD, 0 commits behind, so
-  findings will be against code that is current. (The plan said to wait for a
-  prod sync; the sync had already happened.)
-
-- **WhatsApp Cloud API integration (Phase 1b).** Designed but not built — see
-  `MGT_WhatsApp_Inbox_Phase1b_Design_Summary.md`. Integration points: the
-  `BookingFormModal` callback surface + a new `InboxPanel` component. On
-  merge, the WA module's `whatsapp.js` must import
-  `normalizePhone`/`formatPhone`/`matchCustomerByPhone` from
-  `src/lib/customers.js` rather than keeping its own copies (the
-  complementarity contract established in v16.0.0's customer layer).
-  **v17.16.7 added a second precondition; v17.16.8 removed it.** The sandbox
-  writes four top-level paths — `conversations`, `messages`, `templates` and
-  `settings/whatsapp` — and when the root `.write` grant went, none of them was
-  writable: the sandbox looked populated and silently refused to save.
-  v17.16.8 grants all four, with a CAS shape decided per node rather than
-  deferred (`conversations`/`messages` per-child and uncased, because the WA
-  Admin backend bypasses rules entirely; `templates`/`settings/whatsapp` on real
-  rev pairs). **What remains for the merge is smaller and is client work, not
-  rules work:** the `wa-sandbox` changes that put `templates` behind
-  `writeWithRev` and turned `clearAllWaData()` into a per-key delete loop must
-  survive the re-merge onto the new prod baseline, or the sandbox will write
-  shapes the published rules refuse. See `database.rules.README.md` § v17.16.8.
+- **The WhatsApp port + its crash test (v18.0.0 phases 5–6).** The `wa-sandbox`
+  branch merged to production, admin-switchable and shipped off, with the
+  simulator structurally incapable of running in production. `api/` is not tracked
+  on `main`, so this adds serverless functions to the production Vercel project
+  for the first time and makes `/api/wa-inbound` a live public URL on merge. On
+  merge the module's `whatsapp.js` must import
+  `normalizePhone`/`formatPhone`/`matchCustomerByPhone` from `src/lib/customers.js`
+  rather than keeping its own copies (the complementarity contract from v16.0.0),
+  and the sandbox's `writeWithRev` templates + per-key `clearAllWaData()` must
+  survive the re-merge or it will write shapes the published rules refuse. Then
+  the adversarial crash test, register prefix `CT-WA-…`, aimed at what the
+  bookings one has no sections for: a public webhook, an Admin-SDK server that
+  bypasses the rules entirely, prompt injection through the Gemini parse, a send
+  path that reaches real customers, and per-message cost.
 
 ## Ideas
 

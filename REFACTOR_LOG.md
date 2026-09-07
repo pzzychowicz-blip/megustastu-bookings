@@ -19407,3 +19407,65 @@ contradicted its own behaviour — the `hourLabel`/`cutoffLabel` lesson in
 reverse, and the kind of name that is read rather than checked.
 
 `npm test` 847 → 851.
+
+
+---
+
+## v18.0.0 — the production release
+
+**Date:** 2026-09-07 · **Branch:** `feat/v18.0.0-production-release` ·
+**Behavioural change:** yes, across the release — vouchers, roles, an admin layer
+and the WhatsApp module reaching production.
+**Files:** commit 1 is `src/App.jsx`, `ROADMAP.md`, `REFACTOR_LOG.md`; later
+commits bring their own.
+
+Five pieces of work were planned on 2026-09-05 as four separate versions
+(v17.17.0–v17.20.0) plus a crash test. They ship instead as **one release across
+seven sessions**, one branch, many commits — the documented shape (v16.3.0 shipped
+eleven features, v17.0.0 six), and one PROD rules console step where four were
+planned. That is a real reduction in the least reversible part of the roadmap.
+Three things the earlier plan did not carry were added: manual voucher entry, the
+WhatsApp module going to production behind an admin switch, and multi-tenancy
+preparation.
+
+The plan is `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`.
+
+### Commit 1 — the branch, the bump, and a phase deleted by a measurement
+
+The bump, the ROADMAP sweep, and **the one thing here worth reading later**: a
+measurement that removed the highest-risk phase in the roadmap rather than
+building it.
+
+`ROADMAP.md`'s entire Deferred section was a single entry — *"Measure what a full
+`bookings` read costs"* — gating a conditional v17.20.0 that would have moved
+terminal bookings older than a cut-off into `/archive/{YYYY-MM}`. **It was the
+only phase in the whole roadmap that moves production booking data**, in an app
+whose Firebase plan has no backups and which has lost production data twice.
+
+The Firebase usage figures came in for Aug 8 – Sept 7:
+
+| | | against the Spark free tier |
+|---|---|---|
+| Stored | **860.22 KB** | 1 GB → **0.086%** |
+| Downloaded | **262.61 MB / 30 days** | 10 GB/month → **2.6%** |
+| Peak load | 5% | — |
+| Peak connections | 3 | 100 |
+| Rules | 35k allows · 259 denies · 0 errors | — |
+
+A full read of the entire database is **under a megabyte**. There is no loading
+problem to solve, so there is nothing for an archive to fix: the database would
+have to grow roughly 38× to reach even half the free download allowance. **The
+archive and the `history` cap are both struck**, and neither entry survives in
+`ROADMAP.md` — a settled decision is not pending work, which is why the
+measurement and the decision are recorded here instead.
+
+The rest of the sweep is bookkeeping with one honest correction in it: the four
+"Designed, not implemented" entries were each labelled with the version they were
+once going to ship as (`planned v17.17.0` … `planned v17.20.0`), and every one of
+those numbers is now wrong. They are re-labelled by **phase of this release**, and
+their pointer moved from the superseded plan to this one.
+
+**Baseline for the release, measured on this commit** rather than carried from a
+doc: `93.64 kB` gz main bundle · **851 tests / 25 files** · **0 lint errors** (71
+warnings, by design) · `check:style` OK. The plan's recorded `93.64 kB` was a
+figure it declined to vouch for; it turns out to have been exact.
