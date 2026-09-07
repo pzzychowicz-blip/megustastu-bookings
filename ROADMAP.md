@@ -23,7 +23,7 @@ _(nothing pending)_
 
 ## Designed, not implemented
 
-> The five entries below are one approved plan, written 2026-09-07 against
+> The four entries below are one approved plan, written 2026-09-07 against
 > v17.16.13 and shipping as **one release, v18.0.0**, on one branch across seven
 > sessions. **The plan is
 > `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`** — phase order and
@@ -32,17 +32,6 @@ _(nothing pending)_
 > (2026-09-05), which stays on disk as the record of the four-version split and
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
-
-- **Vouchers (v18.0.0 phase 1).** 8th persisted collection, `/vouchers/{CODE}`
-  keyed by the code itself so uniqueness is structural, per-child `updatedAt` CAS
-  like `/bookings`, a redemption ledger keyed by booking id (idempotent under the
-  retry queue). Balance carries over across visits; 12-month default expiry on a
-  new `settings/voucherDefaults` node. 7th Settings tab. **Manual entry** — a
-  number typed in rather than generated, through the same normaliser and the same
-  create-only rule, with `origin: "manual"|"generated"` on the record; a number is
-  never released, which is why a voucher is voided and never deleted. The case to
-  not lose: the close-time auto-complete must never redeem — nobody is there to
-  answer.
 
 - **Tenant configuration layer (v18.0.0 phase 2).** `VITE_TENANT` selects a config
   module under `src/tenants/`, each exporting `{ firebaseConfig, profile }`; the

@@ -219,6 +219,9 @@ for the same reason the connection popover carries `aria-haspopup` but not
 
 ---
 
+| "How much of it did this bill use?" | **redeem prompt** (`VoucherRedeemModal.jsx`) | Raised BY a completion, the way the kitchen confirm is raised by a save. Three exits: redeem, complete without using it, or Escape (which completes nothing). |
+| The "Gift voucher" field in the booking form | **voucher picker** (`VoucherPicker.jsx`) | Attaches a voucher to a booking. **Attaching is not redeeming** — it writes `booking.voucherCode` and moves no money. |
+
 ## 8. Domain concepts
 
 Where the real ambiguity lives.
@@ -251,6 +254,11 @@ Where the real ambiguity lives.
 
 ---
 
+| A gift voucher's number | **voucher code** (`normalizeCode`, `lib/vouchers.js`) | The child key of `/vouchers/{CODE}`, so uniqueness is a property of the storage. Generated codes avoid `0/O` and `1/I/L`; a manual code is stored exactly as typed. |
+| A voucher that has been taken out of use | **voided** (`status: "void"`) | Not deleted — deleting would free the number for re-issue. **A voucher is never deleted anywhere in the app.** |
+| A completed booking whose voucher was never recorded | **unsettled** (`isUnsettled`, `UnsettledBanner.jsx`) | Reached by the close-time auto-complete (nobody is there to answer) or by "Complete without using it". Surfaces as a strip section that clears itself when recorded. |
+| What a voucher has left | **remaining** (`remainingOf`) | DERIVED as `value − redeemedTotal(ledger)`, never decremented — which is what makes a replayed redemption idempotent. |
+
 ## 9. Settings and admin
 
 Six tabs, split by **audience**: what the restaurant *is*, then what it *holds*,
@@ -258,7 +266,9 @@ then how *you* look at it, then reference.
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| General · Layout · Customers · Reminders · App · Shortcuts | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. |
+| General · Layout · Customers · Vouchers · Reminders · App · Shortcuts | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. |
+| The Vouchers tab body | **vouchers settings** (`VouchersSettings.jsx`) | Issue · search · filter · void, plus the default validity period. Records and their configuration in one place. There is **no delete** — see `CLAUDE.md`. |
+| "Default validity", in months | **voucher expiry period** (`settings/voucherDefaults.expiryMonths`) | Seeds `expiresAt` on a newly issued voucher. `0` means never. |
 | Opening hours, shifts, durations, late thresholds | **General** | The restaurant's operating rules. Restaurant-wide. |
 | Tables, combos, priorities, floor plan | **Layout** (`LayoutSettings.jsx`) | The physical room. |
 | Theme, app width, reduce animations, zoom steppers | **App** | Read once by whoever is *holding* the device. Five of eight follow the account. |
