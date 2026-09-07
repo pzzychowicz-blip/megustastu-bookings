@@ -297,7 +297,7 @@ export function NotificationStrip({ sections, collapseMax = 2, lidIcon = null, s
       // separators, and `Reveal` already manages its own overflow while it
       // animates. Do not add it back to fix a corner — round the child.
     }}>
-      <button
+      <button /* @no-lift full-width lid row — a 1.08 lift clips inside the pane, per the Collapsible header */
         ref={lidRef}
         onClick={function () { setOpen(!open); }}
         aria-expanded={open}

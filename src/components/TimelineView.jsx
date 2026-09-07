@@ -778,7 +778,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           The reset (`background:none;border:0;font:inherit;color:inherit`) is
           what keeps a UA button from repainting the handle: everything visual
           here is unchanged from the span, `borderLeft` included. */}
-      <button
+      <button /* @no-lift the block already lifts as a group (data-bk) — a nested lift double-scales */
         type="button"
         onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
         title="Assign tables"

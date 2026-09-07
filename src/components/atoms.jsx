@@ -673,7 +673,7 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
           index.html warns about, walked into anyway; only measuring the computed
           style caught it. The resting fill comes through `--row-bg`, which is
           why the class takes it as a custom property in the first place. */}
-      <button
+      <button /* @no-lift .mgt-ac-row carries its own hover treatment via --row-bg */
         type="button"
         aria-expanded={open}
         className="mgt-ac-row"

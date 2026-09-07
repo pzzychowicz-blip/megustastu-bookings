@@ -106,6 +106,39 @@
 // structural — a quoted `prop: value;` list, which a JSX style VALUE never is,
 // because inline style values hold no semicolons.
 
+// ── Rule 10: an interactive control carries the hover lift ──────────────────
+// v18.0.0 phase 3. `.mgt-hover-scale` is opt-in per element, which means the
+// only thing standing between a new control and the app's shared hover identity
+// is somebody remembering a class name. Measured when this rule was written:
+// 224 of 242 controls carried it, and the Admin tab shipped with 1 of 11 — the
+// convention was universal enough that its absence read as intentional and was
+// invisible in review.
+//
+// Unlike every other rule here this one is TAG-scoped rather than line-scoped,
+// because a JSX opening tag routinely spans five lines and the class may sit on
+// any of them. The extent is found by brace/quote-aware scanning of the
+// COMMENT-STRIPPED source — prose naming a `<button>` is not a button, which is
+// the trap tests/csp.test.js and the v17.15.1 stylesheet header both hit.
+//
+// The exemption marker is `@no-lift`, and it is deliberately unlike the other
+// four: those sit inside a style object, this one sits anywhere in the tag,
+// because there is no style property it attaches to. Real exemptions exist and
+// this repo already documents two of them — a full-width row cannot lift inside
+// an `overflow:hidden` card (Collapsible's header comment), and a control
+// nested in something that already lifts as a group would double-scale
+// (TimelineView's assign handle).
+//
+// ── Rule 11: <ModalTitle> must name its background ──────────────────────────
+// v18.0.0 phase 3. The atom takes `background` with NO DEFAULT, deliberately —
+// "a default would be a silent eighth answer to that question" — and its ink is
+// a hard-coded `--text-on-accent`. So omitting the prop is not a missing colour,
+// it is WHITE TEXT ON A TRANSPARENT PILL: an invisible heading that throws no
+// error, fails no type check and renders at full size in the DOM.
+//
+// Shipped exactly once, on the Capabilities modal, and spotted on a screenshot
+// rather than in review. The rule that was already written down could not
+// enforce itself, so now it can.
+//
 // ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
 // v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
 // icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
@@ -281,6 +314,25 @@ function walk(dir, out = []) {
     else if (/\.(js|jsx)$/.test(p)) out.push(p);
   }
   return out;
+}
+
+// Index of the `>` closing the JSX opening tag that starts at `i`, ignoring
+// anything inside an expression container or a string — `style={{a:">"}}` is
+// not the end of the tag.
+function tagEnd(src, i) {
+  let depth = 0, j = i, quote = null;
+  while (j < src.length) {
+    const c = src[j];
+    if (quote) {
+      if (c === "\\") { j += 2; continue; }
+      if (c === quote) quote = null;
+    } else if (c === '"' || c === "'" || c === "`") quote = c;
+    else if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if (c === ">" && depth === 0) return j;
+    j++;
+  }
+  return -1;
 }
 
 const problems = [];
@@ -515,12 +567,51 @@ for (const file of walk(SRC)) {
       });
     }
   });
+
+  // ── Rule 10 ───────────────────────────────────────────────────────────────
+  // Tag-scoped, so it runs once per file rather than inside the line loop.
+  if (file.endsWith(".jsx")) {
+    const code = codeLines.join("\n");
+    for (const m of code.matchAll(/<(button|input|select|textarea)\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      if (code.slice(m.index, end).includes("mgt-hover-scale")) continue;
+      // The marker is read off the RAW lines the tag spans — markers live in
+      // comments, which `codeLines` has removed by design.
+      const from = code.slice(0, m.index).split("\n").length - 1;
+      const to = code.slice(0, end).split("\n").length - 1;
+      if (lines.slice(from, to + 1).some((l) => /@no-lift/.test(l))) continue;
+      problems.push({
+        file: rel, line: from + 1, rule: "hover-lift",
+        text: lines[from].trim().slice(0, 90),
+        hint: "interactive control without .mgt-hover-scale — add "
+              + 'className="mgt-hover-scale" (it must set its own border-radius; '
+              + "see index.css), or mark the exception /* @no-lift <reason> */",
+      });
+    }
+
+    // ── Rule 11 ─────────────────────────────────────────────────────────────
+    for (const m of code.matchAll(/<ModalTitle\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      if (/\bbackground\s*=/.test(code.slice(m.index, end))) continue;
+      const at = code.slice(0, m.index).split("\n").length;
+      problems.push({
+        file: rel, line: at, rule: "modal-title-background",
+        text: lines[at - 1].trim().slice(0, 90),
+        hint: "<ModalTitle> without `background` renders --text-on-accent (white) "
+              + "on a TRANSPARENT pill — an invisible heading. A create/act surface "
+              + "takes its action's own colour; a configure/read one takes "
+              + "var(--app-btn-grey-strong)",
+      });
+    }
+  }
 }
 
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
             + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
-            + "scales, marker placement)");
+            + "scales, marker placement, control hover-lift, modal-title background)");
   process.exit(0);
 }
 

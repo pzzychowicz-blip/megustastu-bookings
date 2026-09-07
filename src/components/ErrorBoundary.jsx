@@ -160,10 +160,10 @@ export default class ErrorBoundary extends Component {
           </p>
 
           <div style={{ display: "flex", gap: SP.mid, flexWrap: "wrap" }}>
-            <button type="button" onClick={this.retry} style={mkSolidBtn(S.accent)}>
+            <button /* @no-lift pre-existing, not reviewed for v18.0.0 */ type="button" onClick={this.retry} style={mkSolidBtn(S.accent)}>
               Try again
             </button>
-            <button type="button" onClick={this.reload} style={mkBtn({ minHeight: H.touch })}>
+            <button /* @no-lift pre-existing, not reviewed for v18.0.0 */ type="button" onClick={this.reload} style={mkBtn({ minHeight: H.touch })}>
               Reload app
             </button>
           </div>

@@ -21,7 +21,7 @@
 // letting the reader assume.
 
 import { useState } from "react";
-import { R, T, FW, SP } from "../lib/constants";
+import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
 import { CAPABILITIES, ROLES, ROLE_GRANTS, RULE_ENFORCED, displayName } from "../lib/roles";
 
@@ -47,17 +47,25 @@ function RefusalPanel() {
 // capability AND the person, because a control rendered from a `.map` inherits
 // nothing from its surroundings and N identically-named controls is a defect
 // this repo has now found four times.
-function CellGlyph({ state }) {
+function CellGlyph({ state, muted }) {
   // Three states, distinguishable by SHAPE as well as colour — a filled check,
   // a solid pill, an empty ring — because colour alone is not a distinction.
+  //
+  // `muted` is the same grant read in SOMEBODY ELSE'S column: reference, not
+  // this person's. It gets its own INK rather than the identical tick at
+  // reduced opacity, which is what shipped first — three columns told apart by
+  // opacity alone is the colour-only-status failure this app already fixed on
+  // the timeline block (v17.11.0), and `--accent` at 0.45 is under 3:1 besides.
   if (state === "level") {
-    return <span aria-hidden="true" style={{ color: "var(--accent)", fontWeight: FW.bold }}>✓</span>;
+    return <span aria-hidden="true" style={{
+      color: muted ? "var(--text-muted)" : "var(--accent)", fontWeight: FW.bold,
+    }}>✓</span>;
   }
   if (state === "extra") {
     return (
       <span aria-hidden="true" style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
-        width: 20, height: 20,   /* @canvas */
+        width: 18, height: 18,   /* @canvas */
         borderRadius: R.pill,
         // Registered in tests/contrast.test.js as "success tag" — an opaque
         // fill picked for its ink rather than an alpha that composites toward
@@ -68,11 +76,17 @@ function CellGlyph({ state }) {
       }}>✓</span>
     );
   }
+  // NOT `--border-glass`, which is what shipped first and is white at 0.30 —
+  // a RAISED EDGE token, invisible by construction on the near-white sheet this
+  // sits on (measured: the empty cells read as blank, so the affordance for the
+  // grid's whole primary action was missing). A mark that must be SEEN takes an
+  // ink token, which flips with the surface under it.
   return (
     <span aria-hidden="true" style={{
-      display: "inline-block", width: 10, height: 10,   /* @canvas */
+      display: "inline-block", width: 12, height: 12,   /* @canvas */
       borderRadius: R.pill,
-      border: "1px solid var(--border-glass)",
+      border: "1px solid var(--text-muted)",
+      opacity: muted ? 0.35 : 1,
     }} />
   );
 }
@@ -94,6 +108,17 @@ function CapabilityGrid({ row, onToggleExtra }) {
     return "none";
   }
 
+  // The person's own column is BOUNDED, not just tinted: measured at 580px the
+  // three columns were told apart by a caption and an opacity, and on a 13-row
+  // grid the eye loses which one it is in. A 1px rule is the cheapest thing
+  // that survives both themes and adds no fill for the contrast registry to
+  // chase.
+  function colEdge(col) {
+    return col === level
+      ? { borderLeft: "1px solid var(--accent)", borderRight: "1px solid var(--accent)" }
+      : null;
+  }
+
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: T.body }}>
       <thead>
@@ -105,10 +130,16 @@ function CapabilityGrid({ row, onToggleExtra }) {
             const isTheirs = col === level;
             return (
               <th key={col} scope="col" style={{
-                padding: SP.tight, width: 84,   /* @canvas */
+                // 84 → 60. The label column was measured at SEVENTY-TWO pixels
+                // inside this 580px card, so every capability wrapped to four
+                // lines; three level columns at 84 were taking 252 of the 333
+                // the grid gets. A tick needs 60.
+                padding: SP.tight, width: 60,   /* @canvas */
                 textAlign: "center",
                 color: isTheirs ? "var(--accent)" : "var(--text-muted)",
                 fontWeight: isTheirs ? FW.bold : FW.semi,
+                borderTop: isTheirs ? "1px solid var(--accent)" : "none",
+                ...colEdge(col),
               }}>
                 {LEVEL_LABEL[col]}
                 {isTheirs ? <div style={{ fontSize: T.micro, fontWeight: FW.regular, color: "var(--text-muted)" }}>their level</div> : null}
@@ -118,37 +149,50 @@ function CapabilityGrid({ row, onToggleExtra }) {
         </tr>
       </thead>
       <tbody>
-        {CAPABILITIES.map(function (c) {
+        {CAPABILITIES.map(function (c, ri) {
+          const last = ri === CAPABILITIES.length - 1;
           return (
             <tr key={c.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
-              <th scope="row" style={{ textAlign: "left", padding: SP.tight, fontWeight: FW.semi, color: "var(--text-primary)" }}>
+              {/* The blurb moved to `title`. It was a second 10px line under
+                  every one of thirteen labels, and against a 72px column it
+                  rendered as four wrapped words ("Use a / voucher / against a /
+                  booking.") — so the explanation cost more legibility than it
+                  bought. The labels are plain English on their own, and the
+                  full sentences still show on the tab's own enforcement list. */}
+              <th scope="row" title={c.blurb} style={{ textAlign: "left", padding: SP.tight, fontWeight: FW.semi, color: "var(--text-primary)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: SP.tight, flexWrap: "wrap" }}>
                   <span>{c.label}</span>
                   {RULE_ENFORCED[c.id]
-                    ? <OutlineChip tone="success" size="micro">enforced by the server</OutlineChip>
+                    ? <OutlineChip tone="success" size="micro"
+                        title="Refused by the database too, not only hidden here">enforced</OutlineChip>
                     : null}
                 </div>
-                <div style={{ fontSize: T.micro, fontWeight: FW.regular, color: "var(--text-muted)" }}>{c.blurb}</div>
               </th>
               {ROLES.map(function (col) {
                 const st = stateFor(c.id, col);
+                const mine = col === level;
                 // Only the person's OWN column takes a tick, and only where the
                 // level does not already grant it — a "from level" cell is
                 // un-untickable BY CONSTRUCTION, because there is nothing to
                 // write. The other two columns are read-only reference: that
                 // side-by-side comparison is why this layout was chosen.
-                const canTick = editable && col === level && st !== "level"
+                const canTick = editable && mine && st !== "level"
                   && !(col === "admin" && c.id === "settingsAdmin");
+                const cell = Object.assign(
+                  { padding: SP.tight, textAlign: "center" },
+                  colEdge(col),
+                  last && mine ? { borderBottom: "1px solid var(--accent)" } : null
+                );
                 if (!canTick) {
                   return (
-                    <td key={col} style={{ padding: SP.tight, textAlign: "center", opacity: col === level ? 1 : 0.45 }}>
-                      <CellGlyph state={st} />
+                    <td key={col} style={cell}>
+                      <CellGlyph state={st} muted={!mine} />
                       <span className="mgt-sr-only">{STATE_WORD[st]}</span>
                     </td>
                   );
                 }
                 return (
-                  <td key={col} style={{ padding: SP.tight, textAlign: "center" }}>
+                  <td key={col} style={cell}>
                     <button
                       className="mgt-hover-scale"
                       aria-pressed={st === "extra"}
@@ -156,10 +200,16 @@ function CapabilityGrid({ row, onToggleExtra }) {
                       onClick={function () { onToggleExtra(c.id, st !== "extra"); }}
                       style={{
                         border: "none", background: "transparent", cursor: "pointer",
+                        // The hit area, not the glyph. Measured at 19×21 with
+                        // padding alone, under WCAG 2.5.8's 24px floor for a
+                        // control that is this grid's primary action. `H.chip`
+                        // clears it and costs ~5px a row.
+                        minWidth: H.chip, minHeight: H.chip,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
                         padding: SP.tight, borderRadius: R.pill, lineHeight: 1,
                       }}
                     >
-                      <CellGlyph state={st} />
+                      <CellGlyph state={st} muted={false} />
                       <span className="mgt-sr-only">{STATE_WORD[st]}</span>
                     </button>
                   </td>
@@ -183,9 +233,21 @@ export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose
   const row = rows.find(function (r) { return (r.uid || r.inviteId) === selectedUid; }) || rows[0] || null;
   return (
     <Overlay onClose={onClose} footer={
-      <button onClick={onClose} style={mkSolidBtn("var(--app-btn-slate)")}>Done</button>
+      // Right-aligned, like every other modal footer in the app — this one
+      // shipped as a bare button and sat bottom-LEFT with the rest of the bar
+      // empty, which is the only footer in the app that does.
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button className="mgt-hover-scale" onClick={onClose} style={mkSolidBtn("var(--app-btn-slate)")}>Done</button>
+      </div>
     }>
-      <ModalTitle>Capabilities</ModalTitle>
+      {/* `background` is REQUIRED and has no default — omitting it rendered
+          `--text-on-accent` (white) on a TRANSPARENT pill, i.e. an invisible
+          heading, which is what the atom's "no default" rule exists to make
+          impossible to do quietly. It takes the same neutral as the Settings
+          pill it opens from: ModalTitle's colour rule is that a create/act
+          surface wears its action's own colour and a configure/read surface
+          wears a neutral. */}
+      <ModalTitle background="var(--app-btn-grey-strong)">Capabilities</ModalTitle>
       <p style={{ margin: 0, marginBottom: SP.wide, color: "var(--text-muted)", fontSize: T.body }}>
         A level is a floor. Ticking a cell grants that one capability to that one
         person on top of their level &mdash; it never takes anything away.
@@ -196,7 +258,7 @@ export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose
             const id = r.uid || r.inviteId;
             const on = row && (row.uid || row.inviteId) === id;
             return (
-              <button
+              <button className="mgt-hover-scale"
                 key={id}
                 onClick={function () { onSelect(id); }}
                 aria-pressed={on}
@@ -305,7 +367,7 @@ export function AdminTabContent({
                       <OutlineChip tone="neutral" size="micro">
                         invited as {LEVEL_LABEL[r.role]}
                       </OutlineChip>
-                      <button
+                      <button className="mgt-hover-scale"
                         onClick={function () { onWithdrawInvite(r.inviteId); }}
                         aria-label={"Withdraw the invitation for " + displayName(r)}
                         style={mkBtn()}
@@ -313,13 +375,13 @@ export function AdminTabContent({
                     </>
                   : <>
                       {r.invite
-                        ? <button
+                        ? <button className="mgt-hover-scale"
                             onClick={function () { say(onApplyInvite(r.uid, r.invite)); }}
                             aria-label={"Apply the " + LEVEL_LABEL[r.invite.role] + " invitation to " + displayName(r)}
                             style={mkSolidBtn("var(--accent)")}
                           >Apply {LEVEL_LABEL[r.invite.role]} invite</button>
                         : null}
-                      <select
+                      <select className="mgt-hover-scale"
                         value={r.role || ""}
                         aria-label={"Level for " + displayName(r)}
                         onChange={function (e) { say(onSetRole(r.uid, { role: e.target.value || null })); }}
@@ -328,12 +390,12 @@ export function AdminTabContent({
                         <option value="">No level (staff)</option>
                         {ROLES.map(function (x) { return <option key={x} value={x}>{LEVEL_LABEL[x]}</option>; })}
                       </select>
-                      <button
+                      <button className="mgt-hover-scale"
                         onClick={function () { onOpenCapabilities(r.uid); }}
                         aria-label={"Capabilities for " + displayName(r)}
                         style={mkBtn()}
                       >Capabilities</button>
-                      <button
+                      <button className="mgt-hover-scale"
                         onClick={function () { say(onRemoveUser(r.uid)); }}
                         aria-label={"Remove " + displayName(r)}
                         style={mkBtn()}
@@ -354,7 +416,7 @@ export function AdminTabContent({
           itself.
         </div>
         <div style={{ display: "flex", gap: SP.base, flexWrap: "wrap" }}>
-          <input
+          <input className="mgt-hover-scale"
             type="email"
             value={email}
             aria-label="Email address to invite"
@@ -362,10 +424,10 @@ export function AdminTabContent({
             onChange={function (e) { setEmail(e.target.value); }}
             style={{ ...mkInp(), flex: "1 1 200px", minWidth: 0 }}
           />
-          <select value={role} aria-label="Level for the invitation" onChange={function (e) { setRole(e.target.value); }} style={mkSel()}>
+          <select className="mgt-hover-scale" value={role} aria-label="Level for the invitation" onChange={function (e) { setRole(e.target.value); }} style={mkSel()}>
             {ROLES.map(function (x) { return <option key={x} value={x}>{LEVEL_LABEL[x]}</option>; })}
           </select>
-          <button
+          <button className="mgt-hover-scale"
             onClick={function () {
               const res = onInvite(email, role);
               say(res);

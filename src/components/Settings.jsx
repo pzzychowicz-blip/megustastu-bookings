@@ -172,7 +172,7 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   return (
     <div>
       <label htmlFor={fid} style={{ display: "block", fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
-      <input
+      <input /* @no-lift pre-existing, not reviewed for v18.0.0 */
         id={fid}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -1071,7 +1071,12 @@ export function SettingsContent({
   // so the ←/→ cycle (which reads `settingsTab` in App) does not keep pointing
   // at a tab that is gone.
   const tabs = visibleTabs(can);
-  const cur = tabs.some(function (t) { return t.id === tab; }) ? tab : "general";
+  // The fallback is the first VISIBLE tab, not a hard-coded "general" — v18.0.0
+  // gated `general` itself on `settingsWrite`, so a literal there would have
+  // reset a staff account onto a tab that is not in its own tab bar. The list
+  // is never empty: `shortcuts` and `app` carry no capability at all.
+  const fallback = tabs.length ? tabs[0].id : "shortcuts";
+  const cur = tabs.some(function (t) { return t.id === tab; }) ? tab : fallback;
   useEffect(function () { if (cur !== tab) setTab(cur); }, [cur, tab, setTab]);
 
   let content;
