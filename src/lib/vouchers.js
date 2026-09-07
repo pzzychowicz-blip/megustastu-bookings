@@ -471,12 +471,18 @@ export function attachRefusal(v, code, bookings, bookingId, now) {
 // An EMPTY query lists them all (newest first) rather than nothing: unlike a
 // name or a phone, staff usually hold the physical voucher and may not know
 // what to type, and the list is naturally small.
-export function searchVouchers(vouchers, query, limit) {
+// `now` is a PARAMETER, not a `Date.now()` inside — /code-review v18.0.0. The
+// picker freezes one at mount and passes it to `attachRefusal`; a second clock
+// read in here made the render impure and let the two disagree at an expiry
+// boundary, so a voucher could be listed and then refused on pick, or hidden
+// from the list yet attachable by typing. Every other predicate in this file
+// already takes `now` for the same reason.
+export function searchVouchers(vouchers, query, limit, now) {
   const q = normalizeCode(query);
   const raw = String(query || "").trim().toUpperCase();
   const cap = limit || 20;
   return (Array.isArray(vouchers) ? vouchers : [])
-    .filter(function (v) { return voucherState(v, Date.now()) === "open"; })
+    .filter(function (v) { return voucherState(v, now) === "open"; })
     .filter(function (v) {
       if (!raw) return true;
       // The code is matched NORMALISED, so "abcd 2345" finds ABCD2345 — the

@@ -125,7 +125,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
   // The suggestion dropdown is the name/phone fields' own machinery, from the
   // shared `useAcRow` hook — so a tap on a row behaves identically here, and a
   // swipe that scrolls the list does not pick a voucher.
-  const matches = focus ? searchVouchers(vouchers, typed, 20) : [];
+  const matches = focus ? searchVouchers(vouchers, typed, 20, now) : [];
   const menu = matches.length ? (
     <div style={AC_MENU}>
       {matches.map(function (v) {

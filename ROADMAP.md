@@ -19,7 +19,17 @@ session and keeping it in sync.
 
 ## Deferred
 
-_(nothing pending)_
+- **What happens to a voucher's ledger when a completed booking is walked
+  back?** v18.0.0's `/code-review` removed `unredeemVoucher` from
+  `useVouchers.js` as dead code — it had no caller. The question it was written
+  for is real and unanswered: the edit form lets a completed booking go back to
+  Confirmed or Seated, and if that booking redeemed a voucher, its ledger entry
+  and the spent balance stay. Arguably right (the money was taken) and arguably
+  wrong (the visit is being un-recorded). The pure inverse, `removeRedemption`,
+  is still in `lib/vouchers.js` with its tests, so whichever way this is
+  settled the transform exists. It is a behaviour decision for Patryk, not a
+  bug — which is why the review deleted the unused write path rather than
+  wiring it to a control nobody asked for.
 
 ## Designed, not implemented
 

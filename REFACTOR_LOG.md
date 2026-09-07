@@ -19946,3 +19946,75 @@ height I added to stop the attached row jumping. Removed rather than marked: the
 row is already at least 32 from its own button, so the number was doing nothing.
 
 `npm test` **929 → 934**. Bundle `98.48 → 98.65 kB` gz.
+
+### Commit 10 — `/code-review`, and the one that would have spent money
+
+Five findings, all confirmed, all fixed. `npm test` 934 (unchanged — the fixes
+are behavioural and structural, not new surface); `98.65 → 98.54 kB` gz.
+
+**1 — `settleVoucher` hard-coded its own success, and it is the serious one.**
+The form path read `(doSave(),true)` — and `doSave` returns NOTHING, so the
+voucher was redeemed whether or not the booking saved. That is exactly the
+voucher-first failure the comment directly above it says the write order exists
+to prevent: a ledger entry against a booking that is not completed, which
+nothing in the app looks for. It is reachable, because `doSave` re-runs
+validation on re-entry and validation is not frozen while the modal is open —
+the 15s tick grows a seated booking's live duration, so a manual-table save
+that was valid when the prompt appeared can fail when it is answered.
+
+**The app already had the answer and it needed reading, not building.**
+`saveGuardRef` is set to `DISPATCHED` on the exact two lines that dispatch a
+save (v17.16.0's submit guard), so the guard IS "did this save land". Reading
+it leaves `doSave` — the most dangerous function in the repo — completely
+untouched, where making it return a boolean would have meant editing ten early
+returns inside it. An already-`DISPATCHED` guard also reads true, which is
+correct rather than convenient: that is the double-tap case, where the booking
+DID complete, and `redeemVoucher` is idempotent by booking id.
+
+**2 — `searchVouchers` read its own clock.** It called `Date.now()` internally
+while being called from `VoucherPicker`'s render body, which made the render
+impure AND let it disagree with `attachRefusal`, which uses a `now` frozen at
+mount: at an expiry boundary a voucher could be listed and then refused on
+pick, or hidden from the list yet attachable by typing. `now` is a parameter
+now, like every other predicate in that file. Same class lint caught twice
+earlier in this branch; this call site was inside a lib function, where lint
+does not follow.
+
+**3 — the icon is a gift card, and the bow is a V because that was measured.**
+Patryk supplied a reference. Seven candidates were rasterised at the 14px this
+ships at and magnified 8×, which is `DepositIcon`'s own method — and **the two
+that drew the reference's actual bow both closed into a solid dark blob**, one
+as loops on the card and one as circles inside it. An interior shape needs ~3×
+the stroke to stay open and a bow loop is under it at this size; that is the
+same wall `LockIcon`'s missing keyhole and `DepositIcon`'s two redraws hit. A V
+is open geometry and survives.
+
+**The V also does the job the discarded tag was chosen for.** Both this and
+`DepositIcon` are landscape rounded rects at nearly the same ratio, and they
+sit in the SAME flag rail on the SAME card — as closed outlines they would be
+confusable. The V rises ABOVE the card's outline, so the two differ in
+silhouette before any interior detail resolves, which is a stronger separation
+than a tag's point: a tag is still one closed shape. A horizontal ribbon
+(closest to the reference, which has a divider) was tried and dropped — at 14px
+the four quadrants read busy and the line competes with the card's own edges.
+
+**4 — four more hand-written `<label>`s.** Patryk reported this against
+`VoucherPicker`; the review found the same defect in `VoucherRedeemModal` (1)
+and `VouchersSettings` (3), while `BlockModal`, `ReminderEditor` and
+`WalkinForm` contain **zero** raw labels between them. All four are `Fld` now,
+so they get the real `useId` association rather than relying on implicit label
+wrapping.
+
+**5 — two dead write paths into a money collection.** `unredeemVoucher` and
+`updateVoucher` were returned by the hook and called by nobody: untested-in-
+practice writes that read as supported operations. **Deleted rather than wired
+up** — giving a review finding a caller is building a feature nobody asked for.
+The pure `removeRedemption` stays in `lib/` with its tests because it documents
+the inverse property, and the open question it leaves (what should happen to
+the ledger when a completed booking is walked back) went to `ROADMAP.md` as
+Patryk's decision.
+
+**Both fixes verified live rather than reasoned about.** The form path still
+raises the prompt and still redeems: `HUBZ-74S4` went 100 € → `spent, 0 € left`
+through the tightened gate, so the guard read is correct and the happy path is
+intact. The dropdown still lists and picks after `now` became a parameter.

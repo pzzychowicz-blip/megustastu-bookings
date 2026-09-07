@@ -42,7 +42,7 @@ import { db } from "../firebase";
 import { dbError, describeWriteError } from "../lib/dbError";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
 import {
-  normalizeCode, codeSet, validateIssue, applyRedemption, removeRedemption,
+  normalizeCode, codeSet, validateIssue, applyRedemption,
   sanitizeVoucher, sanitizeVouchers, voucherIndex,
 } from "../lib/vouchers";
 
@@ -195,43 +195,25 @@ export function useVouchers({ setWriteWarning, userEmail }) {
     });
   }, [saveVouchers, userEmail]);
 
-  // Undo a redemption — the booking was completed by mistake, or reopened.
-  const unredeemVoucher = useCallback(function (code, bookingId) {
-    const c = normalizeCode(code);
-    if (!c || !bookingId) return false;
-    return saveVouchers(function (prev) {
-      return prev.map(function (v) {
-        return v.code === c ? removeRedemption(v, bookingId) : v;
-      });
-    });
-  }, [saveVouchers]);
-
-  // ── Voiding, and editing the two fields that are safe to edit ───────────────
+  // ── Voiding ─────────────────────────────────────────────────────────────────
   // `voidVoucher` is the closest thing to a delete that exists, and it is not
   // one: the child stays, so the number stays taken.
+  //
+  // /code-review v18.0.0: `unredeemVoucher` and `updateVoucher` lived here and
+  // were called by nothing — two unreferenced WRITE paths into a money
+  // collection, reading as supported operations while never having run against
+  // the live database. Removed rather than wired up: giving them a caller would
+  // be building a feature out of a review finding. The pure `removeRedemption`
+  // stays in `lib/vouchers.js` with its tests, because it documents the inverse
+  // property; what went is the write wrapper. See ROADMAP for the open question
+  // it leaves — what should happen to the ledger when a completed booking is
+  // walked back.
   const voidVoucher = useCallback(function (code, on) {
     const c = normalizeCode(code);
     if (!c) return false;
     return saveVouchers(function (prev) {
       return prev.map(function (v) {
         return v.code === c ? sanitizeVoucher(Object.assign({}, v, { status: on === false ? "open" : "void" }), c) : v;
-      });
-    });
-  }, [saveVouchers]);
-
-  // Notes and expiry only. `value`, `remaining`, `code` and `origin` are not
-  // editable here: the first two are money the ledger accounts for, and the last
-  // two are the record's identity and its provenance.
-  const updateVoucher = useCallback(function (code, fields) {
-    const c = normalizeCode(code);
-    if (!c) return false;
-    return saveVouchers(function (prev) {
-      return prev.map(function (v) {
-        if (v.code !== c) return v;
-        const patch = {};
-        if (fields && "notes" in fields) patch.notes = fields.notes;
-        if (fields && "expiresAt" in fields) patch.expiresAt = fields.expiresAt;
-        return sanitizeVoucher(Object.assign({}, v, patch), c);
       });
     });
   }, [saveVouchers]);
@@ -247,8 +229,6 @@ export function useVouchers({ setWriteWarning, userEmail }) {
     vouchersLoaded: vouchersLoaded,
     issueVoucher,
     redeemVoucher,
-    unredeemVoucher,
     voidVoucher,
-    updateVoucher,
   };
 }

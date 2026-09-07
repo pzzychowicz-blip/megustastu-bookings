@@ -460,25 +460,37 @@ export function DepositIcon(props) {
   );
 }
 
-// v18.0.0 — the gift voucher. A price TAG: a body with a pointed end, which is
-// a silhouette nothing else in this set has (everything else here is round, a
-// plain rectangle, a diagonal or a chevron). That matters most against
-// DepositIcon, which is the other money mark and sits in the same flag rail on
-// the same card — a banknote is a horizontal rounded rect, and anything else
-// rectangular risks reading as one at 14px.
+// v18.0.0 — the gift voucher: a gift CARD with a ribbon and a tie. Redrawn
+// from a reference Patryk supplied, replacing a price tag (/code-review).
 //
-// **It carries no hole, and that is the DepositIcon lesson applied rather than
-// ignored.** A tag's hole is its most recognisable detail and it is exactly the
-// detail that cannot survive here: stroke width is the constraint, an interior
-// shape needs ~3× the stroke to stay open, and a hole that big inside a
-// 12-unit-tall tag body stops being a hole and becomes the tag. LockIcon has no
-// keyhole for the same reason. A pointed tag reads as a tag without it, because
-// the silhouette is doing the work — which is the whole argument the banknote
-// was redrawn on.
+// **The bow is a V, not two loops, and that is a measurement rather than a
+// simplification made for convenience.** Seven candidates were rasterised at
+// the 14px this ships at and magnified 8×, which is the method `DepositIcon`
+// records. Two of them drew the reference's actual bow — one as a pair of
+// closed loops on the card, one as two circles inside it — and **both closed
+// into a solid dark blob**: an interior shape needs ~3× the stroke to stay
+// open, and at 14px a bow loop is under it. That is the same wall `LockIcon`'s
+// missing keyhole and `DepositIcon`'s own two redraws hit. A V is open
+// geometry, so it survives at any size, and it reads as the tie the bow sits
+// in.
+//
+// **The V is also what keeps this distinct from `DepositIcon`**, which was the
+// whole argument for the tag it replaces. Both are landscape rounded rects at
+// almost the same ratio (this is 20×13, the reference's own 1.56:1), so as
+// closed outlines they would be confusable — and they sit in the SAME flag rail
+// on the SAME card. The V rises ABOVE the card's outline, so the two differ in
+// silhouette before any interior detail resolves, which is a stronger
+// separation than the tag's point gave: a tag is still one closed shape.
+//
+// A horizontal ribbon was tried too (candidate C, closest to the reference,
+// which has a divider across the card). At 14px the four quadrants read busy
+// and the extra line competes with the card's own edges. Dropped.
 export function VoucherIcon(props) {
   return (
     <Svg {...props}>
-      <path d="M2.5 12 L9 5 H19 A2.5 2.5 0 0 1 21.5 7.5 V16.5 A2.5 2.5 0 0 1 19 19 H9 Z" />
+      <rect x="2" y="7.5" width="20" height="13" rx="2.5" />
+      <path d="M12 7.5v13" />
+      <path d="M8 3.5 12 7.5 16 3.5" />
     </Svg>
   );
 }

@@ -2753,7 +2753,24 @@ function BookingApp({uid}){
     if(!ask) return;
     setVoucherAsk(null);
     const ok=withRedeemAsked(function(){
-      return ask.from==="form" ? (doSave(),true) : updateStatus(ask.id,ask.status);
+      if(ask.from!=="form") return updateStatus(ask.id,ask.status);
+      // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
+      // NOTHING — so the form path redeemed the voucher whether or not the
+      // booking saved, which is precisely the voucher-first failure the comment
+      // above says the ordering exists to prevent. `doSave` re-runs validation
+      // on re-entry, and validation is not frozen while the modal is open: the
+      // 15s tick grows a seated booking's live duration, so a manual-table save
+      // that was valid when the prompt appeared can fail when it is answered.
+      //
+      // The app already has the answer and it needed reading rather than
+      // building: `saveGuardRef` is set to DISPATCHED on the exact two lines
+      // that dispatch a save, so the guard IS "did this save land". Reading it
+      // leaves `doSave` — the most dangerous function in the app — untouched.
+      // An already-DISPATCHED guard also reads true, which is correct: that is
+      // the double-tap case, where the booking DID complete, and
+      // `redeemVoucher` is idempotent by booking id.
+      doSave();
+      return !mayDispatch(saveGuardRef.current);
     });
     if(!ok||!amount) return;
     const b=bookings.find(function(x){return x.id===ask.id;});

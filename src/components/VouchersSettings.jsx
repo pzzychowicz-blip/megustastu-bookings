@@ -35,7 +35,7 @@ import {
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
-import { Section, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, InlineAlert, Fld, mkInp, mkBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 
 // The four states, and the chip tone each reads as. `open` is the only one that
@@ -235,26 +235,31 @@ export function VouchersTabContent({
       <Section>
         <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, marginBottom: 8 }}>Issue a voucher</div>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-          <label style={{ flex: "1 1 120px", minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>{"Amount (" + currency + ")"}</span>
-            <input type="number" min={0} step={5} inputMode="decimal" value={amount}
-              onChange={function (e) { setAmount(e.target.value); }}
-              placeholder="50" className="mgt-hover-scale" style={mkInp()} />
-          </label>
-          <label style={{ flex: "2 1 200px", minWidth: 0 }}>
-            <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>Number (leave blank to generate)</span>
-            <input type="text" value={manualCode}
-              onChange={function (e) { setManualCode(e.target.value); }}
-              placeholder="from a printed book" autoCapitalize="characters" className="mgt-hover-scale" style={mkInp()} />
-          </label>
+        {/* `Fld`, not hand-written labels — /code-review v18.0.0, the same
+            defect reported against VoucherPicker. This tab had three of them,
+            each reproducing the atom's look by eye. The FUNCTION shape gives
+            every input a real `useId` association. */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 120px", minWidth: 0 }}>
+            <Fld label={"Amount (" + currency + ")"}>{function (fid) {
+              return <input id={fid} type="number" min={0} step={5} inputMode="decimal" value={amount}
+                onChange={function (e) { setAmount(e.target.value); }}
+                placeholder="50" className="mgt-hover-scale" style={mkInp()} />;
+            }}</Fld>
+          </div>
+          <div style={{ flex: "2 1 200px", minWidth: 0 }}>
+            <Fld label="Number (leave blank to generate)">{function (fid) {
+              return <input id={fid} type="text" value={manualCode}
+                onChange={function (e) { setManualCode(e.target.value); }}
+                placeholder="from a printed book" autoCapitalize="characters" className="mgt-hover-scale" style={mkInp()} />;
+            }}</Fld>
+          </div>
         </div>
 
-        <label style={{ display: "block", marginBottom: 8 }}>
-          <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>Notes (optional)</span>
-          <input type="text" value={notes} onChange={function (e) { setNotes(e.target.value); }}
-            placeholder="Birthday gift for Ana" className="mgt-hover-scale" style={mkInp()} />
-        </label>
+        <Fld label="Notes (optional)">{function (fid) {
+          return <input id={fid} type="text" value={notes} onChange={function (e) { setNotes(e.target.value); }}
+            placeholder="Birthday gift for Ana" className="mgt-hover-scale" style={mkInp()} />;
+        }}</Fld>
 
         <div style={{ fontSize: T.micro, color: S.muted, marginBottom: 8 }}>
           {"A typed number is used exactly as entered (" + MANUAL_CODE_MIN + "–" + MANUAL_CODE_MAX +

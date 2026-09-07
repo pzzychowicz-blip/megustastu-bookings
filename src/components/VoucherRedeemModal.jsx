@@ -37,7 +37,7 @@
 import { useState } from "react";
 import { S, R, T, FW } from "../lib/constants";
 import { formatCode, remainingOf, redeemableAmount, clampMoney } from "../lib/vouchers";
-import { Overlay, ModalTitle, InlineAlert, Reveal, mkInp, mkBtn, mkSolidBtn } from "./atoms";
+import { Overlay, ModalTitle, InlineAlert, Reveal, Fld, mkInp, mkBtn, mkSolidBtn } from "./atoms";
 
 export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedeem, onSkip, onClose }) {
   const max = remainingOf(voucher);
@@ -79,17 +79,24 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
           + max + " " + currency + " left on it."}
       </div>
 
-      <label style={{ display: "block", marginBottom: 4 }}>
-        <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>
-          {"How much of it did this bill use? (" + currency + ")"}
-        </span>
-        <input
-          type="number" min={0} max={max} step={1} inputMode="decimal"
-          value={amount}
-          onChange={function (e) { setAmount(e.target.value); setErr(""); }}
-          className="mgt-hover-scale"
-          style={mkInp()} />
-      </label>
+      {/* `Fld`, not a hand-written label — /code-review v18.0.0, the same
+          defect reported against VoucherPicker. Every other form surface in the
+          app (BlockModal, ReminderEditor, WalkinForm) uses this atom and
+          contains no raw labels at all; a second implementation reproduces its
+          look by eye and inherits none of its behaviour. The FUNCTION shape
+          gives the input a real `useId` association instead of relying on
+          implicit label wrapping. */}
+      <Fld label={"How much of it did this bill use? (" + currency + ")"}>{function (fid) {
+        return (
+          <input
+            id={fid}
+            type="number" min={0} max={max} step={1} inputMode="decimal"
+            value={amount}
+            onChange={function (e) { setAmount(e.target.value); setErr(""); }}
+            className="mgt-hover-scale"
+            style={mkInp()} />
+        );
+      }}</Fld>
 
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 10 }}>
         {left > 0
