@@ -14,6 +14,11 @@
 // Add or reorder tabs HERE ONLY — a hand-copied id list elsewhere is exactly
 // how the "arrow keys skip the new Customers tab" bug happened when the 5th
 // tab shipped. Never duplicate this list.
+// v18.0.0: `vouchers` is the 7th tab, after Customers. Same rationale as the
+// ordering below — General and Layout are what the restaurant IS, Customers and
+// Reminders are what it HOLDS, and vouchers are what it holds. Added HERE and
+// nowhere else: the ←/→ keyboard cycle derives from this list, which is exactly
+// what a hand-copied second list broke when the Customers tab shipped.
 // v17.11.0: `app` is the 6th tab — the eight controls that make the app
 // comfortable on YOUR screen, split out of a General tab that had reached 47
 // controls. Ordered after the restaurant's own configuration and its data, and
@@ -24,6 +29,7 @@ export const SETTINGS_TABS = [
   { id: "general",   label: "General" },
   { id: "layout",    label: "Layout" },
   { id: "customers", label: "Customers" },
+  { id: "vouchers",  label: "Vouchers" },
   { id: "reminders", label: "Reminders" },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },

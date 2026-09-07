@@ -29,6 +29,7 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
+import { VouchersTabContent } from "./VouchersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
 import { BTN, R, M, T, FW, H, IC } from "../lib/constants";
 
@@ -982,6 +983,11 @@ export function SettingsContent({
   bookings,
   waitlist,
   onDeleteCustomer,
+  vouchers,
+  voucherDefaults,
+  onIssueVoucher,
+  onVoidVoucher,
+  onSaveVoucherDefaults,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -1054,6 +1060,10 @@ export function SettingsContent({
   } else if (tab === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
     content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
+  } else if (tab === "vouchers") {
+    // v18.0.0: gift vouchers — the records AND their configuration, because a
+    // voucher setting is edited where vouchers are.
+    content = <VouchersTabContent vouchers={vouchers} bookings={bookings} currency={generalSettings ? generalSettings.currency : "€"} voucherDefaults={voucherDefaults} onIssue={onIssueVoucher} onVoid={onVoidVoucher} onSaveDefaults={onSaveVoucherDefaults} />;
   } else if (tab === "reminders") {
     content = (
       <RemindersTabContent

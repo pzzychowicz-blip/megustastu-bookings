@@ -257,6 +257,15 @@ import { useWalkin } from "./hooks/useWalkin";
 // entries. Active matching (does a table currently fit each entry?) is a
 // BookingApp effect → `waitAvail` state, derived via trialFits, not persisted.
 import { useWaitlist } from "./hooks/useWaitlist";
+// v18.0.0: gift vouchers — the 8th persisted collection, `/vouchers/{CODE}`
+// keyed by the code itself so uniqueness is a property of the storage. Its
+// write path is the /bookings per-child CAS, not the whole-node revGuard one;
+// see the hook's header for why the data forces that. `useVoucherDefaults`
+// owns the 9th settings node (settings/voucherDefaults): the default validity
+// period, edited in the Vouchers tab because a voucher setting belongs where
+// vouchers are.
+import { useVouchers } from "./hooks/useVouchers";
+import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 import { useRecurring } from "./hooks/useRecurring";
 // v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
 // listener (the whole kbRef machinery) live in useKeyboardShortcuts.js now.
@@ -1034,6 +1043,16 @@ function BookingApp({uid}){
   } = useReminders({ nowMins, setWriteWarning, reminderEditor, setReminderEditor, setConfirmReminderDel });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
   const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
+  // ── v18.0.0: Gift vouchers ──────────────────────────────────────────────────
+  // The email is read during render, the way ConnectionStatus reads it — it is
+  // stamped onto `issuedBy`/`by` at write time, and `BookingApp` is keyed on
+  // uid, so an account switch remounts the subtree rather than needing this to
+  // be reactive.
+  const { vouchers, issueVoucher, voidVoucher } = useVouchers({
+    setWriteWarning,
+    userEmail: (auth.currentUser && auth.currentUser.email) || "",
+  });
+  const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
@@ -3854,6 +3873,11 @@ function BookingApp({uid}){
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
+            vouchers={vouchers}
+            voucherDefaults={voucherDefaults}
+            onIssueVoucher={issueVoucher}
+            onVoidVoucher={voidVoucher}
+            onSaveVoucherDefaults={saveVoucherDefaults}
             tab={settingsTab}
             setTab={setSettingsTab}
             reminders={reminders}

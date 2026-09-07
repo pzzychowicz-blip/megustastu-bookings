@@ -19685,3 +19685,62 @@ snapshot nor writes a history entry.
 The import edge is `booking-logic.js → vouchers.js`, and it cannot close a cycle
 because `vouchers.js` imports nothing at all — which is why the module was
 written that way.
+
+### Commit 6 — the Vouchers tab, and the 9th settings node
+
+`src/hooks/useVoucherDefaults.js` · `src/components/VouchersSettings.jsx` ·
+the `SETTINGS_TABS` entry · `Settings.jsx` routing · `App.jsx` wiring. Gate:
+`93.76 → 95.98 kB` gz · 921 tests · 0 lint errors · style OK.
+
+The 7th tab, after Customers, and added to `SETTINGS_TABS` **and nowhere else** —
+the ←/→ keyboard cycle derives from that list, which is exactly what a
+hand-copied second list broke when the Customers tab shipped. It carries both
+the records and their configuration, which is the whole reason
+`settings/voucherDefaults` exists: a voucher setting is edited where vouchers
+are. The node is named `voucherDefaults` and not `vouchers` for the repo's own
+precedent — `/bookings` has `settings/bookingDefaults` and deliberately not
+`settings/bookings`.
+
+`expiryMonths: 0` means never, which is why the clamp floor is 0 rather than 1.
+A real position on the stepper, not an accident.
+
+**There is no delete in this tab, and the header says so at length** so the next
+reader does not "fix" it. Three layers agree: `useVouchers` has no delete
+function, its patch builder logs and drops a null, and the rules refuse one
+server-side.
+
+Two house rules caught while writing it, both by their own gates rather than by
+review:
+
+- **`FilterBtn` was defined inside the component body** — a new type on every
+  render, so React unmounts and remounts its whole subtree (the v15.8.0
+  `TimelineBlock` lesson). Hoisted to module scope, with `active`/`onPick` as
+  props.
+- **`Date.now()` was called during render**, twice, and lint said so. The
+  interesting half is not the impurity: `now` fed the `useMemo` dep arrays for
+  the filtered rows and the totals, and a value that changes every render
+  defeats a memo completely — worse than not having one. It is `useState(() =>
+  Date.now())` now, read once per mount, which is the right granularity anyway
+  since expiry is a day-scale concept and the panel is open for seconds.
+
+The focusable row also takes the `onMouseDown → preventDefault()` guard: making
+an element focusable makes the browser scroll it into view on mousedown, which
+moves it out from under the finger between press and release.
+
+**Verified live against DEV, and the honest result is partly a refusal.** What
+ran: the tab is reachable and renders; a zero amount is refused by
+`validateIssue` as an `InlineAlert` and writes nothing; issuing dispatches
+**exactly one** write, to `/vouchers`, as a multi-path update; opening the tab
+writes nothing on mount. What the server said: `PERMISSION_DENIED`, because the
+new rules are not published to the DEV project — and since v17.16.7 removed the
+root `.write` grant, a path with no rule of its own is simply unwritable. **That
+is the designed failure and it is the point of the restructure**: it fails
+loudly in DEV rather than working there and being unguarded in PROD. So the
+accepted-write path is the one thing here not verified against a live database;
+the rules that will accept it are verified against the emulator, which runs the
+real rules file. The DEV console step is Patryk's, per the plan's own
+per-phase rules deploy.
+
+A useful thing fell out of the refusal: the whole write-error path was exercised
+end to end, and `describeWriteError`'s banner named the right node with the
+right three candidate causes.
