@@ -20166,3 +20166,26 @@ existed in git history** (`git log --diff-filter=D` finds no deletion either —
 the keyboard surface is tested inside `modal-stack` and `a11y`), and omitted
 `db-error` and `vouchers`. A list maintained by hand drifts in both directions,
 which is the row above it, one file over.
+
+### Commit 15 — `/code-review` fix: the tenant guard five slugs walked past
+
+`TENANTS` is an object literal, so `TENANTS[tenantSlug]` resolves **inherited**
+keys. Measured in node: `toString`, `constructor`, `valueOf`, `hasOwnProperty`
+and `__proto__` all return something truthy, so `if (!tenant)` — the guard whose
+entire documented purpose is that an unknown slug must never fall through — was
+bypassable by five of them. The lookup is `Object.prototype.hasOwnProperty.call`
+now, and the same five throw the intended error; verified live, not only in a
+harness: `VITE_TENANT=constructor npx vite` produced
+`Cannot read properties of undefined (reading 'projectId')` from the boot line
+before the fix and `[firebase] Unknown VITE_TENANT "constructor". Known tenants:
+mgt` after it.
+
+The guard also checked EXISTENCE and not SHAPE, so a future tenant module
+missing either export passed it and failed somewhere else entirely — in PROD on
+`firebaseConfig.projectId`, in DEV on `profile.name` inside `useGeneralSettings`'
+module body, both naming the symptom rather than the cause. A second throw names
+the file and the two exports it must have.
+
+This is the repo's own recurring shape one more time: a guard that reads as
+exhaustive and is not, invisible in review because the bypass is a property of
+the language rather than of the code in front of you.

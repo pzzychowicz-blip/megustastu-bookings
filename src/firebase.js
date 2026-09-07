@@ -20,10 +20,12 @@
 // `VITE_TENANT` is set. The tenant selection changes which PROD project a BUILD
 // points at, and nothing else.
 //
-// An unknown slug THROWS rather than falling back. A typo'd tenant that
-// silently resolved to MGT would point one restaurant's build at another
-// restaurant's live bookings — the one failure mode this layer must not have,
-// and the boot watchdog in index.html turns the throw into a visible message.
+// An unknown slug THROWS rather than falling back, and so does a tenant module
+// of the wrong shape. A typo'd tenant that silently resolved to MGT would point
+// one restaurant's build at another restaurant's live bookings — the one failure
+// mode this layer must not have, and the boot watchdog in index.html turns the
+// throw into a visible message. See the `hasOwnProperty` note at the lookup:
+// the first version of that guard was bypassable by five inherited keys.
 //
 // Note on API keys: Firebase web API keys are NOT secrets — they
 // identify the project, they don't authorise access. Database Rules
@@ -41,11 +43,30 @@ import * as mgt from "./tenants/mgt";
 const TENANTS = { mgt };
 
 const tenantSlug = import.meta.env.VITE_TENANT || "mgt";
-const tenant = TENANTS[tenantSlug];
+
+// `hasOwnProperty`, not a bare `TENANTS[slug]`. An object literal inherits from
+// `Object.prototype`, so `TENANTS["toString"]` / `"constructor"` / `"valueOf"` /
+// `"hasOwnProperty"` / `"__proto__"` all return something TRUTHY — five slugs
+// that walked straight past the `if (!tenant)` below, which is the one thing
+// this guard exists to prevent. Measured, not reasoned about.
+//
+// And the shape is checked, not just the existence: a tenant module missing
+// either export would otherwise pass and fail later somewhere else — in PROD on
+// `firebaseConfig.projectId` in the boot line, in DEV on `profile.name` inside
+// `useGeneralSettings`' module body. Both name the symptom and not the cause.
+const tenant = Object.prototype.hasOwnProperty.call(TENANTS, tenantSlug)
+  ? TENANTS[tenantSlug]
+  : null;
 if (!tenant) {
   throw new Error(
     "[firebase] Unknown VITE_TENANT \"" + tenantSlug + "\". Known tenants: " +
     Object.keys(TENANTS).join(", ")
+  );
+}
+if (!tenant.firebaseConfig || !tenant.profile) {
+  throw new Error(
+    "[firebase] Tenant \"" + tenantSlug + "\" (src/tenants/" + tenantSlug +
+    ".js) must export both `firebaseConfig` and `profile`."
   );
 }
 
