@@ -20588,3 +20588,43 @@ byte-for-byte as before, which is the rolling-safe property this phase turns on.
 signed-in token), because DEV still runs the phase-1 rules where `/roles` has no
 rule and the root `.write` grant is gone. Publishing them needs an interactive
 `firebase login`. See the hand-off for what remains.
+
+### Commit 27 — the Capabilities modal eases its own height
+
+Every modal in the app eases a height change; this one jumped. Picking a
+different person in the Capabilities grid re-renders the whole right-hand pane,
+and the pane is a different height for each of them — only the cells in THEIR
+column are tickable, and a tick button is a 28px hit target (WCAG 2.5.8) against
+a 23px read-only row. Measured on DEV: admin 424px with 0 tick buttons, manager
+424px with 2, staff **447px** with 6. So the card resized by 23px in one frame,
+under the finger still pointing at the list it was clicked from.
+
+`<AutoHeight watch={shownId}>` around the two-pane body. **`watch` is not
+optional here** and the reason is v17.9.1's: the ResizeObserver AutoHeight
+normally runs on is one frame late by design, so on a whole-content SWAP the new
+pane paints unclipped for that frame before the box clips and transitions —
+"the content appears, then the panel snaps and re-grows". Settings' tab body
+passes its own `cur` for exactly this, which is the surface Patryk named as the
+reference.
+
+`shownId` is derived from the row actually being RENDERED, not from the
+`selectedUid` prop. The two differ on the first open — nothing is selected, so
+the grid falls back to `rows[0]` — and on any `rows` change that drops the
+selected person.
+
+**Verified live, both directions, frame-independently.** `box.getAnimations()`
+during a switch returns one running transition, `transitionProperty: "height"`,
+`duration: 385`, with the box mid-flight at 426 heading to 447 and at 445
+heading to 424, `overflow: hidden` throughout and `visible` once settled. A
+per-rAF trace agrees: 424 → 447 across 22 frames from 111ms to 485ms.
+
+One measurement lesson, because it cost the most time here. An earlier rAF trace
+of the same click showed a hard jump and no clip, and the code was innocent: a
+previous console experiment had replicated `visibleCap`'s probe by hand —
+writing `box.style.transition` and `box.style.height` directly — which left
+AutoHeight's internal `cRef`/`hRef` bookkeeping disagreeing with the DOM, so the
+next swap took the plain path. **What was measured was the tooling**, the same
+family as the synthetic `:active` press and the automation-tree accessible name.
+The instrumentation that settled it was a temporary `console.log` inside the
+atom's own layout effect, printing the `clampRange` decision — added, read,
+and reverted before the commit.

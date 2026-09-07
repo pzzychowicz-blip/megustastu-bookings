@@ -22,7 +22,7 @@
 
 import { useState } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
-import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
+import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
 import { CAPABILITIES, ROLES, ROLE_GRANTS, RULE_ENFORCED, displayName } from "../lib/roles";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
@@ -231,6 +231,11 @@ function CapabilityGrid({ row, onToggleExtra }) {
 // fails the build otherwise.
 export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose }) {
   const row = rows.find(function (r) { return (r.uid || r.inviteId) === selectedUid; }) || rows[0] || null;
+  // What the AutoHeight below re-measures on: the person actually being shown,
+  // not the `selectedUid` prop — those differ on the first open (nothing is
+  // selected, so the grid falls back to `rows[0]`) and on a `rows` change that
+  // drops the selected person.
+  const shownId = row ? (row.uid || row.inviteId) : null;
   return (
     <Overlay onClose={onClose} footer={
       // Right-aligned, like every other modal footer in the app — this one
@@ -252,6 +257,17 @@ export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose
         A level is a floor. Ticking a cell grants that one capability to that one
         person on top of their level &mdash; it never takes anything away.
       </p>
+      {/* Every other modal in the app eases its own height; this one jumped.
+          The grid is a different height for every person — only the cells in
+          THEIR column are tickable, and a tick button is a 28px hit target
+          against a 23px read-only row — so picking a manager after a staff
+          member resized the card by ~130px in one frame, under the finger that
+          was pointing at the list. `watch` is not optional here: the
+          ResizeObserver AutoHeight normally runs on is a frame late by design,
+          which on a whole-content SWAP lets the new grid paint unclipped for
+          that frame (the v17.9.1 finding, and exactly why Settings passes its
+          own `cur`). */}
+      <AutoHeight watch={shownId}>
       <div style={{ display: "flex", gap: SP.wide, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div role="group" aria-label="People" style={{ flex: "1 1 180px", minWidth: 0 }}>
           {rows.map(function (r) {
@@ -286,6 +302,7 @@ export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose
             : <p style={{ color: "var(--text-muted)", fontSize: T.body }}>Nobody has signed in yet.</p>}
         </div>
       </div>
+      </AutoHeight>
     </Overlay>
   );
 }
