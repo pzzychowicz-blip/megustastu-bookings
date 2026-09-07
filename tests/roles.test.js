@@ -19,6 +19,7 @@ import {
   sanitizeInvite, sanitizeInvites, normalizeEmail, wouldRemoveOwnAdmin,
   matchInvite, applyInviteFields, userRows, displayName,
 } from "../src/lib/roles.js";
+import { sanitizeAdminSettings, DEFAULT_ADMIN_SETTINGS, inviteIdFor } from "../src/hooks/useRoles.js";
 
 const entry = (o = {}) => sanitizeRole(Object.assign({ uid: "u1", email: "a@b.c" }, o), "u1");
 
@@ -326,5 +327,51 @@ describe("userRows — what the left pane lists", () => {
     expect(displayName({ email: "e", uid: "u" })).toBe("e");
     expect(displayName({ uid: "u" })).toBe("u");
     expect(displayName({})).toBe("");
+  });
+});
+
+// ── The hook's two pure exports ─────────────────────────────────────────────
+// Imported from the hook file, the way tests/prefs.test.js reads PREF_SPEC out
+// of useUserPrefs.js. Nothing here mounts anything — these are the parts whose
+// correctness is a property of a string rather than of React.
+describe("sanitizeAdminSettings — absent reads as OFF", () => {
+  it("defaults enforceRoles to false", () => {
+    // The production state on the day this deploys is that the node does not
+    // exist, and the whole rolling-deploy argument rests on that reading as off.
+    expect(DEFAULT_ADMIN_SETTINGS.enforceRoles).toBe(false);
+    expect(sanitizeAdminSettings(null).enforceRoles).toBe(false);
+    expect(sanitizeAdminSettings({}).enforceRoles).toBe(false);
+    expect(sanitizeAdminSettings({ v: 1 }).enforceRoles).toBe(false);
+  });
+
+  it("accepts ONLY boolean true — the rules test `.val() !== true`", () => {
+    // A client reading "false" or 1 as ON would hide controls the database is
+    // still accepting; reading them as OFF matches the server exactly. The
+    // agreement is the point, not the truthiness.
+    expect(sanitizeAdminSettings({ enforceRoles: true }).enforceRoles).toBe(true);
+    ["true", 1, "yes", {}].forEach((v) => {
+      expect(sanitizeAdminSettings({ enforceRoles: v }).enforceRoles).toBe(false);
+    });
+  });
+
+  it("keeps the v marker, so RTDB cannot drop the node", () => {
+    expect(sanitizeAdminSettings({ enforceRoles: false }).v).toBe(1);
+  });
+});
+
+describe("inviteIdFor — an email is not a legal RTDB key", () => {
+  it("strips every character RTDB forbids", () => {
+    // `. $ # [ ] /` are illegal in a key, and every real address has a dot — so
+    // a raw email as a key is a write that always fails.
+    const id = inviteIdFor("Ana.Lopez+staff@example.co.uk");
+    expect(id).not.toMatch(/[.$#[\]/]/);
+    expect(id).toBe("e_ana_lopez+staff_example_co_uk");
+  });
+
+  it("is DETERMINISTIC, so two admins inviting one person do not fork", () => {
+    // Same reasoning as the deterministic recurring-occurrence ids: two devices
+    // write the SAME path, so the second is refused by the CAS instead of
+    // creating a duplicate invitation nobody can tell apart.
+    expect(inviteIdFor("ana@b.c")).toBe(inviteIdFor("  ANA@B.C  "));
   });
 });
