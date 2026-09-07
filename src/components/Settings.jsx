@@ -32,7 +32,8 @@ import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, APP_NAME } from "../lib/constants";
-import { profile } from "../firebase"; // v18.0.0 phase 2: the selected tenant, for the general-settings fallback
+// v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
+import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -466,11 +467,16 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
     ? bookingDefaults
     : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true, turnaroundEnabled: false, turnaroundMin: 15 };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
-  // v17.0.0: general settings (settings/general). Defensive fallback mirrors
-  // the hook's DEFAULT_GENERAL_SETTINGS seed.
+  // v17.0.0: general settings (settings/general). Defensive fallback IS the
+  // hook's seed — v18.0.0 phase 2's /code-review replaced a hand-typed copy of
+  // it. That copy had ten fields, phase 2 updated one of them to read from the
+  // tenant profile and left nine literals behind, and its own comment said it
+  // "mirrors" the seed while nothing enforced the mirroring. Reached only when
+  // `generalSettings` is not an object, so a drift here would never surface in
+  // normal use or in any test — only in the degraded state it exists for.
   const gs = generalSettings && typeof generalSettings === "object"
     ? generalSettings
-    : { restaurantName: profile.name, currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10, defaultBookingSize: 2, defaultWalkinSize: 2 };
+    : DEFAULT_GENERAL_SETTINGS;
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;

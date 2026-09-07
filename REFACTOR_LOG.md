@@ -20237,3 +20237,33 @@ v17.15.1 `csp.test.js` failure, which this test's header cited while repeating
 its shape. Verified: an HTML comment mentioning a literal `<title>` inserted
 above line 22 now fails the title test, where before it would have shadowed the
 real one and passed on bytes nobody was guarding.
+
+### Commit 18 — `/code-review` fix: the fallback that was a hand-typed seed
+
+`GeneralTabContent`'s defensive fallback was a second, hand-typed copy of
+`DEFAULT_GENERAL_SETTINGS` — ten fields, of which commit 12 updated one to read
+from the tenant profile and left nine literals standing. Its own comment said it
+"mirrors the hook's DEFAULT_GENERAL_SETTINGS seed" and nothing enforced the
+mirroring, which is the defect class the `APP_NAME` work in this same phase
+exists to remove, one object over. It now IS the seed.
+
+Worth stating why it would never have been caught: the branch is reached only
+when `generalSettings` is not an object, so a drift between the two — changing
+`waitMatchWin` from 90 in the hook, say, exactly the tuning that node exists for
+— would show up in neither normal use nor any test, only in the degraded state
+the fallback was written for. `gs.v` is read nowhere, so gaining the seed's `v:1`
+changes nothing. The now-unused `profile` import went with it.
+
+Verified in the running app on a FRESH tab: Settings opens, the General tab
+renders, the footer reads "© 2026 Patryk Zychowicz — MGT Bookings", no console
+errors.
+
+**A note on that "fresh tab", because it cost two false alarms.** The Preview
+bridge's console buffer PERSISTS ACROSS `navigate` in the same tab, so errors
+from the mid-edit HMR window kept being reported after a full reload — the
+give-away was the module timestamps (`?t=1788796364887` on the error against
+`?t=1788796698725` on the module actually being served). Twice this looked like
+a live `ReferenceError` in code that builds, lints and tests clean. Open a NEW
+tab before believing a console error that a reload did not clear: it is the
+"what you measured was the tooling" family the Gotchas table already records for
+synthetic presses and automation accessibility trees.
