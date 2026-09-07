@@ -31,9 +31,21 @@ session and keeping it in sync.
   bug — which is why the review deleted the unused write path rather than
   wiring it to a control nobody asked for.
 
+- **The static files still name MGT.** `public/manifest.webmanifest`'s
+  `description` reads *"Staff booking management for Me Gustas Tú"* — the PWA
+  install card and the home-screen add sheet. v18.0.0 phase 2 made the app's own
+  name one constant and pinned `index.html`'s `<title>` and the manifest's
+  `name`/`short_name` to it, but a RESTAURANT name in a static file is a
+  different problem: those files import nothing, so a per-tenant value there is
+  a build step, not a constant. The icon family (`scripts/gen-icons.py`,
+  `public/icon*.png`) is the same question one size up. Deferred rather than
+  genericised, on Patryk's call — dropping the restaurant's name from MGT's
+  install card today would make the manifest say less than it does now, for a
+  tenant that does not exist yet.
+
 ## Designed, not implemented
 
-> The four entries below are one approved plan, written 2026-09-07 against
+> The three entries below are one approved plan, written 2026-09-07 against
 > v17.16.13 and shipping as **one release, v18.0.0**, on one branch across seven
 > sessions. **The plan is
 > `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`** — phase order and
@@ -42,14 +54,6 @@ session and keeping it in sync.
 > (2026-09-05), which stays on disk as the record of the four-version split and
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
-
-- **Tenant configuration layer (v18.0.0 phase 2).** `VITE_TENANT` selects a config
-  module under `src/tenants/`, each exporting `{ firebaseConfig, profile }`; the
-  `import.meta.env.DEV` split is preserved exactly, so localhost can never reach
-  any tenant's production database. One `APP_NAME` constant replaces four
-  hand-typed copies of the app's own name, one of which had already drifted to a
-  third spelling. `.firebaserc` + `npm run rules:deploy` make the rules deploy
-  repeatable, without removing this release's own manual console step.
 
 - **Roles and the Admin tab (v18.0.0 phase 3).** `/roles/{uid}` + `/invites`,
   three levels named `staff`/`manager`/`admin` in code and UI alike, per-user

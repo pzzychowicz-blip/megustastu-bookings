@@ -251,6 +251,8 @@ Where the real ambiguity lives.
 | "Data removed" | **anonymised booking** (`anonymized`) | Deleting a customer keeps the stats and wipes the identity. |
 | The green dot / amber dot / red dot | **connection state** | Green connected · amber **connecting** (never handshaked) · red lost. The three are distinct on purpose. |
 | Other devices in the popover | **presence** (`usePresence.js`) | Ephemeral, per-connection. A device is "connected" only inside a 150s staleness window. |
+| "MGT Bookings" vs "Me Gustas Tú" | **app name** (`APP_NAME`) vs **restaurant name** (`settings/general.restaurantName`) | Two different things, and confusing them has shipped a bug (v17.15.2: the printed day-sheet footer built the app's name out of a restaurant setting). `APP_NAME` is one constant in `lib/constants.js`; the restaurant name is configurable and seeds from the tenant profile. A fallback from one to the other is fine; a **composition** of the two is not. |
+| Which restaurant this build is for | **tenant** (`VITE_TENANT`, `src/tenants/<slug>.js`, `profile`) | One module per restaurant, exporting `{ firebaseConfig, profile }` — the profile carries `slug`, `name`, `locale`, `waContext`. Selects the PRODUCTION project only: `import.meta.env.DEV` still forces the one shared DEV sandbox, whatever the tenant. Shown in the boot banner beside the DEV/PROD badge. |
 
 ---
 

@@ -20137,3 +20137,32 @@ explicitly. **149 tests pass with the file in place**, so the emulator rig is
 untouched. (It first failed on a missing `@firebase/rules-unit-testing`: this
 worktree's `node_modules` predated that devDependency. `npm install` fixed it and
 left `package-lock.json` unchanged — a stale install, not a change to anything.)
+
+### Commit 14 — the living docs catch up with the tenant layer
+
+`CLAUDE.md` gains `src/tenants/` in the file-structure block and a rewritten
+`firebase.js` line (the tenant selection, and the ORDER that preserves the
+DEV/PROD split); the Project section's app-vs-restaurant paragraph, which
+v17.15.2 opened, is finished in both directions. `GLOSSARY.md` gains two rows —
+**app name vs restaurant name**, and **tenant** — in §8, where the real ambiguity
+lives. `DESIGN.md` is untouched: nothing here changes a token, a surface or a
+motion value. `ROADMAP.md` loses the phase-2 entry (shipped) and gains one:
+`public/manifest.webmanifest`'s `description` still names the restaurant, which
+is a build-step problem rather than a constant, deferred on Patryk's call rather
+than genericised.
+
+A new Gotchas row, because the lesson outlives the fix: **N hand-typed copies of
+one STRING are invisible to every gate in this repo.** `check:style` sees colour
+and geometry literals, the contrast registry sees registered pairs, lint sees
+imports — none of them can see that three copies of a name disagree, and each
+copy reads correctly on its own line. It is the modal-list defect one type over.
+
+**And the test-count line was re-measured rather than incremented**, which is
+what that line asks for and what nobody had done. It said "847 tests as of
+v17.16.13"; the branch is at **26 files, 937 tests**, and the rules suite at
+**149** against a claimed 127. Measuring also caught three errors the file's own
+list had carried for versions: it named a `keyboard` test file that **has never
+existed in git history** (`git log --diff-filter=D` finds no deletion either —
+the keyboard surface is tested inside `modal-stack` and `a11y`), and omitted
+`db-error` and `vouchers`. A list maintained by hand drifts in both directions,
+which is the row above it, one file over.
