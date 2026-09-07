@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:rules": "PATH=\"/opt/homebrew/opt/openjdk/bin:$PATH\" firebase emulators:exec --only database --project demo-mgt-bookings \"vitest run --config vitest.rules.config.js\"",
+    "rules:deploy": "firebase deploy --only database --project",
     "check:style": "node scripts/check-style-invariants.mjs",
     "test:watch": "vitest"
   },

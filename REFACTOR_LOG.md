@@ -20099,3 +20099,41 @@ The manifest's `description` still names the restaurant ("Staff booking
 management for Me Gustas Tú") and is deliberately untouched — per-tenant text is
 a different problem from a drifted copy of the app's name, and it is on
 `ROADMAP.md`.
+
+### Commit 13 — `.firebaserc` and `npm run rules:deploy`
+
+Plan §2.3. `.firebaserc` did not exist; the rules have been applied by pasting
+into the Firebase console since v15.3.0. Two aliases (`mgt-dev` →
+`megustastu-bookings-dev`, `mgt-prod` → `megustastu-bookings`) plus
+`npm run rules:deploy -- <alias>` wrapping
+`firebase deploy --only database --project <alias>`. `firebase.json` already
+pointed at `database.rules.json`, so nothing there moved.
+
+**This does not remove v18.0.0's own console step** — it makes it repeatable for
+later releases, and it makes "the rules that were published" and "the rules in
+this file" the same bytes by construction rather than by a careful paste.
+`database.rules.README.md` now opens with both routes; every per-version
+Deployment section below it still describes the console one, because that is how
+each of those was actually published.
+
+**Three properties, all verified with read-only commands rather than by
+deploying anything:**
+
+- `.firebaserc` declares **no default alias**, so a bare `npm run rules:deploy`
+  fails with `option '-P, --project <alias_or_project_id>' argument missing`
+  before contacting anything. There is nothing to fall back to.
+- `firebase target --project mgt-dev` / `mgt-prod` resolve to
+  `megustastu-bookings-dev` / `megustastu-bookings` — the aliases are right.
+- **An unknown alias is passed through as a literal project id**, not rejected:
+  `--project nope` resolves to a project called `nope`. So a typo fails at the
+  API rather than at the CLI, and cannot reach the wrong one of the two real
+  projects. Written into the runbook because discovering it during a deploy is
+  the wrong moment.
+
+`npm run test:rules` was run even though the four gate commands do not require it
+here — `.firebaserc` is exactly the kind of file that could change how the CLI
+resolves a project, and `test:rules` passes `--project demo-mgt-bookings`
+explicitly. **149 tests pass with the file in place**, so the emulator rig is
+untouched. (It first failed on a missing `@firebase/rules-unit-testing`: this
+worktree's `node_modules` predated that devDependency. `npm install` fixed it and
+left `package-lock.json` unchanged — a stale install, not a change to anything.)

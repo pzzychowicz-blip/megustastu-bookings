@@ -1,9 +1,49 @@
 # Firebase Realtime Database — Security Rules (source of truth)
 
 `database.rules.json` in this repo is the **version-controlled source of truth** for the
-RTDB Security Rules. The rules are still applied **manually** via the Firebase console
-(Realtime Database → Rules → paste → Publish) — this file is the canonical copy to paste
-from and to diff against.
+RTDB Security Rules. There are now **two routes** to apply them, and every per-version
+"Deployment" section below describes the console one because that is how every release
+up to and including v18.0.0 was published.
+
+## Applying the rules — two routes
+
+**1 · The Firebase console** (Realtime Database → Rules → paste → Publish). Paste from
+`database.rules.json`; this file is also the canonical copy to diff against. Used for
+every release so far, and for v18.0.0's own deploy.
+
+**2 · `npm run rules:deploy -- <alias>`** (v18.0.0 phase 2). Wraps
+`firebase deploy --only database --project <alias>`, with the aliases in `.firebaserc`:
+
+| alias | project |
+|---|---|
+| `mgt-dev` | `megustastu-bookings-dev` |
+| `mgt-prod` | `megustastu-bookings` |
+
+```bash
+npm run rules:deploy -- mgt-dev     # the shared DEV sandbox
+npm run rules:deploy -- mgt-prod    # PRODUCTION — the restaurant's live data
+```
+
+Needs `firebase login` once per machine (the same global `firebase-tools` the emulator
+uses — see Prerequisites).
+
+**This does not remove the console step from v18.0.0** — it makes it repeatable for
+later releases. What it changes is that "the rules that were published" and "the rules
+in this file" become the same bytes by construction rather than by a careful paste.
+
+Three properties worth knowing before using it:
+
+- **`.firebaserc` deliberately declares NO default alias.** Omit the alias and the
+  command fails with `option '-P, --project <alias_or_project_id>' argument missing`
+  before contacting anything — verified. There is nothing for a bare
+  `npm run rules:deploy` to fall back to, which is the point.
+- **An alias that is not in `.firebaserc` is passed through as a literal project id**
+  — also verified: `--project nope` resolves to a project called `nope` rather than
+  erroring. A typo therefore fails at the API rather than at the CLI, and cannot reach
+  the wrong one of these two projects. Read the alias back before pressing enter.
+- **The order is unchanged: app first, rules second** (or rules at any time, where the
+  per-version section below says so). A faster deploy route does not make a deploy
+  safe to do in the other order.
 
 ## Testing the rules — the local emulator (the THIRD environment)
 
