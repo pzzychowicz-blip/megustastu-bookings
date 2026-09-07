@@ -1,0 +1,398 @@
+// tests/vouchers.test.js
+//
+// v18.0.0 phase 1 — the voucher model's pure core.
+//
+// The whole model is testable before anything renders, which is why this file
+// exists before the hook and the UI. What it pins is mostly the set of things
+// that would be silently wrong rather than loudly broken: a normaliser that
+// destroys a printed number, a generator that re-issues a number, a state
+// function that reads a voided voucher as spendable, and an expiry that hands
+// out days it did not mean to.
+
+import { describe, it, expect } from "vitest";
+import {
+  CODE_ALPHABET, CODE_LENGTH, MANUAL_CODE_MIN, MANUAL_CODE_MAX,
+  normalizeCode, isValidCode, formatCode, generateCode, codeSet,
+  clampMoney, valueOf, remainingOf, redeemedTotal,
+  expiryFrom, isExpired, voucherState, isRedeemedBy, canAttach,
+  attachedElsewhere, isUnsettled,
+  sanitizeVoucher, sanitizeVouchers, voucherIndex,
+} from "../src/lib/vouchers.js";
+
+function v(o) {
+  return Object.assign(
+    { code: "ABCD2345", value: 50, remaining: 50, status: "open", expiresAt: null, redemptions: {} },
+    o
+  );
+}
+
+// A deterministic stand-in for Math.random: walks a list of 0..1 values.
+function seq(values) {
+  let i = 0;
+  return () => values[i++ % values.length];
+}
+
+describe("normalizeCode", () => {
+  it("resolves the three spellings of one code to one child", () => {
+    expect(normalizeCode("abcd 2345")).toBe("ABCD2345");
+    expect(normalizeCode("ABCD-2345")).toBe("ABCD2345");
+    expect(normalizeCode("ABCD2345")).toBe("ABCD2345");
+  });
+
+  it("KEEPS every alphanumeric — a printed book's number survives intact", () => {
+    // The regression this whole design turns on. Under the plan's original
+    // wording ("strip everything outside the alphabet") these lost 0 and 1:
+    // "0001234" became "234", "LOT-1001" became "T", and "0001234" collided
+    // with "1234".
+    expect(normalizeCode("0001234")).toBe("0001234");
+    expect(normalizeCode("LOT-1001")).toBe("LOT1001");
+    expect(normalizeCode("1234")).toBe("1234");
+    expect(normalizeCode("0001234")).not.toBe(normalizeCode("1234"));
+  });
+
+  it("strips only punctuation and whitespace, and survives non-strings", () => {
+    expect(normalizeCode("  a.b/c#d  ")).toBe("ABCD");
+    expect(normalizeCode(1234)).toBe("1234");
+    expect(normalizeCode(null)).toBe("");
+    expect(normalizeCode(undefined)).toBe("");
+    expect(normalizeCode("")).toBe("");
+  });
+
+  it("never emits a character RTDB refuses in a key", () => {
+    const out = normalizeCode("a.b#c$d[e]f/g");
+    expect(out).toBe("ABCDEFG");
+    expect(/[.#$[\]/]/.test(out)).toBe(false);
+  });
+});
+
+describe("isValidCode", () => {
+  it("bounds a manual code rather than truncating it", () => {
+    expect(isValidCode("AB")).toBe(false);              // under MANUAL_CODE_MIN
+    expect(isValidCode("ABC")).toBe(true);              // at the floor
+    expect(isValidCode("A".repeat(MANUAL_CODE_MAX))).toBe(true);
+    expect(isValidCode("A".repeat(MANUAL_CODE_MAX + 1))).toBe(false);
+    expect(isValidCode("")).toBe(false);
+    expect(isValidCode("--")).toBe(false);              // normalises to empty
+  });
+
+  it("MANUAL_CODE_MIN is at least 3 and the ceiling is far under RTDB's key limit", () => {
+    expect(MANUAL_CODE_MIN).toBeGreaterThanOrEqual(3);
+    expect(MANUAL_CODE_MAX).toBeLessThan(768);
+  });
+});
+
+describe("formatCode", () => {
+  it("groups a generated code and leaves a manual one as typed", () => {
+    expect(formatCode("ABCD2345")).toBe("ABCD-2345");
+    expect(formatCode("abcd-2345")).toBe("ABCD-2345");
+    // Not CODE_LENGTH: shown verbatim, so it matches the physical voucher.
+    expect(formatCode("LOT1001")).toBe("LOT1001");
+    expect(formatCode("0001234")).toBe("0001234");
+    expect(formatCode("")).toBe("");
+  });
+});
+
+describe("generateCode", () => {
+  it("emits CODE_LENGTH characters, all from the unambiguous alphabet", () => {
+    for (let i = 0; i < 200; i++) {
+      const c = generateCode([]);
+      expect(c).toHaveLength(CODE_LENGTH);
+      for (const ch of c) expect(CODE_ALPHABET).toContain(ch);
+    }
+  });
+
+  it("never emits a character a human confuses reading it out", () => {
+    expect(CODE_ALPHABET).not.toMatch(/[01ILO]/);
+    const joined = Array.from({ length: 300 }, () => generateCode([])).join("");
+    expect(joined).not.toMatch(/[01ILO]/);
+  });
+
+  it("retries past a code already in use — the collision path, not the odds", () => {
+    // First roll lands on AAAAAAAA (index 0 eight times), which is taken;
+    // second lands on BBBBBBBB.
+    const rnd = seq([0, 0, 0, 0, 0, 0, 0, 0, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31]);
+    expect(generateCode(["AAAAAAAA"], rnd)).toBe("BBBBBBBB");
+  });
+
+  it("excludes a VOIDED number — the reason a voucher is never deleted", () => {
+    const rnd = seq([0, 0, 0, 0, 0, 0, 0, 0, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31]);
+    const existing = { AAAAAAAA: { code: "AAAAAAAA", status: "void", remaining: 0 } };
+    expect(generateCode(existing, rnd)).toBe("BBBBBBBB");
+  });
+
+  it("excludes a MANUAL number, so the generator can never mint one twice", () => {
+    const rnd = seq([0, 0, 0, 0, 0, 0, 0, 0, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31, 1 / 31]);
+    expect(generateCode(["AAAAAAAA"], rnd)).toBe("BBBBBBBB");
+    expect(generateCode([{ code: "aaaa-aaaa" }], rnd)).toBe("BBBBBBBB");
+  });
+
+  it("returns null rather than throwing when every try collides", () => {
+    const rnd = () => 0; // always AAAAAAAA
+    expect(generateCode(["AAAAAAAA"], rnd)).toBe(null);
+  });
+});
+
+describe("codeSet", () => {
+  it("accepts the four shapes a call site actually holds", () => {
+    expect(codeSet(["ab-cd"]).has("ABCD")).toBe(true);
+    expect(codeSet([{ code: "ab cd" }]).has("ABCD")).toBe(true);
+    expect(codeSet(new Set(["abcd"])).has("ABCD")).toBe(true);
+    expect(codeSet({ ABCD: { value: 10 } }).has("ABCD")).toBe(true);
+    expect(codeSet(null).size).toBe(0);
+  });
+
+  it("takes the KEY as authoritative when a row's echoed code is missing", () => {
+    const s = codeSet({ ZZZZ1111: { value: 10 } });
+    expect(s.has("ZZZZ1111")).toBe(true);
+  });
+});
+
+describe("money", () => {
+  it("clamps a string, a null, a NaN and a negative in one expression", () => {
+    expect(clampMoney("25")).toBe(25);
+    expect(clampMoney(null)).toBe(0);
+    expect(clampMoney(NaN)).toBe(0);
+    expect(clampMoney(-5)).toBe(0);
+    expect(clampMoney(undefined)).toBe(0);
+    expect(clampMoney("abc")).toBe(0);
+  });
+
+  it("valueOf / remainingOf survive a missing voucher", () => {
+    expect(valueOf(null)).toBe(0);
+    expect(remainingOf(null)).toBe(0);
+    expect(remainingOf(v({ remaining: -3 }))).toBe(0);
+  });
+
+  it("redeemedTotal is derived from the ledger, never stored", () => {
+    expect(redeemedTotal(v({ redemptions: { b1: { amount: 20 }, b2: { amount: 10 } } }))).toBe(30);
+    expect(redeemedTotal(v({ redemptions: {} }))).toBe(0);
+    expect(redeemedTotal(v({ redemptions: null }))).toBe(0);
+    expect(redeemedTotal(v({ redemptions: { b1: { amount: "bad" } } }))).toBe(0);
+  });
+});
+
+describe("expiryFrom", () => {
+  it("lands on the end of the target day, not the moment of issue", () => {
+    const issued = new Date(2026, 0, 15, 21, 0, 0).getTime(); // 15 Jan 2026, 21:00
+    const e = new Date(expiryFrom(issued, 12));
+    expect(e.getFullYear()).toBe(2027);
+    expect(e.getMonth()).toBe(0);
+    expect(e.getDate()).toBe(15);
+    expect(e.getHours()).toBe(23);
+    expect(e.getMinutes()).toBe(59);
+  });
+
+  it("CLAMPS a day-of-month the target month does not have", () => {
+    // Date.setMonth alone turns 31 Jan + 1 month into 3 March.
+    const e = new Date(expiryFrom(new Date(2026, 0, 31, 12).getTime(), 1));
+    expect(e.getMonth()).toBe(1);   // February
+    expect(e.getDate()).toBe(28);   // 2026 is not a leap year
+  });
+
+  it("clamps into a leap February too", () => {
+    const e = new Date(expiryFrom(new Date(2024, 0, 31, 12).getTime(), 1));
+    expect(e.getMonth()).toBe(1);
+    expect(e.getDate()).toBe(29);
+  });
+
+  it("months <= 0 means never", () => {
+    expect(expiryFrom(Date.now(), 0)).toBe(null);
+    expect(expiryFrom(Date.now(), -1)).toBe(null);
+  });
+});
+
+describe("isExpired", () => {
+  const now = new Date(2026, 5, 1).getTime();
+  it("a null expiry never expires", () => {
+    expect(isExpired(v({ expiresAt: null }), now)).toBe(false);
+    expect(isExpired(v({ expiresAt: undefined }), now)).toBe(false);
+    expect(isExpired(v({ expiresAt: "" }), now)).toBe(false);
+  });
+  it("compares against the stored instant", () => {
+    expect(isExpired(v({ expiresAt: now - 1 }), now)).toBe(true);
+    expect(isExpired(v({ expiresAt: now + 1 }), now)).toBe(false);
+    expect(isExpired(v({ expiresAt: now }), now)).toBe(false); // usable on the boundary
+  });
+  it("an unparseable expiry does not expire the voucher", () => {
+    expect(isExpired(v({ expiresAt: "soon" }), now)).toBe(false);
+  });
+});
+
+describe("voucherState", () => {
+  const now = new Date(2026, 5, 1).getTime();
+
+  it("open is the ordinary case", () => {
+    expect(voucherState(v(), now)).toBe("open");
+  });
+
+  it("void wins over everything, including a positive balance", () => {
+    expect(voucherState(v({ status: "void" }), now)).toBe("void");
+    expect(voucherState(v({ status: "void", remaining: 50, expiresAt: now - 1 }), now)).toBe("void");
+  });
+
+  it("spent beats expired — a voucher can be both, and spent is the story", () => {
+    expect(voucherState(v({ remaining: 0, expiresAt: now - 1 }), now)).toBe("spent");
+    expect(voucherState(v({ remaining: 0 }), now)).toBe("spent");
+  });
+
+  it("expired only once the balance is still positive", () => {
+    expect(voucherState(v({ remaining: 20, expiresAt: now - 1 }), now)).toBe("expired");
+  });
+
+  it("a missing voucher reads as void, never as open", () => {
+    expect(voucherState(null, now)).toBe("void");
+    expect(voucherState(undefined, now)).toBe("void");
+  });
+});
+
+describe("canAttach / isRedeemedBy", () => {
+  const now = new Date(2026, 5, 1).getTime();
+
+  it("an open voucher attaches", () => {
+    expect(canAttach(v(), "b1", now)).toBe(true);
+  });
+
+  it("void, spent and expired do not", () => {
+    expect(canAttach(v({ status: "void" }), "b1", now)).toBe(false);
+    expect(canAttach(v({ remaining: 0 }), "b1", now)).toBe(false);
+    expect(canAttach(v({ expiresAt: now - 1 }), "b1", now)).toBe(false);
+    expect(canAttach(null, "b1", now)).toBe(false);
+  });
+
+  it("a booking that already spent it KEEPS its link at zero remaining", () => {
+    // Otherwise editing the booking that spent the last of a voucher would be
+    // told the voucher is spent and made to drop a record of what happened.
+    const spent = v({ remaining: 0, redemptions: { b1: { amount: 50 } } });
+    expect(canAttach(spent, "b1", now)).toBe(true);
+    expect(canAttach(spent, "b2", now)).toBe(false);
+  });
+
+  it("isRedeemedBy needs both a ledger entry and a booking id", () => {
+    expect(isRedeemedBy(v({ redemptions: { b1: { amount: 5 } } }), "b1")).toBe(true);
+    expect(isRedeemedBy(v({ redemptions: { b1: { amount: 5 } } }), "b2")).toBe(false);
+    expect(isRedeemedBy(v(), "b1")).toBe(false);
+    expect(isRedeemedBy(v({ redemptions: { b1: { amount: 5 } } }), "")).toBe(false);
+  });
+});
+
+describe("attachedElsewhere", () => {
+  const bk = (o) => Object.assign({ id: "b1", status: "confirmed", voucherCode: "" }, o);
+
+  it("finds a live booking holding the same code", () => {
+    const list = [bk({ id: "b1", voucherCode: "ABCD2345" }), bk({ id: "b2" })];
+    expect(attachedElsewhere(list, "abcd-2345", "b2").id).toBe("b1");
+  });
+
+  it("does not report the booking asking the question", () => {
+    const list = [bk({ id: "b1", voucherCode: "ABCD2345" })];
+    expect(attachedElsewhere(list, "ABCD2345", "b1")).toBe(null);
+  });
+
+  it("a terminal booking's link is a record, not a live claim", () => {
+    const done = [bk({ id: "b1", voucherCode: "ABCD2345", status: "completed" })];
+    const gone = [bk({ id: "b1", voucherCode: "ABCD2345", status: "cancelled" })];
+    expect(attachedElsewhere(done, "ABCD2345", "b2")).toBe(null);
+    expect(attachedElsewhere(gone, "ABCD2345", "b2")).toBe(null);
+  });
+
+  it("a seated booking IS a live claim", () => {
+    const seated = [bk({ id: "b1", voucherCode: "ABCD2345", status: "seated" })];
+    expect(attachedElsewhere(seated, "ABCD2345", "b2").id).toBe("b1");
+  });
+
+  it("survives a missing code or a missing list", () => {
+    expect(attachedElsewhere([], "ABCD2345", "b1")).toBe(null);
+    expect(attachedElsewhere(null, "ABCD2345", "b1")).toBe(null);
+    expect(attachedElsewhere([bk({})], "", "b1")).toBe(null);
+  });
+});
+
+describe("isUnsettled", () => {
+  const idx = { ABCD2345: v({ redemptions: {} }) };
+  const settled = { ABCD2345: v({ redemptions: { b1: { amount: 50 } } }) };
+  const bk = (o) => Object.assign({ id: "b1", status: "completed", voucherCode: "ABCD2345" }, o);
+
+  it("a completed booking with an unredeemed voucher is unsettled", () => {
+    // Exactly what the close-time auto-complete leaves behind: it flips a
+    // seated booking to completed with nobody present, and must never redeem.
+    expect(isUnsettled(bk(), idx)).toBe(true);
+  });
+
+  it("a redeemed one is not", () => {
+    expect(isUnsettled(bk(), settled)).toBe(false);
+  });
+
+  it("only a COMPLETED booking can be unsettled", () => {
+    expect(isUnsettled(bk({ status: "seated" }), idx)).toBe(false);
+    expect(isUnsettled(bk({ status: "confirmed" }), idx)).toBe(false);
+    expect(isUnsettled(bk({ status: "cancelled" }), idx)).toBe(false);
+  });
+
+  it("no voucher, no unknown code, no crash", () => {
+    expect(isUnsettled(bk({ voucherCode: "" }), idx)).toBe(false);
+    expect(isUnsettled(bk({ voucherCode: "NOPE9999" }), idx)).toBe(false);
+    expect(isUnsettled(null, idx)).toBe(false);
+    expect(isUnsettled(bk(), null)).toBe(false);
+  });
+});
+
+describe("sanitizeVoucher", () => {
+  it("takes the CHILD KEY as the identity, not the stored echo", () => {
+    // v17.16.13's lesson one collection over — except that here the key IS the
+    // code, so a row disagreeing with its own key must lose.
+    expect(sanitizeVoucher({ code: "WRONG123" }, "ABCD2345").code).toBe("ABCD2345");
+    expect(sanitizeVoucher({ code: "abcd-2345" }, null).code).toBe("ABCD2345");
+  });
+
+  it("seeds an absent remaining from value, never from zero", () => {
+    // Reading a row written by anything but this app as already spent would
+    // silently swallow a customer's balance.
+    expect(sanitizeVoucher({ value: 50 }, "A1").remaining).toBe(50);
+    expect(sanitizeVoucher({ value: 50, remaining: 0 }, "A1").remaining).toBe(0);
+    expect(sanitizeVoucher({ value: 50, remaining: 20 }, "A1").remaining).toBe(20);
+  });
+
+  it("fills every gap so no consumer has to guard", () => {
+    const s = sanitizeVoucher({}, "ABCD2345");
+    expect(s).toMatchObject({
+      code: "ABCD2345", value: 0, remaining: 0, notes: "", status: "open",
+      origin: "generated", issuedAt: 0, issuedBy: "", expiresAt: null, updatedAt: 0,
+    });
+    expect(s.redemptions).toEqual({});
+  });
+
+  it("pins status and origin to their known values", () => {
+    expect(sanitizeVoucher({ status: "weird" }, "A1").status).toBe("open");
+    expect(sanitizeVoucher({ status: "void" }, "A1").status).toBe("void");
+    expect(sanitizeVoucher({ origin: "manual" }, "A1").origin).toBe("manual");
+    expect(sanitizeVoucher({ origin: "typo" }, "A1").origin).toBe("generated");
+  });
+
+  it("clamps money the deposit way", () => {
+    expect(sanitizeVoucher({ value: "50", remaining: -1 }, "A1")).toMatchObject({ value: 50, remaining: 0 });
+    expect(sanitizeVoucher({ value: NaN }, "A1").value).toBe(0);
+  });
+});
+
+describe("sanitizeVouchers / voucherIndex", () => {
+  it("walks ENTRIES so each row keeps its key", () => {
+    const out = sanitizeVouchers({ ABCD2345: { value: 50 }, LOT1001: { value: 10, origin: "manual" } });
+    expect(out.map((x) => x.code).sort()).toEqual(["ABCD2345", "LOT1001"]);
+    expect(out.find((x) => x.code === "LOT1001").origin).toBe("manual");
+  });
+
+  it("drops a row whose key normalises to nothing", () => {
+    expect(sanitizeVouchers({ "---": { value: 1 } })).toHaveLength(0);
+  });
+
+  it("survives a null or non-object node", () => {
+    expect(sanitizeVouchers(null)).toEqual([]);
+    expect(sanitizeVouchers("nope")).toEqual([]);
+  });
+
+  it("voucherIndex keys by code", () => {
+    const idx = voucherIndex(sanitizeVouchers({ ABCD2345: { value: 50 } }));
+    expect(idx.ABCD2345.value).toBe(50);
+    expect(voucherIndex(null)).toEqual({});
+  });
+});

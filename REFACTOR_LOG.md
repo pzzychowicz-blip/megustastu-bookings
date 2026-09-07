@@ -19469,3 +19469,72 @@ their pointer moved from the superseded plan to this one.
 doc: `93.64 kB` gz main bundle · **851 tests / 25 files** · **0 lint errors** (71
 warnings, by design) · `check:style` OK. The plan's recorded `93.64 kB` was a
 figure it declined to vouch for; it turns out to have been exact.
+
+### Commit 2 — the voucher model, and the alphabet that was in the wrong place
+
+`src/lib/vouchers.js` + `tests/vouchers.test.js`. Pure, no React, no Firebase —
+the `customers.js` shape, and the whole model is testable before anything
+renders. `npm test` **851 → 903**. The bundle is unchanged at `93.64 kB` gz
+because nothing imports it yet.
+
+**The one substantive correction to the plan is the normaliser's character set,
+and it was settled by measuring the plan's own wording.** §1.3 said to
+"strip everything outside the alphabet" on input — the 31-character set that
+drops `0`/`O` and `1`/`I`/`L` so a code survives being read out over the phone.
+Correct for a *generated* code. Manual entry is the new requirement, and a
+pre-printed voucher book contains whatever it contains:
+
+```
+"0001234"  ->  "234"        four characters silently deleted
+"LOT-1001" ->  "T"          one character survives out of seven
+"1234"     ->  "234"        ...which COLLIDES with "0001234"
+```
+
+The collision is the part that matters. Two different printed vouchers resolve
+to one child key, so the second one's create is refused as a duplicate and staff
+simply cannot issue it — a data-destroying normaliser dressed as a formatting
+rule. **The alphabet is now a property of GENERATION alone**: `normalizeCode`
+keeps every alphanumeric and drops only punctuation and whitespace, so
+`abcd 2345` / `ABCD-2345` / `ABCD2345` still resolve to one child, which is the
+property §1.3 actually wanted. Patryk-confirmed against the two alternatives
+(follow the wording; or accept alphanumerics but refuse a manual code containing
+an ambiguous character).
+
+A code outside the length bounds is **refused, never truncated** —
+`isValidCode` is separate from "is it taken" precisely so staff can tell a
+malformed number from a duplicate one, and because truncation is what
+manufactures the collision above.
+
+Three smaller decisions worth having written down:
+
+- **`formatCode` groups only an exactly-8-character code.** Re-grouping
+  `LOT1001` into `LOT1-001` would print something that does not match the
+  physical voucher in the customer's hand. We hyphenate what we generate and
+  show a manual code as typed.
+- **`generateCode(existing, rnd)` takes an injectable RNG** so the collision
+  path is *tested* rather than believed, and returns `null` rather than throwing
+  when every try collides. That cannot happen by chance at this scale, which is
+  exactly why it must not be an exception the UI never catches. Its exclusion
+  set is every code that has ever existed — including voided and manual ones,
+  which is the whole reason a voucher is never deleted.
+- **`sanitizeVoucher` seeds an absent `remaining` from `value`.** Treating it as
+  0 would read a row written by anything but this app — a console edit, a rules
+  probe — as already spent, silently swallowing a customer's balance. And the
+  CHILD KEY is authoritative over the row's echoed `code` field: v17.16.13's
+  lesson one collection over, with more force here because the key *is* the
+  identity.
+
+`voucherState`'s order is its meaning: `void` beats everything, and `spent`
+beats `expired` because a voucher can be both and spent is the more useful
+story. `canAttach` has one non-obvious branch — a booking that already holds a
+ledger entry keeps its link at zero remaining, or editing the booking that spent
+the last of a voucher would be told the voucher is spent and made to drop a
+record of something that really happened.
+
+Two functions exist because of what `canAttach` structurally *cannot* answer.
+"Never attached to two live bookings at once" is a constraint over the
+**bookings** list — the attachment lives on the booking while the voucher records
+only what was redeemed — so `attachedElsewhere(bookings, code, bookingId)` takes
+both, and treats a cancelled or completed booking's link as a record rather than
+a live claim. `isUnsettled` is the other: a completed booking whose voucher was
+never redeemed, which is exactly what the close-time auto-complete leaves behind.
