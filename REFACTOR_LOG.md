@@ -20423,6 +20423,62 @@ is `lib/roles.js` + `useRoles.js`, which must be in main because `can()` gates
 the whole app. Verified by grepping the built bundles for panel-only strings
 rather than by reading the total.
 
+### Commit 24 — the refusal nobody could hear, and the rig that found it
+
+`AdminSettings.jsx` renders its refusals through an always-mounted
+`role="alert"` wrapper with only the CHILD conditional, and
+`tests/a11y.test.js` now sweeps four surfaces for it instead of two.
+
+It shipped wrong for one commit. The last-admin refusal — "You can't remove
+your own admin access — ask another admin to do it." — rendered perfectly on
+screen, and `document.querySelectorAll('[role="alert"]')` returned **0**: the
+one message in that panel which STOPS somebody doing something was reaching
+sighted users only. `InlineAlert` is the visual pane and the caller owns the
+region, which the booking form and `ReminderEditor` both do and both say so in
+comments; this panel mounted the alert together with its first message, which is
+the live-region pitfall this repo has now written down three times. Verified
+after the fix by RELOADING first, because HMR had preserved the previous message
+and the region read as non-empty at rest — the measurement was of the tooling
+until it wasn't.
+
+**How it was found is the part worth keeping.** The DEV rules deploy landed but
+the console bootstrap had not, so there was no admin and the panel could not be
+opened at all. Rather than wait, the app was pointed at the LOCAL emulator: a
+temporary `connectDatabaseEmulator` behind `VITE_DB_EMULATOR` in
+`src/firebase.js`, reverted before commit — the same "edit locally and revert"
+precedent as the StrictMode measurement in CLAUDE.md's Gotchas — with an admin
+and three colleagues seeded through the emulator's REST interface with rules
+disabled, which is precisely what the console bootstrap does.
+
+Two traps in that rig, both costing a cycle. **The dev server must stay on the
+SAME PORT**: Firebase auth persists per ORIGIN, so moving to 5183 for the
+emulator build landed on the login screen with no way through (a password is not
+something this session can type). And the emulator serves **namespaces**: the
+app connected to `127.0.0.1:9000` reading
+`megustastu-bookings-dev-default-rtdb` while the seed went to
+`demo-mgt-bookings`, so the first attempt showed an emulator that was up, a
+client that was connected, and no data — three correct-looking facts and a
+silent mismatch between them.
+
+**What the rig then verified, all live.** The Admin tab appeared the moment the
+admin row landed, with no reload. Rows sort admin → manager → staff → unapplied
+stub → pending invitation, every control names its person ("Capabilities for
+Marco Ruiz", "Apply the Manager invitation to Lucia Vega"), and no two cells in
+the grid share a name. With a `staff` user selected, only their column is
+tickable and their `bookingDelete` extra reads "granted as an extra" while
+manager and admin read "granted by level"; with an ADMIN selected every cell in
+their column is read-only, `settingsAdmin` included — un-untickable by
+construction rather than by a disabled attribute, exactly as designed. Ticking
+one cell changed **one row**, added `voucherIssue` BESIDE the existing
+`bookingDelete`, left `role` untouched, and stamped `baseUpdatedAt: 3` — the
+version it overwrote. The modal's transition plays **both ways** (`mgt-card-in`
+→ Escape → `mgt-card-out`, 0.24s, still mounted mid-exit) and Escape closed only
+the top layer with Settings still open underneath. Demoting yourself is refused
+with the select snapping back and the database unchanged. And demoting yourself
+from another device while the tab is OPEN removes the tab and resets the body to
+General — not to an empty pane, and not to the Shortcuts sheet the `else`
+fallthrough would otherwise have rendered.
+
 ### Commit 23 — the field the deployed rules made unwritable
 
 `lastSeenAt` is gone from `sanitizeRole` and from the row model. The plan listed

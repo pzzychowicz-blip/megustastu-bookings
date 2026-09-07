@@ -22,7 +22,7 @@
 
 import { useState } from "react";
 import { R, T, FW, SP } from "../lib/constants";
-import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
+import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
 import { CAPABILITIES, ROLES, ROLE_GRANTS, RULE_ENFORCED, displayName } from "../lib/roles";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
@@ -243,7 +243,20 @@ export function AdminTabContent({
 
   return (
     <div>
-      {msg ? <InlineAlert style={{ marginBottom: SP.wide }}>{msg}</InlineAlert> : null}
+      {/* The `role="alert"` wrapper is ALWAYS mounted and only its CHILD is
+          conditional — a live region announces a change to its CONTENT, so one
+          that arrives already holding its message announces nothing. Found by
+          measuring rather than by review: the last-admin refusal rendered
+          perfectly on screen and `document.querySelectorAll('[role=alert]')`
+          returned 0, so the one message in this panel that stops you doing
+          something was reaching sighted users only. Same shape as the booking
+          form and ReminderEditor; `Reveal` caches its last truthy child, which
+          is what lets the exit animate once `msg` is already null. */}
+      <div role="alert">
+        <Reveal show={!!msg}>
+          {msg ? <InlineAlert style={{ marginBottom: SP.wide }}>{msg}</InlineAlert> : null}
+        </Reveal>
+      </div>
 
       <Section>
         <div style={{ display: "flex", alignItems: "center", gap: SP.wide }}>

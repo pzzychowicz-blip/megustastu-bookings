@@ -63,6 +63,7 @@ const BookingForm = read("components/BookingFormModal.jsx");
 const Walkin = read("components/WalkinForm.jsx");
 const Connection = read("components/ConnectionStatus.jsx");
 const Reminder = read("components/ReminderEditor.jsx");
+const Admin = read("components/AdminSettings.jsx");
 // v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
 // is where it can fail invisibly (hidden in a way that also makes it
 // unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
@@ -265,8 +266,14 @@ describe("live regions (WCAG 4.1.3)", () => {
       "duplicating it — decide which one speaks, do not ship both");
   });
 
-  it("both forms keep a permanently-mounted role=alert wrapper", () => {
-    for (const [name, src] of Object.entries({ BookingForm, Walkin })) {
+  it("every refusal surface keeps a permanently-mounted role=alert wrapper", () => {
+    // v18.0.0 phase 3 adds the Admin panel, and it is here because it SHIPPED
+    // the defect for one commit: the last-admin refusal ("ask another admin")
+    // rendered perfectly on screen while `querySelectorAll('[role=alert]')`
+    // returned 0, so the one message in that panel which STOPS you doing
+    // something reached sighted users only. Measured in the live page, not
+    // caught in review — which is the whole reason this list is a list.
+    for (const [name, src] of Object.entries({ BookingForm, Walkin, Reminder, Admin })) {
       has(src, `${name} role=alert`, /role="alert"/,
         "clicking Save on an empty form rendered good, specific copy that was " +
         "announced by nothing; the wrapper is always rendered and only its " +
