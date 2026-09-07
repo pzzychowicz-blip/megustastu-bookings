@@ -19538,3 +19538,64 @@ only what was redeemed — so `attachedElsewhere(bookings, code, bookingId)` tak
 both, and treats a cancelled or completed booking's link as a record rather than
 a live claim. `isUnsettled` is the other: a completed booking whose voucher was
 never redeemed, which is exactly what the close-time auto-complete leaves behind.
+
+### Commit 3 — the `/vouchers` listener and its guarded writes
+
+`src/hooks/useVouchers.js`, plus the mutations it delegates to. `npm test`
+**903 → 916**; the bundle is still `93.64 kB` gz because nothing imports the
+hook yet either.
+
+**This is the `/bookings` shape, not the `/waitlist` one, and the data forces
+it.** `/vouchers/{CODE}` is a keyed object whose key is the voucher number, so a
+per-child `updatedAt`/`baseUpdatedAt` CAS applies exactly as it does to
+`/bookings/$bid`, and two devices touching different vouchers write disjoint
+paths. The write is therefore a multi-path `update()` of changed children built
+by `lib/write-path.js` — which is already generic over "a list of things with
+ids". The only adaptation is that a voucher's id *is* its code (`withId` /
+`stripId`).
+
+**What it deliberately does not have.** The v15.2.0 client-side freshness gate
+and the v15.4.0 retry queue live in `usePersistence.js`, wired to that hook's
+heartbeat, and are not replicated here. Vouchers are low-contention, and the
+protection that actually closed the 2026-07-05 incident is the server-side CAS,
+which this node has in full. A refused write surfaces as a banner the person who
+made it can act on rather than being replayed silently — which for money is the
+better of the two behaviours anyway. Stating that here because "it does not have
+the retry queue" reads as an omission unless the reason is written down.
+
+**And what it has no route to at all: there is no delete.** Not a missing
+button — no function. Even the patch builder refuses one: a `null` reaching the
+child loop is logged and dropped, because a nulled child frees its number and
+that is the single thing the whole model exists to prevent.
+
+Three things carried over from lessons already in this log. The write computes
+from a **ref mirror** and then `setState`s and writes as plain statements — the
+gotcha row v17.16.10 removed the last exception to. It returns a **boolean**, so
+no caller flashes "saved" over a write that never left the device. And the
+`onValue` passes **`dbError("vouchers")`** as its third argument, without which a
+failed read fires nothing at all.
+
+**The decisions moved to `lib/vouchers.js`**, per v17.8.0's rule that logic the
+restaurant acts on does not live in a hook — and this is money:
+
+- **`validateIssue`** decides whether a number may be issued, and returns the
+  three refusals *distinctly*. "That number is already in use" and "that is not
+  a usable number" are different failures and staff can act on the difference,
+  so they must not collapse into one message. The duplicate check is the fast,
+  specific one; the create-only rule is the guarantee, and a second device can
+  still win the race between them.
+- **`applyRedemption` is idempotent by construction**, which is the property the
+  ledger-keyed-by-booking design was chosen for. Two mechanisms, both needed: a
+  replay writes the same child, *and* `remaining` is **recomputed** from
+  `value − redeemedTotal(ledger)` rather than decremented. A decrement applied
+  twice is wrong; a recompute applied twice is the same answer. It also means
+  the balance can never silently disagree with the entries it is a total of.
+  `removeRedemption` is its exact inverse.
+
+One fix to commit 2's file, and it only becomes reachable once something diffs a
+voucher: `sanitizeVoucher` now **sorts the ledger's keys**. `write-path.js`'s
+`contentKey` is a `JSON.stringify` compare and is key-ORDER sensitive — the trap
+`flatReminder` exists for — and RTDB returns a child object's keys in its own
+order while a local spread returns them in insertion order. Without the sort the
+same ledger read back could differ from the one just written, the diff would
+report a change that is not one, and the hook would write on every snapshot.

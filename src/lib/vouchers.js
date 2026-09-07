@@ -325,9 +325,27 @@ export function sanitizeVoucher(v, key) {
       src.expiresAt === null || src.expiresAt === undefined || src.expiresAt === ""
         ? null
         : Number(src.expiresAt) || null,
-    redemptions: src.redemptions && typeof src.redemptions === "object" ? src.redemptions : {},
+    redemptions: sortedLedger(src.redemptions),
     updatedAt: Number(src.updatedAt) || 0,
   };
+}
+
+// The ledger's keys are SORTED, and that is a write-path requirement rather than
+// tidiness. `write-path.js`'s `contentKey` is a `JSON.stringify` compare, which
+// is key-ORDER sensitive — the same trap `flatReminder` exists for. RTDB returns
+// a child object's keys in its own order and a local spread returns them in
+// insertion order, so without this the same ledger read back could differ from
+// the one just written, the diff would report a change that is not one, and the
+// hook would write on every snapshot.
+function sortedLedger(led) {
+  if (!led || typeof led !== "object") return {};
+  const out = {};
+  Object.keys(led).sort().forEach((k) => {
+    const e = led[k];
+    if (!e || typeof e !== "object") return;
+    out[k] = { amount: clampMoney(e.amount), at: Number(e.at) || 0, by: typeof e.by === "string" ? e.by : "" };
+  });
+  return out;
 }
 
 // The node is a keyed object; this walks ENTRIES so each row keeps its key.
@@ -345,4 +363,77 @@ export function voucherIndex(vouchers) {
     if (v && v.code) out[v.code] = v;
   });
   return out;
+}
+
+// ── Mutations ────────────────────────────────────────────────────────────────
+//
+// These live here rather than in `useVouchers.js` for the reason v17.8.0 set
+// out when `placeWaitlist` and `presenceState` were extracted: logic that
+// decides something the restaurant acts on does not live in a hook. This is
+// money. The hook keeps its subscription, its refs and its setState; every
+// decision below is pure and tested.
+
+// May this number be issued, and under which origin?
+//
+// `taken` is every code that has ever existed (see `codeSet`). The three
+// refusals are DISTINCT on purpose — "that is not a usable number" and "that
+// number is already in use" are different failures and staff can act on the
+// difference. The duplicate check here is the fast, specific message; the
+// create-only rule is the guarantee, and a second device can still win the race
+// between them.
+export function validateIssue({ code, value, taken }) {
+  const amount = clampMoney(value);
+  if (amount <= 0) return { ok: false, error: "Enter an amount above zero." };
+  const set = taken instanceof Set ? taken : codeSet(taken);
+
+  const typed = normalizeCode(code);
+  if (typed) {
+    if (!isValidCode(typed)) {
+      return {
+        ok: false,
+        error: "A voucher number needs " + MANUAL_CODE_MIN + "–" + MANUAL_CODE_MAX + " letters or digits.",
+      };
+    }
+    if (set.has(typed)) return { ok: false, error: "That number is already in use." };
+    return { ok: true, code: typed, origin: "manual", value: amount };
+  }
+
+  const gen = generateCode(set);
+  if (!gen) return { ok: false, error: "Couldn't find a free number. Please try again." };
+  return { ok: true, code: gen, origin: "generated", value: amount };
+}
+
+// Record a redemption against a booking.
+//
+// Two properties make this idempotent by construction, and both are needed:
+// the ledger is keyed by BOOKING, so a replay writes the same child; and
+// `remaining` is RECOMPUTED from `value - redeemedTotal(ledger)` rather than
+// decremented, so applying it twice gives the same answer where a decrement
+// would not. It also means the balance can never silently disagree with the
+// entries it is supposed to be a total of.
+export function applyRedemption(v, bookingId, amount, at, by) {
+  if (!v || !bookingId) return v;
+  const led = Object.assign({}, v.redemptions);
+  led[bookingId] = { amount: clampMoney(amount), at: Number(at) || Date.now(), by: by || "" };
+  return sanitizeVoucher(
+    Object.assign({}, v, { redemptions: led, remaining: clampMoney(valueOf(v) - redeemedTotal({ redemptions: led })) }),
+    v.code
+  );
+}
+
+// The exact inverse — the booking was completed by mistake, or reopened.
+export function removeRedemption(v, bookingId) {
+  if (!v || !bookingId || !isRedeemedBy(v, bookingId)) return v;
+  const led = Object.assign({}, v.redemptions);
+  delete led[bookingId];
+  return sanitizeVoucher(
+    Object.assign({}, v, { redemptions: led, remaining: clampMoney(valueOf(v) - redeemedTotal({ redemptions: led })) }),
+    v.code
+  );
+}
+
+// How much of this bill the voucher can actually cover — the number the redeem
+// modal offers as "fully". Never more than the balance, never negative.
+export function redeemableAmount(v, requested) {
+  return Math.min(remainingOf(v), clampMoney(requested));
 }

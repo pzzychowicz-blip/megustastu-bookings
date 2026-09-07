@@ -17,6 +17,7 @@ import {
   expiryFrom, isExpired, voucherState, isRedeemedBy, canAttach,
   attachedElsewhere, isUnsettled,
   sanitizeVoucher, sanitizeVouchers, voucherIndex,
+  validateIssue, applyRedemption, removeRedemption, redeemableAmount,
 } from "../src/lib/vouchers.js";
 
 function v(o) {
@@ -394,5 +395,121 @@ describe("sanitizeVouchers / voucherIndex", () => {
     const idx = voucherIndex(sanitizeVouchers({ ABCD2345: { value: 50 } }));
     expect(idx.ABCD2345.value).toBe(50);
     expect(voucherIndex(null)).toEqual({});
+  });
+});
+
+// ── Mutations ────────────────────────────────────────────────────────────────
+// These live in lib/ rather than in useVouchers.js for v17.8.0's reason: logic
+// that decides something the restaurant acts on does not live in a hook. This
+// is money, so it is tested rather than trusted.
+
+describe("validateIssue", () => {
+  it("blank code generates; a typed one is used as given", () => {
+    const gen = validateIssue({ code: "", value: 50, taken: [] });
+    expect(gen.ok).toBe(true);
+    expect(gen.origin).toBe("generated");
+    expect(gen.code).toHaveLength(CODE_LENGTH);
+
+    const man = validateIssue({ code: "lot 1001", value: 50, taken: [] });
+    expect(man).toMatchObject({ ok: true, code: "LOT1001", origin: "manual", value: 50 });
+  });
+
+  it("refuses a duplicate and a malformed number DIFFERENTLY", () => {
+    // Staff can act on the difference, so the messages must not be one message.
+    const dup = validateIssue({ code: "LOT1001", value: 50, taken: ["lot-1001"] });
+    const bad = validateIssue({ code: "AB", value: 50, taken: [] });
+    expect(dup.ok).toBe(false);
+    expect(bad.ok).toBe(false);
+    expect(dup.error).not.toBe(bad.error);
+    expect(dup.error).toMatch(/already in use/i);
+  });
+
+  it("refuses a zero or negative amount", () => {
+    expect(validateIssue({ code: "", value: 0, taken: [] }).ok).toBe(false);
+    expect(validateIssue({ code: "", value: -5, taken: [] }).ok).toBe(false);
+    expect(validateIssue({ code: "", value: "abc", taken: [] }).ok).toBe(false);
+  });
+
+  it("clamps a string amount rather than refusing it", () => {
+    expect(validateIssue({ code: "", value: "50", taken: [] }).value).toBe(50);
+  });
+
+  it("never generates a number already taken, whatever its origin", () => {
+    const taken = new Set();
+    for (let i = 0; i < 60; i++) {
+      const r = validateIssue({ code: "", value: 10, taken: taken });
+      expect(r.ok).toBe(true);
+      expect(taken.has(r.code)).toBe(false);
+      taken.add(r.code);
+    }
+    expect(taken.size).toBe(60);
+  });
+});
+
+describe("applyRedemption / removeRedemption", () => {
+  const base = () => sanitizeVoucher({ value: 50, remaining: 50 }, "ABCD2345");
+
+  it("records the entry and recomputes the balance", () => {
+    const r = applyRedemption(base(), "b1", 20, 1000, "me@x");
+    expect(r.remaining).toBe(30);
+    expect(r.redemptions.b1).toEqual({ amount: 20, at: 1000, by: "me@x" });
+    expect(voucherState(r, 2000)).toBe("open");
+  });
+
+  it("is IDEMPOTENT — a retry-queue replay cannot double-spend", () => {
+    // The property the ledger-keyed-by-booking design was chosen for, and the
+    // reason remaining is recomputed rather than decremented: a decrement
+    // applied twice is wrong, a recompute applied twice is the same answer.
+    const once = applyRedemption(base(), "b1", 20, 1000, "me");
+    const twice = applyRedemption(once, "b1", 20, 2000, "me");
+    expect(twice.remaining).toBe(30);
+    expect(Object.keys(twice.redemptions)).toEqual(["b1"]);
+  });
+
+  it("two bookings both spend, and the total is the ledger's", () => {
+    const a = applyRedemption(base(), "b1", 20, 1000, "me");
+    const b = applyRedemption(a, "b2", 30, 2000, "me");
+    expect(b.remaining).toBe(0);
+    expect(redeemedTotal(b)).toBe(50);
+    expect(voucherState(b, 3000)).toBe("spent");
+  });
+
+  it("never drives the balance negative", () => {
+    const over = applyRedemption(base(), "b1", 999, 1000, "me");
+    expect(over.remaining).toBe(0);
+  });
+
+  it("removeRedemption is the exact inverse", () => {
+    const a = applyRedemption(base(), "b1", 20, 1000, "me");
+    const b = applyRedemption(a, "b2", 30, 2000, "me");
+    const back = removeRedemption(b, "b2");
+    expect(back.remaining).toBe(30);
+    expect(Object.keys(back.redemptions)).toEqual(["b1"]);
+    expect(removeRedemption(back, "b1").remaining).toBe(50);
+  });
+
+  it("removing an entry that was never there changes nothing", () => {
+    const v = base();
+    expect(removeRedemption(v, "nope")).toBe(v);
+    expect(applyRedemption(null, "b1", 5, 1, "me")).toBe(null);
+  });
+
+  it("keeps the ledger's keys SORTED, so the write-diff sees no phantom change", () => {
+    // write-path.js's contentKey is a JSON.stringify compare and is key-order
+    // sensitive. Without the sort, a ledger read back from RTDB could differ
+    // from the one just written and the hook would write on every snapshot.
+    const v = applyRedemption(applyRedemption(base(), "zz", 5, 1, "m"), "aa", 5, 2, "m");
+    expect(Object.keys(v.redemptions)).toEqual(["aa", "zz"]);
+    expect(JSON.stringify(v)).toBe(JSON.stringify(sanitizeVoucher(v, v.code)));
+  });
+});
+
+describe("redeemableAmount", () => {
+  it("is bounded by the balance and never negative", () => {
+    const v = sanitizeVoucher({ value: 50, remaining: 20 }, "A1");
+    expect(redeemableAmount(v, 100)).toBe(20);
+    expect(redeemableAmount(v, 5)).toBe(5);
+    expect(redeemableAmount(v, -5)).toBe(0);
+    expect(redeemableAmount(sanitizeVoucher({ value: 0 }, "A1"), 10)).toBe(0);
   });
 });
