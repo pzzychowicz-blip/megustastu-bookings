@@ -126,6 +126,89 @@ the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
 
+## v18.0.0 — `/vouchers/$code`, the second per-child CAS, and it refuses deletes
+
+Two additions, both in one console step: a per-child CAS on `/vouchers/$code`,
+and a standard rev pair on `settings/voucherDefaults`.
+
+**The rev pair needs no test edit** — the sweep above derives it. **The per-child
+CAS does**, because the walker cannot see one; `tests/rules/database-rules.test.js`
+gains a hand-written `vouchers — the per-$code CAS` group in the style of the
+existing `bookings/$bid` cases. **127 → 149 tests.**
+
+### It is `/bookings`' rule with one clause inverted, and that clause is the point
+
+```jsonc
+"vouchers": {
+  "$code": {
+    ".write": "auth != null && newData.exists() && newData.hasChild('updatedAt') && …"
+  }
+}
+```
+
+`/bookings/$bid` holds its CAS in **`.validate`**, opening with
+`!newData.exists() ||` — so a delete is unconditional. That is correct there: a
+multi-path null carries no base, and a cancelled booking is genuinely removed.
+
+A voucher's number must **never** be released, because the generator excludes
+every code that has ever existed and a freed number can therefore be re-issued
+to a second customer. So this CAS lives in **`.write`** — which *is* evaluated
+for a delete, and `.validate` is not (CT-2A-06) — and **requires
+`newData.exists()`**, refusing one.
+
+**The plan's own §1.6 draft had the booking rule's disjunct copied across**, and
+`!newData.exists() ||` short-circuits the entire predicate on a delete. Same
+shape as CT-2A-01, where a `!data.exists()` disjunct short-circuited the create
+branch. **Measured rather than reasoned:** restoring the draft rule and
+re-running the suite fails exactly one test — `a voucher canNOT be DELETED` —
+which is both the proof the defect was real and the proof the test bites.
+
+The grant sits at `$code` and **not** at `/vouchers`, so a whole-node wipe is
+denied (CT-2A-04). Pinned: `remove()`, `set({})` and a replacing `set()` on the
+node all fail, and the child survives a refused delete.
+
+### Two things settled by running them rather than reasoning about them
+
+**A sub-path write cannot slip past the CAS.** `.write` cascades down, so the
+grant at `$code` also permits a write at `$code/notes` or
+`$code/redemptions/$bid` — the plan flagged this as *reasoned, not measured*.
+It refuses, because the `$code` predicate is then evaluated against an
+`updatedAt` the sub-path write never advanced. Three such writes are pinned.
+
+**`remaining: null` is an ABSENT field, not an invalid one**, and this corrected
+a test written the other way round. RTDB cannot store null — writing it omits
+the key — so the child never exists in `newData` and its `.validate` never runs.
+That is exactly the "if PRESENT, must be the right shape" contract v17.16.1
+describes, and it is why `sanitizeVoucher` seeds an absent `remaining` from
+`value` rather than reading it as zero: the row that reaches the client is
+coherent, and treating it as spent would swallow a customer's balance.
+
+### Field shapes
+
+`value` and `remaining` are non-negative numbers; `status` is `open|void` and
+`origin` is `manual|generated`, both carrying v17.16.11's
+`|| newData.val() === data.val()` grandfather clause so a stored value carried
+through unchanged is always allowed; `code`/`notes`/`issuedBy` are strings;
+`issuedAt`/`expiresAt` are numbers when present, and an absent `expiresAt` means
+never; a ledger entry's `amount` is a non-negative number.
+
+**Deliberately NOT validated: `remaining <= value`.** It is expressible, and it
+buys nothing — any signed-in client that could inflate a balance could equally
+write a fresh voucher with `value: 999999`, so the predicate does not bound the
+threat it appears to. What it *would* do is refuse a write on a row whose
+`value` is missing, leaving a record the app cannot repair — the hazard
+v17.16.1 records for exactly this class. The client already recomputes
+`remaining` from the ledger, which is where that invariant is actually kept.
+
+### Deployment — app first, rules second
+
+Rolling-safe in the usual direction: a pre-v18 client never writes `/vouchers`
+at all, so the new rules constrain nothing it does. Publishing rules **before**
+the app is also harmless here for the same reason. Do DEV first and exercise the
+node, then PROD.
+
+---
+
 ## v17.16.11 — `date` and `status` get a FORMAT, without a data audit
 
 Closes the CT-2A-03 follow-on, the last entry in `ROADMAP.md`'s Deferred

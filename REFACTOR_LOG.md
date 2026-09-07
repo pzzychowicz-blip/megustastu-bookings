@@ -19599,3 +19599,56 @@ voucher: `sanitizeVoucher` now **sorts the ledger's keys**. `write-path.js`'s
 order while a local spread returns them in insertion order. Without the sort the
 same ledger read back could differ from the one just written, the diff would
 report a change that is not one, and the hook would write on every snapshot.
+
+### Commit 4 — the rules, and the delete the plan would have allowed
+
+`database.rules.json` + a hand-written test group + the `database.rules.README.md`
+runbook section. `npm run test:rules` **127 → 149**; the four-gate numbers are
+unchanged (`93.64 kB` gz · 916 tests · 0 lint errors · style OK), which is what a
+rules-only commit should look like.
+
+Two additions in one console step: the per-child CAS on `/vouchers/$code`, and a
+standard rev pair on `settings/voucherDefaults`. The rev pair needs **no** test
+edit — `revPairsIn(RULES)` walks the rules file and grows on its own. The
+per-child CAS needs tests written by hand, because the walker cannot see one.
+
+**The plan's own §1.6 draft rule would have permitted deleting a voucher.** It
+copied `/bookings/$bid`'s leading `!newData.exists() ||` disjunct, which
+short-circuits the entire predicate on a delete. On `/bookings` that is correct
+and deliberate — a multi-path null carries no base, and a cancelled booking is
+genuinely removed. On `/vouchers` it frees the number, which is the single
+failure the "voided, never deleted" rule exists to prevent, and the generator
+excludes codes precisely so a freed one could be re-issued to a second customer.
+Same shape as CT-2A-01, where a `!data.exists()` disjunct short-circuited the
+create branch.
+
+So the CAS lives in **`.write`** — evaluated for a delete, where `.validate` is
+not (CT-2A-06) — and **requires `newData.exists()`**.
+
+**Measured, not reasoned.** Restoring the draft rule and re-running the suite
+fails **exactly one test**, `a voucher canNOT be DELETED`, with the other 148
+still green. That is both the proof the defect was real and the proof the test
+bites; a delete-refusal test that passes under a rule permitting deletes would
+have been worth nothing.
+
+Two more things settled by running them rather than arguing about them:
+
+- **A sub-path write cannot slip past the CAS.** `.write` cascades down, so the
+  grant at `$code` also permits a write at `$code/notes` or
+  `$code/redemptions/$bid` — which §1.2 explicitly flagged as *reasoned, not
+  measured, settle it in the emulator*. It refuses, because the `$code`
+  predicate is then evaluated against an `updatedAt` the sub-path write never
+  advanced. Three such writes are pinned.
+- **`remaining: null` is an ABSENT field, not an invalid one**, and this
+  corrected a test written the other way round. RTDB cannot store null — writing
+  it omits the key — so the child never exists in `newData` and its `.validate`
+  never runs. Exactly v17.16.1's "if PRESENT, must be the right shape" contract,
+  and it is why `sanitizeVoucher` seeds an absent `remaining` from `value`.
+
+**One predicate deliberately not written: `remaining <= value`.** It is
+expressible and buys nothing — a client that could inflate a balance could
+equally write a fresh voucher with `value: 999999`, so it does not bound the
+threat it appears to. What it *would* do is refuse a write on a row whose
+`value` is missing, leaving a record the app cannot repair, which is the hazard
+v17.16.1 records for this exact class. The invariant is kept where it is
+actually enforceable: the client recomputes `remaining` from the ledger.

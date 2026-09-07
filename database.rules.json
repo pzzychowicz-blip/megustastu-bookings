@@ -16,6 +16,28 @@
       }
     },
 
+    "vouchers": {
+      "$code": {
+        ".write": "auth != null && newData.exists() && newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (data.exists() ? (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val()) : newData.child('baseUpdatedAt').val() === 0)",
+        "code":      { ".validate": "newData.isString()" },
+        "value":     { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "remaining": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "notes":     { ".validate": "newData.isString()" },
+        "status":    { ".validate": "newData.isString() && (newData.val().matches(/^(open|void)$/) || newData.val() === data.val())" },
+        "origin":    { ".validate": "newData.isString() && (newData.val().matches(/^(manual|generated)$/) || newData.val() === data.val())" },
+        "issuedAt":  { ".validate": "newData.isNumber()" },
+        "issuedBy":  { ".validate": "newData.isString()" },
+        "expiresAt": { ".validate": "newData.isNumber()" },
+        "redemptions": {
+          "$bid": {
+            "amount": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "at":     { ".validate": "newData.isNumber()" },
+            "by":     { ".validate": "newData.isString()" }
+          }
+        }
+      }
+    },
+
     "presence": {
       "$key": { ".write": "auth != null" }
     },
@@ -64,6 +86,9 @@
 
       "general":            { ".write": "auth != null && newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
       "generalRev":         { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "voucherDefaults":    { ".write": "auth != null && newData.parent().child('voucherDefaultsRev').val() === (data.parent().child('voucherDefaultsRev').exists() ? data.parent().child('voucherDefaultsRev').val() + 1 : 1)" },
+      "voucherDefaultsRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
       "whatsapp":           { ".write": "auth != null && newData.parent().child('whatsappRev').val() === (data.parent().child('whatsappRev').exists() ? data.parent().child('whatsappRev').val() + 1 : 1)" },
       "whatsappRev":        { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },

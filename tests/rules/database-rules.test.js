@@ -46,6 +46,7 @@ import {
 // console; a rule that is too strict is not a failing test, it is staff unable
 // to save a booking, and a fixture cannot find that.
 import { sanitize } from "../../src/lib/booking-logic.js";
+import { sanitizeVoucher } from "../../src/lib/vouchers.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(HERE, "../../database.rules.json");
@@ -105,6 +106,8 @@ const booking = (o = {}) => Object.assign({
 // The app never writes a booking any other way: a multi-path update under
 // /bookings, one child per changed booking (usePersistence's diff-write).
 const writeBooking = (db, id, value) => db.ref("bookings").update({ [id]: value });
+// A multi-path null — the shape a diff-write uses to delete a child.
+const db_null = (db, code) => db.ref("vouchers").update({ [code]: null });
 
 // And it never writes a whole-node collection any other way either:
 // revGuard.writeWithRev's atomic { node, nodeRev: base+1 } at the ROOT.
@@ -1039,5 +1042,199 @@ describe("PROBE — the trust model's edges", () => {
     await assertFails(staff().ref("/").update({
       bookings: { b1: booking({ updatedAt: 9999, baseUpdatedAt: 1 }) },
     }));
+  });
+});
+
+// ── /vouchers/$code — the per-child CAS the PAIRS sweep cannot see ───────────
+//
+// `revPairsIn(RULES)` walks the rules file for every key ending in `Rev` and
+// grows on its own, so `settings/voucherDefaults` needs no test edit. A
+// per-child CAS is not a rev pair, so the walker never sees THIS one — hence
+// these are written by hand, in the style of the `bookings/$bid` cases above.
+//
+// One thing here is deliberately unlike `/bookings`, and it is the point of the
+// whole node: **a voucher cannot be deleted.** A booking's CAS lives in
+// `.validate` and opens with `!newData.exists() ||`, so a delete is
+// unconditional — correct there, since a multi-path null carries no base. A
+// voucher's number must never be released, so its CAS lives in `.write` (which
+// IS evaluated for a delete, CT-2A-06) and REQUIRES `newData.exists()`.
+//
+// The plan's own §1.6 draft had the booking rule's leading `!newData.exists()
+// ||` disjunct copied across, which short-circuits the whole predicate on a
+// delete. That would have permitted freeing a number — the exact failure the
+// "voided, never deleted" rule exists to prevent — and it is the same shape as
+// CT-2A-01, where a `!data.exists()` disjunct short-circuited the CAS.
+
+const voucher = (o = {}) => Object.assign({
+  code: "ABCD2345", value: 50, remaining: 50, notes: "",
+  status: "open", origin: "generated", issuedAt: 1000, issuedBy: "staff@x",
+  updatedAt: 1000, baseUpdatedAt: 0,
+}, o);
+
+// The app writes a voucher exactly one way: a multi-path update under
+// /vouchers, one child per changed voucher (useVouchers' diff-write).
+const writeVoucher = (db, code, value) => db.ref("vouchers").update({ [code]: value });
+
+describe("vouchers — the per-$code CAS", () => {
+  it("an anonymous client can neither read nor write", async () => {
+    await assertFails(anon().ref("vouchers").once("value"));
+    await assertFails(writeVoucher(anon(), "ABCD2345", voucher()));
+  });
+
+  it("a create needs baseUpdatedAt === 0, exactly like a booking", async () => {
+    await assertSucceeds(writeVoucher(staff(), "ABCD2345", voucher({ baseUpdatedAt: 0 })));
+  });
+
+  it("a create carrying a NON-zero base is refused", async () => {
+    // v17.16.1's CT-2A-01 rule, one collection over: a stale offline write
+    // naming a version that is not there must not create it.
+    await assertFails(writeVoucher(staff(), "ABCD2345", voucher({ baseUpdatedAt: 900 })));
+  });
+
+  it("a create with no stamps at all is refused", async () => {
+    const { updatedAt, baseUpdatedAt, ...bare } = voucher();
+    void updatedAt; void baseUpdatedAt;
+    await assertFails(writeVoucher(staff(), "ABCD2345", bare));
+  });
+
+  describe("against a stored voucher at updatedAt = 5000", () => {
+    beforeEach(async () => {
+      await seed((db) => db.ref("vouchers/ABCD2345").set(voucher({ updatedAt: 5000, baseUpdatedAt: 0 })));
+    });
+
+    it("a write based on 5000 is accepted", async () => {
+      await assertSucceeds(writeVoucher(staff(), "ABCD2345",
+        voucher({ remaining: 30, updatedAt: 6000, baseUpdatedAt: 5000 })));
+    });
+
+    it("a STALE write is refused however far ahead its clock runs", async () => {
+      // Greater-than is last-writer-wins, not staleness protection — the whole
+      // of the 2026-07-05 incident. A device holding the pre-5000 version
+      // stamps with its own wall clock and is refused anyway.
+      await assertFails(writeVoucher(staff(), "ABCD2345",
+        voucher({ remaining: 0, updatedAt: 9_999_999, baseUpdatedAt: 1000 })));
+    });
+
+    it("a correct base with a NON-advancing stamp is refused", async () => {
+      await assertFails(writeVoucher(staff(), "ABCD2345",
+        voucher({ updatedAt: 5000, baseUpdatedAt: 5000 })));
+    });
+
+    it("a DUPLICATE create is refused — two devices issuing one number", async () => {
+      // The uniqueness guarantee. Both devices believe the code is free, both
+      // send a create, and the second's baseUpdatedAt === 0 no longer matches
+      // the stored 5000. The database decides, not the client.
+      await assertFails(writeVoucher(staff("staff-b"), "ABCD2345",
+        voucher({ value: 25, remaining: 25, updatedAt: 7000, baseUpdatedAt: 0 })));
+    });
+
+    // ── A NUMBER IS NEVER RELEASED ─────────────────────────────────────────
+    it("a voucher canNOT be DELETED — not by a null, not by a remove()", async () => {
+      await assertFails(db_null(staff(), "ABCD2345"));
+      await assertFails(staff().ref("vouchers/ABCD2345").remove());
+      await assertFails(staff().ref("vouchers/ABCD2345").set(null));
+      // And it is still there afterwards.
+      expect(await seedRead("vouchers/ABCD2345")).not.toBeNull();
+    });
+
+    it("the WHOLE node canNOT be wiped — CT-2A-04, one collection over", async () => {
+      await assertFails(staff().ref("vouchers").remove());
+      await assertFails(staff().ref("vouchers").set({}));
+      await assertFails(staff().ref("vouchers").set({ OTHER: voucher({ code: "OTHER" }) }));
+    });
+
+    it("voiding is the closest thing to a delete, and keeps the child", async () => {
+      await assertSucceeds(writeVoucher(staff(), "ABCD2345",
+        voucher({ status: "void", updatedAt: 6000, baseUpdatedAt: 5000 })));
+      expect((await seedRead("vouchers/ABCD2345")).status).toBe("void");
+    });
+
+    it("a SUB-PATH write cannot slip past the CAS", async () => {
+      // `.write` cascades down, so the grant at $code also permits a write at
+      // $code/notes — but the $code predicate is then evaluated against an
+      // `updatedAt` the sub-path write never advanced, so it refuses. The plan
+      // flagged this as reasoned-not-measured; this is the measurement.
+      await assertFails(staff().ref("vouchers/ABCD2345/remaining").set(999));
+      await assertFails(staff().ref("vouchers/ABCD2345/notes").set("free money"));
+      await assertFails(staff().ref("vouchers/ABCD2345/redemptions/b1").set({ amount: 50, at: 1, by: "x" }));
+    });
+
+    it("a root-level write cannot bypass the CAS either", async () => {
+      await assertFails(staff().ref("/").update({
+        vouchers: { ABCD2345: voucher({ updatedAt: 9999, baseUpdatedAt: 1 }) },
+      }));
+    });
+  });
+
+  describe("field shapes", () => {
+    it("money must be a non-negative number", async () => {
+      await assertFails(writeVoucher(staff(), "V1", voucher({ value: -1 })));
+      await assertFails(writeVoucher(staff(), "V2", voucher({ remaining: -1 })));
+      await assertFails(writeVoucher(staff(), "V3", voucher({ value: "50" })));
+      await assertSucceeds(writeVoucher(staff(), "V5", voucher({ value: 0, remaining: 0 })));
+    });
+
+    it("`remaining: null` is an ABSENT field, not an invalid one", async () => {
+      // Measured, and it corrected a test written the other way round. RTDB
+      // cannot store null — writing it omits the key — so the child never
+      // exists in newData and its `.validate` never runs. That is the
+      // "if PRESENT, must be the right shape" contract working exactly as
+      // v17.16.1 describes it, and it is why `sanitizeVoucher` seeds an absent
+      // `remaining` from `value` rather than reading it as zero: the row that
+      // reaches the client here is coherent, and treating it as spent would
+      // swallow the balance.
+      await assertSucceeds(writeVoucher(staff(), "V4", voucher({ remaining: null })));
+      expect(await seedRead("vouchers/V4/remaining")).toBeNull();
+      expect((await seedRead("vouchers/V4")).value).toBe(50);
+    });
+
+    it("status and origin are pinned to their known values", async () => {
+      await assertFails(writeVoucher(staff(), "V1", voucher({ status: "spent" })));
+      await assertFails(writeVoucher(staff(), "V2", voucher({ origin: "imported" })));
+      await assertSucceeds(writeVoucher(staff(), "V3", voucher({ status: "void" })));
+      await assertSucceeds(writeVoucher(staff(), "V4", voucher({ origin: "manual" })));
+    });
+
+    it("a stored value CARRIED THROUGH unchanged is always allowed", async () => {
+      // v17.16.11's grandfather clause. A row that already holds a value the
+      // pattern refuses must stay saveable, or the rules make a record the app
+      // cannot repair.
+      await seed((db) => db.ref("vouchers/LEGACY").set(
+        voucher({ code: "LEGACY", status: "weird", origin: "imported", updatedAt: 5000 })));
+      await assertSucceeds(writeVoucher(staff(), "LEGACY", voucher({
+        code: "LEGACY", status: "weird", origin: "imported", notes: "fixed the note",
+        updatedAt: 6000, baseUpdatedAt: 5000,
+      })));
+    });
+
+    it("a ledger entry's amount must be a non-negative number", async () => {
+      await assertFails(writeVoucher(staff(), "V1",
+        voucher({ redemptions: { b1: { amount: -5, at: 1, by: "x" } } })));
+      await assertFails(writeVoucher(staff(), "V2",
+        voucher({ redemptions: { b1: { amount: "20", at: 1, by: "x" } } })));
+      await assertSucceeds(writeVoucher(staff(), "V3",
+        voucher({ redemptions: { b1: { amount: 20, at: 1, by: "x" } } })));
+    });
+
+    it("expiresAt is a number when present, and absent means never", async () => {
+      await assertFails(writeVoucher(staff(), "V1", voucher({ expiresAt: "soon" })));
+      await assertSucceeds(writeVoucher(staff(), "V2", voucher({ expiresAt: 2_000_000_000_000 })));
+      // The base fixture carries no `expiresAt` at all — "never expires".
+      expect(voucher().expiresAt).toBeUndefined();
+      await assertSucceeds(writeVoucher(staff(), "V3", voucher()));
+    });
+  });
+
+  it("accepts the shape useVouchers itself produces", async () => {
+    // A fixture that RESEMBLES the app's output proves nothing about the app.
+    // This one is built by the real sanitiser, then stamped the way
+    // write-path.js stamps a create.
+    const v = sanitizeVoucher({
+      code: "QRST6789", value: 50, remaining: 50, notes: "Birthday",
+      status: "open", origin: "generated", issuedAt: Date.now(), issuedBy: "staff@x",
+      expiresAt: Date.now() + 86400000, redemptions: {},
+    }, "QRST6789");
+    await assertSucceeds(writeVoucher(staff(), "QRST6789",
+      Object.assign({}, v, { updatedAt: Date.now(), baseUpdatedAt: 0 })));
   });
 });
