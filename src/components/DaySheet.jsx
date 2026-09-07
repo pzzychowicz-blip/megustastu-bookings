@@ -18,7 +18,7 @@
 
 import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
-import { T, FW } from "../lib/constants";
+import { T, FW, APP_NAME } from "../lib/constants";
 import { daySummary } from "../lib/booking-logic";
 import { normalizeCode, formatCode } from "../lib/vouchers";
 
@@ -64,7 +64,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
   return createPortal(
     <div className="mgt-print-sheet" style={{ color: "#000", /* @fixed-fill */ background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", /* @fixed-fill */ paddingBottom: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
+        <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || APP_NAME) + " — Day sheet"}</div>
         <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + date}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
           {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
@@ -134,7 +134,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
           the deposit flag had when it printed the configured currency symbol.
           The heading above already carries the restaurant name, so this line
           was also saying it twice. */}
-      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>MGT Bookings</div>
+      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>{APP_NAME}</div>
     </div>,
     document.body
   );

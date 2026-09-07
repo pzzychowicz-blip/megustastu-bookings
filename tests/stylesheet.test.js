@@ -34,6 +34,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { APP_NAME } from "../src/lib/constants.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
@@ -284,5 +285,55 @@ describe("the app stylesheet (src/index.css)", () => {
     expect(offenders,
       "a [role=\"button\"] rule applies a transform without excluding .mgt-glyph — " +
       "this teleports every floor-plan table to the plan origin").toEqual([]);
+  });
+});
+
+// ── The app's own name, in the static files that cannot import it ───────────
+//
+// v18.0.0 phase 2. `APP_NAME` (src/lib/constants.js) made the app's name one
+// value for every file that can `import` — which was the fix for four
+// hand-typed copies, one of which had silently drifted to a third spelling
+// ("MGT Booking System") that no gate in the repo could see.
+//
+// Two copies survive because they MUST: `index.html` and
+// `public/manifest.webmanifest` are static and import nothing. They are the
+// same defect the constant was created to remove, so they get the only guard
+// that can reach them — this one. A rename of APP_NAME now fails the build
+// until both follow it.
+//
+// It lives in this file because this is where the repo already guards static
+// files against a truth held somewhere else, and a 25th test file for two
+// assertions would be worse than a slightly wider subject here.
+//
+// Both assertions read the CONSTANT rather than a pattern: a regex over
+// constants.js would also match the name where it appears in that file's own
+// prose, which is exactly the failure csp.test.js shipped in v17.15.1.
+//
+// The manifest's `description` deliberately still names the RESTAURANT
+// ("Staff booking management for Me Gustas Tú") and is NOT checked here — that
+// is per-tenant text, a different problem from a drifted copy of the app's
+// name, and it is on ROADMAP.md as pending tenant work.
+describe("the app's own name (APP_NAME)", () => {
+  const MANIFEST = JSON.parse(
+    readFileSync(join(ROOT, "public", "manifest.webmanifest"), "utf8")
+  );
+
+  it("is what index.html's <title> says", () => {
+    const m = HTML.match(/<title>([^<]*)<\/title>/);
+    expect(m, "index.html has no <title>").toBeTruthy();
+    expect(m[1].trim()).toBe(APP_NAME);
+  });
+
+  it("is what index.html's apple-mobile-web-app-title says", () => {
+    const m = HTML.match(
+      /<meta\s+name="apple-mobile-web-app-title"\s+content="([^"]*)"/
+    );
+    expect(m, "index.html has no apple-mobile-web-app-title meta").toBeTruthy();
+    expect(m[1]).toBe(APP_NAME);
+  });
+
+  it("is what the web manifest's name and short_name say", () => {
+    expect(MANIFEST.name).toBe(APP_NAME);
+    expect(MANIFEST.short_name).toBe(APP_NAME);
   });
 });

@@ -51,7 +51,7 @@
 // themselves throw — and no component. A surface that renders only when the
 // component tree has already failed should not be built out of that tree.
 import { Component } from "react";
-import { S, R, T, FW, SP, H } from "../lib/constants";
+import { S, R, T, FW, SP, H, APP_NAME } from "../lib/constants";
 import { mkBtn, mkSolidBtn } from "./atoms";
 
 export default class ErrorBoundary extends Component {
@@ -133,7 +133,7 @@ export default class ErrorBoundary extends Component {
             fontSize: T.title,
             fontWeight: FW.semi,
             color: S.text,
-          }}>MGT Bookings hit an error</h1>
+          }}>{APP_NAME + " hit an error"}</h1>
 
           <p style={{
             margin: 0,
@@ -177,7 +177,7 @@ export default class ErrorBoundary extends Component {
             color: S.muted,
             wordBreak: "break-word",
           }}>
-            {build ? build.app + " " + build.version : "MGT Bookings"}
+            {build ? build.app + " " + build.version : APP_NAME}
             {this.state.message ? " · " + this.state.message : ""}
           </p>
         </div>

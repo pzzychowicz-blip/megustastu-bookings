@@ -28,7 +28,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, H, IC } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
 
 import {
   getDur, toMins, genId, sanitizeBlock,
@@ -288,7 +288,7 @@ import { todayStr, stepDate } from "./lib/day";
 // (window assignment + console.log) so the bundler cannot tree-shake it.
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
-  app:"MGT Bookings",
+  app:APP_NAME,
   version:"18.0.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",

@@ -32,14 +32,18 @@
 
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
-import { db } from "../firebase";
+import { db, profile } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clampStep } from "../lib/clamp";
 import { dbError } from "../lib/dbError";
 
 export const DEFAULT_GENERAL_SETTINGS = {
   v: 1,
-  restaurantName: "Me Gustas Tú",
+  // v18.0.0 phase 2: the seed is the SELECTED TENANT's name, not a literal.
+  // It was MGT's name in code that every tenant would run — and a stored value
+  // always wins, so this is only ever read before the first snapshot lands and
+  // by the pre-auth login cache below. See src/tenants/mgt.js.
+  restaurantName: profile.name,
   currency: "€",
   phonePrefix: "+",
   regularMin: 2,

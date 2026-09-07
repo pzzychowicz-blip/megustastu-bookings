@@ -20052,3 +20052,50 @@ map is something the bundler, `grep` and a reader can all see through, where
 The boot banner keeps its green DEV / red PROD badge and gains the slug —
 `[firebase] DEV — megustastu-bookings-dev · tenant mgt`, verified in the running
 app — so one glance answers both halves of "which database am I on".
+
+### Commit 12 — `APP_NAME`, and the third spelling nothing could see
+
+Plan §2.2. The app's own name was four hand-typed literals, and one had already
+drifted: `Settings.jsx`'s footer said **"MGT Booking System"** — singular, with a
+word `__APP_SIGNATURE__.app` and `DaySheet`'s printed footer had both dropped.
+Nothing in the repo could catch it. `check:style` looks for literals of colour
+and geometry; three copies of one string that happen to disagree are invisible to
+every gate we have.
+
+`APP_NAME` (`src/lib/constants.js`) is now the one value, read by
+`__APP_SIGNATURE__.app`, `DaySheet`'s heading fallback and printed footer, the
+Settings footer, and **two sites the plan's table did not list** —
+`ErrorBoundary`'s heading and its build-line fallback. Six copies, not four; the
+plan enumerated by reading the branding pass and the grep found two more.
+
+**The restaurant-name seed went a different way than the plan drafted, on
+Patryk's call.** §2.2 proposed seeding `DEFAULT_GENERAL_SETTINGS.restaurantName`
+from `APP_NAME` — honest, but it made a PROD console check a hard precondition
+(a stored value always wins, so an absent node would have flipped the header from
+"Me Gustas Tú" to "MGT Bookings" on deploy). Commit 11's tenant profile already
+carries the restaurant's name, so the seed reads **`profile.name`** instead. For
+MGT that is byte-identical to the literal it replaces, so the seed path, the
+pre-auth login cache and the degraded offline state are all unchanged; for the
+next tenant it is that tenant's own name rather than the app's. Patryk separately
+confirmed PROD's `settings/general` does store a `restaurantName`, so the
+precondition is closed twice over.
+
+`DaySheet`'s heading keeps `restaurantName || APP_NAME` — a FALLBACK, not the
+composition v17.15.2 removed. Reading the app's name when no restaurant name is
+configured is the opposite direction from building the app's name out of a
+restaurant setting.
+
+**Two copies survive and must**: `index.html`'s `<title>` and
+`apple-mobile-web-app-title`, and the manifest's `name`/`short_name` — static
+files that import nothing. They are the same defect the constant removes, so
+`tests/stylesheet.test.js` now asserts all four against the constant, and both
+assertions read `APP_NAME` itself rather than a pattern over `constants.js` —
+a regex there would also match the name in that file's own prose, which is
+exactly what `csp.test.js` shipped in v17.15.1. **The guard was proven by
+breaking it**: a `<title>` changed to the old third spelling and a `short_name`
+shortened fail two tests; restored, 40 pass.
+
+The manifest's `description` still names the restaurant ("Staff booking
+management for Me Gustas Tú") and is deliberately untouched — per-tenant text is
+a different problem from a drifted copy of the app's name, and it is on
+`ROADMAP.md`.

@@ -31,7 +31,8 @@ import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
-import { BTN, R, M, T, FW, H, IC } from "../lib/constants";
+import { BTN, R, M, T, FW, H, IC, APP_NAME } from "../lib/constants";
+import { profile } from "../firebase"; // v18.0.0 phase 2: the selected tenant, for the general-settings fallback
 
 // v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
 const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -469,7 +470,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
   // the hook's DEFAULT_GENERAL_SETTINGS seed.
   const gs = generalSettings && typeof generalSettings === "object"
     ? generalSettings
-    : { restaurantName: "Me Gustas Tú", currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10, defaultBookingSize: 2, defaultWalkinSize: 2 };
+    : { restaurantName: profile.name, currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10, defaultBookingSize: 2, defaultWalkinSize: 2 };
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
@@ -928,7 +929,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           version {appVersion}
         </div>
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", letterSpacing: "0.02em", marginTop: 8 }}>
-          © 2026 Patryk Zychowicz — MGT Booking System
+          {"© 2026 Patryk Zychowicz — " + APP_NAME}
         </div>
       </div>
     </div>

@@ -28,6 +28,27 @@
 // + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
 import { todayStr } from "./day";
 
+// ── The app's own name (v18.0.0 phase 2) ─────────────────────────────────────
+// The APP is "MGT Bookings"; the RESTAURANT is whatever `settings/general.
+// restaurantName` says (seeded from the selected tenant's `profile.name` —
+// src/tenants/, src/firebase.js). v17.15.2 fixed a real bug from confusing the
+// two: DaySheet's printed footer built the app's own name out of a restaurant
+// setting, so the app was called something different at every tenant.
+//
+// It is a constant here because it was FOUR hand-typed copies, and one of them
+// had already drifted: `Settings.jsx`'s footer said "MGT Booking System" —
+// singular, with a word the other three dropped. Nothing in the repo could see
+// it. `check:style` looks for literals of colour and geometry; three copies of
+// one string that happen to disagree are invisible to every gate we have. The
+// constant is what makes a fifth copy impossible rather than merely absent.
+//
+// TWO COPIES REMAIN, AND ARE ALLOWED: `index.html` (the <title> and the
+// apple-mobile-web-app-title) and `public/manifest.webmanifest` (name +
+// short_name) are static files that cannot import. They must agree with this
+// value; `tests/stylesheet.test.js` asserts that they do, so a rename here
+// fails the build until they follow.
+export const APP_NAME = "MGT Bookings";
+
 export var DEFAULT_LAYOUT={
   tables:[
     {id:"1A",capacity:2,zone:"outdoor"},{id:"1B",capacity:2,zone:"outdoor"},
