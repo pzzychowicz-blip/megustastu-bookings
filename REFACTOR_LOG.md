@@ -20423,6 +20423,24 @@ is `lib/roles.js` + `useRoles.js`, which must be in main because `can()` gates
 the whole app. Verified by grepping the built bundles for panel-only strings
 rather than by reading the total.
 
+### Commit 23 — the field the deployed rules made unwritable
+
+`lastSeenAt` is gone from `sanitizeRole` and from the row model. The plan listed
+it and this ships without it, found by READING THE ROW the live DEV rules had
+just let the app create: `lastSeenAt: 0`, written once and never again.
+
+It could not have been anything else. Once a stub exists `roles/$uid` is
+admin-only — that is the whole of the no-self-promotion rule — so a person can
+never stamp their own, and nothing else is in a position to. Making it writable
+means a child `.write` on `roles/$uid/lastSeenAt`, which is new rules surface on
+the node that governs permissions, for a field the panel does not render.
+
+The question it was for is answered better and for free: a `/roles` row EXISTS
+only because that person has signed in at least once — which is exactly the
+"invited versus arrived" distinction the People list needs — and `/presence`
+already says who is connected right now. So this is the phase-1 review's finding
+one collection over: an unreferenced write path reading as a supported feature.
+
 **Verified live on DEV, as far as DEV currently allows.** The app loads against
 520 bookings; with no `/roles` row the Admin tab is absent from the seven-tab
 bar and ←/→ wraps Shortcuts → General without stopping on it. That is the

@@ -172,7 +172,6 @@ export function sanitizeRole(r, key) {
     extras: sanitizeExtras(src.extras),
     addedAt: Number(src.addedAt) || 0,
     addedBy: typeof src.addedBy === "string" ? src.addedBy : "",
-    lastSeenAt: Number(src.lastSeenAt) || 0,
     updatedAt: Number(src.updatedAt) || 0,
   };
 }
@@ -287,9 +286,20 @@ export function applyInviteFields(invite) {
 // only as an invitation and would otherwise be invisible on the screen whose
 // job is "who can use this app".
 //
-// Sorted so the list does not reorder under the reader as `lastSeenAt` ticks:
+// Sorted by LEVEL and then by name — never by anything that changes on its own,
+// so the list cannot reorder under the reader while they are pointing at a row:
 // admins first, then managers, then staff, then unapplied stubs, then pending
-// invitations, and alphabetically by the name shown within each group.
+// invitations.
+//
+// The plan listed a `lastSeenAt` on each row and this deliberately has none.
+// Once a stub exists, `roles/$uid` is admin-only — that is the whole of the
+// no-self-promotion rule — so a person can never stamp their own, and nothing
+// else is in a position to. It would have been a field written once as `0` and
+// never again: an unreferenced write path reading as a supported feature, which
+// is the same thing phase 1's review removed from `useVouchers`. The question it
+// was for is answered better and for free anyway — a row EXISTS only because
+// that person has signed in at least once, and `/presence` already says who is
+// connected right now.
 export function userRows(roles, invites) {
   const rows = (roles || []).map(function (r) {
     return {
@@ -299,7 +309,6 @@ export function userRows(roles, invites) {
       name: r.name,
       role: r.role,
       extras: r.extras,
-      lastSeenAt: r.lastSeenAt,
       entry: r,
       // An invitation matching this row is an OFFER, not a state: it is shown
       // on the row with an Apply control and does not change what they can do
@@ -315,7 +324,7 @@ export function userRows(roles, invites) {
       return {
         kind: "invite",
         uid: null, inviteId: i.id, email: i.email, name: "",
-        role: i.role, extras: i.extras, lastSeenAt: 0, entry: null, invite: i,
+        role: i.role, extras: i.extras, entry: null, invite: i,
       };
     });
   return rows.concat(pending).sort(rowOrder);
