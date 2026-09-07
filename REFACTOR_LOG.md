@@ -20209,3 +20209,31 @@ costs production nothing.
 Same class as the pre-v17.5.1 green connection dot: an indicator asserting a
 relationship that does not exist is worse than no indicator, because it is
 believed.
+
+### Commit 17 — `/code-review` fix: the guard pinned four copies and there were seven
+
+Commit 12's own lesson, landing on commit 12. The `APP_NAME` guard pinned
+`index.html`'s `<title>` and `apple-mobile-web-app-title` and the manifest's
+`name`/`short_name`, and said in three places — the constant's comment,
+`CLAUDE.md` twice, and the test's own header — that **two** copies remained. A
+repo-wide grep finds **seven**, and the three that were missed are the ones a
+user sees when the app is BROKEN: `index.html`'s boot-watchdog heading ("MGT
+Bookings didn't start") and `public/sw.js`'s offline page (`<title>Offline — MGT
+Bookings` and "MGT Bookings can't load right now"). So the guard's stated promise
+— "a rename here fails the build until they follow" — was false for exactly the
+screens that would have gone out carrying the old name.
+
+All three are pinned now, **and the COUNT per file is asserted**, because
+pinning a site somebody thought of cannot see a copy nobody thought of, and an
+unseen copy is the entire defect. Prose describing coverage is what failed here;
+a number that fails the build is not. Each new assertion was proven by breaking
+it: a drifted watchdog heading fails two tests, a drifted offline title and body
+fail two, and both restore clean.
+
+**The extraction was the second half.** Every regex now goes through a `once()`
+helper that fails unless the pattern matches EXACTLY ONE time. The first version
+used a bare `.match()`, which takes the first hit anywhere in the file — the
+v17.15.1 `csp.test.js` failure, which this test's header cited while repeating
+its shape. Verified: an HTML comment mentioning a literal `<title>` inserted
+above line 22 now fails the title test, where before it would have shadowed the
+real one and passed on bytes nobody was guarding.

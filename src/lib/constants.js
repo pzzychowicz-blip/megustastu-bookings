@@ -42,11 +42,18 @@ import { todayStr } from "./day";
 // one string that happen to disagree are invisible to every gate we have. The
 // constant is what makes a fifth copy impossible rather than merely absent.
 //
-// TWO COPIES REMAIN, AND ARE ALLOWED: `index.html` (the <title> and the
-// apple-mobile-web-app-title) and `public/manifest.webmanifest` (name +
-// short_name) are static files that cannot import. They must agree with this
-// value; `tests/stylesheet.test.js` asserts that they do, so a rename here
-// fails the build until they follow.
+// SEVEN COPIES REMAIN, AND ARE ALLOWED, in the three files that cannot import:
+// `index.html` (the <title>, the apple-mobile-web-app-title, and the boot
+// watchdog's heading), `public/manifest.webmanifest` (name + short_name) and
+// `public/sw.js` (its header comment, and the offline page's <title> and body
+// copy). They must agree with this value; `tests/stylesheet.test.js` pins each
+// one AND asserts how many there are, so a rename here fails the build until
+// every one follows, and a NEW copy fails it too.
+//
+// The count is asserted rather than described because the first version of that
+// guard described it: the comment said "two copies remain" and the test pinned
+// four, leaving the boot watchdog and the offline page — the two screens a user
+// sees when the app is broken — free to keep an old name silently.
 export const APP_NAME = "MGT Bookings";
 
 export var DEFAULT_LAYOUT={

@@ -295,45 +295,102 @@ describe("the app stylesheet (src/index.css)", () => {
 // hand-typed copies, one of which had silently drifted to a third spelling
 // ("MGT Booking System") that no gate in the repo could see.
 //
-// Two copies survive because they MUST: `index.html` and
-// `public/manifest.webmanifest` are static and import nothing. They are the
-// same defect the constant was created to remove, so they get the only guard
-// that can reach them — this one. A rename of APP_NAME now fails the build
-// until both follow it.
+// Copies survive where a file CANNOT import: `index.html`,
+// `public/manifest.webmanifest` and `public/sw.js`. They are the same defect
+// the constant was created to remove, so they get the only guard that can reach
+// them — this one. A rename of APP_NAME fails the build until every one of them
+// follows.
 //
-// It lives in this file because this is where the repo already guards static
-// files against a truth held somewhere else, and a 25th test file for two
-// assertions would be worse than a slightly wider subject here.
+// /code-review fix, and it is this section's own lesson landing on itself: the
+// first version pinned FOUR sites and its comment said "TWO COPIES REMAIN",
+// while a repo-wide grep finds SEVEN. The three it missed are the ones a user
+// sees when the app is BROKEN — `index.html`'s boot-watchdog heading, and the
+// service worker's offline `<title>` and body copy. So the promise "a rename
+// here fails the build until they follow" was false for exactly the screens
+// that would have gone out carrying the old name. Adding a copy is easy;
+// noticing one is not, which is why the count is asserted below rather than
+// described in a comment that cannot be run.
 //
-// Both assertions read the CONSTANT rather than a pattern: a regex over
-// constants.js would also match the name where it appears in that file's own
-// prose, which is exactly the failure csp.test.js shipped in v17.15.1.
+// Every extraction goes through `once()`, which fails unless the pattern
+// matches EXACTLY ONE time. The first version used a bare `.match()`, taking
+// the first hit anywhere in the file — the v17.15.1 csp.test.js failure, which
+// this comment cited while repeating its shape: an HTML comment mentioning a
+// literal `<title>` (the head already carries multi-line comments) or an inline
+// SVG `<title>` would have shadowed the real one silently.
 //
-// The manifest's `description` deliberately still names the RESTAURANT
-// ("Staff booking management for Me Gustas Tú") and is NOT checked here — that
-// is per-tenant text, a different problem from a drifted copy of the app's
-// name, and it is on ROADMAP.md as pending tenant work.
+// The manifest's `description` deliberately still names the RESTAURANT ("Staff
+// booking management for Me Gustas Tú") and is NOT checked here — per-tenant
+// text is a different problem from a drifted copy of the app's name, and it is
+// on ROADMAP.md as pending tenant work.
 describe("the app's own name (APP_NAME)", () => {
-  const MANIFEST = JSON.parse(
-    readFileSync(join(ROOT, "public", "manifest.webmanifest"), "utf8")
+  const MANIFEST_SRC = readFileSync(
+    join(ROOT, "public", "manifest.webmanifest"), "utf8"
   );
+  const MANIFEST = JSON.parse(MANIFEST_SRC);
+  const SW = readFileSync(join(ROOT, "public", "sw.js"), "utf8");
+
+  // Exactly one match, or the guard is measuring bytes nobody chose.
+  function once(text, re, label) {
+    const all = [...text.matchAll(new RegExp(re.source, re.flags + "g"))];
+    expect(all.length, label + ": expected exactly one match, got " + all.length)
+      .toBe(1);
+    return all[0][1];
+  }
 
   it("is what index.html's <title> says", () => {
-    const m = HTML.match(/<title>([^<]*)<\/title>/);
-    expect(m, "index.html has no <title>").toBeTruthy();
-    expect(m[1].trim()).toBe(APP_NAME);
+    expect(once(HTML, /<title>([^<]*)<\/title>/, "index.html <title>").trim())
+      .toBe(APP_NAME);
   });
 
   it("is what index.html's apple-mobile-web-app-title says", () => {
-    const m = HTML.match(
-      /<meta\s+name="apple-mobile-web-app-title"\s+content="([^"]*)"/
+    expect(once(
+      HTML,
+      /<meta\s+name="apple-mobile-web-app-title"\s+content="([^"]*)"/,
+      "index.html apple-mobile-web-app-title"
+    )).toBe(APP_NAME);
+  });
+
+  // The boot watchdog — the screen shown when the bundle never mounts, so it is
+  // one of the two places the name is read at the app's worst moment. Inside
+  // the CSP-hashed inline script: this reads it, and must never rewrite it.
+  it("is what index.html's boot-watchdog heading says", () => {
+    const heading = once(
+      HTML, /h\.textContent = "([^"]*)"/, "index.html boot-watchdog heading"
     );
-    expect(m, "index.html has no apple-mobile-web-app-title meta").toBeTruthy();
-    expect(m[1]).toBe(APP_NAME);
+    expect(heading.startsWith(APP_NAME),
+      "the boot watchdog heading must start with APP_NAME, got: " + heading
+    ).toBe(true);
   });
 
   it("is what the web manifest's name and short_name say", () => {
     expect(MANIFEST.name).toBe(APP_NAME);
     expect(MANIFEST.short_name).toBe(APP_NAME);
+  });
+
+  // The offline page the service worker serves for a navigation it cannot
+  // fetch. The other worst-moment screen.
+  it("is what the service worker's offline page says", () => {
+    const title = once(SW, /<title>([^<]*)<\/title>/, "sw.js offline <title>");
+    expect(title.endsWith(APP_NAME),
+      "the offline page title must end with APP_NAME, got: " + title).toBe(true);
+
+    const body = once(
+      SW, /<p>([^<]*?) can't load right now/, "sw.js offline body copy"
+    );
+    expect(body).toBe(APP_NAME);
+  });
+
+  // The count itself. Everything above pins a site somebody thought to pin; a
+  // NEW copy is invisible to all of it, and an invisible copy is the whole
+  // defect. Static files import nothing, so the only defence is knowing how
+  // many there are — raise this deliberately, or delete the copy instead.
+  it("appears in the static files exactly as often as it is pinned", () => {
+    const count = (t) => t.split(APP_NAME).length - 1;
+    // index.html: <title>, apple-mobile-web-app-title, watchdog heading.
+    expect(count(HTML), "index.html").toBe(3);
+    // manifest: name, short_name. (`description` names the RESTAURANT.)
+    expect(count(MANIFEST_SRC), "manifest.webmanifest").toBe(2);
+    // sw.js: the file header comment, the offline <title>, the offline body.
+    expect(count(SW), "sw.js").toBe(3);
   });
 });
