@@ -20267,3 +20267,169 @@ a live `ReferenceError` in code that builds, lints and tests clean. Open a NEW
 tab before believing a console error that a reload did not clear: it is the
 "what you measured was the tooling" family the Gotchas table already records for
 synthetic presses and automation accessibility trees.
+
+### Commit 19 — the roles model, and a last-admin rule RTDB can express
+
+Phase 3, the only phase in this release rated `max`, and the reason is that a
+rules mistake is the one class of change a revert cannot reach.
+
+`src/lib/roles.js` + `tests/roles.test.js` first: thirteen capabilities, three
+levels, and extras that ADD on top of a level and never subtract. Patryk's call
+on where the staff→manager line falls — staff run a service (take, edit, seat,
+move, block, waitlist, redeem), a manager owns the money and the configuration
+— pinned by a test so a later edit is deliberate rather than drift.
+
+**Two things the plan asked for that the database cannot do.** Both were
+written down as settled and neither survived contact with RTDB, which is worth
+recording because both read as perfectly reasonable requirements:
+
+*"The rule refuses a write that would leave `/roles` with no admin."* RTDB rules
+cannot count children — there is no `numChildren()`, no iteration, no query — so
+the literal reading needs a maintained counter node with delta validation. That
+IS expressible, and it turns every role write into a 2-path atomic update whose
+failure mode is a counter drifting out of step with reality, repairable only
+from the Firebase console: the exact state the guard exists to avoid. Put to
+Patryk against the alternative, and he took the derived form. **An admin may not
+strip their own `settingsAdmin`**, by level or by extra. Only a holder may write
+`/roles` at all, so the set of admins shrinks exclusively when one admin demotes
+ANOTHER — and the demoter still holds it. Zero is unreachable. One clause, no
+new state, and the panel can disable exactly what the rule refuses instead of
+approximating it. The cost, stated on screen: an admin who wants to step down
+asks another admin.
+
+*"An admin applies an invitation in one tap"* was already in the plan for the
+second one, with the reasoning — a rule would have to look up an invitation by
+the signing-in user's email, and rules do no string manipulation, cannot query,
+and an email cannot be a key.
+
+**`settingsAdmin` is not governed by the enforcement flag**, and that is a
+correction to the plan's model rather than an addition to it. The flag exists so
+the deploy is rolling-safe, and that argument applies only to paths carrying
+live traffic from accounts with no `/roles` row. `/roles`, `/invites` and
+`settings/admin` are new here and carry none, so they are admin-only from the
+first deploy. `ALWAYS_ENFORCED` makes the client ask the same question the rule
+asks; a client that relaxed it would render a screen whose every write the
+server refuses.
+
+Two shapes carried in from other collections rather than re-learned: the child
+KEY is a row's identity of last resort (v17.16.13, where a discarded key grew
+the node by a row per read), and `extras` keys are SORTED because
+`write-path.js`'s `contentKey` compare is key-order sensitive.
+
+### Commit 20 — the rules, and a gate that ships switched off
+
+`database.rules.json` + 63 new emulator tests (149 → 212). Everything here was
+verified by running it.
+
+Two new per-child-CAS nodes carrying the `updatedAt`/`baseUpdatedAt` predicate
+character for character as it stands on `bookings/$bid` and `vouchers/$code`,
+plus a rev pair on `settings/admin`. The gate: `settings/*` needs
+`settingsWrite` and a `bookings/$bid` DELETE needs `bookingDelete`, both only
+while `enforceRoles` is true.
+
+**Sixteen copies of one predicate, because rules have no macros.** That is this
+repo's most-repeated defect shape landing in a file where it cannot be
+refactored away. Applied by script asserting each substitution matched exactly
+once, and swept in the emulator over a list DERIVED from the rules file — a
+hand-typed sixteenth copy and a hand-typed test list are the same bug twice.
+
+**`ROLE_GRANTS` is duplicated into the rules** for the same reason: rules cannot
+read a JS constant. Neither file can see the other, so the suite asserts they
+agree BEHAVIOURALLY — it drives the real rules with each level in turn and
+compares against `can()`.
+
+**Measured, because the plan asked rather than assumed.** A 5-child patch under
+the role gate: **8 ms**, printed by the suite on every run. The predicate is
+ordered `newData.exists() || <role check>`, so the two root reads happen only on
+a DELETE and every ordinary booking write does no extra read at all. It works at
+all only because `.write` is evaluated for a delete and `.validate` is not —
+the v17.16.7 finding, load-bearing a second time.
+
+**Two existing tests changed, both deliberately.** The rig's spot-check pinned
+`bookings/$bid` `.write` to a literal that moved; it now pins the SHAPE, and
+specifically that `newData.exists()` precedes any `root.child(` — an edit that
+reordered those would still be correct and would quietly put a root read on the
+app's hottest path. And the prefs PROBE is **inverted, not weakened**: its own
+comment had predicted that a `$uid === auth.uid` tightening would "fail here
+loudly", and it did.
+
+**One of the plan's two one-line fixes is disproved.** `settings/users/$uid/prefs`
+gained `auth.uid === $uid` and the PROBE closed with it. The plan paired that
+with the same fix for `presence/$key` — and presence keys are **push keys, not
+uids** (`push(ref(db,"presence"))`, `usePresence.js:135`), so the predicate could
+never match; worse, the v17.8.0 staleness prune deliberately deletes OTHER
+devices' dead children (`usePresence.js:204`), so any own-child-only rule would
+break it. Left alone, and the reasoning is in `database.rules.README.md` so the
+next reader does not re-derive it as a fix.
+
+### Commit 21 — useRoles, and the write path's fourth user
+
+`src/hooks/useRoles.js`. Two keyed collections on the `/vouchers` shape, both
+through `lib/write-path.js`, already generic over "a list of things with ids".
+
+`settings/admin` lives here rather than in a tenth settings hook: `can()` is
+meaningless without the flag and the flag is meaningless without `can()`, so
+splitting them would make every consumer wire two hooks together in the right
+order to ask one question.
+
+Four decisions with their reasons at the site. **No empty-collection guard** —
+`/roles` legitimately reaches zero, it starts there, and a role row is one line
+an admin retypes, where an empty `bookings` write destroys records nobody can
+reconstruct. **Invitation ids are derived from the email**, so two admins
+inviting one person write the same path and the second is refused by the CAS.
+**`applyInvite` writes two collections apply-then-withdraw**, because they
+cannot be one atomic patch and a failed withdrawal shows the invitation again
+(a re-tap) where the other order loses it with nothing applied. **Self-
+registration bypasses the shared write path**, because a refusal there is
+routine — the row exists on every sign-in after the first — and routing it
+through `saveRoles` would raise the red banner as a matter of course.
+
+### Commit 22 — the Admin tab, and the gate that gets applied only once
+
+`AdminSettings.jsx`, the 8th settings tab and the first conditional one, plus
+`RolesModal` (`roles` in `MODAL_Z` above `settings`, with its `escapeAction`
+case in the same commit — `tests/modal-stack.test.js` fails the build
+otherwise, and it did, correctly, between the two edits).
+
+**The bug this phase was most likely to ship.** `SETTINGS_TABS` has been a
+single list since v16.0.0 and that was enough while every tab was
+unconditional — but the ←/→ cycle DERIVES from that list, so filtering at the
+render site alone leaves arrows landing on a tab that renders nothing: the
+fifth version of the hand-copied-tab-list bug, arriving through the one door the
+original fix left open. `visibleTabs(can)` lives beside the list and both
+consumers call it. A tab that can disappear needs a second half too — the
+rendered id is DERIVED so no frame renders empty, and an effect corrects the
+STATE so the cycle is not left pointing at something gone. The `else`
+fallthrough is what makes the derived half load-bearing: an id no branch matches
+renders the LAST branch's body, which here was the Shortcuts sheet.
+`tests/settings-tabs.test.js` guards all of it, and both halves were verified by
+sabotage rather than by reading.
+
+The capability grid is a real `<table>`: a cell means "this capability, at this
+level", which is what row and column headers express — so it is announced
+without thirty-nine hand-written labels to keep in step, while the interactive
+cells still carry an `aria-label` naming the capability AND the person. Three
+cell states distinguished by SHAPE as well as colour. The one fill carrying text
+is `--app-success-solid`, already registered in `tests/contrast.test.js`, so the
+grid introduces no unregistered pairing.
+
+**A bundle regression I caused and measured.** Importing `RolesModal` into
+App.jsx statically put the whole Admin panel in the STARTUP bundle — 98.74 →
+**104.13 kB gz** — because App imports it eagerly while `Settings.jsx` is lazy,
+so the one static reference wins and the v17.1.0 lazy-Settings split is defeated
+for a screen almost nobody opens. Through the existing `lazyChunk` helper it
+becomes its own 9.98 kB chunk and startup is **101.72 kB**; the residual +2.98 kB
+is `lib/roles.js` + `useRoles.js`, which must be in main because `can()` gates
+the whole app. Verified by grepping the built bundles for panel-only strings
+rather than by reading the total.
+
+**Verified live on DEV, as far as DEV currently allows.** The app loads against
+520 bookings; with no `/roles` row the Admin tab is absent from the seven-tab
+bar and ←/→ wraps Shortcuts → General without stopping on it. That is the
+production state on deploy day — enforcement off, no roles — and it behaves
+byte-for-byte as before, which is the rolling-safe property this phase turns on.
+**The panel itself is not yet exercised against a live database**: writing
+`/roles` on DEV returns `401 Permission denied` (measured via REST with the
+signed-in token), because DEV still runs the phase-1 rules where `/roles` has no
+rule and the root `.write` grant is gone. Publishing them needs an interactive
+`firebase login`. See the hand-off for what remains.

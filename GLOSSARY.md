@@ -263,12 +263,14 @@ Where the real ambiguity lives.
 
 ## 9. Settings and admin
 
-Six tabs, split by **audience**: what the restaurant *is*, then what it *holds*,
-then how *you* look at it, then reference.
+Eight tabs, split by **audience**: what the restaurant *is*, then what it
+*holds*, then how *you* look at it, then reference — and, since v18.0.0, who may
+do what. **Admin is the only conditional tab**: it appears solely for an account
+with `settingsAdmin`.
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| General · Layout · Customers · Vouchers · Reminders · App · Shortcuts | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. |
+| General · Layout · Customers · Vouchers · Reminders · App · Shortcuts · Admin | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. Since v18.0.0 both read it through **`visibleTabs(can)`**, so a capability-gated tab is filtered out of the render *and* the cycle. |
 | The Vouchers tab body | **vouchers settings** (`VouchersSettings.jsx`) | Issue · search · filter · void, plus the default validity period. Records and their configuration in one place. There is **no delete** — see `CLAUDE.md`. |
 | "Default validity", in months | **voucher expiry period** (`settings/voucherDefaults.expiryMonths`) | Seeds `expiresAt` on a newly issued voucher. `0` means never. |
 | Opening hours, shifts, durations, late thresholds | **General** | The restaurant's operating rules. Restaurant-wide. |
@@ -278,6 +280,14 @@ then how *you* look at it, then reference.
 | "Shared across all devices" | **restaurant-wide setting** | The six `settings/*` nodes. |
 | "This device only" | **per-device setting** | App width, the four zoom values, the saved split layout — properties of the screen. |
 | A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view. Tri-state: `null` means never chosen. |
+| The Admin tab body | **Admin** (`AdminSettings.jsx`) | People, their levels, invitations, and the enforcement switch. Admin-only at both layers — the tab is filtered out, and the rules refuse the writes regardless. |
+| Staff · Manager · Admin | **level** (`role`, `/roles/{uid}`) | The three named tiers. `staff` runs a service; `manager` owns money and configuration; `admin` also administers the app. An absent level reads as **staff**. |
+| A single ticked cell on someone's row | **extra** (`/roles/{uid}/extras/{cap}`) | One capability granted to one person **on top of** their level. Additive only — an extra never takes anything away, so a level is always a floor. |
+| "Take bookings", "Delete bookings", "Change settings" … | **capability** (`CAPABILITIES`, `src/lib/roles.js`) | The thirteen things the app gates on. The UI always asks `can("bookingDelete")`, **never** `role === "admin"`. |
+| The "enforced by the server" chip | **rule-enforced capability** (`RULE_ENFORCED`) | The three the database refuses too — `settingsAdmin`, `settingsWrite`, `bookingDelete`. The other ten are UI gates and the panel says so. |
+| The Capabilities pop-up | **capability grid** (`RolesModal`, `AdminSettings.jsx`) | Pick a person, read their capabilities against all three levels side by side. Only their own column takes a tick. |
+| "Enforce roles" | **role enforcement** (`settings/admin.enforceRoles`) | Ships **off**, so the app behaves exactly as before until it is switched on. Off is also what makes the rules deploy rolling-safe. |
+| A person who has been invited but never signed in | **pending invitation** (`/invites/{id}`) | Waits on the People list. It grants nothing by itself — an admin applies it in one tap once that person signs in. |
 | Printable sheet | **day sheet** (`DaySheet.jsx`) | Print-only DOM, hard-coded light. |
 
 ---

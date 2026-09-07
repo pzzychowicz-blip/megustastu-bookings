@@ -18,7 +18,7 @@ import { isTyping } from "../lib/keyboard";
 import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
-import { SETTINGS_TABS } from "../components/SettingsChrome";
+import { visibleTabs } from "../components/SettingsChrome";
 import { todayStr, stepDate } from "../lib/day";
 import { seatingClosed } from "../lib/booking-logic";
 
@@ -50,6 +50,10 @@ function escapeAction(K,id){
     case "reminder":    return K.requestCloseReminderEditor;
     case "reminderdel": return function(){K.setConfirmReminderDel(null);};
     // requestCloseSettings owns the tab reset, on both its paths.
+    // v18.0.0 phase 3: closes the capability grid and returns you to the Admin
+    // tab underneath — the safe direction, and it holds no draft of its own
+    // (every tick is written as it is made), so there is nothing to guard.
+    case "roles":       return function(){K.setRolesFor(null);};
     case "settings":    return K.requestCloseSettings;
     case "history":     return function(){K.setShowHistory(false);};
     case "kitchen":     return function(){K.setConfirmKitchen(null);};
@@ -219,7 +223,12 @@ export function useKeyboardShortcuts(ctx){
           // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
           // tab list) so a newly added tab can never be skipped here again. Do
           // NOT inline a literal id list (that's how Customers got skipped).
-          const TABS=SETTINGS_TABS.map(function(t){return t.id;});
+          // v18.0.0 phase 3: through `visibleTabs(can)`, not the raw list. The
+          // Admin tab is capability-gated, and a cycle over the UNfiltered list
+          // would step onto a tab the render side refuses to show — the same
+          // bug as a hand-copied list, reached by filtering in only one of the
+          // two places that read it.
+          const TABS=visibleTabs(K.can).map(function(t){return t.id;});
           let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
           const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);

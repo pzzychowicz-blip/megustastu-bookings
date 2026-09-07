@@ -50,6 +50,10 @@ export const MODAL_Z=[
   "voucher",     // the redeem prompt, raised BY a completion — same shape
   "history",
   "settings",
+  // v18.0.0 phase 3: the capability grid opens from INSIDE the Settings
+  // overlay, so it must rank above it — and its `escapeAction` case ships in
+  // the same commit, which tests/modal-stack.test.js enforces.
+  "roles",
   "reminderdel", // renders above Settings in DOM order…
   "reminder",    // …and the editor is checked before it (v14 p7 order, kept)
   "discard",     // z=260 — raised by the surface below it, so it must be near the top

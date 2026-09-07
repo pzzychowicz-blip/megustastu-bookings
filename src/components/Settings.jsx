@@ -42,7 +42,8 @@ const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
 // can import them WITHOUT pulling this whole (now lazy-loaded) module into the
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
-import { SETTINGS_TABS } from "./SettingsChrome";
+import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
+import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
 import { CloseIcon, DownloadIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
@@ -948,6 +949,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
 // state and handlers are also threaded from BookingApp.
 export function SettingsContent({
   tab, setTab,
+  // v18.0.0 phase 3 — the Admin tab. `can` is what filters the tab list, and
+  // it is the SAME function useKeyboardShortcuts filters the ←/→ cycle with.
+  can, isAdmin, myUid, roleRows, enforceRoles, onSetEnforceRoles,
+  onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite,
+  onOpenCapabilities,
   appVersion,
   isDark,
   onToggleDark,
@@ -1057,21 +1063,39 @@ export function SettingsContent({
     setTab(t);
   }
 
+  // ── v18.0.0 phase 3: a tab that DISAPPEARS must not strand the reader ──────
+  // The Admin tab is capability-gated, so the active tab can stop existing
+  // while it is open — an admin demoted from another device, or enforcement
+  // switched on. Two halves, and both are needed: `cur` is derived so the body
+  // never renders empty for even one frame, and the effect corrects the STATE
+  // so the ←/→ cycle (which reads `settingsTab` in App) does not keep pointing
+  // at a tab that is gone.
+  const tabs = visibleTabs(can);
+  const cur = tabs.some(function (t) { return t.id === tab; }) ? tab : "general";
+  useEffect(function () { if (cur !== tab) setTab(cur); }, [cur, tab, setTab]);
+
   let content;
-  if (tab === "app") {
+  if (cur === "admin") {
+    content = <AdminTabContent
+      can={can} isAdmin={isAdmin} myUid={myUid} rows={roleRows}
+      enforceRoles={enforceRoles} onSetEnforceRoles={onSetEnforceRoles}
+      onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
+      onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
+      onOpenCapabilities={onOpenCapabilities} />;
+  } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
-  } else if (tab === "general") {
+  } else if (cur === "general") {
     content = <GeneralTabContent appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
-  } else if (tab === "layout") {
+  } else if (cur === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
-  } else if (tab === "customers") {
+  } else if (cur === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
     content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
-  } else if (tab === "vouchers") {
+  } else if (cur === "vouchers") {
     // v18.0.0: gift vouchers — the records AND their configuration, because a
     // voucher setting is edited where vouchers are.
     content = <VouchersTabContent vouchers={vouchers} bookings={bookings} currency={generalSettings ? generalSettings.currency : "€"} voucherDefaults={voucherDefaults} onIssue={onIssueVoucher} onVoid={onVoidVoucher} onSaveDefaults={onSaveVoucherDefaults} />;
-  } else if (tab === "reminders") {
+  } else if (cur === "reminders") {
     content = (
       <RemindersTabContent
         reminders={reminders}
@@ -1087,8 +1111,8 @@ export function SettingsContent({
   return (
     <div>
       <TabBar
-        tabs={SETTINGS_TABS}
-        current={tab}
+        tabs={tabs}
+        current={cur}
         onSelect={selectTab}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
@@ -1097,8 +1121,8 @@ export function SettingsContent({
           ResizeObserver that normally drives AutoHeight fires one frame too late
           for that, so the new tab painted at full height and the panel then
           snapped shut and re-grew. See AutoHeight. */}
-      <AutoHeight watch={tab}>
-        <div key={tab} className="mgt-fade-in">{content}</div>
+      <AutoHeight watch={cur}>
+        <div key={cur} className="mgt-fade-in">{content}</div>
       </AutoHeight>
     </div>
   );

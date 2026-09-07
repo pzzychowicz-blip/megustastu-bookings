@@ -33,7 +33,32 @@ export const SETTINGS_TABS = [
   { id: "reminders", label: "Reminders" },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
+  // v18.0.0 phase 3: the 8th tab, and the FIRST one that is not always there.
+  // `cap` is what `visibleTabs` filters on — declared beside the tab rather
+  // than as a list of admin-only ids somewhere else, because a second list is
+  // exactly what this comment block has been about since v16.0.0.
+  { id: "admin", label: "Admin", cap: "settingsAdmin" },
 ];
+
+// ── visibleTabs — the ONE filter, for the same reason as the ONE list ────────
+// v18.0.0 phase 3. `SETTINGS_TABS` being single-sourced is not enough on its
+// own: the ←/→ keyboard cycle derives from it, so filtering the list at the
+// RENDER site alone would leave arrows landing on a tab that renders nothing —
+// the fifth version of the hand-copied-tab-list bug, arriving through the one
+// door the original fix left open.
+//
+// So the filter lives here, next to the list, and both consumers call it:
+// SettingsContent for the TabBar and the body, useKeyboardShortcuts for the
+// cycle. `tests/settings-tabs.test.js` fails the build if either reads
+// SETTINGS_TABS directly.
+//
+// `can` is optional so a caller with no roles context (and any future one)
+// degrades to "show everything that is not capability-gated" rather than to an
+// empty tab bar.
+export function visibleTabs(can) {
+  if (typeof can !== "function") return SETTINGS_TABS.filter(function (t) { return !t.cap; });
+  return SETTINGS_TABS.filter(function (t) { return !t.cap || can(t.cap); });
+}
 
 // ── Cog (gear) icon ─────────────────────────────────────────────────────────
 // v17.9.0: moved into the shared icon set (Icons.jsx) so it takes the same Svg

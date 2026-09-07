@@ -45,24 +45,16 @@ session and keeping it in sync.
 
 ## Designed, not implemented
 
-> The three entries below are one approved plan, written 2026-09-07 against
+> The two entries below are one approved plan, written 2026-09-07 against
 > v17.16.13 and shipping as **one release, v18.0.0**, on one branch across seven
-> sessions. **The plan is
+> sessions. Phases 0–3 have shipped and their entries are deleted; see
+> `REFACTOR_LOG.md`. **The plan is
 > `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`** — phase order and
 > why it is forced, data shapes, security rules, hook points, and the decisions
 > already settled. It supersedes `MGT_Bookings_Production_Roadmap_Plan.md`
 > (2026-09-05), which stays on disk as the record of the four-version split and
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
-
-- **Roles and the Admin tab (v18.0.0 phase 3).** `/roles/{uid}` + `/invites`,
-  three levels named `staff`/`manager`/`admin` in code and UI alike, per-user
-  `extras` granted on top of a role (an object keyed by capability — rules cannot
-  search an array). The UI asks `can(cap)`, never `role === "admin"`. Ships with
-  `settings/admin.enforceRoles` **off**, which is what makes the rules deploy
-  rolling-safe. Never fewer than one admin, enforced in the rules and not only in
-  the panel. The Admin tab is admin-only at both layers, whole tab and every
-  control.
 
 - **Module registry and Integrations (v18.0.0 phase 4).** `settings/admin.modules`
   as the on/off registry — the WhatsApp switch ships **off**, and the same

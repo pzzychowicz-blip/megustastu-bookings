@@ -118,6 +118,14 @@ function lazyChunk(load,name){
   });
 }
 const SettingsContent = lazyChunk(function(){return import("./components/Settings").then(function(m){return {default:m.SettingsContent};});},"Settings");
+// v18.0.0 phase 3: LAZY, and measured. A static import here put the whole
+// Admin panel in the STARTUP bundle — 98.74 → 104.13 kB gz — because App
+// imports it while `Settings.jsx` only imports it lazily, so the one static
+// reference wins and the v17.1.0 lazy-Settings split is defeated for a screen
+// almost nobody opens. It resolves to the SAME chunk `Settings.jsx` pulls, so
+// by the time the Admin tab can be reached it is already fetched and the
+// Suspense fallback never paints.
+const RolesModal = lazyChunk(function(){return import("./components/AdminSettings").then(function(m){return {default:m.RolesModal};});},"Capabilities");
 import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
@@ -265,6 +273,7 @@ import { useWaitlist } from "./hooks/useWaitlist";
 // period, edited in the Vouchers tab because a voucher setting belongs where
 // vouchers are.
 import { useVouchers } from "./hooks/useVouchers";
+import { useRoles } from "./hooks/useRoles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 import { normalizeCode, isRedeemedBy, voucherState, isUnsettled } from "./lib/vouchers";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
@@ -891,6 +900,11 @@ function BookingApp({uid}){
   // confirm is raised by a save. Payload: {id, status, from:"status"|"form"}.
   const voucherAsk = modalOpen.voucher || null;
   const setVoucherAsk = setModalFns.voucher;
+  // v18.0.0 phase 3: the capability grid, opened from the Admin tab. Its
+  // payload is the uid whose row is selected — a non-empty string, so the
+  // stack's falsy-closes semantics are safe here.
+  const rolesFor = modalOpen.roles || null;
+  const setRolesFor = setModalFns.roles;
   // Set only while re-entering the completion the modal interrupted, so the
   // gate below asks its question once rather than forever. Cleared in a
   // `finally`, which is what stops a throw in the re-entered action from
@@ -1065,6 +1079,19 @@ function BookingApp({uid}){
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
+  // ── v18.0.0 phase 3: roles, capabilities and the enforcement flag ───────────
+  // `can` is the ONE gate the rest of the app asks — never `role === "admin"`,
+  // which is a copy of the role map nothing can see and which cannot honour an
+  // extra. It also filters SETTINGS_TABS and, through the same function, the
+  // ←/→ tab cycle.
+  const {
+    can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
+    setRole, setExtra, removeUser, inviteUser, withdrawInvite, applyInvite,
+  } = useRoles({
+    uid: uid,
+    userEmail: (auth.currentUser && auth.currentUser.email) || "",
+    setWriteWarning,
+  });
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
@@ -2589,6 +2616,11 @@ function BookingApp({uid}){
     showSearch:showSearch,setShowSearch:setShowSearch, // v16.3.0: "/" opens global search
     // v14 p7: settingsTab for ←/→ tab-cycle shortcut inside Settings modal.
     settingsTab:settingsTab,setSettingsTab:setSettingsTab,
+    // v18.0.0 phase 3: the ←/→ cycle runs over visibleTabs(can), not the raw
+    // list — a cycle over the unfiltered one would step onto the Admin tab the
+    // render side refuses to show. `setRolesFor` is escapeAction's target for
+    // the capability grid.
+    can:can,setRolesFor:setRolesFor,
     // v14 p7: reminder editor state for Esc/Enter handling.
     reminderEditor:reminderEditor,setReminderEditor:setReminderEditor,
     saveReminderFromEditor:saveReminderFromEditor,
@@ -4004,6 +4036,18 @@ function BookingApp({uid}){
             onSaveVoucherDefaults={saveVoucherDefaults}
             tab={settingsTab}
             setTab={setSettingsTab}
+            can={can}
+            isAdmin={isAdmin}
+            myUid={uid}
+            roleRows={roleRows}
+            enforceRoles={enforceRoles}
+            onSetEnforceRoles={setEnforceRoles}
+            onSetRole={setRole}
+            onRemoveUser={removeUser}
+            onInvite={inviteUser}
+            onWithdrawInvite={withdrawInvite}
+            onApplyInvite={applyInvite}
+            onOpenCapabilities={setRolesFor}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
@@ -4023,7 +4067,18 @@ function BookingApp({uid}){
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={requestCloseReminderEditor}
-          isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{historyPopup}</div></div>
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
+        // must sit above the Settings overlay. Same idiom as ReminderEditor:
+        // `position` + `z-index` makes a stacking context and the subtree
+        // stacks there whatever its fixed children declare, so `Overlay` is
+        // reused untouched rather than a second hand-written scrim being
+        // invented (tests/a11y.test.js allows --scrim in exactly one file).
+        rolesFor?<div style={{position:"relative",zIndex:255}}><Suspense fallback={null}><RolesModal
+          rows={roleRows}
+          selectedUid={rolesFor}
+          onSelect={setRolesFor}
+          onToggleExtra={setExtra}
+          onClose={function(){setRolesFor(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>
   );
 }
 
