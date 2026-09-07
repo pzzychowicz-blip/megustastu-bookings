@@ -50,6 +50,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { VoucherPicker } from "./VoucherPicker";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -69,6 +70,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = 2, // v17.0.0: settings/general
+  vouchersByCode,                 // v18.0.0: code -> voucher, for the picker
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
@@ -849,7 +851,18 @@ export function BookingFormModal({
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
           className="mgt-hover-scale"
-          style={inp()} />;}}</Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+          style={inp()} />;}}</Fld></Section>{/* v18.0.0: the gift voucher attached to this booking. ATTACHED, not
+        redeemed — the ledger entry is written when the booking is completed.
+        Rendered only once vouchers are actually in use, so an app that has
+        never issued one is unchanged. */}{(vouchersByCode&&Object.keys(vouchersByCode).length)||form.voucherCode?(
+        <VoucherPicker
+          code={form.voucherCode||""}
+          onChange={function(c){setForm(function(f){return Object.assign({},f,{voucherCode:c});});}}
+          vouchersByCode={vouchersByCode}
+          bookings={bookings}
+          bookingId={editId}
+          currency={currency} />
+      ):null}{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>

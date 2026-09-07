@@ -437,3 +437,20 @@ export function removeRedemption(v, bookingId) {
 export function redeemableAmount(v, requested) {
   return Math.min(remainingOf(v), clampMoney(requested));
 }
+
+// Why this voucher cannot be attached, or "" if it can. One function so the
+// message and the decision cannot drift, and so each refusal is DISTINCT —
+// "spent", "expired" and "on another booking" are different problems with
+// different fixes, and collapsing them into "can't use that voucher" would tell
+// staff nothing they can act on.
+export function attachRefusal(v, code, bookings, bookingId, now) {
+  if (!v) return "No voucher with that number.";
+  if (isRedeemedBy(v, bookingId)) return "";           // already settled here — keep it
+  const st = voucherState(v, now);
+  if (st === "void") return "That voucher has been voided.";
+  if (st === "spent") return "That voucher has no balance left.";
+  if (st === "expired") return "That voucher has expired.";
+  const other = attachedElsewhere(bookings, code, bookingId);
+  if (other) return "That voucher is already on " + (other.name || "another booking") + " on " + other.date + ".";
+  return "";
+}

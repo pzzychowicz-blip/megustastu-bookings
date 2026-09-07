@@ -17,7 +17,7 @@ import {
   expiryFrom, isExpired, voucherState, isRedeemedBy, canAttach,
   attachedElsewhere, isUnsettled,
   sanitizeVoucher, sanitizeVouchers, voucherIndex,
-  validateIssue, applyRedemption, removeRedemption, redeemableAmount,
+  validateIssue, applyRedemption, removeRedemption, redeemableAmount, attachRefusal,
 } from "../src/lib/vouchers.js";
 
 function v(o) {
@@ -511,5 +511,43 @@ describe("redeemableAmount", () => {
     expect(redeemableAmount(v, 5)).toBe(5);
     expect(redeemableAmount(v, -5)).toBe(0);
     expect(redeemableAmount(sanitizeVoucher({ value: 0 }, "A1"), 10)).toBe(0);
+  });
+});
+
+describe("attachRefusal", () => {
+  const now = new Date(2026, 5, 1).getTime();
+  const bk = (o) => Object.assign({ id: "b1", name: "Pau", date: "2026-06-01", status: "confirmed", voucherCode: "" }, o);
+
+  it("an open voucher attaches with no refusal", () => {
+    expect(attachRefusal(v(), "ABCD2345", [], "b2", now)).toBe("");
+  });
+
+  it("gives each refusal its OWN message — they are different problems", () => {
+    // Collapsing these into "can't use that voucher" would tell staff nothing
+    // they can act on: one is reissue, one is wait, one is go and find it.
+    const missing = attachRefusal(null, "NOPE", [], "b2", now);
+    const voided = attachRefusal(v({ status: "void" }), "ABCD2345", [], "b2", now);
+    const spent = attachRefusal(v({ remaining: 0 }), "ABCD2345", [], "b2", now);
+    const expired = attachRefusal(v({ expiresAt: now - 1 }), "ABCD2345", [], "b2", now);
+    const elsewhere = attachRefusal(v(), "ABCD2345",
+      [bk({ id: "b1", voucherCode: "ABCD2345" })], "b2", now);
+    const all = [missing, voided, spent, expired, elsewhere];
+    all.forEach((m) => expect(m).toBeTruthy());
+    expect(new Set(all).size).toBe(5);
+    expect(elsewhere).toMatch(/Pau/);
+    expect(elsewhere).toMatch(/2026-06-01/);
+  });
+
+  it("a booking already settled against it keeps it, whatever the state says", () => {
+    // Otherwise reopening the booking that spent the voucher would be refused
+    // the link to the record of its own payment.
+    const spentHere = v({ remaining: 0, redemptions: { b1: { amount: 50 } } });
+    expect(attachRefusal(spentHere, "ABCD2345", [], "b1", now)).toBe("");
+    expect(attachRefusal(spentHere, "ABCD2345", [], "b2", now)).toBeTruthy();
+  });
+
+  it("a TERMINAL booking's link does not block a new attach", () => {
+    const done = [bk({ id: "b1", voucherCode: "ABCD2345", status: "completed" })];
+    expect(attachRefusal(v(), "ABCD2345", done, "b2", now)).toBe("");
   });
 });

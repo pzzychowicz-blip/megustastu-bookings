@@ -19744,3 +19744,91 @@ per-phase rules deploy.
 A useful thing fell out of the refusal: the whole write-error path was exercised
 end to end, and `describeWriteError`'s banner named the right node with the
 right three candidate causes.
+
+### Commit 7 — redemption, and the three save sites `sanitize` does not reach
+
+`VoucherPicker.jsx` · `VoucherRedeemModal.jsx` · the `MODAL_Z` id and its
+`escapeAction` case · the two hook points in `updateStatus` and `doSave` · and
+**four** App.jsx save/seed sites. `npm test` **921 → 929**; `95.98 → 98.00 kB` gz.
+
+**The bug this commit exists around was found by running the app, not by reading
+it**, and it is the most useful thing here. Commit 5 put `voucherCode` in
+`sanitize`, `UNDO_FIELDS` and `diffBooking` — the three lists the plan names —
+and every one of its tests passed. Then the live flow attached a voucher, saved
+the booking, completed it, and **no redeem prompt appeared**, because the stored
+booking had no `voucherCode` at all.
+
+Those three lists make a field survive a READ, an undo and a history entry. None
+of them makes it get **written**. `doSaveNew` and `doSaveEdit` build the booking
+object field by field, and `openEdit` builds the form draft the same way, so a
+field missing from those three never reaches storage. **The `openEdit` one is
+the dangerous one and would have shipped silently**: without it, opening and
+re-saving any booking WIPES its voucher — the `UNDO_FIELDS` failure mode one
+layer up, invisible until somebody edits a booking that had a voucher on it.
+
+So the count is **five places, not three**, plus the recurring generator's
+occurrence literal. `deposit` is in all of them, which is what made them
+findable, and `tests/booking-logic.test.js` now scans `App.jsx` for the pairing:
+three site-specific assertions naming which one broke, plus the general rule —
+every line that sets `deposit:` and `status:` together must set `voucherCode:`
+too, so the NEXT field added is caught as well. Proven by sabotage: removing the
+`openEdit` seed fails two tests; before they existed, all 921 passed.
+
+### The modal has THREE exits, and that is the design
+
+Raised the way `confirmKitchen` is — the action stops, the modal asks, its
+buttons re-enter the action carrying the answer. But a modal standing between a
+party leaving and their table being freed must not be answerable only with
+money:
+
+- **Redeem & complete** — the amount defaults to the whole balance, so "fully"
+  needs no second button and typing a smaller number is "partially".
+- **Complete without using it** — completes and leaves the voucher alone. That
+  lands in the UNSETTLED state, which this app already defines and already
+  surfaces, because the close-time auto-complete produces it too. A state
+  somebody gets told about, not a hole.
+- **Escape** — nothing happens; the booking is not completed. Escape has to be
+  able to mean "I did not mean to start this", which it cannot mean if
+  dismissing quietly completed the booking.
+
+**The write ORDER is chosen by which failure the app can report.** The booking
+completes first and the voucher is redeemed only if that write dispatched. The
+two failure modes are not symmetric: booking-first leaves a completed booking
+with no ledger entry, which is the unsettled state the strip reports;
+voucher-first would leave a ledger entry against a booking that is not
+completed, which nothing in the app looks for.
+
+`voucherToAsk` has three ways to answer "no" and each is a real case: no voucher
+on the booking; the code is not in the loaded list (recorded on another device,
+or the node has not loaded — never block a completion on that); or this booking
+has already been settled against it, which is what makes a re-entry after a held
+or retried write idempotent. `redeemAskedRef` is cleared in a `finally`, so a
+throw in the re-entered action cannot leave every future completion un-askable.
+
+`attachRefusal` moved to `lib/vouchers.js` — a component file that also exports
+a plain function is a hard lint error here (`react-refresh/only-export-components`,
+the trap `Icons.jsx`'s note records), and on the merits it decides something the
+restaurant acts on. Its five refusals are deliberately distinct strings, pinned
+by a test asserting they are five and not one.
+
+### Verified live on DEV, end to end
+
+Issue 50 € → attach by typing `3v48-phvy` → save → complete → **the prompt
+appears** → redeem 20 → **30 € left** → attach the remainder to a second
+booking (allowed, because the first booking is now terminal and
+`attachedElsewhere` treats a terminal link as a record rather than a live claim)
+→ complete → redeem 30 → **spent, 0 € left**. Zero write rejections, counted by
+instrumenting `console.warn` rather than by reading a console buffer that turns
+out to accumulate across reloads.
+
+The ledger itself is not read back directly, and does not need to be:
+`remaining` is DERIVED as `value − redeemedTotal(ledger)`, so a balance of
+50 → 30 → 0 is only reachable if the ledger holds 20 and then 50.
+
+**One thing recorded rather than smoothed away.** Mid-session, `3V48-PHVY` and
+`LOT1001` were found in the opposite void/open states from the ones a screenshot
+had shown twenty minutes earlier. With a single client and no interaction, two
+reads three seconds apart were identical, so nothing writes on its own; the
+likeliest cause is a stray coordinate click on a Void/Reinstate button in a
+panel that scrolls. It is not proven, and it is written down unproven, because
+an unexplained state change is the only thing that could re-open this.

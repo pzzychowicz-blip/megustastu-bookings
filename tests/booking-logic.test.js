@@ -1903,3 +1903,51 @@ describe("voucherCode is in all three booking-field lists (v18.0.0)", () => {
       .toBe("saved (no field changes)");
   });
 });
+
+// ── The FIVE places a booking field has to appear, not three ────────────────
+//
+// v18.0.0, and this one was found by RUNNING the app, not by reading it. The
+// three lists above (`sanitize`, `UNDO_FIELDS`, `diffBooking`) are what makes a
+// field survive a read, an undo and a history entry — and none of them makes it
+// get WRITTEN. `doSaveNew` and `doSaveEdit` build the booking object field by
+// field, and `openEdit` builds the form draft the same way, so a field missing
+// from those three never reaches storage at all.
+//
+// Live symptom: the voucher attached in the form, the booking saved, and the
+// completion produced no redeem prompt — because the stored booking had no
+// `voucherCode`. The `openEdit` one is worse and would have shipped silently:
+// without it, opening and re-saving any booking WIPES its voucher, which is the
+// `UNDO_FIELDS` failure mode one layer up.
+//
+// `deposit` is in all five, which is what makes them findable — so this scans
+// App.jsx for `deposit` and requires `voucherCode` in the same expression. A
+// grep, like the `isReadableBlock` consumer sweep, because nothing else in the
+// repo can see this class: there are no component tests, and every unit test
+// above passes with all three sites missing.
+describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
+  const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+
+  // Each entry is a fragment unique to one site, so a failure names WHICH.
+  const SITES = [
+    ["openEdit — seeds the form draft", /deposit:b\.deposit\?String\(b\.deposit\):""[^\n]*?voucherCode:/],
+    ["doSaveEdit — writes the edit", /Object\.assign\(\{\},b,\{name:f\.name[\s\S]{0,400}?voucherCode:/],
+    ["doSaveNew — writes the create", /const nb=\{id:newId[\s\S]{0,400}?voucherCode:/],
+  ];
+
+  SITES.forEach(([name, re]) => {
+    it(name + " carries voucherCode", () => {
+      expect(re.test(APP)).toBe(true);
+    });
+  });
+
+  it("every `deposit:` in a booking-shaped literal has a voucherCode beside it", () => {
+    // The general form of the rule, so the NEXT field added is caught too.
+    // A booking literal is one that sets `deposit:` and `status:` together.
+    const lines = APP.split("\n");
+    const offenders = lines
+      .map((l, i) => ({ l, n: i + 1 }))
+      .filter(({ l }) => /deposit:/.test(l) && /status:/.test(l) && !/voucherCode:/.test(l))
+      .map(({ n }) => n);
+    expect(offenders).toEqual([]);
+  });
+});

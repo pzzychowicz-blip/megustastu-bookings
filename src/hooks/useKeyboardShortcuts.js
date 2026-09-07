@@ -53,6 +53,10 @@ function escapeAction(K,id){
     case "settings":    return K.requestCloseSettings;
     case "history":     return function(){K.setShowHistory(false);};
     case "kitchen":     return function(){K.setConfirmKitchen(null);};
+    // v18.0.0: Escape means the completion did not happen. It must NOT quietly
+    // complete the booking without the voucher — that is what the modal's own
+    // "Complete without using it" button is for, as a choice somebody made.
+    case "voucher":     return function(){K.setVoucherAsk(null);};
     case "reshuffle":   return function(){K.setConfirmReshuffle(false);};
     case "cancel":      return function(){K.setConfirmCancel(null);};
     case "del":         return function(){K.setConfirmDel(null);};

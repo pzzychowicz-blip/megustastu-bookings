@@ -266,6 +266,8 @@ import { useWaitlist } from "./hooks/useWaitlist";
 // vouchers are.
 import { useVouchers } from "./hooks/useVouchers";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
+import { normalizeCode, isRedeemedBy, voucherState } from "./lib/vouchers";
+import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { useRecurring } from "./hooks/useRecurring";
 // v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
 // listener (the whole kbRef machinery) live in useKeyboardShortcuts.js now.
@@ -884,6 +886,15 @@ function BookingApp({uid}){
   const [swapAffected, setSwapAffected] = useState(null);
   const confirmKitchen = modalOpen.kitchen || null;
   const setConfirmKitchen = setModalFns.kitchen;
+  // v18.0.0: the redeem prompt, raised BY a completion exactly as the kitchen
+  // confirm is raised by a save. Payload: {id, status, from:"status"|"form"}.
+  const voucherAsk = modalOpen.voucher || null;
+  const setVoucherAsk = setModalFns.voucher;
+  // Set only while re-entering the completion the modal interrupted, so the
+  // gate below asks its question once rather than forever. Cleared in a
+  // `finally`, which is what stops a throw in the re-entered action from
+  // leaving every future completion un-askable.
+  const redeemAskedRef = useRef(false);
   const showHistory = !!modalOpen.history;
   const setShowHistory = setModalFns.history;
   const showPrefPicker = !!modalOpen.prefpicker;
@@ -1048,7 +1059,7 @@ function BookingApp({uid}){
   // stamped onto `issuedBy`/`by` at write time, and `BookingApp` is keyed on
   // uid, so an account switch remounts the subtree rather than needing this to
   // be reactive.
-  const { vouchers, issueVoucher, voidVoucher } = useVouchers({
+  const { vouchers, vouchersByCode, issueVoucher, redeemVoucher, voidVoucher } = useVouchers({
     setWriteWarning,
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
   });
@@ -1651,7 +1662,7 @@ function BookingApp({uid}){
         byDate[ds].forEach(function(oc){
           const rule=oc.rule;
           const dur=getDur(rule.size);
-          const nb={id:"r"+rule.id+"_"+ds,name:rule.name,phone:rule.phone,date:ds,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:ds,history:[histEntry("auto-created from weekly rule","auto")]};
+          const nb={id:"r"+rule.id+"_"+ds,name:rule.name,phone:rule.phone,date:ds,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,voucherCode:"",_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:ds,history:[histEntry("auto-created from weekly rule","auto")]};
           if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
           next=next.concat([nb]);
         });
@@ -1798,7 +1809,7 @@ function BookingApp({uid}){
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
   function openNew(){pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -2055,7 +2066,7 @@ function BookingApp({uid}){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||editFinished)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||editFinished)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
@@ -2133,7 +2144,7 @@ function BookingApp({uid}){
         }
         // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
         // confirmed, OR pending via the "Save pending" button (status override).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
+        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
         // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
         // path above) so the new-booking save joins the optimistic-show + auto-retry
         // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
@@ -2222,6 +2233,15 @@ function BookingApp({uid}){
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
       if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
+      // v18.0.0: the second hook point. AFTER validation and immediately before
+      // the dispatch, so a form that is about to be refused for a missing name
+      // never asks a money question first. Both entries to `doSave` pass
+      // through here — the button's `save()` and the kitchen confirm's direct
+      // re-entry — which is why the gate is here and not in `save()`.
+      if(editId&&!redeemAskedRef.current&&voucherToAsk(editId,f.status)){
+        setVoucherAsk({id:editId,status:f.status,from:"form"});
+        return;
+      }
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -2580,6 +2600,7 @@ function BookingApp({uid}){
     confirmReshuffle:confirmReshuffle,setConfirmReshuffle:setConfirmReshuffle,
     confirmCancel:confirmCancel,setConfirmCancel:setConfirmCancel,
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
+    setVoucherAsk:setVoucherAsk,
     blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
@@ -2622,8 +2643,41 @@ function BookingApp({uid}){
     requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings
   });
 
+  // v18.0.0: does completing this booking need the voucher question asked
+  // first? Returns the voucher, or null. Three ways to answer "no", and each is
+  // a real case rather than defensive padding: the booking carries no voucher;
+  // the number is not in the list (recorded on another device, or the node has
+  // not loaded — never block a completion on that); or this booking has ALREADY
+  // been settled against it, which is what makes the re-entry after a held or
+  // retried write idempotent.
+  function voucherToAsk(id,status){
+    if(status!=="completed") return null;
+    const b=bookings.find(function(x){return x.id===id;});
+    const code=b?normalizeCode(b.voucherCode):"";
+    if(!code) return null;
+    const v=vouchersByCode[code];
+    if(!v) return null;
+    if(isRedeemedBy(v,id)) return null;
+    // A voided, spent or expired voucher has nothing to redeem, so there is
+    // nothing to ask. It stays attached as a record of what was intended.
+    if(voucherState(v,Date.now())!=="open") return null;
+    return v;
+  }
+  // Re-enter the action the modal interrupted, with the question marked asked.
+  function withRedeemAsked(fn){
+    redeemAskedRef.current=true;
+    try{ return fn(); } finally { redeemAskedRef.current=false; }
+  }
   function updateStatus(id,status){
     if(status==="cancelled"){setConfirmCancel(id);return;}
+    // v18.0.0: stop and ask before the status lands. `updateStatus` is the one
+    // funnel for the popup, the List buttons and the S/C shortcuts, so gating
+    // here covers all three — the same property that made it one of the two
+    // hook points rather than four.
+    if(!redeemAskedRef.current&&voucherToAsk(id,status)){
+      setVoucherAsk({id:id,status:status,from:"status"});
+      return false;
+    }
     const user=getUser();
     const nowM=nowMins;
     const ok=saveBookings(function(b){
@@ -2672,6 +2726,38 @@ function BookingApp({uid}){
       return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
     });
     if(ok&&(status==="completed"||status==="seated")) flash();
+    // v18.0.0: returned so the redeem path can gate the voucher write on the
+    // BOOKING write having actually dispatched — see `settleVoucher`.
+    return ok;
+  }
+  // v18.0.0: the modal's two answers, and the ORDER is the design.
+  //
+  // The booking is completed FIRST and the voucher is redeemed only if that
+  // write actually dispatched. Both fail states were considered and they are
+  // not symmetric:
+  //
+  //   * booking first — if the voucher write is then refused, the result is a
+  //     completed booking carrying a `voucherCode` with no ledger entry. That
+  //     is the UNSETTLED state, which this app already defines, already
+  //     detects and already surfaces in the notification strip, because the
+  //     close-time auto-complete produces it too. Somebody is told.
+  //   * voucher first — if the booking write is then refused, the result is a
+  //     ledger entry against a booking that is not completed. Nothing in the
+  //     app looks for that, so nobody is told.
+  //
+  // So the order is chosen by which failure lands in a state the app can
+  // report, not by which is tidier.
+  function settleVoucher(amount){
+    const ask=voucherAsk;
+    if(!ask) return;
+    setVoucherAsk(null);
+    const ok=withRedeemAsked(function(){
+      return ask.from==="form" ? (doSave(),true) : updateStatus(ask.id,ask.status);
+    });
+    if(!ok||!amount) return;
+    const b=bookings.find(function(x){return x.id===ask.id;});
+    const code=b?normalizeCode(b.voucherCode):"";
+    if(code) redeemVoucher(code,ask.id,amount);
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
@@ -3779,6 +3865,7 @@ function BookingApp({uid}){
               autoOptimizer={autoOptimizer}
               isMobile={isMobile}
               currency={generalSettings.currency}
+              vouchersByCode={vouchersByCode}
               regularMin={generalSettings.regularMin}
               today={today}
               nowMins={nowMins}
@@ -3816,7 +3903,13 @@ function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
+              voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
+              booking={bookings.find(function(x){return x.id===voucherAsk.id;})}
+              currency={generalSettings.currency}
+              onRedeem={function(amount){settleVoucher(amount);}}
+              onSkip={function(){settleVoucher(0);}}
+              onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

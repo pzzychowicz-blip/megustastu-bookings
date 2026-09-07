@@ -47,6 +47,7 @@ export const MODAL_Z=[
   "cancel",
   "reshuffle",
   "kitchen",     // the kitchen-load confirm, raised BY a save
+  "voucher",     // the redeem prompt, raised BY a completion — same shape
   "history",
   "settings",
   "reminderdel", // renders above Settings in DOM order…
