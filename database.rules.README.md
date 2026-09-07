@@ -166,6 +166,142 @@ the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
 
+## v18.0.0 phase 3 — `/roles`, `/invites`, and the enforcement flag
+
+The permission layer. Two new per-child-CAS nodes, one new rev pair, a gate
+added to eighteen existing rules, and **one manual step that has no substitute**
+— the first admin.
+
+### The one manual step: bootstrapping the first admin
+
+With `/roles` empty nobody holds `settingsAdmin`, and `settingsAdmin` is what
+the rules require to write `/roles`. So the first admin cannot be created by the
+app, by design. In the Firebase console, at `/roles/<your uid>`:
+
+```json
+{
+  "uid":     "<your uid>",
+  "email":   "<your sign-in email>",
+  "name":    "Patryk",
+  "role":    "admin",
+  "addedAt":  0,
+  "addedBy": "console",
+  "updatedAt": 1,
+  "baseUpdatedAt": 0
+}
+```
+
+`updatedAt` may be any number; the app's next write to that row will carry
+`baseUpdatedAt` equal to whatever is stored, so it does not need to be a real
+timestamp. The uid is in the Firebase console under Authentication.
+
+**A "first user becomes admin" rule was considered and rejected.** It is a hole
+the moment the node is ever emptied — and emptying it is exactly what a
+mistake, a migration or a bad console edit looks like.
+
+### `enforceRoles` — off, and what that means
+
+`settings/admin.enforceRoles` ships **`false`**, and every device in production
+today has no `/roles` row at all. A rule that simply *required* one would stop
+every device the moment it deployed — a v15.5.0-style cutover, at the
+restaurant, during service. So the flag is what makes this a **rolling** deploy:
+
+* **off (or absent)** — `bookings` and `settings/*` behave byte-for-byte as they
+  did before v18.0.0. Pinned by tests, including one that removes the node
+  entirely, because *absent* is the state production is actually in on the day
+  this ships.
+* **on** — an absent role reads as **`staff`**. Useful on a first shift,
+  harmless until you say otherwise, and it is the only reading that lets the
+  flag be flipped without stranding an account nobody has got to yet.
+
+**Three paths are admin-only regardless of the flag**: `/roles`, `/invites` and
+`settings/admin`. They are new here and carry no legacy traffic, so gating them
+hard costs nothing — and `settings/admin` in particular *must* be, because a
+flag anyone could turn on would let one staff account make everybody `staff`
+with nobody left able to turn it off. That is a brick, and repairing it needs
+this console.
+
+### The last-admin guarantee, and why it is not a count
+
+The plan asked for a rule that "refuses a write that would leave `/roles` with
+no admin". **RTDB rules cannot count children** — there is no `numChildren()` —
+so the literal version needs a maintained counter node, which is a second piece
+of state that can drift and whose repair needs the console. That is the state
+the guard exists to avoid.
+
+Patryk chose the derived form instead: **an admin may not strip their own
+`settingsAdmin`**, by level or by extra. Only a holder may write `/roles` at
+all, so the set shrinks exclusively when one admin demotes *another* — and the
+demoter still holds it. Zero is unreachable. One clause, no new state, and the
+Admin panel disables exactly what the rule refuses instead of approximating it.
+
+The cost, stated on screen: an admin who wants to step down asks another admin.
+
+### Self-registration creates a ROW, never a LEVEL
+
+An invitation cannot be claimed automatically, and that is a property of RTDB
+rather than a shortcut: a rule would have to look up an invitation **by the
+signing-in user's email**, and rules do no string manipulation, cannot query,
+and an email cannot be a key. So a user creates their own stub —
+
+```
+auth.uid === $uid && !data.exists() && newData.exists()
+  && newData.child('email').val() === auth.token.email
+  && newData.child('role').val() === null
+  && newData.child('extras').val() === null
+```
+
+— the panel pairs it with the open invitation by email, and **an admin applies
+it in one tap**. Every clause above is load-bearing and each has a test that
+breaks it: without `role === null` a user grants themselves a level, and
+without `extras === null` they grant themselves `settingsAdmin` instead, which
+is the same hole one door over.
+
+### The one duplication that could not be removed
+
+Which levels grant `settingsWrite` and `bookingDelete` is written in
+`src/lib/roles.js` (`ROLE_GRANTS`) **and again** in this rules file, because
+rules cannot read a JS constant. Neither file can see the other, so the suite
+asserts they agree *behaviourally*: it drives the real rules with each level in
+turn and compares the outcome against `can()`. Change one and that test fails.
+
+The same forced-duplication problem produced the sixteen copies of the
+`settingsWrite` gate — one per `settings/*` rule, since rules have no macros.
+They were applied by script and asserted to land exactly once each, and a sweep
+test derives the list from this file so a pair added later is covered without
+the test being edited.
+
+### Measured, not assumed
+
+The plan asked what a role lookup costs on `bookings/$bid`, since a reshuffle
+writes about five children and each evaluates the gate. **A 5-child patch under
+the gate: 8 ms** (printed by the suite on every run). The predicate is ordered
+`newData.exists() || <role check>`, so the two root reads happen **only on a
+delete** — every ordinary booking write does no extra read at all. That gate
+works only because **`.write` is evaluated for a delete and `.validate` is
+not** — the v17.16.7 finding.
+
+### One PROBE closed, one plan instruction disproved
+
+`settings/users/$uid/prefs` gained `auth.uid === $uid`; the PROBE asserting that
+any account could overwrite another's preferences is **inverted**, not deleted —
+its own comment had predicted this tightening would "fail here loudly", and it
+did.
+
+The plan paired that with the same fix for `presence/$key`. **It does not
+apply**, and the rule is correct as it stands: presence keys are **push keys,
+not uids** (`push(ref(db,"presence"))`, `usePresence.js:135`), so
+`auth.uid === $key` could never match — and the v17.8.0 staleness prune
+deliberately deletes *other* devices' dead children (`usePresence.js:204`), so
+any own-child-only restriction would break it. Left alone.
+
+### Deployment — app FIRST, rules SECOND (rolling-safe)
+
+Old rules ignore the new fields, and the new rules with `enforceRoles` off
+behave as the old ones did. Order still matters for the bootstrap: publish the
+rules, **then create the first admin row in the console**, and only then flip
+`enforceRoles` on from the Admin tab.
+
 ## v18.0.0 — `/vouchers/$code`, the second per-child CAS, and it refuses deletes
 
 Two additions, both in one console step: a per-child CAS on `/vouchers/$code`,

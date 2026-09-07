@@ -4,7 +4,7 @@
 
     "bookings": {
       "$bid": {
-        ".write": "auth != null",
+        ".write": "auth != null && (newData.exists() || (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('bookingDelete').val() === true))",
         ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (data.exists() ? (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val()) : newData.child('baseUpdatedAt').val() === 0))",
         "name":     { ".validate": "newData.isString()" },
         "date":     { ".validate": "newData.isString() && (newData.val().matches(/^([0-9]{4}-[0-9]{2}-[0-9]{2})?$/) || newData.val() === data.val())" },
@@ -35,6 +35,31 @@
             "by":     { ".validate": "newData.isString()" }
           }
         }
+      }
+    },
+
+    "roles": {
+      "$uid": {
+        ".write": "auth != null && ((root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true) || (auth.uid === $uid && !data.exists() && newData.exists() && newData.child('email').val() === auth.token.email && newData.child('role').val() === null && newData.child('extras').val() === null)) && (!(auth.uid === $uid && (data.child('role').val() === 'admin' || data.child('extras').child('settingsAdmin').val() === true)) || (newData.exists() && (newData.child('role').val() === 'admin' || newData.child('extras').child('settingsAdmin').val() === true)))",
+        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (data.exists() ? (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val()) : newData.child('baseUpdatedAt').val() === 0))",
+        "email":   { ".validate": "newData.isString()" },
+        "name":    { ".validate": "newData.isString()" },
+        "role":    { ".validate": "newData.isString() && newData.val().matches(/^(staff|manager|admin)$/)" },
+        "extras":  { "$cap": { ".validate": "newData.isBoolean() && newData.val() === true" } },
+        "addedAt": { ".validate": "newData.isNumber()" },
+        "addedBy": { ".validate": "newData.isString()" }
+      }
+    },
+
+    "invites": {
+      "$inviteId": {
+        ".write": "auth != null && (root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true)",
+        ".validate": "!newData.exists() || (newData.hasChild('updatedAt') && newData.child('updatedAt').isNumber() && (data.exists() ? (newData.child('updatedAt').val() > data.child('updatedAt').val() && newData.child('baseUpdatedAt').val() === data.child('updatedAt').val()) : newData.child('baseUpdatedAt').val() === 0))",
+        "email":     { ".validate": "newData.isString()" },
+        "role":      { ".validate": "newData.isString() && newData.val().matches(/^(staff|manager|admin)$/)" },
+        "extras":    { "$cap": { ".validate": "newData.isBoolean() && newData.val() === true" } },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "createdBy": { ".validate": "newData.isString()" }
       }
     },
 
@@ -69,34 +94,37 @@
     "templatesRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
     "settings": {
-      "operatingHours":    { ".write": "auth != null && newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
-      "operatingHoursRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "admin":    { ".write": "auth != null && (root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true) && newData.parent().child('adminRev').val() === (data.parent().child('adminRev').exists() ? data.parent().child('adminRev').val() + 1 : 1)" },
+      "adminRev": { ".write": "auth != null && (root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "dayShifts":         { ".write": "auth != null && newData.parent().child('dayShiftsRev').val() === (data.parent().child('dayShiftsRev').exists() ? data.parent().child('dayShiftsRev').val() + 1 : 1)" },
-      "dayShiftsRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "operatingHours":    { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('operatingHoursRev').val() === (data.parent().child('operatingHoursRev').exists() ? data.parent().child('operatingHoursRev').val() + 1 : 1)" },
+      "operatingHoursRev": { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "optimizer":         { ".write": "auth != null && newData.parent().child('optimizerRev').val() === (data.parent().child('optimizerRev').exists() ? data.parent().child('optimizerRev').val() + 1 : 1)" },
-      "optimizerRev":      { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "dayShifts":         { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('dayShiftsRev').val() === (data.parent().child('dayShiftsRev').exists() ? data.parent().child('dayShiftsRev').val() + 1 : 1)" },
+      "dayShiftsRev":      { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "layout":            { ".write": "auth != null && newData.parent().child('layoutRev').val() === (data.parent().child('layoutRev').exists() ? data.parent().child('layoutRev').val() + 1 : 1)" },
-      "layoutRev":         { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "optimizer":         { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('optimizerRev').val() === (data.parent().child('optimizerRev').exists() ? data.parent().child('optimizerRev').val() + 1 : 1)" },
+      "optimizerRev":      { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "bookingDefaults":    { ".write": "auth != null && newData.parent().child('bookingDefaultsRev').val() === (data.parent().child('bookingDefaultsRev').exists() ? data.parent().child('bookingDefaultsRev').val() + 1 : 1)" },
-      "bookingDefaultsRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "layout":            { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('layoutRev').val() === (data.parent().child('layoutRev').exists() ? data.parent().child('layoutRev').val() + 1 : 1)" },
+      "layoutRev":         { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "general":            { ".write": "auth != null && newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
-      "generalRev":         { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "bookingDefaults":    { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('bookingDefaultsRev').val() === (data.parent().child('bookingDefaultsRev').exists() ? data.parent().child('bookingDefaultsRev').val() + 1 : 1)" },
+      "bookingDefaultsRev": { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "voucherDefaults":    { ".write": "auth != null && newData.parent().child('voucherDefaultsRev').val() === (data.parent().child('voucherDefaultsRev').exists() ? data.parent().child('voucherDefaultsRev').val() + 1 : 1)" },
-      "voucherDefaultsRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "general":            { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('generalRev').val() === (data.parent().child('generalRev').exists() ? data.parent().child('generalRev').val() + 1 : 1)" },
+      "generalRev":         { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
-      "whatsapp":           { ".write": "auth != null && newData.parent().child('whatsappRev').val() === (data.parent().child('whatsappRev').exists() ? data.parent().child('whatsappRev').val() + 1 : 1)" },
-      "whatsappRev":        { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+      "voucherDefaults":    { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('voucherDefaultsRev').val() === (data.parent().child('voucherDefaultsRev').exists() ? data.parent().child('voucherDefaultsRev').val() + 1 : 1)" },
+      "voucherDefaultsRev": { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
+
+      "whatsapp":           { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.parent().child('whatsappRev').val() === (data.parent().child('whatsappRev').exists() ? data.parent().child('whatsappRev').val() + 1 : 1)" },
+      "whatsappRev":        { ".write": "auth != null && (root.child('settings').child('admin').child('enforceRoles').val() !== true || root.child('roles').child(auth.uid).child('role').val() === 'manager' || root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsWrite').val() === true) && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" },
 
       "users": {
         "$uid": {
-          "prefs":    { ".write": "auth != null && newData.parent().child('prefsRev').val() === (data.parent().child('prefsRev').exists() ? data.parent().child('prefsRev').val() + 1 : 1)" },
-          "prefsRev": { ".write": "auth != null && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
+          "prefs":    { ".write": "auth != null && auth.uid === $uid && newData.parent().child('prefsRev').val() === (data.parent().child('prefsRev').exists() ? data.parent().child('prefsRev').val() + 1 : 1)" },
+          "prefsRev": { ".write": "auth != null && auth.uid === $uid && newData.isNumber() && (data.exists() ? newData.val() === data.val() + 1 : newData.val() === 1)" }
         }
       }
     }
