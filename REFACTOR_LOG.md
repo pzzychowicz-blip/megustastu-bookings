@@ -20018,3 +20018,37 @@ Patryk's decision.
 raises the prompt and still redeems: `HUBZ-74S4` went 100 € → `spent, 0 € left`
 through the tightened gate, so the guard read is correct and the happy path is
 intact. The dropdown still lists and picks after `now` became a parameter.
+
+### Commit 11 — `src/firebase.js` becomes tenant-selected
+
+Plan §2.1. `VITE_TENANT=<slug>` picks a module under `src/tenants/`, each
+exporting `{ firebaseConfig, profile }`. `src/tenants/mgt.js` is today's
+`prodConfig` moved verbatim, plus a profile block carrying `slug`, `name`,
+`locale` and `waContext` (phase 5c reads the last one; nothing reads `locale`
+yet, and the comment at the field says so rather than implying it is wired).
+
+**The DEV/PROD split is preserved exactly, and the ORDER is what preserves it.**
+`isDev` resolves first and the tenant's config is not read at all in DEV: there
+is one shared dev sandbox for every tenant, so localhost cannot reach any
+restaurant's production database however `VITE_TENANT` is set. `devConfig` stays
+in `firebase.js` for that reason — it is not per-tenant, so it does not belong in
+a tenant module.
+
+**Verified in the built bundle rather than argued.** A PROD build contains
+`megustastu-bookings-default-rtdb` exactly once and the string
+`megustastu-bookings-dev` zero times — Vite strips the `import.meta.env.DEV`
+branch, so the dev project is not merely unselected in production, it is absent.
+
+**An unknown slug throws instead of falling back.** A typo'd `VITE_TENANT` that
+silently resolved to `mgt` would point one restaurant's build at another
+restaurant's live bookings, which is the one failure mode this layer must not
+have. `index.html`'s boot watchdog turns the throw into a visible message rather
+than a white screen.
+
+The `TENANTS` map is a static import and a static key on purpose: a build-time
+map is something the bundler, `grep` and a reader can all see through, where
+`import.meta.glob` or a dynamic import would hide which tenants exist.
+
+The boot banner keeps its green DEV / red PROD badge and gains the slug —
+`[firebase] DEV — megustastu-bookings-dev · tenant mgt`, verified in the running
+app — so one glance answers both halves of "which database am I on".

@@ -1,11 +1,29 @@
 // src/firebase.js
-// Environment-aware Firebase initialisation.
-//   npm run dev    (import.meta.env.DEV === true)  → DEV project
-//   npm run build  (import.meta.env.DEV === false) → PROD project
+// Environment-aware, tenant-selected Firebase initialisation.
+//   npm run dev    (import.meta.env.DEV === true)  → the shared DEV project
+//   npm run build  (import.meta.env.DEV === false) → the SELECTED TENANT's project
 //
 // This split exists so local development and Claude Code sessions
 // never write to the production database. The Spark plan has no
 // automatic backups; isolating dev writes is the only safety net.
+//
+// ── v18.0.0 phase 2: the tenant layer ────────────────────────────────────────
+// `VITE_TENANT=<slug>` selects a module under `src/tenants/`, each exporting
+// `{ firebaseConfig, profile }`. Absent, it is `mgt` — so an unset env var
+// builds exactly what this file built before, which is what makes the
+// generalisation invisible to the one tenant that exists.
+//
+// **The DEV/PROD split is preserved exactly and comes FIRST.** `isDev` is
+// resolved before the tenant is consulted, and in DEV the tenant's config is
+// not read at all: there is ONE dev sandbox shared by every tenant, so
+// localhost can never reach any restaurant's production database however
+// `VITE_TENANT` is set. The tenant selection changes which PROD project a BUILD
+// points at, and nothing else.
+//
+// An unknown slug THROWS rather than falling back. A typo'd tenant that
+// silently resolved to MGT would point one restaurant's build at another
+// restaurant's live bookings — the one failure mode this layer must not have,
+// and the boot watchdog in index.html turns the throw into a visible message.
 //
 // Note on API keys: Firebase web API keys are NOT secrets — they
 // identify the project, they don't authorise access. Database Rules
@@ -14,19 +32,31 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, forceWebSockets } from "firebase/database";
 import { getAuth } from "firebase/auth";
+import * as mgt from "./tenants/mgt";
 
-const prodConfig = {
-  apiKey:            "AIzaSyAliFpmNhdZjaix-EecY_0ZN99m0dktL-s",
-  authDomain:        "megustastu-bookings.firebaseapp.com",
-  databaseURL:       "https://megustastu-bookings-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId:         "megustastu-bookings",
-  storageBucket:     "megustastu-bookings.firebasestorage.app",
-  messagingSenderId: "263618028611",
-  appId:             "1:263618028611:web:c851ef6291387a895020f6"
-};
+// Statically imported and statically keyed, deliberately: a build-time map is
+// something the bundler, `grep` and a reader can all see through, where a
+// dynamic import would hide which tenants exist. Adding a restaurant is a new
+// module plus a line here.
+const TENANTS = { mgt };
+
+const tenantSlug = import.meta.env.VITE_TENANT || "mgt";
+const tenant = TENANTS[tenantSlug];
+if (!tenant) {
+  throw new Error(
+    "[firebase] Unknown VITE_TENANT \"" + tenantSlug + "\". Known tenants: " +
+    Object.keys(TENANTS).join(", ")
+  );
+}
+
+// Who this restaurant is, for the app rather than for Firebase. Exported from
+// here — and not imported from the tenant module directly — so every consumer
+// reads the SELECTED tenant rather than a hard-coded one.
+export const profile = tenant.profile;
 
 const devConfig = {
-  // ─── PASTE DEV PROJECT CONFIG VALUES HERE ──────────────────────────────────
+  // The ONE shared DEV sandbox — not per-tenant, which is why it stays in this
+  // file rather than moving into `src/tenants/`.
   apiKey:            "AIzaSyDZ-VQNfO_t-Fj3vlbUJBeiMeBx4OmnqXY",
   authDomain:        "megustastu-bookings-dev.firebaseapp.com",
   databaseURL:       "https://megustastu-bookings-dev-default-rtdb.europe-west1.firebasedatabase.app",
@@ -37,13 +67,16 @@ const devConfig = {
 };
 
 const isDev = import.meta.env.DEV;
-const firebaseConfig = isDev ? devConfig : prodConfig;
+const firebaseConfig = isDev ? devConfig : tenant.firebaseConfig;
 
 // Visible boot signal — appears in the browser console next to the
 // app version banner. Green DEV badge = safe to experiment. Red PROD
 // badge = production database, every write is real.
+//
+// v18.0.0 phase 2: it carries the tenant slug too, so one glance answers both
+// halves of "which database am I on" — the environment AND the restaurant.
 console.log(
-  "%c[firebase] " + (isDev ? "DEV" : "PROD") + " — " + firebaseConfig.projectId,
+  "%c[firebase] " + (isDev ? "DEV" : "PROD") + " — " + firebaseConfig.projectId + " · tenant " + tenantSlug,
   "background:" + (isDev ? "#0a0" : "#c00") + ";color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold;"
 );
 
