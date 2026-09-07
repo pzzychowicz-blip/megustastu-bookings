@@ -28,6 +28,11 @@ import {
   TURN_BUFFER
 } from "./constants";
 import { todayStr, nowOn } from "./day";
+// v18.0.0: one voucher-code normaliser, the `normalizePhone` precedent — the
+// issue field, every redemption lookup and `sanitize` must agree on what a code
+// IS, or two spellings resolve to two vouchers. `vouchers.js` imports nothing,
+// so this edge cannot close a cycle.
+import { normalizeCode, formatCode } from "./vouchers";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -315,6 +320,14 @@ export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=is
   // Clamped ≥0 (/code-review): the form's min={0} only blocks the stepper —
   // a typed "-50" would otherwise pass Number() straight through.
   deposit:Math.max(0,Number(b.deposit)||0),
+  // v18.0.0: the gift voucher attached to this booking, "" for none. Per-booking,
+  // so the existing per-$id CAS covers it — no new node and no rules change for
+  // THIS half of the feature. Normalised on read through the same function the
+  // issue field and every redemption lookup use, so a stored "abcd-2345" and a
+  // stored "ABCD2345" can never resolve to two different vouchers. A row that
+  // needs correcting self-heals on the next save, the way `sanitize` fills every
+  // other gap.
+  voucherCode:normalizeCode(b.voucherCode),
   // v16.3.0: recurring-occurrence stamps (null for a one-off). recurringId links
   // to the settings/recurring rule; recurringDate is the occurrence's date. The
   // generator dedupes on these; doDelete adds recurringDate to the rule's
@@ -343,7 +356,7 @@ export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=is
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
   updatedAt:Number(b.updatedAt)||0};}
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
-export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
+export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var origVou=normalizeCode(orig.voucherCode);var formVou=normalizeCode(f.voucherCode);if(origVou!==formVou) ch.push("voucher "+(origVou?formatCode(origVou):"none")+"→"+(formVou?formatCode(formVou):"none"));var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 // v17.16.13: the keyed-object arm walks ENTRIES, not values, so each row can be
 // told the key it was stored under. `.map(sanitize)` was also passing the array
 // INDEX as sanitize's second argument all along — harmless while sanitize took
@@ -1138,7 +1151,7 @@ function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptim
 // are per-write metadata (a server echo must not read as a change), and
 // `history` grows on every write so comparing it would mark everything changed.
 var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
-  "originalDuration","customDur","preference","notes","deposit","status","noShow",
+  "originalDuration","customDur","preference","notes","deposit","voucherCode","status","noShow",
   "tables","_manual","_locked","_conflict","preferredTables","returnOf",
   "recurringId","recurringDate","anonymized"];
 // v17.10.2 (/code-review): the separators are ASCII control characters, not "|"

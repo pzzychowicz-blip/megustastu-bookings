@@ -1838,3 +1838,68 @@ describe("v17.16.2 /code-review — regressions of the axis fix", () => {
     });
   });
 });
+
+// ── v18.0.0 — voucherCode joins the THREE lists a booking field must join ────
+//
+// The plan calls `UNDO_FIELDS` "the silent one", and it is right: nothing fails
+// and no test goes red when a field is missing from it. The defect only appears
+// when somebody attaches a voucher and then presses undo. So these tests exist
+// specifically to make the silent case loud — each one fails if `voucherCode` is
+// removed from its list, and nothing else would.
+
+describe("voucherCode is in all three booking-field lists (v18.0.0)", () => {
+  const vb = (o = {}) => Object.assign({
+    id: "v1", name: "Pau", phone: "", date: "2026-09-01", time: "20:00",
+    size: 2, duration: 90, status: "confirmed", tables: ["3"],
+  }, o);
+
+  it("sanitize KEEPS it, and normalises it through the one normaliser", () => {
+    // Without the whitelist entry the field does not survive a read at all.
+    expect(sanitize({ voucherCode: "abcd-2345" }).voucherCode).toBe("ABCD2345");
+    expect(sanitize({ voucherCode: "ABCD2345" }).voucherCode).toBe("ABCD2345");
+    // Two spellings of one code must never resolve to two vouchers.
+    expect(sanitize({ voucherCode: "abcd 2345" }).voucherCode)
+      .toBe(sanitize({ voucherCode: "ABCD-2345" }).voucherCode);
+    expect(sanitize({}).voucherCode).toBe("");
+    expect(sanitize({ voucherCode: null }).voucherCode).toBe("");
+  });
+
+  it("UNDO_FIELDS notices it — attach a voucher, press undo, get the link back", () => {
+    // THE silent one. A field absent from UNDO_FIELDS reads as "nothing
+    // changed", so undoSnapshots takes NO snapshot and the action is quietly
+    // un-undoable. This test is the only thing that would say so.
+    const before = sanitize(vb({ voucherCode: "" }));
+    const after = sanitize(vb({ voucherCode: "ABCD2345" }));
+    const snap = undoSnapshots([before], [after]);
+    expect(snap.map((x) => x.id)).toEqual(["v1"]);
+    // And the undo actually restores the previous link.
+    expect(applyUndo([after], snap).find((b) => b.id === "v1").voucherCode).toBe("");
+  });
+
+  it("UNDO_FIELDS notices a voucher being SWAPPED, not only added or cleared", () => {
+    const a = sanitize(vb({ voucherCode: "ABCD2345" }));
+    const b = sanitize(vb({ voucherCode: "QRST6789" }));
+    expect(undoSnapshots([a], [b]).map((x) => x.id)).toEqual(["v1"]);
+    // A code that only differs in SPELLING is the same voucher and is not a change.
+    const c = sanitize(vb({ voucherCode: "abcd-2345" }));
+    expect(undoSnapshots([a], [c])).toEqual([]);
+  });
+
+  it("dayBookingsSig sees it too — it shares UNDO_FIELDS' field set", () => {
+    const a = sanitize(vb({ voucherCode: "" }));
+    const b = sanitize(vb({ voucherCode: "ABCD2345" }));
+    expect(dayBookingsSig([a], a.date)).not.toBe(dayBookingsSig([b], b.date));
+  });
+
+  it("diffBooking says what happened, instead of 'saved (no field changes)'", () => {
+    const orig = sanitize(vb({ voucherCode: "" }));
+    expect(diffBooking(orig, { ...orig, voucherCode: "ABCD2345" }, 2))
+      .toMatch(/voucher none→ABCD-2345/);
+    expect(diffBooking(sanitize(vb({ voucherCode: "ABCD2345" })),
+      { ...vb(), voucherCode: "" }, 2)).toMatch(/voucher ABCD-2345→none/);
+    // A re-spelling is not a change and must not appear in the history entry.
+    const same = sanitize(vb({ voucherCode: "ABCD2345" }));
+    expect(diffBooking(same, { ...same, voucherCode: "abcd-2345" }, 2))
+      .toBe("saved (no field changes)");
+  });
+});

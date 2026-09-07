@@ -19652,3 +19652,36 @@ threat it appears to. What it *would* do is refuse a write on a row whose
 `value` is missing, leaving a record the app cannot repair, which is the hazard
 v17.16.1 records for this exact class. The invariant is kept where it is
 actually enforceable: the client recomputes `remaining` from the ledger.
+
+### Commit 5 — `voucherCode` joins the three lists, and the silent one gets a test
+
+`src/lib/booking-logic.js` — `sanitize`, `UNDO_FIELDS` and `diffBooking` — plus
+five tests. `npm test` **916 → 921**. The bundle moves for the first time this
+phase, `93.64 → 93.76 kB` gz, because `vouchers.js` is now reachable from
+`booking-logic.js` and therefore actually in the graph.
+
+The booking's half of the feature is a **per-booking field**, so the existing
+per-`$id` CAS covers it: no new node, no rules change, no console step for this
+half. What it does need is all three lists, and `deposit` is in all three, which
+is what made them findable.
+
+**`UNDO_FIELDS` is the one worth the paragraph.** A field absent from it reads as
+"nothing changed", so `undoSnapshots` takes no snapshot and the action is quietly
+un-undoable — nothing fails, no test goes red, and the defect only appears when
+somebody attaches a voucher and then presses undo. So the tests were written to
+make exactly that case loud, and **verified by sabotage rather than by
+inspection**: removing `voucherCode` from `UNDO_FIELDS` fails three tests (undo,
+the swap case, and `dayBookingsSig`, which shares the field set); removing it
+from `sanitize` fails five. Before the tests, both edits were silent.
+
+`sanitize` normalises through **`normalizeCode`** rather than storing the field
+verbatim, which is the `normalizePhone` precedent doing its job one collection
+over: the issue field, every redemption lookup and `sanitize` have to agree on
+what a code *is*, or `"abcd-2345"` and `"ABCD2345"` resolve to two different
+vouchers on one booking. A consequence worth having a test for rather than
+discovering: a re-spelling is **not** a change, so it neither takes an undo
+snapshot nor writes a history entry.
+
+The import edge is `booking-logic.js → vouchers.js`, and it cannot close a cycle
+because `vouchers.js` imports nothing at all — which is why the module was
+written that way.
