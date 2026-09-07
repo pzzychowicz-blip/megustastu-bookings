@@ -20423,6 +20423,87 @@ is `lib/roles.js` + `useRoles.js`, which must be in main because `can()` gates
 the whole app. Verified by grepping the built bundles for panel-only strings
 rather than by reading the total.
 
+### Commits 25–26 — four bugs Patryk found, and the two rules that answer three of them
+
+Reported against the shipped Admin tab: no hover lift on any of its controls
+("it happened again"), a heading unlike the Settings heading, keyboard
+shortcuts still working for a staff account, and a request to review the
+Capabilities window properly.
+
+**Bugs 1 and 3 are one defect wearing two faces**: a house rule with nothing
+enforcing it. `.mgt-hover-scale` is opt-in per element and `ModalTitle`'s
+`background` is required with no default — both deliberate, both relying on
+memory. Measured before fixing: **224 of 242 controls** in the app carried the
+lift and the Admin tab had **1 of 11**, which is exactly why its absence read
+as intentional; the missing `background` painted `--text-on-accent` (white) on
+a TRANSPARENT pill, an invisible heading that throws nothing.
+
+`check:style` gains **Rule 10** (an interactive control carries the lift) and
+**Rule 11** (`<ModalTitle>` names its background). Rule 10 is TAG-scoped rather
+than line-scoped, because an opening tag here routinely spans five lines; both
+that and the comment-stripping were earned rather than designed. A line-scoped
+draft reports every control in the app, and a draft that skipped
+`stripComments` marked **29 tags instead of 18** — it counted controls named in
+PROSE, the trap already recorded for `csp.test.js` and `index.css`'s own
+header. The eighteen pre-existing violations are marked `/* @no-lift <reason>
+*/` with their behaviour UNCHANGED: four reasons are real and documented, and
+fourteen say "pre-existing, not reviewed", which is honest and greppable rather
+than fourteen design decisions made on somebody else's work.
+
+The fixtures failed on their first run for a reason worth keeping: the
+checker's success line now ends "…, control hover-lift)", so a bare
+`/hover-lift/` matched a PASSING run and every negative case broke. The
+prose-names-the-thing trap, inside the test written to guard against it.
+
+**Bug 2 was wider than reported.** Phase 3 built `can()` and gated the Admin tab
+and nothing else, so with enforcement on a staff account still had every
+button, popup, drag and shortcut; the keyboard is where it showed first. What
+makes it closeable is that the gates worth writing are DERIVED: `staff` is the
+floor and extras only ADD, so every account holds `ROLE_GRANTS.staff` by
+construction and a gate on `bookingStatus` could never fire. `GATED_CAPS` is
+the complement and it is exactly six.
+
+Two mechanisms, per capability rather than uniformly — a tab capability for
+`settingsWrite` (every control on those three tabs writes a settings node, so
+the tab is the boundary and the alternative was ten guards) and one
+`refused(cap)` action guard for the rest, which covers button, keyboard, popup
+and drag in one line. Adding the tab capability immediately broke its own
+neighbour: the strand-proof reset fell back to a literal `"general"`, and
+`general` had just become gated, so a staff account would have reset onto a tab
+absent from its own tab bar. It takes the first VISIBLE tab now.
+
+**Bug 4 was a real design failure, and the measurement is the finding.** Inside
+`Overlay`'s 580px card the two-pane layout left the grid 333px, of which the
+capability column got **72 pixels** — so all thirteen labels wrapped to four
+lines and the table ran past 1400px. Worse, the three columns were told apart
+by OPACITY alone (0.45), which is the colour-only-status failure this app fixed
+on the timeline block in v17.11.0, and the "not granted" ring used
+`--border-glass` — white at 0.30 on a near-white sheet, i.e. **invisible by
+construction**, so the affordance for the grid's whole primary action was
+missing. The tap target measured 19×21, under WCAG 2.5.8's 24px floor.
+
+Fixed within the pinned two-pane layout: the blurb moved to `title` (it cost
+more legibility than it bought at that density), level columns went 84→60, the
+person's column is BOUNDED by a 1px accent rule rather than implied by a
+caption, reference ticks take `--text-muted` instead of the same tick faded,
+the ring takes an ink token, and the hit area is `H.chip`. Result: capability
+column 72→**128px**, row height four lines→**23px**, table 1400→**447px**, and
+the whole grid now fits a 580px card with no scrolling. Contrast measured in
+BOTH themes — their tick 4.02 light / 3.82 dark, reference and ring 5.98 / 4.98
+— all clear of the 3:1 graphical-object floor the old ring failed outright.
+
+Verified live against the emulator as a real staff account with enforcement on:
+Settings showed exactly Customers · Vouchers · App · Shortcuts, `D` on a
+selected booking opened no dialog and raised "You don't have permission to
+delete bookings.", and `N` still opened the form with no refusal. `S` was a
+no-op in that session because the clock had passed the 22:00 close —
+v17.16.12's `seatingClosed`, checked before being reported as a failure.
+
+**One process note, recorded because it is a rule this repo states twice.**
+Bugs 1, 3 and 4 all edit `AdminSettings.jsx` and landed in ONE commit whose
+message describes only 1 and 3. That is a bundled commit, and the bundling is
+an error rather than a judgement — the three are separable changes.
+
 ### Commit 24 — the refusal nobody could hear, and the rig that found it
 
 `AdminSettings.jsx` renders its refusals through an always-mounted
