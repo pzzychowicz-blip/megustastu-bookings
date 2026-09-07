@@ -19890,3 +19890,59 @@ stacks on top of the form**, exactly as the kitchen confirm does → redeem →
 the strip section disappears and the voucher reads `spent, 0 € left`. The
 "Complete without using it" exit was proven the same run: the booking completed,
 the voucher stayed open at 25 €, and the strip named it.
+
+### Commit 9 — three inconsistencies, reported by Patryk
+
+All three are mine, and all three are the same kind of mistake: a new surface
+that invented its own answer to a question the app had already answered.
+
+**1 — the hover lift was missing.** Every component in `src/components` uses
+`.mgt-hover-scale`; the four voucher files had **2 instances between them**
+against `CustomersSettings`' 8 on a comparable tab. Now 19 of 19 controls in the
+Vouchers tab carry it (measured in the live DOM), plus the picker and the redeem
+modal. Three details came with the convention rather than being invented: a
+DISABLED control takes no lift and pairs the state with `opacity` + a
+`not-allowed` cursor (`CustomersSettings`' stepper shape); `borderRadius` is
+**required** on any lifted element, because since v17.7.0 the hover rule no
+longer supplies one but still paints an opaque `--bg-hover-card`, so a
+radius-less element renders that fill as a hard-edged rectangle; and `Section`
+was checked for `overflow` first, since a container that clips is the other half
+of this bug.
+
+**2 — "Gift voucher" was a different kind of thing from "Notes".** The picker
+rendered its own `Section` with a hand-written bold heading, six pixels below
+two fields using the `Fld` atom. One label treatment, invented twice — the same
+defect this log records for the `OutlineChip` that was typed out by hand instead
+of imported. It is a `Fld` now, inside the same Section as Notes and Deposit,
+and it uses **both** of that atom's shapes because each is right for one of its
+states: unattached it is an input, so the FUNCTION shape carries the generated
+id (measured: `labelledBy: "Gift voucher"` through a real `<label for>`, with no
+`aria-label` — so it is named the same WAY as its neighbours, not merely named);
+attached it is chips plus a Remove button with no single control to point at, so
+the ELEMENTS shape makes it a named `role="group"` rather than emitting a
+dangling `for`.
+
+**3 — it had no suggestions.** The form's other two text fields have had
+autocomplete since v16.0.0/v16.4.0. This one now does, and **not as a third copy
+of it**: `acRowHandlers` and the `acTouch` ref moved out of `BookingFormModal`
+into `hooks/useAcRow.js` — verbatim, with the v17.3.0 comment — and the menu
+style, which was written out TWICE in that file, moved with them as `AC_MENU` /
+`AC_ROW`. So the fix removed an existing duplication instead of adding to it,
+and the name/phone dropdowns now share one tap-vs-scroll implementation with the
+voucher one.
+
+`searchVouchers` is pure and tested, in `lib/vouchers.js` beside
+`searchCustomers`' precedent. Two decisions in it: **only OPEN vouchers are
+offered**, because a dropdown is a list of things you can pick and a
+void/spent/expired one is refused by `attachRefusal` a moment later — typing
+such a number by hand still reaches its own specific message, which is where
+that distinction belongs; and an **empty query lists them all**, unlike a name
+or a phone, because staff usually hold the physical voucher and may not know
+what to type. The code matches NORMALISED and the note matches RAW — normalising
+a note would strip the space out of "Birthday gift".
+
+`check:style` caught a `minHeight: 34` in the same commit — an off-scale control
+height I added to stop the attached row jumping. Removed rather than marked: the
+row is already at least 32 from its own button, so the number was doing nothing.
+
+`npm test` **929 → 934**. Bundle `98.48 → 98.65 kB` gz.

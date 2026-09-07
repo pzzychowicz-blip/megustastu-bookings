@@ -3878,6 +3878,7 @@ function BookingApp({uid}){
               autoOptimizer={autoOptimizer}
               isMobile={isMobile}
               currency={generalSettings.currency}
+              vouchers={vouchers}
               vouchersByCode={vouchersByCode}
               regularMin={generalSettings.regularMin}
               today={today}

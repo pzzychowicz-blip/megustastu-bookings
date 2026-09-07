@@ -60,10 +60,10 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
       onClose={onClose}
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-          <button type="button" onClick={onSkip} style={mkBtn({ background: "var(--app-btn-slate)" })}>
+          <button type="button" onClick={onSkip} className="mgt-hover-scale" style={mkBtn({ background: "var(--app-btn-slate)" })}>
             Complete without using it
           </button>
-          <button type="button" onClick={commit} style={mkSolidBtn("var(--accent)")}>
+          <button type="button" onClick={commit} className="mgt-hover-scale" style={mkSolidBtn("var(--accent)")}>
             Redeem &amp; complete
           </button>
         </div>
@@ -87,6 +87,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
           type="number" min={0} max={max} step={1} inputMode="decimal"
           value={amount}
           onChange={function (e) { setAmount(e.target.value); setErr(""); }}
+          className="mgt-hover-scale"
           style={mkInp()} />
       </label>
 

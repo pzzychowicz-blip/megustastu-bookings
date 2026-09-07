@@ -75,6 +75,11 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
         // click, not pointer events.
         onMouseDown={function (e) { e.preventDefault(); }}
         onKeyDown={function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        className="mgt-hover-scale"
+        // borderRadius is REQUIRED on any .mgt-hover-scale element: since
+        // v17.7.0 the hover rule no longer supplies one but still paints an
+        // opaque --bg-hover-card, so a radius-less element renders that fill as
+        // a hard-edged rectangle inside its own rounded card.
         style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{formatCode(v.code)}</div>
@@ -124,6 +129,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
             type="button"
             onClick={function (e) { e.stopPropagation(); onVoid(v.code, state !== "void"); }}
             aria-label={(state === "void" ? "Reinstate" : "Void") + " voucher " + formatCode(v.code)}
+            className="mgt-hover-scale"
             style={mkBtn({ fontSize: T.body, minHeight: 36, background: state === "void" ? BTN.nav : BTN.del })}>
             {state === "void" ? "Reinstate voucher" : "Void voucher"}
           </button>
@@ -145,6 +151,7 @@ function FilterBtn({ id, label, active, onPick }) {
       // A control that paints itself selected with a fill must say so, or its
       // state is colour alone (v17.15.6).
       aria-pressed={active}
+      className="mgt-hover-scale"
       style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: active ? "var(--accent)" : BTN.nav })}>
       {label}
     </button>
@@ -200,6 +207,11 @@ export function VouchersTabContent({
     };
   }, [vouchers, now]);
 
+  // A disabled control takes NO hover lift, and pairs the state with opacity +
+  // cursor — the shape CustomersSettings' own steppers use.
+  const atMin = !voucherDefaults || voucherDefaults.expiryMonths <= EXPIRY_MIN;
+  const atMax = !voucherDefaults || voucherDefaults.expiryMonths >= EXPIRY_MAX;
+
   function doIssue() {
     setIssueErr("");
     setIssued("");
@@ -228,20 +240,20 @@ export function VouchersTabContent({
             <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>{"Amount (" + currency + ")"}</span>
             <input type="number" min={0} step={5} inputMode="decimal" value={amount}
               onChange={function (e) { setAmount(e.target.value); }}
-              placeholder="50" style={mkInp()} />
+              placeholder="50" className="mgt-hover-scale" style={mkInp()} />
           </label>
           <label style={{ flex: "2 1 200px", minWidth: 0 }}>
             <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>Number (leave blank to generate)</span>
             <input type="text" value={manualCode}
               onChange={function (e) { setManualCode(e.target.value); }}
-              placeholder="from a printed book" autoCapitalize="characters" style={mkInp()} />
+              placeholder="from a printed book" autoCapitalize="characters" className="mgt-hover-scale" style={mkInp()} />
           </label>
         </div>
 
         <label style={{ display: "block", marginBottom: 8 }}>
           <span style={{ display: "block", fontSize: T.small, color: S.muted, marginBottom: 4 }}>Notes (optional)</span>
           <input type="text" value={notes} onChange={function (e) { setNotes(e.target.value); }}
-            placeholder="Birthday gift for Ana" style={mkInp()} />
+            placeholder="Birthday gift for Ana" className="mgt-hover-scale" style={mkInp()} />
         </label>
 
         <div style={{ fontSize: T.micro, color: S.muted, marginBottom: 8 }}>
@@ -250,6 +262,7 @@ export function VouchersTabContent({
         </div>
 
         <button type="button" onClick={doIssue}
+          className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 40, background: "var(--accent)" })}>Issue voucher</button>
 
         <Reveal show={!!issueErr}>
@@ -271,9 +284,10 @@ export function VouchersTabContent({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button type="button"
             aria-label="Fewer months"
-            disabled={!voucherDefaults || voucherDefaults.expiryMonths <= EXPIRY_MIN}
+            disabled={atMin}
+            className={atMin ? undefined : "mgt-hover-scale"}
             onClick={function () { onSaveDefaults({ expiryMonths: voucherDefaults.expiryMonths - 1 }); }}
-            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav })}>−</button>
+            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: atMin ? 0.4 : 1, cursor: atMin ? "not-allowed" : "pointer" })}>−</button>
           <span style={{ fontSize: T.body, color: S.text, minWidth: 96, textAlign: "center" }}>
             {voucherDefaults && voucherDefaults.expiryMonths > 0
               ? voucherDefaults.expiryMonths + " month" + (voucherDefaults.expiryMonths !== 1 ? "s" : "")
@@ -281,9 +295,10 @@ export function VouchersTabContent({
           </span>
           <button type="button"
             aria-label="More months"
-            disabled={!voucherDefaults || voucherDefaults.expiryMonths >= EXPIRY_MAX}
+            disabled={atMax}
+            className={atMax ? undefined : "mgt-hover-scale"}
             onClick={function () { onSaveDefaults({ expiryMonths: voucherDefaults.expiryMonths + 1 }); }}
-            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav })}>+</button>
+            style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: atMax ? 0.4 : 1, cursor: atMax ? "not-allowed" : "pointer" })}>+</button>
         </div>
       </Section>
 
@@ -297,7 +312,7 @@ export function VouchersTabContent({
 
         <input type="search" value={query} onChange={function (e) { setQuery(e.target.value); }}
           aria-label="Search vouchers by number or note"
-          placeholder="Search by number or note…" style={{ ...mkInp(), marginBottom: 8 }} />
+          placeholder="Search by number or note…" className="mgt-hover-scale" style={{ ...mkInp(), marginBottom: 8 }} />
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           <FilterBtn id="all" label="All" active={filter === "all"} onPick={setFilter} />

@@ -3,6 +3,22 @@
 // v18.0.0 phase 1 — the booking form's voucher field: attach a gift voucher to
 // this booking, or detach the one that is on it.
 //
+// ── IT IS A FORM FIELD, NOT A PANEL ─────────────────────────────────────────
+// v18.0.0 correction. The first version rendered its own `<Section>` with a
+// hand-written bold heading, so "Gift voucher" was a different KIND of thing on
+// screen from "Notes" and "Deposit (€)" six pixels above it — the same label
+// treatment invented twice, which is the defect this repo records for the
+// `OutlineChip` that was typed out by hand. It is a `Fld` now, inside the same
+// Section as those two, so the three read as one group and it inherits the
+// atom's label association for free.
+//
+// **Both of `Fld`'s shapes are used, and each is the right one.** With nothing
+// attached the field is an input (plus its Attach affordance and its dropdown,
+// exactly like the name and phone fields), so it takes the FUNCTION shape and
+// puts the generated id on the input. With a voucher attached there is no
+// single control to point at — it is a row of chips and a Remove button — so it
+// takes the ELEMENTS shape and `Fld` makes it a named `role="group"`.
+//
 // ── ATTACHED IS NOT REDEEMED ────────────────────────────────────────────────
 // This field writes `booking.voucherCode` and nothing else. It does not touch
 // the voucher, does not move any money, and cannot: the ledger entry is written
@@ -25,6 +41,7 @@
 // Props:
 //   code            — form.voucherCode (the draft value)
 //   onChange(code)  — writes it back into the form draft
+//   vouchers        — the sanitised list, for the suggestion dropdown
 //   vouchersByCode  — the code→voucher index from useVouchers
 //   bookings        — for the "already on another live booking" check
 //   bookingId       — editId, or null for a new booking
@@ -34,15 +51,18 @@ import { useState } from "react";
 import { S, BTN, R, T, FW } from "../lib/constants";
 import {
   normalizeCode, formatCode, voucherState, remainingOf,
-  isRedeemedBy, attachRefusal,
+  isRedeemedBy, attachRefusal, searchVouchers,
 } from "../lib/vouchers";
-import { Section, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn } from "./atoms";
+import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
+import { Fld, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn } from "./atoms";
 
 const STATE_TONE = { open: "success", spent: "neutral", expired: "warn", void: "danger" };
 
-export function VoucherPicker({ code, onChange, vouchersByCode, bookings, bookingId, currency = "€" }) {
+export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookings, bookingId, currency = "€" }) {
   const [typed, setTyped] = useState("");
   const [err, setErr] = useState("");
+  const [focus, setFocus] = useState(false);
+  const acRowHandlers = useAcRow();
   // Once per mount, for the same reason the Vouchers tab reads it once: expiry
   // is a day-scale concept and a `Date.now()` in the render body is neither
   // pure nor stable enough to sit in a dependency.
@@ -51,22 +71,24 @@ export function VoucherPicker({ code, onChange, vouchersByCode, bookings, bookin
   const attached = code ? (vouchersByCode || {})[normalizeCode(code)] : null;
   const settledHere = attached && isRedeemedBy(attached, bookingId);
 
-  function attach() {
-    const c = normalizeCode(typed);
+  function attach(raw) {
+    const c = normalizeCode(raw === undefined ? typed : raw);
     if (!c) { setErr("Enter a voucher number."); return; }
     const refusal = attachRefusal((vouchersByCode || {})[c], c, bookings, bookingId, now);
     if (refusal) { setErr(refusal); return; }
     setErr("");
     setTyped("");
+    setFocus(false);
     onChange(c);
   }
 
   // ── Something is attached ──────────────────────────────────────────────────
+  // `Fld`'s ELEMENTS shape: there is no single control here to carry the label,
+  // so the atom makes this a named group instead of emitting a dangling `for`.
   if (code) {
     const st = attached ? voucherState(attached, now) : null;
     return (
-      <Section>
-        <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: S.text, marginBottom: 6 }}>Gift voucher</div>
+      <Fld label="Gift voucher">
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>
             {formatCode(code)}
@@ -82,7 +104,8 @@ export function VoucherPicker({ code, onChange, vouchersByCode, bookings, bookin
             <button type="button"
               onClick={function () { onChange(""); setErr(""); }}
               aria-label={"Remove voucher " + formatCode(code) + " from this booking"}
-              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav })}>
+              className="mgt-hover-scale"
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill })}>
               Remove
             </button>
           )}
@@ -94,33 +117,73 @@ export function VoucherPicker({ code, onChange, vouchersByCode, bookings, bookin
               ? "You will be asked how much of it the bill used when this booking is completed."
               : "This number is not in the voucher list — it may have been recorded on another device."}
         </div>
-      </Section>
+      </Fld>
     );
   }
 
   // ── Nothing attached ───────────────────────────────────────────────────────
+  // The suggestion dropdown is the name/phone fields' own machinery, from the
+  // shared `useAcRow` hook — so a tap on a row behaves identically here, and a
+  // swipe that scrolls the list does not pick a voucher.
+  const matches = focus ? searchVouchers(vouchers, typed, 20) : [];
+  const menu = matches.length ? (
+    <div style={AC_MENU}>
+      {matches.map(function (v) {
+        return (
+          <div
+            key={v.code}
+            className="mgt-ac-row"
+            {...acRowHandlers(function () { attach(v.code); })}
+            style={AC_ROW}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, fontVariantNumeric: "tabular-nums" }}>
+                {formatCode(v.code)}
+              </div>
+              {v.notes ? (
+                <div style={{ fontSize: T.small, color: S.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {v.notes}
+                </div>
+              ) : null}
+            </div>
+            <OutlineChip tone="success">{remainingOf(v) + " " + currency + " left"}</OutlineChip>
+          </div>
+        );
+      })}
+    </div>
+  ) : null;
+
   return (
-    <Section>
-      <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: S.text, marginBottom: 6 }}>Gift voucher</div>
-      <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-        <input
-          type="text"
-          value={typed}
-          onChange={function (e) { setTyped(e.target.value); setErr(""); }}
-          onKeyDown={function (e) { if (e.key === "Enter") { e.preventDefault(); attach(); } }}
-          placeholder="Voucher number"
-          autoCapitalize="characters"
-          aria-label="Voucher number to attach to this booking"
-          className="mgt-hover-scale"
-          style={{ ...mkInp(), flex: 1, minWidth: 0 }} />
-        <button type="button" onClick={attach}
-          style={mkBtn({ fontSize: T.body, background: BTN.nav, borderRadius: R.pill })}>
-          Attach
-        </button>
-      </div>
-      <div role="alert">
-        <Reveal show={!!err}><InlineAlert style={{ marginTop: 8 }}>{err}</InlineAlert></Reveal>
-      </div>
-    </Section>
+    <Fld label="Gift voucher">{function (fid) {
+      return (
+        <div>
+          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+              <input
+                id={fid}
+                type="text"
+                value={typed}
+                onChange={function (e) { setTyped(e.target.value); setErr(""); }}
+                onFocus={function () { setFocus(true); }}
+                onBlur={function () { setFocus(false); }}
+                onKeyDown={function (e) { if (e.key === "Enter") { e.preventDefault(); attach(); } }}
+                placeholder="Number, or pick from the list"
+                autoCapitalize="characters"
+                autoComplete="off"
+                className="mgt-hover-scale"
+                style={mkInp()} />
+              {menu}
+            </div>
+            <button type="button" onClick={function () { attach(); }}
+              className="mgt-hover-scale"
+              style={mkBtn({ fontSize: T.body, background: BTN.nav, borderRadius: R.pill })}>
+              Attach
+            </button>
+          </div>
+          <div role="alert">
+            <Reveal show={!!err}><InlineAlert style={{ marginTop: 8 }}>{err}</InlineAlert></Reveal>
+          </div>
+        </div>
+      );
+    }}</Fld>
   );
 }

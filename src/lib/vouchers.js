@@ -454,3 +454,37 @@ export function attachRefusal(v, code, bookings, bookingId, now) {
   if (other) return "That voucher is already on " + (other.name || "another booking") + " on " + other.date + ".";
   return "";
 }
+
+// Vouchers matching a typed query, for the booking form's suggestion dropdown.
+//
+// It lives here rather than in the picker for `searchCustomers`'s reason: the
+// booking form's other two search fields are backed by pure functions in
+// `customers.js`, and a third search implemented inline in a component would be
+// the one nothing can test.
+//
+// **Only OPEN vouchers are offered.** A dropdown is a list of things you can
+// pick, and picking a void, spent or expired voucher is refused by
+// `attachRefusal` a moment later — so offering them is offering a dead end.
+// Typing such a number by hand still reaches the specific refusal message,
+// which is where that distinction belongs.
+//
+// An EMPTY query lists them all (newest first) rather than nothing: unlike a
+// name or a phone, staff usually hold the physical voucher and may not know
+// what to type, and the list is naturally small.
+export function searchVouchers(vouchers, query, limit) {
+  const q = normalizeCode(query);
+  const raw = String(query || "").trim().toUpperCase();
+  const cap = limit || 20;
+  return (Array.isArray(vouchers) ? vouchers : [])
+    .filter(function (v) { return voucherState(v, Date.now()) === "open"; })
+    .filter(function (v) {
+      if (!raw) return true;
+      // The code is matched NORMALISED, so "abcd 2345" finds ABCD2345 — the
+      // same property the attach field itself has. The note is matched on the
+      // raw text, because a note is prose and normalising it would strip the
+      // spaces out of "Birthday gift".
+      return (q && v.code.includes(q)) || (v.notes || "").toUpperCase().includes(raw);
+    })
+    .sort(function (a, b) { return (b.issuedAt || 0) - (a.issuedAt || 0); })
+    .slice(0, cap);
+}

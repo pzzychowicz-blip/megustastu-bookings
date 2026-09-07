@@ -17,7 +17,7 @@ import {
   expiryFrom, isExpired, voucherState, isRedeemedBy, canAttach,
   attachedElsewhere, isUnsettled,
   sanitizeVoucher, sanitizeVouchers, voucherIndex,
-  validateIssue, applyRedemption, removeRedemption, redeemableAmount, attachRefusal,
+  validateIssue, applyRedemption, removeRedemption, redeemableAmount, attachRefusal, searchVouchers,
 } from "../src/lib/vouchers.js";
 
 function v(o) {
@@ -549,5 +549,46 @@ describe("attachRefusal", () => {
   it("a TERMINAL booking's link does not block a new attach", () => {
     const done = [bk({ id: "b1", voucherCode: "ABCD2345", status: "completed" })];
     expect(attachRefusal(v(), "ABCD2345", done, "b2", now)).toBe("");
+  });
+});
+
+describe("searchVouchers", () => {
+  const mk = (o) => sanitizeVoucher(Object.assign({ value: 50, remaining: 50, issuedAt: 1 }, o), o.code);
+  const list = [
+    mk({ code: "ABCD2345", notes: "Birthday gift for Ana", issuedAt: 3 }),
+    mk({ code: "LOT1001", notes: "", issuedAt: 2 }),
+    mk({ code: "QRST6789", notes: "Anniversary", issuedAt: 1 }),
+    mk({ code: "VOIDED11", status: "void", issuedAt: 9 }),
+    mk({ code: "SPENT111", remaining: 0, issuedAt: 9 }),
+    mk({ code: "EXPIRED1", expiresAt: 1, issuedAt: 9 }),
+  ];
+
+  it("offers ONLY open vouchers — a dropdown is a list of things you can pick", () => {
+    // Void, spent and expired are all refused by attachRefusal a moment later,
+    // so offering them is offering a dead end.
+    const codes = searchVouchers(list, "").map((v) => v.code);
+    expect(codes).toEqual(["ABCD2345", "LOT1001", "QRST6789"]);
+  });
+
+  it("an empty query lists them all, newest first", () => {
+    expect(searchVouchers(list, "").map((v) => v.issuedAt)).toEqual([3, 2, 1]);
+  });
+
+  it("matches the code NORMALISED, so a typed spelling finds it", () => {
+    expect(searchVouchers(list, "abcd 2345").map((v) => v.code)).toEqual(["ABCD2345"]);
+    expect(searchVouchers(list, "ABCD-2345").map((v) => v.code)).toEqual(["ABCD2345"]);
+    expect(searchVouchers(list, "LOT").map((v) => v.code)).toEqual(["LOT1001"]);
+  });
+
+  it("matches a note on the RAW text, because a note is prose", () => {
+    // normalizeCode would strip the space out of "Birthday gift" and never match.
+    expect(searchVouchers(list, "birthday gift").map((v) => v.code)).toEqual(["ABCD2345"]);
+    expect(searchVouchers(list, "anniv").map((v) => v.code)).toEqual(["QRST6789"]);
+  });
+
+  it("caps the list and survives junk", () => {
+    expect(searchVouchers(list, "", 2)).toHaveLength(2);
+    expect(searchVouchers(null, "x")).toEqual([]);
+    expect(searchVouchers(list, "zzzz")).toEqual([]);
   });
 });

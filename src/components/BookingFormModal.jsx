@@ -50,6 +50,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
@@ -70,7 +71,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = 2, // v17.0.0: settings/general
-  vouchersByCode,                 // v18.0.0: code -> voucher, for the picker
+  vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
@@ -94,25 +95,10 @@ export function BookingFormModal({
   // (new bookings only) pre-fills size/preference from the latest booking, the
   // same fields Book Again pre-fills.
   const [phoneFocus,setPhoneFocus]=useState(false);
-  // v17.3.0: tap-vs-scroll disambiguation for the autocomplete rows. Now that the
-  // dropdowns scroll (maxHeight), selecting on `onTouchStart` made a swipe-scroll
-  // immediately pick a row — rows past the fold were unreachable on touch. Instead
-  // we RECORD the touch start, only select on `onTouchEnd` if the finger barely
-  // moved (a tap, not a scroll), and suppress the synthesized mouse event that
-  // follows a touch. `acRowSelect(fn)` returns the shared handler bundle so both
-  // dropdowns reuse it. React makes touch listeners passive, so we never rely on
-  // preventDefault — native scroll is left free.
-  const acTouch=useRef({x:0,y:0,scroll:false,ts:0});
-  function acRowHandlers(select){
-    return {
-      // Desktop: mousedown beats the input's blur (which would unmount the list).
-      // Guard: ignore the synthesized mousedown that follows a touch (within 600ms).
-      onMouseDown:function(e){ if(Date.now()-acTouch.current.ts<600) return; e.preventDefault(); select(); },
-      onTouchStart:function(e){ const t=e.touches&&e.touches[0]; acTouch.current={x:t?t.clientX:0,y:t?t.clientY:0,scroll:false,ts:Date.now()}; },
-      onTouchMove:function(e){ const t=e.touches&&e.touches[0]; if(t&&(Math.abs(t.clientX-acTouch.current.x)+Math.abs(t.clientY-acTouch.current.y))>12) acTouch.current.scroll=true; },
-      onTouchEnd:function(){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
-    };
-  }
+  // v18.0.0: the tap-vs-scroll disambiguation moved to `hooks/useAcRow.js` when
+  // the voucher field became the THIRD dropdown on this form. Behaviour is
+  // unchanged — the hook holds the v17.3.0 code and its comment verbatim.
+  const acRowHandlers=useAcRow();
   // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
   // every keystroke (the form draft lives in the parent, so EVERY field edit
   // re-renders this component).
@@ -324,12 +310,12 @@ export function BookingFormModal({
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the
   // popover rule (a translucent card reads see-through over form content).
-  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:R.card,boxShadow:"var(--shadow-sheet)",overflowX:"hidden",overflowY:"auto",maxHeight:264}}>{phoneMatches.map(function(c){return (
+  const phoneDropdown=phoneMatches.length?<div style={AC_MENU}>{phoneMatches.map(function(c){return (
     <div
       key={c.phone}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickCustomer(c);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
               border in the matching hue PLUS bold text in a third shade. They are
               the same counts as the Customers tab's chips, so they are now the
               same chip. */}{c.visits>0?<OutlineChip tone="success">{c.visits+" visit"+(c.visits!==1?"s":"")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</OutlineChip>:null}</div></div>
@@ -337,12 +323,12 @@ export function BookingFormModal({
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
   // phone-less guests are visually distinguishable (they are separate rows).
-  const nameDropdown=nameMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:R.card,boxShadow:"var(--shadow-sheet)",overflowX:"hidden",overflowY:"auto",maxHeight:264}}>{nameMatches.map(function(r){return (
+  const nameDropdown=nameMatches.length?<div style={AC_MENU}>{nameMatches.map(function(r){return (
     <div
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -851,18 +837,22 @@ export function BookingFormModal({
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
           className="mgt-hover-scale"
-          style={inp()} />;}}</Fld></Section>{/* v18.0.0: the gift voucher attached to this booking. ATTACHED, not
+          style={inp()} />;}}</Fld>{/* v18.0.0: the gift voucher attached to this booking. ATTACHED, not
         redeemed — the ledger entry is written when the booking is completed.
+        It sits INSIDE this Section, beside Notes and Deposit, and is a `Fld`
+        like both of them: the first version gave it its own Section and its own
+        hand-written heading, so one label treatment existed twice on one form.
         Rendered only once vouchers are actually in use, so an app that has
-        never issued one is unchanged. */}{(vouchersByCode&&Object.keys(vouchersByCode).length)||form.voucherCode?(
+        never issued one is unchanged. */}{(vouchers&&vouchers.length)||form.voucherCode?(
         <VoucherPicker
           code={form.voucherCode||""}
           onChange={function(c){setForm(function(f){return Object.assign({},f,{voucherCode:c});});}}
+          vouchers={vouchers}
           vouchersByCode={vouchersByCode}
           bookings={bookings}
           bookingId={editId}
           currency={currency} />
-      ):null}{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+      ):null}</Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>
