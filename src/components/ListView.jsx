@@ -32,10 +32,11 @@
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, seatingClosed } from "../lib/booking-logic";
+import { formatCode, normalizeCode, isUnsettled } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
-import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon } from "./Icons";
+import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon } from "./Icons";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
 // The same facts TimelineBlock draws on its right-hand rail, in the same order
@@ -146,6 +147,9 @@ export const ListView = memo(function ListView({
   // another — App's `clashMap`, the same memo TimelineView takes.
   late = {}, clashes = {}, onNoShow = () => {},
   selectedId = null, onSelect = () => {}, focusReq = 0,
+  // v18.0.0: code -> voucher, so a card can say whether an attached voucher is
+  // still unsettled. A STABLE object from App's memo, per the React.memo rule.
+  vouchersByCode = {},
   showFinished = false, onToggleFinished = () => {},
   // v17.14.0: `emptyWalkin` — one name across all three views, see TimelineView.
   // `isEmpty` comes from App too: the three views used to answer "is this day
@@ -477,6 +481,26 @@ export const ListView = memo(function ListView({
             <DepositIcon size={IC.control} />{(currency || "€") + b.deposit}
           </CardFlag>
         ) : null;
+        // v18.0.0: the gift voucher. Deliberately NOT on the timeline block —
+        // a voucher is a settlement fact, not a seating fact, and the block is
+        // the app's most contended surface (Patryk-confirmed; `deposit` decided
+        // the other way and that is where 12 of its references went). The card
+        // is where a booking is read before it is settled, so it belongs here.
+        //
+        // Two states, one flag. An UNSETTLED booking — completed, carrying a
+        // voucher, with no ledger entry — is the one that needs acting on, so
+        // it is the one drawn in warn; anything else is neutral information.
+        const vCode = normalizeCode(b.voucherCode);
+        const vUnsettled = vCode ? isUnsettled(b, vouchersByCode) : false;
+        const voucherTag = vCode ? (
+          <CardFlag
+            ink={vUnsettled ? FLAG_WARN : FLAG_NEUTRAL}
+            title={vUnsettled
+              ? "Voucher " + formatCode(vCode) + " — not yet recorded against this booking"
+              : "Voucher " + formatCode(vCode)}>
+            <VoucherIcon size={IC.control} />{formatCode(vCode)}
+          </CardFlag>
+        ) : null;
         // v17.15.5: the double-booked marker. `findClashes` can return a pair
         // whose `tables` is EMPTY — `canAssign` also rejects a pair when each
         // booking takes two or more tables from one join cluster, and those
@@ -695,6 +719,7 @@ export const ListView = memo(function ListView({
                     `locked` because it is the same fact one notch weaker, and
                     the two counters that have no block counterpart come last. */}
                 {depositTag}
+                {voucherTag}
                 {prefTag}
                 {lockedTag}
                 {manualTag}

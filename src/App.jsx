@@ -133,7 +133,7 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, VoucherIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -266,8 +266,9 @@ import { useWaitlist } from "./hooks/useWaitlist";
 // vouchers are.
 import { useVouchers } from "./hooks/useVouchers";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
-import { normalizeCode, isRedeemedBy, voucherState } from "./lib/vouchers";
+import { normalizeCode, isRedeemedBy, voucherState, isUnsettled } from "./lib/vouchers";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
+import { UnsettledBanner } from "./components/UnsettledBanner";
 import { useRecurring } from "./hooks/useRecurring";
 // v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
 // listener (the whole kbRef machinery) live in useKeyboardShortcuts.js now.
@@ -3157,6 +3158,14 @@ function BookingApp({uid}){
   // reminders are scheduled prompts; the waitlist is an opportunity, not a
   // problem, so it sits last and stays green. The strip shows the first entry
   // as its collapsed summary, which makes "worst thing first" load-bearing.
+  // v18.0.0: bookings on the VIEWED day that completed carrying a voucher no
+  // ledger entry was ever written for. Scoped to the viewed date rather than to
+  // today, unlike late/waitlist/overlap: the whole point of the state is that
+  // staff settle it NEXT service, which means seeing it on a day that is no
+  // longer today. ClashBanner is scoped the same way.
+  const unsettledBookings=useMemo(function(){
+    return bookings.filter(function(b){return b.date===viewDate&&isUnsettled(b,vouchersByCode);});
+  },[bookings,viewDate,vouchersByCode]);
   const notifSections=[].concat(
     appBannerSections({
       isOnline:isOnline,
@@ -3196,7 +3205,10 @@ function BookingApp({uid}){
       title:(reminderCount===1?"Reminder":"Reminders")+notifToday,count:reminderCount,node:reminderBanners}]:[],
     hasWaitBanner?[{id:"wait",tone:"var(--success-text)",tint:"var(--suggest-bg-soft)",icon:WaitIcon,
       title:"Waitlist — table free"+notifToday,count:waitBannerEntries.length,
-      node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[]
+      node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[],
+    unsettledBookings.length?[{id:"unsettled",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:VoucherIcon,
+      title:"Voucher not recorded",count:unsettledBookings.length,
+      node:<UnsettledBanner bookings={unsettledBookings} vouchersByCode={vouchersByCode} currency={generalSettings.currency} onOpen={function(id){const b=bookings.find(function(x){return x.id===id;});if(b) openEdit(b);}} swapKey={viewDate} />}]:[]
   );
   // v17.12.0: what a screen reader is TOLD when the strip changes.
   //
@@ -3458,6 +3470,7 @@ function BookingApp({uid}){
   // dismissing a strip row quiets the row, it does not make the double-booking
   // stop being true.
   const listEl=<ListView
+    vouchersByCode={vouchersByCode}
     bookings={bookings}
     date={viewDate}
     today={today}

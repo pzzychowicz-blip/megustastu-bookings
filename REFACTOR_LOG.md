@@ -19832,3 +19832,61 @@ reads three seconds apart were identical, so nothing writes on its own; the
 likeliest cause is a stray coordinate click on a Void/Reinstate button in a
 panel that scrolls. It is not proven, and it is written down unproven, because
 an unexplained state change is the only thing that could re-open this.
+
+### Commit 8 — display, and the section that clears itself
+
+`ListView` · `DaySheet` · `Icons.jsx` (`VoucherIcon`) ·
+`UnsettledBanner.jsx` + its `notifSections` entry. `95.98 → 98.48 kB` gz; test
+count unchanged at 929, which is what a display commit should look like.
+
+**The timeline block deliberately shows nothing** — Patryk's call, taken against
+the plan's own flag that this was a decision to make. A voucher is a
+*settlement* fact rather than a seating fact: the redeem prompt fires at
+completion, which is exactly when it matters, and the block is the app's most
+contended surface. `deposit` decided the other way and that is where 12 of its
+16 display references went; this one costs 1 in `ListView` and 1 in `DaySheet`.
+
+**One flag, two tones.** An unsettled booking is the one that needs acting on,
+so it is drawn in warn; anything else is neutral information. The day sheet
+shares ONE money column between deposit and voucher — a separate column would
+widen a sheet printed on A4 and read at the table, and the two answer the same
+question.
+
+`VoucherIcon` is a price TAG, and the shape is argued rather than picked. Its
+pointed end is a silhouette nothing else in the set has, which matters most
+against `DepositIcon` — the other money mark, in the same flag rail on the same
+card — because a banknote is a horizontal rounded rect and anything else
+rectangular reads as one at 14px. **It carries no hole**, which is
+`DepositIcon`'s own lesson applied rather than ignored: a tag's hole is its most
+recognisable detail and is exactly the detail that cannot survive, since an
+interior shape needs ~3× the stroke to stay open and a hole that big inside a
+12-unit body stops being a hole and becomes the tag. `LockIcon` has no keyhole
+for the same reason.
+
+**`UnsettledBanner` is the second half of two earlier decisions**, and without
+it neither is finished: the close-time auto-complete must never redeem because
+nobody is there to answer, and the redeem modal's "Complete without using it"
+says in as many words that the booking "will show as unsettled until someone
+records it". That is a promise this file keeps.
+
+Two things about it depart from its four sibling sections, both deliberately:
+
+- **It is scoped to the VIEWED date, not to today.** Money left unrecorded does
+  not stop mattering because the day rolled over — the entire point is that
+  staff settle it NEXT service, which means seeing it on a day that is no
+  longer today. `ClashBanner` is scoped the same way.
+- **It has no ✕ dismissal, and it is the only section without one.** The other
+  four are notices about a situation you may already know about. This is an
+  unfinished piece of bookkeeping about money, and it CLEARS ITSELF the moment
+  somebody records it — verified live, the row vanished on the settling save.
+  A dismissal would hide a thing that has not been done, which is the opposite
+  of what the row is for.
+
+**Verified live, including the second hook point.** The `updateStatus` path was
+already proven in commit 7; this run proved the FORM path: Settle → the edit
+form opens on the completed booking with its voucher intact (which is the
+`openEdit` seed fix from commit 7 doing its job) → Save → **the redeem prompt
+stacks on top of the form**, exactly as the kitchen confirm does → redeem →
+the strip section disappears and the voucher reads `spent, 0 € left`. The
+"Complete without using it" exit was proven the same run: the booking completed,
+the voucher stayed open at 25 €, and the strip named it.

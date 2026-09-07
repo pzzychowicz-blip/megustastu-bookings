@@ -11,7 +11,7 @@
 //
 // Content for `date`: header (restaurant, date + weekday, covers + shift totals
 // via daySummary), a time-sorted table of the day's NON-cancelled bookings
-// (Time · Name · Pax · Tables · Phone · Deposit · Notes), any table blocks, and
+// (Time · Name · Pax · Tables · Phone · Deposit/voucher · Notes), any table blocks, and
 // the day's waitlist entries.
 //
 // Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
@@ -20,6 +20,7 @@ import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW } from "../lib/constants";
 import { daySummary } from "../lib/booking-logic";
+import { normalizeCode, formatCode } from "../lib/vouchers";
 
 const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
@@ -80,7 +81,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
               <th style={th}>Pax</th>
               <th style={th}>Tables</th>
               <th style={th}>Phone</th>
-              <th style={th}>Deposit</th>
+              <th style={th}>Deposit / voucher</th>
               <th style={th}>Notes</th>
             </tr>
           </thead>
@@ -93,7 +94,14 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
                   <td style={cell}>{b.phone || "—"}</td>
-                  <td style={cell}>{(Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : "—"}</td>
+                  {/* v18.0.0: deposit and voucher share one money column. A
+                      separate column would widen a sheet that is printed on
+                      A4 and read at the table, and the two are the same
+                      question — has this guest already paid something. */}
+                  <td style={cell}>{[
+                    (Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : null,
+                    normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
+                  ].filter(Boolean).join("  ·  ") || "—"}</td>
                   <td style={cell}>{b.notes || ""}</td>
                 </tr>
               );

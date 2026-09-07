@@ -460,6 +460,29 @@ export function DepositIcon(props) {
   );
 }
 
+// v18.0.0 — the gift voucher. A price TAG: a body with a pointed end, which is
+// a silhouette nothing else in this set has (everything else here is round, a
+// plain rectangle, a diagonal or a chevron). That matters most against
+// DepositIcon, which is the other money mark and sits in the same flag rail on
+// the same card — a banknote is a horizontal rounded rect, and anything else
+// rectangular risks reading as one at 14px.
+//
+// **It carries no hole, and that is the DepositIcon lesson applied rather than
+// ignored.** A tag's hole is its most recognisable detail and it is exactly the
+// detail that cannot survive here: stroke width is the constraint, an interior
+// shape needs ~3× the stroke to stay open, and a hole that big inside a
+// 12-unit-tall tag body stops being a hole and becomes the tag. LockIcon has no
+// keyhole for the same reason. A pointed tag reads as a tag without it, because
+// the silhouette is doing the work — which is the whole argument the banknote
+// was redrawn on.
+export function VoucherIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 12 L9 5 H19 A2.5 2.5 0 0 1 21.5 7.5 V16.5 A2.5 2.5 0 0 1 19 19 H9 Z" />
+    </Svg>
+  );
+}
+
 // ── v17.10.0: the STATUS marks ───────────────────────────────────────────────
 // Every button that moves a booking to another status used to be prefixed with
 // the SAME ChevronRightIcon — ">Confirmed", ">Seated", ">Completed" — which is
