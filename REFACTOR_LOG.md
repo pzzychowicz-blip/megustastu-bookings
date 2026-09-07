@@ -20189,3 +20189,23 @@ the file and the two exports it must have.
 This is the repo's own recurring shape one more time: a guard that reads as
 exhaustive and is not, invisible in review because the bypass is a property of
 the language rather than of the code in front of you.
+
+### Commit 16 — `/code-review` fix: the badge claimed a scoping DEV does not have
+
+Commit 11's banner printed `· tenant <slug>` in both environments, and the
+comment above it said it "answers both halves of 'which database am I on' — the
+environment AND the restaurant". In DEV the second half is simply false: `isDev`
+short-circuits the tenant's `firebaseConfig` and every tenant shares the ONE
+sandbox, so the slug describes the loaded profile and says nothing about the
+database. `VITE_TENANT=other npm run dev` would have read as tenant-namespaced
+DEV data; it is the same bookings, and two tenants would overwrite each other's
+seeded rows.
+
+DEV now reads `· shared sandbox — tenant mgt supplies the profile only`
+(verified in the running app); PROD keeps `· tenant mgt`, where the slug DOES
+determine the database. The DEV string is absent from the built bundle, so this
+costs production nothing.
+
+Same class as the pre-v17.5.1 green connection dot: an indicator asserting a
+relationship that does not exist is worse than no indicator, because it is
+believed.

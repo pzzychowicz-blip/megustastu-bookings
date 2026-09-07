@@ -94,10 +94,22 @@ const firebaseConfig = isDev ? devConfig : tenant.firebaseConfig;
 // app version banner. Green DEV badge = safe to experiment. Red PROD
 // badge = production database, every write is real.
 //
-// v18.0.0 phase 2: it carries the tenant slug too, so one glance answers both
-// halves of "which database am I on" — the environment AND the restaurant.
+// v18.0.0 phase 2: it carries the tenant too — but ONLY in PROD does the tenant
+// say anything about the database, and the badge must not claim otherwise.
+//
+// /code-review fix: the first version printed "· tenant mgt" in both
+// environments, which reads as "this database belongs to this restaurant". In
+// DEV that is false — `isDev` short-circuits the tenant's `firebaseConfig`
+// entirely and EVERY tenant shares the one sandbox, so two tenants run on the
+// same bookings and would overwrite each other's seeded data. A badge whose
+// whole job is answering "which database am I on" must not assert a scoping the
+// database does not have; the pre-v17.5.1 green connection dot is the same
+// mistake in the same place.
+const tenantNote = isDev
+  ? " · shared sandbox — tenant " + tenantSlug + " supplies the profile only"
+  : " · tenant " + tenantSlug;
 console.log(
-  "%c[firebase] " + (isDev ? "DEV" : "PROD") + " — " + firebaseConfig.projectId + " · tenant " + tenantSlug,
+  "%c[firebase] " + (isDev ? "DEV" : "PROD") + " — " + firebaseConfig.projectId + tenantNote,
   "background:" + (isDev ? "#0a0" : "#c00") + ";color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold;"
 );
 
