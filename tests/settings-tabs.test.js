@@ -15,9 +15,16 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SETTINGS_TABS, visibleTabs } from "../src/components/SettingsChrome.jsx";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (p) => readFileSync(join(ROOT, p), "utf8");
+// v18.0.0 phase 4: COMMENTS OFF, the `a11y.test.js` / `style-check.test.js`
+// convention. This file greps source for a call, and the comment directly above
+// that call quotes it — so a raw read finds the sentence about the code before
+// the code. That is this repo's recorded trap (`tests/csp.test.js`' boot block,
+// the `src/index.css` header) arriving a third time, and the tool that prevents
+// it already existed and was not being used here.
+const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
 
 describe("visibleTabs — the one filter", () => {
   const ALL = SETTINGS_TABS.map((t) => t.id);
@@ -99,12 +106,11 @@ describe("both consumers read the FILTERED list", () => {
   // added — which is the guard working, but it should fail on a consumer that
   // DROPS a gate, not on one that gains one. What must not drift is that each
   // consumer passes the same set.
-  // Anchored on the ASSIGNMENT and not on `visibleTabs(`, because the comment
-  // directly above that call quotes `visibleTabs(can)` in prose — so a bare
-  // search finds the sentence about the call before the call. That is this
-  // repo's own recorded trap (`tests/csp.test.js`' boot block, `src/index.css`'
-  // header): prose that names the thing a matcher hunts for is indistinguishable
-  // from the thing, and it looks perfect in review.
+  // Reads the call's ARGUMENTS rather than pinning a literal string. Pinning
+  // `visibleTabs(K.can)` is what failed the moment a second gate was ADDED —
+  // right to fail on a consumer that DROPS a gate, wrong to fail on one that
+  // gains one. `read` strips comments, so `visibleTabs(` now finds the call and
+  // not the sentence above it that quotes the call.
   const callArgs = (src, call) => {
     const i = src.indexOf(call);
     if (i < 0) return null;
@@ -113,7 +119,7 @@ describe("both consumers read the FILTERED list", () => {
 
   it("the ←/→ cycle derives from visibleTabs, with every gate", () => {
     const src = read("src/hooks/useKeyboardShortcuts.js");
-    const args = callArgs(src, "const TABS=visibleTabs(");
+    const args = callArgs(src, "visibleTabs(");
     expect(args).not.toBe(null);
     expect(args).toContain("K.can");
     // The module gate. Without it the cycle steps onto the Vouchers tab of a
@@ -126,7 +132,7 @@ describe("both consumers read the FILTERED list", () => {
 
   it("the TabBar renders the filtered list, with every gate", () => {
     const src = read("src/components/Settings.jsx");
-    const args = callArgs(src, "const tabs = visibleTabs(");
+    const args = callArgs(src, "visibleTabs(");
     expect(args).not.toBe(null);
     expect(args).toContain("can");
     expect(args).toContain("hasModule");

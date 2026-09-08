@@ -27,6 +27,7 @@ import {
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -460,7 +461,7 @@ describe("canAssign / getBusy / getBlockSlots", () => {
       "src/components/WalkinForm.jsx", "src/App.jsx"];
     const offenders = [];
     files.forEach((f) => {
-      const src = readFileSync(new URL("../" + f, import.meta.url), "utf8");
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
       // Does this file hand a block's own from/to to toMins itself, rather than
       // going through getBlockSlots? If so it must know about the predicate.
       const computes = /toMins\(\s*b[a-z]*\.(from|to)\s*\)/.test(src);
@@ -1302,7 +1303,7 @@ describe("clashRowId", () => {
     // A literal 0x1F in source is invisible in every editor, grep and diff — the
     // same class of trap as the HTML entity that hid from v17.9.0's glyph sweep.
     // Asserted over the whole module, so it also covers undoKey's four keys.
-    const src = readFileSync(new URL("../src/lib/booking-logic.js", import.meta.url), "utf8");
+    const src = stripComments(readFileSync(new URL("../src/lib/booking-logic.js", import.meta.url), "utf8")).join("\n");
     expect(src).toMatch(/\\u001f/);
     expect(src.includes("\u001f")).toBe(false);
   });

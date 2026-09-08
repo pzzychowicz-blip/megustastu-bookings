@@ -24,6 +24,7 @@ import {
   matchInvite, applyInviteFields, userRows, displayName,
 } from "../src/lib/roles.js";
 import { sanitizeAdminSettings, DEFAULT_ADMIN_SETTINGS, inviteIdFor } from "../src/hooks/useRoles.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const entry = (o = {}) => sanitizeRole(Object.assign({ uid: "u1", email: "a@b.c" }, o), "u1");
 
@@ -414,7 +415,7 @@ describe("inviteIdFor — an email is not a legal RTDB key", () => {
 // has a gate, instead of shipping an ungated action.
 describe("GATED_CAPS — the capabilities a person can actually lack", () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const read = (p) => readFileSync(join(ROOT, p), "utf8");
+  const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
   const App = read("src/App.jsx");
   const Chrome = read("src/components/SettingsChrome.jsx");
 
@@ -574,7 +575,7 @@ describe("setCapability writes ONE map, chosen by the level", () => {
   // decision is made from the LEVEL and that both maps are cleared first, or a
   // row can carry a deny and an extra for one capability and "why can't this
   // person do X?" stops having one answer.
-  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/hooks/useRoles.js"), "utf8");
+  const src = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/hooks/useRoles.js"), "utf8")).join("\n");
 
   it("clears both maps before deciding", () => {
     expect(src).toContain("delete extras[cap];");

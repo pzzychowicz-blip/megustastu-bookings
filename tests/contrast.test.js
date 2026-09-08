@@ -36,6 +36,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 // v17.15.1: the token blocks moved out of index.html into src/index.css (the
 // service worker can cache a hashed asset; it re-sent the inline block on every
@@ -396,23 +397,28 @@ function measure(entry, theme) {
 // that names the thing it is guarding and then does not look at it is the same
 // defect as the v17.8.0 marker check. Now the number the test uses is the number
 // the component renders.
+// v18.0.0 phase 4: comments stripped before matching. `strip-comments.mjs`
+// was written for exactly this file's hazard — its own header says "half the
+// apparent colour literals are prose about colour literals" — and this was
+// one of two source-scanning tests still reading raw when the new
+// `tests/test-hygiene.test.js` guard first ran.
 const BLOCK_FILLS = ["--block-confirmed", "--block-pending", "--block-seated",
                      "--block-completed", "--block-cancelled"];
 
-const TIMELINE_SRC = readFileSync(
+const TIMELINE_SRC = stripComments(readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"),
   "utf8"
-);
+)).join("\n");
 
 // v17.15.5: `SIZE_RING` moved to atoms.jsx when the List card became its third
 // consumer, so `ringAlpha()` reads THIS file now. Re-anchored rather than
 // deleted, which is what the throw in `ringAlpha()` asks the next person to do
 // — and it is what happened: the move made that guard fail loudly instead of
 // measuring a default, which is the entire reason it throws.
-const ATOMS_SRC = readFileSync(
+const ATOMS_SRC = stripComments(readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "atoms.jsx"),
   "utf8"
-);
+)).join("\n");
 
 // The BLOCK chip's own opacity, as authored.
 //

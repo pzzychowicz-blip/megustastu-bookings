@@ -17,9 +17,15 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { SW_CACHE } from "../src/lib/serviceWorker.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SW = readFileSync(join(ROOT, "public/sw.js"), "utf8");
+// v18.0.0 phase 4: COMMENTS OFF before matching (`a11y.test.js` /
+// `style-check.test.js` convention). Prose that names the thing a matcher
+// hunts for is indistinguishable from the thing — measured in this repo three
+// times, most recently a comment quoting `visibleTabs(can)` that made a raw
+// read report the wrong arguments for the call below it.
+const SW = stripComments(readFileSync(join(ROOT, "public/sw.js"), "utf8")).join("\n");
 
 // Rebuild ASSET_RE from the worker's own source, so the test cannot drift from
 // it by copying the pattern.

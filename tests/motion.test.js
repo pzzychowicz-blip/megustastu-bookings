@@ -39,13 +39,22 @@
 
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { join } from "node:path";
 import { M, EXIT_MS, REVEAL_EXIT_MS, exitHold } from "../src/lib/constants.js";
 
 const ROOT = join(import.meta.dirname, "..");
 // v17.15.1: duration tokens now live in src/index.css (moved out of the
 // inline <style> so the service worker can cache them). Same tokens.
+// v18.0.0 phase 4: this one stays RAW and the choice is deliberate. It is CSS,
+// and `stripComments` is the JS/JSX stripper — a bare `//` in a CSS value (an
+// unquoted `url(https://…)`) is not a comment there, and it would truncate the
+// rest of the line. `tests/stylesheet.test.js` keeps its own CSS stripper for
+// the same reason. Every JS/JSX read below goes through `code()`.
 const html = readFileSync(join(ROOT, "src", "index.css"), "utf8");
+// Prose that names the thing a matcher hunts for is indistinguishable from the
+// thing (three occurrences in this repo), so every JS source read is stripped.
+const code = (...a) => stripComments(readFileSync(...a)).join("\n");
 
 function token(name) {
   const m = html.match(new RegExp("--" + name + ":\\s*(\\d+)ms"));
@@ -90,7 +99,7 @@ describe("exit holds outlast their animations", () => {
 
   it("useRevealRows keeps a departed row alive past its own Reveal", () => {
     // A row contains a Reveal, so it must outlive it — not merely match it.
-    const src = readFileSync(join(ROOT, "src/hooks/useRevealRows.js"), "utf8");
+    const src = code(join(ROOT, "src/hooks/useRevealRows.js"), "utf8");
     expect(src).toMatch(/PRUNE_MS\s*=\s*REVEAL_EXIT_MS/);
     expect(src).not.toMatch(/PRUNE_MS\s*=\s*\d/);
   });
@@ -118,7 +127,7 @@ describe("Reveal speeds name a real entry of the scale", () => {
   });
 
   it("Reveal derives both halves from the speed it was given", () => {
-    const src = readFileSync(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const src = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
     // The hold, twice (settle + unmount), and the easing — all from `speed`.
     expect((src.match(/exitHold\(speed\)/g) || []).length,
       "Reveal's two timeouts must both derive from its speed").toBe(2);
@@ -140,7 +149,7 @@ describe("Reveal speeds name a real entry of the scale", () => {
       }
     })(join(ROOT, "src"), "src/");
     for (const [label, full] of files) {
-      for (const m of readFileSync(full, "utf8").matchAll(/\bspeed="([^"]*)"/g)) {
+      for (const m of code(full, "utf8").matchAll(/\bspeed="([^"]*)"/g)) {
         if (!names.has(m[1])) offenders.push(label + ': speed="' + m[1] + '"');
       }
     }
@@ -156,9 +165,9 @@ describe("no hand-typed exit delays", () => {
     const offenders = [];
     for (const f of readdirSync(dir)) {
       if (!/\.jsx?$/.test(f)) continue;
-      if (/outMs=\{\d+\}/.test(readFileSync(join(dir, f), "utf8"))) offenders.push(f);
+      if (/outMs=\{\d+\}/.test(code(join(dir, f), "utf8"))) offenders.push(f);
     }
-    const app = readFileSync(join(ROOT, "src/App.jsx"), "utf8");
+    const app = code(join(ROOT, "src/App.jsx"), "utf8");
     if (/outMs=\{\d+\}/.test(app)) offenders.push("App.jsx");
     expect(offenders, "pass no outMs and take the EXIT_MS default").toEqual([]);
   });

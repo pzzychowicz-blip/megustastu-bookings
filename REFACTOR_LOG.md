@@ -21190,3 +21190,60 @@ is phases 0–3's, unchanged.
 
 **One version, one entry.** Phase 4 extended this entry with commits 32–35; the
 next phase extends it again.
+
+### Commit 36 — the stripper existed, and nine of eleven tests were not using it
+
+The prose-versus-code trap, third occurrence, fixed at the class rather than at
+the call site.
+
+**Nothing new was needed.** `scripts/strip-comments.mjs` has existed since
+v17.13.0 — written after `check-style-invariants` and `a11y.test.js` each
+reported a false positive on prose about the thing they were hunting — and it
+skips strings and regex literals properly. Two tests imported it. **Nine did
+not, and nothing said so**: the convention was real and unenforced, which is the
+shape this file names for the settings-tab list, the modal-visibility lists and
+the four dismissal Sets.
+
+**The measurement, on the real file:**
+
+```
+RAW      first `visibleTabs(` args → "can"
+STRIPPED first `visibleTabs(` args → "K.can,K.hasModule"
+```
+
+The comment above the call quotes `visibleTabs(can)`, so a raw read answers with
+the sentence about the call. That would fail the build for a CORRECT consumer —
+and, the reason this became a guard rather than a note, it would let a
+`toContain("can")` assertion **pass forever over a consumer that had dropped the
+gate entirely**, because the comment satisfies it. A checker that cannot fail is
+worse than no checker.
+
+`settings-tabs.test.js`'s anchor goes back to the plain `visibleTabs(` as a
+result; the assignment-anchored version written an hour earlier was a workaround
+for a problem that had a tool.
+
+**`tests/test-hygiene.test.js`** is the new guard: a test that greps JS/JSX
+source must import the stripper. Both halves proven against sabotage — dropping
+the import from `roles.test.js` names it as an offender, and breaking the
+detector trips the floor assertion instead of reporting green.
+
+**It found two more offenders on its first run.** `contrast.test.js`, whose
+entire subject is colour literals in two files full of prose about colour
+literals — the exact case the stripper's own header describes — and
+`stylesheet.test.js`.
+
+**And it found one place where stripping is WRONG**, which is the more useful
+outcome: `stylesheet.test.js` counts how often the app's name appears in
+`public/sw.js`, header comment included, and stripping took the count 3 → 2 and
+turned the suite red. That read is raw on purpose now, with the measurement
+written at the site. So the guard checks that a file HAS the stripper, not that
+every read uses it — a prompt to make the choice rather than a proof it was made
+well — and it says so in its own header, because a guard that claims more than
+it checks is the thing it exists to catch.
+
+Also corrected while here: `CLAUDE.md`'s test inventory said **26 files** while
+`ls` said 28 — phase 3's `roles` and `settings-tabs` were never added — and the
+first attempt at this fix got 28 by adding two to the stale number instead of
+counting. Measured: **30 files, 1068 tests.**
+
+Gate: `103.42 kB` gz · **1068 tests** · 0 lint errors (71 warnings) · style OK.

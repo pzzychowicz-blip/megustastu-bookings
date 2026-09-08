@@ -35,6 +35,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { APP_NAME } from "../src/lib/constants.js";
+import { stripComments as stripJs } from "../scripts/strip-comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
@@ -152,7 +153,8 @@ describe("the app stylesheet (src/index.css)", () => {
   // Inline in index.html the CSS could not fail to load. That property is what
   // was traded away for the caching win, and this is what buys it back.
   it("is actually imported by the entry module", () => {
-    const main = readFileSync(join(ROOT, "src", "main.jsx"), "utf8");
+    // v18.0.0 phase 4: JS source, so comments off (test-hygiene.test.js).
+    const main = stripJs(readFileSync(join(ROOT, "src", "main.jsx"), "utf8")).join("\n");
     expect(main, "src/main.jsx must import ./index.css or the app ships unstyled")
       .toMatch(/^\s*import\s+["']\.\/index\.css["']/m);
   });
@@ -327,6 +329,12 @@ describe("the app's own name (APP_NAME)", () => {
     join(ROOT, "public", "manifest.webmanifest"), "utf8"
   );
   const MANIFEST = JSON.parse(MANIFEST_SRC);
+  // v18.0.0 phase 4: RAW, deliberately, and it was measured. This assertion
+  // counts how often the app's name appears in the file's TEXT — header comment
+  // included, as the line below says — so stripping comments is not a
+  // refinement here, it is a different question: the count went 3 → 2 and the
+  // suite went red. `tests/test-hygiene.test.js` is what forced the choice to be
+  // made rather than defaulted.
   const SW = readFileSync(join(ROOT, "public", "sw.js"), "utf8");
 
   // Exactly one match, or the guard is measuring bytes nobody chose.
