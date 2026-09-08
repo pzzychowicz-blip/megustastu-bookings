@@ -494,3 +494,15 @@ export function searchVouchers(vouchers, query, limit, now) {
     .sort(function (a, b) { return (b.issuedAt || 0) - (a.issuedAt || 0); })
     .slice(0, cap);
 }
+
+// ── One money formatter ─────────────────────────────────────────────────────
+// v18.0.0 phase 4. It was a private helper in `VouchersSettings.jsx` and the
+// Admin tab's module warning needed the second copy — which is the point at
+// which a formatter stops being a local detail. Two call sites rounding money
+// differently is a class of defect nothing in this repo can see: `check:style`
+// reads literals, the contrast registry reads pairs, and neither can see a
+// shape. `currency` comes from `settings/general`; vouchers add no second
+// source for it.
+export function money(n, currency) {
+  return (Math.round(n * 100) / 100) + " " + currency;
+}

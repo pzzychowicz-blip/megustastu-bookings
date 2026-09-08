@@ -968,6 +968,9 @@ export function SettingsContent({
   // v18.0.0 phase 3 — the Admin tab. `can` is what filters the tab list, and
   // it is the SAME function useKeyboardShortcuts filters the ←/→ cycle with.
   can, isAdmin, myUid, roleRows, enforceRoles, onSetEnforceRoles,
+  // v18.0.0 phase 4 — the module registry. `moduleWarning(id)` is App's, not
+  // the registry's: only App can count what a module holds.
+  modules, onSetModule, moduleWarning,
   onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite,
   onOpenCapabilities,
   appVersion,
@@ -1100,6 +1103,7 @@ export function SettingsContent({
     content = <AdminTabContent
       can={can} isAdmin={isAdmin} myUid={myUid} rows={roleRows}
       enforceRoles={enforceRoles} onSetEnforceRoles={onSetEnforceRoles}
+      modules={modules} onSetModule={onSetModule} moduleWarning={moduleWarning}
       onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
       onOpenCapabilities={onOpenCapabilities} />;

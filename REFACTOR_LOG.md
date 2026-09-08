@@ -20998,3 +20998,59 @@ stops the next `enforceRoles` toggle deleting the registry from the server.
 
 Gate: `103.04 kB` gz · **1056 tests** · 0 lint errors (71 warnings, baseline) ·
 style OK. Phase 3 left it at `102.58 kB` / 1039.
+
+### Commit 33 — the switch says what it is about to hide
+
+The Modules section in the Admin tab, below "Enforce roles" and above "People":
+the reading order is what this restaurant HAS, then who may use it.
+
+**`enforceRoles` stays its own section**, against the plan's own wording ("the
+on/off switches plus `enforceRoles`") — Patryk's call. Role enforcement is not a
+module, and listing it among WhatsApp and Vouchers reads as "roles are an
+optional feature", which is the opposite of what phase 3 built.
+
+**The switch asks before it hides money.** Off means every surface, so for
+vouchers it means the tab, the booking-form picker, the list chips, the redeem
+modal, the unsettled banner and the printed column. An OPEN voucher is money the
+restaurant owes, and that is the one consequence turning the switch back on does
+not undo at the moment it matters: the guest walks in with a voucher nobody can
+see. So the row states the count and the balance first — and then refuses
+nothing. An admin who has read the number may still switch it off, nothing is
+touched in the database, and the confirm exists to inform rather than to block,
+because the restaurant that wants vouchers gone is not making a mistake.
+
+Three details the shape depends on:
+
+- **The toggle does not move while the question is up.** `askOff` holds the id
+  awaiting an answer; `on` still comes from the stored value. The screen never
+  shows a state the database is not in.
+- **No warning, no question.** `moduleWarning` returns null when there is
+  nothing to lose, and switching off is then an ordinary action — a confirm on
+  every switch is a confirm nobody reads. Measured: with DEV's three vouchers
+  all spent, the switch went straight off and the row's blurb flipped to what it
+  now hides.
+- **Inline, not an `Overlay`.** A surface in `MODAL_Z` owes a rank and an
+  `escapeAction`; a two-button question inside the section it belongs to owes
+  neither.
+
+**Who knows what.** `lib/modules.js` knows which modules exist and never what
+they hold — App counts the open vouchers, because only App can. The sentence is
+`hideWarning` and is pure, for v17.8.0's reason: a string somebody reads before
+deciding something is a decision, and a decision inside a component is
+unreachable by a test. It takes the amount ALREADY FORMATTED, which is what
+keeps the registry free of `lib/vouchers.js` without growing a second money
+formatter — `money` itself moved out of `VouchersSettings.jsx` into
+`lib/vouchers.js` in this commit, the second call site being the point at which
+a private formatter stops being private.
+
+**Verified live on DEV, and the copy defect only the running app showed.** With
+one 75 € voucher issued, the warning read *"1 voucher **is** still open, worth
+75 €. Switching this off hides **them** … brings **them** back exactly as
+**they are**."* — the count agreed in one clause of four. Four assertions pin it
+now, in both directions.
+
+Also measured while verifying: three named switches with correct `aria-checked`
+(`Enforce roles`, `Gift vouchers`, `WhatsApp inbox`), each naming what it
+controls and not its state, per v17.15.4.
+
+Gate: `103.33 kB` gz · **1060 tests** · 0 lint errors (71 warnings) · style OK.

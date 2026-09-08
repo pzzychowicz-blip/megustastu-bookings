@@ -118,3 +118,28 @@ export function withModule(modules, id, on) {
   next[id] = { enabled: on === true };
   return next;
 }
+
+// ── What a module is about to hide ──────────────────────────────────────────
+// The sentence the Admin tab shows on the way OFF. Pure, and here rather than
+// in `App.jsx`, for the reason v17.8.0 made a rule: a string a person reads
+// before deciding something is a decision, and a decision buried in a component
+// is unreachable by a test.
+//
+// It takes the amount ALREADY FORMATTED rather than a number and a currency,
+// which keeps this file's own contract: the registry knows what modules exist
+// and never what they hold, so importing `lib/vouchers.js`' `money` here would
+// be the coupling the header argues against — and re-implementing the rounding
+// would be a second money formatter, which is worse. App counts and formats;
+// this phrases.
+//
+// Returns null for "nothing to say", which is the ordinary case: a confirm on
+// every switch is a confirm nobody reads.
+export function hideWarning(count, formattedAmount) {
+  if (!count) return null;
+  const one = count === 1;
+  return count + (one ? " voucher is" : " vouchers are")
+    + " still open, worth " + formattedAmount
+    + ". Switching this off hides " + (one ? "it" : "them")
+    + " \u2014 nothing is deleted, and turning it back on brings "
+    + (one ? "it" : "them") + " back exactly as " + (one ? "it is" : "they are") + ".";
+}

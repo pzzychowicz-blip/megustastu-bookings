@@ -32,7 +32,7 @@ import { useState, useMemo } from "react";
 import { S, BTN, R, T, FW, IC } from "../lib/constants";
 import {
   formatCode, normalizeCode, voucherState, remainingOf, valueOf, redeemedTotal,
-  MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom,
+  MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
 import { Section, OutlineChip, Reveal, InlineAlert, Fld, mkInp, mkBtn } from "./atoms";
@@ -42,10 +42,6 @@ import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
 // can still be spent, so it is the only one in success green.
 const STATE_TONE = { open: "success", spent: "neutral", expired: "warn", void: "danger" };
 const STATE_LABEL = { open: "open", spent: "spent", expired: "expired", void: "void" };
-
-function money(n, currency) {
-  return (Math.round(n * 100) / 100) + " " + currency;
-}
 
 function dateLabel(ms) {
   if (!ms) return "—";

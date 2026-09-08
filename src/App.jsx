@@ -15,7 +15,7 @@
  * Author:  Patryk Zychowicz
  * Contact: pz.zychowicz@gmail.com
  */
-import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -276,7 +276,8 @@ import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
 import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
-import { normalizeCode, isRedeemedBy, voucherState, isUnsettled } from "./lib/vouchers";
+import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money } from "./lib/vouchers";
+import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
 import { useRecurring } from "./hooks/useRecurring";
@@ -1092,12 +1093,36 @@ function BookingApp({uid}){
   // ←/→ tab cycle.
   const {
     can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
+    // v18.0.0 phase 4 — the module registry.
+    modules, setModuleEnabled,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   } = useRoles({
     uid: uid,
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
     setWriteWarning,
   });
+  // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
+  // The Admin tab asks this on the way OFF, and only this file can answer it:
+  // `lib/modules.js` knows what modules EXIST, not what they hold, and keeping
+  // it that way is what stops the registry growing a dependency on every
+  // feature it switches.
+  //
+  // Returns a sentence, or null for "nothing to say" — and null is the ordinary
+  // case, which matters: a confirm on every switch is a confirm nobody reads.
+  // Vouchers is the only module with an answer today because an OPEN voucher is
+  // money the restaurant owes, and hiding it is the one consequence of this
+  // switch that is not reversible by simply turning it back on — the guest
+  // walks in with a voucher nobody can see. WhatsApp has no such stake:
+  // switching it off hides conversations, and a conversation nobody reads costs
+  // nothing that was not already lost.
+  const moduleWarning = useCallback(function (id) {
+    if (id !== "vouchers") return null;
+    const now = Date.now();
+    const open = vouchers.filter(function (v) { return voucherState(v, now) === "open"; });
+    if (!open.length) return null;
+    const total = open.reduce(function (sum, v) { return sum + remainingOf(v); }, 0);
+    return hideWarning(open.length, money(total, generalSettings.currency));
+  }, [vouchers, generalSettings.currency]);
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
@@ -4088,6 +4113,9 @@ function BookingApp({uid}){
             roleRows={roleRows}
             enforceRoles={enforceRoles}
             onSetEnforceRoles={setEnforceRoles}
+            modules={modules}
+            onSetModule={setModuleEnabled}
+            moduleWarning={moduleWarning}
             onSetRole={setRole}
             onRemoveUser={removeUser}
             onInvite={inviteUser}

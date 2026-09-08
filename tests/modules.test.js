@@ -16,7 +16,7 @@
 import { describe, it, expect } from "vitest";
 import {
   MODULES, MODULE_IDS, DEFAULT_MODULES,
-  moduleMeta, sanitizeModules, moduleOn, withModule,
+  moduleMeta, sanitizeModules, moduleOn, withModule, hideWarning,
 } from "../src/lib/modules.js";
 import { sanitizeAdminSettings, DEFAULT_ADMIN_SETTINGS } from "../src/hooks/useRoles.js";
 
@@ -153,5 +153,44 @@ describe("the node carries it", () => {
     expect(sanitizeAdminSettings(null).modules).toEqual(DEFAULT_MODULES);
     expect(DEFAULT_ADMIN_SETTINGS.modules).toEqual(DEFAULT_MODULES);
     expect(DEFAULT_ADMIN_SETTINGS.enforceRoles).toBe(false);
+  });
+});
+
+describe("hideWarning", () => {
+  it("says nothing when there is nothing to lose", () => {
+    // The ordinary case, and the important one: a confirm on every switch is a
+    // confirm nobody reads.
+    expect(hideWarning(0, "0 €")).toBe(null);
+  });
+
+  it("agrees with itself about number, in every clause", () => {
+    // Four agreement points in one sentence and they were not all in step when
+    // it shipped: "1 voucher is still open ... hides THEM ... brings THEM back
+    // exactly as THEY ARE", measured on screen against one open voucher.
+    const one = hideWarning(1, "75 €");
+    expect(one).toContain("1 voucher is");
+    expect(one).toContain("hides it");
+    expect(one).toContain("brings it back");
+    expect(one).toContain("as it is");
+    expect(one).not.toMatch(/them|they are|vouchers are/);
+
+    const many = hideWarning(3, "120 €");
+    expect(many).toContain("3 vouchers are");
+    expect(many).toContain("hides them");
+    expect(many).toContain("brings them back");
+    expect(many).toContain("as they are");
+    expect(many).not.toMatch(/hides it|brings it|as it is|voucher is/);
+  });
+
+  it("states the amount it was handed, and formats none of it", () => {
+    // It takes the amount ALREADY FORMATTED so this file never needs
+    // `lib/vouchers.js` — the registry knows what modules exist, never what
+    // they hold. A second money formatter here would be the worse of the two
+    // ways out.
+    expect(hideWarning(2, "12.5 €")).toContain("worth 12.5 €");
+  });
+
+  it("promises the data survives, because that is what makes it a warning and not a block", () => {
+    expect(hideWarning(1, "10 €")).toContain("nothing is deleted");
   });
 });

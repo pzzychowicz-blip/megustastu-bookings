@@ -24,8 +24,86 @@ import { useState } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
+import { MODULES, moduleOn } from "../lib/modules";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
+
+// ── The Modules section ─────────────────────────────────────────────────────
+// v18.0.0 phase 4. Its own section, deliberately NOT folded in beside "Enforce
+// roles" as the plan's wording suggested (Patryk's call): role enforcement is
+// not a module, and listing it among WhatsApp and Vouchers would read as "roles
+// are an optional feature", which is the opposite of what phase 3 built.
+//
+// ── WHY A MODULE BEING SWITCHED OFF ASKS FIRST ──────────────────────────────
+// Off hides every surface of the module, which for vouchers means the tab, the
+// booking-form picker, the list chips, the redeem modal, the unsettled banner
+// and the printed column. That is the behaviour Patryk chose over "off stops
+// new vouchers but existing ones stay redeemable", and its one real cost is
+// that **an open voucher is money the restaurant owes** — hiding it silently
+// makes a liability invisible.
+//
+// So the switch states the count and the balance before it moves, and then
+// REFUSES NOTHING: an admin who has read the number may still turn it off, and
+// nothing in the database is touched — the vouchers are waiting when the switch
+// comes back. A confirm that blocks would be the wrong instrument, because the
+// restaurant that wants vouchers gone is not making a mistake.
+//
+// Inline rather than an `Overlay`, so this adds no entry to the modal stack:
+// a surface in `MODAL_Z` owes an `escapeAction` and a rank, and a two-button
+// question inside a section it belongs to needs neither.
+function ModuleRow({ mod, on, warning, onToggle, onConfirm, onCancel }) {
+  return (
+    <div style={{
+      padding: SP.base + "px 0",
+      borderTop: "1px solid var(--border-soft)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: SP.wide }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: FW.semi, fontSize: T.body, color: "var(--text-primary)" }}>
+            {mod.label}
+          </div>
+          <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2 }}>
+            {on ? mod.blurb : "Off. " + mod.hides}
+          </div>
+        </div>
+        <Toggle
+          on={on}
+          onClick={function () { onToggle(!on); }}
+          /* The label carries the module's identity: a static one would be N
+             identical names for N switches, which in the source is one string
+             and only on the running page is three (v17.15.6). `aria-checked`
+             says on or off, so the name must not. */
+          label={mod.label}
+        />
+      </div>
+
+      {/* Always mounted, only its child conditional — a live region that
+          arrives holding its message announces nothing. Same shape as the
+          refusal alert below. */}
+      <div role="alert">
+        <Reveal show={!!warning}>
+          {warning
+            ? <div style={{ marginTop: SP.base }}>
+                <InlineAlert tone={ALERT_TONES.warn.tone} tint={ALERT_TONES.warn.tint}>
+                  {warning}
+                </InlineAlert>
+                <div style={{ display: "flex", gap: SP.base, marginTop: SP.base, flexWrap: "wrap" }}>
+                  <button className="mgt-hover-scale"
+                    onClick={onConfirm}
+                    style={mkSolidBtn("var(--app-warn-solid)")}
+                  >Turn {mod.label} off anyway</button>
+                  <button className="mgt-hover-scale"
+                    onClick={onCancel}
+                    style={mkBtn()}
+                  >Keep it on</button>
+                </div>
+              </div>
+            : null}
+        </Reveal>
+      </div>
+    </div>
+  );
+}
 
 // The grid's rows, bucketed once at module load out of two frozen constants
 // that cannot change — rather than four `CAPABILITIES.filter` passes per
@@ -424,11 +502,16 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
 // ── The tab ─────────────────────────────────────────────────────────────────
 export function AdminTabContent({
   can, isAdmin, myUid, rows, enforceRoles, onSetEnforceRoles,
+  modules, onSetModule, moduleWarning,
   onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite, onOpenCapabilities,
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("staff");
   const [msg, setMsg] = useState(null);
+  // Which module has been asked to switch off and is waiting on an answer. The
+  // switch does NOT move while it waits, so the screen never shows a state the
+  // database is not in.
+  const [askOff, setAskOff] = useState(null);
 
   if (!can("settingsAdmin") || !isAdmin) return <RefusalPanel />;
 
@@ -465,6 +548,46 @@ export function AdminTabContent({
           </div>
           <Toggle on={enforceRoles} onClick={function () { onSetEnforceRoles(!enforceRoles); }} label="Enforce roles" />
         </div>
+      </Section>
+
+      {/* v18.0.0 phase 4. Below "Enforce roles" and above "People", because the
+          reading order is what this restaurant HAS, then who may use it. */}
+      <Section>
+        <div style={{ fontWeight: FW.bold, fontSize: T.body, color: "var(--text-primary)" }}>
+          Modules
+        </div>
+        <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2 }}>
+          Whole features this restaurant uses, or does not. Switching one off hides
+          it everywhere for everybody &mdash; it changes nothing in the database, so
+          turning it back on restores what was there.
+        </div>
+        {MODULES.map(function (mod) {
+          const on = moduleOn(modules, mod.id);
+          // The question is asked only on the way OFF, and only when this
+          // module has something to lose. `moduleWarning` is the parent's,
+          // because only App can count open vouchers — the registry knows
+          // nothing about what a module holds, and should not.
+          const warn = askOff === mod.id ? (moduleWarning ? moduleWarning(mod.id) : null) : null;
+          return (
+            <ModuleRow
+              key={mod.id}
+              mod={mod}
+              on={on}
+              warning={warn}
+              onToggle={function (next) {
+                if (next) { setAskOff(null); onSetModule(mod.id, true); return; }
+                const q = moduleWarning ? moduleWarning(mod.id) : null;
+                // Nothing to warn about — switching off is then an ordinary
+                // action and a confirm on every one of them is how a confirm
+                // stops being read.
+                if (!q) { setAskOff(null); onSetModule(mod.id, false); return; }
+                setAskOff(mod.id);
+              }}
+              onConfirm={function () { setAskOff(null); onSetModule(mod.id, false); }}
+              onCancel={function () { setAskOff(null); }}
+            />
+          );
+        })}
       </Section>
 
       <Section>
