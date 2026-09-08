@@ -285,6 +285,27 @@ EXCEPT the path's own must still be refused, or a rule left naming
 `settingsWrite` passes, because a manager holds both. Proven by sabotage:
 restoring `settingsWrite` on `settings/layout` fails three tests.
 
+### The deny clause (v18.0.0 phase 3)
+
+Every capability gate carries a second half: `(<the grant> && denies.<cap> !==
+true)`. Twenty-five gates, applied by script and asserted to land exactly once
+each, plus **two more in the last-admin clause**, and those two are the ones
+worth understanding.
+
+That clause says an admin may not write a version of their OWN row that stops
+being an admin. It compared the level and the extras — and a deny is a third
+route to the same place, one where `role` reads `"admin"` on both sides, so the
+clause would have seen no change at all and let an admin lock the restaurant out
+of its own administration. `isAdminEntry` in `src/lib/roles.js` checks the deny
+FIRST for the same reason and in the same order; the client and the rule ask one
+question, not two that agree today. Proven by sabotage: dropping the deny from
+either side of that clause fails `an admin cannot deny their OWN settingsAdmin`.
+
+The clause order matters elsewhere too. The deny sits INSIDE the
+`enforceRoles !== true ||` disjunct, never beside it, so a deny stored while
+experimenting does nothing until enforcement is switched on — which is the same
+promise the flag makes about everything else, and the same order `can()` uses.
+
 ### Measured, not assumed
 
 The plan asked what a role lookup costs on `bookings/$bid`, since a reshuffle

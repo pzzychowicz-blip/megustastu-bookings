@@ -21,17 +21,30 @@
 // person one capability. The grid an admin actually sees writes only
 // `/roles/{uid}/extras/{cap}`.
 //
-// ── EXTRAS ARE ADDITIVE ONLY ────────────────────────────────────────────────
-// They grant; they never revoke. So a level is always a FLOOR, and "what can
-// this person do?" is answerable as *their level, plus what is highlighted on
-// their row* — never as a subtraction the reader has to hold in their head. A
-// cell that is granted by the level is therefore un-untickable BY
-// CONSTRUCTION: there is nothing to write, not a disabled attribute.
+// ── EXTRAS ADD, DENIES REMOVE ───────────────────────────────────────────────
+// v18.0.0 phase 3 shipped with extras only, on the argument that a level should
+// be a FLOOR so "what can this person do?" is never a subtraction the reader
+// has to hold in their head. Patryk's call reversed it: **an admin must be able
+// to switch off a default too.** A level that cannot be reduced is not a
+// default, it is a minimum, and a restaurant's actual answer to "this one
+// person should not be moving tables" was previously "invent a fourth level".
+//
+// So a row carries TWO maps and they are mutually exclusive by construction:
+// `extras/{cap}` grants what the level does not, `denies/{cap}` removes what
+// the level does. Which one a tick writes is decided by the level, never by the
+// caller — `setCapability` in useRoles.js — so the two can never both be set
+// for one capability and "why can't this person do X?" has exactly one answer.
+//
+// A deny is scoped to the ENFORCEMENT FLAG like everything else: with
+// `enforceRoles` off the app behaves exactly as it did before roles existed,
+// and a stored deny does nothing until the flag goes on. Off means off.
 //
 // ── WHAT THE RULES ENFORCE, AND WHAT THEY DO NOT ────────────────────────────
-// Three capabilities are enforced server-side, because for those the predicate
+// Seven capabilities are enforced server-side, because for those the predicate
 // is clean: `settingsAdmin` (the `/roles`, `/invites` and `settings/admin`
-// nodes), `settingsWrite` (every other `settings/*` node) and `bookingDelete`
+// nodes), `settingsWrite` / `hoursEdit` / `layoutEdit` (the `settings/*` nodes,
+// split four ways), `reminderManage` and `recurringManage` (their own
+// collections) and `bookingDelete`
 // (a delete on `bookings/$bid` — which works only because `.write` IS evaluated
 // for a delete, the v17.16.7 finding). `RULE_ENFORCED` below names them, and
 // `tests/rules/database-rules.test.js` asserts the rules and this file agree
@@ -150,16 +163,20 @@ export const RULE_ENFORCED = Object.freeze(grantSet(
 ));
 
 // ── The capabilities a person can actually LACK ─────────────────────────────
-// `staff` is the floor — an absent role reads as staff — and extras only ADD,
-// so every account holds at least `ROLE_GRANTS.staff` BY CONSTRUCTION. A client
-// gate on anything in that set is therefore dead code today, and the gates
-// worth writing are exactly the complement.
+// It was the COMPLEMENT OF THE STAFF FLOOR, and that reasoning was sound while
+// extras could only add: every account held at least `ROLE_GRANTS.staff` by
+// construction, so a gate on `bookingStatus` was a branch that could never run.
 //
-// DERIVED rather than hand-listed, and that is the whole point: promoting a
-// capability above staff later changes this set automatically, and
-// `tests/roles.test.js` asserts every member of it has a gate — so the change
-// fails the build instead of silently shipping an ungated action.
-export const GATED_CAPS = CAP_IDS.filter(function (id) { return !ROLE_GRANTS.staff[id]; });
+// **Denies removed the floor.** An admin can now switch off any capability for
+// any one person, so every capability in the list can genuinely be absent and
+// every one of them needs a gate. This is therefore just `CAP_IDS` — kept as
+// its own name because `tests/roles.test.js` asserts every member has a gate,
+// and that assertion is what turned "the revocation feature" from a tick that
+// changes a stored flag into a tick that changes what the app lets you do.
+//
+// The seven that used to be un-lackable are exactly the seven that gained gates
+// in the same commit: take, edit, status, move, block, waitlist, redeem.
+export const GATED_CAPS = CAP_IDS.slice();
 
 // The capability's own label, lower-cased for the middle of a sentence — the
 // refusal a person actually reads ("You don't have permission to delete
@@ -196,11 +213,37 @@ export const ALWAYS_ENFORCED = Object.freeze({ settingsAdmin: true });
 // ── The one gate ────────────────────────────────────────────────────────────
 // `entry` is a sanitized `/roles/{uid}` row or null (no row at all).
 export function can(entry, cap, enforceRoles) {
+  // FIRST, and deliberately above the deny: with enforcement off the app is
+  // byte-for-byte what it was before roles existed, and a deny stored while
+  // experimenting must not leak out through a flag that is switched off.
   if (!enforceRoles && !ALWAYS_ENFORCED[cap]) return true;
   const e = entry || {};
+  // A deny beats everything below it. `setCapability` never writes both a deny
+  // and an extra for one capability, so this ordering is a guard rather than a
+  // policy — but it has to BE one of the two, and refusing is the safe half.
+  if (e.denies && e.denies[cap] === true) return false;
   const grants = ROLE_GRANTS[effectiveRole(e.role)] || {};
   if (grants[cap]) return true;
   return !!(e.extras && e.extras[cap] === true);
+}
+
+// What the grid draws in a person's own column, as one word. Exported so the
+// glyph, the screen-reader text and the toggle all read one function instead of
+// three ladders that agree today.
+export function capState(entry, cap) {
+  const e = entry || {};
+  if (e.denies && e.denies[cap] === true) return "denied";
+  const grants = ROLE_GRANTS[effectiveRole(e.role)] || {};
+  if (grants[cap]) return "level";
+  if (e.extras && e.extras[cap] === true) return "extra";
+  return "none";
+}
+
+// Does the LEVEL grant this, ignoring both maps? The one question that decides
+// whether a tick writes a deny or an extra.
+export function levelGrants(role, cap) {
+  const grants = ROLE_GRANTS[effectiveRole(role)] || {};
+  return !!grants[cap];
 }
 
 // Does this row grant `settingsAdmin` by ANY route — level or extra? The
@@ -208,6 +251,12 @@ export function can(entry, cap, enforceRoles) {
 // asking it in one place is what keeps them from drifting apart.
 export function isAdminEntry(entry) {
   const e = entry || {};
+  // The deny is checked FIRST and that is what keeps the last-admin invariant
+  // intact after v18.0.0 phase 3's revocation: without it an admin could strip
+  // their own `settingsAdmin` by writing a deny instead of by changing their
+  // level, and `wouldRemoveOwnAdmin` — which asks this exact question of the
+  // old and new rows — would have seen no change at all.
+  if (e.denies && e.denies.settingsAdmin === true) return false;
   if (e.role === "admin") return true;
   return !!(e.extras && e.extras.settingsAdmin === true);
 }
@@ -230,7 +279,8 @@ export function sanitizeRole(r, key) {
     // level yet. Coercing it to "staff" here would make the panel unable to
     // show "invited, not yet applied", which is the whole of the invite flow.
     role: ROLES.indexOf(src.role) >= 0 ? src.role : null,
-    extras: sanitizeExtras(src.extras),
+    extras: sanitizeCaps(src.extras),
+    denies: sanitizeCaps(src.denies),
     addedAt: Number(src.addedAt) || 0,
     addedBy: typeof src.addedBy === "string" ? src.addedBy : "",
     updatedAt: Number(src.updatedAt) || 0,
@@ -238,13 +288,15 @@ export function sanitizeRole(r, key) {
 }
 
 // Only KNOWN capability ids, only `true`, and the keys SORTED. All three
-// matter. An unknown id would be a capability nothing can ever check, `false`
-// would be a revocation the additive model does not have, and the sort is the
+// matter, and it is shared by BOTH maps: an unknown id would be a capability
+// nothing can ever check, and `false` is not how a revocation is spelt — a deny
+// is `denies/{cap}: true`, a PRESENT key, so that the rules can test it with
+// `.val() !== true` without having to tell "absent" from "false". The sort is the
 // write-path requirement `sortedLedger` exists for one file over: `contentKey`
 // is a key-order-sensitive `JSON.stringify` compare, so an unsorted object read
 // back could differ from the one just written, the diff would report a change
 // that is not one, and the hook would write on every snapshot.
-function sanitizeExtras(x) {
+function sanitizeCaps(x) {
   if (!x || typeof x !== "object") return {};
   const out = {};
   Object.keys(x).sort().forEach(function (k) {
@@ -270,7 +322,7 @@ export function sanitizeInvite(i, key) {
     // case a person typed at sign-up.
     email: normalizeEmail(src.email),
     role: ROLES.indexOf(src.role) >= 0 ? src.role : "staff",
-    extras: sanitizeExtras(src.extras),
+    extras: sanitizeCaps(src.extras),
     createdAt: Number(src.createdAt) || 0,
     createdBy: typeof src.createdBy === "string" ? src.createdBy : "",
     updatedAt: Number(src.updatedAt) || 0,
@@ -337,7 +389,7 @@ export function applyInviteFields(invite) {
   const i = invite || {};
   return {
     role: ROLES.indexOf(i.role) >= 0 ? i.role : "staff",
-    extras: sanitizeExtras(i.extras),
+    extras: sanitizeCaps(i.extras),
   };
 }
 

@@ -13,8 +13,8 @@
 // reject. Hiding a tab is a convenience; the rule is the boundary.
 //
 // ── WHAT IS ENFORCED AND WHAT IS NOT IS PRINTED ON THE SCREEN ───────────────
-// Three capabilities are refused by the database too (`RULE_ENFORCED`); the
-// other ten are UI gates that cover the real threat — a member of staff tapping
+// Seven capabilities are refused by the database too (`RULE_ENFORCED`); the
+// other eleven are UI gates that cover the real threat — a member of staff tapping
 // the wrong thing — and are not security boundaries. A permission model that
 // claims more than it enforces is exactly the falsely-reassuring documentation
 // this repo's crash tests hunt for, so the panel says which is which instead of
@@ -23,7 +23,7 @@
 import { Fragment, useState } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
-import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, displayName } from "../lib/roles";
+import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, displayName } from "../lib/roles";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
 
@@ -48,8 +48,13 @@ function RefusalPanel() {
 // nothing from its surroundings and N identically-named controls is a defect
 // this repo has now found four times.
 function CellGlyph({ state, muted }) {
-  // Three states, distinguishable by SHAPE as well as colour — a filled check,
-  // a solid pill, an empty ring — because colour alone is not a distinction.
+  // FOUR states since v18.0.0 phase 3, distinguishable by SHAPE as well as
+  // colour — a plain check, a green pill, a red pill, an empty ring — because
+  // colour alone is not a distinction. The two pills are deliberately a matched
+  // pair: a capability ADDED to this person and one TAKEN AWAY from them are
+  // the same kind of fact (an admin's decision about one row) and read as each
+  // other's opposite, where the plain check and the empty ring are the level
+  // speaking rather than anybody's decision.
   //
   // `muted` is the same grant read in SOMEBODY ELSE'S column: reference, not
   // this person's. It gets its own INK rather than the identical tick at
@@ -76,6 +81,21 @@ function CellGlyph({ state, muted }) {
       }}>✓</span>
     );
   }
+  if (state === "denied") {
+    return (
+      <span aria-hidden="true" style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 18, height: 18,   /* @canvas */
+        borderRadius: R.pill,
+        // Registered in tests/contrast.test.js as "danger tag" — the pairing
+        // was measured before it was copied, which is the rule this repo has
+        // for a tone/tint pair chosen by hand.
+        background: "var(--app-danger-solid)",
+        color: "var(--text-on-accent)",
+        fontSize: T.micro, fontWeight: FW.bold, lineHeight: 1,
+      }}>&times;</span>
+    );
+  }
   // NOT `--border-glass`, which is what shipped first and is white at 0.30 —
   // a RAISED EDGE token, invisible by construction on the near-white sheet this
   // sits on (measured: the empty cells read as blank, so the affordance for the
@@ -91,21 +111,35 @@ function CellGlyph({ state, muted }) {
   );
 }
 
-const STATE_WORD = { level: "granted by level", extra: "granted as an extra", none: "not granted" };
+const STATE_WORD = {
+  level: "granted by level",
+  extra: "granted as an extra",
+  denied: "switched off for this person",
+  none: "not granted",
+};
+// Is this person able to do it right now? The button's pressed state and the
+// meaning of a tap both read this, so "granted" is one fact rather than two
+// ladders that agree today.
+function isGranted(st) { return st === "level" || st === "extra"; }
 
-function CapabilityGrid({ row, onToggleExtra }) {
-  // A pending invitation has no uid, so there is no row to write an extra onto.
+function CapabilityGrid({ row, myUid, onToggleCap }) {
+  // A pending invitation has no uid, so there is no row to write onto.
   const editable = row && row.kind === "user";
   const level = row && row.role;
-  const extras = (row && row.extras) || {};
   const who = displayName(row);
+  const isSelf = !!(row && row.uid && row.uid === myUid);
+  // An invite row has no stored entry: it carries the level and extras the
+  // invitation will apply. It has no `denies` and deliberately does not get
+  // one — an invitation says "come in at this level", and the fine-tuning
+  // happens on the row once that person exists.
+  const subject = row ? (row.entry || { role: row.role, extras: row.extras || {}, denies: {} }) : null;
 
   function stateFor(cap, col) {
-    if (ROLE_GRANTS[col] && ROLE_GRANTS[col][cap]) return "level";
-    // An extra belongs to the PERSON, so it shows only in the column they are
-    // actually on. Painting it across all three would say the level grants it.
-    if (col === level && extras[cap] === true) return "extra";
-    return "none";
+    // The person's OWN column is the only one that can show a decision — an
+    // extra or a deny belongs to them, and painting either across all three
+    // would say the LEVEL grants or withholds it.
+    if (col === level) return capState(subject, cap);
+    return ROLE_GRANTS[col] && ROLE_GRANTS[col][cap] ? "level" : "none";
   }
 
   // The person's own column is BOUNDED, not just tinted: measured at 580px the
@@ -194,14 +228,22 @@ function CapabilityGrid({ row, onToggleExtra }) {
                     {ROLES.map(function (col) {
                       const st = stateFor(c.id, col);
                       const mine = col === level;
-                      // Only the person's OWN column takes a tick, and only
-                      // where the level does not already grant it — a "from
-                      // level" cell is un-untickable BY CONSTRUCTION, because
-                      // there is nothing to write. The other two columns are
-                      // read-only reference: that side-by-side comparison is
-                      // why this layout was chosen.
-                      const canTick = editable && mine && st !== "level"
-                        && !(col === "admin" && c.id === "settingsAdmin");
+                      // Only the person's OWN column takes a tick, and since
+                      // v18.0.0 phase 3 EVERY cell in it does — including one
+                      // the level grants, which is the whole of the revocation
+                      // Patryk asked for. The other two columns stay read-only
+                      // reference: that side-by-side comparison is why this
+                      // layout was chosen.
+                      //
+                      // The one exception is the last-admin invariant, and it
+                      // is the same question the rules ask rather than a
+                      // lookalike: an admin may not take `settingsAdmin` off
+                      // their OWN row, by any route. Disabled with the reason
+                      // on it, because a control that refuses when pressed
+                      // teaches nothing about why.
+                      const granted = isGranted(st);
+                      const selfLock = isSelf && c.id === "settingsAdmin" && granted;
+                      const canTick = editable && mine && !selfLock;
                       const cell = Object.assign(
                         { padding: SP.tight, textAlign: "center" },
                         colEdge(col),
@@ -209,9 +251,12 @@ function CapabilityGrid({ row, onToggleExtra }) {
                       );
                       if (!canTick) {
                         return (
-                          <td key={col} style={cell}>
+                          <td key={col} style={cell}
+                              title={selfLock ? "You can't remove your own admin access — ask another admin to do it." : undefined}>
                             <CellGlyph state={st} muted={!mine} />
-                            <span className="mgt-sr-only">{STATE_WORD[st]}</span>
+                            <span className="mgt-sr-only">
+                              {STATE_WORD[st] + (selfLock ? ", and you cannot remove your own admin access" : "")}
+                            </span>
                           </td>
                         );
                       }
@@ -219,9 +264,10 @@ function CapabilityGrid({ row, onToggleExtra }) {
                         <td key={col} style={cell}>
                           <button
                             className="mgt-hover-scale"
-                            aria-pressed={st === "extra"}
+                            aria-pressed={granted}
                             aria-label={c.label + " for " + who}
-                            onClick={function () { onToggleExtra(c.id, st !== "extra"); }}
+                            title={granted ? "Switch off for " + who : "Switch on for " + who}
+                            onClick={function () { onToggleCap(c.id, !granted); }}
                             style={{
                               border: "none", background: "transparent", cursor: "pointer",
                               // The hit area, not the glyph. Measured at 19×21
@@ -256,7 +302,7 @@ function CapabilityGrid({ row, onToggleExtra }) {
 // MODAL_Z because it opens from inside the Settings overlay, and its
 // `escapeAction` case ships in the same commit — `tests/modal-stack.test.js`
 // fails the build otherwise.
-export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose }) {
+export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, onClose }) {
   const row = rows.find(function (r) { return (r.uid || r.inviteId) === selectedUid; }) || rows[0] || null;
   // What the AutoHeight below re-measures on: the person actually being shown,
   // not the `selectedUid` prop — those differ on the first open (nothing is
@@ -281,8 +327,9 @@ export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose
           wears a neutral. */}
       <ModalTitle background="var(--app-btn-grey-strong)">Capabilities</ModalTitle>
       <p style={{ margin: 0, marginBottom: SP.wide, color: "var(--text-muted)", fontSize: T.body }}>
-        A level is a floor. Ticking a cell grants that one capability to that one
-        person on top of their level &mdash; it never takes anything away.
+        A level sets the defaults. Tapping a cell in this person&rsquo;s own
+        column switches that one capability on or off for them alone &mdash;
+        their level, and everybody else on it, is untouched.
       </p>
       {/* Every other modal in the app eases its own height; this one jumped.
           The grid is a different height for every person — only the cells in
@@ -325,7 +372,7 @@ export function RolesModal({ rows, selectedUid, onSelect, onToggleExtra, onClose
         </div>
         <div style={{ flex: "3 1 320px", minWidth: 0, overflowX: "auto" }}>
           {row
-            ? <CapabilityGrid row={row} onToggleExtra={function (cap, on) { onToggleExtra(row.uid, cap, on); }} />
+            ? <CapabilityGrid row={row} myUid={myUid} onToggleCap={function (cap, on) { onToggleCap(row.uid, cap, on); }} />
             : <p style={{ color: "var(--text-muted)", fontSize: T.body }}>Nobody has signed in yet.</p>}
         </div>
       </div>

@@ -1813,3 +1813,96 @@ describe("each gated path names its OWN capability", () => {
     named.forEach((c) => expect(CAP_IDS).toContain(c));
   });
 });
+
+// ── denies — the revocation half (v18.0.0 phase 3) ──────────────────────────
+//
+// The client half is `can()` returning false; this is the server agreeing. A
+// deny that only hid controls would be the exact disagreement this whole phase
+// exists to prevent: the panel says a manager cannot change the hours while the
+// database goes on accepting their writes.
+describe("a deny is refused by the rules, not only hidden", () => {
+  const CASES = [
+    { cap: "settingsWrite",   run: (db) => writeWithRev(db, "settings/general", { v: 1 }, 1) },
+    { cap: "hoursEdit",       run: (db) => writeWithRev(db, "settings/operatingHours", { days: { 0: { open: 13, close: 22 } } }, 1) },
+    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
+    { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
+    { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
+    { cap: "bookingDelete",   run: (db) => db.ref("bookings").update({ b1: null }) },
+  ];
+
+  for (const { cap, run } of CASES) {
+    it(`${cap}: a manager who is denied it is refused`, async () => {
+      await seedEnforce(true);
+      await seed((db) => db.ref("bookings/b1").set(booking()));
+      // The level still grants it — this is a subtraction, not a demotion.
+      await seedRole("staff-a", { role: "manager" });
+      await assertSucceeds(run(staff()));
+      await testEnv.clearDatabase();
+      await seedEnforce(true);
+      await seed((db) => db.ref("bookings/b1").set(booking()));
+      await seedRole("staff-a", { role: "manager", denies: { [cap]: true } });
+      await assertFails(run(staff()));
+    });
+
+    it(`${cap}: the deny does nothing while enforcement is OFF`, async () => {
+      // Off means off. A deny stored while experimenting must not leak out
+      // through a switch nobody has turned on — which is why the flag
+      // short-circuit sits ABOVE the deny in both `can()` and the rule.
+      await seedEnforce(false);
+      await seed((db) => db.ref("bookings/b1").set(booking()));
+      await seedRole("staff-a", { role: "staff", denies: { [cap]: true } });
+      await assertSucceeds(run(staff()));
+    });
+  }
+
+  it("beats an extra — a row carrying both is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { settingsWrite: true }, denies: { settingsWrite: true } });
+    await assertFails(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("settingsAdmin: a denied admin can no longer write /roles", async () => {
+    await seedRole("staff-a", { role: "admin", denies: { settingsAdmin: true } });
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" })));
+  });
+
+  it("an admin cannot deny their OWN settingsAdmin", async () => {
+    // The last-admin invariant, and the hole a deny would have opened in it:
+    // the row's `role` stays "admin" on both sides, so a clause comparing only
+    // the level and the extras sees no change at all and lets it through.
+    await seedRole("staff-a", { role: "admin" });
+    await assertFails(staff().ref("roles/staff-a").set(
+      roleRow("staff-a", { role: "admin", denies: { settingsAdmin: true }, updatedAt: 2000, baseUpdatedAt: 1000 })));
+    // …and by the extras route either, which is the same fact one door over.
+    await testEnv.clearDatabase();
+    await seedRole("staff-a", { extras: { settingsAdmin: true } });
+    await assertFails(staff().ref("roles/staff-a").set(
+      roleRow("staff-a", { extras: { settingsAdmin: true }, denies: { settingsAdmin: true }, updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("but ANOTHER admin can — that is how the set of admins shrinks", async () => {
+    await seedRole("staff-a", { role: "admin" });
+    await seedRole(OTHER, { role: "admin" });
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "admin", denies: { settingsAdmin: true }, updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("a self-registered stub may not carry one", async () => {
+    // The stub's whole job is to be visible; it carries identity and nothing
+    // else. A stub arriving with either map is the self-promotion hole in one
+    // direction and clutter on the permission node in the other.
+    await assertFails(staff().ref("roles/staff-a").set({
+      uid: "staff-a", email: "staff-a@mgt.test", name: "", role: null,
+      denies: { bookingEdit: true }, addedAt: 1, addedBy: "staff-a",
+      updatedAt: 1000, baseUpdatedAt: 0,
+    }));
+  });
+
+  it("`false` is not how a revocation is spelt — validate refuses it", async () => {
+    // The rules test `.val() !== true`, so a deny must be a PRESENT `true`
+    // rather than something they would have to tell apart from absent.
+    await seedAdmin("staff-a");
+    await assertFails(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "staff", denies: { bookingEdit: false } })));
+  });
+});

@@ -18,7 +18,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CAPABILITIES, CAP_IDS, ROLES, ROLE_GRANTS, RULE_ENFORCED, ALWAYS_ENFORCED,
-  GATED_CAPS, capLabel,
+  GATED_CAPS, capLabel, capState, levelGrants,
   can, isAdminEntry, effectiveRole, sanitizeRole, sanitizeRoles,
   sanitizeInvite, sanitizeInvites, normalizeEmail, wouldRemoveOwnAdmin,
   matchInvite, applyInviteFields, userRows, displayName,
@@ -406,23 +406,27 @@ describe("GATED_CAPS — the capabilities a person can actually lack", () => {
   const App = read("src/App.jsx");
   const Chrome = read("src/components/SettingsChrome.jsx");
 
-  it("is exactly the complement of the staff floor", () => {
-    expect(GATED_CAPS.slice().sort()).toEqual(
-      CAP_IDS.filter((id) => !ROLE_GRANTS.staff[id]).slice().sort());
-    // Every capability staff HAS is ungated on purpose — a gate there is a
-    // branch that can never run.
-    Object.keys(ROLE_GRANTS.staff).forEach((id) => expect(GATED_CAPS).not.toContain(id));
+  it("is EVERY capability, because a deny can remove any of them", () => {
+    // It was the complement of the staff floor, and that was right while
+    // extras could only add: every account held `ROLE_GRANTS.staff` by
+    // construction, so a gate on `bookingStatus` was a branch that could never
+    // run. Denies removed the floor, so the set is the whole list — and the
+    // seven that used to be un-lackable are exactly the seven that gained
+    // gates in the same commit.
+    expect(GATED_CAPS.slice().sort()).toEqual(CAP_IDS.slice().sort());
+    Object.keys(ROLE_GRANTS.staff).forEach((id) => expect(GATED_CAPS).toContain(id));
   });
 
-  it("names the eleven the app actually gates", () => {
-    // Pinned so a change to the level map is a deliberate edit here too. It was
-    // six until v18.0.0 phase 3 split `settingsWrite` into five.
-    expect(GATED_CAPS).toEqual([
-      "voucherIssue", "voucherVoid",
-      "reminderManage", "recurringManage", "hoursEdit", "layoutEdit",
-      "settingsWrite", "bookingDelete", "customerDelete", "dataExport",
-      "settingsAdmin",
-    ]);
+  it("names the seven that only became gateable when denies shipped", () => {
+    // Pinned as a list rather than derived, so removing a gate from one of
+    // these is a deliberate edit here too. Every one of them is inside
+    // ROLE_GRANTS.staff, which is exactly why none of them had a gate before.
+    ["bookingCreate", "bookingEdit", "bookingStatus", "bookingAssign",
+     "tableBlock", "waitlistManage", "voucherRedeem"].forEach((id) => {
+      expect(ROLE_GRANTS.staff[id]).toBe(true);
+      expect(GATED_CAPS).toContain(id);
+    });
+    expect(GATED_CAPS.length).toBe(18);
   });
 
   it("every one of them is gated — by a tab capability or by refused()", () => {
@@ -458,5 +462,96 @@ describe("GATED_CAPS — the capabilities a person can actually lack", () => {
     // Unknown ids still make a sentence rather than printing "undefined".
     expect(capLabel("nope")).toBe("do that");
     CAP_IDS.forEach((id) => expect(capLabel(id).length).toBeGreaterThan(0));
+  });
+});
+
+// ── denies — the revocation half (v18.0.0 phase 3) ──────────────────────────
+describe("denies", () => {
+  it("removes a capability the level grants", () => {
+    const e = entry({ role: "staff", denies: { tableBlock: true } });
+    expect(can(e, "tableBlock", true)).toBe(false);
+    // …and only that one.
+    expect(can(e, "bookingCreate", true)).toBe(true);
+  });
+
+  it("does nothing while enforcement is OFF", () => {
+    // The flag's whole promise is that the app behaves as it did before roles
+    // existed. A deny stored while experimenting must not leak out through a
+    // switch that is off — which is why the short-circuit sits ABOVE the deny
+    // in `can`, and moving it below would break exactly this.
+    const e = entry({ role: "staff", denies: { tableBlock: true } });
+    expect(can(e, "tableBlock", false)).toBe(true);
+  });
+
+  it("beats an extra, if a row somehow carries both", () => {
+    // `setCapability` clears the other map on every tick so this cannot arise
+    // from the UI; it can from a console edit. Refusing is the safe half.
+    const e = entry({ role: "staff", extras: { voucherIssue: true }, denies: { voucherIssue: true } });
+    expect(can(e, "voucherIssue", true)).toBe(false);
+  });
+
+  it("keeps the last-admin invariant — a self-deny is still a self-demotion", () => {
+    // The hole this would have opened: an admin strips their own settingsAdmin
+    // by writing a deny rather than by changing their level, and
+    // `wouldRemoveOwnAdmin` — which asks `isAdminEntry` of the old and new rows
+    // — sees `role: "admin"` on both and reports no change at all.
+    const before = entry({ role: "admin" });
+    const after = entry({ role: "admin", denies: { settingsAdmin: true } });
+    expect(isAdminEntry(before)).toBe(true);
+    expect(isAdminEntry(after)).toBe(false);
+    expect(wouldRemoveOwnAdmin("u1", "u1", before, after)).toBe(true);
+    // Another admin doing it to them is allowed — that is how the set shrinks.
+    expect(wouldRemoveOwnAdmin("u2", "u1", before, after)).toBe(false);
+  });
+
+  it("survives a sanitize round-trip, sorted and true-only", () => {
+    const e = sanitizeRole({ uid: "u1", denies: { tableBlock: true, bookingEdit: true, nope: true, voucherVoid: false } }, "u1");
+    expect(Object.keys(e.denies)).toEqual(["bookingEdit", "tableBlock"]);
+    // An unknown id is a capability nothing can ever check; `false` is not how
+    // a revocation is spelt, because the rules test `.val() !== true` and need
+    // a PRESENT key rather than having to tell absent from false.
+    expect(e.denies.nope).toBeUndefined();
+    expect(e.denies.voucherVoid).toBeUndefined();
+  });
+
+  it("capState names the four things a cell can be", () => {
+    expect(capState({ role: "staff" }, "bookingEdit")).toBe("level");
+    expect(capState({ role: "staff", extras: { voucherIssue: true } }, "voucherIssue")).toBe("extra");
+    expect(capState({ role: "staff", denies: { bookingEdit: true } }, "bookingEdit")).toBe("denied");
+    expect(capState({ role: "staff" }, "voucherIssue")).toBe("none");
+  });
+
+  it("levelGrants ignores both maps — it is what decides which one a tick writes", () => {
+    expect(levelGrants("staff", "bookingEdit")).toBe(true);
+    expect(levelGrants("staff", "voucherIssue")).toBe(false);
+    // An absent level reads as staff, here as everywhere.
+    expect(levelGrants(null, "bookingEdit")).toBe(true);
+  });
+});
+
+describe("setCapability writes ONE map, chosen by the level", () => {
+  // No DOM tests in this repo, so this reads the hook's source — the same way
+  // the suite pins every other structural fact. What matters is that the
+  // decision is made from the LEVEL and that both maps are cleared first, or a
+  // row can carry a deny and an extra for one capability and "why can't this
+  // person do X?" stops having one answer.
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../src/hooks/useRoles.js"), "utf8");
+
+  it("clears both maps before deciding", () => {
+    expect(src).toContain("delete extras[cap];");
+    expect(src).toContain("delete denies[cap];");
+  });
+
+  it("branches on levelGrants, not on the caller's opinion", () => {
+    expect(src).toContain("if (levelGrants(stored.role, cap)) {");
+    expect(src).toContain("if (!on) denies[cap] = true;");
+    expect(src).toContain("extras[cap] = true;");
+  });
+
+  it("still routes through setRole, so the last-admin refusal covers it", () => {
+    // `setRole` is where `wouldRemoveOwnAdmin` runs. A `setCapability` that
+    // wrote the row directly would be a second write path past the one guard
+    // this whole feature turns on.
+    expect(src).toContain("return setRole(targetUid, { extras: extras, denies: denies });");
   });
 });

@@ -1092,7 +1092,7 @@ function BookingApp({uid}){
   // ←/→ tab cycle.
   const {
     can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
-    setRole, setExtra, removeUser, inviteUser, withdrawInvite, applyInvite,
+    setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   } = useRoles({
     uid: uid,
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
@@ -1710,7 +1710,7 @@ function BookingApp({uid}){
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
   // returnOf pattern) and remember the entry id — doSave's new-booking path
   // removes it once the booking is dispatched.
-  function bookFromWaitlist(w){
+  function bookFromWaitlist(w){if(refused("waitlistManage"))return;
     const avail=waitAvail[w.id];
     openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
@@ -1728,6 +1728,7 @@ function BookingApp({uid}){
   // "Add to waitlist" from the booking form's no-tables banner: capture the
   // draft's fields as a waiting entry, close the form, flash the toast.
   function addFormToWaitlist(){
+    if(refused("waitlistManage"))return;
     const f=formRef.current;
     addToWaitlist({
       name:f.name||"",
@@ -1743,6 +1744,7 @@ function BookingApp({uid}){
   }
   // Same from the walk-in form (today, current draft time).
   function addWalkinToWaitlist(){
+    if(refused("waitlistManage"))return;
     const wf=walkinForm||{};
     addToWaitlist({
       name:wf.name||"",
@@ -1848,8 +1850,8 @@ function BookingApp({uid}){
   // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
-  function openNew(){pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -1904,7 +1906,7 @@ function BookingApp({uid}){
     walkinForm, setWalkinForm,
     walkinError, walkinDirty,
     getNextWalkinNum,
-    openWalkin, saveWalkin, doSaveWalkin,
+    openWalkin: openWalkinRaw, saveWalkin, doSaveWalkin,
   } = useWalkin({
     bookings, saveBookings,
     setViewDate, getUser,
@@ -1912,6 +1914,11 @@ function BookingApp({uid}){
     showWalkin, setShowWalkin,   // v17.14.0: an entry in App's modal stack
     defaultWalkinSize: generalSettings.defaultWalkinSize,
   });
+  // v18.0.0 phase 3: ONE gated wrapper, because `openWalkin` is reached from
+  // four places — the header button, the floor plan's per-table action, the
+  // keyboard ctx and `viewActionsRef` — and a guard per call site is the
+  // hand-copied-list shape this repo keeps paying for.
+  function openWalkin(t){if(refused("bookingCreate"))return;openWalkinRaw(t);}
 
   // ── v17.5.0: unsaved-changes guard — dirtiness + the guarded close paths ────
   // Origin: nothing in the app warned before losing a draft. On the tablets a
@@ -2402,7 +2409,7 @@ function BookingApp({uid}){
     return true;
   }
   function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
-  function dropOnTable(id,targetId){
+  function dropOnTable(id,targetId){if(refused("bookingAssign"))return;
     const src=liveBookings.find(function(b){return b.id===id;});
     if(!src||src.date!==viewDate||!isActive(src)) return;
     const cur=src.tables||[];
@@ -2737,7 +2744,7 @@ function BookingApp({uid}){
     redeemAskedRef.current=true;
     try{ return fn(); } finally { redeemAskedRef.current=false; }
   }
-  function updateStatus(id,status){
+  function updateStatus(id,status){if(refused("bookingStatus"))return;
     if(status==="cancelled"){setConfirmCancel(id);return;}
     // v18.0.0: stop and ask before the status lands. `updateStatus` is the one
     // funnel for the popup, the List buttons and the S/C shortcuts, so gating
@@ -2816,7 +2823,7 @@ function BookingApp({uid}){
   //
   // So the order is chosen by which failure lands in a state the app can
   // report, not by which is tidier.
-  function settleVoucher(amount){
+  function settleVoucher(amount){if(refused("voucherRedeem"))return;
     const ask=voucherAsk;
     if(!ask) return;
     setVoucherAsk(null);
@@ -2951,7 +2958,7 @@ function BookingApp({uid}){
     if(ok&&affected&&affected.length>0) flash();
   }
 
-  function addBlock(block){
+  function addBlock(block){if(refused("tableBlock"))return;
     // v17.15.3: through sanitizeBlock, so the id is minted at the SAME one site
     // the read path uses. A locally-added block therefore has a stable identity
     // before the Firebase echo lands, rather than acquiring one on the way back.
@@ -2961,7 +2968,7 @@ function BookingApp({uid}){
     if(ok) flash();
     setBlockTarget(null);
   }
-  function removeBlock(block){
+  function removeBlock(block){if(refused("tableBlock"))return;
     // v17.15.3: matches on IDENTITY. This used to filter on the field set
     // (tableId+date+allDay+from+to), which two duplicate blocks share exactly —
     // so unblocking either one dropped BOTH. See sanitizeBlock in booking-logic.
@@ -3418,7 +3425,7 @@ function BookingApp({uid}){
     availability={waitAvail}
     date={viewDate}
     onBook={bookFromWaitlist}
-    onRemove={removeFromWaitlist}
+    onRemove={function(w){if(refused("waitlistManage"))return;removeFromWaitlist(w);}}
     onClose={function(){setShowWaitlist(false);}} />:null}</ModalPresence>;
 
   // ── v17.1.0 perf: stable view-callback identities (the kbRef pattern) ──────
@@ -3709,7 +3716,7 @@ function BookingApp({uid}){
     booking={manualBooking}
     bookings={manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings}
     blocks={tableBlocks}
-    onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{manualAssign(manualBooking.id,tables,locked,affected);}}}
+    onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{if(refused("bookingAssign"))return;manualAssign(manualBooking.id,tables,locked,affected);}}}
     onDirty={setManualDirty}
     onClose={requestCloseManual} />:null}</ModalPresence>;
 
@@ -4113,8 +4120,9 @@ function BookingApp({uid}){
         rolesFor?<div style={{position:"relative",zIndex:255}}><Suspense fallback={null}><RolesModal
           rows={roleRows}
           selectedUid={rolesFor}
+          myUid={uid}
           onSelect={setRolesFor}
-          onToggleExtra={setExtra}
+          onToggleCap={setCapability}
           onClose={function(){setRolesFor(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>
   );
 }

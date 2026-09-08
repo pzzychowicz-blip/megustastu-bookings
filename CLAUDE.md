@@ -223,7 +223,29 @@ function saveBookings(next, isSilent) {
 keyed objects on the per-child `updatedAt`/`baseUpdatedAt` CAS, `useRoles.js`
 through the same generic `lib/write-path.js` diff; `extras` is an OBJECT keyed by
 capability because rules cannot search an array, and its keys are SORTED on read
-for `contentKey`'s key-order-sensitive compare. **`CAPABILITIES` is EIGHTEEN
+for `contentKey`'s key-order-sensitive compare. **A row carries TWO such maps.**
+v18.0.0 phase 3 shipped `extras` alone, arguing a level should be a FLOOR so
+"what can this person do?" is never a subtraction the reader holds in their
+head; Patryk's call reversed it, because a level that cannot be reduced is a
+minimum rather than a default and the restaurant's real answer to "this one
+person should not be moving tables" was otherwise "invent a fourth level". So
+`denies/{cap}` removes what the level grants, and the two are mutually exclusive
+BY CONSTRUCTION — `setCapability` clears both and picks one from
+`levelGrants(role, cap)`, so the screen only ever asks "should this person have
+this?" and "why can't they do X?" has exactly one answer. Three consequences
+that are easy to get wrong: a deny is a PRESENT `true` and never `false`,
+because the rules test `.val() !== true` and must not have to tell absent from
+false; `can()` checks the enforcement flag BEFORE the deny, so a deny stored
+while experimenting cannot leak out through a switch that is off; and
+`isAdminEntry` checks the deny FIRST, which is the whole of the last-admin
+invariant surviving — without it an admin strips their own `settingsAdmin` by
+writing a deny, and `wouldRemoveOwnAdmin` sees `role: "admin"` on both sides and
+reports no change at all (same clause, same order, in the rule). **And
+`GATED_CAPS` became every capability**: it used to be the complement of the
+staff floor, which was right while extras could only add, and a deny can remove
+any of the eighteen — so the seven that had never needed a gate (take, edit,
+status, move, block, waitlist, redeem) got one in the same commit, and
+`tests/roles.test.js` fails the build until they have. **`CAPABILITIES` is EIGHTEEN
 entries in four groups, not the thirteen the plan drafted**: Patryk's call
 during phase 3 split `settingsWrite` — which had been one tick covering "hours,
 layout, defaults and reminders", four decisions of very different weight — into

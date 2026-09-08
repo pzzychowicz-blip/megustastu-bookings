@@ -20698,3 +20698,82 @@ distinction this panel already prints for the other UI-only capabilities.
 still render (the no-regression half), and the grid shows 22 rows — eighteen
 capabilities plus four group headings — with exactly eleven tick buttons for a
 staff row, which is `GATED_CAPS.length`.
+
+### Commit 29 — an admin can switch a default OFF
+
+Patryk: *"Admin must be entitled to also switch off the default capabilities for
+every type of user."* Asked whether that meant per person or per level, he chose
+per person, in the grid.
+
+Phase 3 shipped extras-only three days ago, and `roles.js` argued the case in
+its own header: a level should be a FLOOR so "what can this person do?" is never
+a subtraction the reader has to hold in their head, and a level-granted cell is
+un-untickable BY CONSTRUCTION because there is nothing to write. The argument is
+still true and it was answering the wrong question. **A level that cannot be
+reduced is a minimum, not a default**, and the restaurant's actual answer to
+"this one person should not be moving tables" was "invent a fourth level".
+
+`denies/{cap}` beside `extras/{cap}`. The two are mutually exclusive by
+construction rather than by care: `setCapability` clears both maps on every tick
+and picks one from `levelGrants(role, cap)`, so the screen only ever asks
+*should this person have this?* and "why can't they do X?" keeps exactly one
+answer. Three details that are each a way to get it wrong:
+
+- **A deny is a present `true`, never `false`.** The rules test `.val() !== true`
+  and must not have to tell absent from false.
+- **`can()` reads the enforcement flag ABOVE the deny**, and the rule puts the
+  deny INSIDE the `enforceRoles !== true ||` disjunct rather than beside it. Off
+  means off: a deny stored while experimenting does nothing until the flag goes
+  on.
+- **`isAdminEntry` checks the deny FIRST**, and so does the rule's last-admin
+  clause. Without it an admin strips their own `settingsAdmin` by writing a deny
+  instead of by changing their level — `role` reads `"admin"` on both sides, so
+  `wouldRemoveOwnAdmin` sees no change and the restaurant is locked out of its
+  own administration with only the Firebase console to repair it. That is the
+  invariant this whole phase was built around, and revocation is a third route
+  into it. Proven by sabotage: dropping the deny from that clause fails exactly
+  the test named for it.
+
+#### The seven gates that had never been worth writing
+
+`GATED_CAPS` was the complement of the staff floor, and the reasoning was sound:
+staff is a floor, extras only add, so every account held `ROLE_GRANTS.staff` by
+construction and a gate on `bookingStatus` was a branch that could never run.
+**Denies removed the floor.** So it is now every capability, and the seven that
+had never needed a gate got one in the same commit — take bookings, edit, change
+status, move tables, block tables, the waitlist, redeem a voucher. The existing
+test asserting every member of `GATED_CAPS` is gated is what made that a
+build-breaking obligation rather than a good intention: the feature was not
+"a tick that stores a flag" until those seven existed.
+
+`openWalkin` got ONE gated wrapper rather than a guard at each of its four call
+sites — the header button, the floor plan's per-table action, the keyboard ctx
+and `viewActionsRef` — because a guard per call site is the hand-copied-list
+shape this repo keeps paying for. And the `removeFromWaitlist` inside `doSave`
+is deliberately NOT gated: it is the automatic consequence of a booking the
+person was allowed to make, and gating it would strand the waiting entry behind
+a booking that already exists.
+
+#### Verified live on DEV, end to end
+
+- Tapping "Block tables" on a staff row turns the cell into a red `✕`
+  (`rgb(220, 38, 38)` — `--app-danger-solid`, already registered in
+  `tests/contrast.test.js` as "danger tag"), `aria-pressed` goes false, the
+  screen-reader text reads "switched off for this person", and the title flips
+  to "Switch on for …".
+- The admin's own row offers **17** tickable cells of 18: "Administer the app"
+  is locked, with the reason on the cell and in its screen-reader text rather
+  than as a refusal that appears only after you press it.
+- Denying myself `hoursEdit` removed **exactly** Opening hours and Shifts from
+  the General tab and left the other six sections — which is also the live proof
+  of commit 28's per-section gating, unverifiable until revocation existed.
+- Denying myself `bookingCreate` made "+ New" refuse visibly: no form, and
+  "You don't have permission to take bookings." in the live region.
+- Both self-denies were then removed and the admin row is clean. **The staff
+  test account on DEV keeps its `tableBlock` deny** as a live example.
+
+257 rules tests (up from 239), 1031 unit tests. The rules are NOT yet deployed —
+DEV is still running phase 3's first version, which accepts a `denies` child
+(there is no `$other` validate) and ignores it in every gate. So on DEV today the
+UI hides what the server would still accept; the emulator is what proves the
+server half, and the deploy is Patryk's step.
