@@ -20,10 +20,10 @@
 // this repo's crash tests hunt for, so the panel says which is which instead of
 // letting the reader assume.
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
-import { CAPABILITIES, ROLES, ROLE_GRANTS, RULE_ENFORCED, displayName } from "../lib/roles";
+import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, displayName } from "../lib/roles";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
 
@@ -149,73 +149,100 @@ function CapabilityGrid({ row, onToggleExtra }) {
         </tr>
       </thead>
       <tbody>
-        {CAPABILITIES.map(function (c, ri) {
-          const last = ri === CAPABILITIES.length - 1;
+        {/* Grouped since v18.0.0 phase 3. Thirteen rows read as one block;
+            eighteen do not, and the groups are the honest reading of what a
+            tick actually costs — a shift tool, money, the restaurant's own
+            configuration, or something that cannot be taken back. The heading
+            row carries three empty cells rather than a `colSpan`, so the accent
+            rule bounding the person's column runs unbroken down the whole
+            table instead of restarting in each group. */}
+        {CAP_GROUPS.map(function (g) {
+          const caps = CAPABILITIES.filter(function (c) { return c.group === g.id; });
+          const lastGroup = g.id === CAP_GROUPS[CAP_GROUPS.length - 1].id;
           return (
-            <tr key={c.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
-              {/* The blurb moved to `title`. It was a second 10px line under
-                  every one of thirteen labels, and against a 72px column it
-                  rendered as four wrapped words ("Use a / voucher / against a /
-                  booking.") — so the explanation cost more legibility than it
-                  bought. The labels are plain English on their own, and the
-                  full sentences still show on the tab's own enforcement list. */}
-              <th scope="row" title={c.blurb} style={{ textAlign: "left", padding: SP.tight, fontWeight: FW.semi, color: "var(--text-primary)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: SP.tight, flexWrap: "wrap" }}>
-                  <span>{c.label}</span>
-                  {RULE_ENFORCED[c.id]
-                    ? <OutlineChip tone="success" size="micro"
-                        title="Refused by the database too, not only hidden here">enforced</OutlineChip>
-                    : null}
-                </div>
-              </th>
-              {ROLES.map(function (col) {
-                const st = stateFor(c.id, col);
-                const mine = col === level;
-                // Only the person's OWN column takes a tick, and only where the
-                // level does not already grant it — a "from level" cell is
-                // un-untickable BY CONSTRUCTION, because there is nothing to
-                // write. The other two columns are read-only reference: that
-                // side-by-side comparison is why this layout was chosen.
-                const canTick = editable && mine && st !== "level"
-                  && !(col === "admin" && c.id === "settingsAdmin");
-                const cell = Object.assign(
-                  { padding: SP.tight, textAlign: "center" },
-                  colEdge(col),
-                  last && mine ? { borderBottom: "1px solid var(--accent)" } : null
-                );
-                if (!canTick) {
-                  return (
-                    <td key={col} style={cell}>
-                      <CellGlyph state={st} muted={!mine} />
-                      <span className="mgt-sr-only">{STATE_WORD[st]}</span>
-                    </td>
-                  );
-                }
+            <Fragment key={g.id}>
+              <tr>
+                <th scope="colgroup" style={{
+                  textAlign: "left", padding: SP.tight, paddingTop: SP.wide,
+                  fontSize: T.micro, fontWeight: FW.bold, letterSpacing: "0.04em",
+                  textTransform: "uppercase", color: "var(--text-faint)",
+                }}>{g.label}</th>
+                {ROLES.map(function (col) {
+                  return <td key={col} style={Object.assign({}, colEdge(col))} />;
+                })}
+              </tr>
+              {caps.map(function (c, ri) {
+                const last = lastGroup && ri === caps.length - 1;
                 return (
-                  <td key={col} style={cell}>
-                    <button
-                      className="mgt-hover-scale"
-                      aria-pressed={st === "extra"}
-                      aria-label={c.label + " for " + who}
-                      onClick={function () { onToggleExtra(c.id, st !== "extra"); }}
-                      style={{
-                        border: "none", background: "transparent", cursor: "pointer",
-                        // The hit area, not the glyph. Measured at 19×21 with
-                        // padding alone, under WCAG 2.5.8's 24px floor for a
-                        // control that is this grid's primary action. `H.chip`
-                        // clears it and costs ~5px a row.
-                        minWidth: H.chip, minHeight: H.chip,
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        padding: SP.tight, borderRadius: R.pill, lineHeight: 1,
-                      }}
-                    >
-                      <CellGlyph state={st} muted={false} />
-                      <span className="mgt-sr-only">{STATE_WORD[st]}</span>
-                    </button>
-                  </td>
+                  <tr key={c.id} style={{ borderTop: "1px solid var(--border-soft)" }}>
+                    {/* The blurb moved to `title`. It was a second 10px line
+                        under every one of thirteen labels, and against a 72px
+                        column it rendered as four wrapped words ("Use a /
+                        voucher / against a / booking.") — so the explanation
+                        cost more legibility than it bought. The labels are
+                        plain English on their own, and the full sentences still
+                        show on the tab's own enforcement list. */}
+                    <th scope="row" title={c.blurb} style={{ textAlign: "left", padding: SP.tight, fontWeight: FW.semi, color: "var(--text-primary)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: SP.tight, flexWrap: "wrap" }}>
+                        <span>{c.label}</span>
+                        {RULE_ENFORCED[c.id]
+                          ? <OutlineChip tone="success" size="micro"
+                              title="Refused by the database too, not only hidden here">enforced</OutlineChip>
+                          : null}
+                      </div>
+                    </th>
+                    {ROLES.map(function (col) {
+                      const st = stateFor(c.id, col);
+                      const mine = col === level;
+                      // Only the person's OWN column takes a tick, and only
+                      // where the level does not already grant it — a "from
+                      // level" cell is un-untickable BY CONSTRUCTION, because
+                      // there is nothing to write. The other two columns are
+                      // read-only reference: that side-by-side comparison is
+                      // why this layout was chosen.
+                      const canTick = editable && mine && st !== "level"
+                        && !(col === "admin" && c.id === "settingsAdmin");
+                      const cell = Object.assign(
+                        { padding: SP.tight, textAlign: "center" },
+                        colEdge(col),
+                        last && mine ? { borderBottom: "1px solid var(--accent)" } : null
+                      );
+                      if (!canTick) {
+                        return (
+                          <td key={col} style={cell}>
+                            <CellGlyph state={st} muted={!mine} />
+                            <span className="mgt-sr-only">{STATE_WORD[st]}</span>
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={col} style={cell}>
+                          <button
+                            className="mgt-hover-scale"
+                            aria-pressed={st === "extra"}
+                            aria-label={c.label + " for " + who}
+                            onClick={function () { onToggleExtra(c.id, st !== "extra"); }}
+                            style={{
+                              border: "none", background: "transparent", cursor: "pointer",
+                              // The hit area, not the glyph. Measured at 19×21
+                              // with padding alone, under WCAG 2.5.8's 24px
+                              // floor for a control that is this grid's primary
+                              // action. `H.chip` clears it and costs ~5px a row.
+                              minWidth: H.chip, minHeight: H.chip,
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              padding: SP.tight, borderRadius: R.pill, lineHeight: 1,
+                            }}
+                          >
+                            <CellGlyph state={st} muted={false} />
+                            <span className="mgt-sr-only">{STATE_WORD[st]}</span>
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
                 );
               })}
-            </tr>
+            </Fragment>
           );
         })}
       </tbody>

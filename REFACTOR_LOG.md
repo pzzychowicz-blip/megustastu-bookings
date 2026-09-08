@@ -20628,3 +20628,73 @@ family as the synthetic `:active` press and the automation-tree accessible name.
 The instrumentation that settled it was a temporary `console.log` inside the
 atom's own layout effect, printing the `clampRange` decision — added, read,
 and reverted before the commit.
+
+### Commit 28 — `settingsWrite` was four decisions behind one tick
+
+Patryk, reading the finished grid: *"Reminders should be on the Capabilities
+list separately. Not as a part of a bigger setting."* He is right, and it was
+not only reminders. `settingsWrite` read "Hours, layout, defaults and
+reminders" — a shift tool, the restaurant's trading hours, the floor plan that
+rewrites the world the optimiser places bookings in, and a set of defaults, all
+granted or withheld together. Asked what else should come out, he took all four
+candidates offered.
+
+**Eighteen capabilities in four groups.** `reminderManage`, `recurringManage`
+(standing bookings, which create real bookings weeks ahead on their own),
+`hoursEdit`, `layoutEdit` and `dataExport` (the backup — every booking, every
+customer name, every phone number in one file) are their own rows;
+`settingsWrite` keeps the booking defaults, the optimiser cutoff and the general
+options. `CAP_GROUPS` — Service · Money · Configuration · Data and access — is
+new because thirteen rows read as one block and eighteen do not, and the groups
+are the honest reading of what a tick costs.
+
+**Every split capability keeps `manager` as its floor**, so this changes
+nobody's access on the day it ships. It is a refactor of the permission model,
+not a change to anybody's permissions, and the access only becomes separable
+afterwards.
+
+#### A tab stopped being one capability
+
+`SETTINGS_TABS` carried a scalar `cap`, and General now holds controls belonging
+to FOUR: the hours, standing bookings, the backup, and everything else. A single
+`cap` would have hidden a person's own hours editor because they lack the
+unrelated capability governing the optimiser cutoff two sections further down.
+So `caps` is a LIST and `visibleTabs` tests ANY — the tab is the door — and
+`GeneralTabContent` takes `can` and gates its own twelve sections. Its default
+is permissive, because the component is also rendered by callers with no roles
+context and an empty tab is the worse failure; `tests/settings-tabs.test.js`
+pins that the call site passes `can` anyway, since failing open is exactly the
+direction nothing else would notice.
+
+#### The sweep could not see the split, and that is the finding
+
+`/reminders` and `/recurring` went from `auth != null` — anyone signed in — to
+their own gates, and four settings pairs were re-pointed from `settingsWrite` at
+`hoursEdit`/`layoutEdit`. **The existing derived sweep passed unchanged**, and
+would have passed with all sixteen rules still naming `settingsWrite`: it drives
+a STAFF account, and staff holds neither capability, so "is this account
+refused?" cannot distinguish one gate from another.
+
+What can see it is an account holding exactly ONE capability as an extra. The
+new `each gated path names its OWN capability` does both halves, and the second
+is the load-bearing one: an account holding every capability EXCEPT the path's
+own must still be refused, or a rule left on the old name passes anyway because
+a manager holds both. Plus one assertion derived from BOTH files — the set of
+capabilities named anywhere in `database.rules.json` must equal
+`Object.keys(RULE_ENFORCED)` — so a capability flagged `enforced: true` with no
+rule behind it fails the build rather than shipping as a badge promising a
+guarantee nothing provides.
+
+**Proven by sabotage**: restoring `settingsWrite` on `settings/layout` fails
+three of them. `npm run test:rules` is 239, up from 212.
+
+`dataExport` is deliberately NOT flagged enforced, and the list says why at the
+entry: the backup is built client-side out of reads and `.read` is `auth != null`
+at the root, so gating it server-side means restructuring every read in the app.
+Hiding the button covers the real threat and no more — which is the same
+distinction this panel already prints for the other UI-only capabilities.
+
+**Verified live on DEV** as an admin: eight tabs and all twelve General sections
+still render (the no-regression half), and the grid shows 22 rows — eighteen
+capabilities plus four group headings — with exactly eleven tick buttons for a
+staff row, which is `GATED_CAPS.length`.

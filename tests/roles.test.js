@@ -50,11 +50,19 @@ describe("the capability list", () => {
 
   it("derives RULE_ENFORCED from the list rather than re-typing it", () => {
     // The panel's "enforced by the server" badge and the rules sweep read one
-    // fact. Three today; the assertion is on the DERIVATION, so adding a fourth
-    // needs only the flag on the capability.
+    // fact. The assertion is on the DERIVATION, so adding one needs only the
+    // flag on the capability — which is how the v18.0.0 split went from three
+    // to seven without touching this line's first half.
     const flagged = CAPABILITIES.filter((c) => c.enforced).map((c) => c.id);
     expect(Object.keys(RULE_ENFORCED).slice().sort()).toEqual(flagged.slice().sort());
-    expect(flagged).toEqual(["bookingDelete", "settingsWrite", "settingsAdmin"]);
+    expect(flagged).toEqual([
+      "reminderManage", "recurringManage", "hoursEdit", "layoutEdit",
+      "settingsWrite", "bookingDelete", "settingsAdmin",
+    ]);
+    // `dataExport` is the one gated capability with NO rule behind it, and the
+    // list is where that is stated: the backup is built client-side out of
+    // reads, and `.read` is `auth != null` at the root.
+    expect(flagged).not.toContain("dataExport");
   });
 });
 
@@ -406,11 +414,14 @@ describe("GATED_CAPS — the capabilities a person can actually lack", () => {
     Object.keys(ROLE_GRANTS.staff).forEach((id) => expect(GATED_CAPS).not.toContain(id));
   });
 
-  it("names the six the app actually gates", () => {
-    // Pinned so a change to the level map is a deliberate edit here too.
+  it("names the eleven the app actually gates", () => {
+    // Pinned so a change to the level map is a deliberate edit here too. It was
+    // six until v18.0.0 phase 3 split `settingsWrite` into five.
     expect(GATED_CAPS).toEqual([
-      "bookingDelete", "voucherIssue", "voucherVoid",
-      "settingsWrite", "customerDelete", "settingsAdmin",
+      "voucherIssue", "voucherVoid",
+      "reminderManage", "recurringManage", "hoursEdit", "layoutEdit",
+      "settingsWrite", "bookingDelete", "customerDelete", "dataExport",
+      "settingsAdmin",
     ]);
   });
 
@@ -419,7 +430,13 @@ describe("GATED_CAPS — the capabilities a person can actually lack", () => {
     // `settingsWrite` (every control on those three writes a settings node,
     // where the alternative was a guard on ten save functions), and an ACTION
     // guard is right for the rest. What matters is that neither is missing.
-    const tabCaps = [...Chrome.matchAll(/cap:\s*"([A-Za-z]+)"/g)].map((m) => m[1]);
+    // `caps` is a LIST since v18.0.0 phase 3 — the General tab holds controls
+    // belonging to four capabilities. A regex still looking for the old scalar
+    // `cap:` would have matched nothing and quietly passed every tab-gated
+    // capability through as ungated, so this reads the array.
+    const tabCaps = [...Chrome.matchAll(/caps:\s*\[([^\]]*)\]/g)]
+      .flatMap((m) => [...m[1].matchAll(/"([A-Za-z]+)"/g)].map((x) => x[1]));
+    expect(tabCaps.length).toBeGreaterThanOrEqual(7);
     const refusedCaps = [...App.matchAll(/refused\("([A-Za-z]+)"\)/g)].map((m) => m[1]);
     const guarded = new Set([...tabCaps, ...refusedCaps]);
     const ungated = GATED_CAPS.filter((c) => !guarded.has(c));

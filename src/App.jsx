@@ -1767,6 +1767,12 @@ function BookingApp({uid}){
   // device. Read-only (no write-guard concerns). The Firebase free plan has NO
   // automatic backups, so this is one-tap insurance; restore stays manual.
   function doBackup(){
+    // The widest data-protection action in the app — every booking, every
+    // customer name and every phone number in one file — and the ONE gated
+    // capability with no rule behind it: the file is built client-side out of
+    // reads, and `.read` is `auth != null` at the root. `CAPABILITIES` says so
+    // rather than letting the enforced badge imply otherwise.
+    if(refused("dataExport")) return;
     const payload={
       exportedAt:new Date().toISOString(),
       appVersion:__APP_SIGNATURE__.version,
@@ -4036,12 +4042,12 @@ function BookingApp({uid}){
             tlSettings={tlSettings}
             onSetTlSetting={onSetTlSetting}
             weekHours={weekHours}
-            onSaveDayHours={saveDayHours}
-            onSaveAllDays={saveAllDays}
+            onSaveDayHours={function(i,p){if(refused("hoursEdit"))return;saveDayHours(i,p);}}
+            onSaveAllDays={function(d){if(refused("hoursEdit"))return;saveAllDays(d);}}
             weekRange={weekRange()}
             splitHour={dayShifts.split}
             shiftsEnabled={dayShifts.enabled}
-            onSaveShifts={saveDayShifts}
+            onSaveShifts={function(p){if(refused("hoursEdit"))return;saveDayShifts(p);}}
             optimizerCutoff={optimizerSettings.cutoff}
             optimizerAutoSwitch={optimizerSettings.autoSwitch}
             onSaveOptimizer={saveOptimizerSettings}
@@ -4051,10 +4057,10 @@ function BookingApp({uid}){
             onSaveGeneralSettings={saveGeneralSettings}
             onBackup={doBackup}
             recurring={recurring}
-            onSetRecurringEnabled={setRecurringEnabled}
-            onSetRecurringHorizon={setRecurringHorizon}
-            onUpdateRule={updateRule}
-            onRemoveRule={removeRule}
+            onSetRecurringEnabled={function(on){if(refused("recurringManage"))return;setRecurringEnabled(on);}}
+            onSetRecurringHorizon={function(w){if(refused("recurringManage"))return;setRecurringHorizon(w);}}
+            onUpdateRule={function(id,f){if(refused("recurringManage"))return;updateRule(id,f);}}
+            onRemoveRule={function(id){if(refused("recurringManage"))return;removeRule(id);}}
             layout={layout}
             onSaveLayout={saveLayout}
             bookings={bookings}

@@ -25,27 +25,35 @@
 // before Shortcuts: General and Layout are what the restaurant is, Customers and
 // Reminders are what it holds, App is how you look at it, and Shortcuts is
 // reference rather than settings at all.
-// v18.0.0 phase 3: three tabs are `settingsWrite`, and gating them HERE is what
-// makes that capability enforced on the client at all — every control on those
-// three writes a `settings/*` node, so the tab is the natural boundary and the
-// alternative was a guard on each of ~10 save functions. `customers` and
-// `vouchers` stay ungated because READING them is not a capability; the
-// destructive actions inside them carry their own (customerDelete,
-// voucherIssue, voucherVoid). `app` is per-user preferences and `shortcuts` is
-// reference, so neither is a restaurant setting at all.
+// v18.0.0 phase 3: a tab declares the capabilities that make it worth opening,
+// and gating them HERE is what makes those capabilities enforced on the client
+// at all — the alternative was a guard on each of ~10 save functions.
+// `customers` and `vouchers` stay ungated because READING them is not a
+// capability; the destructive actions inside them carry their own
+// (customerDelete, voucherIssue, voucherVoid). `app` is per-user preferences and
+// `shortcuts` is reference, so neither is a restaurant setting at all.
+//
+// **`caps` is a LIST and the test is ANY, because one tab stopped being one
+// capability.** The v18.0.0 split gave reminders, standing bookings, the floor
+// plan and the opening hours their own rows, and General holds controls
+// belonging to four of them at once — so a single `cap` would have hidden a
+// person's own hours editor because they lack the unrelated capability that
+// governs the optimiser cutoff two sections further down. The tab is the door;
+// the sections behind it gate themselves (`GeneralTabContent`, which takes
+// `can` for exactly that).
 export const SETTINGS_TABS = [
-  { id: "general",   label: "General",   cap: "settingsWrite" },
-  { id: "layout",    label: "Layout",    cap: "settingsWrite" },
+  { id: "general",   label: "General",   caps: ["settingsWrite", "hoursEdit", "recurringManage", "dataExport"] },
+  { id: "layout",    label: "Layout",    caps: ["layoutEdit"] },
   { id: "customers", label: "Customers" },
   { id: "vouchers",  label: "Vouchers" },
-  { id: "reminders", label: "Reminders", cap: "settingsWrite" },
+  { id: "reminders", label: "Reminders", caps: ["reminderManage"] },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
   // v18.0.0 phase 3: the 8th tab, and the FIRST one that is not always there.
-  // `cap` is what `visibleTabs` filters on — declared beside the tab rather
+  // `caps` is what `visibleTabs` filters on — declared beside the tab rather
   // than as a list of admin-only ids somewhere else, because a second list is
   // exactly what this comment block has been about since v16.0.0.
-  { id: "admin", label: "Admin", cap: "settingsAdmin" },
+  { id: "admin", label: "Admin", caps: ["settingsAdmin"] },
 ];
 
 // ── visibleTabs — the ONE filter, for the same reason as the ONE list ────────
@@ -64,8 +72,10 @@ export const SETTINGS_TABS = [
 // degrades to "show everything that is not capability-gated" rather than to an
 // empty tab bar.
 export function visibleTabs(can) {
-  if (typeof can !== "function") return SETTINGS_TABS.filter(function (t) { return !t.cap; });
-  return SETTINGS_TABS.filter(function (t) { return !t.cap || can(t.cap); });
+  if (typeof can !== "function") return SETTINGS_TABS.filter(function (t) { return !t.caps; });
+  return SETTINGS_TABS.filter(function (t) {
+    return !t.caps || t.caps.some(function (c) { return can(c); });
+  });
 }
 
 // ── Cog (gear) icon ─────────────────────────────────────────────────────────

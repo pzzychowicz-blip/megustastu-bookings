@@ -56,19 +56,54 @@
 // it is rendered in the panel, because the honest version of this screen tells
 // you which promises are guarantees.
 export const CAPABILITIES = [
-  { id: "bookingCreate",  label: "Take bookings",        blurb: "Add a booking or a walk-in." },
-  { id: "bookingEdit",    label: "Edit bookings",        blurb: "Change a booking's name, size, time or notes." },
-  { id: "bookingStatus",  label: "Change status",        blurb: "Confirm, seat, complete or cancel a booking." },
-  { id: "bookingAssign",  label: "Move tables",          blurb: "Assign or drag a booking to another table." },
-  { id: "tableBlock",     label: "Block tables",         blurb: "Take a table out of service for a period." },
-  { id: "waitlistManage", label: "Manage the waitlist",  blurb: "Add, book or remove a waiting party." },
-  { id: "voucherRedeem",  label: "Redeem vouchers",      blurb: "Use a voucher against a booking." },
-  { id: "bookingDelete",  label: "Delete bookings",      blurb: "Remove a booking and its record entirely.", enforced: true },
-  { id: "voucherIssue",   label: "Issue vouchers",       blurb: "Create a new gift voucher." },
-  { id: "voucherVoid",    label: "Void vouchers",        blurb: "Take a voucher out of use." },
-  { id: "settingsWrite",  label: "Change settings",      blurb: "Hours, layout, defaults and reminders.", enforced: true },
-  { id: "customerDelete", label: "Delete customer data", blurb: "Erase a guest's personal details." },
-  { id: "settingsAdmin",  label: "Administer the app",   blurb: "This tab: people, roles and modules.", enforced: true },
+  // ── Service — what a shift needs ──────────────────────────────────────────
+  { id: "bookingCreate",  group: "service", label: "Take bookings",        blurb: "Add a booking or a walk-in." },
+  { id: "bookingEdit",    group: "service", label: "Edit bookings",        blurb: "Change a booking's name, size, time or notes." },
+  { id: "bookingStatus",  group: "service", label: "Change status",        blurb: "Confirm, seat, complete or cancel a booking." },
+  { id: "bookingAssign",  group: "service", label: "Move tables",          blurb: "Assign or drag a booking to another table." },
+  { id: "tableBlock",     group: "service", label: "Block tables",         blurb: "Take a table out of service for a period." },
+  { id: "waitlistManage", group: "service", label: "Manage the waitlist",  blurb: "Add, book or remove a waiting party." },
+
+  // ── Money ─────────────────────────────────────────────────────────────────
+  { id: "voucherRedeem",  group: "money",   label: "Redeem vouchers",      blurb: "Use a voucher against a booking." },
+  { id: "voucherIssue",   group: "money",   label: "Issue vouchers",       blurb: "Create a new gift voucher." },
+  { id: "voucherVoid",    group: "money",   label: "Void vouchers",        blurb: "Take a voucher out of use." },
+
+  // ── Configuration — what the restaurant IS ────────────────────────────────
+  // v18.0.0 phase 3, Patryk's call: `settingsWrite` was ONE capability covering
+  // "hours, layout, defaults and reminders", which is four decisions of very
+  // different weight behind one tick. Reminders are a shift tool; the floor
+  // plan rewrites the world the optimiser places bookings in; standing bookings
+  // create real bookings weeks ahead on their own. Each is its own row now, and
+  // each keeps `manager` as its floor, so the split changes nobody's access on
+  // the day it ships — it only makes the access separable afterwards.
+  { id: "reminderManage",  group: "config", label: "Manage reminders",         blurb: "Create and edit the reminders staff see during a service.", enforced: true },
+  { id: "recurringManage", group: "config", label: "Manage standing bookings", blurb: "Bookings that repeat every week, generated ahead automatically.", enforced: true },
+  { id: "hoursEdit",       group: "config", label: "Change opening hours",     blurb: "Opening and closing times, closed days, and the shift split.", enforced: true },
+  { id: "layoutEdit",      group: "config", label: "Change the floor plan",    blurb: "Tables, zones, joins, combos and the optimiser's priorities.", enforced: true },
+  { id: "settingsWrite",   group: "config", label: "Change settings",          blurb: "Booking defaults, the optimiser cutoff and general options.", enforced: true },
+
+  // ── Data and access — what cannot be taken back ───────────────────────────
+  { id: "bookingDelete",  group: "data",    label: "Delete bookings",      blurb: "Remove a booking and its record entirely.", enforced: true },
+  { id: "customerDelete", group: "data",    label: "Delete customer data", blurb: "Erase a guest's personal details." },
+  // The one capability in this group with NO rule behind it, and the list says
+  // so rather than implying otherwise: the backup is built client-side out of
+  // reads, and `.read` is `auth != null` at the root. Gating it server-side
+  // would mean restructuring every read in the app, which is a different
+  // project; hiding the button covers the real threat and no more.
+  { id: "dataExport",     group: "data",    label: "Export the data",      blurb: "Download every booking, customer and phone number as a file." },
+  { id: "settingsAdmin",  group: "data",    label: "Administer the app",   blurb: "This tab: people, roles and modules.", enforced: true },
+];
+
+// The grid's section headings, in render order. A thirteen-row grid read fine
+// as one block; eighteen does not, and the groups are the honest reading of
+// what a tick actually costs — a shift tool, money, the restaurant's own
+// configuration, or something that cannot be taken back.
+export const CAP_GROUPS = [
+  { id: "service", label: "Service" },
+  { id: "money",   label: "Money" },
+  { id: "config",  label: "Configuration" },
+  { id: "data",    label: "Data and access" },
 ];
 
 export const CAP_IDS = CAPABILITIES.map(function (c) { return c.id; });
@@ -84,8 +119,13 @@ const STAFF = [
   "bookingCreate", "bookingEdit", "bookingStatus", "bookingAssign",
   "tableBlock", "waitlistManage", "voucherRedeem",
 ];
+// The five capabilities split out of `settingsWrite` in v18.0.0 phase 3 join at
+// the level they already had inside it, which is what makes the split a
+// REFACTOR of the permission model rather than a change to anybody's access.
 const MANAGER = STAFF.concat([
-  "bookingDelete", "voucherIssue", "voucherVoid", "settingsWrite",
+  "bookingDelete", "voucherIssue", "voucherVoid",
+  "reminderManage", "recurringManage", "hoursEdit", "layoutEdit",
+  "settingsWrite", "dataExport",
 ]);
 const ADMIN = MANAGER.concat(["customerDelete", "settingsAdmin"]);
 

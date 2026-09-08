@@ -47,7 +47,7 @@ import {
 // to save a booking, and a fixture cannot find that.
 import { sanitize } from "../../src/lib/booking-logic.js";
 import { sanitizeVoucher } from "../../src/lib/vouchers.js";
-import { can, ROLES, ALWAYS_ENFORCED } from "../../src/lib/roles.js";
+import { can, ROLES, ALWAYS_ENFORCED, RULE_ENFORCED, CAP_IDS } from "../../src/lib/roles.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(HERE, "../../database.rules.json");
@@ -1724,8 +1724,15 @@ describe("the rules and ROLE_GRANTS agree (v18.0.0)", () => {
   // BEHAVIOURALLY — by driving the real rules with each level in turn and
   // comparing the outcome against `can()`.
   const CASES = [
-    { cap: "settingsWrite", run: (db) => writeWithRev(db, "settings/general", { v: 1 }, 1) },
-    { cap: "bookingDelete", run: (db) => db.ref("bookings").update({ b1: null }) },
+    { cap: "settingsWrite",   run: (db) => writeWithRev(db, "settings/general", { v: 1 }, 1) },
+    { cap: "bookingDelete",   run: (db) => db.ref("bookings").update({ b1: null }) },
+    // v18.0.0 phase 3 — the four capabilities split out of `settingsWrite`.
+    // Each is driven against the REAL rules for every level, so "manager keeps
+    // what it had inside settingsWrite" is proven rather than asserted.
+    { cap: "hoursEdit",       run: (db) => writeWithRev(db, "settings/operatingHours", { days: { 0: { open: 13, close: 22 } } }, 1) },
+    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
+    { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
+    { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
   ];
 
   for (const { cap, run } of CASES) {
@@ -1754,5 +1761,55 @@ describe("the rules and ROLE_GRANTS agree (v18.0.0)", () => {
       if (allowed) await assertSucceeds(write);
       else await assertFails(write);
     }
+  });
+});
+
+// ── The split is REAL, not four names for one gate (v18.0.0 phase 3) ─────────
+//
+// The `settings/*` sweep above proves a staff account is refused everywhere,
+// and would go on passing if all sixteen rules still named `settingsWrite` —
+// staff holds none of them either way. So it cannot see the split, and this is
+// the test that can: give an account ONE capability as an extra and check it
+// opens exactly its own door and no other.
+describe("each gated path names its OWN capability", () => {
+  const PATHS = [
+    { path: "settings/operatingHours", cap: "hoursEdit",       value: { days: { 0: { open: 13, close: 22 } } } },
+    { path: "settings/dayShifts",      cap: "hoursEdit",       value: { split: 17, enabled: true } },
+    { path: "settings/layout",         cap: "layoutEdit",      value: { tables: [{ id: "1A", capacity: 2 }] } },
+    { path: "reminders",               cap: "reminderManage",  value: [{ id: "r1", text: "Prep" }] },
+    { path: "recurring",               cap: "recurringManage", value: { v: 1, enabled: true } },
+    { path: "settings/general",        cap: "settingsWrite",   value: { v: 1, restaurantName: "X" } },
+    { path: "settings/optimizer",      cap: "settingsWrite",   value: { cutoff: 15 } },
+  ];
+
+  for (const { path, cap, value } of PATHS) {
+    it(`${path} opens for ${cap} alone`, async () => {
+      await seedEnforce(true);
+      await seedRole("staff-a", { role: "staff", extras: { [cap]: true } });
+      await assertSucceeds(writeWithRev(staff(), path, value, 1));
+    });
+
+    it(`${path} stays shut for a DIFFERENT capability`, async () => {
+      // The half that fails if a re-point is missed: an account carrying every
+      // capability EXCEPT this path's own must still be refused. Without it a
+      // rule left naming `settingsWrite` would pass the test above, because a
+      // manager holds both.
+      const others = {};
+      CAP_IDS.forEach((c) => { if (c !== cap) others[c] = true; });
+      await seedEnforce(true);
+      await seedRole("staff-a", { role: "staff", extras: others });
+      await assertFails(writeWithRev(staff(), path, value, 1));
+    });
+  }
+
+  it("the rules name exactly the capabilities the app calls enforced", async () => {
+    // Derived from BOTH files, so a capability flagged `enforced: true` in
+    // roles.js with no rule behind it — or a rule naming a capability the app
+    // has never heard of — fails here rather than shipping as a badge that
+    // promises a guarantee nothing provides.
+    const text = readFileSync(RULES_PATH, "utf8");
+    const named = new Set([...text.matchAll(/extras'\)\.child\('([A-Za-z]+)'\)/g)].map((m) => m[1]));
+    expect([...named].sort()).toEqual(Object.keys(RULE_ENFORCED).slice().sort());
+    named.forEach((c) => expect(CAP_IDS).toContain(c));
   });
 });

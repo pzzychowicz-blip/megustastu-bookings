@@ -259,17 +259,31 @@ is the same hole one door over.
 
 ### The one duplication that could not be removed
 
-Which levels grant `settingsWrite` and `bookingDelete` is written in
+Which levels grant each rule-enforced capability is written in
 `src/lib/roles.js` (`ROLE_GRANTS`) **and again** in this rules file, because
 rules cannot read a JS constant. Neither file can see the other, so the suite
 asserts they agree *behaviourally*: it drives the real rules with each level in
 turn and compares the outcome against `can()`. Change one and that test fails.
+There are **six** such capabilities driven that way after the v18.0.0 split
+(`settingsWrite`, `bookingDelete`, `hoursEdit`, `layoutEdit`, `reminderManage`,
+`recurringManage`) plus `settingsAdmin`, which is checked separately because the
+enforcement flag does not relax it.
 
-The same forced-duplication problem produced the sixteen copies of the
-`settingsWrite` gate — one per `settings/*` rule, since rules have no macros.
-They were applied by script and asserted to land exactly once each, and a sweep
-test derives the list from this file so a pair added later is covered without
-the test being edited.
+The same forced-duplication problem produced the copies of the gate — one per
+writable node, since rules have no macros. They were applied by script and
+asserted to land exactly once each, and a sweep test derives the list from this
+file so a pair added later is covered without the test being edited.
+
+**The sweep is not enough on its own, and v18.0.0 phase 3 is where that showed.**
+Re-pointing four settings pairs from `settingsWrite` at `hoursEdit` /
+`layoutEdit` broke nothing in it: it drives a *staff* account, which holds
+neither capability, so sixteen rules all still named `settingsWrite` and every
+assertion passed. What can see a split is an account carrying exactly ONE
+capability as an extra — `each gated path names its OWN capability` — and its
+second half matters as much as its first: an account holding every capability
+EXCEPT the path's own must still be refused, or a rule left naming
+`settingsWrite` passes, because a manager holds both. Proven by sabotage:
+restoring `settingsWrite` on `settings/layout` fails three tests.
 
 ### Measured, not assumed
 

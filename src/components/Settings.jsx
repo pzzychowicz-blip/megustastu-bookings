@@ -440,10 +440,18 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
   );
 }
 
-export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
+export function GeneralTabContent({ can = function () { return true; }, appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
+  // v18.0.0 phase 3: this tab holds controls belonging to FOUR capabilities —
+  // the opening hours, standing bookings, the backup, and everything else,
+  // which is `settingsWrite`. `visibleTabs` opens the door for any of them and
+  // each section decides for itself, so a person holding only `hoursEdit` gets
+  // a General tab containing exactly the hours. `can` defaults to permissive:
+  // this component is also rendered by callers with no roles context, and an
+  // empty tab is the worse failure.
+  const sw = can("settingsWrite");
   const wr = weekRange && typeof weekRange === "object" ? weekRange : { minOpen: 13, maxClose: 22 };
   const wrMin = wr.minOpen, wrMax = wr.maxClose;
   const wh = weekHours && typeof weekHours === "object" ? weekHours : {};
@@ -555,6 +563,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           fields commit on BLUR (or Enter) so every keystroke isn't a CAS
           write; the hook's sanitizer trims/caps and restores a default on
           an emptied field. */}
+      {sw ? (
       <Collapsible
         title="Restaurant"
         subtitle="Name, currency and phone prefix."
@@ -574,10 +583,12 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         </div>
       </Collapsible>
+      ) : null}
       {/* v14.4.0 / v15.0.0: Per-weekday opening-hours editor — Firebase-shared
           (settings/operatingHours). Each day sets its own booking window + timeline
           range, or is marked Closed. "copy → all" pushes one day's config to all 7.
           Displayed Mon→Sun; stored by JS weekday index (0=Sun). */}
+      {can("hoursEdit") ? (
       <Collapsible
         title="Opening hours"
         subtitle="Per day of the week. Sets the booking window and the timeline range."
@@ -592,8 +603,10 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           );
         })}
       </Collapsible>
+      ) : null}
       {/* v14.6.0: Shifts — on/off toggle + the Afternoon/Evening split hour for
           the day Summary. Firebase-shared (settings/dayShifts). */}
+      {can("hoursEdit") ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -617,10 +630,12 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         ) : null}</Reveal>
       </Section>
+      ) : null}
       {/* v15.0.0: Auto-optimizer — the master auto-switch + the editable daily
           cutoff hour. Firebase-shared (settings/optimizer). When the switch is
           off the optimizer is fully manual (no cutoff auto-off, no overnight
           auto-on); it then only changes via the timeline toggle or the "o" key. */}
+      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -648,11 +663,13 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         )}</AutoHeight>
       </Section>
+      ) : null}
       {/* v16.1.0: Default booking durations — three party-size tiers with
           EDITABLE band boundaries. Firebase-shared (settings/bookingDefaults).
           Only NEW bookings pick up a change; existing ones keep their stored
           duration. The hook's sanitizer enforces t1Max < t2Max; the steppers
           disable at the same bounds so an invalid value can't be set. */}
+      {sw ? (
       <Collapsible
         title="Booking durations"
         subtitle="Default length of new bookings by party size."
@@ -709,10 +726,12 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         </div>
       </Collapsible>
+      ) : null}
       {/* v17.6.0: Separation between bookings — turnaround time held after each
           party so the next one isn't seated back-to-back. Firebase-shared
           (settings/bookingDefaults, same node as the durations). Default OFF;
           affects only where NEW bookings can be placed, never existing ones. */}
+      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -741,9 +760,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         )}</AutoHeight>
       </Section>
+      ) : null}
       {/* v16.1.0: Running late — amber highlight for a confirmed booking past
           its time, then a one-tap "No show" offer. Firebase-shared
           (settings/bookingDefaults, same node as the durations). */}
+      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -769,9 +790,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         )}</AutoHeight>
       </Section>
+      ) : null}
       {/* v17.0.0 round 7: Alert banners — master switches for the other in-flow
           banners, matching the Running-late toggle above (Patryk: every banner
           adjustable the same way). Firebase-shared (settings/bookingDefaults). */}
+      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -792,9 +815,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           <Toggle label="Reshuffle suggestions" on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
         </div>
       </Section>
+      ) : null}
       {/* v16.3.0: Table turns — predict which seated tables free up in the next
           ~15 min (Summary "freeing soon" line + timeline countdown pills).
           Firebase-shared (settings/bookingDefaults). */}
+      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -818,10 +843,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         ) : null}</AutoHeight>
       </Section>
+      ) : null}
       {/* v16.3.0: Standing bookings — the recurring-rule manager. Rules are
           CREATED from the booking form ("Repeat weekly"); here staff pause /
           delete them and set the generation horizon. */}
-      {recurring ? (
+      {recurring && can("recurringManage") ? (
         <Section style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ textAlign: "left", flex: "1 1 200px" }}>
@@ -876,6 +902,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
       ) : null}
       {/* v17.0.0: Preferences — the remaining ex-hard-coded knobs from the
           configurability pass. Firebase-shared (settings/general). */}
+      {sw ? (
       <Collapsible
         title="Preferences"
         subtitle="Regulars threshold, banner collapse, waitlist match window, undo timing."
@@ -912,10 +939,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
             onInc={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize + 1 })} />
         </div>
       </Collapsible>
+      ) : null}
       {/* v16.3.0 correction: Backup lives at the BOTTOM of the General tab —
           download a JSON snapshot of every collection + all settings to this
           device (the Firebase free plan has no auto-backups). */}
-      {onBackup ? (
+      {onBackup && can("dataExport") ? (
         <Section style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ textAlign: "left", flex: "1 1 200px" }}>
@@ -1090,7 +1118,7 @@ export function SettingsContent({
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {
-    content = <GeneralTabContent appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
+    content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
   } else if (cur === "customers") {
