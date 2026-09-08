@@ -623,9 +623,18 @@ for (const file of walk(SRC)) {
       // Walk to the MATCHING close. Nothing nests an Overlay today; without
       // this the first `</Overlay>` would end the body early and the rule would
       // silently read the wrong span.
+      // The depth scan matches `<Overlay` the SAME way the outer loop does —
+      // with a word boundary. A bare `indexOf("<Overlay")` also matches
+      // `<OverlayScrollContext` (which atoms.jsx renders), so a file holding
+      // both would count the context provider as a nested modal, run past the
+      // real close, and report a compliant file as a violation.
+      const nest = /<Overlay\b/g;
       let depth = 1, k = end + 1;
       while (k < code.length && depth > 0) {
-        const open = code.indexOf("<Overlay", k), close = code.indexOf("</Overlay>", k);
+        nest.lastIndex = k;
+        const m2 = nest.exec(code);
+        const open = m2 ? m2.index : -1;
+        const close = code.indexOf("</Overlay>", k);
         if (close < 0) break;
         if (open >= 0 && open < close) { depth++; k = open + 8; }
         else { depth--; k = close + 10; }

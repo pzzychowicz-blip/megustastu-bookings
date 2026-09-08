@@ -588,7 +588,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           (settings/operatingHours). Each day sets its own booking window + timeline
           range, or is marked Closed. "copy → all" pushes one day's config to all 7.
           Displayed Mon→Sun; stored by JS weekday index (0=Sun). */}
-      {can("hoursEdit") ? (
+      {can("hoursEdit") ? (<>
       <Collapsible
         title="Opening hours"
         subtitle="Per day of the week. Sets the booking window and the timeline range."
@@ -603,10 +603,8 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           );
         })}
       </Collapsible>
-      ) : null}
       {/* v14.6.0: Shifts — on/off toggle + the Afternoon/Evening split hour for
           the day Summary. Firebase-shared (settings/dayShifts). */}
-      {can("hoursEdit") ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -630,12 +628,12 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
         ) : null}</Reveal>
       </Section>
-      ) : null}
+      </>) : null}
       {/* v15.0.0: Auto-optimizer — the master auto-switch + the editable daily
           cutoff hour. Firebase-shared (settings/optimizer). When the switch is
           off the optimizer is fully manual (no cutoff auto-off, no overnight
           auto-on); it then only changes via the timeline toggle or the "o" key. */}
-      {sw ? (
+      {sw ? (<>
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -663,13 +661,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
         )}</AutoHeight>
       </Section>
-      ) : null}
       {/* v16.1.0: Default booking durations — three party-size tiers with
           EDITABLE band boundaries. Firebase-shared (settings/bookingDefaults).
           Only NEW bookings pick up a change; existing ones keep their stored
           duration. The hook's sanitizer enforces t1Max < t2Max; the steppers
           disable at the same bounds so an invalid value can't be set. */}
-      {sw ? (
       <Collapsible
         title="Booking durations"
         subtitle="Default length of new bookings by party size."
@@ -726,12 +722,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
         </div>
       </Collapsible>
-      ) : null}
       {/* v17.6.0: Separation between bookings — turnaround time held after each
           party so the next one isn't seated back-to-back. Firebase-shared
           (settings/bookingDefaults, same node as the durations). Default OFF;
           affects only where NEW bookings can be placed, never existing ones. */}
-      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -760,11 +754,9 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
         )}</AutoHeight>
       </Section>
-      ) : null}
       {/* v16.1.0: Running late — amber highlight for a confirmed booking past
           its time, then a one-tap "No show" offer. Firebase-shared
           (settings/bookingDefaults, same node as the durations). */}
-      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -790,11 +782,9 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
         )}</AutoHeight>
       </Section>
-      ) : null}
       {/* v17.0.0 round 7: Alert banners — master switches for the other in-flow
           banners, matching the Running-late toggle above (Patryk: every banner
           adjustable the same way). Firebase-shared (settings/bookingDefaults). */}
-      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -815,11 +805,9 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           <Toggle label="Reshuffle suggestions" on={bd.reshuffleSuggestEnabled !== false} onClick={() => onSaveBookingDefaults({ reshuffleSuggestEnabled: bd.reshuffleSuggestEnabled === false })} />
         </div>
       </Section>
-      ) : null}
       {/* v16.3.0: Table turns — predict which seated tables free up in the next
           ~15 min (Summary "freeing soon" line + timeline countdown pills).
           Firebase-shared (settings/bookingDefaults). */}
-      {sw ? (
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -843,7 +831,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           </div>
         ) : null}</AutoHeight>
       </Section>
-      ) : null}
+      </>) : null}
       {/* v16.3.0: Standing bookings — the recurring-rule manager. Rules are
           CREATED from the booking form ("Repeat weekly"); here staff pause /
           delete them and set the generation horizon. */}

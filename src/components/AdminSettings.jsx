@@ -20,12 +20,33 @@
 // this repo's crash tests hunt for, so the panel says which is which instead of
 // letting the reader assume.
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
-import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, displayName } from "../lib/roles";
+import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
+
+// The grid's rows, bucketed once at module load out of two frozen constants
+// that cannot change — rather than four `CAPABILITIES.filter` passes per
+// render. **Every capability lands in a bucket**: one whose `group` matched no
+// entry in `CAP_GROUPS` used to be silently dropped from the grid while still
+// being enforced everywhere else, which is a permission you cannot see. It goes
+// in the last group instead, and `tests/roles.test.js` fails the build if any
+// capability names a group that does not exist.
+// The list the panel prints AND the number it opens with — one fact, because
+// this is the one panel whose stated purpose is being honest about what is
+// enforced, and it shipped saying "Three" over a list of seven. The count moved
+// from three to seven in the commit that split `settingsWrite`, and a
+// hand-typed number beside a derived list is how that goes unnoticed.
+const ENFORCED_CAPS = CAPABILITIES.filter(function (c) { return RULE_ENFORCED[c.id]; });
+
+const CAPS_BY_GROUP = {};
+CAP_GROUPS.forEach(function (g) { CAPS_BY_GROUP[g.id] = []; });
+CAPABILITIES.forEach(function (c) {
+  const bucket = CAPS_BY_GROUP[c.group] || CAPS_BY_GROUP[CAP_GROUPS[CAP_GROUPS.length - 1].id];
+  bucket.push(c);
+});
 
 // ── The refusal ─────────────────────────────────────────────────────────────
 function RefusalPanel() {
@@ -117,22 +138,29 @@ const STATE_WORD = {
   denied: "switched off for this person",
   none: "not granted",
 };
-// Is this person able to do it right now? The button's pressed state and the
-// meaning of a tap both read this, so "granted" is one fact rather than two
-// ladders that agree today.
-function isGranted(st) { return st === "level" || st === "extra"; }
+// `isGranted` is imported from lib/roles.js: the button's pressed state and the
+// app's own gate must be the same fact, not two ladders that agree today.
 
 function CapabilityGrid({ row, myUid, onToggleCap }) {
   // A pending invitation has no uid, so there is no row to write onto.
   const editable = row && row.kind === "user";
-  const level = row && row.role;
+  // EFFECTIVE, not stored. A person who has signed in but whom no admin has
+  // given a level is governed as `staff` — that is what `can()` does with an
+  // absent role everywhere else in the app — and keying the grid on the raw
+  // `row.role` meant NO column was theirs, so every one of the 54 cells was
+  // read-only and an admin could not grant or deny that person anything. The
+  // People list has been offering "No level (staff)" beside a grid that would
+  // not act on it since the panel shipped.
+  const level = row ? effectiveRole(row.role) : null;
+  // …but the caption still tells the truth about which of the two it is.
+  const levelIsAssumed = !!(row && row.kind === "user" && !row.role);
   const who = displayName(row);
   const isSelf = !!(row && row.uid && row.uid === myUid);
   // An invite row has no stored entry: it carries the level and extras the
   // invitation will apply. It has no `denies` and deliberately does not get
   // one — an invitation says "come in at this level", and the fine-tuning
   // happens on the row once that person exists.
-  const subject = row ? (row.entry || { role: row.role, extras: row.extras || {}, denies: {} }) : null;
+  const subject = row ? (row.entry || { role: level, extras: row.extras || {}, denies: row.denies || {} }) : null;
 
   function stateFor(cap, col) {
     // The person's OWN column is the only one that can show a decision — an
@@ -147,11 +175,14 @@ function CapabilityGrid({ row, myUid, onToggleCap }) {
   // grid the eye loses which one it is in. A 1px rule is the cheapest thing
   // that survives both themes and adds no fill for the contrast registry to
   // chase.
-  function colEdge(col) {
-    return col === level
-      ? { borderLeft: "1px solid var(--accent)", borderRight: "1px solid var(--accent)" }
-      : null;
-  }
+  // Three possible answers, decided once per render rather than per cell. It
+  // was called 69 times a render (3 headers + 4 group rows x 3 + 18 rows x 3)
+  // for a function whose only input is `level`, on a component that re-renders
+  // on every tick and every person switch.
+  const EDGE = { borderLeft: "1px solid var(--accent)", borderRight: "1px solid var(--accent)" };
+  const edges = {};
+  ROLES.forEach(function (col) { edges[col] = col === level ? EDGE : null; });
+  function colEdge(col) { return edges[col]; }
 
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: T.body }}>
@@ -176,33 +207,43 @@ function CapabilityGrid({ row, myUid, onToggleCap }) {
                 ...colEdge(col),
               }}>
                 {LEVEL_LABEL[col]}
-                {isTheirs ? <div style={{ fontSize: T.micro, fontWeight: FW.regular, color: "var(--text-muted)" }}>their level</div> : null}
+                {/* Says WHICH of the two this is. A person with no level yet is
+                    governed as staff — so the column is theirs and is editable
+                    — but calling it "their level" would assert a decision no
+                    admin has made. */}
+                {isTheirs ? <div style={{ fontSize: T.micro, fontWeight: FW.regular, color: "var(--text-muted)" }}>{levelIsAssumed ? "no level yet" : "their level"}</div> : null}
               </th>
             );
           })}
         </tr>
       </thead>
-      <tbody>
-        {/* Grouped since v18.0.0 phase 3. Thirteen rows read as one block;
+      {/* Grouped since v18.0.0 phase 3. Thirteen rows read as one block;
             eighteen do not, and the groups are the honest reading of what a
             tick actually costs — a shift tool, money, the restaurant's own
             configuration, or something that cannot be taken back. The heading
             row carries three empty cells rather than a `colSpan`, so the accent
             rule bounding the person's column runs unbroken down the whole
-            table instead of restarting in each group. */}
+            table instead of restarting in each group.
+
+            ONE `<tbody>` per group, and the heading is `scope="rowgroup"`:
+            "Service" labels the rows beneath it, and the `colgroup` this
+            shipped with said it labelled the three LEVEL COLUMNS — the wrong
+            axis, and the kind of thing only a screen reader would have told
+            anybody. Several tbodys in one table is valid HTML and is what the
+            scope value is defined against. */}
         {CAP_GROUPS.map(function (g) {
-          const caps = CAPABILITIES.filter(function (c) { return c.group === g.id; });
+          const caps = CAPS_BY_GROUP[g.id];
           const lastGroup = g.id === CAP_GROUPS[CAP_GROUPS.length - 1].id;
           return (
-            <Fragment key={g.id}>
+            <tbody key={g.id}>
               <tr>
-                <th scope="colgroup" style={{
+                <th scope="rowgroup" style={{
                   textAlign: "left", padding: SP.tight, paddingTop: SP.wide,
                   fontSize: T.micro, fontWeight: FW.bold, letterSpacing: "0.04em",
                   textTransform: "uppercase", color: "var(--text-faint)",
                 }}>{g.label}</th>
                 {ROLES.map(function (col) {
-                  return <td key={col} style={Object.assign({}, colEdge(col))} />;
+                  return <td key={col} style={colEdge(col) || undefined} />;
                 })}
               </tr>
               {caps.map(function (c, ri) {
@@ -288,10 +329,9 @@ function CapabilityGrid({ row, myUid, onToggleCap }) {
                   </tr>
                 );
               })}
-            </Fragment>
+            </tbody>
           );
         })}
-      </tbody>
     </table>
   );
 }
@@ -531,11 +571,11 @@ export function AdminTabContent({
 
       <Collapsible title="What the server actually enforces" defaultOpen={false}>
         <p style={{ margin: 0, marginBottom: SP.base, color: "var(--text-secondary)", fontSize: T.body }}>
-          Three of these are refused by the database itself, so they hold even if
-          somebody reaches the data another way:
+          {ENFORCED_CAPS.length} of these are refused by the database itself, so
+          they hold even if somebody reaches the data another way:
         </p>
         <ul style={{ margin: 0, paddingLeft: 18, color: "var(--text-secondary)", fontSize: T.body }}>
-          {CAPABILITIES.filter(function (c) { return RULE_ENFORCED[c.id]; }).map(function (c) {
+          {ENFORCED_CAPS.map(function (c) {
             return <li key={c.id}>{c.label}</li>;
           })}
         </ul>

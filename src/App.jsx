@@ -2395,9 +2395,11 @@ function BookingApp({uid}){
   // shortcut, the quick-status popup and a drag are covered by one line — which
   // is the four-surfaces lesson this file already records for `seated`.
   //
-  // Only the six capabilities in `GATED_CAPS` are worth guarding: `staff` is the
-  // floor and extras only ADD, so every account holds the staff set by
-  // construction and a gate on `bookingStatus` could never fire.
+  // EVERY capability in `GATED_CAPS` is worth guarding, and that list is now
+  // all eighteen. It used to be the complement of the staff floor — `staff` was
+  // a floor and extras only ADDED, so every account held the staff set by
+  // construction and a gate on `bookingStatus` could never fire. **Denies
+  // removed the floor**, so it can; the gate is twenty lines below.
   //
   // It REFUSES rather than doing nothing. A control that silently no-ops reads
   // as broken, which is the v17.16.12 lesson about `seated` after close.

@@ -20845,3 +20845,96 @@ The deny itself also had to survive the deployed `.validate`: it does —
 `roles/{uid}/denies` reads back `{ hoursEdit: true }` after a tap in the grid,
 which is the new `denies/$cap` rule accepting a write the previous version of
 the rules had no name for.
+
+### Commit 31 — `/code-review` fixes: nine, and one of them was a latent divergence
+
+The phase-3 boundary review, over `9c1f4f0^..HEAD`. Seven of the eight finder
+angles died on a session rate limit and were re-run by hand; the survivor was
+the cleanup angle, and it earned its place — two of the three most serious
+findings below are its.
+
+**Confirmed and fixed:**
+
+1. **The enforcement panel said "Three" over a list of seven.** Hand-typed,
+   directly above a list rendered from `CAPABILITIES.filter(RULE_ENFORCED)` —
+   on the one panel whose stated purpose is being honest about what the
+   database actually refuses, in the commit that changed the number. The count
+   and the list are one derived `ENFORCED_CAPS` now.
+
+2. **`isAdminEntry` could diverge from `can`, about `settingsAdmin`.** It tested
+   `e.role === "admin"` directly rather than asking `ROLE_GRANTS`, which is
+   equivalent only while `settingsAdmin` is granted to exactly one level.
+   Promote it to `manager` and the gate says yes while the last-admin invariant
+   says no — silently, about the one capability the whole guard is built on.
+   `capState` is now THE ladder, `can` and `isAdminEntry` are derived from it,
+   and `isGranted` is exported so the grid's pressed state reads the same fact
+   as the gate. The file's own comment had already said `capState` exists so
+   the glyph, the screen-reader text and the toggle read one function; the gate
+   and the invariant had not been included in that. Pinned across 36 row shapes
+   × 18 capabilities, and proven by a surgical sabotage: restoring the old
+   `isAdminEntry` and granting `settingsAdmin` to `manager` — which keeps the
+   staff ⊂ manager ⊂ admin ladder intact, so the existing tests do not all
+   fire — fails the new test.
+
+3. **A person with no level yet had no editable column at all.** `can()` reads
+   an absent role as `staff` everywhere in the app; the grid keyed on the raw
+   `row.role`, so for a self-registered stub NO column was theirs and all 54
+   cells were read-only — the People list offering "No level (staff)" beside a
+   grid that would not act on it. `effectiveRole` now decides the column, and
+   the caption says "no level yet" rather than "their level" so the panel does
+   not assert a decision nobody made.
+
+4. **`scope="colgroup"` on the group headings.** "Service" labels the rows
+   beneath it, not the three level columns. One `<tbody>` per group with
+   `scope="rowgroup"`, which is what the value is defined against — visible to
+   a screen reader and to nothing else.
+
+5. **A capability whose `group` matched no `CAP_GROUPS` entry vanished from the
+   grid** while still being enforced everywhere else: a permission nobody can
+   see. It buckets into the last group now, and a test fails the build if any
+   capability names a group that does not exist — so the fallback is
+   unreachable rather than load-bearing.
+
+6. **The row model carried `denies` that nothing read.** The invite branch read
+   `row.extras` and hard-coded `denies: {}` two characters away. Reading both
+   makes the field live, which is the point of adding it.
+
+7. **`colEdge` allocated 69 objects per render** (3 headers + 4 group rows × 3 +
+   18 rows × 3) for a function whose only input is the level, on a component
+   that re-renders on every tick and every person switch — plus four
+   `CAPABILITIES.filter` passes per render over two frozen constants. Three
+   consts and a module-level bucket map.
+
+8. **Eight `{sw ? …}` wrappers where three do**, six of them contiguous. The
+   pins moved with the code (3 and 1, exact counts rather than "at least"), and
+   the merge was verified by DENYING `settingsWrite` live: exactly the eight
+   settingsWrite sections disappear and the four belonging to other
+   capabilities stay.
+
+9. **Rule 12's two matchers disagreed.** The outer loop found modals with
+   `/<Overlay\b/`; the depth scan used `indexOf("<Overlay")`, which also matches
+   `<OverlayScrollContext` — so a file holding both would count the context
+   provider as a nested modal and report a compliant file as a violation.
+   Unreachable today; a latent false POSITIVE, which is the kind of rule failure
+   that gets a checker muted.
+
+Plus a stale paragraph in `App.jsx` that the same commit refuted — "a gate on
+`bookingStatus` could never fire", twenty lines above the `bookingStatus` gate —
+and a test comment claiming four ungated tabs beside an assertion of "at least
+two".
+
+**Skipped, with the reason:**
+
+- **`saveKeyed` duplicates `useVouchers`' write path** (~45 lines: the loaded
+  guard, the mirror read, `buildPatch`, the StrictMode dedupe, the catch). Real,
+  and the fix is a shared `useKeyedCollection`. Not at a phase boundary:
+  CLAUDE.md records that rewriting this path is how the repo has lost production
+  data twice, and three collections now depend on it. Its own version.
+- **`refused` duplicates `flashDragMsg`'s timer.** The finding's stated cost —
+  a refusal and a drag message on screen together — is **refuted**:
+  `StatusToasts` renders `topToastKey`, one slot, highest priority wins. What
+  remains is two states and a `3500` literal, against changing the toast model
+  for two shapes that differ (`string` vs `{text, good}`).
+- **`GATED_CAPS` is now an alias of `CAP_IDS`** and its test asserts a
+  tautology. Kept: the name is what the gate-coverage test MEANS, and the
+  tautology records that the set widened. The stale comment was the real defect.

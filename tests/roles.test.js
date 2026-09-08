@@ -18,7 +18,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CAPABILITIES, CAP_IDS, ROLES, ROLE_GRANTS, RULE_ENFORCED, ALWAYS_ENFORCED,
-  GATED_CAPS, capLabel, capState, levelGrants,
+  GATED_CAPS, CAP_GROUPS, capLabel, capState, levelGrants, isGranted,
   can, isAdminEntry, effectiveRole, sanitizeRole, sanitizeRoles,
   sanitizeInvite, sanitizeInvites, normalizeEmail, wouldRemoveOwnAdmin,
   matchInvite, applyInviteFields, userRows, displayName,
@@ -39,6 +39,18 @@ describe("the capability list", () => {
 
   it("has no duplicate ids", () => {
     expect(new Set(CAP_IDS).size).toBe(CAP_IDS.length);
+  });
+
+  it("gives every capability a group that exists", () => {
+    // The grid renders group by group. A capability whose `group` matched no
+    // entry in CAP_GROUPS used to be dropped from the panel silently while
+    // still being enforced everywhere else — a permission nobody can see. The
+    // component now buckets a stray one into the last group rather than losing
+    // it; this is what stops that fallback from being reached at all.
+    const ids = CAP_GROUPS.map((g) => g.id);
+    CAPABILITIES.forEach((c) => expect(ids).toContain(c.group));
+    // …and no group is empty, or the grid prints a heading over nothing.
+    ids.forEach((id) => expect(CAPABILITIES.some((c) => c.group === id)).toBe(true));
   });
 
   it("gives every capability a label and a blurb for the grid", () => {
@@ -512,6 +524,33 @@ describe("denies", () => {
     // a PRESENT key rather than having to tell absent from false.
     expect(e.denies.nope).toBeUndefined();
     expect(e.denies.voucherVoid).toBeUndefined();
+  });
+
+  it("can(), isAdminEntry() and capState() are ONE ladder, not three", () => {
+    // They were three, and the divergence was latent rather than theoretical:
+    // `isAdminEntry` tested `role === "admin"` directly instead of asking
+    // ROLE_GRANTS, which is equivalent only while `settingsAdmin` is granted to
+    // exactly one level. This asserts the derivation across every row shape, so
+    // a fourth precedence tier added to one of them fails here instead of
+    // making the panel and the gate disagree about the one capability the
+    // last-admin invariant is built on.
+    const rows = [];
+    [null, "staff", "manager", "admin"].forEach((role) => {
+      [{}, { settingsAdmin: true }, { voucherIssue: true }].forEach((extras) => {
+        [{}, { settingsAdmin: true }, { voucherIssue: true }].forEach((denies) => {
+          rows.push(entry({ role, extras, denies }));
+        });
+      });
+    });
+    rows.forEach((e) => {
+      CAP_IDS.forEach((cap) => {
+        expect(can(e, cap, true)).toBe(isGranted(capState(e, cap)));
+      });
+      expect(isAdminEntry(e)).toBe(isGranted(capState(e, "settingsAdmin")));
+      // And `can` with the flag on is the same question isAdminEntry asks.
+      expect(isAdminEntry(e)).toBe(can(e, "settingsAdmin", true));
+    });
+    expect(rows.length).toBe(36);
   });
 
   it("capState names the four things a cell can be", () => {

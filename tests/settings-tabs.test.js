@@ -126,8 +126,10 @@ describe("both consumers read the FILTERED list", () => {
     const src = read("src/components/Settings.jsx");
     expect(src).toContain("const fallback = tabs.length ? tabs[0].id");
     expect(src).not.toMatch(/\? tab : "general"/);
-    // And the list it indexes can never be empty: four tabs carry no capability.
-    expect(SETTINGS_TABS.filter((t) => !t.caps).length).toBeGreaterThanOrEqual(2);
+    // And the list it indexes can never be empty. FOUR tabs carry no
+    // capability — the assertion said "at least two" while the comment beside
+    // it said four, which is a guard describing coverage it does not have.
+    expect(SETTINGS_TABS.filter((t) => !t.caps).length).toBe(4);
   });
 
   it("every tab body branches on the DERIVED id, never the raw state", () => {
@@ -153,14 +155,16 @@ describe("the General tab gates its own sections (v18.0.0 phase 3)", () => {
   it("takes `can` and derives the settingsWrite majority once", () => {
     expect(src).toContain("export function GeneralTabContent({ can =");
     expect(src).toContain('const sw = can("settingsWrite")');
-    // Eight sections belong to settingsWrite; a wrapper that stopped being
-    // applied would show up here as a count, not as a missing string.
-    expect((src.match(/\{sw \? \(/g) || []).length).toBeGreaterThanOrEqual(8);
+    // THREE wrappers, not eight: the six contiguous settingsWrite sections
+    // share one gate. A count is what catches a wrapper that stopped being
+    // applied — a missing string would not, because the others still match.
+    expect((src.match(/\{sw \? \(/g) || []).length).toBe(3);
   });
 
   it("gates the three sections that are NOT settingsWrite", () => {
     // Opening hours and Shifts both write settings/operatingHours-family nodes.
-    expect((src.match(/\{can\("hoursEdit"\) \? \(/g) || []).length).toBe(2);
+    // One gate over both adjacent hours sections (Opening hours, Shifts).
+    expect((src.match(/\{can\("hoursEdit"\) \? \(/g) || []).length).toBe(1);
     expect(src).toContain('{recurring && can("recurringManage") ? (');
     expect(src).toContain('{onBackup && can("dataExport") ? (');
   });

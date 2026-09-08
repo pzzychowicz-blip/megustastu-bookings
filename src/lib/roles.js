@@ -210,33 +210,45 @@ export function effectiveRole(role) {
 // granted EXCEPT this one.
 export const ALWAYS_ENFORCED = Object.freeze({ settingsAdmin: true });
 
-// ── The one gate ────────────────────────────────────────────────────────────
+// ── The one ladder ──────────────────────────────────────────────────────────
+// deny → level → extra, in that order, resolved in ONE place. `capState` is
+// that place and `can` is derived from it; so is `isAdminEntry` below.
+//
+// **They were three copies at first and the divergence was already latent.**
+// `isAdminEntry` tested `e.role === "admin"` directly rather than asking
+// `ROLE_GRANTS`, which is equivalent only while `settingsAdmin` is granted to
+// exactly one level — so promoting it to `manager` in the level map would have
+// made `can` say yes and the last-admin invariant say no, silently, about the
+// one capability the whole guard is built on. The file's own comment already
+// said this function exists "so the glyph, the screen-reader text and the
+// toggle all read one function instead of three ladders that agree today"; the
+// gate had not been included in that.
+//
 // `entry` is a sanitized `/roles/{uid}` row or null (no row at all).
-export function can(entry, cap, enforceRoles) {
-  // FIRST, and deliberately above the deny: with enforcement off the app is
-  // byte-for-byte what it was before roles existed, and a deny stored while
-  // experimenting must not leak out through a flag that is switched off.
-  if (!enforceRoles && !ALWAYS_ENFORCED[cap]) return true;
+export function capState(entry, cap) {
   const e = entry || {};
   // A deny beats everything below it. `setCapability` never writes both a deny
   // and an extra for one capability, so this ordering is a guard rather than a
   // policy — but it has to BE one of the two, and refusing is the safe half.
-  if (e.denies && e.denies[cap] === true) return false;
-  const grants = ROLE_GRANTS[effectiveRole(e.role)] || {};
-  if (grants[cap]) return true;
-  return !!(e.extras && e.extras[cap] === true);
-}
-
-// What the grid draws in a person's own column, as one word. Exported so the
-// glyph, the screen-reader text and the toggle all read one function instead of
-// three ladders that agree today.
-export function capState(entry, cap) {
-  const e = entry || {};
   if (e.denies && e.denies[cap] === true) return "denied";
   const grants = ROLE_GRANTS[effectiveRole(e.role)] || {};
   if (grants[cap]) return "level";
   if (e.extras && e.extras[cap] === true) return "extra";
   return "none";
+}
+
+// Can this person do it right now? The grid's pressed state and the app's gate
+// both ask this of a `capState`, so a cell that looks ticked and an action that
+// is permitted cannot come apart.
+export function isGranted(state) { return state === "level" || state === "extra"; }
+
+// ── The one gate ────────────────────────────────────────────────────────────
+export function can(entry, cap, enforceRoles) {
+  // FIRST, and deliberately above the deny: with enforcement off the app is
+  // byte-for-byte what it was before roles existed, and a deny stored while
+  // experimenting must not leak out through a flag that is switched off.
+  if (!enforceRoles && !ALWAYS_ENFORCED[cap]) return true;
+  return isGranted(capState(entry, cap));
 }
 
 // Does the LEVEL grant this, ignoring both maps? The one question that decides
@@ -250,15 +262,12 @@ export function levelGrants(role, cap) {
 // no-self-demotion rule and the panel both turn on this exact question, and
 // asking it in one place is what keeps them from drifting apart.
 export function isAdminEntry(entry) {
-  const e = entry || {};
-  // The deny is checked FIRST and that is what keeps the last-admin invariant
-  // intact after v18.0.0 phase 3's revocation: without it an admin could strip
-  // their own `settingsAdmin` by writing a deny instead of by changing their
-  // level, and `wouldRemoveOwnAdmin` — which asks this exact question of the
-  // old and new rows — would have seen no change at all.
-  if (e.denies && e.denies.settingsAdmin === true) return false;
-  if (e.role === "admin") return true;
-  return !!(e.extras && e.extras.settingsAdmin === true);
+  // The deny is part of the ladder, and that is what keeps the last-admin
+  // invariant intact after v18.0.0 phase 3's revocation: without it an admin
+  // could strip their own `settingsAdmin` by writing a deny instead of by
+  // changing their level, and `wouldRemoveOwnAdmin` — which asks this exact
+  // question of the old and new rows — would have seen no change at all.
+  return isGranted(capState(entry, "settingsAdmin"));
 }
 
 // ── Sanitize ────────────────────────────────────────────────────────────────
