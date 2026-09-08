@@ -150,6 +150,11 @@ export const ListView = memo(function ListView({
   // v18.0.0: code -> voucher, so a card can say whether an attached voucher is
   // still unsettled. A STABLE object from App's memo, per the React.memo rule.
   vouchersByCode = {},
+  // v18.0.0 phase 4: the module gate, as a SCALAR — this view is `React.memo`'d
+  // and a memo cannot see a live binding. The tag keys on `b.voucherCode`
+  // rather than on the map, so passing an empty `vouchersByCode` would not
+  // hide it; the gate has to be its own value.
+  vouchersOn = true,
   showFinished = false, onToggleFinished = () => {},
   // v17.14.0: `emptyWalkin` — one name across all three views, see TimelineView.
   // `isEmpty` comes from App too: the three views used to answer "is this day
@@ -490,7 +495,7 @@ export const ListView = memo(function ListView({
         // Two states, one flag. An UNSETTLED booking — completed, carrying a
         // voucher, with no ledger entry — is the one that needs acting on, so
         // it is the one drawn in warn; anything else is neutral information.
-        const vCode = normalizeCode(b.voucherCode);
+        const vCode = vouchersOn ? normalizeCode(b.voucherCode) : "";
         const vUnsettled = vCode ? isUnsettled(b, vouchersByCode) : false;
         const voucherTag = vCode ? (
           <CardFlag

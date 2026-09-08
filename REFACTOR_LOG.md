@@ -21054,3 +21054,66 @@ Also measured while verifying: three named switches with correct `aria-checked`
 controls and not its state, per v17.15.4.
 
 Gate: `103.33 kB` gz · **1060 tests** · 0 lint errors (71 warnings) · style OK.
+
+### Commit 34 — off means every surface
+
+`hasModule("vouchers")` becomes ONE derivation in App (`vouchersOn`) and reaches
+six places. A scalar, not the function and not the map, for the reason
+`hoursSig`, `layoutSig` and `turnBuffer` are all scalars: every view that reads
+it is `React.memo`'d, and a memo cannot see a live binding.
+
+| Surface | Gate |
+|---|---|
+| Settings tab | `SETTINGS_TABS` gains `module`, `visibleTabs(can, hasModule)` filters on it |
+| Booking form's picker | `vouchersOn` prop, tested BEFORE the existing "any vouchers exist" condition |
+| List card's voucher tag | `vouchersOn` prop |
+| The redeem modal | `voucherToAsk`, the funnel both raise sites already share |
+| Unsettled strip section | the `unsettledBookings` memo |
+| Printed day sheet | `vouchersOn` prop |
+
+**Two of those are gated at a funnel rather than at the render**, and both times
+the render site would have been the wrong place. `voucherToAsk` is the single
+door for the form's save AND `updateStatus` — itself the one door for the popup,
+the List buttons and the S/C shortcuts — so gating it covers five entry points
+with one line. And `unsettledBookings` feeds the strip section AND
+`notifAnnounce`: gating the section alone would have left a screen reader told
+about a voucher the module has hidden.
+
+**Neither the map nor an empty list is a gate.** The List tag keys on
+`b.voucherCode`, so passing an empty `vouchersByCode` hides nothing; the form's
+picker already rendered whenever `form.voucherCode` was set, so a booking
+carrying a code would have kept its field. The stored code is untouched in both
+— hidden is not deleted, which is the promise the Modules section makes.
+
+`visibleTabs` takes the module gate FIRST and returns before `can` runs. The
+other order would let a capability grant re-open a feature the restaurant
+switched off.
+
+**The tab-list guard caught the signature change, which is the guard working.**
+`tests/settings-tabs.test.js` pinned the literal `visibleTabs(K.can)` and failed
+the moment a second gate was passed — right to fail on a consumer that DROPS a
+gate, wrong to fail on one that gains one. It reads the call's ARGUMENTS now and
+asserts both gates at both consumers. Anchoring that read cost one more lesson
+already in this file: a bare search for `visibleTabs(` found the COMMENT above
+the call, which quotes `visibleTabs(can)` in prose — the `tests/csp.test.js` boot
+block and the `src/index.css` header, a third time. It anchors on the assignment.
+
+Verified live on DEV, both directions. Off: **seven tabs with Vouchers gone**,
+the ←/→ cycle stepping over it, the booking form showing Notes and Deposit and
+no Gift voucher field, and the switch persisting to Firebase. On: eight tabs and
+the field back.
+
+Gate: `103.42 kB` gz · **1062 tests** · 0 lint errors (71 warnings) · style OK.
+
+### A note on the verification rig
+
+The browser pane's frame-to-CSS scale **changed between individual calls** this
+session — measured at 1.2461, then 1.0, then 1.9499, then 1.2549, each time by
+clicking a known point and reading `e.clientX` off a capture-phase listener.
+CLAUDE.md records that it must be calibrated per session and that it changes
+when the pane is reopened; what this session adds is that a calibration can go
+stale between two consecutive tool calls, so a coordinate click is not reliable
+for a multi-step flow at all. Direct DOM activation was used for the last leg —
+sound HERE because every control involved is a plain `onClick`, which is exactly
+what a synthetic click drives faithfully, and NOT a substitute for a finger on
+anything gesture-shaped or `:active`-shaped, which is the standing rule.

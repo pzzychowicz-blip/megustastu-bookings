@@ -1093,8 +1093,10 @@ function BookingApp({uid}){
   // ←/→ tab cycle.
   const {
     can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
-    // v18.0.0 phase 4 — the module registry.
-    modules, setModuleEnabled,
+    // v18.0.0 phase 4 — the module registry. `hasModule` is the gate every
+    // module-owned surface asks, and it is checked BEFORE `can`: a module that
+    // is off is hidden from everybody including an admin.
+    modules, hasModule, setModuleEnabled,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   } = useRoles({
     uid: uid,
@@ -1123,6 +1125,10 @@ function BookingApp({uid}){
     const total = open.reduce(function (sum, v) { return sum + remainingOf(v); }, 0);
     return hideWarning(open.length, money(total, generalSettings.currency));
   }, [vouchers, generalSettings.currency]);
+  // ONE derivation, passed down as a SCALAR. Every view that reads it is
+  // `React.memo`'d and a memo cannot see a live binding or a fresh function —
+  // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
+  const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
@@ -2690,7 +2696,7 @@ function BookingApp({uid}){
     // list — a cycle over the unfiltered one would step onto the Admin tab the
     // render side refuses to show. `setRolesFor` is escapeAction's target for
     // the capability grid.
-    can:can,setRolesFor:setRolesFor,requestDelete:requestDelete,
+    can:can,hasModule:hasModule,setRolesFor:setRolesFor,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
     reminderEditor:reminderEditor,setReminderEditor:setReminderEditor,
     saveReminderFromEditor:saveReminderFromEditor,
@@ -2754,6 +2760,11 @@ function BookingApp({uid}){
   // been settled against it, which is what makes the re-entry after a held or
   // retried write idempotent.
   function voucherToAsk(id,status){
+    // v18.0.0 phase 4: the module gate, at the funnel both raise sites already
+    // share — the form's save and `updateStatus` (which is itself the one door
+    // for the popup, the List buttons and the S/C shortcuts). With vouchers off
+    // a completion must never stop to ask about one.
+    if(!vouchersOn) return null;
     if(status!=="completed") return null;
     const b=bookings.find(function(x){return x.id===id;});
     const code=b?normalizeCode(b.voucherCode):"";
@@ -3282,9 +3293,14 @@ function BookingApp({uid}){
   // today, unlike late/waitlist/overlap: the whole point of the state is that
   // staff settle it NEXT service, which means seeing it on a day that is no
   // longer today. ClashBanner is scoped the same way.
+  // v18.0.0 phase 4: gated HERE rather than at the strip section, because this
+  // one memo feeds both the section and `notifAnnounce` — gating the render
+  // site alone would leave a screen reader told about a voucher the module has
+  // hidden. It also skips the scan entirely when the module is off.
   const unsettledBookings=useMemo(function(){
+    if(!vouchersOn) return EMPTY_ARR;
     return bookings.filter(function(b){return b.date===viewDate&&isUnsettled(b,vouchersByCode);});
-  },[bookings,viewDate,vouchersByCode]);
+  },[bookings,viewDate,vouchersByCode,vouchersOn]);
   const notifSections=[].concat(
     appBannerSections({
       isOnline:isOnline,
@@ -3590,6 +3606,7 @@ function BookingApp({uid}){
   // stop being true.
   const listEl=<ListView
     vouchersByCode={vouchersByCode}
+    vouchersOn={vouchersOn}
     bookings={bookings}
     date={viewDate}
     today={today}
@@ -3699,7 +3716,7 @@ function BookingApp({uid}){
   const dateCtrlShift=(isMobile||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
-  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />;
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -4000,6 +4017,7 @@ function BookingApp({uid}){
               currency={generalSettings.currency}
               vouchers={vouchers}
               vouchersByCode={vouchersByCode}
+              vouchersOn={vouchersOn}
               regularMin={generalSettings.regularMin}
               today={today}
               nowMins={nowMins}
@@ -4114,6 +4132,7 @@ function BookingApp({uid}){
             enforceRoles={enforceRoles}
             onSetEnforceRoles={setEnforceRoles}
             modules={modules}
+            hasModule={hasModule}
             onSetModule={setModuleEnabled}
             moduleWarning={moduleWarning}
             onSetRole={setRole}

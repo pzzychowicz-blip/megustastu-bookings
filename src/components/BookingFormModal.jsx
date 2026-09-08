@@ -72,6 +72,7 @@ export function BookingFormModal({
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = 2, // v17.0.0: settings/general
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
+  vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
@@ -843,7 +844,10 @@ export function BookingFormModal({
         like both of them: the first version gave it its own Section and its own
         hand-written heading, so one label treatment existed twice on one form.
         Rendered only once vouchers are actually in use, so an app that has
-        never issued one is unchanged. */}{(vouchers&&vouchers.length)||form.voucherCode?(
+        never issued one is unchanged, and v18.0.0 phase 4 adds the module
+        gate FIRST: off hides the field even on a booking that already carries a
+        code, which is the whole meaning of the switch. The code itself stays in
+        the draft and is saved back untouched — hidden is not deleted. */}{vouchersOn&&((vouchers&&vouchers.length)||form.voucherCode)?(
         <VoucherPicker
           code={form.voucherCode||""}
           onChange={function(c){setForm(function(f){return Object.assign({},f,{voucherCode:c});});}}

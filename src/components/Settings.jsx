@@ -970,7 +970,7 @@ export function SettingsContent({
   can, isAdmin, myUid, roleRows, enforceRoles, onSetEnforceRoles,
   // v18.0.0 phase 4 — the module registry. `moduleWarning(id)` is App's, not
   // the registry's: only App can count what a module holds.
-  modules, onSetModule, moduleWarning,
+  modules, hasModule, onSetModule, moduleWarning,
   onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite,
   onOpenCapabilities,
   appVersion,
@@ -1089,7 +1089,7 @@ export function SettingsContent({
   // never renders empty for even one frame, and the effect corrects the STATE
   // so the ←/→ cycle (which reads `settingsTab` in App) does not keep pointing
   // at a tab that is gone.
-  const tabs = visibleTabs(can);
+  const tabs = visibleTabs(can, hasModule);
   // The fallback is the first VISIBLE tab, not a hard-coded "general" — v18.0.0
   // gated `general` itself on `settingsWrite`, so a literal there would have
   // reset a staff account onto a tab that is not in its own tab bar. The list

@@ -38,7 +38,7 @@ const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" /* 
 
 // v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
 // re-render on every BookingApp render; props are state objects + primitives.
-export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency }) {
+export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency, vouchersOn = true }) {
   // /code-review: the sheet is PERMANENTLY mounted (display:none) and BookingApp
   // re-renders every 15s tick — memoise the filter/sort/summary passes so they
   // run only when the underlying data (not the clock) changes. This is the
@@ -81,7 +81,12 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
               <th style={th}>Pax</th>
               <th style={th}>Tables</th>
               <th style={th}>Phone</th>
-              <th style={th}>Deposit / voucher</th>
+              {/* v18.0.0 phase 4: the column is SHARED, so with the vouchers
+                  module off it does not disappear — it narrows to what is left.
+                  A header naming a feature the restaurant does not have is the
+                  same defect on paper as on screen, and this sheet is read at
+                  the table by people who never open Settings. */}
+              <th style={th}>{vouchersOn ? "Deposit / voucher" : "Deposit"}</th>
               <th style={th}>Notes</th>
             </tr>
           </thead>
@@ -100,7 +105,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                       question — has this guest already paid something. */}
                   <td style={cell}>{[
                     (Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : null,
-                    normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
+                    vouchersOn && normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
                   ].filter(Boolean).join("  ·  ") || "—"}</td>
                   <td style={cell}>{b.notes || ""}</td>
                 </tr>

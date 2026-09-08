@@ -93,20 +93,65 @@ describe("visibleTabs — the one filter", () => {
 describe("both consumers read the FILTERED list", () => {
   // The whole point. Each of these is a place that would silently disagree with
   // the other if it read SETTINGS_TABS directly.
-  it("the ←/→ cycle derives from visibleTabs, not from SETTINGS_TABS", () => {
+  // v18.0.0 phase 4: BOTH gates, at both consumers. The assertions match the
+  // call with its arguments rather than a fixed string, because pinning
+  // `visibleTabs(K.can)` exactly is what failed the moment the second gate was
+  // added — which is the guard working, but it should fail on a consumer that
+  // DROPS a gate, not on one that gains one. What must not drift is that each
+  // consumer passes the same set.
+  // Anchored on the ASSIGNMENT and not on `visibleTabs(`, because the comment
+  // directly above that call quotes `visibleTabs(can)` in prose — so a bare
+  // search finds the sentence about the call before the call. That is this
+  // repo's own recorded trap (`tests/csp.test.js`' boot block, `src/index.css`'
+  // header): prose that names the thing a matcher hunts for is indistinguishable
+  // from the thing, and it looks perfect in review.
+  const callArgs = (src, call) => {
+    const i = src.indexOf(call);
+    if (i < 0) return null;
+    return src.slice(i + call.length, src.indexOf(")", i));
+  };
+
+  it("the ←/→ cycle derives from visibleTabs, with every gate", () => {
     const src = read("src/hooks/useKeyboardShortcuts.js");
-    expect(src).toContain("visibleTabs(K.can)");
-    // A raw read would be the bug — the cycle stepping onto a tab the render
-    // side refuses to show.
+    const args = callArgs(src, "const TABS=visibleTabs(");
+    expect(args).not.toBe(null);
+    expect(args).toContain("K.can");
+    // The module gate. Without it the cycle steps onto the Vouchers tab of a
+    // restaurant that has switched vouchers off — the capability bug of
+    // v18.0.0 phase 3, one gate over.
+    expect(args).toContain("K.hasModule");
     expect(src).not.toContain("SETTINGS_TABS.map");
     expect(src).not.toContain("SETTINGS_TABS.filter");
   });
 
-  it("the TabBar renders the filtered list", () => {
+  it("the TabBar renders the filtered list, with every gate", () => {
     const src = read("src/components/Settings.jsx");
-    expect(src).toContain("const tabs = visibleTabs(can)");
+    const args = callArgs(src, "const tabs = visibleTabs(");
+    expect(args).not.toBe(null);
+    expect(args).toContain("can");
+    expect(args).toContain("hasModule");
     expect(src).toContain("tabs={tabs}");
     expect(src).not.toContain("tabs={SETTINGS_TABS}");
+  });
+
+  it("hides a module-gated tab, and only that one", () => {
+    const MODULED = SETTINGS_TABS.filter((t) => t.module);
+    expect(MODULED.length).toBeGreaterThanOrEqual(1);
+    const ids = visibleTabs(() => true, () => false).map((t) => t.id);
+    MODULED.forEach((t) => expect(ids).not.toContain(t.id));
+    // …and hides ONLY those: an emptied tab bar would satisfy the line above.
+    SETTINGS_TABS.filter((t) => !t.module).forEach((t) => expect(ids).toContain(t.id));
+  });
+
+  it("checks the module BEFORE the capability", () => {
+    // The order is load-bearing: a module that is off hides the tab from
+    // everybody INCLUDING an admin. The other order would let a capability
+    // grant re-open a feature the restaurant switched off. Proven with a tab
+    // carrying both gates would need a fixture; what is checkable here is that
+    // an all-capable caller still loses a module-gated tab.
+    const ids = visibleTabs(() => true, (m) => m !== "vouchers").map((t) => t.id);
+    expect(ids).not.toContain("vouchers");
+    expect(ids).toContain("admin");
   });
 
   it("a tab that disappears resets rather than stranding the reader", () => {

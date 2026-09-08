@@ -228,7 +228,11 @@ export function useKeyboardShortcuts(ctx){
           // would step onto a tab the render side refuses to show — the same
           // bug as a hand-copied list, reached by filtering in only one of the
           // two places that read it.
-          const TABS=visibleTabs(K.can).map(function(t){return t.id;});
+          // v18.0.0 phase 4: and `hasModule`, the second gate, for the same
+          // reason — the Vouchers tab disappears with its module, and an arrow
+          // cycle that still knew about it would land on a tab that renders
+          // nothing.
+          const TABS=visibleTabs(K.can,K.hasModule).map(function(t){return t.id;});
           let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
           const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);

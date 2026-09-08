@@ -45,7 +45,12 @@ export const SETTINGS_TABS = [
   { id: "general",   label: "General",   caps: ["settingsWrite", "hoursEdit", "recurringManage", "dataExport"] },
   { id: "layout",    label: "Layout",    caps: ["layoutEdit"] },
   { id: "customers", label: "Customers" },
-  { id: "vouchers",  label: "Vouchers" },
+  // v18.0.0 phase 4: `module` beside `caps`, for the same reason `caps` sits
+  // here rather than as a list of ids elsewhere — a second list is what this
+  // comment block has been about since v16.0.0. The two gates are different
+  // questions and both go through `visibleTabs`: `module` asks whether this
+  // restaurant HAS the feature, `caps` who may use it.
+  { id: "vouchers",  label: "Vouchers", module: "vouchers" },
   { id: "reminders", label: "Reminders", caps: ["reminderManage"] },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
@@ -71,10 +76,20 @@ export const SETTINGS_TABS = [
 // `can` is optional so a caller with no roles context (and any future one)
 // degrades to "show everything that is not capability-gated" rather than to an
 // empty tab bar.
-export function visibleTabs(can) {
-  if (typeof can !== "function") return SETTINGS_TABS.filter(function (t) { return !t.caps; });
+// v18.0.0 phase 4 adds the SECOND gate, `hasModule`, and the order is
+// load-bearing: a module that is off hides the tab from everybody INCLUDING an
+// admin, so it is tested first and `can` never runs for that tab. The other
+// order would let a capability grant re-open a feature the restaurant switched
+// off. Both are optional so a caller with no context degrades to "show what is
+// not gated" rather than to an empty tab bar.
+export function visibleTabs(can, hasModule) {
+  const canFn = typeof can === "function" ? can : null;
+  const modFn = typeof hasModule === "function" ? hasModule : null;
   return SETTINGS_TABS.filter(function (t) {
-    return !t.caps || t.caps.some(function (c) { return can(c); });
+    if (t.module && modFn && !modFn(t.module)) return false;
+    if (!t.caps) return true;
+    if (!canFn) return false;
+    return t.caps.some(function (c) { return canFn(c); });
   });
 }
 
