@@ -1077,6 +1077,33 @@ its declaration does not.** An ink that inverts the same way the composite does
 theme is broken: 4.59:1 light but 2.30:1 dark, against white's 1.30 / 6.42.
 Measured live at 5.14:1 light and 4.60:1 dark, so it is no longer an exemption.
 
+### External links (v18.0.0 phase 4) — the app's first, and its only one
+
+The Integrations panel points at Vercel. Until then this app contained **no
+external link at all**, and the skip link is the only internal one — so there
+was no answer to "what does a link look like here" and the next one would have
+invented a second.
+
+**It is `color: var(--accent)` + `FW.semi` inside body copy, and nothing else** —
+no underline, no icon, no chip. That is not a new treatment: it is the emphasis
+treatment three surfaces already use for a name inside a sentence
+(`HistoryPopup`'s author, `Settings`' count pill, `LayoutSettings`' add button),
+so a link inherits a shape the app already reads as "this word matters" rather
+than adding a fourth. `--accent` on a card is already registered against both
+themes by those call sites.
+
+**Always `target="_blank"` with `rel="noreferrer noopener"`.** This app is a
+staff tool held open across a whole service on one tablet; a link that navigated
+the tab away would drop the shift out of the app, and re-entry costs a full
+reload and a Firebase re-sync.
+
+**A link is not a button and must not be styled as one.** The distinction this
+app needs is that a button acts on the restaurant's data and a link leaves the
+app entirely, which is exactly the moment a shared appearance would be
+misleading. `check:style` Rule 10 (an interactive control carries
+`.mgt-hover-scale`) governs `<button>` and `[role="button"]`, so a plain anchor
+is outside it by construction — deliberately, not by omission.
+
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
