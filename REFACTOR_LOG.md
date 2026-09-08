@@ -20938,3 +20938,63 @@ two".
 - **`GATED_CAPS` is now an alias of `CAP_IDS`** and its test asserts a
   tautology. Kept: the name is what the gate-coverage test MEANS, and the
   tautology records that the set widened. The stale comment was the real defect.
+
+---
+
+## Phase 4 — the module registry and Integrations
+
+**2026-09-08.** Session 4 of seven. The switch that says which features a
+restaurant HAS, as opposed to which a person may use — and, under
+project-per-restaurant, the whole of "restaurant B has no WhatsApp".
+
+### Commit 32 — a module is not a capability
+
+`src/lib/modules.js` is the pure registry: two modules (`vouchers`, `whatsapp`),
+a stored shape `{[id]: {enabled}}` under `settings/admin.modules`, and one gate
+`moduleOn(modules, id)`.
+
+**It is a new FIELD on an existing node, so there is no rules change.**
+`settings/admin` is already admin-only to write, unconditionally, and carries no
+`.validate`. A new NODE would have needed both a CAS and its own `.write` grant
+(CLAUDE.md's rule of law, since the root grant went in v17.16.7) — which is why
+the registry lives on the existing node rather than at `/modules`.
+
+**`roles.js` answers "may this person", this answers "does this restaurant
+have".** They compose in one direction only and the order is load-bearing: a
+module that is off hides the surface from everybody including an admin, so
+`moduleOn` is checked FIRST and `can` never runs. The other order would let a
+capability grant re-open a feature the restaurant switched off.
+
+Registering vouchers as an eighteenth capability was the tempting merge and it
+says the wrong sentence: "this restaurant has no vouchers" would have rendered
+as "nobody here may redeem a voucher" — the same screen, and the wrong thing to
+hand a new manager. A capability is revoked from one waiter and restored next
+week; a module being off is a fact about the restaurant.
+
+**Defaults are per-module and absence resolves through them.** WhatsApp ships
+OFF because its code does not exist in the app until phase 5 — a default-on
+switch would offer to turn on a module that is not there. Vouchers ships ON
+because it shipped in phase 1, which is what makes this commit a no-op for the
+restaurant on the day it deploys. An absent `modules` — the production state on
+the day this lands — is every module at its own default, not everything off.
+
+**The whole-node write is where this stopped being free.** `setEnforceRoles`
+built its payload from its own argument alone (`sanitizeAdminSettings({
+enforceRoles: on })`), which was correct while the node held one field and would
+have **silently reset `modules` to its defaults on the next toggle of an
+unrelated switch**. Both writers now go through one `writeAdmin(fields)`, which
+MERGES onto `adminRef.current` — a mirror, not the state, because two switches
+tapped in one render would otherwise both build on the same stale value and the
+second would undo the first. The listener assigns that mirror on the line above
+its `setState`, the invariant v17.16.10 pinned for `usePersistence`; here a
+stale mirror would not be a skipped field but the OTHER switch reverting.
+
+`tests/modules.test.js` — 17 tests. The four properties that fail silently:
+absence reads as defaults, an unexpected stored value falls to the default
+rather than to truthiness (`"false"` read as on would show a module the
+restaurant switched off), `withModule` leaves the other switches where they
+were, and `sanitizeAdminSettings` round-trips `modules` — that last one is what
+stops the next `enforceRoles` toggle deleting the registry from the server.
+
+Gate: `103.04 kB` gz · **1056 tests** · 0 lint errors (71 warnings, baseline) ·
+style OK. Phase 3 left it at `102.58 kB` / 1039.

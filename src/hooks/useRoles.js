@@ -44,11 +44,12 @@ import {
   sanitizeInvite, sanitizeInvites, normalizeEmail, wouldRemoveOwnAdmin,
   applyInviteFields, userRows,
 } from "../lib/roles";
+import { sanitizeModules, withModule, moduleOn, DEFAULT_MODULES } from "../lib/modules";
 
 // The flag's node. `v` is the presence marker every settings node carries —
 // RTDB drops an all-default object, and the scalar keeps the node present once
 // written (the priorities lesson).
-export const DEFAULT_ADMIN_SETTINGS = { v: 1, enforceRoles: false };
+export const DEFAULT_ADMIN_SETTINGS = { v: 1, enforceRoles: false, modules: DEFAULT_MODULES };
 
 export function sanitizeAdminSettings(s) {
   const src = s && typeof s === "object" ? s : {};
@@ -59,6 +60,18 @@ export function sanitizeAdminSettings(s) {
     // while the server read it as off would hide controls the database was
     // still accepting — the disagreement this whole phase exists to prevent.
     enforceRoles: src.enforceRoles === true,
+    // v18.0.0 phase 4. A new FIELD on an existing node, so there is no rules
+    // change: `settings/admin` is already admin-only to write, unconditionally,
+    // and carries no `.validate`. A new NODE would have needed both a CAS and
+    // its own `.write` grant (CLAUDE.md's rule of law) — which is the reason
+    // the registry lives here and not at `/modules`.
+    //
+    // NOTE `sanitizeModules` resolves each module through its own
+    // `defaultEnabled` rather than to `false`, so the node written before a
+    // module existed reads that module at its default. Absent `modules`
+    // entirely — the production state on the day this deploys — is every module
+    // at its default, which is the shipped behaviour unchanged.
+    modules: sanitizeModules(src.modules),
   };
 }
 
@@ -75,6 +88,7 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
   const rolesLoaded = useRef(false);
   const invitesLoaded = useRef(false);
   const adminLoaded = useRef(false);
+  const adminRef = useRef(DEFAULT_ADMIN_SETTINGS);   // mirror — see `writeAdmin`
   const adminRevRef = useRef(0);
   const lastStampRef = useRef(0);
   const lastPatchSigRef = useRef(null);
@@ -174,7 +188,14 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
       const val = snap.val();
       // Node ABSENT is the production state on the day this deploys, and it
       // must read as OFF — the same thing `.val() !== true` does in the rules.
-      setAdminSettings(val && typeof val === "object" ? sanitizeAdminSettings(val) : DEFAULT_ADMIN_SETTINGS);
+      const next = val && typeof val === "object" ? sanitizeAdminSettings(val) : DEFAULT_ADMIN_SETTINGS;
+      // The mirror is assigned on the line ABOVE its setState, which is the
+      // invariant every mirrored writer in this app depends on: a set site that
+      // forgets it hands the next `writeAdmin` a stale base, and since that
+      // write is a whole-node replace the staleness would not be a skipped
+      // field — it would be the OTHER switch reverting.
+      adminRef.current = next;
+      setAdminSettings(next);
       adminLoaded.current = true;
     }, dbError("settings/admin"));
     return unsub;
@@ -328,22 +349,58 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
     });
   }, [ready, uid, userEmail]);
 
-  // ── The enforcement flag ──────────────────────────────────────────────────
-  const setEnforceRoles = useCallback(function (on) {
+  // ── Writing the node ──────────────────────────────────────────────────────
+  // `settings/admin` is a WHOLE-NODE write under the rev CAS, so every writer
+  // must send the whole node — and v18.0.0 phase 4 is where that stopped being
+  // free. `setEnforceRoles` used to build its payload from its own argument
+  // alone (`sanitizeAdminSettings({ enforceRoles: on })`), which was correct
+  // while the node held one field and would have SILENTLY RESET `modules` to
+  // its defaults on the next toggle of an unrelated switch. So both writers go
+  // through here, and the payload is a MERGE onto what is stored.
+  //
+  // The mirror is `adminRef` rather than the `adminSettings` state, for the
+  // reason every other writer in this app reads a ref: two switches tapped in
+  // one render would both build on the same stale value and the second would
+  // undo the first.
+  const writeAdmin = useCallback(function (fields, failMsg) {
     if (!adminLoaded.current) {
       console.warn("[SAFE] Refused to write settings/admin — initial read has not completed yet.");
       return false;
     }
-    const next = sanitizeAdminSettings({ enforceRoles: on });
+    const next = sanitizeAdminSettings(Object.assign({}, adminRef.current, fields));
+    adminRef.current = next;
     setAdminSettings(next);
     writeWithRev("settings/admin", next, adminRevRef, function () {
-      setWriteWarning("Couldn't change role enforcement — you may not have permission, or another device changed it first.");
+      setWriteWarning(failMsg);
     });
     return true;
   }, [setWriteWarning]);
 
+  // ── The enforcement flag ──────────────────────────────────────────────────
+  const setEnforceRoles = useCallback(function (on) {
+    return writeAdmin({ enforceRoles: on },
+      "Couldn't change role enforcement — you may not have permission, or another device changed it first.");
+  }, [writeAdmin]);
+
+  // ── The module registry ───────────────────────────────────────────────────
+  // `withModule` applies one switch to the stored map, so an admin turning
+  // WhatsApp on does not restate what vouchers is set to.
+  const setModuleEnabled = useCallback(function (id, on) {
+    return writeAdmin({ modules: withModule(adminRef.current.modules, id, on) },
+      "Couldn't change that module — you may not have permission, or another device changed it first.");
+  }, [writeAdmin]);
+
+  // The gate the app asks, shaped like `can` for the same reason: memoised on
+  // the one thing it reads, so a `React.memo`'d view taking it as a prop is not
+  // defeated on every render.
+  const modules = adminSettings.modules;
+  const hasModule = useCallback(function (id) {
+    return moduleOn(modules, id);
+  }, [modules]);
+
   return {
     can, isAdmin, myEntry, enforceRoles, setEnforceRoles,
+    modules, hasModule, setModuleEnabled,
     roles, invites, rows, rolesReady: ready,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
   };
