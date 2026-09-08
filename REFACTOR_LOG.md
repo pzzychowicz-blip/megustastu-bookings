@@ -20822,3 +20822,26 @@ asserting on the bracketed `[modal-auto-height]` label rather than the bare
 words — the checker's own success line now contains "modal auto-height", so a
 loose match would pass on a PASSING run, which is the trap Rule 10's fixtures
 already walked into once.
+
+### The server half, verified against the DEPLOYED rules
+
+Commits 28–29 were written against the emulator; Patryk then published the rules
+to DEV, which made the other half testable. Driven by REST with the signed-in
+account's own ID token, so the UI gate is bypassed entirely and only the
+database is answering:
+
+| what | before | after |
+|---|---|---|
+| `settings/operatingHours` + rev, same account, same rev arithmetic | **200** | **401** once `hoursEdit` is denied |
+| `reminders` + rev, correct rev throughout | **200** → | **401** denied → **200** restored |
+
+The `reminders` row is the one that needed the third column. `/reminders` was
+`auth != null` until commit 28 — anyone signed in could write it — so a single
+401 would not have distinguished the new gate from a rev-CAS rejection. Writing
+the node back to itself with a correct `rev + 1`, three times, with only the
+deny changing between them, does.
+
+The deny itself also had to survive the deployed `.validate`: it does —
+`roles/{uid}/denies` reads back `{ hoursEdit: true }` after a tap in the grid,
+which is the new `denies/$cap` rule accepting a write the previous version of
+the rules had no name for.
