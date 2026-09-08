@@ -21191,7 +21191,7 @@ is phases 0–3's, unchanged.
 **One version, one entry.** Phase 4 extended this entry with commits 32–35; the
 next phase extends it again.
 
-### Commit 36 — the stripper existed, and nine of eleven tests were not using it
+### Commit 36 — the stripper existed, and eleven of thirteen tests were not using it
 
 The prose-versus-code trap, third occurrence, fixed at the class rather than at
 the call site.
@@ -21199,7 +21199,7 @@ the call site.
 **Nothing new was needed.** `scripts/strip-comments.mjs` has existed since
 v17.13.0 — written after `check-style-invariants` and `a11y.test.js` each
 reported a false positive on prose about the thing they were hunting — and it
-skips strings and regex literals properly. Two tests imported it. **Nine did
+skips strings and regex literals properly. Two tests imported it. **Eleven did
 not, and nothing said so**: the convention was real and unenforced, which is the
 shape this file names for the settings-tab list, the modal-visibility lists and
 the four dismissal Sets.
@@ -21247,3 +21247,54 @@ first attempt at this fix got 28 by adding two to the stale number instead of
 counting. Measured: **30 files, 1068 tests.**
 
 Gate: `103.42 kB` gz · **1068 tests** · 0 lint errors (71 warnings) · style OK.
+
+### Commit 37 — `/code-review` fixes: six, and two of them were mine to measure
+
+**1. `visibleTabs` degraded in opposite directions for its two gates.** A missing
+`can` hid every capability-gated tab; a missing `hasModule` **showed** every
+module-gated one, because `t.module && modFn && !modFn(...)` short-circuits to
+false when `modFn` is absent. So a future third caller — or either existing one
+losing the prop in a refactor — would silently re-open the Vouchers tab for a
+restaurant that had switched the module off, with nothing erroring. Absent
+context now hides a gated tab whichever gate it is. Four existing tests failed
+on the fix, and **they were pinning the asymmetry by accident**: they passed
+`can` alone and asserted `UNGATED`, which contains the module-gated tab. They
+exercise the real two-gate call now, and the degradation test asserts both.
+
+**2. `hideWarning` hardcoded the word "voucher"** — in the file whose own header
+says the registry "knows what modules EXIST, never what they hold", eighty lines
+above. The assertion and its violation shipped in one commit. The noun is the
+caller's now (`hideWarning(count, amount, noun, plural?)`); what stays here is
+the sentence shape and the number agreement, which is what actually went wrong
+on screen. Pinned with a non-voucher noun and an irregular plural.
+
+**3. `scripts/strip-comments.mjs` mistook a JSX self-closing tag for a regex.**
+`regexAllowedAfter` allows a regex after `}` (true in JS: `if(x){}/re/`), so
+`<Foo a={b} /> // prose` opened a pseudo-regex at `/>`, ran unterminated to end
+of line and **emitted the comment as code** — the exact hazard this module
+exists to remove, in the syntax it is mostly pointed at. Zero occurrences in
+`src/` today, so it was latent; what made it worth fixing is that commit 36 had
+just widened this utility from 2 callers to 13 **without checking its blind
+spots**, which is how a shared checker quietly stops checking. `/>` is never a
+regex opener now; a genuine `/>/ ` literal is the only thing given up and
+appears nowhere here. Pinned alongside the two cases that must not regress (a
+regex containing `>`, and `/Edg\//`).
+
+**4. The hide-warning's buttons stayed clickable through their own collapse.**
+`Reveal` caches its last truthy children and holds them mounted for the exit —
+measured live: after the first click the confirm button is *the same DOM node*,
+still mounted and clickable. A second tap sent a second whole-node
+`settings/admin` write with identical content and advanced `adminRev` again.
+Idempotent, so waste rather than corruption, which is why the fix is a local
+`answered` latch rather than the full commit-once guard. Same class as
+`submitGuard`'s lesson, one surface over.
+
+**5 and 6, both documentation, both the drift this release keeps finding.** The
+stripper figures said "two of eleven" and "nine places"; measured, it is **two
+of thirteen and eleven converted** — the count was taken before the new guard
+found its last two offenders and never re-taken, inside the row that is about
+exactly that. And `test-hygiene.test.js`'s header cited `settings/settings-tabs`,
+which is not a path, in the one file whose whole subject is a matcher and its
+prose disagreeing.
+
+Gate: `103.44 kB` gz · **1070 tests** · 0 lint errors (71 warnings) · style OK.

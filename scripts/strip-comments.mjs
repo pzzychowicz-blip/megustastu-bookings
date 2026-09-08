@@ -74,6 +74,17 @@ export function stripComments(text) {
       if (c === '"' || c === "'" || c === "`") { quote = c; res += c; i++; continue; }
       if (c === "/" && d === "/") break;
       if (c === "/" && d === "*") { block = true; i += 2; continue; }
+      // `/>` is a JSX self-closing tag, never a regex opener — and this line is
+      // a v18.0.0-phase-4 /code-review fix, not decoration. `regexAllowedAfter`
+      // says a `/` after `}` may open a regex (true in JS: `if(x){}/re/`), so
+      // `<Foo a={b} /> // prose` opened a pseudo-regex at `/>`, ran unterminated
+      // to end of line, and emitted the trailing COMMENT as code — the exact
+      // hazard this module exists to remove, in the one syntax it is mostly
+      // pointed at. Measured before the fix: that line came back verbatim while
+      // `const x = 1; // prose` stripped correctly. A genuine `/>/ ` regex
+      // literal (matching a ">") is the only thing given up, and it appears
+      // nowhere in this repo; an unterminated run still fails SAFE either way.
+      if (c === "/" && d === ">") { res += c; i++; continue; }
       if (c === "/" && regexAllowedAfter(res)) { i = skipRegex(line, i, (t) => { res += t; }); continue; }
       res += c; i++;
     }

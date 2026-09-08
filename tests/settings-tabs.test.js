@@ -34,13 +34,21 @@ describe("visibleTabs — the one filter", () => {
   // capability it happens to name.
   const UNGATED = SETTINGS_TABS.filter((t) => !t.caps).map((t) => t.id);
   const GATED = SETTINGS_TABS.filter((t) => t.caps);
+  // v18.0.0 phase 4 /code-review: these assertions are about the CAPABILITY
+  // axis, so they hold the module axis at "this restaurant has everything".
+  // Passing one gate and leaving the other undefined stopped being a neutral
+  // choice when absent context began hiding a gated tab — which is the fix that
+  // made these four fail, and they were asserting the old degradation by
+  // accident rather than on purpose.
+  const ALL_MODULES = () => true;
+  const NO_MODULES = () => false;
 
   it("returns every tab for an admin", () => {
-    expect(visibleTabs(() => true).map((t) => t.id)).toEqual(ALL);
+    expect(visibleTabs(() => true, ALL_MODULES).map((t) => t.id)).toEqual(ALL);
   });
 
   it("hides every capability-gated tab from someone with no capabilities", () => {
-    const ids = visibleTabs(() => false).map((t) => t.id);
+    const ids = visibleTabs(() => false, ALL_MODULES).map((t) => t.id);
     expect(GATED.length).toBeGreaterThanOrEqual(4);   // general, layout, reminders, admin
     GATED.forEach((t) => expect(ids).not.toContain(t.id));
     // …and hides ONLY those — a filter that emptied the tab bar would pass a
@@ -52,10 +60,10 @@ describe("visibleTabs — the one filter", () => {
     // The whole reason `caps` is a list. General holds controls belonging to
     // four capabilities; losing `settingsWrite` alone must not take away the
     // opening hours, and the tab stays because `hoursEdit` is still held.
-    const ids = visibleTabs((cap) => cap !== "settingsWrite").map((t) => t.id);
+    const ids = visibleTabs((cap) => cap !== "settingsWrite", ALL_MODULES).map((t) => t.id);
     expect(ids).toContain("general");
     // …and it goes when the LAST of its four is gone.
-    const none = visibleTabs((cap) => !["settingsWrite", "hoursEdit", "recurringManage", "dataExport"].includes(cap));
+    const none = visibleTabs((cap) => !["settingsWrite", "hoursEdit", "recurringManage", "dataExport"].includes(cap), ALL_MODULES);
     expect(none.map((t) => t.id)).not.toContain("general");
   });
 
@@ -65,7 +73,7 @@ describe("visibleTabs — the one filter", () => {
     // contents it may not write.
     const staffCaps = ["bookingCreate", "bookingEdit", "bookingStatus",
       "bookingAssign", "tableBlock", "waitlistManage", "voucherRedeem"];
-    const ids = visibleTabs((cap) => staffCaps.includes(cap)).map((t) => t.id);
+    const ids = visibleTabs((cap) => staffCaps.includes(cap), ALL_MODULES).map((t) => t.id);
     expect(ids).toEqual(["customers", "vouchers", "app", "shortcuts"]);
   });
 
@@ -73,7 +81,7 @@ describe("visibleTabs — the one filter", () => {
     const asked = [];
     // `some` short-circuits on the first true, so ask with a `can` that always
     // says no — which is also the only way to see the whole list.
-    visibleTabs((cap) => { asked.push(cap); return false; });
+    visibleTabs((cap) => { asked.push(cap); return false; }, ALL_MODULES);
     expect(asked).toEqual(GATED.flatMap((t) => t.caps));
     expect(new Set(asked)).toEqual(new Set([
       "settingsWrite", "hoursEdit", "recurringManage", "dataExport",
@@ -81,12 +89,27 @@ describe("visibleTabs — the one filter", () => {
     ]));
   });
 
-  it("degrades to the ungated tabs when there is no `can` at all", () => {
-    // A caller with no roles context must not get an empty tab bar, and must
-    // not get the Admin tab either — the conservative direction in both.
+  it("degrades the SAME way for both gates when context is missing", () => {
+    // /code-review: this used to pass `can` alone and assert `UNGATED`, which
+    // includes the module-gated Vouchers tab — so it was pinning the very
+    // asymmetry that was the bug: a missing `can` hid its tabs while a missing
+    // `hasModule` showed its own. A caller with no context must not get an
+    // empty tab bar and must not get a GATED tab of either kind.
+    const FULLY_UNGATED = SETTINGS_TABS.filter((t) => !t.caps && !t.module).map((t) => t.id);
+    expect(FULLY_UNGATED.length).toBeGreaterThan(0);
     [undefined, null, "nope"].forEach((bad) => {
-      expect(visibleTabs(bad).map((t) => t.id)).toEqual(UNGATED);
+      expect(visibleTabs(bad).map((t) => t.id)).toEqual(FULLY_UNGATED);
+      expect(visibleTabs(bad, bad).map((t) => t.id)).toEqual(FULLY_UNGATED);
     });
+    // The module gate alone, with capabilities absent: still no gated tab.
+    expect(visibleTabs(undefined, ALL_MODULES).map((t) => t.id))
+      .toEqual(SETTINGS_TABS.filter((t) => !t.caps).map((t) => t.id));
+    // And a caller that supplies capabilities but no module gate loses the
+    // module tab rather than gaining it — the direction you notice.
+    expect(visibleTabs(() => true).map((t) => t.id))
+      .toEqual(SETTINGS_TABS.filter((t) => !t.module).map((t) => t.id));
+    expect(visibleTabs(() => true, NO_MODULES).map((t) => t.id))
+      .toEqual(SETTINGS_TABS.filter((t) => !t.module).map((t) => t.id));
   });
 
   it("every gated tab names a capability that exists", async () => {

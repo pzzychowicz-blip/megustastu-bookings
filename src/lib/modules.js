@@ -125,19 +125,26 @@ export function withModule(modules, id, on) {
 // before deciding something is a decision, and a decision buried in a component
 // is unreachable by a test.
 //
-// It takes the amount ALREADY FORMATTED rather than a number and a currency,
-// which keeps this file's own contract: the registry knows what modules exist
-// and never what they hold, so importing `lib/vouchers.js`' `money` here would
-// be the coupling the header argues against — and re-implementing the rounding
-// would be a second money formatter, which is worse. App counts and formats;
-// this phrases.
+// /code-review: the first version hardcoded the word "voucher" in every clause,
+// in a file whose own header says the registry "knows what modules EXIST, never
+// what they hold" — an assertion and its violation eighty lines apart, which is
+// the falsely-reassuring-documentation defect this repo hunts. The vocabulary
+// is now the CALLER's, because the caller is the only thing that knows what the
+// module holds; this owns the shape of the sentence and the number agreement,
+// which is what actually went wrong on screen and is what the tests pin.
+//
+// `noun` is the singular ("voucher"); `plural` defaults to `noun + "s"` so the
+// ordinary case stays one argument. `amount` arrives ALREADY FORMATTED, which
+// is what keeps this file free of `lib/vouchers.js` without growing a second
+// money formatter.
 //
 // Returns null for "nothing to say", which is the ordinary case: a confirm on
 // every switch is a confirm nobody reads.
-export function hideWarning(count, formattedAmount) {
+export function hideWarning(count, formattedAmount, noun, plural) {
   if (!count) return null;
   const one = count === 1;
-  return count + (one ? " voucher is" : " vouchers are")
+  const many = plural || (noun ? noun + "s" : "");
+  return count + " " + (one ? noun : many) + (one ? " is" : " are")
     + " still open, worth " + formattedAmount
     + ". Switching this off hides " + (one ? "it" : "them")
     + " \u2014 nothing is deleted, and turning it back on brings "

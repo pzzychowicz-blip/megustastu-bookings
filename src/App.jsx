@@ -1123,7 +1123,7 @@ function BookingApp({uid}){
     const open = vouchers.filter(function (v) { return voucherState(v, now) === "open"; });
     if (!open.length) return null;
     const total = open.reduce(function (sum, v) { return sum + remainingOf(v); }, 0);
-    return hideWarning(open.length, money(total, generalSettings.currency));
+    return hideWarning(open.length, money(total, generalSettings.currency), "voucher");
   }, [vouchers, generalSettings.currency]);
   // ONE derivation, passed down as a SCALAR. Every view that reads it is
   // `React.memo`'d and a memo cannot see a live binding or a fresh function —

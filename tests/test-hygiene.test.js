@@ -11,7 +11,7 @@
 //
 // That is the defect this repo names over and over — a fact kept in step by
 // nothing gets written down N−1 times, and the missing one is invisible. It
-// bit a THIRD time in v18.0.0 phase 4: `settings/settings-tabs` greps
+// bit a THIRD time in v18.0.0 phase 4: `tests/settings-tabs.test.js` greps
 // `useKeyboardShortcuts.js` for the `visibleTabs(` call, and the comment
 // directly ABOVE that call quotes `visibleTabs(can)` in prose. Measured on the
 // real file:
@@ -147,6 +147,23 @@ describe("the stripper answers the question it is imported for", () => {
       const out = stripComments('const u = "https://example.com/x"; // gone').join("\n");
       expect(out).toContain("https://example.com/x");
       expect(out).not.toContain("gone");
+    });
+  });
+
+  it("does not mistake a JSX self-closing tag for a regex", () => {
+    // /code-review, and the reason this guard's arrival mattered: widening the
+    // stripper from 2 callers to 13 without checking its blind spots is how a
+    // shared checker quietly stops checking. `regexAllowedAfter` says a `/`
+    // after `}` may open a regex (true in JS: `if(x){}/re/`), so `<Foo a={b} />`
+    // followed by a trailing comment opened a pseudo-regex at `/>`, ran
+    // unterminated to end of line, and emitted the COMMENT as code.
+    return import("../scripts/strip-comments.mjs").then(({ stripComments }) => {
+      const line = "  <Foo a={b} /> // aria-modal here";
+      expect(stripComments(line).join("")).toBe("  <Foo a={b} /> ");
+      // …without giving up the two things it must keep doing.
+      expect(stripComments("  const re = /a>b/; // x").join("")).toBe("  const re = /a>b/; ");
+      expect(stripComments('  if(/Edg\\//.test(ua)) br="Edge";').join(""))
+        .toBe('  if(/Edg\\//.test(ua)) br="Edge";');
     });
   });
 });

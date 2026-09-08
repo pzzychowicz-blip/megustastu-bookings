@@ -160,21 +160,21 @@ describe("hideWarning", () => {
   it("says nothing when there is nothing to lose", () => {
     // The ordinary case, and the important one: a confirm on every switch is a
     // confirm nobody reads.
-    expect(hideWarning(0, "0 €")).toBe(null);
+    expect(hideWarning(0, "0 €", "voucher")).toBe(null);
   });
 
   it("agrees with itself about number, in every clause", () => {
     // Four agreement points in one sentence and they were not all in step when
     // it shipped: "1 voucher is still open ... hides THEM ... brings THEM back
     // exactly as THEY ARE", measured on screen against one open voucher.
-    const one = hideWarning(1, "75 €");
+    const one = hideWarning(1, "75 €", "voucher");
     expect(one).toContain("1 voucher is");
     expect(one).toContain("hides it");
     expect(one).toContain("brings it back");
     expect(one).toContain("as it is");
     expect(one).not.toMatch(/them|they are|vouchers are/);
 
-    const many = hideWarning(3, "120 €");
+    const many = hideWarning(3, "120 €", "voucher");
     expect(many).toContain("3 vouchers are");
     expect(many).toContain("hides them");
     expect(many).toContain("brings them back");
@@ -187,10 +187,22 @@ describe("hideWarning", () => {
     // `lib/vouchers.js` — the registry knows what modules exist, never what
     // they hold. A second money formatter here would be the worse of the two
     // ways out.
-    expect(hideWarning(2, "12.5 €")).toContain("worth 12.5 €");
+    expect(hideWarning(2, "12.5 €", "voucher")).toContain("worth 12.5 €");
   });
 
   it("promises the data survives, because that is what makes it a warning and not a block", () => {
-    expect(hideWarning(1, "10 €")).toContain("nothing is deleted");
+    expect(hideWarning(1, "10 €", "voucher")).toContain("nothing is deleted");
+  });
+
+  it("takes its vocabulary from the caller, so the registry stays ignorant", () => {
+    // /code-review: the noun was hardcoded here, in the file whose header says
+    // this registry never knows what a module holds. The agreement logic is
+    // what belongs here; the word is the caller's.
+    const conv = hideWarning(2, "0 €", "conversation");
+    expect(conv).toContain("2 conversations are");
+    expect(conv).not.toMatch(/voucher/);
+    // An irregular plural does not have to be noun + "s".
+    expect(hideWarning(2, "0 €", "entry", "entries")).toContain("2 entries are");
+    expect(hideWarning(1, "0 €", "entry", "entries")).toContain("1 entry is");
   });
 });

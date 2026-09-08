@@ -86,7 +86,17 @@ export function visibleTabs(can, hasModule) {
   const canFn = typeof can === "function" ? can : null;
   const modFn = typeof hasModule === "function" ? hasModule : null;
   return SETTINGS_TABS.filter(function (t) {
-    if (t.module && modFn && !modFn(t.module)) return false;
+    // /code-review: BOTH gates degrade the same way, and the first version of
+    // this did not. `t.module && modFn && !modFn(...)` short-circuits to false
+    // when `modFn` is absent, which SHOWS a module-gated tab — the opposite of
+    // what the `can` half four lines down does, and the opposite of the
+    // conservative direction the comment above claims for both. A future third
+    // caller, or either existing one losing the prop in a refactor, would have
+    // silently re-opened the Vouchers tab for a restaurant that switched the
+    // module off, with nothing erroring. Absent context now HIDES a gated tab
+    // whichever gate it is: the app always passes both, so the only reachable
+    // case is a mistake, and hiding is the direction you notice.
+    if (t.module && (!modFn || !modFn(t.module))) return false;
     if (!t.caps) return true;
     if (!canFn) return false;
     return t.caps.some(function (c) { return canFn(c); });

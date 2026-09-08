@@ -20,7 +20,7 @@
 // this repo's crash tests hunt for, so the panel says which is which instead of
 // letting the reader assume.
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
@@ -52,6 +52,25 @@ const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
 // a surface in `MODAL_Z` owes an `escapeAction` and a rank, and a two-button
 // question inside a section it belongs to needs neither.
 function ModuleRow({ mod, on, warning, onToggle, onConfirm, onCancel }) {
+  // /code-review: `Reveal` CACHES its last truthy children and keeps them
+  // mounted for the full exit hold, so both buttons below stay hit-testable for
+  // ~520ms after the answer has been given — the submitGuard lesson (a control
+  // inside a self-animating exit is still a live control), one surface over.
+  // A second tap on "off anyway" would send a second whole-node
+  // `settings/admin` write with identical content and advance `adminRev` again.
+  // Idempotent, so this is waste rather than corruption — which is why the fix
+  // is a local latch and not the full commit-once guard: `answered` makes the
+  // cached copy inert without needing to know anything about the write path.
+  // It resets whenever a fresh question arrives, keyed on the warning itself.
+  const answered = useRef(false);
+  useEffect(function () { if (warning) answered.current = false; }, [warning]);
+  function once(fn) {
+    return function () {
+      if (answered.current) return;
+      answered.current = true;
+      fn();
+    };
+  }
   return (
     <div style={{
       padding: SP.base + "px 0",
@@ -89,11 +108,11 @@ function ModuleRow({ mod, on, warning, onToggle, onConfirm, onCancel }) {
                 </InlineAlert>
                 <div style={{ display: "flex", gap: SP.base, marginTop: SP.base, flexWrap: "wrap" }}>
                   <button className="mgt-hover-scale"
-                    onClick={onConfirm}
+                    onClick={once(onConfirm)}
                     style={mkSolidBtn("var(--app-warn-solid)")}
                   >Turn {mod.label} off anyway</button>
                   <button className="mgt-hover-scale"
-                    onClick={onCancel}
+                    onClick={once(onCancel)}
                     style={mkBtn()}
                   >Keep it on</button>
                 </div>
