@@ -574,3 +574,51 @@ describe("check:style — ModalTitle background (v18.0.0)", () => {
     expect(r.out).not.toMatch(/\[modal-title-background\]/);
   });
 });
+
+// ── Rule 12: a modal eases its own height ───────────────────────────────────
+// Ten of eleven Overlay bodies in the app were already wrapped; the eleventh
+// resized its card by 23px in a single frame. A missing wrapper is an ABSENCE,
+// which is why review kept walking past it and why the fixtures below matter
+// more than usual — they assert on the BRACKETED `[modal-auto-height]` label,
+// because the checker's own success line now contains the words "modal
+// auto-height" and a bare match would pass on a PASSING run.
+describe("Rule 12 — <Overlay> without <AutoHeight>", () => {
+  it("catches a bare Overlay", () => {
+    const r = run({ "a.jsx": "const x = <Overlay onClose={f}><div>hi</div></Overlay>;\n" });
+    expect(r.out).toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("catches it across a multi-line opening tag", () => {
+    const r = run({ "a.jsx": "const x = (\n  <Overlay\n    onClose={f}\n    footer={<button/>}\n  >\n    <div>hi</div>\n  </Overlay>\n);\n" });
+    expect(r.out).toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("is silent when the body is wrapped", () => {
+    const r = run({ "a.jsx": "const x = <Overlay onClose={f}><AutoHeight watch={k}><div>hi</div></AutoHeight></Overlay>;\n" });
+    expect(r.out).not.toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("is silent when the exception is marked, and the marker must be on the TAG", () => {
+    const ok = run({ "a.jsx": "const x = <Overlay /* @static-height one fixed sentence */ onClose={f}><div>hi</div></Overlay>;\n" });
+    expect(ok.out).not.toMatch(/\[modal-auto-height\]/);
+    // A marker sitting somewhere else in the file does not exempt anything —
+    // otherwise one comment would silence every modal in a file.
+    const far = run({ "a.jsx": "// @static-height\n\n\nconst x = <Overlay onClose={f}><div>hi</div></Overlay>;\n" });
+    expect(far.out).toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("reads the MATCHING close, not the first one", () => {
+    // Nothing nests an Overlay today. Without the depth walk the inner body
+    // would end the outer one early, and an outer AutoHeight sitting after the
+    // inner modal would be invisible — the rule would fire on a compliant file.
+    const r = run({ "a.jsx": "const x = <Overlay onClose={f}><Overlay /* @static-height inner */ onClose={g}><i/></Overlay><AutoHeight><div/></AutoHeight></Overlay>;\n" });
+    expect(r.out).not.toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("does not fire on prose or on a self-closing tag", () => {
+    const prose = run({ "a.jsx": "// every <Overlay> should wrap its body\nexport const x = 1;\n" });
+    expect(prose.out).not.toMatch(/\[modal-auto-height\]/);
+    const closed = run({ "a.jsx": "const x = <Overlay onClose={f} />;\n" });
+    expect(closed.out).not.toMatch(/\[modal-auto-height\]/);
+  });
+});

@@ -20777,3 +20777,48 @@ DEV is still running phase 3's first version, which accepts a `denies` child
 (there is no `$other` validate) and ignores it in every gate. So on DEV today the
 UI hides what the server would still accept; the emulator is what proves the
 server half, and the deploy is Patryk's step.
+
+### Commit 30 — Rule 12, because a missing wrapper is an absence
+
+Patryk asked for the CI rule I had argued against, so here is the argument that
+lost. I said a "modal must use AutoHeight" check would need ~9 exemption markers
+to catch one case, and that markers nobody verified are how this repo gets
+bitten. The first half was right — it flags exactly nine — and the second half
+was an argument for *checking the nine*, not for not writing the rule. Rule 10
+shipped with eighteen for the same reason and has been earning its keep since.
+
+**Ten of eleven `<Overlay>` bodies were already wrapped.** That ratio is the
+whole case: it is not a convention somebody might reasonably not follow, it is
+what the app does, and the eleventh resized its card by 23px in a single frame.
+A missing wrapper is an ABSENCE, and an absence looks identical in a diff to the
+nine places where it is correct — which is precisely the class of defect a
+checker sees and a reader does not.
+
+Two implementation details are load-bearing. It walks to the MATCHING
+`</Overlay>` rather than the first one, so a nested modal cannot end the outer
+body early and make the rule fire on a compliant file — pinned with a fixture,
+since nothing nests one today and the next thing that does would find out the
+hard way. And the marker is read off the RAW lines the opening tag spans,
+because `codeLines` has the comments stripped by design; a marker anywhere else
+in the file exempts nothing, or one comment would silence every modal in it.
+
+**Each of the nine reasons was checked, not assumed.** Seven confirm dialogs in
+App.jsx whose body is one fixed sentence (`confirmKitchen`'s is computed, but
+when it opens and not after); the Settings overlay, which delegates to
+`SettingsContent`'s own `AutoHeight watch={cur}`; `HistoryPopup`, whose entry
+list is built once per open; and `VoucherRedeemModal`, whose only variable
+content is a `Reveal` — and a Reveal eases its own height, so the card follows
+it smoothly with nothing above needing to do it.
+
+That last one is why the rule is not "does this body change height". It is not
+statically decidable, and a rule that tried would have been wrong about the one
+modal in the list that solves the problem a different way. What IS decidable is
+whether the house pattern was applied and, if not, whether anybody said why.
+
+**Proven against the real tree, not only against fixtures**: removing the
+`AutoHeight` this session added reports
+`src/components/AdminSettings.jsx:313 [modal-auto-height]`. Six fixtures,
+asserting on the bracketed `[modal-auto-height]` label rather than the bare
+words — the checker's own success line now contains "modal auto-height", so a
+loose match would pass on a PASSING run, which is the trap Rule 10's fixtures
+already walked into once.

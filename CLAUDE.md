@@ -90,12 +90,26 @@ each scale.** The part you cannot skip:
   `height` / `minHeight` number, a white-inset shadow over a theme-flipping
   fill, a drop-shadow literal, a **colour** literal, a numeric icon `size`, or
   a hand-written duration/curve.
-- **Four exemption markers, always inline in the style object, never in JSX
-  children position:** `/* @canvas */` (geometry and type one-offs),
-  `/* @fixed-fill */` (the surface under this does not flip with the theme),
-  `/* @shadow */` (a genuine one-off shadow), `/* @motion */` (the WAAPI
-  escape hatch). A marker in children position RENDERS AS TEXT — Rule 0 rejects
-  that placement because eight of them once shipped.
+- **SIX exemption markers, and they live in two places.** Four go inline in
+  the STYLE OBJECT, never in JSX children position: `/* @canvas */` (geometry
+  and type one-offs), `/* @fixed-fill */` (the surface under this does not flip
+  with the theme), `/* @shadow */` (a genuine one-off shadow), `/* @motion */`
+  (the WAAPI escape hatch). A marker in children position RENDERS AS TEXT —
+  Rule 0 rejects that placement because eight of them once shipped. The other
+  two go inside the OPENING TAG, because what they exempt is the tag rather
+  than a declaration: `<button /* @no-lift <reason> */ …>` (Rule 10, the hover
+  lift) and `<Overlay /* @static-height <reason> */ …>` (Rule 12 — a modal body
+  not wrapped in `<AutoHeight>`, which resizes the card in one frame when its
+  contents change). **Both tag markers take a REASON and the reason is checked**:
+  Rule 12 shipped with nine, and each was verified by reading the body before it
+  was written — seven confirm dialogs whose body is one fixed sentence, the
+  Settings overlay (which delegates to `SettingsContent`'s own
+  `AutoHeight watch={cur}`), `HistoryPopup` (a list built once per open) and
+  `VoucherRedeemModal`, whose only variable content is a `Reveal` and a Reveal
+  eases its own height. That last one is why the rule cannot be "does this body
+  change height": not statically decidable, and it would have been wrong about
+  the one modal that solves the problem another way. What IS decidable is
+  whether the house pattern was applied, and if not, whether anybody said why.
 - **A fill that carries text is registered in `tests/contrast.test.js`**, in
   both themes, or the coverage guard fails the build.
 - **`mkInp` / `mkBtn` return style objects**, not JSX — the sibling Scheduling

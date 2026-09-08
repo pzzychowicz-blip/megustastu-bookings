@@ -139,6 +139,31 @@
 // rather than in review. The rule that was already written down could not
 // enforce itself, so now it can.
 //
+// ── Rule 12: a modal eases its own height ──────────────────────────────────
+// v18.0.0 phase 3. Ten of eleven `<Overlay>` bodies in this app are wrapped in
+// `<AutoHeight>`; the Capabilities modal was the one that was not, and picking
+// a different person there resized the card by 23px in a single frame under the
+// finger that had just clicked the list. Nobody spotted it in review because a
+// missing wrapper is an ABSENCE, and the nine that legitimately have none look
+// exactly the same in a diff.
+//
+// So the rule is stated the way the codebase already behaves — a modal wraps
+// its body — and the exceptions say why, one line each:
+//
+//     <Overlay /* @static-height <reason> */ onClose={…}>
+//
+// The nine are real and each claim was checked rather than assumed: seven
+// confirm dialogs in App.jsx whose body is one fixed sentence, the Settings
+// overlay (which delegates to `SettingsContent`'s own `AutoHeight watch={cur}`),
+// `HistoryPopup` (a list built once per open), and `VoucherRedeemModal`, whose
+// only variable content is a `Reveal` — and a Reveal eases its own height, so
+// the card follows it smoothly with nothing above to do it.
+//
+// That last one is why this rule cannot be "does the body change height": it
+// is not statically decidable, and a rule that tried would be wrong about the
+// one modal in the list that solves the problem another way. What IS decidable
+// is "is the house pattern applied, and if not, has somebody said why".
+//
 // ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
 // v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
 // icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
@@ -590,6 +615,38 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rule 12 ─────────────────────────────────────────────────────────────
+    for (const m of code.matchAll(/<Overlay\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      if (code[end - 1] === "/") continue;              // self-closing: no body
+      // Walk to the MATCHING close. Nothing nests an Overlay today; without
+      // this the first `</Overlay>` would end the body early and the rule would
+      // silently read the wrong span.
+      let depth = 1, k = end + 1;
+      while (k < code.length && depth > 0) {
+        const open = code.indexOf("<Overlay", k), close = code.indexOf("</Overlay>", k);
+        if (close < 0) break;
+        if (open >= 0 && open < close) { depth++; k = open + 8; }
+        else { depth--; k = close + 10; }
+      }
+      const body = code.slice(end, depth === 0 ? k - 10 : code.length);
+      if (/<AutoHeight\b/.test(body)) continue;
+      // The marker is read off the RAW lines the opening tag spans — markers
+      // live in comments, which `codeLines` has removed by design.
+      const from = code.slice(0, m.index).split("\n").length - 1;
+      const to = code.slice(0, end).split("\n").length - 1;
+      if (lines.slice(from, to + 1).some((l) => /@static-height/.test(l))) continue;
+      problems.push({
+        file: rel, line: from + 1, rule: "modal-auto-height",
+        text: lines[from].trim().slice(0, 90),
+        hint: "an <Overlay> body that is not wrapped in <AutoHeight> resizes the "
+              + "card in one frame when its contents change — wrap it, passing "
+              + "`watch` if the body is SWAPPED rather than grown, or mark the "
+              + "exception /* @static-height <reason> */",
+      });
+    }
+
     // ── Rule 11 ─────────────────────────────────────────────────────────────
     for (const m of code.matchAll(/<ModalTitle\b/g)) {
       const end = tagEnd(code, m.index);
@@ -611,7 +668,8 @@ for (const file of walk(SRC)) {
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
             + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
-            + "scales, marker placement, control hover-lift, modal-title background)");
+            + "scales, marker placement, control hover-lift, modal-title background, "
+            + "modal auto-height)");
   process.exit(0);
 }
 

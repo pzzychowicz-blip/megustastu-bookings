@@ -56,7 +56,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
   const left = max - clampMoney(amount);
 
   return (
-    <Overlay
+    <Overlay /* @static-height its only variable content is a Reveal, which eases its own height */
       onClose={onClose}
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
