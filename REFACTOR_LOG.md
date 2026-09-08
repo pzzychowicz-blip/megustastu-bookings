@@ -21117,3 +21117,57 @@ for a multi-step flow at all. Direct DOM activation was used for the last leg �
 sound HERE because every control involved is a plain `onClick`, which is exactly
 what a synthetic click drives faithfully, and NOT a substitute for a finger on
 anything gesture-shaped or `:active`-shaped, which is the standing rule.
+
+### Commit 35 — Integrations holds no secret, and says so
+
+The second section the plan asked for, and it answers one question: *where do I
+add or change the WhatsApp login details?* The answer is "not here", and the
+whole design is that answer being legible.
+
+**`.read` is `auth != null` at the ROOT, and read permission cascades DOWN and
+cannot be revoked at a child** — the read-side twin of the measured CT-2A-06
+write finding. So a Meta token stored anywhere in this database is readable by
+every account that can sign in, and that token can send messages as the
+restaurant and read every customer conversation. Making one path
+admin-only-readable would mean removing the root grant and re-granting every
+readable path individually: the riskiest change available, because a path that
+silently loses its read grant goes BLANK on every device, and a read failure is
+quieter than a write failure.
+
+Under project-per-restaurant that is not a compromise, it is the mechanism —
+each tenant has its own Vercel project, so per-project environment variables are
+already scoped per restaurant. The panel names nine keys in three groups, says
+they live in the deployment's environment variables, and points at the path
+(Vercel → this restaurant's project → Settings → Environment Variables). The
+app's first external link, and the only one.
+
+**It states WHERE, and does not claim to know WHETHER.** The plan's
+`/api/wa-config` — a token-gated endpoint returning a boolean per key, never a
+value — moves to phase 5 (Patryk's call). `api/_lib/env.js` on `wa-sandbox`
+already reads every one of these keys, so a second env reader now would be a
+duplicate for that merge to reconcile; and it could not have been verified here
+in any case, because `npm run dev` has no serverless runtime and exercising it
+needs `vercel dev`, which this repo has never run. A status line wired to
+nothing is exactly the falsely-reassuring documentation this repo's crash tests
+hunt for, so the panel says the status is coming rather than showing one.
+`ROADMAP.md` carries it under phase 5.
+
+Docs updated in the same commit: `CLAUDE.md` gains the module-registry section
+and the `settings/admin` shape change (a new FIELD, hence no rules change) plus
+the `visibleTabs` second gate on the settings-tab gotcha row; `GLOSSARY.md`
+gains four rows (module registry, module switch, hide warning, integrations
+panel) and corrects its "Admin is the only conditional tab" line — two tabs are
+conditional now, on two different questions.
+
+Gate: `103.42 kB` gz · **1062 tests** · 0 lint errors (71 warnings) · style OK.
+
+---
+
+## Phase 4 — what a reader should know
+
+**`settings/admin` gained a field, not a node**, so there is no Firebase console
+step for this phase and no rules deploy. The PROD rules step still outstanding
+is phases 0–3's, unchanged.
+
+**One version, one entry.** Phase 4 extended this entry with commits 32–35; the
+next phase extends it again.

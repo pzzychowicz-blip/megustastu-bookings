@@ -105,6 +105,93 @@ function ModuleRow({ mod, on, warning, onToggle, onConfirm, onCancel }) {
   );
 }
 
+// ── The Integrations section ────────────────────────────────────────────────
+// v18.0.0 phase 4. It answers ONE question — "where do I add or change the
+// WhatsApp login details?" — and its whole design is the answer being "not
+// here, and here is why".
+//
+// ── NO SECRET GOES IN THE DATABASE, AND THIS PANEL SAYS SO ──────────────────
+// `.read` is `auth != null` at the ROOT, and read permission cascades DOWN and
+// cannot be revoked at a child — the read-side twin of the measured CT-2A-06
+// write finding. So a Meta token stored anywhere in this database is readable
+// by every waiter who can sign in, and that token can send messages as the
+// restaurant and read every customer conversation. Making one path
+// admin-only-readable would mean removing the root grant and re-granting every
+// readable path individually: the riskiest change available, because a path
+// that silently loses its read grant goes BLANK on every device, and a read
+// failure is quieter than a write failure.
+//
+// Under project-per-restaurant this is not a compromise, it is the mechanism:
+// each tenant has its own Vercel project, so per-project environment variables
+// are already scoped per restaurant. The app's job is to make the state
+// legible, never to hold the secret.
+//
+// ── WHAT IS NOT HERE YET, AND SAYS SO ───────────────────────────────────────
+// The plan's `/api/wa-config` — a token-gated endpoint returning a BOOLEAN per
+// key, never a value — lands in phase 5 with the WhatsApp port (Patryk's call).
+// `api/_lib/env.js` on `wa-sandbox` already reads every one of these keys, so
+// writing a second env reader now would be a duplicate for that merge to
+// reconcile, and it could not be verified here in any case: `npm run dev` has
+// no serverless runtime.
+//
+// So this section states WHERE each key lives and does not claim to know
+// whether it is set. That is the honest version, and it is the one thing a
+// panel about secrets must not get wrong — a status line that is not wired to
+// anything is exactly the falsely-reassuring documentation this repo's crash
+// tests hunt for.
+const INTEGRATION_KEYS = [
+  { group: "WhatsApp (Meta Cloud API)", keys: ["META_WA_TOKEN", "META_APP_SECRET", "META_VERIFY_TOKEN", "META_PHONE_NUMBER_ID"] },
+  { group: "Message understanding (Gemini)", keys: ["GEMINI_API_KEY", "GEMINI_MODEL"] },
+  { group: "Server-side database access", keys: ["FIREBASE_SERVICE_ACCOUNT", "WA_DB_URL"] },
+];
+
+function IntegrationsSection() {
+  return (
+    <Section>
+      <div style={{ fontWeight: FW.bold, fontSize: T.body, color: "var(--text-primary)" }}>
+        Integrations
+      </div>
+      <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2 }}>
+        Keys the server uses to reach WhatsApp and Google. They are <strong>not
+        stored in this app</strong> and never will be: everyone who can sign in
+        here can read this restaurant&rsquo;s whole database, so a key kept here
+        would be a key every member of staff could take. They live in the
+        deployment&rsquo;s environment variables instead, one set per restaurant.
+      </div>
+
+      {INTEGRATION_KEYS.map(function (g) {
+        return (
+          <div key={g.group} style={{ marginTop: SP.wide }}>
+            <div style={{ fontWeight: FW.semi, fontSize: T.body, color: "var(--text-primary)" }}>
+              {g.group}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: SP.tight, marginTop: SP.tight }}>
+              {g.keys.map(function (k) {
+                return <OutlineChip key={k} tone="neutral" size="micro">{k}</OutlineChip>;
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.wide }}>
+        To add or change one: open{" "}
+        <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer noopener"
+          style={{ color: "var(--accent)", fontWeight: FW.semi }}>
+          Vercel
+        </a>
+        , pick this restaurant&rsquo;s project, then Settings &rarr; Environment
+        Variables. The change takes effect on the next deployment.
+      </div>
+      <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.tight }}>
+        This panel does not yet show whether each key is set &mdash; that arrives
+        with the WhatsApp module, from the server, as a yes or no and never as a
+        value.
+      </div>
+    </Section>
+  );
+}
+
 // The grid's rows, bucketed once at module load out of two frozen constants
 // that cannot change — rather than four `CAPABILITIES.filter` passes per
 // render. **Every capability lands in a bucket**: one whose `group` matched no
@@ -589,6 +676,8 @@ export function AdminTabContent({
           );
         })}
       </Section>
+
+      <IntegrationsSection />
 
       <Section>
         <div style={{ fontWeight: FW.bold, fontSize: T.body, marginBottom: SP.base, color: "var(--text-primary)" }}>

@@ -265,12 +265,13 @@ Where the real ambiguity lives.
 
 Eight tabs, split by **audience**: what the restaurant *is*, then what it
 *holds*, then how *you* look at it, then reference — and, since v18.0.0, who may
-do what. **Admin is the only conditional tab**: it appears solely for an account
-with `settingsAdmin`.
+do what. **Two tabs are conditional, on different questions**: Admin appears
+solely for an account with `settingsAdmin` (*may you*), and Vouchers disappears
+when its module is switched off (*does this restaurant have it*).
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| General · Layout · Customers · Vouchers · Reminders · App · Shortcuts · Admin | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. Since v18.0.0 both read it through **`visibleTabs(can)`**, so a capability-gated tab is filtered out of the render *and* the cycle. |
+| General · Layout · Customers · Vouchers · Reminders · App · Shortcuts · Admin | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. Since v18.0.0 both read it through **`visibleTabs(can, hasModule)`**, so a gated tab is filtered out of the render *and* the cycle. The module is checked FIRST: off hides the tab from everybody, an admin included. |
 | The Vouchers tab body | **vouchers settings** (`VouchersSettings.jsx`) | Issue · search · filter · void, plus the default validity period. Records and their configuration in one place. There is **no delete** — see `CLAUDE.md`. |
 | "Default validity", in months | **voucher expiry period** (`settings/voucherDefaults.expiryMonths`) | Seeds `expiresAt` on a newly issued voucher. `0` means never. |
 | Opening hours, shifts, durations, late thresholds | **General** | The restaurant's operating rules. Restaurant-wide. |
@@ -288,6 +289,10 @@ with `settingsAdmin`.
 | "Take bookings", "Delete bookings", "Change settings" … | **capability** (`CAPABILITIES`, `src/lib/roles.js`) | The eighteen things the app gates on, in four groups (`CAP_GROUPS`) — Service, Money, Configuration, Data and access. Eighteen because v18.0.0 phase 3 split `settingsWrite` into five: reminders, standing bookings, the opening hours, the floor plan, and what was left. Each split capability kept `manager` as its floor, so the split changed nobody's access on the day it shipped. The UI always asks `can("bookingDelete")`, **never** `role === "admin"`. |
 | The "enforced by the server" chip | **rule-enforced capability** (`RULE_ENFORCED`) | **Seven** the database refuses too — `settingsAdmin`, `settingsWrite`, `bookingDelete`, `reminderManage`, `recurringManage`, `hoursEdit`, `layoutEdit`. The other eleven are UI gates and the panel says so. |
 | The Capabilities pop-up | **capability grid** (`RolesModal`, `AdminSettings.jsx`) | Pick a person, read their capabilities against all three levels side by side. Only their own column takes a tick. |
+| The Modules section | **module registry** (`settings/admin.modules`, `src/lib/modules.js`) | Whole features this restaurant has, or does not: **Gift vouchers** (ships on) and **WhatsApp inbox** (ships off, until phase 5 brings its code). Off hides every surface of the module from everybody, admin included — the tab, the booking-form picker, the list chips, the redeem modal, the unsettled banner and the printed column — and deletes nothing, so switching it back on restores what was there. Under project-per-restaurant this is the whole of "restaurant B has no WhatsApp". |
+| A module switch (`Toggle`) | **module switch** (`moduleOn`, `setModuleEnabled`) | A **module** answers *does this restaurant have it*; a **capability** answers *may this person do it*. They are different questions and compose one way only — `moduleOn` is asked first, so a capability grant can never re-open a switched-off feature. |
+| "1 voucher is still open, worth 75 €…" | **hide warning** (`hideWarning`, `src/lib/modules.js`) | Shown before the vouchers switch moves, because an open voucher is money the restaurant owes and hiding it makes a liability invisible. It **refuses nothing** — an admin who has read the number may still switch off — and the toggle does not move until they answer. No open vouchers, no question. |
+| The Integrations section | **integrations panel** (`AdminSettings.jsx`) | Names the server-side keys (Meta, Gemini, the service account) and where they live: **the deployment's environment variables, never this database**. `.read` is `auth != null` at the root and read permission cascades down, so a key stored here would be readable by every member of staff. It states where, not whether — a live "is it set" status arrives with the WhatsApp module, as a boolean from the server and never as a value. |
 | "Enforce roles" | **role enforcement** (`settings/admin.enforceRoles`) | Ships **off**, so the app behaves exactly as before until it is switched on. Off is also what makes the rules deploy rolling-safe. |
 | A person who has been invited but never signed in | **pending invitation** (`/invites/{id}`) | Waits on the People list. It grants nothing by itself — an admin applies it in one tap once that person signs in. |
 | Printable sheet | **day sheet** (`DaySheet.jsx`) | Print-only DOM, hard-coded light. |

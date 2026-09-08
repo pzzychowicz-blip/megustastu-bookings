@@ -277,10 +277,20 @@ otherwise. **No empty-collection guard, and
 that is deliberate**: `/roles` legitimately reaches zero — it starts there — and
 a role row is one line an admin retypes, where an empty `bookings` or `vouchers`
 write destroys records nobody can reconstruct), plus **eight** `settings` objects (all restaurant-wide config → **shared** across devices; v18.0.0 adds `settings/voucherDefaults` — `{v, expiryMonths}` + `voucherDefaultsRev`, `useVoucherDefaults.js`, the default validity period with `0` meaning never. Named `voucherDefaults` and NOT `vouchers` for this repo's own precedent: `/bookings` has `settings/bookingDefaults` and deliberately not `settings/bookings` — two paths a character apart, one holding records and one holding config, is a trap the codebase already declined once): `settings/operatingHours` (#1, v14.4.0 — **per-weekday** `{days:{0..6}}` since v15.0.0), `settings/dayShifts` (#2, v14.6.0 — `{split, enabled}`), `settings/optimizer` (#3, v15.0.0 — `{cutoff, autoSwitch}`), `settings/layout` (#4, v15.0.0 — `{tables, joinGroups, comboCaps, megaCombos, kitchenLimit}`; + `priorities` v15.9.0 — the data-driven optimizer heuristics), `settings/general` (#6, v17.0.0 — `{v, restaurantName, currency, phonePrefix, regularMin, lateCollapseMax, waitMatchWin, undoSecs}`; revGuard CAS `generalRev`; `useGeneralSettings.js`), and `settings/bookingDefaults` (#5, v16.1.0 — `{v, tiers:[{max,dur}…], restDur, lateEnabled, lateWarnMin, lateNoShowMin, freeSoonEnabled, freeSoonWindow}`; a present node's missing `tiers` array = EMPTY (RTDB drops empty arrays — the priorities lesson), never the default; `freeSoonWindow` (v16.3.0-correction) = the table-turn prediction window in minutes, 5–60 step 5, default 15; `useBookingDefaults.js`), `settings/admin` (#10, v18.0.0 phase 3 — `{v,
-enforceRoles}` + `adminRev`, and the ONLY settings node that is admin-only in the
-rules unconditionally; it lives in `useRoles.js` rather than a hook of its own,
-because `can()` is meaningless without the flag and the flag is meaningless
-without `can()`). **v17.6.0 supersedes the old "per-device preferences never go in Firebase" rule.** `settings/users/{uid}/prefs` (#8, `useUserPrefs.js`) is the documented exception: it is per-USER, not restaurant-wide, and carries theme · reduceMotion · planGestures · navLocked · splitEnabled so a user's setup follows them to any device. **`localStorage` still holds all five as well, and that mirror is load-bearing** — `index.html`'s no-flash script reads `mgt-theme`/`mgt-reduce-motion` before React mounts and long before Firebase or auth resolve, so dropping it flashes the wrong theme on every load. localStorage = pre-mount cache, node = source of truth. Genuinely per-DEVICE settings (app width, the 4 Timeline zoom values, the saved split layout) stay `localStorage`-only, because they are properties of the screen. All six use the loaded-ref write-guard (small objects, so the empty-array guard doesn't apply — except `useLayout`, which additionally refuses an empty-`tables` config); see `useOperatingHours.js` / `useDayShifts.js` / `useOptimizerSettings.js` / `useLayout.js`.
+enforceRoles, modules}` + `adminRev`, and the ONLY settings node that is
+admin-only in the rules unconditionally; it lives in `useRoles.js` rather than a
+hook of its own, because `can()` is meaningless without the flag and the flag is
+meaningless without `can()`. **v18.0.0 phase 4 adds `modules`, and it needed NO
+rules change** — a new FIELD on a node already admin-only to write and carrying
+no `.validate`; a new NODE would have needed both a CAS and its own `.write`
+grant, which is why the registry lives here rather than at `/modules`. Two
+consequences of the node now having more than one field: every writer sends the
+WHOLE node under the rev CAS, so both go through one `writeAdmin(fields)` that
+MERGES onto an `adminRef` mirror — `setEnforceRoles` built its payload from its
+own argument alone, which was correct with one field and would have silently
+reset `modules` on every toggle — and the listener assigns that mirror on the
+line above its `setState`, where a stale one would not be a skipped field but
+the OTHER switch reverting). **v17.6.0 supersedes the old "per-device preferences never go in Firebase" rule.** `settings/users/{uid}/prefs` (#8, `useUserPrefs.js`) is the documented exception: it is per-USER, not restaurant-wide, and carries theme · reduceMotion · planGestures · navLocked · splitEnabled so a user's setup follows them to any device. **`localStorage` still holds all five as well, and that mirror is load-bearing** — `index.html`'s no-flash script reads `mgt-theme`/`mgt-reduce-motion` before React mounts and long before Firebase or auth resolve, so dropping it flashes the wrong theme on every load. localStorage = pre-mount cache, node = source of truth. Genuinely per-DEVICE settings (app width, the 4 Timeline zoom values, the saved split layout) stay `localStorage`-only, because they are properties of the screen. All six use the loaded-ref write-guard (small objects, so the empty-array guard doesn't apply — except `useLayout`, which additionally refuses an empty-`tables` config); see `useOperatingHours.js` / `useDayShifts.js` / `useOptimizerSettings.js` / `useLayout.js`.
 
 **Single central save path:** route every mutation of a collection through one helper (e.g. `bookingsAfterAction`) so future conflict-detection / re-derivation has one hook point.
 
@@ -331,6 +341,79 @@ collapse every guest row onto one `""` key.)
 `waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day.
 
 **v17.8.0 — entries are matched SEQUENTIALLY, in a FCFS queue, never in parallel.** Each party that lands is appended to a local `holds` array as a synthetic `_locked` booking, and the next party scans `liveBookings.concat(holds)`. Before this every entry was matched independently against the same snapshot, so identical inputs gave identical answers and several waiting parties were offered the *same table at the same minute* — individually true, jointly impossible, and it silently falsified every chip but the first the moment one was booked. `_locked` is load-bearing: `applyOpt` (the reshuffling path inside `trialFits`) copies a locked booking's tables through verbatim, so a hold reserves its slot instead of being optimised out from under the ghost already drawn for it. The queue is `createdAt`-ascending because sequential placement is only *fair* if the sequence is. A budget-skipped entry keeping its previous answer is held too, or the queue behind it can't see it. Transition-to-available (prev-id-set diff in a ref, first pass exempt) fires the green toast. The "⏳ N" badge lives in the Today slot (Presence slide; orange when someone fits now); Book prefills the form + `pendingWaitlistRef`, consumed in `doSave`'s new-booking path.
+
+### The module registry (v18.0.0 phase 4) — what this restaurant HAS
+
+`src/lib/modules.js` + `settings/admin.modules`. Two modules today: `vouchers`
+(ships ON — it shipped in phase 1) and `whatsapp` (ships OFF, because its code
+does not exist in the app until phase 5, and a default-on switch would offer to
+turn on a module that is not there).
+
+**A module is not a capability, and merging them says the wrong sentence.**
+`roles.js` answers *may THIS PERSON do it*; this answers *does this restaurant
+HAVE it*. Registering vouchers as an eighteenth capability would have rendered
+"this restaurant has no vouchers" as "nobody here may redeem a voucher" — the
+same screen, the wrong thing to hand a new manager. A capability is revoked from
+one waiter and restored next week; a module being off is a fact about the
+restaurant.
+
+**They compose one way only and the order is load-bearing.** `moduleOn` is
+checked FIRST and `can` never runs, so a module that is off hides its surface
+from everybody including an admin. The other order would let a capability grant
+re-open a feature the restaurant switched off. `visibleTabs(can, hasModule)`
+encodes it.
+
+**Absence resolves through each module's own `defaultEnabled`**, never to false —
+an absent `modules` is the production state on the day this deploys, and a
+registry that read absence as "everything off" would ship a blank app. An
+unexpected stored value falls to the default too (`=== true` / `=== false`, never
+truthiness): `"false"` read as on would show a module the restaurant switched
+off. An id the registry does not know is DROPPED on read, and `moduleOn` returns
+FALSE for one — a typo'd gate hides a surface, which is visible immediately,
+where returning true leaves one permanently open, which is not.
+
+**Off means every surface**, Patryk's call over "off stops new vouchers while
+existing ones stay redeemable": a half-off module cannot be explained on one line
+of screen, and the tenant story is the whole argument for the registry existing.
+Six gates for vouchers — the Settings tab, the booking form's picker, the List
+tag, the redeem modal, the unsettled strip section, the day sheet's column. **Two
+of them sit at a funnel rather than at the render**, and both times the render
+site was wrong: `voucherToAsk` is the single door for the form's save AND
+`updateStatus` (itself the one door for the popup, the List buttons and the S/C
+shortcuts), and the `unsettledBookings` memo feeds the strip section AND
+`notifAnnounce`, so gating the section alone would announce a voucher the module
+has hidden. Note that **neither an empty map nor an empty list is a gate** — the
+List tag keys on `b.voucherCode` and the form's picker already rendered whenever
+one was set. Nothing is deleted; hidden is not deleted.
+
+The cost of "off means everything" is paid where it belongs: an open voucher is
+money the restaurant owes, so the Admin tab states the count and the balance
+before the switch moves (`hideWarning`, pure and here rather than in App for the
+v17.8.0 reason) and then **refuses nothing**. The toggle does not move while the
+question is up, so the screen never shows a state the database is not in; with
+nothing open there is no question, because a confirm on every switch is a
+confirm nobody reads.
+
+**Multi-tenancy is this and nothing more.** Under project-per-restaurant each
+tenant has its own `settings/admin`, so a per-tenant module set needs no
+namespacing, no tenant-aware rules and no new mechanism — the property that
+model was chosen for.
+
+**Integrations, in the same tab, holds no secret and says so on screen.** `.read`
+is `auth != null` at the ROOT and read permission cascades DOWN and cannot be
+revoked at a child (the read-side twin of the measured CT-2A-06 write finding),
+so a Meta token stored anywhere in this database is readable by every account
+that can sign in — and that token can send as the restaurant and read every
+customer conversation. Keys live in the deployment's environment variables, one
+set per restaurant, which under project-per-tenant IS the per-tenant credential
+mechanism. The panel therefore states WHERE each key lives and does NOT claim to
+know whether it is set: the plan's `/api/wa-config` (a token-gated endpoint
+returning a boolean per key, never a value) lands in phase 5 with the port,
+because `api/_lib/env.js` on `wa-sandbox` already reads every one of these keys
+and a second reader now would be a duplicate for that merge to reconcile — and
+`npm run dev` has no serverless runtime, so it could not have been verified
+here. A status line wired to nothing is exactly the falsely-reassuring
+documentation this repo's crash tests hunt for.
 
 ### Per-user preferences (v17.6.0) — the one non-restaurant-wide settings node
 `settings/users/{uid}/prefs` + `prefsRev` (`useUserPrefs.js`). Five settings
@@ -622,7 +705,7 @@ Already lazy-loaded and covers the exact same phrases ("give me the deployment v
 | `mkInp`/`mkBtn` | Return **style objects** in Bookings (not JSX) — no prop passthrough |
 | Worktree paths | In a worktree session, Edit/Read absolute paths must include `.claude/worktrees/<name>/…` or they silently target `main`'s checkout |
 | Firebase `set()` inside a setState updater | **Corrupts data, not just doubles writes** (proven live, v16.0.0): RTDB fires local listeners synchronously on `set()`, the echo lands mid-update, StrictMode re-applies the queued updater on echo state → a concat updater persists the entry TWICE. Use the ref-mirror shape (`useWaitlist.js` / `useReminders.jsx`): compute from a ref, then `setState` + the write as plain statements. **v17.16.0 corrects what this row used to claim.** It said "All hooks are converted as of v16.0.0 — never reintroduce the updater-side write", and that was false of the most important write path in the app: `saveBookings` / `saveBlocks` (`usePersistence.js`) call `persist(prev,computed)` — which performs the `update()` — from INSIDE their `setBookings` updater, and always have (CT-2A-09, v17.15.7 crash test). **The corruption this row was written about has not occurred there, and the reason is worth knowing rather than trusting**: v15.5.0's per-child diff `update()` is IDEMPOTENT (the same patch applied twice writes the same children the same way) where the whole-node concat `set()` that caused the v16.0.0 incident is not, and the StrictMode double-dispatch is separately caught by `lastPatchSigRef`'s 2s content+base signature. So it is MITIGATED, not structurally removed — two defences either of which could be edited away by someone who read this row and believed the shape was already gone. **v17.16.10 closed it (CT-2A-09) and there is now NO exception**: both functions compute from a `bookingsRef` / `blocksRef` mirror and then `setState` and write as plain statements, the `useWaitlist.js` shape. So this row is once again what it claimed to be in v16.0.0 — except that it is now true. **The invariant that replaces the mitigation:** every `setBookings` / `setTableBlocks` in `usePersistence.js` assigns its mirror on the line above it (four and three respectively); a new set site that forgets one hands the next save a stale `prev`, and the diff would read that as fields changing BACK, so it would write rather than skip. Two things the conversion fixed beyond the rule: `saveBookings` returns a `dispatched` boolean read on the line after the write, which only appeared synchronous because React EAGERLY evaluates the first update on an idle fiber — an internal optimisation, not a contract, and the same one that invokes the updater a second time at render, which is the dev double-dispatch `lastPatchSigRef` exists to absorb |
-| Settings tabs — ONE list | `SETTINGS_TABS` (SettingsChrome.jsx since v17.1.0; re-exported by Settings.jsx) is the single source: the TabBar renders it AND App.jsx's ←/→ keyboard nav derives its cycle from it. **Never inline a literal tab-id list** — a hand-copied 4-item list is how arrows skipped the new Customers tab (v16.0.0 follow-up). v17.11.0 added the 6th tab (`app`) by editing that list ONLY, and the arrow cycle picked it up with no other change — which is the property this rule buys |
+| Settings tabs — ONE list | `SETTINGS_TABS` (SettingsChrome.jsx since v17.1.0; re-exported by Settings.jsx) is the single source: the TabBar renders it AND App.jsx's ←/→ keyboard nav derives its cycle from it. **Never inline a literal tab-id list** — a hand-copied 4-item list is how arrows skipped the new Customers tab (v16.0.0 follow-up). v17.11.0 added the 6th tab (`app`) by editing that list ONLY, and the arrow cycle picked it up with no other change — which is the property this rule buys. **v18.0.0 phase 4 adds the SECOND gate to `visibleTabs(can, hasModule)`** — the Vouchers tab disappears with its module — and the ORDER is load-bearing: the module is checked first and `can` never runs for that tab, because a module that is off hides the surface from everybody INCLUDING an admin, where the other order would let a capability grant re-open a feature the restaurant switched off. Both consumers pass both gates and `tests/settings-tabs.test.js` reads the call's ARGUMENTS to prove it. That test used to pin the literal string `visibleTabs(K.can)` and failed the moment a gate was ADDED — right to fail on a consumer that drops one, wrong to fail on one that gains one; and anchoring the replacement cost this file's own trap a third time, since a bare search for `visibleTabs(` finds the COMMENT above the call, which quotes it in prose |
 | React.memo × live module bindings | v17.1.0: TimelineView/ListView/PlanView/Summary/DaySheet are `React.memo`'d. Two hard rules: (1) function props must be App's **stable `VA` wrappers** (viewActionsRef pattern) — never inline closures (defeats the memo) and never a comparator that ignores function props (stale closures); (2) a memoized component reading **live bindings** (OPEN/QUARTER_HOURS/TIMELINE_TABLES/TOTAL_SEATS/hoursFor) needs identity-only `hoursSig`/`layoutSig` props, or an hours/layout edit won't repaint it. Any object/array prop must be `useMemo`'d in App or the memo is dead |
 | Inline sub-components | An inline component (defined inside another component's body) is a NEW type every render — React unmounts/remounts its whole DOM subtree (the v15.8.0 TimelineBlock lesson; v17.1.0 caught GridLines/BlockBar rebuilding 500+ grid nodes per keystroke). Hoist to module scope, pass former closures as props |
 | A SCROLL container around `.mgt-hover-scale` | Same clipping trap as below, but you can't fix it with `overflow-x: visible` — the CSS spec forces the other axis to clip once one axis is `auto`. A scroller clips at its PADDING box, so the fix is to make the scrollport wider than its content: **`padding-inline: 4%`** (the lift is `scale(1.08)` = exactly 4% of card width per side, so a percentage self-scales at any width), plus a matching **negative margin** where the content must stay put. The percentage resolves against the **containing block**, so a scroller that is not itself the sized box needs a wrapper: `SplitLayout` puts each scroller inside a non-scrolling frame that carries the pane's `flexBasis`, and a flat `4%` is then correct in every direction at every ratio (card width ≤ 92% of the frame, so the 4% lift always fits inside a 4% gutter — it's provable, not tuned). Hit three times in v17.5.0 before landing there: first the lift was clipped outright in the locked-nav region and both split directions; then a hand-scaled `4 * share + "%"` applied the vertical share to a horizontal gutter, so top/bottom stayed broken (an 806px pane got 16px of room for a 31px lift); the frame removed the hand-scaling entirely |

@@ -45,9 +45,9 @@ session and keeping it in sync.
 
 ## Designed, not implemented
 
-> The two entries below are one approved plan, written 2026-09-07 against
+> The entry below is what remains of one approved plan, written 2026-09-07 against
 > v17.16.13 and shipping as **one release, v18.0.0**, on one branch across seven
-> sessions. Phases 0–3 have shipped and their entries are deleted; see
+> sessions. Phases 0–4 have shipped and their entries are deleted; see
 > `REFACTOR_LOG.md`. **The plan is
 > `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`** — phase order and
 > why it is forced, data shapes, security rules, hook points, and the decisions
@@ -55,12 +55,6 @@ session and keeping it in sync.
 > (2026-09-05), which stays on disk as the record of the four-version split and
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
-
-- **Module registry and Integrations (v18.0.0 phase 4).** `settings/admin.modules`
-  as the on/off registry — the WhatsApp switch ships **off**, and the same
-  mechanism is the multi-tenancy lever under project-per-restaurant. Integrations
-  shows which server-side secrets are *set*, never their values: **no Meta or
-  Gemini token may go in RTDB**, which every signed-in account can read.
 
 - **The WhatsApp port + its crash test (v18.0.0 phases 5–6).** The `wa-sandbox`
   branch merged to production, admin-switchable and shipped off, with the
@@ -76,6 +70,16 @@ session and keeping it in sync.
   bookings one has no sections for: a public webhook, an Admin-SDK server that
   bypasses the rules entirely, prompt injection through the Gemini parse, a send
   path that reaches real customers, and per-message cost.
+
+  **Phase 5 also carries `/api/wa-config`**, moved here from phase 4 (Patryk's
+  call, session 4): the token-gated status endpoint returning a **boolean per
+  key, never a value**, which the Admin tab's Integrations section then renders
+  in place of its current "where the keys live" text. It belongs with the port
+  because `api/_lib/env.js` already reads every one of those keys — writing a
+  second env reader in phase 4 would have been a duplicate for this merge to
+  reconcile — and because it cannot be verified before then: `npm run dev` has
+  no serverless runtime, so exercising it needs `vercel dev`, which this repo
+  has never run.
 
 ## Ideas
 
