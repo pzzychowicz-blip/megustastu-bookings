@@ -21105,18 +21105,37 @@ the field back.
 
 Gate: `103.42 kB` gz · **1062 tests** · 0 lint errors (71 warnings) · style OK.
 
-### A note on the verification rig
+### A note on the verification rig, and what a second pass corrected in it
 
-The browser pane's frame-to-CSS scale **changed between individual calls** this
-session — measured at 1.2461, then 1.0, then 1.9499, then 1.2549, each time by
-clicking a known point and reading `e.clientX` off a capture-phase listener.
-CLAUDE.md records that it must be calibrated per session and that it changes
-when the pane is reopened; what this session adds is that a calibration can go
-stale between two consecutive tool calls, so a coordinate click is not reliable
-for a multi-step flow at all. Direct DOM activation was used for the last leg —
-sound HERE because every control involved is a plain `onClick`, which is exactly
-what a synthetic click drives faithfully, and NOT a substitute for a finger on
-anything gesture-shaped or `:active`-shaped, which is the standing rule.
+The browser pane's frame-to-CSS scale went stale **between two consecutive tool
+calls** — no reload, no `resize_window`, no navigation in between. A click
+computed from the previous call's K landed at 138,213 instead of on the button
+at 270,416, so "Turn off anyway" silently did nothing and looked for a moment
+like a bug in the code under test. Readings across the session: 1.2461, 1.0,
+1.9499, 1.2549.
+
+**The first write-up of this stopped there and said the rig "is worse than
+documented", which is true and is not a finding.** Measured properly afterwards,
+K is not drifting randomly at all: it held at **1.0178 across three screenshot
+scales (1, 0.5, 0.4), a full page reload, and a modal opening**. So the
+screenshot's `scale` argument does not set the click frame, and page geometry
+does not move it — the two obvious hypotheses, both wrong, and the first one had
+already been acted on this session before it was tested.
+
+**What does move it was not reproduced, so it is not claimed.** The pane is a
+host UI panel whose physical size this session cannot read. Recording a cause
+here on the strength of a correlation is the thing this file warns about in
+half a dozen other rows.
+
+The rule that goes into `CLAUDE.md` is therefore procedural rather than
+explanatory: **never carry a K across tool calls**; default to `javascript_tool`
++ `el.click()`, which needs no coordinates and drives a plain React `onClick`
+faithfully (verified — a module switch flipped and persisted to Firebase through
+it); use coordinates only where a real pointer is required, and then read back
+where the click landed before believing it. A `.click()` is not a finger, and
+that half is unchanged. Mechanical detail worth knowing: a reload clears the
+tool's cached screenshot dimensions, and a coordinate click then errors until a
+fresh screenshot is taken.
 
 ### Commit 35 — Integrations holds no secret, and says so
 
