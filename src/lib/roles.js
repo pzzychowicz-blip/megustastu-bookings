@@ -421,7 +421,12 @@ export function userRows(roles, invites) {
       email: r.email,
       name: r.name,
       role: r.role,
+      // BOTH maps, though the grid reads `entry` rather than these two. A row
+      // model carrying half of a fact is how a future consumer comes to believe
+      // extras are the whole answer — which is exactly what they were until
+      // three days ago.
       extras: r.extras,
+      denies: r.denies,
       entry: r,
       // An invitation matching this row is an OFFER, not a state: it is shown
       // on the row with an Apply control and does not change what they can do
@@ -437,7 +442,9 @@ export function userRows(roles, invites) {
       return {
         kind: "invite",
         uid: null, inviteId: i.id, email: i.email, name: "",
-        role: i.role, extras: i.extras, entry: null, invite: i,
+        // An invitation says "come in at this level" and carries no denies —
+        // the fine-tuning happens on the row once that person exists.
+        role: i.role, extras: i.extras, denies: {}, entry: null, invite: i,
       };
     });
   return rows.concat(pending).sort(rowOrder);
