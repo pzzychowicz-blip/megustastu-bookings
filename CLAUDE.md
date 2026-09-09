@@ -62,8 +62,15 @@ api/                                 **serverless functions — new to `main` in
                                      as each handler's FIRST statement — before the method check and before staff auth, so the
                                      answer is indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
                                      handler is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
-                                     `"true"` and `"1"` — where only the last opens it. **6 functions total**; `_lib/` is
-                                     underscore-prefixed so Vercel does not route it
+                                     `"true"` and `"1"` — where only the last opens it. **7 functions total**; `_lib/` is
+                                     underscore-prefixed so Vercel does not route it. **`wa-config.js` (phase 5) answers
+                                     "which server-side keys are configured" as a BOOLEAN PER KEY and never a value** —
+                                     it is what the Admin tab's Integrations section renders. It cannot leak a secret by
+                                     mistake because it never holds one (`Boolean(env(k, null))` is the whole of it), and it
+                                     is staff-auth gated because a map of which integrations are unconfigured is a map of
+                                     where a deployment is soft. The client keeps its own labels and groups and asks only the
+                                     question a browser cannot answer — presentation there, fact here, so the key list is not
+                                     one list in two places
 ```
 
 **REFACTOR_LOG.md** at repo root contains the full version history with architectural decisions for each phase (B1–B5, C1–C3, D1–D4, E1+).

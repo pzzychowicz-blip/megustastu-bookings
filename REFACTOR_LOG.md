@@ -21579,3 +21579,68 @@ both with the measured semantics (only exactly `"1"` enables the simulator;
 unset context reproduces today's prompts).
 
 Gate: `109.92 kB` gz · **1169 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 41 (phase 5, completing it) — `/api/wa-config`, and the third state
+
+The status the Integrations panel said was "coming". A boolean per key, never a
+value, rendered where phase 4 left a sentence promising it.
+
+**It cannot leak a secret by mistake, because it never holds one.**
+`Boolean(env(k, null))` is the whole of the transform. That is not paranoia about
+this handler in particular: the panel exists to say these keys are NOT in the
+database, on the grounds that everyone who can sign in can read the whole
+database — and an endpoint returning a value, even a masked one, even four
+characters of a suffix, would put the thing back in reach of exactly the people
+that sentence is about, through a different door. Verified by setting
+`GEMINI_API_KEY` to a sentinel and asserting the serialised payload does not
+contain it.
+
+It is **staff-auth gated** like `/api/wa-send` and `/api/wa-recheck`: "which of
+this restaurant's integrations are unconfigured" is a map of where the deployment
+is soft. Measured: no token → 401, POST → 405, a blank variable reads as unset
+(`env(k, null)` returns the fallback for `""` as well as `undefined`, which is
+how the rest of this backend behaves).
+
+**The key list lives on the SERVER and the labels on the client**, which is what
+keeps them from being one list in two places. `INTEGRATION_KEYS` in
+`AdminSettings.jsx` decides grouping and wording; the endpoint answers only the
+question a browser cannot. A key the client asks about that the endpoint does not
+know comes back absent and renders as unknown rather than as "no".
+
+#### Three states, and the third is the whole design
+
+`set`, `not set`, and **`null` — we could not ask**. The third is what a local
+dev server produces, since `npm run dev` runs no serverless functions, and what
+any deployment without the functions produces. A panel about secrets must not
+render "not set" for a key it never managed to enquire about: that is a false
+negative pointing at a configuration problem that may not exist, in the one place
+someone goes to diagnose exactly that. The unknown state renders the bare key
+name with no chip qualifier and one sentence underneath saying why — rather than
+ten grey "unknown" badges saying the same thing ten times.
+
+Both paths verified live. The failure path is the real one on the dev server:
+"Couldn't reach the server to check which of these are set, so none of them are
+marked either way. That is expected on a local dev server, which runs no
+server-side functions", with no chip claiming either way. The success path was
+exercised by STUBBING `fetch` in the page — said plainly because it is not the
+real endpoint — and renders `META_WA_TOKEN · set`, `META_VERIFY_TOKEN · not set`
+and the modes line beneath.
+
+**The modes are reported separately from the keys, and as values.** "GEMINI_API_KEY
+is set" and "the LLM is actually being called" are different facts, and the second
+is the one that spends money — a key can be set while the mode is still `mock`.
+Neither `"mock"` nor `"live"` is a secret.
+
+**A deferral reason that had stopped being true.** `ROADMAP.md` justified holding
+this back with "it cannot be verified before then: `npm run dev` has no
+serverless runtime, so exercising it needs `vercel dev`, which this repo has
+never run." Phase 5b established a cheaper rig needing neither: import the
+handler and call it with a plain `{method, headers}` object and a `res` stub
+recording `status`/`json`. That is how the sim gate was measured across five env
+values and how `wa-inbound`'s unset-secret behaviour was reproduced. `vercel dev`
+is still the only way to exercise Vercel's own ROUTING — a smaller claim than the
+one that was being made, and the entry now says the smaller one.
+
+Vercel function count is **7** of the Hobby plan's 12.
+
+Gate: `109.93 kB` gz · **1169 tests** · 0 lint errors (88 warnings) · style OK.
