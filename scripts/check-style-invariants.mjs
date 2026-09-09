@@ -235,6 +235,20 @@ const SHADOW_VALUE = /(?:["'`]|inset\s+|,\s*)(?:0|-?[\d.]+px)\s+(?:0|-?[\d.]+px)
 const SPACING_STEPS = new Set([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32]);
 const HEIGHT_STEPS = new Set([28, 32, 36, 40, 44]);
 
+// The WA module's saturated, TEXT-BEARING fills. Declared in `:root` ONLY, with
+// no dark override, deliberately: the 17.8.0-wa-sandbox contrast pass made them
+// OPAQUE precisely so one value works in both themes, which is what
+// "theme-invariant" has to mean in order to be true. Everything else under
+// --wa-* (panes, rows, banners, rims) DOES flip.
+//
+// One list, two regexes built from it — the fixed set and its complement. The
+// classification is checked below as `!fixed || flips`, so BOTH have to agree:
+// a name matched by both lists still counts as flipping. The first attempt put
+// the bare `--wa-` prefix in THEME_FILL under a comment asserting the whole
+// family flipped, which would have failed a CORRECT white inset over
+// --wa-green citing a dark override that has never existed.
+const WA_OPAQUE = "green|green-dark|btn-open|btn-cancel|btn-handled|bubble-out|sim-accent|unread-dot";
+
 // Fills that do NOT flip with the theme: saturated solids, block colours, and
 // raw colour literals. A white inset is correct over any of these.
 const FIXED_FILL = [
@@ -242,11 +256,20 @@ const FIXED_FILL = [
   /BLOCK_BG\b/, /\bBTN\./, /S\.accent/, /TBL\./,
   /var\(--app-[a-z-]*(solid|walkin|new|btn-[a-z-]+)\)/,
   /var\(--accent\)/, /var\(--btn-[a-z-]+\)/, /var\(--tag-flag\)/,
+  new RegExp("var\\(--wa-(?:" + WA_OPAQUE + ")\\)"),
 ];
 // Fills that DO flip. Anything matching here under a white inset is the bug.
 const THEME_FILL = [
   /var\(--bg-[a-z-]+\)/, /var\(--(warn|danger|suggest)-bg[a-z-]*\)/,
   /var\(--border-[a-z-]+\)/, /var\(--text-[a-z-]+\)/,
+  // The REST of the --wa-* family (WA sandbox) — soft surfaces, rows, panes,
+  // banners and rims, every one of which has a dark override. A white inset
+  // over these is the bug this rule exists for; without this the checker walked
+  // past the module entirely (the --app-btn-grey prefix-blindness again).
+  // The lookahead is the complement of WA_OPAQUE, and it needs the closing
+  // paren inside it: --wa-bubble-out is opaque, --wa-bubble-out-border flips,
+  // and only the `)` tells them apart.
+  new RegExp("var\\(--wa-(?!(?:" + WA_OPAQUE + ")\\))[a-z-]+\\)"),
 ];
 
 // Read a style value: everything after `key:` up to the first TOP-LEVEL comma.

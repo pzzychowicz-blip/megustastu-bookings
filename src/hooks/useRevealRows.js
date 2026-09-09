@@ -18,6 +18,15 @@
 // list rather than a change to it — see the block in the body for what that
 // distinction is worth and why it cannot be an effect (v17.15.0).
 //
+// `opts.instantIn` (v17.6.0-wa-sandbox) makes the lifecycle ASYMMETRIC: a
+// newcomer is added to renderIds and openIds in the SAME commit, so its Reveal
+// mounts already open (show=true at mount → Reveal's state initializers, no
+// transition) and the row simply appears at full height. Departures are
+// unaffected — they still collapse. Patryk on the WA conversation list: the
+// expand-back on the way in read as too much movement, since the rows below are
+// already sliding to make room (useFlip) and the growing row added a second
+// motion on top of that.
+//
 // `sig` is a stable, sorted membership signature — the effects key on it, NOT the
 // fresh-every-render ids array, so a value-only change (e.g. warn→noshow, or a
 // countdown tick) re-renders without churning the lifecycle. The membership diff
@@ -25,7 +34,7 @@
 // (the app-wide set()-in-updater gotcha applies to any side-effect-in-updater).
 
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import { REVEAL_EXIT_MS } from "../lib/constants";
+import { REVEAL_EXIT_MS, exitHold } from "../lib/constants";
 
 // v17.15.0: derived, not typed. This was 350, chosen as "> Reveal's ~300ms
 // collapse" — a literal encoding of the OLD --t-shift. `Reveal` now takes
@@ -35,7 +44,17 @@ import { REVEAL_EXIT_MS } from "../lib/constants";
 // no second copy to keep in step.
 const PRUNE_MS = REVEAL_EXIT_MS;
 
-export function useRevealRows(ids, resetKey) {
+// `opts.speed` (17.15.0-wa-sandbox) names which entry of the `M` scale the
+// caller's own <Reveal> runs on, so the prune window can be derived from the
+// SAME entry. The sandbox used to pass a `pruneMs` number here to match a
+// `ms` number there — two hand-kept halves of one fact, which is the defect
+// v17.15.0's named `speed` exists to remove. A row must outlive the Reveal
+// inside it; naming the speed once is what guarantees it still does when the
+// token moves.
+export function useRevealRows(ids, resetKey, opts) {
+  const speed = (opts && opts.speed) || "reveal";
+  const instantIn = !!(opts && opts.instantIn);
+  const pruneMs = speed === "reveal" ? PRUNE_MS : exitHold(speed);
   const [renderIds, setRenderIds] = useState(function () { return ids.slice(); });
   const [openIds, setOpenIds] = useState(function () { return new Set(ids); });
   const prevKeys = useRef(ids.slice());
@@ -131,6 +150,19 @@ export function useRevealRows(ids, resetKey) {
         newcomers.forEach(function (id) { if (next.indexOf(id) === -1) next.push(id); });
         return next;
       });
+      // Asymmetric mode: open in the SAME commit as the mount. Both updaters
+      // batch, so the row's <Reveal> is first rendered with show=true and its
+      // useState initializers make it open+revealed with no transition to run.
+      // (A row that departs and returns BEFORE its prune is still mounted and
+      // mid-collapse, so it eases the rest of the way open — it cannot teleport,
+      // and that is the right behaviour for a genuinely interrupted collapse.)
+      if (instantIn) {
+        setOpenIds(function (prev) {
+          const next = new Set(prev);
+          newcomers.forEach(function (id) { next.add(id); });
+          return next;
+        });
+      }
     }
     cur.forEach(function (id) {
       if (timers.current[id]) { clearTimeout(timers.current[id]); delete timers.current[id]; }
@@ -147,7 +179,7 @@ export function useRevealRows(ids, resetKey) {
           timers.current[id] = setTimeout(function () {
             delete timers.current[id];
             setRenderIds(function (prev) { return prev.filter(function (x) { return x !== id; }); });
-          }, PRUNE_MS);
+          }, pruneMs);
         }
       });
     }

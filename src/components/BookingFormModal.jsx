@@ -43,7 +43,7 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor, seatingClosed
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
@@ -70,7 +70,7 @@ export function BookingFormModal({
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
-  currency = "€", regularMin = 2, // v17.0.0: settings/general
+  currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
@@ -223,10 +223,15 @@ export function BookingFormModal({
   // --suggest/--warn families, text from --success-text/--warn-text. A tone is
   // one decision now. `size="small"` keeps this chip's wider inset and T.small —
   // it sits in a form beside inputs, not in a dense settings row.
+  //
+  // The label itself stays `regularChipLabel` (lib/customers.js), the
+  // sandbox's own /code-review extraction: prod re-inlined the same ternary
+  // here, and the threshold it compares against is a settings value, so an
+  // inline copy is a second place for `regularMin` to be read wrongly.
   const chipMark=function(which){return histWhich===which?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />;};
   const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
     key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("regular");}}><span>{custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>{chipMark("regular")}</OutlineChip>:null;
+    onClick={function(){toggleChipHist("regular");}}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{chipMark("regular")}</OutlineChip>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<OutlineChip
     key="ns" tone="warn" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}><span>{"No-show ×"+custMatch.noShowCount}</span>{chipMark("noshow")}</OutlineChip>:<OutlineChip

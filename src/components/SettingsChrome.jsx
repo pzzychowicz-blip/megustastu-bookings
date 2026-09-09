@@ -8,6 +8,7 @@
 // open instead of in the startup bundle. Settings.jsx re-exports both, so the
 // old import path still works.
 
+
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // Single source of truth for the Settings tabs. SettingsContent renders it AND
 // App.jsx's ←/→ keyboard nav derives its cycle order from it (imported there).
@@ -33,6 +34,13 @@
 // (customerDelete, voucherIssue, voucherVoid). `app` is per-user preferences and
 // `shortcuts` is reference, so neither is a restaurant setting at all.
 //
+// v18.0.0 phase 5: the WhatsApp tab replaces the sandbox's `WA_SANDBOX` splice
+// with the `module` gate phase 4 built. Same effect — a build without the module
+// shows exactly the tabs it always did — but through the switch an admin can
+// reach, rather than a build-time constant only a developer can. It keeps the
+// sandbox's placement: after Reminders, with the other things the restaurant
+// HOLDS, and before App/Shortcuts, which are about the device and reference.
+//
 // **`caps` is a LIST and the test is ANY, because one tab stopped being one
 // capability.** The v18.0.0 split gave reminders, standing bookings, the floor
 // plan and the opening hours their own rows, and General holds controls
@@ -52,6 +60,13 @@ export const SETTINGS_TABS = [
   // restaurant HAS the feature, `caps` who may use it.
   { id: "vouchers",  label: "Vouchers", module: "vouchers" },
   { id: "reminders", label: "Reminders", caps: ["reminderManage"] },
+  // Both gates at once, and the FIRST tab to carry both — which is the pair
+  // `visibleTabs` was written for. `module` asks whether this restaurant has
+  // WhatsApp at all; `settingsWrite` asks who may change the one restaurant-wide
+  // setting behind this tab (auto-archive on completion). The INBOX is not gated
+  // on a capability: reading and replying to a guest is service work, the same
+  // judgement that leaves Customers and Vouchers open (Patryk's call, phase 5).
+  { id: "whatsapp",  label: "WhatsApp", module: "whatsapp", caps: ["settingsWrite"] },
   { id: "app",       label: "App" },
   { id: "shortcuts", label: "Shortcuts" },
   // v18.0.0 phase 3: the 8th tab, and the FIRST one that is not always there.

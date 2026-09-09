@@ -1885,9 +1885,10 @@ export const TimelineView = memo(function TimelineView({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flex: "1 1 auto", minWidth: 0 }}>
           {legendEls}
         </div>
-        {/* v17.0.0 round 8: the 🔍/⚙ pair moved OUT of this legend, first to
-            App's date-nav row and (v17.9.0) up into App's header, so it sits in
-            one place for all three views. */}
+        {/* v17.0.0 round 8: the Find/Settings pair moved OUT of this legend,
+            first to App's date-nav row and (v17.9.0) up into App's header, so
+            it sits in one place for all three views. The WA sandbox simulator
+            button did NOT follow them — it lives in InboxPanel's own header. */}
       </div>
       {/* v17.9.0: this line said "= assign" and described a glyph that no longer
           exists — the block's handle is AssignIcon now. Exactly the trap

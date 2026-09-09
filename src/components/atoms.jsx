@@ -188,7 +188,116 @@ export function mkSolidBtn(background, extra) {
 const OverlayScrollContext = createContext(null);
 export function useOverlayScroll() { return useContext(OverlayScrollContext); }
 
-export function Overlay({ onClose, children, footer }) {
+// ── useDialog (v17.9.1 prod; extracted here in 17.9.1-wa-sandbox) ────────────
+// This was pulled out of Overlay so the WA inbox — then a bespoke panel with
+// its own scrim, and so the one modal surface in the app with no role, no name
+// and no focus trap — could take the identical contract without a second copy
+// of a focus trap.
+//
+// 17.15.0-wa-sandbox: that caller is GONE. The inbox is an Overlay now (`panel`
+// mode below), so this has exactly one caller again, which is the shape it had
+// before the extraction. It stays extracted rather than being folded back in
+// for one reason and it is not inertia: the reason it was ever separable is
+// that a dialog's semantics are not Overlay's layout, and the next surface that
+// needs the one without the other should find it already named. If none
+// appears, folding it back is a safe five-minute change.
+//
+// Measured in the live DOM before this: no role, no aria-modal, no accessible
+// name, and focus left sitting on <body> when a modal opened. A screen-reader
+// or keyboard user got no announcement that anything had happened and no way
+// into the dialog except tabbing through the entire page behind it.
+//
+// The accessible NAME is resolved from the DOM rather than from a prop. Seven
+// modals render a <ModalTitle> and five (the confirm dialogs, WeekView,
+// BlockModal, HistoryPopup) render their own heading text instead, and a prop
+// would have to be kept correct at twelve call sites forever. Pointing
+// `aria-labelledby` at an id that is not in the tree leaves the dialog
+// NAMELESS — strictly worse than not trying — so this checks. Falling back to
+// the first heading means the untitled modals get a real name too.
+export function useDialog(ref) {
+const restoreRef = useRef(null);
+const uid = useId();
+useEffect(() => {
+  restoreRef.current = document.activeElement;
+  const el = ref.current;
+  if (el) {
+    // Scoped to THIS dialog's subtree, then given an id unique to this
+    // instance — two modals can be mounted at once (a sub-modal opened from
+    // the booking form), and a shared id makes both point at the first one in
+    // document order. See MODAL_TITLE_ATTR.
+    const titled = el.querySelector("[" + MODAL_TITLE_ATTR + "]") || el.querySelector("h1,h2,h3");
+    if (titled) {
+      if (!titled.id) titled.id = "mgt-modal-title-" + uid;
+      el.setAttribute("aria-labelledby", titled.id);
+    } else {
+      el.setAttribute("aria-label", "Dialog");
+    }
+    // Focus the dialog itself, not its first control: focusing a text input
+    // pops the keyboard on a tablet before the user has decided to type, and
+    // focusing the first BUTTON puts a destructive action one Enter away.
+    // tabIndex -1 makes the container focusable without adding a tab stop.
+    el.focus({ preventScroll: true });
+  }
+  return () => {
+    const prev = restoreRef.current;
+    // Return focus to whatever opened the modal, so the keyboard lands back
+    // where the user left it instead of at the top of the document.
+    if (prev && typeof prev.focus === "function" && document.contains(prev)) {
+      prev.focus({ preventScroll: true });
+    }
+  };
+}, []);
+
+// Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
+// the app-wide Escape z-order chain, and a second handler would race it.
+function onKeyDown(e) {
+  if (e.key !== "Tab") return;
+  const el = ref.current;
+  if (!el) return;
+  const items = [...el.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter((n) => n.offsetParent !== null || n === document.activeElement);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
+
+// NB: no `ref` in the returned props, and do not add one. Overlay's desktop
+// no-footer card is BOTH the dialog and the scroll port, and one node cannot
+// take two refs — that branch assigns both through a callback ref instead.
+// Returning a `ref` from here would read as the obvious convenience and
+// silently break it.
+  return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
+}
+
+// `panel` (17.15.0-wa-sandbox) — a dialog that brings its OWN body.
+//
+// Every branch below gives you a padded, scrolling card at maxWidth 580 on
+// --bg-sheet, which is right for the twelve modals that are a column of fields
+// and a footer. The WhatsApp inbox is not one: it is 1200px wide, a fixed
+// min(900px, 90dvh) tall, and its body is a flex column holding two
+// independently-scrolling panes, so a padded scroll port around it is exactly
+// wrong. That is why it was bespoke for its whole life — and being bespoke is
+// what left it, alone among the app's modals, with no role, no accessible name,
+// no focus trap and no focus restore until v17.9.1 had to extract `useDialog`
+// to reach it.
+//
+// So this is ONE prop and one concept, not a styling API. `panel` takes
+// `{ maxWidth, height, background, blur }`; Overlay keeps the scrim, the card
+// and sheet classes, the mobile full-screen branch, and the whole dialog
+// contract, and simply does not wrap the children in a scroll port. Omitted —
+// which is every caller in prod — nothing here runs and the four branches are
+// byte-for-byte what they were.
+//
+// It deliberately does NOT accept arbitrary style. A caller that needs more
+// than a size and a surface is describing a different component, and the next
+// person should have to say so out loud rather than reach for a fifth key.
+export function Overlay({ onClose, children, footer, panel }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
   const scrollRef = useRef(null);
@@ -213,86 +322,56 @@ export function Overlay({ onClose, children, footer }) {
   }, [mob]);
 
   // ── v17.9.1 (audit P1): dialog semantics ───────────────────────────────────
-  // Measured in the live DOM before this: no role, no aria-modal, no accessible
-  // name, and focus left sitting on <body> when a modal opened. A screen-reader
-  // or keyboard user got no announcement that anything had happened and no way
-  // into the dialog except tabbing through the entire page behind it.
-  //
-  // The accessible NAME is resolved from the DOM rather than from a prop. Seven
-  // modals render a <ModalTitle> and five (the confirm dialogs, WeekView,
-  // BlockModal, HistoryPopup) render their own heading text instead, and a prop
-  // would have to be kept correct at twelve call sites forever. Pointing
-  // `aria-labelledby` at an id that is not in the tree leaves the dialog
-  // NAMELESS — strictly worse than not trying — so this checks. Falling back to
-  // the first heading means the untitled modals get a real name too.
+  // The behaviour lives in useDialog (above), so the WA inbox panel — which is
+  // not an Overlay — can take the identical contract.
   const dialogRef = useRef(null);
-  const restoreRef = useRef(null);
-  const uid = useId();
-  useEffect(() => {
-    restoreRef.current = document.activeElement;
-    const el = dialogRef.current;
-    if (el) {
-      // Scoped to THIS dialog's subtree, then given an id unique to this
-      // instance — two modals can be mounted at once (a sub-modal opened from
-      // the booking form), and a shared id makes both point at the first one in
-      // document order. See MODAL_TITLE_ATTR.
-      const titled = el.querySelector("[" + MODAL_TITLE_ATTR + "]") || el.querySelector("h1,h2,h3");
-      if (titled) {
-        if (!titled.id) titled.id = "mgt-modal-title-" + uid;
-        el.setAttribute("aria-labelledby", titled.id);
-      } else {
-        el.setAttribute("aria-label", "Dialog");
-      }
-      // Focus the dialog itself, not its first control: focusing a text input
-      // pops the keyboard on a tablet before the user has decided to type, and
-      // focusing the first BUTTON puts a destructive action one Enter away.
-      // tabIndex -1 makes the container focusable without adding a tab stop.
-      el.focus({ preventScroll: true });
-    }
-    return () => {
-      const prev = restoreRef.current;
-      // Return focus to whatever opened the modal, so the keyboard lands back
-      // where the user left it instead of at the top of the document.
-      if (prev && typeof prev.focus === "function" && document.contains(prev)) {
-        prev.focus({ preventScroll: true });
-      }
-    };
-  }, []);
-
-  // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
-  // the app-wide Escape z-order chain, and a second handler would race it.
-  function onKeyDown(e) {
-    if (e.key !== "Tab") return;
-    const el = dialogRef.current;
-    if (!el) return;
-    const items = [...el.querySelectorAll(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )].filter((n) => n.offsetParent !== null || n === document.activeElement);
-    if (!items.length) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey && (document.activeElement === first || document.activeElement === el)) {
-      e.preventDefault(); last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault(); first.focus();
-    }
-  }
-
-  // NB: no `ref` in here. The desktop no-footer card is BOTH the dialog and the
-  // scroll port, and one node cannot take two refs — that branch assigns both
-  // through a callback ref instead.
-  const dialogProps = {
-    role: "dialog",
-    "aria-modal": "true",
-    tabIndex: -1,
-    onKeyDown,
-  };
+  const dialogProps = useDialog(dialogRef);
 
   // One provider around every branch, so a child can reset the scroll port that
   // actually mounted without knowing which of the four it is.
   const wrap = (el) => (
     <OverlayScrollContext.Provider value={scrollApi.current}>{el}</OverlayScrollContext.Provider>
   );
+
+  // ── panel mode ─────────────────────────────────────────────────────────────
+  // One branch for both widths: below 600px it is the full-screen sheet every
+  // other modal becomes, above it a centred card at the caller's size. The
+  // children are handed a flex column and nothing else — no padding, no scroll
+  // port, and no OverlayScrollContext, because there is no single scroll port
+  // to reset and a provider promising one would be a lie a child could call.
+  if (panel) {
+    const pw = panel.maxWidth || 1200;
+    return (
+      <div
+        className={scrimCls}
+        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: mob ? 0 : 16, boxSizing: "border-box" }}
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div
+          ref={dialogRef}
+          {...dialogProps}
+          className={mob ? sheetCls : cardCls}
+          style={{
+            background: panel.background || "var(--bg-sheet)",
+            backdropFilter: "blur(" + (panel.blur || 16) + "px)",
+            WebkitBackdropFilter: "blur(" + (panel.blur || 16) + "px)",
+            borderRadius: mob ? 0 : R.sheet,
+            border: "1px solid var(--border-sheet)",
+            width: "100%",
+            maxWidth: mob ? "none" : pw,
+            height: mob ? "100dvh" : (panel.height || "min(900px, 90dvh)"),
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "var(--shadow-sheet)",
+            overflow: "hidden",
+            boxSizing: "border-box",
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   if (mob) {
     // Footer pinned to the viewport bottom; body scrolls between top and footer.
@@ -763,7 +842,21 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // takes a NAME and not a number: they are the two halves that were wrong in six
 // places at the start of this version, and a caller able to pass one without the
 // other is the same defect with a nicer spelling.
-export function Reveal({ show, children, style, horizontal = false, speed = "reveal" }) {
+// `presentational` (17.15.0-wa-sandbox) — mark BOTH wrapper divs
+// `role="presentation"` so they vanish from the accessibility tree.
+//
+// A `role="list"` must OWN its `role="listitem"` children, and this component
+// puts two generic divs between them. Measured in the WA conversation list
+// before this: 17 listitems, ZERO of them a direct child of the list, each
+// three levels down — so the list announced its items as loose content and the
+// count and position a list exists to give were both lost. Prod's ListView
+// never hit it because it maps its cards straight into the list element; the
+// moment a per-row Reveal sits in between, the relationship needs saying.
+//
+// Presentation is the right tool rather than `aria-owns`: these divs carry no
+// focus and no ARIA of their own, which is exactly the condition under which
+// the role is honoured, and it needs no ids to keep in step.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -805,10 +898,26 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
   const innerStyle = horizontal
     ? { overflow: revealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
-    : { overflow: revealed ? "visible" : "hidden", minHeight: 0 };
+    // `minWidth: 0` is the horizontal counterpart of the `minHeight: 0` beside
+    // it, and it is load-bearing: the inner track is a GRID ITEM, whose default
+    // `min-width: auto` resolves to its content's MIN-CONTENT width. Wrap
+    // anything containing `white-space: nowrap` text (the WA conversation rows)
+    // and the item refuses to shrink below the full unwrapped text, blowing out
+    // of its track and killing the ellipsis. The horizontal branch above always
+    // had it; the vertical branch only ever wrapped self-limiting content, so
+    // the gap went unnoticed until v17.6.0-wa-sandbox put the conversation list
+    // in a Reveal.
+    //
+    // RESTORED at the 17.15.0 sync, having been silently reverted by it: the
+    // conflict in this file was resolved by taking prod's copy wholesale, and
+    // `git checkout --theirs` discards the ENTIRE ours-side of a conflicted
+    // file, including hunks that never conflicted. Prod's Reveal has never
+    // needed this line, so nothing upstream would ever reintroduce it. Guarded
+    // now by tests/wa-sandbox-integrity.test.js.
+    : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
-    <div style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
-      <div style={innerStyle}>{children || last.current}</div>
+    <div role={presentational ? "presentation" : undefined} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
+      <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
   );
 }
@@ -1285,13 +1394,30 @@ export function reduceMotionOn() {
     || !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
 
-export function useFlip(deps) {
+// `isQuiet` (v17.6.0-wa-sandbox) — an optional PREDICATE that re-measures
+// WITHOUT animating when it returns true. It is NOT superseded by v17.15.0's
+// container-relative measurement above, and the two answer different faults:
+// that one cancels a shift OF the container, which every child shares; this one
+// covers a shift WITHIN it, where a sibling's own CSS height transition eases
+// the rows below it upward between two passes. Nothing above the container
+// moved, so container-relative offsets change exactly as much as viewport ones
+// do — and the stored tops still describe a position the rows left long ago.
+// The next pass measures that whole stale delta and replays a move the user has
+// already watched. A caller that knows a given change was carried by something
+// other than FLIP returns true for that pass, which resyncs the tops and
+// animates nothing. The WA conversation list does, while a row collapses.
+//
+// A predicate rather than a boolean so it is evaluated HERE, inside the layout
+// effect — the moment the question is actually asked. That also lets a caller
+// answer it from refs without reading them during render.
+export function useFlip(deps, isQuiet) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
     const originTop = container.getBoundingClientRect().top;
+    const quiet = typeof isQuiet === "function" && isQuiet() === true;
     // v17.1.0: WAAPI animations aren't touched by the CSS reduced-motion
     // kill-switch — honor both the OS setting and the per-device "Reduce
     // animations" toggle (data-motion, index.html) here in JS. Computed ONCE
@@ -1308,7 +1434,7 @@ export function useFlip(deps) {
       const top = el.getBoundingClientRect().top - originTop;
       next.set(id, top);
       const prev = prevTops.current.get(id);
-      if (!reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
+      if (!quiet && !reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
           // WAAPI cannot read a CSS var — see the note on M.dur/M.easeOut.

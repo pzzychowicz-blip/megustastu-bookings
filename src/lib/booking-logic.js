@@ -26,13 +26,16 @@ import {
   PRIORITIES,
   DUR_TIERS,
   TURN_BUFFER
-} from "./constants";
-import { todayStr, nowOn } from "./day";
+} from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
+import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
 // v18.0.0: one voucher-code normaliser, the `normalizePhone` precedent — the
 // issue field, every redemption lookup and `sanitize` must agree on what a code
 // IS, or two spellings resolve to two vouchers. `vouchers.js` imports nothing,
 // so this edge cannot close a cycle.
-import { normalizeCode, formatCode } from "./vouchers";
+// v18.0.0 phase 5: ".js" for the same reason as the two above — this file is now
+// reachable from the serverless functions (api/* → whatsapp.js → customers.js →
+// here), and Node's ESM resolver does not add the extension the way Vite does.
+import { normalizeCode, formatCode } from "./vouchers.js";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/

@@ -21298,3 +21298,130 @@ which is not a path, in the one file whose whole subject is a matcher and its
 prose disagreeing.
 
 Gate: `103.44 kB` gz · **1070 tests** · 0 lint errors (71 warnings) · style OK.
+
+### Commit 38 (phase 5a) — the WhatsApp module lands, gated off
+
+The largest single commit in the release: **62 files, +10,030 / −178**, the
+`wa-sandbox` branch merged onto the v18 head and squashed to one commit. Landing
+state, per the plan: the gate is green, the module switch is off, and nothing a
+restaurant can see has changed.
+
+**The merge itself was small; what it collided with was not.** 39 of the 62 files
+are new and could not conflict. 15 files had been touched by both sides, and only
+6 conflicted, in **9 hunks total** — the four phases of v18 work and the sandbox's
+own edits mostly sat in different parts of the same files. Two of the nine were
+the whole of the interesting work:
+
+- **`firebase.js`** — the sandbox forces DEV via `VITE_FB_TARGET`, phase 2 made
+  the PROD half tenant-selected. They are not competing answers and the resolution
+  says so: the override decides WHICH ENVIRONMENT, the tenant layer decides WHICH
+  RESTAURANT once the answer is a real one. A sandbox build of any tenant still
+  lands in the same shared DEV project.
+- **`booking-logic.js`** — the sandbox had added explicit `.js` extensions with a
+  comment naming a "Node ESM chain"; v18 had added an extensionless `./vouchers`
+  import. Both were right and the merge is not "keep both": `vouchers` needed the
+  extension too. **The chain is real and was measured rather than reasoned about**
+  — `node --input-type=module` importing `whatsapp.js` resolves
+  `api/* → whatsapp.js → customers.js → booking-logic.js → constants/day/vouchers`
+  end to end, and the extensionless form was separately reproduced failing with
+  `ERR_MODULE_NOT_FOUND`.
+
+**The complementarity contract was already satisfied**, which three documents
+listed as work still to do. `whatsapp.js:92` re-exports
+`normalizePhone`/`formatPhone`/`matchCustomerByPhone` from `customers.js` rather
+than keeping copies — done on the sandbox branch at some earlier sync. It is
+recorded in `ROADMAP.md` as done rather than deleted, because otherwise it gets
+re-checked at every future sync.
+
+#### The gate swap — `WA_SANDBOX` → the module, and what a build constant had hidden
+
+The sandbox gated every WhatsApp surface on `WA_SANDBOX`, a build-time constant.
+Phase 4 built the lever this release needs; phase 5a moves the client surface
+onto it and leaves the SIMULATOR behind — `WA_SANDBOX` now means only "this build
+may simulate", and `whatsappOn` means "this restaurant uses WhatsApp".
+
+Swapping a constant for a runtime value exposed three things that were correct
+only because the flag never changed:
+
+**1. The listeners' dep arrays.** All four in `useWhatsApp` plus three in
+`useWaSettings` were `[]`. Correct for a constant; wrong for a switch — without
+the gate as a dependency, an admin turning WhatsApp on would attach no listener
+until they reloaded. Verified live: with the fix the inbox fills the moment the
+switch moves.
+
+**2. The Settings tab branched on the RAW requested id.** `tab === "whatsapp"`
+was safe in the sandbox only because `SETTINGS_TABS` spliced that tab out of
+existence at build time, so the id was unreachable. Under the module gate the id
+is real and merely hidden, so `tab` would have rendered the WhatsApp settings for
+a restaurant whose module is off. It reads `cur` now — the id validated against
+`visibleTabs` — like every other branch in that chain. `tests/settings-tabs.test.js`
+already had a guard for exactly this ("every tab body branches on the DERIVED id")
+and would have caught it.
+
+**3. Three listeners had no error callback at all.** `useWhatsApp`'s
+`conversations`, `messages` and `templates` `onValue` calls passed two arguments,
+and the file did not import `dbError`. That is the omission behind the
+v17.5.1 tablet outage, in the one hook that had never been through this repo's
+gates. All three pass `dbError("<path>")` now.
+
+**The 2026-07-16 PROD-write hazard is covered better, not worse.** The templates
+listener seeding `DEFAULT_TEMPLATES` into a production node is now prevented by
+the module shipping off — the restaurant's own data — rather than by which env var
+a deployment happened to set.
+
+#### What the gates found
+
+Patryk's call on who sees WhatsApp: **module only for the inbox, module +
+`settingsWrite` for the settings tab.** Replying to a guest is service work, the
+judgement that already leaves Customers and Vouchers ungated; the tab holds a
+restaurant-wide setting, which is configuration. It makes WhatsApp the first tab
+carrying both gates — the pair `visibleTabs` was written for — and, notably, it
+made two failing `settings-tabs` assertions pass **without editing them**, which
+is the sign a decision fits the model it is being added to rather than bending it.
+
+Five test files and `check:style` failed on the merged tree, every one of them
+encoding a rule the sandbox predates:
+
+- **`tests/wa-sandbox-integrity.test.js`** — the sandbox's own merge-protection
+  guard, asserting the `WA_SANDBOX ? … id: "whatsapp"` splice and a WA_SANDBOX-gated
+  `I` key. Its PURPOSE survives and its MECHANISM changed: it now pins the module
+  declaration, pins `I` to the module, pins `X` to `WA_SANDBOX`, and — added —
+  asserts `I` is *no longer* WA_SANDBOX-gated, since that flag is false in every
+  production build and the switch could be on with the shortcut dead.
+- **`tests/test-hygiene.test.js`** — two WA test files greped JS source without
+  `stripComments`. Both strip now, and this file needed it more than most: two of
+  its assertions check that an old gating shape is ABSENT, which a raw read would
+  fail the moment somebody explained the change in a comment beside it.
+- **The weight ratchet** fell to 29.6% against a 30% floor. Three captions were
+  demoted — "N selected", "Draft booking — parsed from message", "Reading the
+  message…" — each of them secondary COLOUR at primary WEIGHT, which is precisely
+  the pairing v17.13.0's pass demoted 46 of.
+- **`check:style`, nine violations.** Four `@no-lift` markers with real reasons
+  (a `readOnly` checkbox whose row is the control; two full-width text fields,
+  which is the case `index.css` itself records as having overflowed the booking
+  form's Section; and a transparent radius-less ✕ inside an input, the
+  ConnectionStatus-dot case). Four `@static-height` markers on confirm overlays
+  and on the inbox's `panel` mode, whose height comes from `INBOX_PANEL` and not
+  from its content. **One earned a real fix rather than a marker**: `WaSimulator`'s
+  body genuinely changes height (`status`, `health`, `genHint`), so it got
+  `<AutoHeight>`.
+
+#### Verified live on DEV
+
+Module OFF: no WhatsApp button, no WhatsApp tab, and no occurrence of the word
+anywhere in the rendered body. Module ON, flipped through Settings → Admin →
+Modules: the tab appears in the list in its designed position, the toolbar button
+appears, and the inbox opens against real DEV conversations. Both directions
+matter — "no WhatsApp visible" is also exactly what a broken merge looks like.
+
+A fresh tab reports **zero console errors**. The errors visible in the editing tab
+were HMR artifacts, including a run of `useEffect changed size between renders`
+which is `[]` → `[on]` swapping under a live module — the hand-off's own warning
+that this console buffer does not clear on navigation, confirmed by opening a
+clean one.
+
+Gate: `127.36 kB` gz · **1158 tests** · 0 lint errors (88 warnings) · style OK.
+The bundle is **+23.9 kB gz** and the warnings **+17**, both from WhatsApp code
+now in the startup chunk; the size is phase 5b's lazy-import work, and the
+warnings are pre-existing sandbox `exhaustive-deps` and React-compiler advisories
+that CI does not gate.

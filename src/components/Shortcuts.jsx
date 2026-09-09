@@ -59,6 +59,8 @@ const SHORTCUT_SECTIONS = [
     { keys: ["/"],       label: "Find a booking (any date)" },
     { keys: ["⇧D"], label: "Toggle dark / light mode" },
     { keys: ["⇧+", "⇧−"], label: "Adjust app width (±50 px)" },
+    { keys: ["I"],       label: "Open WhatsApp inbox" },
+    { keys: ["X"],       label: "Open WhatsApp simulator" },
     { keys: ["?"],       label: "Show this help" },
   ]},
   { title: "Timeline", rows: [
@@ -77,6 +79,19 @@ const SHORTCUT_SECTIONS = [
     { keys: ["C"],       label: "Mark completed" },
     { keys: ["⇧C"], label: "Cancel booking" },
     { keys: ["D"],       label: "Delete booking" },
+  ]},
+  { title: "WhatsApp Inbox", rows: [
+    { keys: ["←", "→"],   label: "Switch Inbox / Archived" },
+    { keys: ["↑", "↓"],   label: "Select previous / next conversation" },
+    { keys: ["S"],        label: "Toggle multi-select" },
+    { keys: ["T"],        label: "Open templates editor" },
+    { keys: ["E"],        label: "Toggle quick-reply templates" },
+    { keys: ["A"],        label: "Accept draft, else toggle Needs action" },
+    { keys: ["D"],        label: "Dismiss draft" },
+    { keys: ["C"],        label: "Focus the reply box" },
+    { keys: ["/"],        label: "Focus search" },
+    { keys: ["⌫"],        label: "Archive (Inbox; selection in select mode)" },
+    { keys: ["R"],        label: "Restore (Archived; selection in select mode)" },
   ]},
   { title: "More popover (Week / Month)", rows: [
     { keys: ["W", "M"], label: "Week / Month view" },

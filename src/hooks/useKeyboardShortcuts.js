@@ -21,6 +21,15 @@ import { validateReminderDraft } from "../lib/reminders";
 import { visibleTabs } from "../components/SettingsChrome";
 import { todayStr, stepDate } from "../lib/day";
 import { seatingClosed } from "../lib/booking-logic";
+// WA sandbox: gates the I (inbox) / X (simulator) keys, exactly like the
+// toolbar button — a non-sandbox build must expose no WhatsApp surface.
+//
+// RESTORED at the 17.15.0 sync, having been silently reverted by it. This file
+// conflicted only on the `anyModal` line, and taking prod's copy wholesale threw
+// away the two key handlers with it — the module's only keyboard entry points,
+// both documented in the mount card, neither reachable by any test. See
+// tests/wa-sandbox-integrity.test.js.
+import { WA_SANDBOX } from "../lib/waSandbox";
 
 // v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
 // NB: in List view with a booking focused, S marks it Seated (that check runs
@@ -72,6 +81,13 @@ function escapeAction(K,id){
     // v17.14.0: new. The waitlist Overlay had no Esc branch, so it was the one
     // modal in the app you could not dismiss from the keyboard.
     case "waitlist":    return function(){K.setShowWaitlist(false);};
+    // WA sandbox. The inbox's own close CLEARS the filter state and the
+    // return-to-inbox key, so Esc must go through it rather than the raw setter
+    // — the same reason `form`/`walkin`/`manual` name a requestClose* here.
+    case "wadelete":    return function(){K.setConfirmDeleteConv(null);};
+    case "waarchive":   return function(){K.setConfirmArchive(null);};
+    case "sim":         return function(){K.setShowSim(false);};
+    case "inbox":       return K.closeInbox;
     case "week":        return function(){K.setShowWeek(false);};
     case "form":        return K.requestCloseForm;
     default:            return null;
@@ -360,6 +376,13 @@ export function useKeyboardShortcuts(ctx){
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(todayStr());return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
+      // WhatsApp: I → open the inbox ("w" was taken by Walk-in). v18.0.0 phase 5
+      // gates it on the MODULE, exactly like the toolbar button — a shortcut is
+      // a second door to the same surface, and gating one door is gating none.
+      // `hasModule` is already on the ctx for the Settings tab cycle.
+      if((k==="i"||k==="I")&&K.hasModule&&K.hasModule("whatsapp")){e.preventDefault();K.setShowInbox(true);return;}
+      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
+      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}

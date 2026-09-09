@@ -18,10 +18,14 @@ both of them warn about.
 user-visible surface adds its row here, in the same PR. A glossary that lags is
 worse than none, because it is quoted with confidence.
 
-Sections 1–9 and 11 are **the shipped app**. Section 10 is the **WhatsApp
-sandbox**, which is not on `main` and not in the restaurant's app — it is marked
-as such at its own heading, and the distinction matters more than any other in
-this file.
+Sections 1–11 are all **the shipped app** as of v18.0.0 phase 5. Section 10 was
+the **WhatsApp sandbox** for eight versions, and the distinction it carried —
+"real code you can read, none of it in the app the restaurant runs" — mattered
+more than any other in this file. It is gone: the module is merged, and what
+replaces it is a weaker but still real line. WhatsApp is **shipped and switched
+off**, so its surfaces exist in the build and are absent from a restaurant whose
+admin has not enabled the module. The one thing still not shipped is the
+**simulator** (§10, `WaSimulator.jsx`), which is DEV-only by construction.
 
 ---
 
@@ -271,7 +275,7 @@ when its module is switched off (*does this restaurant have it*).
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| General · Layout · Customers · Vouchers · Reminders · App · Shortcuts · Admin | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. Since v18.0.0 both read it through **`visibleTabs(can, hasModule)`**, so a gated tab is filtered out of the render *and* the cycle. The module is checked FIRST: off hides the tab from everybody, an admin included. |
+| General · Layout · Customers · Vouchers · Reminders · WhatsApp · App · Shortcuts · Admin | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. Since v18.0.0 both read it through **`visibleTabs(can, hasModule)`**, so a gated tab is filtered out of the render *and* the cycle. The module is checked FIRST: off hides the tab from everybody, an admin included. **WhatsApp (v18.0.0 phase 5) is the first tab carrying BOTH gates** — `module: "whatsapp"` and `caps: ["settingsWrite"]` — which is the pair `visibleTabs` was written for. |
 | The Vouchers tab body | **vouchers settings** (`VouchersSettings.jsx`) | Issue · search · filter · void, plus the default validity period. Records and their configuration in one place. There is **no delete** — see `CLAUDE.md`. |
 | "Default validity", in months | **voucher expiry period** (`settings/voucherDefaults.expiryMonths`) | Seeds `expiresAt` on a newly issued voucher. `0` means never. |
 | Opening hours, shifts, durations, late thresholds | **General** | The restaurant's operating rules. Restaurant-wide. |
@@ -289,7 +293,7 @@ when its module is switched off (*does this restaurant have it*).
 | "Take bookings", "Delete bookings", "Change settings" … | **capability** (`CAPABILITIES`, `src/lib/roles.js`) | The eighteen things the app gates on, in four groups (`CAP_GROUPS`) — Service, Money, Configuration, Data and access. Eighteen because v18.0.0 phase 3 split `settingsWrite` into five: reminders, standing bookings, the opening hours, the floor plan, and what was left. Each split capability kept `manager` as its floor, so the split changed nobody's access on the day it shipped. The UI always asks `can("bookingDelete")`, **never** `role === "admin"`. |
 | The "enforced by the server" chip | **rule-enforced capability** (`RULE_ENFORCED`) | **Seven** the database refuses too — `settingsAdmin`, `settingsWrite`, `bookingDelete`, `reminderManage`, `recurringManage`, `hoursEdit`, `layoutEdit`. The other eleven are UI gates and the panel says so. |
 | The Capabilities pop-up | **capability grid** (`RolesModal`, `AdminSettings.jsx`) | Pick a person, read their capabilities against all three levels side by side. Only their own column takes a tick. |
-| The Modules section | **module registry** (`settings/admin.modules`, `src/lib/modules.js`) | Whole features this restaurant has, or does not: **Gift vouchers** (ships on) and **WhatsApp inbox** (ships off, until phase 5 brings its code). Off hides every surface of the module from everybody, admin included — the tab, the booking-form picker, the list chips, the redeem modal, the unsettled banner and the printed column — and deletes nothing, so switching it back on restores what was there. Under project-per-restaurant this is the whole of "restaurant B has no WhatsApp". |
+| The Modules section | **module registry** (`settings/admin.modules`, `src/lib/modules.js`) | Whole features this restaurant has, or does not: **Gift vouchers** (ships on) and **WhatsApp inbox** (ships off). Off hides every surface of the module from everybody, admin included — the tab, the booking-form picker, the list chips, the redeem modal, the unsettled banner and the printed column — and deletes nothing, so switching it back on restores what was there. Under project-per-restaurant this is the whole of "restaurant B has no WhatsApp". |
 | A module switch (`Toggle`) | **module switch** (`moduleOn`, `setModuleEnabled`) | A **module** answers *does this restaurant have it*; a **capability** answers *may this person do it*. They are different questions and compose one way only — `moduleOn` is asked first, so a capability grant can never re-open a switched-off feature. |
 | "1 voucher is still open, worth 75 €…" | **hide warning** (`hideWarning`, `src/lib/modules.js`) | Shown before the vouchers switch moves, because an open voucher is money the restaurant owes and hiding it makes a liability invisible. It **refuses nothing** — an admin who has read the number may still switch off — and the toggle does not move until they answer. No open vouchers, no question. |
 | The Integrations section | **integrations panel** (`AdminSettings.jsx`) | Names the server-side keys (Meta, Gemini, the service account) and where they live: **the deployment's environment variables, never this database**. `.read` is `auth != null` at the root and read permission cascades down, so a key stored here would be readable by every member of staff. It states where, not whether — a live "is it set" status arrives with the WhatsApp module, as a boolean from the server and never as a value. |
@@ -301,12 +305,18 @@ when its module is switched off (*does this restaurant have it*).
 
 ## 10. The WhatsApp module
 
-> **Not in this branch.** The WhatsApp Inbox is a **sandbox** built on top of the
-> production app, living on the long-lived `wa-sandbox` branch and deployed to
-> its own Vercel project against **DEV Firebase**. Its version marker is
-> `<prod-version>-wa-sandbox`. It is **never merged to `main`** until Patryk says
-> *"give me the deployment version"* — so every term below is real code you can
-> read, and none of it is in the app the restaurant runs today.
+> **Merged in v18.0.0 phase 5, and shipped OFF.** For eight versions this note
+> said the opposite, and the change is the whole of that phase: the module now
+> lives on `main`, and every surface below is gated on
+> `settings/admin.modules.whatsapp.enabled` — off by default, so a restaurant
+> sees none of it until an admin switches it on in Settings → Admin → Modules.
+> The `wa-sandbox` branch survives as the development history and as the home of
+> the simulator's own Vercel project against **DEV Firebase**.
+>
+> **What is still not shipped is the simulator** (`WaSimulator.jsx`, the `X` key
+> and the three `api/wa-sim-*` endpoints), which stays behind the build-time
+> `WA_SANDBOX` constant. That is the one term in this section that a restaurant
+> can never reach.
 >
 > Verified against the **live `wa-sandbox` branch at `17.15.0-wa-sandbox`**
 > (worktree `wa-sync-17-15-0`), not just the snapshot — every `src/` and `api/`
@@ -317,7 +327,7 @@ when its module is switched off (*does this restaurant have it*).
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| The **WhatsApp** toolbar button, or `I` | **inbox** (`InboxPanel.jsx`) | Opens the module. Two-pane above `INBOX_TWO_PANE_BREAKPOINT`, stacked below. **As of 17.15.0-wa-sandbox it is an `Overlay` in `panel` mode** — see below. |
+| The **WhatsApp** toolbar button, or `I` | **inbox** (`InboxPanel.jsx`) | Opens the module. Two-pane above `INBOX_TWO_PANE_BREAKPOINT`, stacked below; an `Overlay` in `panel` mode. **Both the button and the `I` key are gated on the whatsapp module** (v18.0.0 phase 5) — a shortcut is a second door to the same surface, so gating one and not the other is gating neither. No capability gate: reading and replying is service work, like taking a booking. |
 | "Needs action · Conversations · Archived" | **inbox tabs** (`ConversationList.jsx`) | Needs action is the triage view; archived sorts by `archivedAt`, the others by `lastMessageAt`. |
 | One line per customer | **conversation row** (`ConversationRow.jsx`) | Name-or-number, snippet, relative time, plus the state marks below. |
 | The thread itself | **conversation view** (`ConversationView.jsx`) | Messages, the cards below, Archive / Delete / Restore. |
@@ -326,7 +336,8 @@ when its module is switched off (*does this restaurant have it*).
 | "Draft booking — parsed from message" | **draft card** (`DraftCard.jsx`) | What the model extracted. Accept · Accept & open · Dismiss. |
 | "Customer is requesting changes / to cancel" | **intent banner** (`IntentBanner.jsx`) | A change or cancel request. Apply changes · Mark as handled. |
 | "Linked booking" | **linked booking card** (`LinkedBookingCard.jsx`) | The booking this thread is attached to. Open booking · Cancel booking. |
-| EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. |
+| EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. Edited from INSIDE the inbox, not from the settings tab. |
+| Settings › **WhatsApp** | **WhatsApp settings tab** (`WhatsAppTabContent`, `Settings.jsx`) | The module's one restaurant-wide setting: **Archive when the booking is completed**. Needs `settingsWrite` on top of the module, unlike the inbox — changing what the whole restaurant's inbox does is configuration, whereas answering a guest is service. |
 | 🧪 icon in the inbox header, or `X` | **simulator** (`WaSimulator.jsx`) | Sandbox-only. Fake inbound messages to drive the pipeline. |
 
 ### Conversation state
@@ -355,7 +366,7 @@ when its module is switched off (*does this restaurant have it*).
 | The automatic "got it" reply | **auto-ack** (`AUTO_ACK_TEXT`) | Sent on inbound so the customer isn't left waiting. |
 | "Checking…" / the ↻ button | **re-check** (`api/wa-recheck.js`, `parseThread`) | A **real staff feature, not sim tooling.** Re-reads the last `WA_RECHECK_HISTORY` (12) messages *both directions* and asks what the customer wants **now**, then applies it through the same `applyParse` the webhook uses. |
 | `conversations/{phoneKey}` | **phone key** (`phoneKey`) | The normalised phone, used as the RTDB child key. Writes are keyed, never whole-array. |
-| — | **`settings/whatsapp`** (`useWaSettings.js`) | `{v, autoArchiveOnComplete}` + revGuard CAS on `whatsappRev`. **Needs its rules pair when the module ships** — DEV is permissive, so it works untouched there. |
+| — | **`settings/whatsapp`** (`useWaSettings.js`) | `{v, autoArchiveOnComplete}` + revGuard CAS on `whatsappRev`. Its rules pair ships with the module (v18.0.0 phase 5); DEV is permissive, so it worked untouched there beforehand. |
 
 ### Simulator-only terms
 
@@ -432,7 +443,7 @@ The tempting name, and why it's the wrong one.
 | status (for no-show) | **flag** | No-show is a flag on a cancelled booking. |
 | optimizer (in UI copy) | **optimiser** | And the reverse in code. See §8. |
 | dialog (for the quick-status popup) | **popup** | It has no focus trap and must not claim one. |
-| "the WhatsApp integration" | **the WA sandbox** | It is not shipped and not on `main`. Calling it an integration implies the restaurant has it. |
+| "the WhatsApp integration" | **the WhatsApp module** | Shipped since v18.0.0 but **off by default**, so "the restaurant has WhatsApp" is a question about `settings/admin.modules`, not about the build. "Integration" also overstates it — what the restaurant switches on is a module, in the same sense as Gift vouchers. |
 | chat / thread | **conversation** | `conversations/{phoneKey}` is the node; every identifier says conversation. |
 | status (in the WA module) | say **send status** or **draft status** | Two unrelated lifecycles: `sending/delivered/failed` on a message, `parsed/accepted/dismissed` on a draft. |
 | re-check (as sim tooling) | **re-check**, a staff feature | It ships with the module. Only the simulator around it doesn't. |

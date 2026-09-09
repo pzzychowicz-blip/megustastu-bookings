@@ -41,6 +41,14 @@ export default defineConfig([
     },
   },
   {
+    // WA sandbox: api/* are Vercel serverless FUNCTIONS, not browser code —
+    // they legitimately use `process.env` and `Buffer` (Meta HMAC signature
+    // verification, base64 service-account decoding). Node globals for that
+    // directory only; everything else keeps the browser set above.
+    files: ['api/**/*.js'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // Deliberate multi-export files (documented in CLAUDE.md): atoms.jsx is
     // THE multi-export atoms file; FloorGlyphs is a multi-export geometry
     // unit; SettingsChrome/Settings/FloorPlanEditor export chrome constants +

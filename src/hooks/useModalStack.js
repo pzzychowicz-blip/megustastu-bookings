@@ -38,12 +38,28 @@ export const MODAL_Z=[
   "form",        // the booking form — the bottom of every stack it takes part in
   "week",        // the More popover
   "waitlist",    // the waitlist panel
+  // ── WA sandbox (17.15.0-wa-sandbox) ────────────────────────────────────────
+  // The module's four surfaces, ranked rather than OR'd by hand into `anyModal`
+  // — which is exactly what `showWaitlist` above was doing when it turned out to
+  // be missing from four of the five lists. The inbox is a BASE surface: things
+  // open over it, and it closes itself when the booking form takes over (see
+  // `returnToInboxKey` in App), so it never stacks with the form. The simulator
+  // and the two confirms are raised FROM the inbox, so they rank above it; the
+  // confirms outrank the simulator because a decision must be reachable over a
+  // tool. These ranks are unconditional while the WA UI is `WA_SANDBOX`-gated:
+  // a rank that never opens costs one map entry, and tests/modal-stack.test.js
+  // requires every `setModalFor` id in App to have one whether or not the build
+  // renders it.
+  "inbox",       // the WhatsApp inbox panel
   "walkin",
   "manual",      // manual table assign — opens over the form
   "block",
   "search",
   "prefpicker",
+  "sim",         // WA sandbox: the message simulator, opened from the inbox header
   "del",
+  "waarchive",   // WA sandbox: archive-conversation confirm
+  "wadelete",    // WA sandbox: delete-conversation confirm
   "cancel",
   "reshuffle",
   "kitchen",     // the kitchen-load confirm, raised BY a save

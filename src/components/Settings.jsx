@@ -959,6 +959,46 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
   );
 }
 
+// ── WhatsApp tab body (WA sandbox) ──────────────────────────────────────────
+// The module's own settings. Uses Collapsible for its titled section, matching
+// every other settings section — NOT Section, which takes only {style, children}
+// and silently swallows a `title` prop.
+// Backed by settings/whatsapp (useWaSettings) — restaurant-wide, not per-device.
+function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
+  const s = waSettings || {};
+  // Default-ON tri-state read, resolved ONCE: the toggle's state and the value
+  // it writes are then obviously each other's inverse.
+  const autoArchive = s.autoArchiveOnComplete !== false;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Collapsible
+        title="Inbox"
+        subtitle="How conversations leave the inbox. Shared across all devices."
+        summary={autoArchive ? "Auto-archive on" : "Auto-archive off"}
+        defaultOpen
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Archive when the booking is completed</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+              A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself. Only bookings completed from now on are affected.
+            </div>
+          </div>
+          {/* v17.15.4's rule, reaching the module at the 17.16.12 sync: a control
+              with no text content has NO name. The label is the visible heading
+              verbatim — a paraphrase would replace a name a voice-control user
+              can say with one that matches nothing on screen. The STATE is
+              aria-checked's job and must never be in the name. */}
+          <Toggle
+            label="Archive when the booking is completed"
+            on={autoArchive}
+            onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
+        </div>
+      </Collapsible>
+    </div>
+  );
+}
+
 // ── Settings modal body — tab bar + active tab content ──────────────────────
 // Tab state lives in BookingApp (so it persists across modal close/reopen if
 // desired — currently it's reset on close by the parent). Reminder list
@@ -1025,7 +1065,10 @@ export function SettingsContent({
   onEditReminder,
   onDeleteReminder,
   onToggleReminder,
-  onDirty
+  onDirty,
+  // WA sandbox (settings/whatsapp — useWaSettings)
+  waSettings,
+  onSaveWaSettings
 }) {
   // v17.8.0 unsaved-changes guard. Settings holds drafts that commit on BLUR
   // (GsTextField) or on an explicit Add/Rename (LayoutTabContent), so closing
@@ -1120,6 +1163,14 @@ export function SettingsContent({
     // v18.0.0: gift vouchers — the records AND their configuration, because a
     // voucher setting is edited where vouchers are.
     content = <VouchersTabContent vouchers={vouchers} bookings={bookings} currency={generalSettings ? generalSettings.currency : "€"} voucherDefaults={voucherDefaults} onIssue={onIssueVoucher} onVoid={onVoidVoucher} onSaveDefaults={onSaveVoucherDefaults} />;
+  } else if (cur === "whatsapp") {
+    // v18.0.0 phase 5: `cur`, not `tab`. The sandbox tested the RAW requested
+    // tab, which was safe there only because SETTINGS_TABS spliced this id out
+    // of existence in a non-sandbox build. Under the module gate the id is real
+    // and merely hidden, so `tab` would render the WhatsApp settings for a
+    // restaurant whose module is off. `cur` is the id validated against
+    // `visibleTabs`; it is the gate, and every other branch here uses it.
+    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} />;
   } else if (cur === "reminders") {
     content = (
       <RemindersTabContent

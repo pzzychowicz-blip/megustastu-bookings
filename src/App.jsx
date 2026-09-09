@@ -292,6 +292,21 @@ import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 import { todayStr, stepDate } from "./lib/day";
 
+// ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
+// `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
+// templates) + every inbox handler + the draft→form seam. InboxPanel is the
+// inbox overlay. WaSimulator + the wa-sim modules are the SANDBOX-ONLY local
+// stand-in for the (deferred) Meta webhook + LLM — every simulator surface is
+// gated behind WA_SANDBOX (dev server, or a deployed sandbox build with
+// VITE_FB_TARGET=dev) so it can never appear in a real production build.
+import { useWhatsApp } from "./hooks/useWhatsApp";
+import { useWaSettings } from "./hooks/useWaSettings";
+import { InboxPanel } from "./components/whatsapp/InboxPanel";
+import { WaSimulator } from "./components/whatsapp/WaSimulator";
+import { simulateInbound } from "./lib/wa-sim";
+import { SCENARIOS_BY_ID, seedSampleBookings, clearWaSimBookings, simulateBurst } from "./lib/wa-sim-scenarios";
+import { WA_SANDBOX } from "./lib/waSandbox";
+
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
 // Module-level identity record. Survives bundling/minification — the strings
@@ -939,6 +954,42 @@ function BookingApp({uid}){
   // v14.7.0: Week View popover (opened from the Summary panel's Week button).
   const showWeek = !!modalOpen.week;
   const setShowWeek = setModalFns.week;
+  // ── WhatsApp Inbox (sandbox) UI state ──────────────────────────────────────
+  // 17.15.0-wa-sandbox: the four VISIBILITY flags are entries in the modal stack
+  // like every other surface, so they inherit the Escape order, `inert` and the
+  // single-letter-shortcut suppression instead of being OR'd into `anyModal` by
+  // hand — the arrangement v17.14.0 retired precisely because the hand-written
+  // list is the one nobody keeps in step. The names survive as one-line
+  // derivations, so nothing below this changes.
+  //
+  // What stays plain state is what is NOT a surface: the inbox's own filter and
+  // the return key. They must survive the inbox CLOSING (Open booking / Apply
+  // changes take you to the form and back), which is the opposite of a modal's
+  // lifetime.
+  const showInbox = !!modalOpen.inbox;
+  const setShowInbox = setModalFns.inbox;
+  const confirmArchive = modalOpen.waarchive || null;       // phoneKey pending archive-confirm
+  const setConfirmArchive = setModalFns.waarchive;
+  const confirmDeleteConv = modalOpen.wadelete || null;     // phoneKey pending delete-confirm
+  const setConfirmDeleteConv = setModalFns.wadelete;
+  const showSim = !!modalOpen.sim;                          // sandbox-only simulator panel
+  const setShowSim = setModalFns.sim;
+  const [returnToInboxKey, setReturnToInboxKey] = useState(null);   // reopen the inbox here when an overlay closes
+  // Inbox filter state lives here (not in InboxPanel) so it survives the inbox
+  // round-trip — Open booking / Apply changes close the inbox to show the form,
+  // and returning restores the same Needs-action / search state. Reset only on
+  // an explicit inbox close (the X / Esc / scrim → closeInbox).
+  const [waQuery, setWaQuery] = useState("");
+  const [waNeedsAction, setWaNeedsAction] = useState(false);
+  // The inbox's real close: the surface plus the state that outlives it. Named
+  // because Escape must take the same door as the ✕ and the scrim — a raw
+  // `setShowInbox(false)` from the keyboard would leave the filter and the
+  // return key set, and the next open would come up filtered for no visible
+  // reason. This is `requestClose*`'s shape without a dirty guard; there is no
+  // draft here to lose.
+  const closeInbox = useCallback(function(){
+    setShowInbox(false); setReturnToInboxKey(null); setWaQuery(""); setWaNeedsAction(false);
+  },[setShowInbox]);
   // Settings tab state — which tab is active in the Settings modal.
   // Resets to 'general' on modal close so reopens start fresh. Belongs to
   // the Settings subsystem; lived inside the reminder state block pre-D2
@@ -1016,6 +1067,44 @@ function BookingApp({uid}){
     loadStalled, readError, hasConnected, forceReconnect,
     firstLoadCount,
   } = usePersistence({ autoOptimizer, nowMins });
+
+  // v18.0.0 phase 5: `useRoles` moved UP to here, from below `useVouchers`. It
+  // needs only `setWriteWarning` (the line above), and `hasModule` has to be in
+  // scope BEFORE any module-gated hook is called — `useWaSettings` and
+  // `useWhatsApp` are both gated on it and both used to sit ~150 lines above the
+  // old position. A `const` read above its declaration is a TDZ ReferenceError
+  // that blanks the whole app with only "An error occurred in <BookingApp>" in
+  // the console, and neither lint nor `npm run build` catches it — this file's
+  // Gotchas row, hit twice in v17.11.0 alone. Declaring the gate early is the
+  // structural answer; moving each gated hook below it is the local one.
+  // ── v18.0.0 phase 3: roles, capabilities and the enforcement flag ───────────
+  // `can` is the ONE gate the rest of the app asks — never `role === "admin"`,
+  // which is a copy of the role map nothing can see and which cannot honour an
+  // extra. It also filters SETTINGS_TABS and, through the same function, the
+  // ←/→ tab cycle.
+  const {
+    can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
+    // v18.0.0 phase 4 — the module registry. `hasModule` is the gate every
+    // module-owned surface asks, and it is checked BEFORE `can`: a module that
+    // is off is hidden from everybody including an admin.
+    modules, hasModule, setModuleEnabled,
+    setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
+  } = useRoles({
+    uid: uid,
+    userEmail: (auth.currentUser && auth.currentUser.email) || "",
+    setWriteWarning,
+  });
+  // ONE derivation, passed down as a SCALAR — the `vouchersOn` reasoning below,
+  // and for the same memo reason. Every WhatsApp surface asks THIS, never
+  // WA_SANDBOX: the sandbox flag is a build-time constant that says "this build
+  // may simulate", and the module switch is restaurant data that says "this
+  // restaurant uses WhatsApp". Only the SIMULATOR still asks WA_SANDBOX.
+  const whatsappOn = hasModule("whatsapp");
+  // v18.0.0 phase 5: settings/whatsapp — the module's own restaurant-wide
+  // settings (currently just auto-archive-on-complete). Gated on the MODULE now
+  // rather than on WA_SANDBOX, so an admin switching WhatsApp on is what
+  // attaches the listener, in production as in DEV.
+  const { waSettings, saveWaSettings } = useWaSettings({ enabled: whatsappOn });
   // v17.10.1: install (or tear down) the offline shell.
   //
   // The `bookingsReady` gate is the safety property, not a detail. A worker is
@@ -1052,6 +1141,57 @@ function BookingApp({uid}){
   // TABLE_GROUPS bindings on each snapshot. saveLayout is wired to the Settings
   // Layout tab. See ./hooks/useLayout.js.
   const { layout, saveLayout } = useLayout();
+  // ── WhatsApp Inbox hook (sandbox) ─────────────────────────────────────────
+  // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
+  // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
+  // draft→form seam: handleAcceptDraft pre-fills the form + flags draftSourceRef;
+  // doSave calls wa.completeDraftAccept(newId) on success to flip the conversation.
+  // NB (17.5.0 sync): the hook gets `openForm`, NOT raw `setForm` — all three of
+  // its form-opening handlers (accept draft / open linked / apply modify) are
+  // OPENERS, so they must seed formBaseline like openNew/openEdit do. Passing
+  // setForm would leave the baseline stale and make an untouched WA-prefilled
+  // form read as dirty, popping "Discard unsaved changes?" on every Cancel/Esc.
+  const wa = useWhatsApp({
+    enabled: whatsappOn,
+    bookings, setWriteWarning, waSettings,
+    openForm, setEditId, setError, setSwapAffected, setViewDate, setShowForm, setConfirmCancel,
+    setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
+  });
+  // Return-to-inbox: when an overlay opened from the WA module (the booking form
+  // or the cancel-confirm) closes by ANY path, reopen the inbox at that
+  // conversation. returnToInboxKey is cleared only on explicit inbox close.
+  useEffect(function(){
+    if(returnToInboxKey&&!showForm&&!confirmCancel&&!showInbox){setShowInbox(true);}
+  },[returnToInboxKey,showForm,confirmCancel,showInbox]);
+  // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
+  // so the helpers always see live savers/conversations without rebinding. The
+  // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).
+  const waSimCtxRef=useRef(null);
+  waSimCtxRef.current={
+    conversations:wa.conversations, messagesMap:wa.messagesMap, upsertConversation:wa.upsertConversation,
+    appendMessage:wa.appendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
+  };
+  useEffect(function(){
+    if(!WA_SANDBOX) return;
+    const ctx=function(){return waSimCtxRef.current;};
+    const todayIso=function(){return new Date().toISOString().slice(0,10);};
+    window.__waSim={
+      scenario:function(id){const s=SCENARIOS_BY_ID[id];if(s) return s.run(ctx());console.warn("[waSim] unknown scenario:",id,"— try __waSim.list()");},
+      custom:function(p){return simulateInbound(p,ctx());},
+      newBooking:function(phone,opts){return simulateInbound(Object.assign({phone:phone,language:"es",text:"(sim) reserva",parse:{intent:"new_booking",size:2,date:todayIso(),time:"20:00",confidence:"high"}},opts||{}),ctx());},
+      cancel:function(phone,acceptedBookingId){return simulateInbound({phone:phone,language:"en",text:"(sim) need to cancel",parse:{intent:"cancel",confidence:"high"},acceptedBookingId:acceptedBookingId},ctx());},
+      modify:function(phone,acceptedBookingId){return simulateInbound({phone:phone,language:"es",text:"(sim) cambiar reserva",parse:{intent:"modify",confidence:"high"},acceptedBookingId:acceptedBookingId},ctx());},
+      question:function(phone){return simulateInbound({phone:phone,language:"es",text:"(sim) ¿una pregunta?",parse:{intent:"question"}},ctx());},
+      largeGroup:function(phone){return simulateInbound({phone:phone,language:"es",text:"(sim) somos 12",parse:{intent:"new_booking",size:12,date:todayIso(),time:"20:30",confidence:"high"}},ctx());},
+      burst:function(){return simulateBurst(ctx());},
+      seedBookings:function(){return seedSampleBookings(ctx());},
+      clearBookings:function(){return clearWaSimBookings(ctx());},
+      clearConversations:function(){return ctx().clearAllWaData();},
+      list:function(){return Object.keys(SCENARIOS_BY_ID);},
+    };
+    console.log("%c[waSim] console helpers ready","background:#a855f7;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold;","— __waSim.list(), __waSim.seedBookings(), __waSim.scenario(id)");
+    return function(){try{delete window.__waSim;}catch{/* ignore */}};
+  },[]);
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the
   // reminderBanners JSX. nowMins drives banner re-evaluation; setWriteWarning
@@ -1086,23 +1226,6 @@ function BookingApp({uid}){
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
-  // ── v18.0.0 phase 3: roles, capabilities and the enforcement flag ───────────
-  // `can` is the ONE gate the rest of the app asks — never `role === "admin"`,
-  // which is a copy of the role map nothing can see and which cannot honour an
-  // extra. It also filters SETTINGS_TABS and, through the same function, the
-  // ←/→ tab cycle.
-  const {
-    can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
-    // v18.0.0 phase 4 — the module registry. `hasModule` is the gate every
-    // module-owned surface asks, and it is checked BEFORE `can`: a module that
-    // is off is hidden from everybody including an admin.
-    modules, hasModule, setModuleEnabled,
-    setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,
-  } = useRoles({
-    uid: uid,
-    userEmail: (auth.currentUser && auth.currentUser.email) || "",
-    setWriteWarning,
-  });
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
   // The Admin tab asks this on the way OFF, and only this file can answer it:
   // `lib/modules.js` knows what modules EXIST, not what they hold, and keeping
@@ -2187,6 +2310,9 @@ function BookingApp({uid}){
         // job is done, so close it. Flash only on a real save (never claim "saved"
         // for a not-yet-persisted write — matches quick-action honesty).
         const ok=saveBookings(buildNextMemo);
+        // WhatsApp sandbox: if this edit came from a modify request's "Apply
+        // changes", auto-mark that request handled — but only on a real save.
+        wa.completeModifyApply(editId, ok);
         if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
@@ -2266,6 +2392,14 @@ function BookingApp({uid}){
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
         const ok=saveBookings(buildNextMemo);
+        // WhatsApp sandbox: if this save came from accepting a draft, flip the
+        // source conversation to "accepted" + link the new booking id (no-op
+        // otherwise — draftSourceRef is only set by handleAcceptDraft).
+        wa.completeDraftAccept(newId);
+        // …and if this NEW booking's phone matches a WhatsApp conversation that
+        // isn't linked yet (booking typed manually, not via Accept & open),
+        // link it so the conversation shows the LinkedBookingCard.
+        wa.linkBookingByPhone(newId, f.phone);
         if(ok) flash();
         // v16.0.0: this new booking converted a waitlist entry (Book from the
         // panel) — remove the entry now the booking is dispatched (a held write
@@ -2725,6 +2859,12 @@ function BookingApp({uid}){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
+    // WhatsApp sandbox: the I shortcut's opener, and the four setters
+    // `escapeAction` names. `showInbox` is still read directly — the I key must
+    // not re-open a panel that is already up.
+    showInbox:showInbox,setShowInbox:setShowInbox,closeInbox:closeInbox,
+    setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,
+    showSim:showSim,setShowSim:setShowSim,
     // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
     // not merely in `escapeAction` because the OLD chain had no waitlist branch,
     // so this setter had never been needed in the ctx — adding the `case` without
@@ -2901,6 +3041,7 @@ function BookingApp({uid}){
     const cancelMemo=memoByPrev(cancelTransform);
     const post=cancelMemo(bookings);
     const ok=saveBookings(cancelMemo);
+    wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);
     if(ok){
       flash();
@@ -3852,7 +3993,16 @@ function BookingApp({uid}){
               style={mkSolidBtn("var(--app-walkin)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button>{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
+              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button>{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
+              WA_SANDBOX. Same guarantee — the module ships off, so a build on PROD
+              Firebase (including a main-project Vercel preview of this branch) reads
+              `settings/admin.modules`, finds WhatsApp disabled and shows no WA UI —
+              but now an admin can turn it on, which is the point of the release. */}
+            {whatsappOn?<button
+              onClick={function(){setShowInbox(true);}}
+              className="mgt-hover-scale"
+              title="WhatsApp inbox (I)"
+              style={mkSolidBtn("var(--wa-green)",{position:"relative",padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>WhatsApp{wa.unreadCount>0?<span style={{position:"absolute",top:-6,right:-6,minWidth:18,height:18,padding:"0 5px",borderRadius:R.pill,background:"var(--wa-unread-dot)",color:"var(--text-on-accent)",fontSize: T.small,fontWeight: FW.bold,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"var(--shadow-flat)",boxSizing:"border-box"}}>{wa.unreadCount}</span>:null}</button>:null}{/* v17.9.0 (Patryk): Find-a-booking moved here from the date-nav
               toolbar, between "+ New" and the dot. Searching is an ACTION, and
               this is the row of them — it reads as the counterpart to adding a
               booking rather than as view chrome. */}<button
@@ -4145,7 +4295,9 @@ function BookingApp({uid}){
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
             onDeleteReminder={deleteReminder}
-            onToggleReminder={toggleReminderActive} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
+            onToggleReminder={toggleReminderActive}
+            waSettings={waSettings}
+            onSaveWaSettings={saveWaSettings} /></Suspense></Overlay>:null}</ModalPresence><ModalPresence show={!!confirmReminderDel}>{// v14 p7 fix: in-app reminder-delete confirmation (replaces broken
         // window.confirm which is blocked in sandboxed preview environments).
         // Renders on top of Settings in DOM order so it visually covers the list.
         confirmReminderDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReminderDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
@@ -4160,7 +4312,52 @@ function BookingApp({uid}){
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={requestCloseReminderEditor}
-          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={showInbox}>{showInbox?<InboxPanel
+          conversations={wa.conversations}
+          messages={wa.messagesMap}
+          templates={wa.templates}
+          bookings={bookings}
+          initialActiveKey={returnToInboxKey}
+          regularMin={generalSettings.regularMin}
+          query={waQuery} setQuery={setWaQuery} needsAction={waNeedsAction} setNeedsAction={setWaNeedsAction}
+          onClose={closeInbox}
+          onSend={wa.handleSendReply}
+          onAccept={wa.handleAcceptDraft}
+          onDismiss={wa.handleDismissDraft}
+          onSaveTemplates={wa.saveTemplates}
+          onMarkRead={wa.handleMarkRead}
+          onArchive={wa.handleArchive}
+          onUnarchive={wa.handleUnarchive}
+          onDelete={wa.handleDeleteConversation}
+          onBulkArchive={wa.bulkArchive}
+          onBulkUnarchive={wa.bulkUnarchive}
+          onBulkDelete={wa.bulkDeleteConversations}
+          onCancelLinkedBooking={wa.handleCancelLinkedBooking}
+          onOpenLinkedBooking={wa.handleOpenLinkedBooking}
+          onDismissAcceptedBadge={wa.handleDismissAcceptedBadge}
+          onMarkIntentHandled={wa.handleMarkIntentHandled}
+          onResend={wa.handleResend}
+          onApplyModify={wa.handleApplyModify}
+          onRecheck={wa.recheckConversation}
+          onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} />:null}</ModalPresence>{confirmArchive?(function(){
+          const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
+          const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
+          return <Overlay /* @static-height one sentence, chosen from the linked booking when it opens and not after */ onClose={function(){setConfirmArchive(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              onClick={function(){setConfirmArchive(null);}}>Back</button><button
+              onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
+              className="mgt-hover-scale"
+              style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
+        })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
+              onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
+              className="mgt-hover-scale"
+              style={mkSolidBtn(BTN.del,{minHeight:H.touch})}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
+          onClose={function(){setShowSim(false);}} />:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree
         // stacks there whatever its fixed children declare, so `Overlay` is

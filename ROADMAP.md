@@ -56,20 +56,35 @@ session and keeping it in sync.
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
 
-- **The WhatsApp port + its crash test (v18.0.0 phases 5–6).** The `wa-sandbox`
-  branch merged to production, admin-switchable and shipped off, with the
-  simulator structurally incapable of running in production. `api/` is not tracked
-  on `main`, so this adds serverless functions to the production Vercel project
-  for the first time and makes `/api/wa-inbound` a live public URL on merge. On
-  merge the module's `whatsapp.js` must import
-  `normalizePhone`/`formatPhone`/`matchCustomerByPhone` from `src/lib/customers.js`
-  rather than keeping its own copies (the complementarity contract from v16.0.0),
-  and the sandbox's `writeWithRev` templates + per-key `clearAllWaData()` must
-  survive the re-merge or it will write shapes the published rules refuse. Then
-  the adversarial crash test, register prefix `CT-WA-…`, aimed at what the
-  bookings one has no sections for: a public webhook, an Admin-SDK server that
-  bypasses the rules entirely, prompt injection through the Gemini parse, a send
-  path that reaches real customers, and per-message cost.
+- **The WhatsApp port — 5b and 5c (v18.0.0 phase 5).** **5a is done**: the
+  `wa-sandbox` branch is merged, admin-switchable and shipped off, and `api/` is
+  now tracked. Two commits remain. **5b, production hardening** — four
+  fail-closed gates so the simulator cannot run in production: the lazy dynamic
+  import, a test that greps the BUILT bundle for a simulator marker (the step
+  that turns "Rollup strips it" from a belief into a measurement), a runtime
+  404 on the three `api/wa-sim-*` endpoints unless `WA_SIM_ENABLED === "1"`, and
+  the mode defaults. Plus three things to reproduce rather than assume: what
+  `api/wa-inbound.js` does with `META_APP_SECRET` unset (it becomes a live
+  public URL on merge, before any Meta app points at it, and must REJECT rather
+  than crash), whether the CSP's `img-src` covers whatever the inbox renders for
+  a media attachment, and Vercel's function count and build impact on a project
+  that has never built an `api/` directory. **5c, tenant de-hardcoding** — the
+  Gemini prompts carry "a small restaurant in the Canary Islands"
+  (`api/_lib/gemini.js`), to be read from `profile.waContext` via a
+  `TENANT_WA_CONTEXT` env var.
+
+  Two things this entry listed as work turned out already done and are recorded
+  rather than dropped, because both would otherwise be re-checked at every future
+  sync: the **complementarity contract** was already honoured on the sandbox
+  branch (`whatsapp.js` re-exports the phone primitives from `customers.js`
+  rather than copying them), and the `writeWithRev` templates and per-key
+  `clearAllWaData()` both survived the merge intact.
+
+- **The WhatsApp crash test (v18.0.0 phase 6).** The adversarial pass, register
+  prefix `CT-WA-…`, aimed at what the bookings one has no sections for: a public
+  webhook, an Admin-SDK server that bypasses the rules entirely, prompt injection
+  through the Gemini parse, a send path that reaches real customers, and
+  per-message cost.
 
   **Phase 5 also carries `/api/wa-config`**, moved here from phase 4 (Patryk's
   call, session 4): the token-gated status endpoint returning a **boolean per

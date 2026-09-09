@@ -26,7 +26,10 @@
 //     can't generate (each {ids, cap}). Appended to the auto combos in order.
 // buildLayout(DEFAULT_LAYOUT) reproduces the pre-Phase-4 VALID_COMBOS (40, ordered)
 // + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
-import { todayStr } from "./day";
+// WA sandbox: explicit ".js" — this file is in the Node ESM chain reached from
+// src/lib/whatsapp.js via booking-logic.js (api/_lib + the :3999 harness import it).
+// Node ESM does not resolve extensionless specifiers; Vite does not care either way.
+import { todayStr } from "./day.js";
 
 // ── The app's own name (v18.0.0 phase 2) ─────────────────────────────────────
 // The APP is "MGT Bookings"; the RESTAURANT is whatever `settings/general.

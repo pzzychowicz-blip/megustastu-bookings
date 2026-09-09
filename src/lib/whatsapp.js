@@ -1,0 +1,298 @@
+// src/lib/whatsapp.js
+//
+// WhatsApp Inbox — pure helpers (no React, no DOM). Ported from the
+// pre-refactor preview (`restaurant_booking_v_unknown_preview 6.jsx`) into the
+// current architecture as a sibling to booking-logic.js / reminders.js.
+//
+// These are the channel-agnostic primitives the WA module shares: phone
+// normalisation, customer matching across the bookings list, relative/clock
+// time formatting, and the 24-hour service-window calculation. The real LLM
+// intent classification and Meta Cloud API plumbing live in the (deferred)
+// Phase 1b backend; here we only carry what the UI + local simulator need.
+
+// ≥ this viewport width → two-pane inbox; below → stacked (list ⇄ conversation).
+export const INBOX_TWO_PANE_BREAKPOINT = 900;
+
+// < this viewport HEIGHT → compact mode: the draft card collapses to a one-line
+// bar and the composer's template chips hide behind a "Templates" button, so the
+// message thread stays readable on short screens (tablet). At ≥ this height the
+// full laptop layout renders unchanged. (90dvh of <820px ≈ <740px usable.)
+export const INBOX_COMPACT_HEIGHT = 820;
+
+// The WhatsApp service-conversation window: 24h from the last INBOUND message.
+export const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Inbound-text safety caps, shared client/server so every path agrees.
+// A legitimate booking message is <300 chars — these only bite hostile or
+// garbage input (signature-valid traffic CAN be hostile: any customer).
+//   WA_MAX_TEXT_LEN   — chars STORED per message (RTDB bloat guard)
+//   WA_PARSE_TEXT_LEN — chars sent to the LLM prompt (token/quota guard)
+export const WA_MAX_TEXT_LEN = 4000;
+export const WA_PARSE_TEXT_LEN = 1000;
+
+// How long the big "✓ Booking confirmed" banner stays before it dismisses
+// itself (ConversationView's timer). The ✕ still dismisses it immediately, and
+// a new inbound message clears acceptedBadgeDismissedAt so it re-surfaces —
+// this only stops it sitting there forever once staff has seen it.
+export const WA_ACCEPTED_BANNER_MS = 10000;
+
+// Manual re-check (the ⟳✓ button): how many of the conversation's most recent
+// messages — BOTH directions — are sent to the LLM. Both-directions matters:
+// the whole point of the manual check is catching a request that the
+// per-message automatic parse missed because it was spread over several
+// messages or made after a staff reply, and a staff reply is often what the
+// customer's "yes, that one" refers to.
+export const WA_RECHECK_HISTORY = 12;
+
+// How long a `parsing` flag is believed before the UI treats it as abandoned.
+// The flag is set before an LLM round-trip and cleared when it lands — but if
+// the tab is closed or navigated mid-request, nothing ever clears it and the
+// conversation shows "Reading the message…" to every device, forever, with no
+// UI to fix it. Well above the 15s Gemini timeout, so a slow-but-live parse is
+// never mistaken for a dead one.
+export const WA_PARSING_STALE_MS = 90000;
+
+// isParsing(conv) — THE test for "an LLM round-trip is genuinely in progress".
+// Use this rather than reading `conv.parsing` directly, so the staleness bound
+// applies everywhere the indicator is shown. A conversation written before
+// `parsingAt` existed has no timestamp; those are trusted, since the pre-
+// existing inbound path always cleared the flag on both success and failure.
+export function isParsing(conv) {
+  if (!conv || !conv.parsing) return false;
+  if (!conv.parsingAt) return true;
+  return Date.now() - conv.parsingAt < WA_PARSING_STALE_MS;
+}
+
+// Default quick-reply templates (EN/ES). Staff-editable via the TemplatesEditor;
+// persisted to Firebase `templates/` in this sandbox (was localStorage in the
+// preview). Seeded once on first load when the node is empty.
+export const DEFAULT_TEMPLATES = [
+  { id: "t1", key: "confirm", labelEn: "Confirm", labelEs: "Confirmar", textEn: "Your booking is confirmed — see you soon!", textEs: "Su reserva está confirmada — ¡le esperamos!" },
+  { id: "t2", key: "ask_size", labelEn: "Ask size", labelEs: "Pedir número", textEn: "How many people will you be?", textEs: "¿Para cuántas personas?" },
+  { id: "t3", key: "ask_time", labelEn: "Ask time", labelEs: "Pedir hora", textEn: "What time would you like to come?", textEs: "¿A qué hora le gustaría venir?" },
+  { id: "t4", key: "full", labelEn: "Fully booked", labelEs: "Completo", textEn: "Sorry, we're fully booked then. Could another time work?", textEs: "Lo siento, estamos completos. ¿Le sirve otra hora?" },
+  { id: "t5", key: "large_group", labelEn: "Large group", labelEs: "Grupo grande", textEn: "For groups of 10+, please call us to arrange the booking.", textEs: "Para grupos de 10+, llámenos por favor para coordinar." },
+];
+
+// The auto-acknowledgment text sent on a customer's first-ever inbound message,
+// matched to the detected language. (In Phase 1b this gating is server-side.)
+export const AUTO_ACK_TEXT = {
+  en: "Thanks for your message! We'll get back to you shortly.",
+  es: "¡Gracias por su mensaje! Le contestaremos en breve.",
+};
+
+// Phone-identity primitives — complementarity contract (applied at the v16.0.0
+// prod sync): `src/lib/customers.js` is now the ONE home of normalizePhone /
+// formatPhone / matchCustomerByPhone (ported verbatim from here; its
+// matchCustomerByPhone is a strict superset — adds noShowCount/noShowBookings,
+// which existing WA consumers ignore). Re-exported so every WA import path
+// keeps working. Never re-add local copies.
+// NB: the explicit .js extension is load-bearing — this module is ALSO imported
+// by the Node server side (api/_lib), where extensionless ESM specifiers fail.
+export { normalizePhone, formatPhone, matchCustomerByPhone, regularChipLabel } from "./customers.js";
+// A re-export is NOT a local binding — the names above are visible to importers
+// of this module and undefined INSIDE it. `describeConversation` at the foot of
+// this file needs two of them, so they are imported as well. The build cannot
+// see the difference (rolldown resolves the re-export for every consumer and
+// never evaluates the body), which is what makes this worth stating: it fails
+// at runtime, in the one function, and only when a row renders.
+import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone } from "./customers.js";
+
+// Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
+export function formatRelativeTime(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return m + " min ago";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + "h ago";
+  const d = Math.floor(h / 24);
+  if (d === 1) return "yesterday";
+  if (d < 7) return d + " days ago";
+  const dt = new Date(ts);
+  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
+// Format a timestamp as an inline bubble caption ("14:32").
+export function formatClockTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+// Format remaining time on the 24h WA window → { label, expired } or null.
+export function formatWindow(expiresAt) {
+  if (!expiresAt) return null;
+  const diff = expiresAt - Date.now();
+  if (diff <= 0) return { label: "Window expired", expired: true };
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h >= 1) return { label: "Window: " + h + "h " + m + "m left", expired: false };
+  return { label: "Window: " + m + "m left", expired: false };
+}
+
+// clampConfidence(stated, draft) — the confidence ceiling rule (decided
+// 2026-06-26). HIGH is allowed ONLY when every crucial field (size, date, time)
+// is present AND there is no ambiguity. Count "issues" = missing crucial fields
+// + (1 if an ambiguity note is present): 0 → high · 1 → medium · 2+ → low. The
+// LLM's own stated confidence is the ceiling's upper bound (so a complete draft
+// the model still flagged low/medium isn't bumped up). Single source of truth,
+// applied wherever a draft is finalized (mergeDraft here, the server's
+// draftPatchFromParse, and the client simulator's draftData build).
+export function clampConfidence(stated, draft) {
+  const d = draft || {};
+  const missing = [d.size, d.date, d.time].filter((v) => v === null || v === undefined || v === "").length;
+  const hasAmbiguity = !!(d.ambiguity && String(d.ambiguity).trim());
+  const issues = missing + (hasAmbiguity ? 1 : 0);
+  const ceiling = issues >= 2 ? "low" : issues === 1 ? "medium" : "high";
+  const rank = { low: 0, medium: 1, high: 2 };
+  const s = rank[stated] != null ? rank[stated] : 2; // unknown stated → let the ceiling govern
+  return ["low", "medium", "high"][Math.min(s, rank[ceiling])];
+}
+
+// mergeDraft — the mechanical draft-update rule, shared by the server MOCK
+// parser (api/_lib/gemini.js) and the client-mode simulator (wa-sim.js) so
+// every test mode exercises the same flow the LIVE path gets semantically from
+// Gemini (which receives the existing draft in its prompt and merges itself).
+//
+// Policy (decided 2026-06-05): ANY pending draft (draftStatus "parsed") is
+// updated by follow-up messages — new details fill gaps, corrections overwrite,
+// confidence is re-assessed and can go up OR down. Accepted/dismissed drafts
+// are never touched here (the cancel/modify intent-banner flow owns those).
+//
+// Rules:
+//   · different intent → return the new parse unchanged (the request changed —
+//     e.g. a pending new_booking turns into a cancel; replace is correct).
+//   · same intent → non-null-overwrite: a field the new message states wins;
+//     a field it doesn't mention keeps the old value. notes: new if non-empty.
+//   · confidence recomputed from the MERGED fields: size+date+time all present
+//     → high · two of three → medium · else low.
+//   · ambiguity: the new parse's note if present; cleared when everything is
+//     filled; otherwise the old note carries over.
+export function mergeDraft(oldDraft, newParse) {
+  if (!oldDraft) return newParse;
+  if (!newParse) return oldDraft;
+  if (newParse.intent !== oldDraft.intent) return newParse;
+  const pick = (a, b) => (a !== null && a !== undefined && a !== "" ? a : (b !== null && b !== undefined ? b : null));
+  const merged = {
+    intent: newParse.intent,
+    name: pick(newParse.name, oldDraft.name),
+    size: pick(newParse.size, oldDraft.size),
+    date: pick(newParse.date, oldDraft.date),
+    time: pick(newParse.time, oldDraft.time),
+    notes: pick(newParse.notes, oldDraft.notes) || "",
+    language: pick(newParse.language, oldDraft.language),
+  };
+  // preference: a stated area ("indoor"/"outdoor") wins; "auto" means the new
+  // message didn't mention seating, so keep whatever the draft already had.
+  merged.preference = (newParse.preference && newParse.preference !== "auto")
+    ? newParse.preference
+    : (oldDraft.preference || "auto");
+  const filled = [merged.size, merged.date, merged.time].filter((v) => v !== null && v !== undefined && v !== "").length;
+  merged.ambiguity = newParse.ambiguity || (filled === 3 ? null : oldDraft.ambiguity || null);
+  merged.confidence = clampConfidence(newParse.confidence, merged);
+  return merged;
+}
+
+// intentBannerVisible(conv) — single source of truth for the cancel/modify
+// intent-banner show condition (ConversationView render + useWhatsApp's
+// autoHandleCancelIntent gate). Once handled, the banner re-shows ONLY when a
+// later inbound actually RENEWS the request: gate on `draftUpdatedAt`, stamped
+// exclusively where an inbound parse SETS/UPDATES the draft (server
+// draftPatchFromParse, client simulateInbound). Two wrong gates rejected in
+// live QA 2026-06-13: `lastMessageAt` (staff's own reply resurrected the
+// banner) and a bare every-inbound stamp (a customer's "thank you" did).
+// "other"/"question" parses leave drafts — and this stamp — untouched, so only
+// an actionable message re-raises the alert. Conversations written before the
+// field existed read as 0: a handled banner stays hidden until the next
+// actionable inbound stamps it.
+export function intentBannerVisible(conv) {
+  if (!conv || !conv.draftData) return false;
+  const intent = conv.draftData.intent;
+  if (intent !== "cancel" && intent !== "modify") return false;
+  const handledAt = conv.intentHandledAt || 0;
+  if (!handledAt) return true;
+  return (conv.draftUpdatedAt || 0) > handledAt;
+}
+
+// conversationOrder(archivedView) — JUST the comparator half of
+// sortConversations, so a caller that must NOT re-filter can still sort the
+// canonical way. ConversationList needs exactly that: while a row is easing out
+// it is no longer in the filtered set (and may no longer belong to this tab at
+// all, e.g. it was just archived), but it still has to hold its correct
+// position for the length of the collapse. Split out rather than duplicated —
+// the visible order and the ↑/↓ nav order must never drift apart.
+export function conversationOrder(archivedView) {
+  return (a, b) =>
+    archivedView
+      ? (b.archivedAt || b.lastMessageAt || 0) - (a.archivedAt || a.lastMessageAt || 0)
+      : (b.lastMessageAt || 0) - (a.lastMessageAt || 0);
+}
+
+// sortConversations — the canonical inbox ordering for one tab: filter by the
+// active tab (archived vs inbox), then sort newest-first. Inbox sorts by
+// lastMessageAt; archived sorts by archivedAt (falling back to lastMessageAt).
+// Shared by the list render (ConversationList) AND the keyboard-nav index math
+// (InboxPanel) so the visible order and the ↑/↓ order can never drift apart.
+// `.filter` already returns a fresh array, so the subsequent sort never mutates
+// the caller's `conversations`.
+export function sortConversations(conversations, archivedView) {
+  if (!Array.isArray(conversations)) return [];
+  return conversations
+    .filter((c) => (archivedView ? c.archived : !c.archived))
+    .sort(conversationOrder(archivedView));
+}
+
+// describeConversation(conv, { bookings }) — what ONE conversation row sounds
+// like (17.15.0-wa-sandbox).
+//
+// The `describeBooking` precedent, applied to the module's own list. The row is
+// a stack of a dot, a name, a glyph, a relative time and a truncated snippet;
+// read as raw text that is a run of fragments with no subject, and three of the
+// five things it tells you at a glance — unread, what the customer wants, that
+// the thread is archived — are carried ONLY by a coloured dot or an icon. Those
+// have `title` attributes, which a screen reader may or may not reach and a
+// keyboard user never sees.
+//
+// It lives here rather than in ConversationRow for `describeBooking`'s reason:
+// it is a pure function of the data, it is the one place the vocabulary is
+// decided, and a component file that also exports a plain function trips
+// `react-refresh/only-export-components`.
+//
+// The intent vocabulary is the same wording the IntentBanner prints ("requesting
+// to cancel" / "requesting changes"), so what is spoken and what is shown cannot
+// drift. State that belongs to the LIST rather than to the conversation —
+// select mode, checked — stays at the call site, exactly as the booking card's
+// clash and late clauses do.
+export function describeConversation(conv, opts) {
+  if (!conv) return "";
+  const bookings = (opts && opts.bookings) || [];
+  const match = _matchByPhone(conv.phoneKey, bookings);
+  const parts = [];
+  // `match.name` is whatever the newest matching booking carries, and a booking
+  // can legitimately have none — a walk-in saved without one. Falling through to
+  // the number keeps the label a name rather than opening it with an empty
+  // segment ("…, 34600111222, hola"), which is what `join(", ")` produces from
+  // an empty first part.
+  const title = (match && match.name) || conv.phone || conv.phoneKey || "";
+  if (title) parts.push(title);
+  // The number is spoken only when it is not already the name — an unmatched
+  // conversation is titled by its number, and saying it twice is noise.
+  // …and only then is the number a second, separate clause.
+  if (match && match.name && (conv.phone || conv.phoneKey)) parts.push(_formatPhone(conv.phone || conv.phoneKey));
+  if (conv.unread) parts.push("unread");
+  if (conv.archived) parts.push("archived");
+  const intent = (conv.draftData && conv.draftData.intent) || null;
+  if (isParsing(conv)) parts.push("reading the message");
+  else if (intent === "cancel") parts.push("requesting to cancel");
+  else if (intent === "modify") parts.push("requesting changes");
+  else if (conv.draftStatus === "accepted") parts.push("booking confirmed");
+  else if (conv.draftStatus === "parsed" && conv.draftData) parts.push("draft booking");
+  const when = formatRelativeTime(conv.lastMessageAt);
+  if (when) parts.push(when);
+  // Last: the snippet is what the row is ABOUT, and it is spoken in full — the
+  // visual ellipsis is a width constraint, not a decision about content.
+  if (conv.lastMessageSnippet) parts.push(conv.lastMessageSnippet);
+  return parts.join(", ");
+}
