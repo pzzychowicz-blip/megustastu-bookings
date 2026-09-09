@@ -61,7 +61,19 @@ const SIM_MARKERS = [
   "/api/wa-sim-suggest",
   "/api/wa-sim-generate",
   "+34600123456",            // a wa-sim-scenarios fixture number
-  "simulateInbound",         // an EXPORT name — preserved for inter-chunk linking
+  "Backend mode (local Phase-1b pipeline)", // a WaSimulator UI string
+];
+
+// Where each marker must genuinely exist, so the absences below mean something.
+// This USED to be checked against `dist/` — correct while the simulator's lazy
+// chunks were still emitted, and wrong the moment they stopped being. The source
+// is the right place: it is what proves a marker is a real string rather than
+// one renamed out of existence, and it stays true however the build changes.
+const SIM_SOURCES = [
+  "src/lib/wa-sim.js",
+  "src/lib/wa-sim-scenarios.js",
+  "src/lib/wa-backend-sim.js",
+  "src/components/whatsapp/WaSimulator.jsx",
 ];
 
 describe("the WhatsApp simulator cannot reach production", () => {
@@ -134,8 +146,19 @@ describe("the WhatsApp simulator cannot reach production", () => {
     ? readdirSync(DIST).find((f) => /^index-.*\.js$/.test(f))
     : null;
 
-  it.runIf(entry)("the built ENTRY chunk contains no simulator code", () => {
-    let js = readFileSync(join(DIST, entry), "utf8");
+  it.runIf(entry)("no built chunk contains simulator code — not just the entry", () => {
+    // v18.0.0 phase 5b/2 widened this from the entry to ALL of dist/. Until the
+    // build began stripping the simulator, the honest assertion was the narrow
+    // one: the lazy chunks were emitted, so demanding their absence would have
+    // been demanding something the bundler did not promise. It promises it now,
+    // because vite.config.js resolves those four modules to a stub in a
+    // production build, so the wide assertion is the one that is true.
+    const chunks = readdirSync(DIST).filter((f) => f.endsWith(".js"))
+      .map((f) => ({ file: f, js: readFileSync(join(DIST, f), "utf8") }));
+    // Assert on FILE NAMES, never on the joined bytes: a failed `toContain`
+    // against a megabyte of minified bundle prints the megabyte, which is how a
+    // useful failure becomes an unreadable one (measured: 152 kB of output).
+    let js = chunks.map((c) => c.js).join("\n");
     // Vite's preload manifest is a list of chunk FILENAMES, not code. It names
     // every lazy chunk including the simulator's, which is not a leak — dropping
     // it here is what keeps the markers below meaningful rather than drowned.
@@ -143,15 +166,21 @@ describe("the WhatsApp simulator cannot reach production", () => {
     const found = SIM_MARKERS.filter((m) => js.includes(m));
     expect(
       found,
-      "simulator code is in the entry chunk — the bundle every production client "
-        + "downloads and runs. Check whether a module the simulator uses has "
-        + "gained a production importer, and re-read this file's header."
+      "simulator code was built into a production chunk. Either vite.config.js' "
+        + "stripSimulator plugin stopped matching a module (check SIM_MODULES "
+        + "against the real paths), or a simulator module gained an importer the "
+        + "plugin does not stub. Re-read this file's header."
     ).toEqual([]);
     // WA_SANDBOX itself must fold away. If the identifier survives, the constant
     // was not statically replaced and every gate resting on it is a runtime
     // question rather than a settled one.
-    expect(js).not.toContain("WA_SANDBOX");
-    expect(js).not.toContain("VITE_FB_TARGET");
+    ["WA_SANDBOX", "VITE_FB_TARGET"].forEach((tok) => {
+      expect(
+        chunks.filter((c) => c.js.includes(tok)).map((c) => c.file),
+        tok + " survived into these chunks — the constant was not statically "
+          + "replaced, so the gates resting on it are runtime questions"
+      ).toEqual([]);
+    });
     // `__waSim` is checked separately from SIM_MARKERS and cannot join that list,
     // because it appears NOWHERE in dist/ — which is the strongest result here
     // and the reason it needs its own assertion. It is written only inside App's
@@ -167,19 +196,59 @@ describe("the WhatsApp simulator cannot reach production", () => {
     ).toEqual([]);
   });
 
-  it.runIf(entry)("…and the markers are real — they DO appear in the simulator's own chunks", () => {
-    // The guard against the guard. Every assertion above is an absence, and an
+  it("…and the markers are real — they DO appear in the simulator's source", () => {
+    // The guard against the guard. Every assertion above is an ABSENCE, and an
     // absence passes just as well when the marker has been renamed out of
-    // existence. This fails if the simulator stopped being built at all.
-    const all = readdirSync(DIST)
-      .filter((f) => f.endsWith(".js"))
-      .map((f) => readFileSync(join(DIST, f), "utf8"))
-      .join("\n");
-    const missing = SIM_MARKERS.filter((m) => !all.includes(m));
+    // existence. Its first version checked `dist/` and caught exactly that:
+    // `__waSim` and `postFakeWebhook` are identifiers the minifier renames, so
+    // they proved nothing. Only string literals live here now, and the check
+    // moved to the SOURCE, which is where they must exist however the build
+    // changes — and which is the only place left, now that the build emits none
+    // of the simulator at all.
+    const src = SIM_SOURCES.map((p) => readFileSync(join(ROOT, p), "utf8")).join("\n");
+    const missing = SIM_MARKERS.filter((m) => !src.includes(m));
     expect(
       missing,
-      "these markers appear nowhere in dist/, so the assertions above are checking "
-        + "for strings that no longer exist. Re-derive them from the simulator source."
+      "these markers appear nowhere in the simulator's own source, so the "
+        + "assertions above are checking for strings that no longer exist. "
+        + "Re-derive them from the simulator source."
     ).toEqual([]);
   });
+
+  it("the build strips the simulator rather than relying on it being unreachable", () => {
+    const cfg = read("vite.config.js");
+    // The plugin must name every simulator module. A module missing from this
+    // list is built for real and shipped, silently — the defect this whole file
+    // exists to catch, arriving through the fix for it.
+    SIM_SOURCES.forEach((m) => {
+      expect(cfg, "vite.config.js' stripSimulator does not name " + m).toContain('"' + m + '"');
+    });
+    // And the condition must be WA_SANDBOX's, not an approximation of it: a
+    // sandbox BUILD (VITE_FB_TARGET=dev) has to keep the simulator, or the
+    // sandbox deployment loses the tool it exists for.
+    expect(cfg).toContain('command === "serve" || process.env.VITE_FB_TARGET === "dev"');
+  });
+
+  it(".vercelignore keeps the simulator's endpoints off a deployment", () => {
+    const ignore = readFileSync(join(ROOT, ".vercelignore"), "utf8");
+    const lines = ignore.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    expect(
+      lines,
+      "the api/wa-sim-*.js exclusion is gone from .vercelignore, so the three "
+        + "simulator endpoints deploy to production again. They import "
+        + "firebase-admin (which bypasses the security rules) and the Gemini "
+        + "client (which spends money)."
+    ).toContain("api/wa-sim-*.js");
+    // The four production handlers must NOT be caught by any pattern here. A
+    // broadened glob (`api/wa-*.js`) would take the live webhook down, and the
+    // symptom would be a Meta integration that silently stops delivering.
+    ["wa-inbound.js", "wa-send.js", "wa-recheck.js", "wa-config.js"].forEach((f) => {
+      lines.forEach((pat) => {
+        if (pat.startsWith("!")) return;
+        const re = new RegExp("^" + pat.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*") + "$");
+        expect(re.test("api/" + f), ".vercelignore pattern " + pat + " excludes api/" + f).toBe(false);
+      });
+    });
+  });
+
 });

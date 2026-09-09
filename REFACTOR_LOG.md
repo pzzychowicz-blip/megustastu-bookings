@@ -21644,3 +21644,86 @@ one that was being made, and the entry now says the smaller one.
 Vercel function count is **7** of the Hobby plan's 12.
 
 Gate: `109.93 kB` gz · **1169 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 42 (phase 5, Patryk's call at the review boundary) — the simulator is not DEPLOYED, not merely unreachable
+
+Phase 5b got the simulator out of the entry chunk and stopped there, on the
+reasonable-sounding basis that what remained was unreachable. Patryk's question
+at the review boundary is the right one and the answer was no: **the simulator's
+chunks were still being written to `dist/` and served from the restaurant's
+CDN**, and the three `api/wa-sim-*` handlers were still deployed. Inert, and
+still developer tooling on a production deployment. "Cannot be run" and "is not
+there" are different claims; this commit makes the second one true.
+
+#### The client — a build plugin, not a gate
+
+`vite.config.js` gains `stripSimulator`, which resolves the four simulator
+modules (`WaSimulator.jsx`, `wa-sim.js`, `wa-sim-scenarios.js`,
+`wa-backend-sim.js`) to **one virtual stub** in a production build. The chunks
+are not merely unreferenced; they contain no simulator code to begin with.
+
+**The condition mirrors `WA_SANDBOX` exactly** — `command === "serve" ||
+process.env.VITE_FB_TARGET === "dev"` — because two conditions that merely agree
+today are two conditions. Verified in all three environments rather than the one
+that was convenient:
+
+| | simulator |
+|---|---|
+| dev server (`serve`) | present — `__waSim` with 60 scenarios, modal opens |
+| `VITE_FB_TARGET=dev` build (the sandbox) | present — all three chunks emitted, stub absent |
+| production build | **absent** — every marker gone from `dist/` |
+
+The stub's functions **throw** rather than no-op. They are unreachable by
+construction — the caller sits behind the same `WA_SANDBOX` that selected the
+stub — so the choice only decides what happens if that stops being true, and a
+silently no-op simulator is the worse of the two failures.
+
+**The entry chunk GREW, and that is re-chunking rather than weight.** 109.93 →
+121.08 kB gz, because `booking-logic` had been a shared chunk between the entry
+and the simulator's chunks and, with those gone, folds back into the entry. It
+was always loaded eagerly (App imports it statically), so the number that matters
+is eager boot bytes: **123.33 → 121.09 kB gz**, down 2.24. Total shipped
+JavaScript falls by about 15 kB. Reading the headline figure alone would have
+recorded this change as an 11 kB regression.
+
+#### The server — `.vercelignore`, appended-to rather than deleted-from
+
+Vercel deploys `api/` wholesale, so the only way to keep the three simulator
+handlers off a deployment is not to upload them. Production now routes **four**
+functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config`) instead of
+seven. This matters beyond tidiness: those three import firebase-admin, whose
+writes bypass the security rules entirely, and the Gemini client, which spends
+money — deployed, they are one stray environment variable from live.
+
+The deployed sandbox calls them same-origin and needs them, so the branches must
+differ by this file. **The sandbox APPENDS `!api/wa-sim-*.js` rather than
+deleting the exclusion** (Patryk's choice): a merge silently reinstates a deleted
+line — the failure `tests/wa-sandbox-integrity.test.js` was written for after it
+happened twice — while an appended line survives a merge untouched. The
+instruction lives in `.vercelignore`'s own comment, next to the thing it is
+about. The runtime 404 stays as the second, independent answer.
+
+#### What the guard had to become
+
+`tests/wa-sim-not-in-prod.test.js` widened from the entry chunk to **all** of
+`dist/`. That assertion would have been dishonest before this commit — the lazy
+chunks were emitted, so demanding their absence would have been demanding
+something the bundler did not promise. It promises it now.
+
+Its "the markers are real" guard moved from `dist/` to the SOURCE, and had to:
+with the simulator stripped, the markers legitimately appear nowhere in the
+build, so the old check would have failed for the right reason at the wrong
+target. The source is where they must exist however the build changes.
+
+Two defects found by running it. The stub's own throw message contained the
+literal `WA_SANDBOX`, which tripped the assertion that the constant folds away —
+a guard catching its own fixture. And the widened test asserted against a
+megabyte of joined minified bundle, so its failure printed **152 kB**; it reports
+FILE NAMES now. A failure nobody can read is a failure nobody acts on.
+
+`eslint.config.js` gives `vite.config.js` and `vitest.rules.config.js` Node
+globals — the build config reads `process.env` and had been linting as browser
+code, which surfaced as a hard `no-undef` error the moment it needed one.
+
+Gate: `121.08 kB` gz (eager boot 121.09 vs 123.33 before) · **1171 tests** ·
+0 lint errors (88 warnings) · style OK.

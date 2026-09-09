@@ -49,6 +49,16 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
   },
   {
+    // v18.0.0 phase 5: the build config runs in NODE, not the browser. It reads
+    // `process.env.VITE_FB_TARGET` to decide whether this is a sandbox build and
+    // therefore whether the WhatsApp simulator is stripped — the one decision in
+    // the repo that has to be made before any app code exists to make it.
+    // Listed by name rather than as a glob: this is the only such file, and a
+    // wider pattern would hand Node globals to something that ships to a browser.
+    files: ['vite.config.js', 'vitest.rules.config.js'],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // Deliberate multi-export files (documented in CLAUDE.md): atoms.jsx is
     // THE multi-export atoms file; FloorGlyphs is a multi-export geometry
     // unit; SettingsChrome/Settings/FloorPlanEditor export chrome constants +

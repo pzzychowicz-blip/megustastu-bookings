@@ -56,22 +56,24 @@ session and keeping it in sync.
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
 
-- **Two WhatsApp decisions recorded rather than taken (v18.0.0 phase 5).**
-  Neither is work in flight; both are here so nobody re-derives the reasoning.
-  (1) The three `api/wa-sim-*` handlers are still DEPLOYED to production — Vercel
-  ships `api/` wholesale — and answer 404 there. Excluding them via
-  `.vercelignore` was considered and dropped: the sandbox branch would need its
-  own inverted copy, which is a second place the same fact is written, and the
-  runtime gate is measured fail-closed across five env values. **Revisit only if
-  Vercel's function count becomes a constraint** — it is 7 of the Hobby plan's 12
-  today. (2) `TENANT_WA_CONTEXT` duplicates `src/tenants/<slug>.js` →
-  `profile.waContext`. The tenant file used to justify this by claiming the
-  backend "cannot import this file", which is false and now has a test importing
-  it from Node to prove so; the env var stays because it matches how all ten
-  other backend values arrive and needs no second variable naming the tenant.
-  The alternative — the function importing `src/tenants/` by slug at runtime — is
-  viable and was not taken. Drift is bounded: the prompt falls back to exactly
-  the profile's string and a test fails if the two stop matching.
+- **One WhatsApp decision recorded rather than taken (v18.0.0 phase 5).**
+  `TENANT_WA_CONTEXT` duplicates `src/tenants/<slug>.js` → `profile.waContext`.
+  The tenant file used to justify this by claiming the backend "cannot import
+  this file", which is false and now has a test importing it from Node to prove
+  so; the env var stays because it matches how all ten other backend values
+  arrive and needs no second variable naming the tenant. The alternative — the
+  function importing `src/tenants/` by slug at runtime — is viable and was not
+  taken. Drift is bounded: the prompt falls back to exactly the profile's string
+  and a test fails if the two stop matching.
+
+- **The `wa-sandbox` branch must append `!api/wa-sim-*.js` to `.vercelignore`.**
+  Not pending work on `main` — a standing item for the next prod-sync of the
+  sandbox. `main` excludes the three simulator endpoints so they do not deploy to
+  the restaurant's project; the deployed sandbox calls them same-origin and needs
+  them back. **Appending a negation, never deleting the exclusion**: a merge
+  silently reinstates a deleted line, which is the failure
+  `tests/wa-sandbox-integrity.test.js` exists for. `.vercelignore`'s own comment
+  carries the instruction.
 
 - **The WhatsApp crash test (v18.0.0 phase 6).** The adversarial pass, register
   prefix `CT-WA-…`, aimed at what the bookings one has no sections for: a public
