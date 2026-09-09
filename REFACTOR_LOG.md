@@ -21538,3 +21538,44 @@ real one. The remaining console errors on a clean load are two
 local harness that is not running.
 
 Gate: `109.92 kB` gz · **1166 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 40 (phase 5c) — the restaurant the LLM is told it is serving
+
+The Gemini prompts described this restaurant as a string literal. They read
+`waContext()` now — `TENANT_WA_CONTEXT`, falling back to the exact wording they
+already used, so an unset variable changes nothing.
+
+**There were THREE sites, and the plan named two** ("`api/_lib/gemini.js` ~74 and
+~179"). The third is the scenario generator. That is the ordinary outcome of a
+de-hardcoding pass rather than bad luck, which is why
+`tests/wa-tenant-context.test.js` exists: it fails on any prompt string
+containing "Canary Islands" other than the accessor's own fallback, and it was
+checked in BOTH directions — reintroducing one literal turns it red, removing it
+turns it green again.
+
+**Verified on the wire, not by reading the concatenation.** The prompt builders
+are internal, so `fetch` was stubbed with `WA_LLM_MODE=live` and a fake key and
+the outgoing request body read back: unset gives "…sent by a customer to a small
+restaurant in the Canary Islands and extract…", and `TENANT_WA_CONTEXT="a beach
+bar in Tarifa"` gives "…to a beach bar in Tarifa and extract…". The test itself
+stays a source check, because what regresses is a new literal, and holding that
+cheaply forever is worth more than re-running a network stub on every build.
+
+**A reason in the code was wrong and is corrected rather than quoted.**
+`src/tenants/mgt.js` said the value reaches the backend through an env var
+"because that backend runs server-side and cannot import this file". Measured
+false — nothing in the module touches `import.meta.env`, only its comments
+mention it, and `node -e "import('./src/tenants/mgt.js')"` resolves it and reads
+`profile.waContext`. The env var is still the right choice, for a reason that
+survives contact with the measurement: it matches how all nine other backend
+values arrive, and it needs no second variable telling the function which tenant
+it is serving. But a wrong REASON outlives the decision it justifies and stands
+in the way of whoever later wants to revisit it, so the comment now says what is
+true, names the duplication as a cost, and points at what bounds it — the
+fallback IS the profile's string, and a test fails if the two drift apart.
+
+`.env.local.example` gains `TENANT_WA_CONTEXT` and phase 5b's `WA_SIM_ENABLED`,
+both with the measured semantics (only exactly `"1"` enables the simulator;
+unset context reproduces today's prompts).
+
+Gate: `109.92 kB` gz · **1169 tests** · 0 lint errors (88 warnings) · style OK.

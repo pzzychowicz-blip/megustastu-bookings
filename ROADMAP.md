@@ -56,17 +56,22 @@ session and keeping it in sync.
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
 
-- **The WhatsApp port — 5c (v18.0.0 phase 5).** **5a and 5b are done.** What
-  remains is **5c, tenant de-hardcoding**: the Gemini prompts carry "a small
-  restaurant in the Canary Islands" (`api/_lib/gemini.js`, ~74 and ~179), to be
-  read from `profile.waContext` via a `TENANT_WA_CONTEXT` env var, matching how
-  everything else reaches the backend. `AUTO_ACK_TEXT` and `DEFAULT_TEMPLATES`
-  are already generic EN/ES and stay seedable through the `templates` node. The
-  four draft-assembly points gotcha applies unchanged: any per-tenant field that
-  should influence parsing must cross `lib/wa-sim.js`,
-  `api/_lib/inbound-core.js`, `mergeDraft` in `lib/whatsapp.js`, and the
-  schema/prompt in `api/_lib/gemini.js` — plus a deterministic backstop if the
-  LLM must populate it.
+- **`/api/wa-config` — the last piece of v18.0.0 phase 5.** Moved here from
+  phase 4 (Patryk's call, session 4): a token-gated status endpoint returning a
+  **boolean per key, never a value**, which the Admin tab's Integrations section
+  renders in place of its current "where the keys live" text. It belongs with the
+  port because `api/_lib/env.js` already reads all nine keys, so a second env
+  reader in phase 4 would have been a duplicate for the merge to reconcile.
+
+  **One reason this entry gave for deferring it no longer holds.** It said the
+  endpoint "cannot be verified before then: `npm run dev` has no serverless
+  runtime, so exercising it needs `vercel dev`, which this repo has never run."
+  Phase 5b established a cheaper rig that needs neither: import the handler and
+  call it with a plain `{method, headers}` object and a `res` stub recording
+  `status`/`json`. That is how the sim gate was measured across five env values
+  and how `wa-inbound`'s unset-secret behaviour was reproduced. `vercel dev` is
+  still the only way to exercise Vercel's own routing, which is a smaller claim
+  than the one that was being made.
 
   **Not deferred, but not built either — recorded so nobody re-derives it.** The
   three `api/wa-sim-*` handlers are still DEPLOYED to production (Vercel ships
@@ -74,7 +79,17 @@ session and keeping it in sync.
   considered and dropped: the sandbox branch would need its own inverted copy,
   which is a second place the same fact is written, and the runtime gate is
   measured fail-closed across five env values. Revisit only if Vercel's function
-  count ever becomes a constraint — it is 6 of the Hobby plan's 12 today.
+  count becomes a constraint — it is 6 of the Hobby plan's 12 today.
+
+  **Also left, with its reason measured rather than assumed.** `TENANT_WA_CONTEXT`
+  duplicates `src/tenants/<slug>.js` → `profile.waContext`, one fact in two
+  places. The tenant file used to justify this by saying the backend "cannot
+  import this file" — false, and `tests/wa-tenant-context.test.js` now imports it
+  from Node to prove so. The env var stays because it matches how all nine other
+  backend values arrive and needs no second variable naming the tenant; the
+  alternative (the function importing `src/tenants/` by slug at runtime) is
+  viable and was not taken. The drift is bounded: the prompt side falls back to
+  exactly the profile's string, and a test fails if the two stop matching.
 
 - **The WhatsApp crash test (v18.0.0 phase 6).** The adversarial pass, register
   prefix `CT-WA-…`, aimed at what the bookings one has no sections for: a public

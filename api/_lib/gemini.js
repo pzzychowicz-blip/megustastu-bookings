@@ -23,6 +23,27 @@
 // to list what the key can see).
 
 import { env, llmMode } from "./env.js";
+
+// ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
+// The prompts carried "a small restaurant in the Canary Islands" as a literal,
+// in THREE places — the plan named two, which is the usual reason a literal
+// survives a de-hardcoding pass.
+//
+// It arrives as an env var and not from `src/tenants/<slug>.js`, because a
+// serverless function cannot import a client module that reads
+// `import.meta.env`: `api/` runs under Node, where that syntax does not exist.
+// So the tenant's `profile.waContext` is the SOURCE and `TENANT_WA_CONTEXT` is
+// the delivery, set per Vercel project alongside every other backend key.
+//
+// The fallback is the MGT string the prompts already used, so an unset variable
+// changes nothing about today's behaviour — this is a de-hardcoding, not a
+// behaviour change, and a prompt that suddenly said "a restaurant" would be one.
+// It is a description, never an instruction: it lands in a sentence the model
+// reads as context, and a tenant who writes prose into it is describing their
+// own restaurant to their own model.
+function waContext() {
+  return env("TENANT_WA_CONTEXT", "a small restaurant in the Canary Islands");
+}
 import { mergeDraft, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
 
 // flash-lite normally answers in <1s; this generous cap catches the occasional
@@ -93,7 +114,7 @@ function buildPrompt(text, { todayIso, weekday, hoursLine, existingDraft, thread
     JSON.stringify(text),
   ];
   return [
-    "You classify a WhatsApp message sent by a customer to a small restaurant in the Canary Islands and extract booking details.",
+    "You classify a WhatsApp message sent by a customer to " + waContext() + " and extract booking details.",
     "Customers write mostly in Spanish or English, informally, with typos.",
     "",
     "Context:",
@@ -336,7 +357,7 @@ export async function generateCustomerReply(history, language) {
     .map((m) => (m.direction === "out" ? "Restaurant: " : "You (customer): ") + m.text)
     .join("\n");
   const prompt = [
-    "You are a customer of a small restaurant in the Canary Islands, chatting with the restaurant on WhatsApp.",
+    "You are a customer of " + waContext() + ", chatting with the restaurant on WhatsApp.",
     "Here is the conversation so far:",
     "",
     transcript || "(no messages yet — open the conversation naturally)",
@@ -386,7 +407,7 @@ export async function generateScenarioMessage({ hint } = {}) {
   const model = env("GEMINI_MODEL", "gemini-3.1-flash-lite");
   const seed = Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
   const prompt = [
-    "Invent ONE realistic inbound WhatsApp message from a (potential) customer to a small restaurant in the Canary Islands. It is test data for a booking system — make it varied and natural.",
+    "Invent ONE realistic inbound WhatsApp message from a (potential) customer to " + waContext() + ". It is test data for a booking system — make it varied and natural.",
     "Randomly pick the SITUATION from a WIDE range (do NOT default to a plain new booking):",
     "- a new booking: party size 1-20, for today / tomorrow / a named weekday / a date, lunch or dinner, sometimes a vague time;",
     "- a cancellation; a change to an existing booking (size/time/date); running late;",

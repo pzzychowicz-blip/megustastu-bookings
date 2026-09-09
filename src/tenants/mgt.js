@@ -53,8 +53,22 @@ export const profile = {
   locale: "es-ES",
 
   // One sentence describing the restaurant, for the WhatsApp module's Gemini
-  // prompts (plan §5c). Read there through a `TENANT_WA_CONTEXT` env var,
-  // because that backend runs server-side and cannot import this file — this is
-  // the value's home, not its delivery route. Unused until phase 5.
+  // prompts. Read there through a `TENANT_WA_CONTEXT` env var: this is the
+  // value's home, not its delivery route.
+  //
+  // v18.0.0 phase 5c corrects the reason this comment used to give. It said the
+  // backend "cannot import this file", and that is measurably false — nothing in
+  // this module touches `import.meta.env` (only the comments mention it), and
+  // `node -e "import('./src/tenants/mgt.js')"` resolves it and reads this very
+  // field. The env var is a DELIBERATE choice, not a limitation: it matches how
+  // every other backend value arrives (`api/_lib/env.js` reads nine of them) and
+  // it needs no second variable naming which tenant the function is serving.
+  //
+  // The cost is that this string and `TENANT_WA_CONTEXT` are one fact in two
+  // places, which this repo warns about everywhere. What bounds it: the prompt
+  // side FALLS BACK to exactly this string, so the two can only drift after
+  // somebody deliberately sets the variable, and a wrong value there degrades a
+  // prompt rather than breaking anything. See `waContext()` in
+  // `api/_lib/gemini.js`, and ROADMAP for the alternative that was left.
   waContext: "a small restaurant in the Canary Islands"
 };
