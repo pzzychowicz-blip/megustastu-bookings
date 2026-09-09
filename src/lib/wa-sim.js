@@ -29,7 +29,7 @@
 // phoneKeyOverride params are ignored on that path — the server decides, like
 // production will (see src/lib/wa-backend.js).
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, clampConfidence, WA_MAX_TEXT_LEN } from "./whatsapp";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, clampConfidence, WA_MAX_TEXT_LEN, sanitizeParse } from "./whatsapp";
 import { backendEnabled } from "./wa-backend";
 import { backendInbound } from "./wa-backend-sim";
 
@@ -61,7 +61,11 @@ export function simulateInbound(params, ctx) {
   const lang = params.language === "en" ? "en" : "es";
   const ts = Date.now() - (params.windowAgeMs || 0);
   const text = (params.text || "").slice(0, WA_MAX_TEXT_LEN); // same storage cap as the backend
-  const parse = params.parse || null;
+  // Same boundary as the server's draftPatchFromParse (v18.0.0 phase 6,
+  // CT-WA-01) — the simulator hands `parse` straight in from a scenario or from
+  // __waSim.custom(), so without this the sandbox is the one path that can still
+  // build a draft the app cannot use.
+  const parse = sanitizeParse(params.parse || null);
   const intent = parse ? (parse.intent || "new_booking") : null;
   const isDraftIntent = intent === "new_booking" || intent === "cancel" || intent === "modify";
 

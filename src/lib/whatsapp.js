@@ -97,6 +97,11 @@ export { normalizePhone, formatPhone, matchCustomerByPhone, regularChipLabel } f
 // never evaluates the body), which is what makes this worth stating: it fails
 // at runtime, in the one function, and only when a row renders.
 import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone } from "./customers.js";
+// The two "can a consumer take this apart" predicates, reused rather than
+// re-expressed — see sanitizeParse below. Both files carry their explicit .js
+// extension because api/_lib imports this module under Node ESM.
+import { isReadableTime } from "./booking-logic.js";
+import { isReadableDate } from "./day.js";
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {
@@ -130,6 +135,55 @@ export function formatWindow(expiresAt) {
   const m = Math.floor((diff % 3600000) / 60000);
   if (h >= 1) return { label: "Window: " + h + "h " + m + "m left", expired: false };
   return { label: "Window: " + m + "m left", expired: false };
+}
+
+// ── What the LLM said vs what this app can use (v18.0.0 phase 6, CT-WA-01) ───
+//
+// Gemini's `responseSchema` constrains the JSON *type* of every draft field and
+// nothing else: `date` is described as "YYYY-MM-DD" and `time` as "HH:MM 24h",
+// but a description is not a constraint, so "next tuesday" and "8 in the
+// evening" are schema-valid answers. The parse is the ONE piece of this app's
+// data that a customer's own words influence, and it was stored verbatim.
+//
+// Measured on 2026-09-10 against the running app: a draft carrying
+// `time: "8 in the evening"` was accepted through the booking form and landed in
+// `/bookings` — the security rules pin `date` (v17.16.11) and deliberately do
+// NOT pin `time`, so nothing server-side refused it — after which `sanitize`'s
+// own `isReadableTime` fallback rendered it as **13:00** on every screen. A
+// party that asked for the evening reads as booked for lunch, and the stored
+// row holds a value no client will ever display.
+//
+// So the rule is the one rtdb.js's sanitizeKey already states: validate at the
+// BOUNDARY, not in the callers. A field the app cannot use becomes `null`,
+// which is the shape it already handles everywhere — "the customer did not say"
+// — rather than a value that looks stated and is not.
+//
+// The predicates are the CONSUMERS' requirements, never formats of their own —
+// `isReadableTime`/`isReadableDate` are defined that way for exactly this
+// reason, and reusing them is what keeps the draft and the booking agreeing.
+
+// A party size the app can place: a whole number of people, at least one.
+// Deliberately UNBOUNDED above — a maximum party size is a decision about this
+// restaurant, and the placement guard already refuses what will not fit.
+export function isUsableSize(v) {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1;
+}
+export function isUsableDate(v) { return typeof v === "string" && isReadableDate(v); }
+export function isUsableTime(v) { return typeof v === "string" && isReadableTime(v); }
+
+// sanitizeParse(parse) — the door every LLM answer walks through, on the server
+// (draftPatchFromParse) and in the client simulator (simulateInbound) alike.
+// Returns a NEW object; `null` in, `null` out. Only the three fields a booking
+// is actually built from are narrowed: `name`/`notes` are free text the app
+// only ever displays, and `intent`/`preference` are already gated by the
+// enum tests at their own call sites.
+export function sanitizeParse(parse) {
+  if (!parse || typeof parse !== "object") return parse;
+  return Object.assign({}, parse, {
+    size: isUsableSize(parse.size) ? parse.size : null,
+    date: isUsableDate(parse.date) ? parse.date : null,
+    time: isUsableTime(parse.time) ? parse.time : null,
+  });
 }
 
 // clampConfidence(stated, draft) — the confidence ceiling rule (decided

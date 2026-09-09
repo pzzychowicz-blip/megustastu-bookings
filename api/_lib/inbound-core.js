@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence } from "../../src/lib/whatsapp.js";
+import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse } from "../../src/lib/whatsapp.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
@@ -40,6 +40,12 @@ import { parseMessage, mockParse } from "./gemini.js";
 // stamps it, so a customer's "thank you" (intent other — drafts untouched)
 // never resurrects a handled banner.
 function draftPatchFromParse(parse, ts) {
+  // v18.0.0 phase 6 (CT-WA-01): the model's answer is untrusted input, and this
+  // is the one door every server-side parse walks through. `sanitizeParse` nulls
+  // a size/date/time the app cannot use, so a schema-valid nonsense answer
+  // ("next tuesday", "8 in the evening") reads as "the customer did not say"
+  // instead of reaching /bookings verbatim. See src/lib/whatsapp.js.
+  parse = sanitizeParse(parse);
   const draftData = {
     name: parse.name != null ? parse.name : null,
     size: parse.size != null ? parse.size : null,

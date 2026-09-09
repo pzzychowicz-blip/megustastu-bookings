@@ -21805,3 +21805,88 @@ simulator marker, a `VITE_FB_TARGET=dev` build contains all three chunks, and th
 dev server still opens the simulator and still carries `__waSim`.
 
 Gate: `120.96 kB` gz · **1171 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 44 (phase 6) — CT-WA-01: what a customer's own words could put in the bookings list
+
+The WhatsApp crash test (`MGT BOOKINGS — CRASH TEST - WHATSAPP.md`, register
+prefix `CT-WA-…`) ran against the ported module at v18.0.0. This is its central
+finding, and the one thing in the module that could produce a **wrong booking**
+rather than a wrong screen.
+
+**The mechanism.** Gemini's `responseSchema` constrains the JSON *type* of every
+draft field and nothing else. `date` is described there as `"YYYY-MM-DD"` and
+`time` as `"HH:MM 24h"` — and a description is not a constraint, so
+`"next tuesday"` and `"8 in the evening"` are schema-honouring answers. The parse
+is the one piece of this app's data that a customer's own words influence, and
+`draftPatchFromParse` stored it verbatim (`date: parse.date || null`).
+
+**Measured live, on the running DEV app, 2026-09-10.** A draft carrying
+`size: 5000 · date: "next tuesday" · time: "8 in the evening"` was injected
+through `__waSim.custom()`, accepted from the inbox, and saved from the booking
+form. The stored row, read back over the RTDB REST API:
+
+```json
+{ "name": "CTWA TimeProbe", "date": "2026-09-10",
+  "time": "\"8 in the evening\"", "size": 2, "tables": ["1A"], "status": "confirmed" }
+```
+
+Four gates were expected to stop it and none did:
+
+1. **`doSave`'s time validation** asks `if(!f.time)` — whether there *is* a time,
+   never whether the app can read one. `toMins("8 in the evening")` is `NaN`, and
+   `NaN < open*60 || NaN > close*60` is **false in both directions**, so the range
+   gate — the only thing between a garbage time and the write — passed everything.
+   Measured: `V4 false → V5 true`.
+2. **The security rules** pin `date` (v17.16.11's optional-group pattern) and
+   deliberately do **not** pin `time`, for the reason `CLAUDE.md` records:
+   `isReadableTime` accepts `"9:30"`/`"13:00:00"`/`":"` on purpose, so the
+   client's own output is wider than any pattern worth writing. Confirmed
+   against the real `database.rules.json` in the emulator: `garbageTime:
+   ALLOWED`, `garbageDate: DENIED`. That trade is correct and was not touched.
+3. **The form** renders an `<input type="time">`, which coerces the value to
+   blank. Staff sees an empty field and `End: NaN:NaN` — a warning, but not a
+   refusal, and the field looks merely *unfilled*.
+4. **`sanitize`** then hides the evidence: `isReadableTime(b.time) ? b.time :
+   "13:00"` (v17.16.5). Every device reads the booking as **13:00**. A party that
+   asked for the evening is on the list for lunch, the row holds a value no
+   screen will ever show, and it self-heals only when somebody edits that
+   booking for an unrelated reason.
+
+**The fix is the rule `rtdb.js`'s `sanitizeKey` already states — validate at the
+BOUNDARY, not in the callers** — plus the write-side half of a predicate the read
+side already had.
+
+`src/lib/whatsapp.js` gains `isUsableSize`/`isUsableDate`/`isUsableTime` and
+**`sanitizeParse(parse)`**, which nulls a size, date or time the app cannot use.
+`null` is the shape the app already handles everywhere ("the customer did not
+say"), rather than a value that looks stated and is not. The predicates are the
+**consumers' requirements** and not formats of their own — `isReadableTime` and
+`isReadableDate` are defined that way for exactly this reason, and reusing them
+is what keeps the draft and the booking agreeing. `"9:30"` and `"2026-8-3"` still
+pass, because nothing currently working may move.
+
+Size is **unbounded above** deliberately: a maximum party size is a decision
+about this restaurant, and the placement guard already refuses what will not fit
+(the 5000-guest draft was blocked by "Could not assign a table"). What
+`isUsableSize` rejects is a size that is not a whole number of people — `-7` and
+`2.5` both reached `/bookings` before, and the rules accept both (`isNumber()`).
+
+Wired into **both** draft builders: `api/_lib/inbound-core.js`'s
+`draftPatchFromParse` (the server's one door — the webhook, `applyParse` and the
+re-check all pass through it) and `src/lib/wa-sim.js`'s `simulateInbound`, which
+takes `parse` straight from a scenario or from `__waSim.custom()` and would
+otherwise be the one path that could still build an unusable draft.
+
+And `doSave` now refuses an unreadable time before it computes with one. Nothing
+the form can produce moves: an `<input type="time">` yields `""` (already caught
+by the existing required check) or `HH:MM`. That is the same test v17.16.5
+applied when it added the predicate for `sanitize`.
+
+`tests/wa-parse-guard.test.js` — 11 tests. **Three of them scan the source**, the
+way `tests/booking-logic.test.js` scans the consumers of `isReadableBlock`,
+because the pure tests pass whether or not anything CALLS the new function:
+deleting the call from `draftPatchFromParse` left all 33 WA tests green. A
+boundary nothing crosses is not a boundary. Both sabotages — the missing call and
+the missing `doSave` guard — fail two of the three.
+
+Gate: `121.07 kB` gz · **1182 tests** · 0 lint errors (88 warnings) · style OK.

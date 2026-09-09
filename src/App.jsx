@@ -42,7 +42,10 @@ import {
   nowTime,
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo,
-  seatedElapsed
+  seatedElapsed,
+  // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
+  // `sanitize` already applies on the way IN. See the guard below.
+  isReadableTime
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
@@ -2455,6 +2458,21 @@ function BookingApp({uid}){
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setErrorField("date");setError("Please set a date.");return;}
       if(!f.time){setErrorField("time");setError("Please set a time.");return;}
+      // v18.0.0 phase 6 (CT-WA-01). "Is there a time" and "is there a time this
+      // app can use" are different questions, and only the first was asked.
+      // `toMins` on an unreadable string yields NaN, and BOTH range comparisons
+      // below are false against NaN — so the range gate, the one thing standing
+      // between a garbage time and the database, passed everything. The security
+      // rules pin `date` and deliberately do NOT pin `time` (see
+      // database.rules.json), so nothing server-side refuses it either; the
+      // booking lands, and `sanitize` then shows it to every device as 13:00.
+      //
+      // Measured live on 2026-09-10: a WhatsApp draft carrying
+      // `time: "8 in the evening"` saved, stored verbatim, and displayed as a
+      // 13:00 booking. Nothing the form can produce moves — an <input type=time>
+      // yields "" (already caught above) or HH:MM — which is the same test
+      // v17.16.5 applied when it added this predicate for `sanitize`.
+      if(!isReadableTime(f.time)){setErrorField("time");setError("That time could not be read — please set it again.");return;}
       const sm=toMins(f.time);
       // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
       // viewed day, and block a closed day outright.
