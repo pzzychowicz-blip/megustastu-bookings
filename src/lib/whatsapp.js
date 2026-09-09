@@ -196,7 +196,14 @@ export function sanitizeParse(parse) {
 // draftPatchFromParse, and the client simulator's draftData build).
 export function clampConfidence(stated, draft) {
   const d = draft || {};
-  const missing = [d.size, d.date, d.time].filter((v) => v === null || v === undefined || v === "").length;
+  // v18.0.0 phase 6 (CT-WA-03): a field counts when the app can USE it, not
+  // when it is merely non-empty. The old test asked only whether something was
+  // there, so the draft card rendered "5000 pax · next tuesday · 8 in the
+  // evening" under a HIGH badge — the one signal staff have for "check this
+  // one" vouching for the worst draft the module can produce. Measured live.
+  const missing = [
+    isUsableSize(d.size), isUsableDate(d.date), isUsableTime(d.time),
+  ].filter((ok) => !ok).length;
   const hasAmbiguity = !!(d.ambiguity && String(d.ambiguity).trim());
   const issues = missing + (hasAmbiguity ? 1 : 0);
   const ceiling = issues >= 2 ? "low" : issues === 1 ? "medium" : "high";

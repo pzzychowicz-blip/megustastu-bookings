@@ -21889,4 +21889,36 @@ deleting the call from `draftPatchFromParse` left all 33 WA tests green. A
 boundary nothing crosses is not a boundary. Both sabotages — the missing call and
 the missing `doSave` guard — fail two of the three.
 
-Gate: `121.07 kB` gz · **1182 tests** · 0 lint errors (88 warnings) · style OK.
+Gate: `121.01 kB` gz · **1182 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 45 (phase 6) — CT-WA-03: the confidence badge vouched for the worst draft the module can produce
+
+Measured in the same live run as CT-WA-01, and visible on screen before anything
+was saved. The inbox drew the injected draft as:
+
+> **5000 pax · next tuesday · 8 in the evening** — `HIGH`
+
+`clampConfidence` counts "issues" as *missing crucial fields* plus an ambiguity
+note, and its test for missing was `v === null || v === undefined || v === ""`.
+So it asked whether a field was **there**, never whether it was **usable** —
+which means the one signal staff have for "check this one before you accept it"
+actively certified the only kind of draft that can produce a wrong booking. A
+field the model invented in the wrong shape scored exactly like a field the
+customer stated clearly.
+
+The fix is one line, on top of the predicates CT-WA-01 introduced: a field counts
+when `isUsableSize` / `isUsableDate` / `isUsableTime` says the app can use it.
+The measured draft now reads `low`; one unusable field reads `medium`.
+
+Nothing that worked moves. `""` and `null` were missing before and are missing
+now; `"2026-8-3"` and `"9:30"` counted before and still count; the stated
+confidence is still the ceiling, and an ambiguity note still costs one. The one
+value that genuinely changes side is `size: 0`, which used to count as *present*
+because zero is not `null`, `undefined` or `""` — a party of nobody, scored as a
+stated fact.
+
+`mergeDraft` inherits it for free, since it already finalises through the same
+function; so does the client simulator's `draftData` build. Five more tests,
+proven against a sabotage that restores the old presence-only test (two fail).
+
+Gate: `121.07 kB` gz · **1187 tests** · 0 lint errors (88 warnings) · style OK.

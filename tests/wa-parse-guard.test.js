@@ -1,7 +1,7 @@
 // tests/wa-parse-guard.test.js
 //
-// v18.0.0 phase 6 — the WhatsApp crash test's central
-// data-integrity finding, pinned: the LLM's answer is the one piece of
+// v18.0.0 phase 6 — the WhatsApp crash test's two data-integrity findings,
+// pinned. Both are about the same thing: the LLM's answer is the one piece of
 // this app's data a CUSTOMER's own words influence, and Gemini's responseSchema
 // constrains the JSON *type* of each field and nothing else. "YYYY-MM-DD" and
 // "HH:MM 24h" are descriptions in that schema, not constraints, so
@@ -12,12 +12,16 @@
 // landed in /bookings verbatim (the rules pin `date` and deliberately do not pin
 // `time`), after which `sanitize`'s own fallback rendered it as 13:00 on every
 // screen. A party that asked for the evening reads as booked for lunch.
+//
+// CT-WA-03 — the draft card labelled "5000 pax · next tuesday · 8 in the
+// evening" HIGH confidence, because clampConfidence counted a field as present
+// when it was non-empty rather than when the app could use it.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { sanitizeParse, isUsableSize, isUsableDate, isUsableTime } from "../src/lib/whatsapp.js";
+import { sanitizeParse, clampConfidence, isUsableSize, isUsableDate, isUsableTime, mergeDraft } from "../src/lib/whatsapp.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => stripComments(readFileSync(join(ROOT, p), "utf8")).join("\n");
@@ -73,6 +77,37 @@ describe("CT-WA-01 — a schema-valid nonsense parse cannot reach a booking", ()
   });
 });
 
+describe("CT-WA-03 — confidence counts what the app can USE, not what is non-empty", () => {
+  it("the measured draft no longer reads HIGH", () => {
+    expect(clampConfidence("high", { size: 5000, date: "next tuesday", time: "8 in the evening" })).toBe("low");
+  });
+  it("one unusable field is medium, two are low", () => {
+    expect(clampConfidence("high", { size: 4, date: "2026-09-10", time: "not a time" })).toBe("medium");
+    expect(clampConfidence("high", { size: 4, date: "whenever", time: "not a time" })).toBe("low");
+  });
+  it("a complete, usable draft is still HIGH — the pre-fix behaviour holds", () => {
+    expect(clampConfidence("high", { size: 4, date: "2026-09-10", time: "21:00" })).toBe("high");
+  });
+  it("an ambiguity note still costs one, and the stated value is still the ceiling", () => {
+    expect(clampConfidence("high", { size: 4, date: "2026-09-10", time: "21:00", ambiguity: "evening?" })).toBe("medium");
+    expect(clampConfidence("low", { size: 4, date: "2026-09-10", time: "21:00" })).toBe("low");
+  });
+  it("mergeDraft inherits it — a merged draft cannot claim more than its fields support", () => {
+    const merged = mergeDraft(
+      { intent: "new_booking", size: null, date: "2026-09-10", time: "21:00", confidence: "medium" },
+      { intent: "new_booking", size: 5000, date: null, time: null, confidence: "high" },
+    );
+    expect(merged.size).toBe(5000);          // merge is mechanical; the guard is upstream
+    expect(merged.confidence).toBe("high");  // …and by then every field is usable
+  });
+});
+
+// ── The WIRING, not just the function ───────────────────────────────────────
+// The pure tests above pass whether or not anything CALLS sanitizeParse —
+// proven: deleting the call from draftPatchFromParse leaves all 33 WA tests
+// green. So the two draft builders and doSave's own gate are scanned, the way
+// tests/booking-logic.test.js scans the consumers of isReadableBlock. A boundary
+// nothing crosses is not a boundary.
 describe("CT-WA-01 — the boundary is actually crossed", () => {
   it("the server's draftPatchFromParse sanitizes before it builds a draft", () => {
     const src = read("api/_lib/inbound-core.js");
