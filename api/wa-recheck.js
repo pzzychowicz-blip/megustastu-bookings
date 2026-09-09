@@ -25,7 +25,7 @@
 import { verifyStaffToken, staffAuthError, getConversation, readMessages, readOperatingHours } from "./_lib/rtdb.js";
 import { parseThread } from "./_lib/gemini.js";
 import { applyParse } from "./_lib/inbound-core.js";
-import { WA_RECHECK_HISTORY, normalizePhone } from "../src/lib/whatsapp.js";
+import { WA_RECHECK_HISTORY, normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -64,8 +64,11 @@ export default async function handler(req, res) {
   // WRITE arbitrary sub-paths under conversations/. Every other caller of those
   // helpers passes a normalizePhone() result — so require the client sent one,
   // and reject anything that does not round-trip through it unchanged.
+  // v18.0.0 phase 6 (CT-WA-04): the hand-written version of this test — non-empty,
+  // not "+", and unchanged by normalisation — is now `isPhoneKey`, shared with
+  // processInbound, which had only the first third of it. Same three conditions.
   const phoneKey = normalizePhone(raw);
-  if (!phoneKey || phoneKey === "+" || phoneKey !== raw) { res.status(400).json({ error: "valid phoneKey required" }); return; }
+  if (!isPhoneKey(raw)) { res.status(400).json({ error: "valid phoneKey required" }); return; }
 
   try {
     const conv = await getConversation(phoneKey);

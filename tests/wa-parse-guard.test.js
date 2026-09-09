@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { inboundTs } from "../api/wa-inbound.js";
+import { isPhoneKey } from "../src/lib/whatsapp.js";
 import { sanitizeParse, clampConfidence, isUsableSize, isUsableDate, isUsableTime, mergeDraft } from "../src/lib/whatsapp.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -170,5 +171,48 @@ describe("CT-WA-02 — a Meta timestamp is not a number until it is checked", ()
   });
   it("leaves an OLD timestamp alone — a Meta redelivery after an outage is real", () => {
     expect(inboundTs("1600000000")).toBe(1600000000000);
+  });
+});
+
+// ── CT-WA-04 ────────────────────────────────────────────────────────────────
+// `normalizePhone("+")` is `"+"` — truthy, a legal RTDB key, nobody's number.
+// processInbound guarded only `if (!phoneKey)`; api/wa-recheck.js had already
+// written the fuller test by hand, so the rule lived in ONE of the two places
+// that build a conversation key. Measured against the emulator with a
+// correctly-signed payload: a message carrying no `from` created a whole
+// conversation at key "+", and `messages: "abc"` — a string where Meta sends an
+// array — was iterated by `for...of` one character at a time, answering 200 with
+// `messages: 3`.
+describe("CT-WA-04 — a conversation key has to identify somebody", () => {
+  it('refuses "+", which is what a message with no `from` normalises to', () => {
+    expect(isPhoneKey("+")).toBe(false);
+    expect(isPhoneKey("")).toBe(false);
+    expect(isPhoneKey(null)).toBe(false);
+    expect(isPhoneKey(undefined)).toBe(false);
+  });
+  it("accepts the keys the module actually writes", () => {
+    expect(isPhoneKey("+34600111222")).toBe(true);
+    expect(isPhoneKey("34600111222")).toBe(true);   // no "+" is legal — Meta sends bare digits
+  });
+  it("refuses anything normalisation would change — the round-trip rule", () => {
+    for (const bad of ["+34 600 111 222", "+34-600-111", "conversations/x", "+34600111222 ", "abc"]) {
+      expect(isPhoneKey(bad)).toBe(false);
+    }
+  });
+  it("is the rule wa-recheck wrote by hand, and both endpoints use it now", () => {
+    const core = read("api/_lib/inbound-core.js");
+    const recheck = read("api/wa-recheck.js");
+    expect(core).toMatch(/isPhoneKey\(/);
+    expect(recheck).toMatch(/isPhoneKey\(/);
+    // The hand-written half must be gone, or there are two rules again.
+    expect(recheck).not.toMatch(/phoneKey === "\+"/);
+  });
+  it("the webhook checks the SHAPE of every envelope array, not just two of five", () => {
+    const src = read("api/wa-inbound.js");
+    for (const field of ["entry", "changes", "messages", "statuses", "contacts"]) {
+      expect(src).toMatch(new RegExp("Array\\.isArray\\((payload|entry|value)\\." + field + "\\)"));
+    }
+    // `for...of value.messages || []` iterates a STRING one character at a time.
+    expect(src).not.toMatch(/of\s+value\.(messages|statuses)\s*\|\|/);
   });
 });

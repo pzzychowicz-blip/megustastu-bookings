@@ -96,7 +96,7 @@ export { normalizePhone, formatPhone, matchCustomerByPhone, regularChipLabel } f
 // see the difference (rolldown resolves the re-export for every consumer and
 // never evaluates the body), which is what makes this worth stating: it fails
 // at runtime, in the one function, and only when a row renders.
-import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone } from "./customers.js";
+import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, normalizePhone } from "./customers.js";
 // The two "can a consumer take this apart" predicates, reused rather than
 // re-expressed — see sanitizeParse below. Both files carry their explicit .js
 // extension because api/_lib imports this module under Node ESM.
@@ -161,6 +161,23 @@ export function formatWindow(expiresAt) {
 // The predicates are the CONSUMERS' requirements, never formats of their own —
 // `isReadableTime`/`isReadableDate` are defined that way for exactly this
 // reason, and reusing them is what keeps the draft and the booking agreeing.
+
+// isPhoneKey(k) — is this a conversation key that identifies SOMEBODY?
+//
+// v18.0.0 phase 6 (CT-WA-04). `normalizePhone` strips every non-digit and keeps
+// a leading "+", so `normalizePhone("+")` is `"+"` — truthy, a legal RTDB key,
+// and nobody's phone number. `processInbound`'s only guard was `if (!phoneKey)`,
+// which "+" passes; `api/wa-recheck.js` had already worked this out and written
+// `phoneKey === "+"` by hand, so the rule existed in ONE of the two places that
+// build a conversation key. Measured against the emulator: a signed payload
+// whose message carries no `from` created a whole conversation at key `"+"`.
+//
+// The test is deliberately minimal — at least one digit, and unchanged by
+// normalisation. A minimum LENGTH would be an invented rule about what counts
+// as a phone number, and short codes are real.
+export function isPhoneKey(k) {
+  return typeof k === "string" && /[0-9]/.test(k) && normalizePhone(k) === k;
+}
 
 // A party size the app can place: a whole number of people, at least one.
 // Deliberately UNBOUNDED above — a maximum party size is a decision about this

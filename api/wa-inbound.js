@@ -158,12 +158,17 @@ export default async function handler(req, res) {
 
         // contacts[] carries the WhatsApp profile name keyed by wa_id.
         const profileByWaId = {};
-        (value.contacts || []).forEach((c) => {
+        // v18.0.0 phase 6 (CT-WA-04): `entry` and `changes` were checked with
+        // Array.isArray and these three were not, so a `value.messages` that is a
+        // STRING is iterated by `for...of` ONE CHARACTER AT A TIME. Measured
+        // against the emulator with a correctly-signed body: `messages: "abc"`
+        // answered 200 with `messages: 3` and manufactured three records.
+        (Array.isArray(value.contacts) ? value.contacts : []).forEach((c) => {
           if (c && c.wa_id && c.profile && c.profile.name) profileByWaId[c.wa_id] = c.profile.name;
         });
 
         // ── Inbound messages (phase A: store fast, parse later) ───────────
-        for (const m of value.messages || []) {
+        for (const m of Array.isArray(value.messages) ? value.messages : []) {
           try {
             // Text only for now (Phase 3 covers media); non-text becomes a
             // placeholder message with no draft (and no parse job).
@@ -201,7 +206,7 @@ export default async function handler(req, res) {
         }
 
         // ── Delivery / read statuses ──────────────────────────────────────
-        for (const s of value.statuses || []) {
+        for (const s of Array.isArray(value.statuses) ? value.statuses : []) {
           try {
             const phoneKey = normalizePhone("+" + String(s.recipient_id || "").replace(/^\+/, ""));
             if (phoneKey && s.id && s.status) {

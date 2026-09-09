@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse } from "../../src/lib/whatsapp.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
@@ -103,7 +103,10 @@ export async function applyParse(phoneKey, parse, ts) {
 // Returns { phoneKey, skipped } — skipped=true when the wamid was seen before.
 export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse }) {
   const phoneKey = normalizePhone(phone);
-  if (!phoneKey) return { phoneKey: null, skipped: true };
+  // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
+  // is a legal RTDB key and is nobody. api/wa-recheck.js had already refused it
+  // by hand; this is the same rule, in the other place that builds a key.
+  if (!isPhoneKey(phoneKey)) return { phoneKey: null, skipped: true };
   // Storage cap — one choke point for every caller (webhook, harness /dev).
   text = String(text || "").slice(0, WA_MAX_TEXT_LEN);
   const msgId = wamid ? sanitizeKey(wamid) : "in" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);

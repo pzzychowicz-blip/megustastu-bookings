@@ -21974,3 +21974,51 @@ new clamp correctly capped it — the mirror image of the 2026-09-02
 `tests/reconcile.test.js` trap, and it is derived from the live clock now.
 
 Gate: `121.07 kB` gz · **1192 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 47 (phase 6) — CT-WA-04: a conversation key that identifies nobody, and an envelope trusted to be the right shape
+
+Two halves of one thing — the webhook believing what it was handed.
+
+**`"+"` is a valid RTDB key and is nobody.** `normalizePhone` strips every
+non-digit and keeps a leading `"+"`, so `normalizePhone("+")` is `"+"`:
+truthy, path-safe, and not a phone number. `processInbound`'s guard was
+`if (!phoneKey)`, which `"+"` sails past. Measured against the emulator with a
+correctly-signed payload: a `messages[]` entry carrying no `from` produced
+`phone = "+"` and created a whole conversation at key `"+"` — a row in the inbox
+for a customer who does not exist and cannot be replied to.
+
+`api/wa-recheck.js` had **already worked this out**, and its guard reads
+`!phoneKey || phoneKey === "+" || phoneKey !== raw` — non-empty, not `"+"`, and
+unchanged by normalisation. So the rule existed in one of the two places that
+build a conversation key, and the other had a third of it. That is the shape
+this repo names everywhere: the settings-tab list, the four modal-visibility
+lists, the two `isReadableBlock` consumers.
+
+`isPhoneKey(k)` is now that rule, shared. Deliberately minimal — at least one
+digit, and unchanged by normalisation. A minimum LENGTH would be an invented
+claim about what counts as a phone number, and short codes are real. The
+hand-written copy in `wa-recheck` is gone rather than left beside it.
+
+**`entry` and `changes` were shape-checked; `messages`, `statuses` and
+`contacts` were not.** `for (const m of value.messages || [])` over a STRING
+iterates one character at a time. Measured: a signed body carrying
+`messages: "abc"` answered **200** with `messages: 3` and manufactured three
+records under the `"+"` conversation above. Two of five arrays checked is the
+same defect as one of two places guarding a key, one level down.
+
+After: `messages: "abc"` → `200 { messages: 0 }`, nothing written; a message
+with no `from` → `200 { skipped: 1 }`, no conversation keys. A real message
+still stores and an exact Meta replay is still skipped — the idempotency this
+sits next to is untouched.
+
+Reachability is again Meta or whoever holds `META_APP_SECRET`, which is what
+keeps it at P2 — Meta does not send `messages: "abc"`. It is fixed anyway because
+`injectSimInbound` reaches `processInbound` from a request BODY, and because a
+guard that exists in one of two places is a guard that has already failed once.
+
+Five tests; two of them scan the source, and both sabotages fail them.
+
+Gate: `121.07 kB` gz · **1197 tests** · 0 lint errors (88 warnings) · style OK.
+No rules file moved (`git diff --name-only` over `database.rules.json`,
+`tests/rules`, `firebase.json`, `vitest.rules.config.js` → empty), so
+`test:rules` is not owed. The emulator was used all phase, as an INSTRUMENT.
