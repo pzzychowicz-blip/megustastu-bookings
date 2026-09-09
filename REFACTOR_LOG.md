@@ -21922,3 +21922,55 @@ function; so does the client simulator's `draftData` build. Five more tests,
 proven against a sabotage that restores the old presence-only test (two fail).
 
 Gate: `121.07 kB` gz · **1187 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 46 (phase 6) — CT-WA-02: one malformed Meta timestamp was a seven-day poison pill
+
+`api/wa-inbound.js` trusted `m.timestamp` as seconds-since-epoch:
+`m.timestamp ? parseInt(m.timestamp, 10) * 1000 : Date.now()`. The ternary
+guards `absent`, which is the one case that was never a problem. Three failures
+follow from a value that is present and is not what it claims, and all three
+were measured against the RTDB emulator with correctly-signed payloads:
+
+| `timestamp` | before | after |
+|---|---|---|
+| `"abc"` | `NaN` → RTDB refuses the write → **500** | 200, stored |
+| `"-1"` | `windowExpiresAt: 86399000` (1970) | now + 24h |
+| `99999999999` | `windowExpiresAt: 100000086399000` (year 5138) | now + 24h |
+
+The first is the serious one. RTDB rejects NaN outright — *"values argument
+contains NaN in property `conversations.+34600111222.lastMessageAt`"* — so the
+message throws, `results.errors` is the only non-zero counter, and the handler
+takes its total-failure branch and answers **500**. Meta redelivers a 500 for up
+to seven days; every redelivery hits the same line and fails identically. A
+booking request is silently dropped and the function is invoked on a schedule
+for a week. The retry semantics are correct in themselves — 500 means "try
+again, the database was unreachable" — and a permanently-failing input turns
+them into a bill.
+
+The second is quieter and worse to be on the receiving end of: a window that
+expired in 1970 means `api/wa-send` answers **410** forever, so staff simply
+cannot reply to that customer, with nothing on screen explaining why.
+
+`inboundTs(raw)` is the fix and it is **exported**, because it decides the 24h
+service window — the difference between staff being able to answer a customer and
+not — and that is the rule v17.8.0 wrote down for `placeWaitlist` and
+`presenceState`. Non-finite or non-positive falls back to now; the future is
+clamped to now, which is a **fact** rather than a policy (a webhook delivery
+cannot be timestamped after it arrived) and so only ever absorbs clock skew. An
+OLD timestamp is deliberately left alone: Meta redelivering after an outage is
+legitimate, and the expired window that produces is the honest answer.
+
+Reachability is Meta or whoever holds `META_APP_SECRET`. The HMAC gate is sound —
+verified across ten cases in the same run, including no-secret-at-all, an empty
+header, a missing `sha256=` prefix, an HMAC of a different body, and
+`WA_ALLOW_UNSIGNED` set to `"0"`/`"true"` (both correctly OFF; the comparison is
+exactly `=== "1"`). That is what makes this P2 rather than P1, and it is not what
+makes it acceptable.
+
+Five tests, proven against a sabotage restoring the original expression (three
+fail). One of them caught its own fixture on the first run: `1789000000` looks
+like a safely-past literal and was 18 minutes in the *future* when it ran, so the
+new clamp correctly capped it — the mirror image of the 2026-09-02
+`tests/reconcile.test.js` trap, and it is derived from the live clock now.
+
+Gate: `121.07 kB` gz · **1192 tests** · 0 lint errors (88 warnings) · style OK.

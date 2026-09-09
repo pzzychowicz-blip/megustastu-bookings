@@ -57,6 +57,45 @@ function scheduleAfterResponse(promise) {
   } catch { /* no Vercel context — local harness */ }
 }
 
+// inboundTs(raw) — the message's own timestamp, or now (v18.0.0 phase 6,
+// CT-WA-02). Meta's `timestamp` is seconds-since-epoch as a string, and it was
+// trusted as one: `parseInt(m.timestamp, 10) * 1000`. Three things follow from a
+// value that is not what it claims, and all three were measured against the
+// emulator with a correctly-signed payload:
+//
+//   · NON-NUMERIC → NaN. RTDB REFUSES NaN ("values argument contains NaN in
+//     property 'conversations.+34600111222.lastMessageAt'"), so the whole
+//     message throws, `results.errors` is the only non-zero counter, and the
+//     handler answers **500**. Meta redelivers a 500 for up to seven days, every
+//     redelivery fails identically, and the customer's message is never stored.
+//     A poison pill: a bill and a dropped booking request, on repeat.
+//   · NEGATIVE / tiny → `windowExpiresAt` lands in 1970 (measured: 86399000), so
+//     the 24h service window is already expired and staff can never reply to
+//     that customer at all — `api/wa-send` answers 410 forever.
+//   · ABSURDLY LARGE → `windowExpiresAt` in the year 5138 (measured:
+//     100000086399000). The composer stays enabled indefinitely and the Cloud
+//     API rejects every free-form send.
+//
+// Reachability is Meta or whoever holds META_APP_SECRET — the HMAC gate is
+// sound (verified across ten cases). That is what makes it P2 rather than P1,
+// and it is not what makes it acceptable: the failure is permanent, silent to
+// staff, and costs money for a week.
+//
+// The upper clamp is a FACT rather than a policy — a webhook delivery cannot be
+// timestamped after it arrived — so it only ever absorbs clock skew. An old
+// timestamp is left alone: Meta redelivering after an outage is legitimate, and
+// the expired window it produces is the honest answer.
+// EXPORTED so it can be tested at all — it decides the 24h service window, which
+// is the difference between staff being able to answer a customer and not. The
+// rule v17.8.0 wrote down for `placeWaitlist` and `presenceState`.
+export function inboundTs(raw) {
+  const now = Date.now();
+  if (raw === undefined || raw === null || raw === "") return now;
+  const ms = parseInt(raw, 10) * 1000;
+  if (!Number.isFinite(ms) || ms <= 0) return now;
+  return Math.min(ms, now);
+}
+
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -131,7 +170,7 @@ export default async function handler(req, res) {
             const isText = m.type === "text" && m.text;
             const text = isText ? m.text.body : "[" + (m.type || "unsupported") + " message]";
             const phone = "+" + String(m.from || "").replace(/^\+/, "");
-            const ts = m.timestamp ? parseInt(m.timestamp, 10) * 1000 : Date.now();
+            const ts = inboundTs(m.timestamp);
             // Read the conversation ONCE: a PENDING draft (draftStatus "parsed")
             // becomes the phase-B parse's merge context so follow-up messages
             // UPDATE it (fill gaps, apply corrections, re-assess confidence)

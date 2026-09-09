@@ -21,6 +21,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { inboundTs } from "../api/wa-inbound.js";
 import { sanitizeParse, clampConfidence, isUsableSize, isUsableDate, isUsableTime, mergeDraft } from "../src/lib/whatsapp.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -131,5 +132,43 @@ describe("CT-WA-01 — the boundary is actually crossed", () => {
     expect(guard).toBeGreaterThan(-1);
     expect(use).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(use);
+  });
+});
+
+// ── CT-WA-02 ────────────────────────────────────────────────────────────────
+// The webhook trusted `m.timestamp` as seconds-since-epoch. Measured against the
+// emulator with correctly-signed payloads: "abc" → NaN → RTDB refuses the write
+// → the handler answers 500 → Meta redelivers for up to seven days, identically,
+// and the customer's message is never stored. "-1" → a window that expired in
+// 1970, so staff can never reply. 99999999999 → a window in the year 5138.
+describe("CT-WA-02 — a Meta timestamp is not a number until it is checked", () => {
+  it("keeps a real timestamp, faithfully", () => {
+    // Derived from the live clock, never a literal: this repo has already lost a
+    // day to a fixture that was in the future when it was written and in the past
+    // by the time it ran (tests/reconcile.test.js, 2026-09-02). Here the trap is
+    // the mirror image — a literal that LOOKS past is future relative to `now`
+    // and gets clamped, which is exactly what caught this line on its first run.
+    const t = Math.floor(Date.now() / 1000) - 60;
+    expect(inboundTs(String(t))).toBe(t * 1000);
+    expect(inboundTs(t)).toBe(t * 1000);
+  });
+  it("falls back to now rather than writing NaN", () => {
+    const before = Date.now();
+    for (const bad of ["abc", "", "  ", null, undefined, {}, [], "NaN"]) {
+      const out = inboundTs(bad);
+      expect(Number.isFinite(out)).toBe(true);
+      expect(out).toBeGreaterThanOrEqual(before);
+    }
+  });
+  it("refuses a non-positive timestamp — the window must not expire in 1970", () => {
+    const before = Date.now();
+    for (const bad of ["-1", "0", -99999]) expect(inboundTs(bad)).toBeGreaterThanOrEqual(before);
+  });
+  it("clamps the future to now — a delivery cannot predate its own arrival", () => {
+    const after = Date.now() + 1;
+    expect(inboundTs("99999999999")).toBeLessThanOrEqual(after);
+  });
+  it("leaves an OLD timestamp alone — a Meta redelivery after an outage is real", () => {
+    expect(inboundTs("1600000000")).toBe(1600000000000);
   });
 });
