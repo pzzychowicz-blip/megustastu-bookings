@@ -13,6 +13,7 @@
 //   → { generated, samples: [{ phone, text }] }
 
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
+import { simEnabled } from "./_lib/env.js";
 import { generateScenarioMessage } from "./_lib/gemini.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
 
@@ -45,6 +46,9 @@ function randomPhone() {
 }
 
 export default async function handler(req, res) {
+  // v18.0.0 phase 5b — FIRST statement, fail-closed. See simEnabled() in
+  // _lib/env.js for why it is first and why absent means off.
+  if (!simEnabled()) { res.status(404).json({ error: "not found" }); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
 
   // ── Staff auth ──────────────────────────────────────────────────────────────

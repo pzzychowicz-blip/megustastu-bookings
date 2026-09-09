@@ -20,6 +20,7 @@
 // (scripts/wa-backend-dev.mjs) for DEV testing with a real DEV id token.
 
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
+import { simEnabled } from "./_lib/env.js";
 import { injectSimInbound } from "./_lib/inbound-core.js";
 
 // Run `promise` after the response is sent (same hook as api/wa-inbound): on
@@ -49,6 +50,9 @@ function readJsonBody(req) {
 }
 
 export default async function handler(req, res) {
+  // v18.0.0 phase 5b — FIRST statement, fail-closed. See simEnabled() in
+  // _lib/env.js for why it is first and why absent means off.
+  if (!simEnabled()) { res.status(404).json({ error: "not found" }); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
 
   // ── Staff auth (NOT Meta HMAC — the sim is staff-only) ──────────────────────

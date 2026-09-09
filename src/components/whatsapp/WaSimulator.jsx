@@ -18,7 +18,8 @@ import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
-import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL, suggestCustomerReply, generateScenario } from "../../lib/wa-backend";
+import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
+import { suggestCustomerReply, generateScenario } from "../../lib/wa-backend-sim";
 import { WA_SANDBOX } from "../../lib/waSandbox";
 import { FlaskIcon, DiceIcon } from "./WaIcons";
 

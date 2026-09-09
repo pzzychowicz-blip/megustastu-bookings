@@ -56,29 +56,25 @@ session and keeping it in sync.
 > the per-feature reasoning; where the two disagree, the v18.0.0 plan wins. These
 > entries say what is pending; that file says how. Revise it there, not here.
 
-- **The WhatsApp port — 5b and 5c (v18.0.0 phase 5).** **5a is done**: the
-  `wa-sandbox` branch is merged, admin-switchable and shipped off, and `api/` is
-  now tracked. Two commits remain. **5b, production hardening** — four
-  fail-closed gates so the simulator cannot run in production: the lazy dynamic
-  import, a test that greps the BUILT bundle for a simulator marker (the step
-  that turns "Rollup strips it" from a belief into a measurement), a runtime
-  404 on the three `api/wa-sim-*` endpoints unless `WA_SIM_ENABLED === "1"`, and
-  the mode defaults. Plus three things to reproduce rather than assume: what
-  `api/wa-inbound.js` does with `META_APP_SECRET` unset (it becomes a live
-  public URL on merge, before any Meta app points at it, and must REJECT rather
-  than crash), whether the CSP's `img-src` covers whatever the inbox renders for
-  a media attachment, and Vercel's function count and build impact on a project
-  that has never built an `api/` directory. **5c, tenant de-hardcoding** — the
-  Gemini prompts carry "a small restaurant in the Canary Islands"
-  (`api/_lib/gemini.js`), to be read from `profile.waContext` via a
-  `TENANT_WA_CONTEXT` env var.
+- **The WhatsApp port — 5c (v18.0.0 phase 5).** **5a and 5b are done.** What
+  remains is **5c, tenant de-hardcoding**: the Gemini prompts carry "a small
+  restaurant in the Canary Islands" (`api/_lib/gemini.js`, ~74 and ~179), to be
+  read from `profile.waContext` via a `TENANT_WA_CONTEXT` env var, matching how
+  everything else reaches the backend. `AUTO_ACK_TEXT` and `DEFAULT_TEMPLATES`
+  are already generic EN/ES and stay seedable through the `templates` node. The
+  four draft-assembly points gotcha applies unchanged: any per-tenant field that
+  should influence parsing must cross `lib/wa-sim.js`,
+  `api/_lib/inbound-core.js`, `mergeDraft` in `lib/whatsapp.js`, and the
+  schema/prompt in `api/_lib/gemini.js` — plus a deterministic backstop if the
+  LLM must populate it.
 
-  Two things this entry listed as work turned out already done and are recorded
-  rather than dropped, because both would otherwise be re-checked at every future
-  sync: the **complementarity contract** was already honoured on the sandbox
-  branch (`whatsapp.js` re-exports the phone primitives from `customers.js`
-  rather than copying them), and the `writeWithRev` templates and per-key
-  `clearAllWaData()` both survived the merge intact.
+  **Not deferred, but not built either — recorded so nobody re-derives it.** The
+  three `api/wa-sim-*` handlers are still DEPLOYED to production (Vercel ships
+  `api/` wholesale) and answer 404 there. Excluding them via `.vercelignore` was
+  considered and dropped: the sandbox branch would need its own inverted copy,
+  which is a second place the same fact is written, and the runtime gate is
+  measured fail-closed across five env values. Revisit only if Vercel's function
+  count ever becomes a constraint — it is 6 of the Hobby plan's 12 today.
 
 - **The WhatsApp crash test (v18.0.0 phase 6).** The adversarial pass, register
   prefix `CT-WA-…`, aimed at what the bookings one has no sections for: a public

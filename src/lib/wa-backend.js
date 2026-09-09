@@ -19,6 +19,11 @@
 // parse, like production will. Linked cancel/modify scenarios therefore only
 // link when the conversation already carries acceptedBookingId from a prior
 // accept. That asymmetry is the point: backend mode tests the real pipeline.
+//
+// v18.0.0 phase 5b: the five functions that call an `/api/wa-sim-*` endpoint
+// moved to `wa-backend-sim.js`. See that file's header — they shipped in the
+// production entry chunk because THIS module has two audiences and one of them
+// (useWhatsApp) is eager. Keep it that way: nothing here may import the sim half.
 
 import { auth } from "../firebase";
 import { WA_SANDBOX } from "./waSandbox";
@@ -71,97 +76,6 @@ export async function sendViaBackend(phoneKey, text) {
   return data;
 }
 
-// Wrap one inbound message in the Meta Cloud API webhook shape and POST it to
-// the local /api/wa-inbound — the client-side mirror of
-// scripts/wa-webhook-samples.mjs::textMessagePayload. `agoMs` back-dates the
-// message (unix-seconds timestamp), e.g. to simulate an expired 24h window.
-export async function postFakeWebhook({ phone, text, name, agoMs = 0 }) {
-  const waId = String(phone).replace(/^\+/, "");
-  const payload = {
-    object: "whatsapp_business_account",
-    entry: [{
-      id: "WABA_ID_LOCAL_SIM",
-      changes: [{
-        field: "messages",
-        value: {
-          messaging_product: "whatsapp",
-          metadata: { display_phone_number: "34600000000", phone_number_id: "PHONE_NUMBER_ID_LOCAL_SIM" },
-          contacts: [{ wa_id: waId, profile: { name: name || "Sim Customer" } }],
-          messages: [{
-            from: waId,
-            id: "wamid.LOCALSIM." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-            timestamp: String(Math.floor((Date.now() - agoMs) / 1000)),
-            type: "text",
-            text: { body: text },
-          }],
-        },
-      }],
-    }],
-  };
-  const res = await fetch(WA_BACKEND_URL + "/api/wa-inbound", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-  return data;
-}
-
-// Online sim inbound: POST one simulated message to the STAFF-AUTH endpoint
-// /api/wa-sim-inbound (same-origin on Vercel). Unlike postFakeWebhook this needs
-// no HMAC/WA_ALLOW_UNSIGNED — the staff Firebase ID token is the gate. The
-// server runs the real pipeline incl. live Gemini parsing.
-export async function postSimInbound({ phone, text, name, agoMs = 0 }) {
-  const user = auth.currentUser;
-  if (!user) throw new Error("not signed in");
-  const idToken = await user.getIdToken();
-  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-inbound", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-    body: JSON.stringify({ phone, text, name, agoMs }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-  return data;
-}
-
-// Route a simulated inbound through the real pipeline when backend mode is ON:
-//   · DEV    → the local harness's unsigned /api/wa-inbound (Meta-shaped payload)
-//   · online → the staff-auth /api/wa-sim-inbound (no public-webhook exposure)
-// Either way the server parses with Gemini and the draft lands via onValue.
-export function backendInbound({ phone, text, name, windowAgeMs = 0 }) {
-  return import.meta.env.DEV
-    ? postFakeWebhook({ phone, text, name, agoMs: windowAgeMs })
-    : postSimInbound({ phone, text, name, agoMs: windowAgeMs });
-}
-
-// ✨ Suggest reply (Gemini plays the customer). Same Gemini-stays-server-side
-// shape as the pipeline: DEV → the harness's open /dev/customer-reply; online →
-// the staff-auth /api/wa-sim-suggest. Returns { text }.
-export async function suggestCustomerReply({ language, history }) {
-  if (import.meta.env.DEV) {
-    const res = await fetch(WA_BACKEND_URL + "/dev/customer-reply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ language, history }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-    return data;
-  }
-  const user = auth.currentUser;
-  if (!user) throw new Error("not signed in");
-  const idToken = await user.getIdToken();
-  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-suggest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-    body: JSON.stringify({ language, history }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-  return data;
-}
 
 // Manual re-check — ask the server to re-read the conversation's recent thread
 // and re-run the LLM classification (api/wa-recheck). Unlike every other seam
@@ -185,22 +99,6 @@ export async function recheckViaBackend(phoneKey) {
   } catch {
     throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
-  return data;
-}
-// 🎲 Generate scenario — Gemini invents `count` varied inbound messages and the
-// server injects each as a fresh conversation (live parse). Staff-auth, same
-// endpoint DEV (via harness) and online. Returns { generated, samples }.
-export async function generateScenario({ hint, count } = {}) {
-  const user = auth.currentUser;
-  if (!user) throw new Error("not signed in");
-  const idToken = await user.getIdToken();
-  const res = await fetch(WA_BACKEND_URL + "/api/wa-sim-generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + idToken },
-    body: JSON.stringify({ hint: hint || "", count: count || 1 }),
-  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
   return data;

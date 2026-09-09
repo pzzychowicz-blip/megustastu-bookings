@@ -51,6 +51,23 @@ export function llmMode() { return env("WA_LLM_MODE", "mock") === "live" ? "live
 export function sendMode() { return env("WA_SEND_MODE", "mock") === "live" ? "live" : "mock"; }
 export function allowUnsigned() { return env("WA_ALLOW_UNSIGNED", "") === "1"; }
 
+// ── The simulator's kill switch (v18.0.0 phase 5b) ───────────────────────────
+// Vercel deploys `api/` WHOLESALE. There is no build-time way to keep the three
+// wa-sim-* handlers out of a production deployment the way `WA_SANDBOX` keeps
+// WaSimulator out of the client bundle — so a RUNTIME gate is the only mechanism
+// available, and being the only one is why it must be fail-closed and must be
+// each handler's FIRST statement.
+//
+// Fail-closed: an ABSENT variable is disabled. Only the sandbox Vercel project
+// sets WA_SIM_ENABLED=1, and production never has to remember to unset anything
+// — which is the direction that survives someone copying an env var list.
+//
+// FIRST statement, before the method check and before staff auth, because the
+// gate's answer must be indistinguishable from "no such endpoint". Checked after
+// the method check, a GET would return 405 and confirm the handler exists; after
+// auth, a 401 would do the same. 404 says nothing.
+export function simEnabled() { return env("WA_SIM_ENABLED", "") === "1"; }
+
 // ── Staff allow-list ─────────────────────────────────────────────────────────
 // verifyIdToken proves a valid token FOR THIS FIREBASE PROJECT and nothing
 // more, while these endpoints grant abilities the client security rules do not:

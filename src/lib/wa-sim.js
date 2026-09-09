@@ -30,7 +30,8 @@
 // production will (see src/lib/wa-backend.js).
 
 import { normalizePhone, WA_WINDOW_MS, AUTO_ACK_TEXT, mergeDraft, clampConfidence, WA_MAX_TEXT_LEN } from "./whatsapp";
-import { backendEnabled, backendInbound } from "./wa-backend";
+import { backendEnabled } from "./wa-backend";
+import { backendInbound } from "./wa-backend-sim";
 
 function genMsgId() { return "sim" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 

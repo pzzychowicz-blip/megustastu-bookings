@@ -21425,3 +21425,116 @@ The bundle is **+23.9 kB gz** and the warnings **+17**, both from WhatsApp code
 now in the startup chunk; the size is phase 5b's lazy-import work, and the
 warnings are pre-existing sandbox `exhaustive-deps` and React-compiler advisories
 that CI does not gate.
+
+### Commit 39 (phase 5b) — the simulator cannot reach production, measured rather than believed
+
+Four fail-closed gates, and the reason this commit is larger than "add a flag" is
+that **the first thing it did was check the belief the plan was built on, and the
+belief was half wrong.**
+
+#### What the built bundle actually contained
+
+The claim in the code — verbatim, in App.jsx above the console-helpers effect —
+was "the whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX
+false)". Measured against the phase-5a build: `WA_SANDBOX` and `VITE_FB_TARGET`
+are both absent from the output, so the constant DID fold, and the WaSimulator
+component WAS stripped — none of its UI strings survive. And yet
+`fetch("/api/wa-sim-inbound")`, `/api/wa-sim-suggest`, `/api/wa-sim-generate`,
+the `[waSim]` console prefix and the `+34600123456` scenario fixtures were all in
+the entry chunk. **Half of the belief was true, in the half nobody had checked.**
+
+Two independent causes, and fixing either alone would have left the other:
+
+1. **A STATIC import puts a module in the entry whatever the gate says.** App.jsx
+   imported `wa-sim` and `wa-sim-scenarios` at module scope and used them only
+   inside the dead branch. They are `import()`ed inside the effect now, and
+   `WaSimulator` is a `lazyChunk`.
+2. **`lib/wa-backend.js` had two audiences.** `useWhatsApp.js` — a production
+   hook, always eager — imported `backendEnabled`/`sendViaBackend`/
+   `recheckViaBackend` from it, while the simulator imported the `/api/wa-sim-*`
+   callers from the same file. Under Rolldown a module with a production audience
+   lands in the ENTRY and keeps the exports its lazy consumers need, so
+   **tree-shaking was never going to remove them**. Split into
+   `wa-backend-sim.js`. The file already knew: `recheckViaBackend`'s own comment
+   said it "is NOT a simulator affordance: it is a real staff feature".
+
+Result: the entry chunk contains **zero** of the markers, and `wa-sim` appears
+nowhere in it outside Vite's preload manifest, which is a list of filenames.
+`__waSim` appears nowhere in `dist/` at all — direct evidence the dead branch is
+eliminated rather than merely moved. **Main bundle 127.36 → 109.92 kB gz**, so
+the whole WhatsApp module now costs +6.5 kB on the startup path instead of +23.9.
+
+#### The guard, and the guard against the guard
+
+`tests/wa-sim-not-in-prod.test.js` reads the built entry (`it.runIf`, the
+`csp.test.js` convention, so a skip is visible). It asserts the entry is clean,
+that App reaches the simulator only through dynamic imports, that no production
+module imports `wa-backend-sim`, and that each handler's gate is FIRST.
+
+Its last test is the one that earned its place: it checks the markers **do**
+appear in the simulator's own chunks. That failed on the first run and was right
+to — `__waSim`, `postFakeWebhook` and a WaSimulator UI string are identifiers the
+minifier renames, so they asserted an absence guaranteed for the wrong reason and
+would have kept passing after the simulator was linked straight into the entry.
+The list is string literals and export names now, each verified present in
+`dist/` before being trusted to prove an absence.
+
+The lazy chunks themselves are still EMITTED — Rolldown emits a chunk for an
+`import()` inside a branch it folded — and the test says so rather than asserting
+something the bundler does not promise. They are unreachable, not absent.
+
+#### The server gate
+
+`simEnabled()` (`api/_lib/env.js`), and the three `wa-sim-*` handlers check it as
+their **first statement** — before the method check and before staff auth,
+because the answer has to be indistinguishable from "no such endpoint": a 405 or
+a 401 would each confirm the handler exists. Measured by calling the handlers
+directly across five values: absent, empty, `"0"` and `"true"` all give **404**;
+only exactly `"1"` gets through (405 on a GET). Vercel deploys `api/` wholesale,
+so a runtime gate is the only mechanism available — which is why it must be first
+and fail-closed.
+
+#### The three things the plan said to reproduce rather than assume
+
+- **`api/wa-inbound.js` with `META_APP_SECRET` unset.** It becomes a live public
+  URL the moment this merges. Reproduced by calling the handler: unset secret and
+  no signature → **401, no crash**; unset secret with an attacker-supplied
+  signature → **401** (an absent secret does not degrade into "accept
+  anything"); secret set, wrong signature → 401; GET handshake with a wrong
+  verify token → 403. The one path that processes a request is
+  `WA_ALLOW_UNSIGNED=1` → 200, which is the documented local-harness bypass and
+  is never set on Vercel.
+- **The CSP.** Untouched, and for a better reason than expected: the inbox
+  renders no media at all — no `<img>`, no `backgroundImage`, no stored URL.
+  `api/wa-inbound.js` turns a non-text message into the TEXT placeholder
+  `"[image message]"`, so there is never a Meta CDN URL for `img-src` to block.
+- **Vercel.** 6 functions (`_lib/` is underscore-prefixed and not routed),
+  against the Hobby plan's 12. No `functions` or `builds` config to reconcile;
+  `firebase-admin ^14.0.0` is already a production dependency.
+
+Mode defaults were verified the same way: `llmMode`/`sendMode` default to
+`mock`, `allowUnsigned` and `simEnabled` to false, and `requireStaffAllowList()`
+flips true when send goes live OR `WA_DB_URL` points off the DEV database — so an
+unset `WA_STAFF_EMAILS` fails closed per-request. `"LIVE"` does not enable live
+mode; the comparison is exact, which is the safe direction.
+
+#### One bug shipped and caught by opening the thing
+
+`lazyChunk` was called with the bare module — `import("./…/WaSimulator")` — where
+all four existing call sites map the named export (`.then(m => ({default:
+m.X}))`). `React.lazy` wants a default, and a module namespace object throws
+**"Cannot convert object to primitive value"** from inside `<Lazy>`, naming
+neither the component nor the export shape. Build, lint and 1166 tests all passed
+over it, because nothing renders it. Found by clicking the simulator open. It is
+this file's own "grep unfamiliar atoms before use", with four correct call sites
+sitting directly above the fifth.
+
+Worth carrying separately: two earlier crashes during this work were **stale HMR
+module graphs**, not code — the browser held a cached `wa-sim.js` still asking
+`wa-backend.js` for the export the split had moved. Restarting the dev server,
+clearing `node_modules/.vite` and opening a fresh tab distinguished them from the
+real one. The remaining console errors on a clean load are two
+`GET http://localhost:3999/health` refusals, which is the simulator probing the
+local harness that is not running.
+
+Gate: `109.92 kB` gz · **1166 tests** · 0 lint errors (88 warnings) · style OK.

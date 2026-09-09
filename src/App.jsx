@@ -302,9 +302,22 @@ import { todayStr, stepDate } from "./lib/day";
 import { useWhatsApp } from "./hooks/useWhatsApp";
 import { useWaSettings } from "./hooks/useWaSettings";
 import { InboxPanel } from "./components/whatsapp/InboxPanel";
-import { WaSimulator } from "./components/whatsapp/WaSimulator";
-import { simulateInbound } from "./lib/wa-sim";
-import { SCENARIOS_BY_ID, seedSampleBookings, clearWaSimBookings, simulateBurst } from "./lib/wa-sim-scenarios";
+// v18.0.0 phase 5b — the simulator does not reach production through a STATIC
+// import. Measured on the phase-5a build: `WA_SANDBOX` folds to `false` and
+// Rollup did strip the WaSimulator COMPONENT (none of its UI strings survive),
+// but `lib/wa-sim.js`, `lib/wa-sim-scenarios.js` and `lib/wa-backend.js` shipped
+// anyway — `fetch("/api/wa-sim-inbound")`, the `[waSim]` logging and the fixture
+// phone numbers were all in `dist/`. So the effect's old comment ("the whole
+// effect is dead-code-eliminated in a real prod build") was half true, in the
+// half nobody had checked. A dynamic import inside the dead branch is not an
+// optimisation here: it is what makes the claim structurally true, because an
+// `import()` Rollup can prove unreachable emits no chunk at all.
+// `{default: m.WaSimulator}` like the four lazyChunk call sites above it, and NOT
+// the bare module: `WaSimulator` is a NAMED export, React.lazy wants a default,
+// and handing it a module namespace object throws "Cannot convert object to
+// primitive value" from inside <Lazy> — a crash with no mention of the export
+// shape anywhere in it. Caught by opening the simulator, not by build or lint.
+const WaSimulator = lazyChunk(function(){return import("./components/whatsapp/WaSimulator").then(function(m){return {default:m.WaSimulator};});},"WaSimulator");
 import { WA_SANDBOX } from "./lib/waSandbox";
 
 
@@ -1173,8 +1186,16 @@ function BookingApp({uid}){
   };
   useEffect(function(){
     if(!WA_SANDBOX) return;
+    let cancelled=false;
     const ctx=function(){return waSimCtxRef.current;};
     const todayIso=function(){return new Date().toISOString().slice(0,10);};
+    Promise.all([import("./lib/wa-sim"),import("./lib/wa-sim-scenarios")]).then(function(mods){
+    if(cancelled) return;
+    const simulateInbound=mods[0].simulateInbound;
+    const SCENARIOS_BY_ID=mods[1].SCENARIOS_BY_ID;
+    const seedSampleBookings=mods[1].seedSampleBookings;
+    const clearWaSimBookings=mods[1].clearWaSimBookings;
+    const simulateBurst=mods[1].simulateBurst;
     window.__waSim={
       scenario:function(id){const s=SCENARIOS_BY_ID[id];if(s) return s.run(ctx());console.warn("[waSim] unknown scenario:",id,"— try __waSim.list()");},
       custom:function(p){return simulateInbound(p,ctx());},
@@ -1190,7 +1211,8 @@ function BookingApp({uid}){
       list:function(){return Object.keys(SCENARIOS_BY_ID);},
     };
     console.log("%c[waSim] console helpers ready","background:#a855f7;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold;","— __waSim.list(), __waSim.seedBookings(), __waSim.scenario(id)");
-    return function(){try{delete window.__waSim;}catch{/* ignore */}};
+    }).catch(function(err){console.error("[waSim] failed to load the simulator modules",err);});
+    return function(){cancelled=true;try{delete window.__waSim;}catch{/* ignore */}};
   },[]);
   // ── Reminders hook ──────────────────────────────────────────────────────────
   // Owns all reminder state, savers, listeners, handlers, and the
@@ -4355,9 +4377,9 @@ function BookingApp({uid}){
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.del,{minHeight:H.touch})}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<WaSimulator
+              style={mkSolidBtn(BTN.del,{minHeight:H.touch})}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
-          onClose={function(){setShowSim(false);}} />:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
+          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree
         // stacks there whatever its fixed children declare, so `Overlay` is
