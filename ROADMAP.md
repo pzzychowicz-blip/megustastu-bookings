@@ -43,12 +43,47 @@ session and keeping it in sync.
   install card today would make the manifest say less than it does now, for a
   tenant that does not exist yet.
 
+- **CT-WA-05 · out-of-order WhatsApp status callbacks (P3).** Meta does not
+  guarantee the order of `statuses[]`, and `updateMessageStatusByWamid` writes
+  the status with a bare `set()` and no rank. Measured against the emulator:
+  `read` then `delivered` leaves the bubble reading "delivered" for a message the
+  customer has already read. Fix is a rank (`sent < delivered < read`, `failed`
+  apart) that refuses a downgrade.
+
+- **CT-WA-06 · no length cap on an OUTBOUND WhatsApp message (P3).**
+  `WA_MAX_TEXT_LEN` (4000) guards both inbound paths (`api/_lib/inbound-core.js`,
+  `src/lib/wa-sim.js`) and neither outbound one: `api/wa-send.js` takes
+  `body.text` and the client's mock send takes the composer's value, both
+  uncapped — and the outbound `lastMessageSnippet` is written whole where the
+  inbound one is `.slice(0, 200)`, so it lands in the conversation-list payload
+  every device downloads. Cloud API refuses a body over 4096, so LIVE mode fails
+  cleanly at the provider; MOCK mode, the shipping default, stores all of it.
+
+- **CT-WA-07 · `/api/wa-config` reports the raw mode string, not the effective
+  one (P3).** It returns `env("WA_LLM_MODE", "mock")` while the backend runs on
+  `llmMode()`, which compares `=== "live"` exactly. Measured: `"LIVE"`, `"Live"`,
+  `"live "`, `"true"` and `"1"` each display as themselves in the Admin tab while
+  the backend is in **mock**. The direction is the wrong one — it reads as more
+  capable than it is, and the handler's own comment says this is the mode that
+  spends money. Report `llmMode()` / `sendMode()`.
+
+- **CT-WA-08 · thread-mode prompt interpolates the transcript raw (P3).**
+  `parseThread` builds `"CUSTOMER: " + text` lines and joins them, so a customer
+  can place `STAFF:` or `CUSTOMER:` mid-line under a prompt that assigns meaning
+  to those labels. They cannot forge a NEW line — `\s+` is collapsed to a space,
+  verified — and no LLM output mutates a booking without a staff action, so the
+  worst outcome is the app telling staff that a customer is asking for something
+  they are not. The single-message path is already safe: its text goes through
+  `JSON.stringify` and cannot leave its quoted block. Fix is a delimiter the text
+  cannot contain, or escaping the two labels.
+
 ## Designed, not implemented
 
-> The entry below is what remains of one approved plan, written 2026-09-07 against
-> v17.16.13 and shipping as **one release, v18.0.0**, on one branch across seven
-> sessions. Phases 0–4 have shipped and their entries are deleted; see
-> `REFACTOR_LOG.md`. **The plan is
+> The entries below are what remains of one approved plan, written 2026-09-07
+> against v17.16.13 and shipping as **one release, v18.0.0**, on one branch across
+> seven sessions. Phases 0–6 have shipped and their entries are deleted; only
+> phase 7 (docs, README, ship) is left, and it is described in the plan rather
+> than here. See `REFACTOR_LOG.md`. **The plan is
 > `…/megustastu-bookings context/MGT_Bookings_v18.0.0_Plan.md`** — phase order and
 > why it is forced, data shapes, security rules, hook points, and the decisions
 > already settled. It supersedes `MGT_Bookings_Production_Roadmap_Plan.md`
@@ -74,22 +109,6 @@ session and keeping it in sync.
   silently reinstates a deleted line, which is the failure
   `tests/wa-sandbox-integrity.test.js` exists for. `.vercelignore`'s own comment
   carries the instruction.
-
-- **The WhatsApp crash test (v18.0.0 phase 6).** The adversarial pass, register
-  prefix `CT-WA-…`, aimed at what the bookings one has no sections for: a public
-  webhook, an Admin-SDK server that bypasses the rules entirely, prompt injection
-  through the Gemini parse, a send path that reaches real customers, and
-  per-message cost.
-
-  **Phase 5 also carries `/api/wa-config`**, moved here from phase 4 (Patryk's
-  call, session 4): the token-gated status endpoint returning a **boolean per
-  key, never a value**, which the Admin tab's Integrations section then renders
-  in place of its current "where the keys live" text. It belongs with the port
-  because `api/_lib/env.js` already reads every one of those keys — writing a
-  second env reader in phase 4 would have been a duplicate for this merge to
-  reconcile — and because it cannot be verified before then: `npm run dev` has
-  no serverless runtime, so exercising it needs `vercel dev`, which this repo
-  has never run.
 
 ## Ideas
 
