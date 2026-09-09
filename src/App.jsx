@@ -1174,8 +1174,10 @@ function BookingApp({uid}){
   // or the cancel-confirm) closes by ANY path, reopen the inbox at that
   // conversation. returnToInboxKey is cleared only on explicit inbox close.
   useEffect(function(){
-    if(returnToInboxKey&&!showForm&&!confirmCancel&&!showInbox){setShowInbox(true);}
-  },[returnToInboxKey,showForm,confirmCancel,showInbox]);
+    // The module check is the same one the button and the `I` key carry: this is
+    // a third door into the inbox and gating two of three is gating none.
+    if(whatsappOn&&returnToInboxKey&&!showForm&&!confirmCancel&&!showInbox){setShowInbox(true);}
+  },[whatsappOn,returnToInboxKey,showForm,confirmCancel,showInbox]);
   // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
   // so the helpers always see live savers/conversations without rebinding. The
   // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).
@@ -4334,7 +4336,13 @@ function BookingApp({uid}){
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
           onSave={saveReminderFromEditor}
           onCancel={requestCloseReminderEditor}
-          isNew={reminderEditor.id==="new"} />:null}</ModalPresence><ModalPresence show={showInbox}>{showInbox?<InboxPanel
+          isNew={reminderEditor.id==="new"} />:null}</ModalPresence>{/* v18.0.0 phase 5 review: `whatsappOn &&`, not `showInbox`
+          alone. Gating only the ENTRY POINTS left an inbox that was already open
+          when an admin switched the module off still mounted — reachable,
+          because `?` opens Settings above the `anyModal` guard, so Admin is one
+          keystroke away with the inbox up. Its listeners are detached by then,
+          so it would render the last-loaded conversations, with live Send and
+          Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<InboxPanel
           conversations={wa.conversations}
           messages={wa.messagesMap}
           templates={wa.templates}

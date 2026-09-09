@@ -42,12 +42,16 @@ describe("the Gemini prompts take the restaurant from the tenant", () => {
 
   it("every prompt that mentions the restaurant uses the accessor", () => {
     const src = read("api/_lib/gemini.js");
-    const uses = (src.match(/waContext\(\)/g) || []).length;
-    // Three call sites plus the definition's own `function waContext()` is not
-    // matched by this pattern, so three is the whole of it. A FLOOR rather than
-    // an equality: a fourth prompt is welcome, a third that lost its accessor is
-    // what this catches — together with the literal check above, which is what
-    // makes "it stopped using the accessor" impossible to do silently.
+    // CALL SITES, not occurrences. The first version counted /waContext\(\)/g,
+    // which also matches inside `function waContext() {` — so the total was 4
+    // where the comment claimed 3, and the floor of 3 would still have been met
+    // by ONE declaration plus TWO surviving calls. A guard off by its own
+    // subject. Matching the concatenation shape counts only real uses.
+    const uses = (src.match(/\+ waContext\(\) \+/g) || []).length;
+    // A FLOOR rather than an equality: a fourth prompt is welcome, a third that
+    // lost its accessor is what this catches — together with the literal check
+    // above, which is what makes "it stopped using the accessor" impossible to
+    // do silently.
     expect(uses, "a prompt stopped reading the tenant's description").toBeGreaterThanOrEqual(3);
   });
 

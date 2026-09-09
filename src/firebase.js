@@ -91,17 +91,24 @@ const devConfig = {
 // where import.meta.env.DEV is false — so a deployed build would otherwise pick
 // the PROD config. The sandbox Vercel project sets VITE_FB_TARGET=dev to force
 // the DEV project; prod leaves it unset and behaves exactly as before. Accepts
-// "dev" | "prod"; anything else falls back to the import.meta.env.DEV default.
-//
 // v18.0.0 phase 5: the two halves compose rather than compete. This override
 // decides WHICH ENVIRONMENT (the shared DEV sandbox vs. a real one); the tenant
-// layer decides WHICH RESTAURANT once the answer is a real one. So the override
-// still cannot reach a production database by accident, and a sandbox build of
-// any tenant lands in the same DEV project it always did.
+// layer decides WHICH RESTAURANT once the answer is a real one, so a sandbox
+// build of any tenant lands in the same DEV project it always did.
+//
+// **It forces in ONE direction only, and that is the whole of its safety.**
+// The sandbox's version also accepted "prod", which forced `isDev` FALSE — and
+// once phase 2 made the production half tenant-selected, that arm meant a single
+// line in `.env.local` pointed `npm run dev` at a real restaurant's live
+// bookings. Nothing in the repo ever set it (grepped at the phase-5 review), so
+// it was unused capability that could only do harm, against a CLAUDE.md rule
+// that admits no exceptions: "The split is enforced in `src/firebase.js` via
+// `import.meta.env.DEV`; never bypass it." An override that can only reach the
+// shared DEV sandbox cannot bypass anything that matters; one that can reach
+// production is the bypass. Anything other than "dev" now falls through to
+// `import.meta.env.DEV`.
 const __fbTarget = import.meta.env.VITE_FB_TARGET;
-const isDev = __fbTarget === "dev" ? true
-            : __fbTarget === "prod" ? false
-            : import.meta.env.DEV;
+const isDev = __fbTarget === "dev" ? true : import.meta.env.DEV;
 const firebaseConfig = isDev ? devConfig : tenant.firebaseConfig;
 
 // Visible boot signal — appears in the browser console next to the

@@ -37,6 +37,31 @@ const FLAG_KEY = "mgt-wa-backend";
 // Backend mode is available wherever the sandbox surfaces are (dev server OR a
 // deployed sandbox build) — online it routes through the staff-auth sim endpoint
 // (see backendInbound), so no public-webhook exposure.
+// ── Does a send go through the SERVER? (v18.0.0 phase 5 review) ─────────────
+// `backendEnabled()` below answers a different question from the one the send
+// path needs, and conflating them meant production could not send at all.
+//
+// It is a SANDBOX developer toggle: "has someone flipped backend mode on in the
+// Sim panel", and it is hard-false outside the sandbox. `handleSendReply` used
+// it to choose between the server and a CLIENT-SIDE MOCK that appends the
+// message locally and flips it to "delivered" after 800ms — so in production,
+// where the flag can never be true, every staff reply was mocked and reported
+// as delivered to a guest who received nothing.
+//
+// The two questions, kept apart:
+//   · backendEnabled()    — sandbox only: am I testing against the real pipeline?
+//   · sendsViaServer()    — is there a real provider at the other end at all?
+//
+// Production is ALWAYS the second. What it actually sends is then the SERVER's
+// decision: `WA_SEND_MODE` defaults to "mock" in `api/_lib/env.js`, so a
+// deployment that has not been configured still sends nothing — but it says so,
+// through `/api/wa-send`'s response, instead of the client inventing a delivery
+// receipt. An honest failure beats a false success, and this is the path that
+// reaches a real customer.
+export function sendsViaServer() {
+  return !WA_SANDBOX || backendEnabled();
+}
+
 export function backendEnabled() {
   if (!WA_SANDBOX) return false;
   try { return localStorage.getItem(FLAG_KEY) === "1"; } catch { return false; }

@@ -21727,3 +21727,81 @@ code, which surfaced as a hard `no-undef` error the moment it needed one.
 
 Gate: `121.08 kB` gz (eager boot 121.09 vs 123.33 before) · **1171 tests** ·
 0 lint errors (88 warnings) · style OK.
+
+### Commit 43 — `/code-review` fixes: eight, and one of them would have lied to a guest
+
+Reviewed at `max` over the four phase-5 commits. 28 of the 74 touched files came
+in from the sandbox byte-identical and were treated as merged input; the 46 I
+authored or resolved were the scope.
+
+**1. Production could not send a WhatsApp reply, and said it had.**
+`handleSendReply` chose the server path on `backendEnabled()`, which returns
+false whenever `!WA_SANDBOX` — hard-false in every production build. So the
+branch was unreachable in production and every reply fell through to the mock:
+appended locally, then flipped to `"delivered"` 800ms later by a `setTimeout`,
+with `patchMessage` persisting that status so every device agreed. A restaurant
+switches the module on, a member of staff answers a guest asking to move a
+booking, the app confirms delivery, the guest receives nothing. The asymmetry is
+what made it look wired: `recheckViaBackend` is called unconditionally, so
+re-check reached the server while send did not. Two questions were one function;
+they are two now — `backendEnabled()` (sandbox: am I testing the real pipeline?)
+and `sendsViaServer()` (is there a provider at the other end at all?). What is
+actually transmitted stays the SERVER's decision, and `WA_SEND_MODE` defaults to
+`mock`, so an unconfigured deployment still sends nothing — but reports it,
+rather than inventing a receipt.
+
+**2. `handleResend` was the same defect on a worse control.** It flipped
+unconditionally to `"delivered"`, on the button somebody presses *because* the
+first attempt failed. It re-posts through the server now and leaves the failed
+bubble alone rather than rewriting it to a status this client cannot know.
+
+**3. `VITE_FB_TARGET=prod` aimed a dev server at a real restaurant's live
+database.** The sandbox's override accepted `"dev" | "prod"`; the `prod` arm
+forces `isDev` FALSE, and phase 2 had made the production half tenant-selected —
+so one line in `.env.local` pointed `npm run dev` at production bookings.
+Nothing in the repo has ever set it (grepped), so it was unused capability that
+could only do harm, against a rule that admits no exceptions: "the split is
+enforced in `src/firebase.js` via `import.meta.env.DEV`; never bypass it." **The
+comment I had written directly above it claimed the override "still cannot reach
+a production database by accident"** — a false assurance sitting on top of the
+thing it was wrong about. It forces in one direction now.
+
+**4. The auto-archive effect wrote to a switched-off module.** It was ungated,
+justified by "every conversation came from the gated listener, so the array is
+empty otherwise" — true of a BUILD CONSTANT, false of a runtime switch: turning
+WhatsApp off detaches the listener but leaves `conversations`, `waSettings` and
+`conversationsLoaded` holding their last values, so a later `bookings` change
+re-ran it and wrote `archived` to a conversation for a disabled module.
+
+**5. An open Inbox survived the module being switched off.** Only the entry
+points were gated. Reachable, and verified live: `?` calls `setShowSettings` at
+`useKeyboardShortcuts.js:227`, ABOVE the `anyModal` guard at 326, so Admin is one
+keystroke away with the inbox up. Measured before the fix — two dialogs, inbox
+still mounted; after — the inbox unmounts the moment the switch moves. The
+`returnToInboxKey` effect was a third door and took the same gate.
+
+**6. `tests/wa-tenant-context.test.js` was off by its own subject.**
+`/waContext\(\)/g` also matches inside `function waContext() {`, so the count was
+4 where the comment claimed 3, and a floor of 3 would have been met by one
+declaration plus two surviving calls — the regression the file exists to catch,
+passing in the file that catches it. It counts the concatenation shape now.
+
+**7. `stripSimulator` resolved the entire module graph** to compare against four
+paths — a second full resolution pass for four possible hits. A specifier
+pre-filter fixes it, and **the first version of that filter was itself a bug**:
+hand-written as `/wa-sim|WaSimulator/`, it silently stopped stubbing
+`wa-backend-sim.js`, whose name does not contain "wa-sim" (it breaks as
+"…d-sim"). It is DERIVED from `SIM_MODULES` now, so the filter and the thing it
+filters cannot be two lists.
+
+**8. `tests/wa-sandbox-integrity.test.js`' header described a world that ended.**
+It explains itself as guarding a sandbox against production syncs; the module is
+on `main` now and the sync runs the other way. The assertions had been updated
+and the framing that says WHY they exist had not — in the one file whose stated
+purpose is to be read at the next sync.
+
+Verified after the fixes, in all three environments: production build contains no
+simulator marker, a `VITE_FB_TARGET=dev` build contains all three chunks, and the
+dev server still opens the simulator and still carries `__waSim`.
+
+Gate: `120.96 kB` gz · **1171 tests** · 0 lint errors (88 warnings) · style OK.

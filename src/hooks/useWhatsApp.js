@@ -40,7 +40,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
 import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible } from "../lib/whatsapp";
-import { backendEnabled, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
+import { sendsViaServer, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
 
@@ -292,7 +292,12 @@ export function useWhatsApp({
   //   status "sending", update the conversation, flip to "delivered" after
   //   800ms to fake the provider round-trip.
   function handleSendReply(phoneKey, text) {
-    if (backendEnabled()) {
+    // `sendsViaServer()`, NOT `backendEnabled()`. The latter is hard-false
+    // outside the sandbox, so this branch was unreachable in production and
+    // every reply fell through to the mock below — appended locally and marked
+    // "delivered" 800ms later, for a guest who received nothing. See the note
+    // on `sendsViaServer` in lib/wa-backend.js.
+    if (sendsViaServer()) {
       sendViaBackend(phoneKey, text).catch(function (e) {
         console.warn("[wa] backend send failed:", e.message);
         if (setWriteWarning) setWriteWarning("WhatsApp send failed: " + e.message);
@@ -316,10 +321,30 @@ export function useWhatsApp({
       patchMessage(phoneKey, msgId, { status: willFail ? "failed" : "delivered" });
     }, 800);
   }
-  // handleResend: retry a failed mock send — flip the bubble back to "sending"
-  // then "delivered" (a retry succeeds). Client mock path only; in backend mode
-  // the server owns message lifecycle, so resend isn't wired there.
+  // handleResend: retry a send that failed.
+  //
+  // The mock half (flip to "sending", then "delivered" 800ms later) is a SANDBOX
+  // affordance and stays one, because a retry that always succeeds is only
+  // meaningful against a failure the sandbox invented (`simFailNextSend`). Left
+  // unconditional it did in production what `handleSendReply` did: reported a
+  // delivery that never happened, on the one control a member of staff reaches
+  // for precisely BECAUSE the first attempt failed.
+  //
+  // Where sends go through the server, so does a retry: re-post the original
+  // text and let the server own the outcome. It appends a new message and the
+  // listener echoes it, so the failed bubble is deliberately left alone rather
+  // than being rewritten to a status this client cannot know.
   function handleResend(phoneKey, msgId) {
+    if (sendsViaServer()) {
+      const list = messagesMapRef.current[phoneKey] || [];
+      const prev = list.find(function (m) { return m && m.id === msgId; });
+      if (!prev || !prev.text) return;
+      sendViaBackend(phoneKey, prev.text).catch(function (e) {
+        console.warn("[wa] backend resend failed:", e.message);
+        if (setWriteWarning) setWriteWarning("WhatsApp resend failed: " + e.message);
+      });
+      return;
+    }
     patchMessage(phoneKey, msgId, { status: "sending" });
     setTimeout(() => { patchMessage(phoneKey, msgId, { status: "delivered" }); }, 800);
   }
@@ -443,9 +468,15 @@ export function useWhatsApp({
   // booking id (not a bare boolean) means a LATER booking linked to the same
   // conversation still auto-archives when it completes in turn.
   //
-  // Not gated on WA_SANDBOX: every conversation in `conversations` already came
-  // from the WA_SANDBOX-gated listener, so the array is empty otherwise and the
-  // loop is a no-op.
+  // GATED ON THE MODULE (v18.0.0 phase 5 review). It used to be ungated, on the
+  // reasoning that "every conversation came from the gated listener, so the
+  // array is empty otherwise and the loop is a no-op". That is true of a
+  // BUILD-TIME constant, which never changes, and false of a runtime switch:
+  // turning WhatsApp off detaches the listener but leaves `conversations`,
+  // `waSettings` and `conversationsLoaded` holding their last values, so a later
+  // `bookings` change re-ran this and wrote `archived` to a conversation for a
+  // module the restaurant had just switched off. Phase 4's rule is that off
+  // means EVERY surface, and a WRITE is the surface that matters most.
   //
   // `autoArchiveSince` (settings/whatsapp) is the cutoff that keeps this from
   // sweeping the backlog: on the first load after the feature ships, EVERY
@@ -456,6 +487,7 @@ export function useWhatsApp({
   // is archived at all, so a device that loads before the stamp lands does
   // nothing rather than guessing.
   useEffect(function () {
+    if (!on) return;
     if (!waSettings || waSettings.autoArchiveOnComplete === false) return;
     if (!waSettings.autoArchiveSince) return; // epoch not established yet
     if (!conversationsLoaded.current) return;
@@ -471,7 +503,7 @@ export function useWhatsApp({
         autoArchivedBookingId: c.acceptedBookingId,
       });
     });
-  }, [bookings, conversations, waSettings]);
+  }, [on, bookings, conversations, waSettings]);
   // ── Bulk actions (multi-select) ──────────────────────────────────────────────
   // Loop the existing single-key primitives (patchConversation is per-key
   // update()-semantics, so a loop is safe). Bulk archive deliberately uses

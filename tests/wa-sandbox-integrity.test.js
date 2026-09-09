@@ -1,6 +1,18 @@
 // tests/wa-sandbox-integrity.test.js
 //
 // ── Why this file exists ─────────────────────────────────────────────────────
+// **v18.0.0 phase 5 changed the world this file was written for, and the
+// framing below is kept because the mechanism did not change — only who it
+// protects.** The WhatsApp module now lives on `main`; most of what these
+// assertions guard is production code, and the sync they warn about runs the
+// other way, from a `main` that already contains these files into the sandbox.
+// The guards still hold because what they pin is a set of small edits that a
+// merge can silently revert, and a merge is still how these two branches meet.
+// One assertion is now genuinely sandbox-only: the `X` shortcut. One is now
+// genuinely production-only: `I` must NOT be WA_SANDBOX-gated.
+//
+// The original reason, unchanged in substance:
+//
 // The sandbox's own edits to files that PROD also owns are the one thing a
 // production sync can silently revert, and at the 17.15.0 sync it reverted two
 // of them at once.

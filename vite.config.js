@@ -32,6 +32,9 @@ const SIM_MODULES = [
   "src/lib/wa-sim-scenarios.js",
   "src/lib/wa-backend-sim.js",
 ];
+// The filename half of each path, extension stripped — the fragment every
+// specifier for that module must contain, however it is spelled relatively.
+const SIM_BASENAMES = SIM_MODULES.map((m) => m.split("/").pop().replace(/\.[jt]sx?$/, ""));
 const SIM_STUB_ID = "\0mgt:wa-sim-stub";
 // One stub for all four, so the export lists cannot drift apart per module.
 // Every name any importer destructures has to appear here or Rollup's import
@@ -65,7 +68,19 @@ function stripSimulator(isSandbox) {
     resolveId(source, importer) {
       if (isSandbox) return null;
       if (source === SIM_STUB_ID) return SIM_STUB_ID;
-      // Resolve through Vite first so a relative specifier from any importer
+      // Cheap reject FIRST. Without it this hook awaited a full `this.resolve`
+      // for every specifier in the graph — node_modules included — to compare
+      // against four fixed paths: a second resolution pass over the whole build
+      // for four possible hits.
+      //
+      // DERIVED from SIM_MODULES, not hand-written. The hand-written version was
+      // `/wa-sim|WaSimulator/`, which silently stopped stubbing
+      // `wa-backend-sim.js` — that name does not contain the substring "wa-sim"
+      // ("wa-backend-sim" breaks as "…d-sim"). A filter listing the same set as
+      // the thing it filters is the two-lists defect this repo names everywhere;
+      // adding a module to SIM_MODULES now updates this automatically.
+      if (!SIM_BASENAMES.some((b) => source.includes(b))) return null;
+      // Then resolve through Vite, so a relative specifier from any importer
       // lands on the same absolute path this list is matched against.
       return this.resolve(source, importer, { skipSelf: true }).then((r) => {
         if (!r) return null;
