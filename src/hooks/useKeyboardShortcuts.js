@@ -70,6 +70,10 @@ function escapeAction(K,id){
     // complete the booking without the voucher — that is what the modal's own
     // "Complete without using it" button is for, as a choice somebody made.
     case "voucher":     return function(){K.setVoucherAsk(null);};
+    // Escape leaves the redemption exactly as it is and abandons the status
+    // change — the same shape as its twin above, and the safe direction for a
+    // prompt about money: dismissing it moves nothing.
+    case "voucherback": return function(){K.setVoucherBack(null);};
     case "reshuffle":   return function(){K.setConfirmReshuffle(false);};
     case "cancel":      return function(){K.setConfirmCancel(null);};
     case "del":         return function(){K.setConfirmDel(null);};

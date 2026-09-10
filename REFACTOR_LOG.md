@@ -22149,3 +22149,59 @@ outgoing body is captured and **no Gemini call is made and nothing is spent**.
 Two fail against a sabotage restoring the raw interpolation.
 
 Gate: `121.13 kB` gz · **1215 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 52 (phase 6, resolving ROADMAP) — the voucher walk-back: ask, in both directions
+
+The last open question `/code-review` left behind. A completed booking can be
+walked back to Confirmed, Seated or Pending in the edit form, and it can be
+cancelled; if that visit redeemed a voucher, the ledger entry and the spent
+balance stayed, and there was **no un-redeem control anywhere in the app** —
+`unredeemVoucher` had been deleted as an unreferenced write path into a money
+collection, which was right at the time and left a mis-redemption with no
+correction path at all.
+
+**Patryk's call: ASK, symmetric with the completion that asked whether to redeem
+in the first place.** So money never moves as a silent side-effect of a status
+tap, in either direction — and neither does it stay put silently.
+
+`voucherToRestore(id, status)` is the exact inverse of `voucherToAsk`, and its
+gate is **"is this booking LEAVING completed"** rather than a list of target
+statuses: every status other than `completed` is a visit that did not finish the
+way the ledger says it did, and enumerating them is how the next one added gets
+missed. It also requires `isRedeemedBy(v, id)` — a voucher redeemed by a
+DIFFERENT booking is not this booking's to give back.
+
+Three things reused rather than rebuilt, each for a reason:
+
+- **ONE `redeemAskedRef` covers both prompts.** A status change is either INTO
+  `completed` or OUT of it, so the two can never both be pending; a second ref
+  would be a second thing to keep in step, which is the defect this repo names
+  everywhere.
+- **`settleVoucherBack` keeps `settleVoucher`'s ordering**: the booking write
+  goes first and the money moves only if it landed, read off `saveGuardRef`
+  because `doSave` returns nothing. That was the v18.0.0 `/code-review` finding
+  on the redeem side and it applies identically here.
+- **One rank in `MODAL_Z`** (`"voucherback"`, beside `"voucher"`) plus its
+  `escapeAction` case in the same commit — which `tests/modal-stack.test.js`
+  enforces rather than trusting. Escape leaves the redemption alone and abandons
+  the status change: the safe direction for a prompt about money.
+
+**Verified live against DEV, both halves, reading the stored rows back over the
+RTDB REST API rather than the screen:**
+
+| | booking | voucher |
+|---|---|---|
+| **Restore to voucher** | Gate Test `completed → confirmed` | `HUBZ74S4` remaining **0 → 100**, redemption gone |
+| **Keep redeemed** | Unsettled Test `completed → confirmed` (its own history entry) | `LOT1001` untouched — €25 redemption intact, remaining 0 |
+
+**And the first reading of the second run was wrong, which is worth recording.**
+"Keep redeemed" appeared to leave the status at `completed`, and it had not: the
+first run re-sorted the day, and the browser-automation `ref` captured before
+that pointed at a DIFFERENT card by the time it was clicked — so the booking that
+moved was `Unsettled Test` and the one being read was `Redeem Test`, which had
+never been touched. The booking's own `history` entry (`status
+completed→confirmed`) is what settled it. **A ref taken before a re-sort is a
+row number, not a row** — the same family as the synthetic `:active` press and
+the accessible name read out of an automation tree.
+
+Gate: `121.58 kB` gz · **1215 tests** · 0 lint errors (88 warnings) · style OK.

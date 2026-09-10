@@ -64,6 +64,10 @@ export const MODAL_Z=[
   "reshuffle",
   "kitchen",     // the kitchen-load confirm, raised BY a save
   "voucher",     // the redeem prompt, raised BY a completion — same shape
+  // v18.0.0 phase 6: the INVERSE prompt, raised by a completed booking being
+  // walked back. Same rank as its twin because only one of the two can ever be
+  // open — a status change is either into `completed` or out of it.
+  "voucherback",
   "history",
   "settings",
   // v18.0.0 phase 3: the capability grid opens from INSIDE the Settings

@@ -43,7 +43,7 @@ import { dbError, describeWriteError } from "../lib/dbError";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
 import {
   normalizeCode, codeSet, validateIssue, applyRedemption,
-  sanitizeVoucher, sanitizeVouchers, voucherIndex,
+  sanitizeVoucher, sanitizeVouchers, voucherIndex, removeRedemption,
 } from "../lib/vouchers";
 
 // write-path.js keys everything off `id`; a voucher's identity is its code.
@@ -199,15 +199,33 @@ export function useVouchers({ setWriteWarning, userEmail }) {
   // `voidVoucher` is the closest thing to a delete that exists, and it is not
   // one: the child stays, so the number stays taken.
   //
-  // /code-review v18.0.0: `unredeemVoucher` and `updateVoucher` lived here and
-  // were called by nothing — two unreferenced WRITE paths into a money
-  // collection, reading as supported operations while never having run against
-  // the live database. Removed rather than wired up: giving them a caller would
-  // be building a feature out of a review finding. The pure `removeRedemption`
-  // stays in `lib/vouchers.js` with its tests, because it documents the inverse
-  // property; what went is the write wrapper. See ROADMAP for the open question
-  // it leaves — what should happen to the ledger when a completed booking is
-  // walked back.
+  // /code-review v18.0.0 removed `unredeemVoucher` and `updateVoucher` from here
+  // as two unreferenced WRITE paths into a money collection — supported-looking
+  // operations that had never run against the live database. That was right at
+  // the time, and the note it left said the open question was what should happen
+  // to the ledger when a completed booking is walked back.
+  //
+  // **v18.0.0 phase 6 answers it and `unredeemVoucher` comes back WITH a
+  // caller** (Patryk's call): walking a completed booking back to Confirmed or
+  // Seated now ASKS whether to restore the redemption, symmetric with the
+  // completion that asked whether to make it. So this is no longer a write path
+  // in search of a feature; `updateVoucher` stayed deleted, because nothing
+  // asked for it.
+  //
+  // `removeRedemption` is the pure inverse of `applyRedemption` and recomputes
+  // `remaining` from the ledger the same way — so applying it twice gives the
+  // same answer, which is what makes it safe under the retry queue.
+  const unredeemVoucher = useCallback(function (code, bookingId) {
+    const c = normalizeCode(code);
+    if (!c || !bookingId) return false;
+    return saveVouchers(function (prev) {
+      return prev.map(function (v) {
+        return v.code === c ? removeRedemption(v, bookingId) : v;
+      });
+    });
+  }, [saveVouchers]);
+
+  // ── Voiding ─────────────────────────────────────────────────────────────────
   const voidVoucher = useCallback(function (code, on) {
     const c = normalizeCode(code);
     if (!c) return false;
@@ -229,6 +247,7 @@ export function useVouchers({ setWriteWarning, userEmail }) {
     vouchersLoaded: vouchersLoaded,
     issueVoucher,
     redeemVoucher,
+    unredeemVoucher,
     voidVoucher,
   };
 }

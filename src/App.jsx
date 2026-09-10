@@ -279,7 +279,7 @@ import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
 import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
-import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money } from "./lib/vouchers";
+import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
@@ -938,6 +938,10 @@ function BookingApp({uid}){
   // confirm is raised by a save. Payload: {id, status, from:"status"|"form"}.
   const voucherAsk = modalOpen.voucher || null;
   const setVoucherAsk = setModalFns.voucher;
+  // v18.0.0 phase 6: the inverse prompt — a completed booking being walked back
+  // to Confirmed/Seated while its voucher carries a redemption for this visit.
+  const voucherBack = modalOpen.voucherback || null;
+  const setVoucherBack = setModalFns.voucherback;
   // v18.0.0 phase 3: the capability grid, opened from the Admin tab. Its
   // payload is the uid whose row is selected — a non-empty string, so the
   // stack's falsy-closes semantics are safe here.
@@ -1248,7 +1252,7 @@ function BookingApp({uid}){
   // stamped onto `issuedBy`/`by` at write time, and `BookingApp` is keyed on
   // uid, so an account switch remounts the subtree rather than needing this to
   // be reactive.
-  const { vouchers, vouchersByCode, issueVoucher, redeemVoucher, voidVoucher } = useVouchers({
+  const { vouchers, vouchersByCode, issueVoucher, redeemVoucher, unredeemVoucher, voidVoucher } = useVouchers({
     setWriteWarning,
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
   });
@@ -2496,6 +2500,14 @@ function BookingApp({uid}){
         setVoucherAsk({id:editId,status:f.status,from:"form"});
         return;
       }
+      // The walk-back question, at the same point and behind the same ref. The
+      // form is the ONLY way a booking leaves `completed` for Confirmed/Seated/
+      // Pending — `updateStatus` covers the popup and the List buttons, and gets
+      // the same gate below.
+      if(editId&&!redeemAskedRef.current&&voucherToRestore(editId,f.status)){
+        setVoucherBack({id:editId,status:f.status,from:"form"});
+        return;
+      }
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -2886,6 +2898,7 @@ function BookingApp({uid}){
     confirmCancel:confirmCancel,setConfirmCancel:setConfirmCancel,
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     setVoucherAsk:setVoucherAsk,
+    setVoucherBack:setVoucherBack,
     blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
@@ -2959,7 +2972,36 @@ function BookingApp({uid}){
     if(voucherState(v,Date.now())!=="open") return null;
     return v;
   }
+  // voucherToRestore(id,status) — the INVERSE of voucherToAsk (v18.0.0 phase 6).
+  // A completed booking can be walked back to Confirmed, Seated or Pending in the
+  // edit form, and it can be cancelled; if that visit redeemed a voucher, the
+  // ledger entry and the spent balance stayed with no control anywhere to undo
+  // them. Patryk's call: ASK, symmetric with the completion that asked whether to
+  // redeem in the first place — so money never moves as a silent side-effect of a
+  // status tap, in either direction.
+  //
+  // The gate is "is this booking LEAVING completed", not a list of target
+  // statuses: every status other than completed is a visit that did not finish
+  // the way the ledger says it did, and enumerating them is how the next one
+  // added gets missed.
+  function voucherToRestore(id,status){
+    if(!vouchersOn) return null;
+    if(status==="completed") return null;
+    const b=bookings.find(function(x){return x.id===id;});
+    if(!b||b.status!=="completed") return null;   // only a walk-back, never a first pass
+    const code=b?normalizeCode(b.voucherCode):"";
+    if(!code) return null;
+    const v=vouchersByCode[code];
+    if(!v) return null;
+    // Nothing was taken for THIS visit, so there is nothing to give back. A
+    // voucher redeemed by a DIFFERENT booking is not this booking's to restore.
+    if(!isRedeemedBy(v,id)) return null;
+    return v;
+  }
   // Re-enter the action the modal interrupted, with the question marked asked.
+  // ONE ref covers both prompts, deliberately: a status change is either INTO
+  // `completed` or OUT of it, so the two can never both be pending, and a second
+  // ref would be a second thing to keep in step.
   function withRedeemAsked(fn){
     redeemAskedRef.current=true;
     try{ return fn(); } finally { redeemAskedRef.current=false; }
@@ -2972,6 +3014,10 @@ function BookingApp({uid}){
     // hook points rather than four.
     if(!redeemAskedRef.current&&voucherToAsk(id,status)){
       setVoucherAsk({id:id,status:status,from:"status"});
+      return false;
+    }
+    if(!redeemAskedRef.current&&voucherToRestore(id,status)){
+      setVoucherBack({id:id,status:status,from:"status"});
       return false;
     }
     const user=getUser();
@@ -3071,6 +3117,26 @@ function BookingApp({uid}){
     const b=bookings.find(function(x){return x.id===ask.id;});
     const code=b?normalizeCode(b.voucherCode):"";
     if(code) redeemVoucher(code,ask.id,amount);
+  }
+  // settleVoucherBack(restore) — the mirror of settleVoucher, and it keeps that
+  // function's hard-won ORDERING: the booking write goes first and the money
+  // moves only if it landed. `saveGuardRef` is what answers "did this save
+  // land" (the v18.0.0 /code-review finding — `doSave` returns nothing), and
+  // `unredeemVoucher` is idempotent by booking id, so an already-DISPATCHED
+  // guard reading true is correct rather than merely tolerable.
+  function settleVoucherBack(restore){if(refused("voucherRedeem"))return;
+    const ask=voucherBack;
+    if(!ask) return;
+    setVoucherBack(null);
+    const ok=withRedeemAsked(function(){
+      if(ask.from!=="form") return updateStatus(ask.id,ask.status);
+      doSave();
+      return !mayDispatch(saveGuardRef.current);
+    });
+    if(!ok||!restore) return;
+    const b=bookings.find(function(x){return x.id===ask.id;});
+    const code=b?normalizeCode(b.voucherCode):"";
+    if(code) unredeemVoucher(code,ask.id);
   }
   function doCancelBooking(id,noShow){
     const user=getUser();
@@ -4253,7 +4319,18 @@ function BookingApp({uid}){
               currency={generalSettings.currency}
               onRedeem={function(amount){settleVoucher(amount);}}
               onSkip={function(){settleVoucher(0);}}
-              onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherBack}>{voucherBack&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherBack.id;})||{}).voucherCode)]?<Overlay /* @static-height two fixed sentences and two buttons */ onClose={function(){setVoucherBack(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              className="mgt-hover-scale"
+              style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
+              onClick={function(){settleVoucherBack(false);}}>Keep redeemed</button><button
+              onClick={function(){settleVoucherBack(true);}}
+              className="mgt-hover-scale"
+              style={mkSolidBtn(BTN.blue)}>Restore to voucher</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Restore the voucher?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{(function(){
+              const b=bookings.find(function(x){return x.id===voucherBack.id;})||{};
+              const v=vouchersByCode[normalizeCode(b.voucherCode)];
+              const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
+              return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". You are moving it back out of Completed — restore that amount to the voucher, or keep it redeemed?";
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>Restoring puts the balance back and removes this visit from the voucher&rsquo;s history. Keeping it redeemed leaves the record as it is.</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button
