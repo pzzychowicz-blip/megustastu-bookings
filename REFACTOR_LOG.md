@@ -22022,3 +22022,30 @@ Gate: `121.07 kB` gz · **1197 tests** · 0 lint errors (88 warnings) · style O
 No rules file moved (`git diff --name-only` over `database.rules.json`,
 `tests/rules`, `firebase.json`, `vitest.rules.config.js` → empty), so
 `test:rules` is not owed. The emulator was used all phase, as an INSTRUMENT.
+
+### Commit 48 (phase 6, resolving ROADMAP) — CT-WA-05: a delivery receipt that went backwards
+
+Meta does not guarantee the order of a webhook's `statuses[]`, and
+`updateMessageStatusByWamid` wrote the receipt with a bare `set()`. Measured
+against the emulator: `read` delivered before `delivered` leaves the bubble
+reading **"delivered"** for a message the customer has already read. The status
+moves backwards, and the only person who could notice is staff wondering why a
+guest has not seen a reply they have.
+
+`statusWins(next, current)` in `src/lib/whatsapp.js` — a rank, and a write that
+must BEAT what is stored rather than simply replace it. Two decisions inside it:
+
+- **`failed` sits at the top**, above `read`. It is the one receipt staff act on,
+  and a later `delivered` for a message the provider rejected must not quietly
+  bury it. That is a deliberate departure from "rank = progress".
+- **An unknown status wins by default**, either side of the comparison. Meta may
+  add one, and refusing a receipt this app has never heard of would be inventing
+  behaviour for it — the same direction `isReadableTime` takes with `"9:30"`.
+
+The refused downgrade still returns `true` to the webhook, so the payload's
+`statuses` tally counts a receipt that was handled. Reporting it as a miss would
+make the response lie about what the handler did with the payload.
+
+Six tests, one of them a source scan proving `rtdb.js` asks before it writes.
+
+Gate: `121.07 kB` gz · **1203 tests** · 0 lint errors (88 warnings) · style OK.

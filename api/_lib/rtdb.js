@@ -38,6 +38,7 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { getAuth } from "firebase-admin/auth";
 import { dbUrl, serviceAccount, staffEmails, requireStaffAllowList } from "./env.js";
+import { statusWins } from "../../src/lib/whatsapp.js";
 
 let cachedApp = null;
 let cachedDb = null;
@@ -205,6 +206,11 @@ export async function updateMessageStatusByWamid(phoneKey, wamid, status) {
   for (const key of Object.keys(all)) {
     const m = all[key];
     if (m && m.providerMsgId === wamid) {
+      // v18.0.0 phase 6 (CT-WA-05): receipts can arrive out of order, so a write
+      // has to BEAT what is stored rather than simply replace it. Returning true
+      // on a refused downgrade is deliberate — the callback was handled, and
+      // counting it as a miss would make the webhook's `statuses` tally lie.
+      if (!statusWins(status, m.status)) return true;
       await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + key + "/status").set(status);
       return true;
     }

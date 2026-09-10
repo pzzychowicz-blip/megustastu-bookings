@@ -162,6 +162,26 @@ export function formatWindow(expiresAt) {
 // `isReadableTime`/`isReadableDate` are defined that way for exactly this
 // reason, and reusing them is what keeps the draft and the booking agreeing.
 
+// ── Delivery-receipt ordering (v18.0.0 phase 6, CT-WA-05) ────────────────────
+// Meta does not guarantee the order of a webhook's `statuses[]`, and the receipt
+// was written with a bare `set()`. Measured against the emulator: `read` arriving
+// before `delivered` leaves the bubble reading "delivered" for a message the
+// customer has already read — the status goes BACKWARDS.
+//
+// A rank, and a write that must beat the stored value. `failed` sits at the top
+// because it is the one receipt staff act on: a later `delivered` for a message
+// the provider rejected must not quietly bury it. An UNKNOWN status wins by
+// default — Meta may add one, and refusing a receipt this app has never heard of
+// would be inventing behaviour for it.
+const STATUS_RANK = { sending: 0, sent: 1, delivered: 2, read: 3, failed: 4 };
+
+export function statusWins(next, current) {
+  if (!current || current === next) return true;
+  const a = STATUS_RANK[next], b = STATUS_RANK[current];
+  if (a === undefined || b === undefined) return true;
+  return a > b;
+}
+
 // isPhoneKey(k) — is this a conversation key that identifies SOMEBODY?
 //
 // v18.0.0 phase 6 (CT-WA-04). `normalizePhone` strips every non-digit and keeps

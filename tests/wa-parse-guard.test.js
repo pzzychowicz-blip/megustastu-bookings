@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { inboundTs } from "../api/wa-inbound.js";
-import { isPhoneKey } from "../src/lib/whatsapp.js";
+import { isPhoneKey, statusWins } from "../src/lib/whatsapp.js";
 import { sanitizeParse, clampConfidence, isUsableSize, isUsableDate, isUsableTime, mergeDraft } from "../src/lib/whatsapp.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -214,5 +214,41 @@ describe("CT-WA-04 — a conversation key has to identify somebody", () => {
     }
     // `for...of value.messages || []` iterates a STRING one character at a time.
     expect(src).not.toMatch(/of\s+value\.(messages|statuses)\s*\|\|/);
+  });
+});
+
+// ── CT-WA-05 ────────────────────────────────────────────────────────────────
+// Meta does not guarantee `statuses[]` ordering and the receipt was written with
+// a bare set(). Measured against the emulator: `read` then `delivered` left the
+// bubble reading "delivered" for a message the customer had already read.
+describe("CT-WA-05 — a delivery receipt may not go backwards", () => {
+  it("refuses the measured downgrade", () => {
+    expect(statusWins("delivered", "read")).toBe(false);
+    expect(statusWins("sent", "delivered")).toBe(false);
+  });
+  it("accepts the ordinary forward path", () => {
+    expect(statusWins("sent", "sending")).toBe(true);
+    expect(statusWins("delivered", "sent")).toBe(true);
+    expect(statusWins("read", "delivered")).toBe(true);
+  });
+  it("lets `failed` through and never buries it", () => {
+    expect(statusWins("failed", "read")).toBe(true);
+    expect(statusWins("delivered", "failed")).toBe(false);
+  });
+  it("accepts a status this app has never heard of, either side", () => {
+    expect(statusWins("deleted", "read")).toBe(true);
+    expect(statusWins("read", "deleted")).toBe(true);
+  });
+  it("a repeat of the same receipt is not a downgrade", () => {
+    expect(statusWins("read", "read")).toBe(true);
+    expect(statusWins("sent", undefined)).toBe(true);
+  });
+  it("rtdb.js actually asks before it writes", () => {
+    const src = read("api/_lib/rtdb.js");
+    const body = src.slice(src.indexOf("export async function updateMessageStatusByWamid"));
+    const guard = body.indexOf("statusWins(");
+    const write = body.indexOf('"/status").set(status)');
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(write);
   });
 });
