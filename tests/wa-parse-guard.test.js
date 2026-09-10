@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { inboundTs } from "../api/wa-inbound.js";
-import { isPhoneKey, statusWins } from "../src/lib/whatsapp.js";
+import { isPhoneKey, statusWins, capOutbound, snippet, WA_MAX_TEXT_LEN, WA_SNIPPET_LEN } from "../src/lib/whatsapp.js";
 import { sanitizeParse, clampConfidence, isUsableSize, isUsableDate, isUsableTime, mergeDraft } from "../src/lib/whatsapp.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -250,5 +250,42 @@ describe("CT-WA-05 — a delivery receipt may not go backwards", () => {
     const write = body.indexOf('"/status").set(status)');
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(write);
+  });
+});
+
+// ── CT-WA-06 ────────────────────────────────────────────────────────────────
+// WA_MAX_TEXT_LEN guarded both INBOUND paths and neither outbound one, and the
+// outbound lastMessageSnippet was written whole where the inbound one was
+// already sliced — so it landed in the conversation-list payload every device
+// downloads. LIVE mode failed cleanly at the provider (Cloud API refuses >4096);
+// MOCK mode, the shipping default, stored all of it.
+describe("CT-WA-06 — an outbound message is capped, both ways out", () => {
+  it("caps at the same length the inbound paths use", () => {
+    expect(capOutbound("z".repeat(WA_MAX_TEXT_LEN + 5000)).length).toBe(WA_MAX_TEXT_LEN);
+    expect(capOutbound("hola").length).toBe(4);
+  });
+  it("the snippet is the LIST payload and is much shorter", () => {
+    expect(snippet("z".repeat(5000)).length).toBe(WA_SNIPPET_LEN);
+    expect(WA_SNIPPET_LEN).toBeLessThan(WA_MAX_TEXT_LEN);
+  });
+  it("handles the shapes a request body can actually carry", () => {
+    for (const v of [null, undefined, 0, false]) expect(capOutbound(v)).toBe(v == null ? "" : String(v));
+  });
+  it("the server caps BEFORE it sends, so stored and transmitted agree", () => {
+    const src = read("api/wa-send.js");
+    const cap = src.indexOf("capOutbound(");
+    const send = src.indexOf("await sendText(");
+    expect(cap).toBeGreaterThan(-1);
+    expect(cap).toBeLessThan(send);
+    expect(src).toMatch(/lastMessageSnippet: snippet\(/);
+  });
+  it("the client caps once, above the branch, so both send paths get it", () => {
+    const src = read("src/hooks/useWhatsApp.js");
+    const body = src.slice(src.indexOf("function handleSendReply"));
+    const cap = body.indexOf("capOutbound(");
+    const branch = body.indexOf("sendsViaServer()");
+    expect(cap).toBeGreaterThan(-1);
+    expect(cap).toBeLessThan(branch);
+    expect(body.slice(0, body.indexOf("function handleResend"))).toMatch(/lastMessageSnippet: snippet\(/);
   });
 });

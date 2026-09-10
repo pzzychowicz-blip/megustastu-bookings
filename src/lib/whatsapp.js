@@ -29,6 +29,28 @@ export const WA_WINDOW_MS = 24 * 60 * 60 * 1000;
 //   WA_PARSE_TEXT_LEN — chars sent to the LLM prompt (token/quota guard)
 export const WA_MAX_TEXT_LEN = 4000;
 export const WA_PARSE_TEXT_LEN = 1000;
+// Chars kept in `lastMessageSnippet` — the conversation-LIST payload, which every
+// connected device downloads on every write. The inbound path always sliced to
+// this; the outbound one wrote the whole message (CT-WA-06).
+export const WA_SNIPPET_LEN = 200;
+
+// capOutbound(text) — the cap the two OUTBOUND paths never had (v18.0.0 phase 6,
+// CT-WA-06). `WA_MAX_TEXT_LEN` guarded both inbound paths and neither outbound
+// one: `api/wa-send.js` took `body.text` and the client's mock send took the
+// composer's value, both uncapped, and the outbound `lastMessageSnippet` was
+// written whole where the inbound one was already sliced.
+//
+// It is applied BEFORE the provider call, never after, so what is transmitted
+// and what is stored are the same string. Cloud API refuses a body over 4096, so
+// LIVE mode used to fail cleanly at the provider and MOCK mode — the shipping
+// default — stored all of it; capping first makes the two agree instead of
+// making one of them the accident that saves the other.
+export function capOutbound(text) {
+  return String(text == null ? "" : text).slice(0, WA_MAX_TEXT_LEN);
+}
+export function snippet(text) {
+  return String(text == null ? "" : text).slice(0, WA_SNIPPET_LEN);
+}
 
 // How long the big "✓ Booking confirmed" banner stays before it dismisses
 // itself (ConversationView's timer). The ✕ still dismisses it immediately, and

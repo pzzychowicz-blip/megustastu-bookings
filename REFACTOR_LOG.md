@@ -22049,3 +22049,34 @@ make the response lie about what the handler did with the payload.
 Six tests, one of them a source scan proving `rtdb.js` asks before it writes.
 
 Gate: `121.07 kB` gz · **1203 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 49 (phase 6, resolving ROADMAP) — CT-WA-06: the cap that guarded one direction
+
+`WA_MAX_TEXT_LEN` (4000) was applied at both INBOUND sites
+(`api/_lib/inbound-core.js`, `src/lib/wa-sim.js`) and at neither outbound one:
+`api/wa-send.js` took `body.text` and the client's mock send took the composer's
+value, both uncapped. And the outbound `lastMessageSnippet` was written **whole**
+where the inbound one was already `.slice(0, 200)` — so a pasted document landed
+in the conversation-LIST payload, which every connected device downloads on every
+write.
+
+The asymmetry had an accidental guard on one side and none on the other: Cloud
+API refuses a body over 4096, so LIVE mode failed cleanly at the provider while
+MOCK mode — **the shipping default** — stored all of it. Relying on that is
+relying on the provider to be the validator.
+
+`capOutbound(text)` and `snippet(text)` in `src/lib/whatsapp.js`, with
+`WA_SNIPPET_LEN` finally named rather than being a `200` typed at one site.
+Two placement decisions:
+
+- **The server caps BEFORE `sendText`**, never after, so the message transmitted
+  and the message stored are the same string. Capping afterwards would put a
+  different text on the customer's phone from the one in the thread.
+- **The client caps above the `sendsViaServer()` branch**, not inside the mock
+  arm, so the server path posts exactly what the mock path would have stored.
+  The server caps again at its own boundary, because it takes requests this
+  client is not the only source of.
+
+Five tests, two of them source scans pinning both orderings.
+
+Gate: `121.13 kB` gz · **1208 tests** · 0 lint errors (88 warnings) · style OK.

@@ -35,6 +35,7 @@
 
 import { verifyStaffToken, staffAuthError, getConversation, upsertConversation, appendMessage } from "./_lib/rtdb.js";
 import { sendText } from "./_lib/meta.js";
+import { capOutbound, snippet } from "../src/lib/whatsapp.js";
 
 function readJsonBody(req) {
   if (req.body !== undefined && req.body !== null) {
@@ -74,7 +75,9 @@ export default async function handler(req, res) {
 
   const body = await readJsonBody(req);
   const phoneKey = body && body.phoneKey;
-  const text = body && typeof body.text === "string" ? body.text.trim() : "";
+  // v18.0.0 phase 6 (CT-WA-06): capped BEFORE the send, so the message
+  // transmitted and the message stored are the same string.
+  const text = capOutbound(body && typeof body.text === "string" ? body.text.trim() : "");
   if (!phoneKey || !text) { res.status(400).json({ error: "phoneKey and text are required" }); return; }
 
   const conv = await getConversation(phoneKey);
@@ -106,7 +109,7 @@ export default async function handler(req, res) {
     providerMsgId: sent.wamid || null,
     authorEmail: staff.email || staff.uid,
   });
-  const patch = { lastMessageAt: ts, lastMessageSnippet: text };
+  const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(text) };
   if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
   await upsertConversation(phoneKey, patch);
 

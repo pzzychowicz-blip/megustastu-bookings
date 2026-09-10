@@ -39,7 +39,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible } from "../lib/whatsapp";
+import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -291,7 +291,12 @@ export function useWhatsApp({
   //   CLIENT mode (default): the original sandbox mock — append locally with
   //   status "sending", update the conversation, flip to "delivered" after
   //   800ms to fake the provider round-trip.
-  function handleSendReply(phoneKey, text) {
+  function handleSendReply(phoneKey, rawText) {
+    // v18.0.0 phase 6 (CT-WA-06): capped here rather than in the mock branch, so
+    // the server path sends the same string this one would have stored. The
+    // server caps again at its own boundary — it takes requests this client is
+    // not the only source of.
+    const text = capOutbound(rawText);
     // `sendsViaServer()`, NOT `backendEnabled()`. The latter is hard-false
     // outside the sandbox, so this branch was unreachable in production and
     // every reply fell through to the mock below — appended locally and marked
@@ -309,7 +314,7 @@ export function useWhatsApp({
     const msg = { id: msgId, direction: "out", text, ts, status: "sending", isAutoAck: false, channel: "whatsapp" };
     appendMessage(phoneKey, msg);
     patchConversation(phoneKey, function (c) {
-      const patch = { lastMessageAt: ts, lastMessageSnippet: text };
+      const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(text) };
       if (c.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
       return patch;
     });
