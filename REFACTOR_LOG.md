@@ -22406,3 +22406,29 @@ all read exactly as before — and **W13 now reports `"read"` where it reported
 `"delivered"`**, which is CT-WA-05 confirmed end-to-end rather than by unit test.
 
 Gate: `121.63 kB` gz · **1226 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 58 (phase 6) — `/code-review` fix 4/4: the one finding that is a feature
+
+`unredeemVoucher` restores a balance and writes nothing about having done so.
+`applyRedemption` stamps `by: <email>` on every entry it creates; the inverse
+deletes the entry and leaves the voucher reading as though it had never been
+spent. The trail is not gone — the booking's `history` carries the status change
+that raised the prompt, and the restore can only happen behind that prompt — but
+`/vouchers` has **no backups** and is the first place anyone would look.
+
+Not fixed here, and the reason is the rule rather than the effort: a reversal
+journal changes the PERSISTED voucher shape, which drags `sanitizeVoucher`, the
+rules pair and a console step with it. That is a feature, and a review finding
+must not be the door a feature comes through unasked. `ROADMAP.md` carries it
+with the two shapes it could take.
+
+**Also disproved, and worth recording so it is not re-raised.** `api/_lib/rtdb.js`
+now imports `src/lib/whatsapp.js` for `statusWins`, which pulls
+`customers → booking-logic → constants → day` into every handler that touches the
+database — including `/api/wa-config`, which had none of it before. It reads like
+a cold-start regression. **Measured: 5.1 ms for that whole graph, against 37.4 ms
+for the `firebase-admin/app` import already sitting beside it in the same
+handler.** Noise, on cold start only. Reported as checked rather than fixed —
+the repo's own lesson about a perf fix aimed at something that measures as noise.
+
+Gate: `121.63 kB` gz · **1226 tests** · 0 lint errors (88 warnings) · style OK.

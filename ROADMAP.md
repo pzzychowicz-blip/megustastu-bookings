@@ -19,7 +19,18 @@ session and keeping it in sync.
 
 ## Deferred
 
-_(nothing pending)_
+- **A voucher reversal leaves no trace on the voucher.** `applyRedemption`
+  stamps `by: <email>` on every ledger entry; `unredeemVoucher` deletes the entry
+  through `removeRedemption` and records nothing, so a balance can be restored
+  with no mark on the money record itself. The trail is not absent — the
+  booking's own `history` carries the status change that triggered it, and the
+  restore only ever happens behind the walk-back prompt — but `/vouchers` is a
+  collection with **no backups**, and it is the one place someone would look.
+  Raised by `/code-review` at v18.0.0 phase 6 and deliberately NOT fixed there:
+  a reversal journal (`v.reversals[bookingId] = {amount, at, by}`, or a
+  soft-delete on the entry) changes the persisted voucher shape, which is a
+  feature rather than a review fix. `sanitizeVoucher` and the rules pair would
+  move with it.
 
 ## Designed, not implemented
 
