@@ -4325,7 +4325,7 @@ function BookingApp({uid}){
               onClick={function(){settleVoucherBack(false);}}>Keep redeemed</button><button
               onClick={function(){settleVoucherBack(true);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.blue)}>Restore to voucher</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Restore the voucher?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{(function(){
+              style={mkSolidBtn(S.accent)}>Restore to voucher</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Restore the voucher?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{(function(){
               const b=bookings.find(function(x){return x.id===voucherBack.id;})||{};
               const v=vouchersByCode[normalizeCode(b.voucherCode)];
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;

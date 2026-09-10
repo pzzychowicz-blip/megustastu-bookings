@@ -22300,3 +22300,29 @@ kept where a reader will find it. `Deferred` and `Ideas` are both empty, which i
 the accurate state of the repo rather than a tidy one.
 
 Gate: `121.58 kB` gz · **1219 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 55 (phase 6) — `/code-review` fix 1/4: the primary action had no fill
+
+Patryk spotted it on screen. `mkSolidBtn(BTN.blue)` — and **`BTN` has no `blue`
+key** (`constants.js:798` is `tables·edit·del·cancel·clear·reset·today·nav·
+dismiss·orange`). `mkSolidBtn` spreads `background` straight through, so the
+rendered style attribute carried **no `background` property at all**: an unfilled
+pill wearing `color: var(--text-on-accent)`, i.e. white text on the sheet's own
+light surface. The primary money action of a money dialog, unreadable.
+
+**Nothing in the repo could have caught it.** `npm run check:style` looks for
+literals and this is a token REFERENCE; `tests/contrast.test.js` registers
+fill/ink PAIRS and there is no fill to register; lint sees a defined identifier
+(`BTN`) with a property access. A colour token that does not exist fails silently
+in exactly the gap between the two guards this app relies on.
+
+Fixed to `mkSolidBtn(S.accent)` — which is right twice over. `DESIGN.md`:
+*"Accent = primary action or current selection"*, and this is the dialog's
+primary action. And it makes the pair **identical to `VoucherRedeemModal`'s
+footer** (`mkBtn({background:"var(--app-btn-slate)"})` + `mkSolidBtn("var(--accent)")`),
+which is the dialog this one mirrors — two prompts about the same voucher should
+not wear two different primaries.
+
+Measured live rather than eyeballed: the computed style is now
+`background rgb(10,132,255)` / `color rgb(255,255,255)` for the primary and
+`rgba(100,116,139,0.7)` / white for the secondary.
