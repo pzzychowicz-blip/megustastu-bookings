@@ -22326,3 +22326,43 @@ not wear two different primaries.
 Measured live rather than eyeballed: the computed style is now
 `background rgb(10,132,255)` / `color rgb(255,255,255)` for the primary and
 `rgba(100,116,139,0.7)` / white for the secondary.
+
+### Commit 56 (phase 6) — `/code-review` fixes 2/4: the voucher prompt's two holes
+
+**A prompt nobody could dismiss.** `settleVoucher` and `settleVoucherBack` both
+opened with `if(refused("voucherRedeem"))return;` — BEFORE clearing their own
+modal state. The gates that RAISE those prompts (`voucherToAsk`,
+`voucherToRestore`) carry no permission check, so with `enforceRoles` on a
+`staff`-level account gets the dialog, and then both of its buttons only flash
+the permission toast while the dialog stays put. Escape was the sole exit and it
+abandoned the status change with no explanation. The dismissal now happens first
+and the permission test second, in both twins — a refused action gets its toast
+and a closed dialog, which is the behaviour every other `refused()` call site
+already has.
+
+**The cancel funnel never saw the gate.** `voucherToRestore` gates on "is this
+booking LEAVING completed", and its comment claimed that covered Cancelled — but
+`updateStatus` returns early for `"cancelled"` straight into `setConfirmCancel`,
+so `doCancelBooking` is a THIRD funnel that neither `doSave`'s gate nor
+`updateStatus`'s ever reaches. Cancelling a completed booking from the List card
+or the timeline popup kept its redemption silently, while making the identical
+change in the edit form asked. One action, two routes, two behaviours — and the
+comment and the REFACTOR_LOG both asserted the coverage the code did not have.
+
+`doCancelBooking` now consults the same gate, dismissing the cancel confirm
+first so only ONE dialog is on screen (`voucherback` outranks `cancel` in
+`MODAL_Z` either way, but two stacked confirms about one tap is not a thing to
+show anybody). It **returns its save's `ok`** — additive, no existing caller
+reads it — so `settleVoucherBack` keeps the ordering it inherited from
+`settleVoucher`: the booking write lands first, money moves only if it did.
+
+Verified live on DEV through the List card, which is the funnel that was broken:
+the cancel confirm gave way to "Restore the voucher?", and after Restore the
+booking read `cancelled` with its history entry, `3V48PHVY` went **remaining
+0 → 20** with this booking's entry gone — and the OTHER booking's €30 redemption
+on the same voucher left exactly where it was.
+
+Also: the dead `b ? … : ""` ternary in `voucherToRestore`, three lines after an
+early return on `!b`.
+
+Gate: `121.63 kB` gz · **1219 tests** · 0 lint errors (88 warnings) · style OK.

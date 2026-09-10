@@ -2989,7 +2989,7 @@ function BookingApp({uid}){
     if(status==="completed") return null;
     const b=bookings.find(function(x){return x.id===id;});
     if(!b||b.status!=="completed") return null;   // only a walk-back, never a first pass
-    const code=b?normalizeCode(b.voucherCode):"";
+    const code=normalizeCode(b.voucherCode);
     if(!code) return null;
     const v=vouchersByCode[code];
     if(!v) return null;
@@ -3089,10 +3089,17 @@ function BookingApp({uid}){
   //
   // So the order is chosen by which failure lands in a state the app can
   // report, not by which is tidier.
-  function settleVoucher(amount){if(refused("voucherRedeem"))return;
+  function settleVoucher(amount){
     const ask=voucherAsk;
     if(!ask) return;
+    // /code-review v18.0.0 phase 6: the dialog is dismissed BEFORE the
+    // permission test, not after. `refused()` returning first left an account
+    // without `voucherRedeem` looking at a prompt whose BOTH buttons only
+    // flashed a toast — the gates that raise it (`voucherToAsk` /
+    // `voucherToRestore`) carry no permission check, so it opens for anyone.
+    // Escape was the only exit and it abandoned the status change silently.
     setVoucherAsk(null);
+    if(refused("voucherRedeem")) return;
     const ok=withRedeemAsked(function(){
       if(ask.from!=="form") return updateStatus(ask.id,ask.status);
       // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
@@ -3124,11 +3131,16 @@ function BookingApp({uid}){
   // land" (the v18.0.0 /code-review finding — `doSave` returns nothing), and
   // `unredeemVoucher` is idempotent by booking id, so an already-DISPATCHED
   // guard reading true is correct rather than merely tolerable.
-  function settleVoucherBack(restore){if(refused("voucherRedeem"))return;
+  function settleVoucherBack(restore){
     const ask=voucherBack;
     if(!ask) return;
-    setVoucherBack(null);
+    setVoucherBack(null);                      // see settleVoucher on the order
+    if(refused("voucherRedeem")) return;
     const ok=withRedeemAsked(function(){
+      // Three funnels now, not two — `doCancelBooking` is its own door because
+      // `updateStatus` hands "cancelled" straight to the confirm and never
+      // reaches its own gate. It returns the save's `ok` for this caller.
+      if(ask.from==="cancel") return doCancelBooking(ask.id,ask.noShow);
       if(ask.from!=="form") return updateStatus(ask.id,ask.status);
       doSave();
       return !mayDispatch(saveGuardRef.current);
@@ -3139,6 +3151,21 @@ function BookingApp({uid}){
     if(code) unredeemVoucher(code,ask.id);
   }
   function doCancelBooking(id,noShow){
+    // /code-review v18.0.0 phase 6: THE CANCEL FUNNEL. `updateStatus` returns
+    // early for "cancelled" into `setConfirmCancel`, so neither of that
+    // function's gates nor `doSave`'s ever sees this path — cancelling a
+    // completed booking from the popup or the List card kept its redemption
+    // silently, while the identical change made in the edit form asked. One
+    // action, two routes, two behaviours.
+    //
+    // The cancel confirm is dismissed first so only ONE dialog is on screen;
+    // `voucherback` outranks `cancel` in MODAL_Z either way, but two stacked
+    // confirms about the same tap is not a thing to show anybody.
+    if(!redeemAskedRef.current&&voucherToRestore(id,"cancelled")){
+      setConfirmCancel(null);
+      setVoucherBack({id:id,status:"cancelled",noShow:!!noShow,from:"cancel"});
+      return false;
+    }
     const user=getUser();
     // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
     // (status/noShow/notes/tables — the whole object). Single pending slot; a
@@ -3155,6 +3182,10 @@ function BookingApp({uid}){
       flash();
       armUndo(undoDelta(bookings,post),id,"cancel",!!noShow);
     }
+    // Returned for `settleVoucherBack`, which must not move money for a write
+    // that was held — the ordering `settleVoucher` established. No other caller
+    // reads it, so this is additive.
+    return ok;
   }
   // v17.4.0 — GENERAL undo: the v16.3.0 cancel/no-show snapshot+toast pattern
   // now also covers DELETE and form EDIT. armUndo parks one pending snapshot
