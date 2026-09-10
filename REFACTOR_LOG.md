@@ -22080,3 +22080,32 @@ Two placement decisions:
 Five tests, two of them source scans pinning both orderings.
 
 Gate: `121.13 kB` gz · **1208 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 50 (phase 6, resolving ROADMAP) — CT-WA-07: the Admin tab reported a mode the backend was not in
+
+`/api/wa-config` returned `env("WA_LLM_MODE", "mock")` — the RAW environment
+string — while every code path that actually decides anything runs on
+`llmMode()`, which compares `=== "live"` exactly. Measured across eight values:
+
+| set to | backend runs | Admin tab showed |
+|---|---|---|
+| `"live"` | live | live ✓ |
+| `"LIVE"` · `"Live"` · `"live "` · `"true"` · `"1"` | **mock** | itself ✗ |
+| `""` · unset | mock | mock ✓ |
+
+The direction is what makes it a fix rather than a note: it read as **more**
+capable than it was, on the value this handler's own header calls "the one that
+spends money". An operator who typed `LIVE` would have seen `LIVE` on the
+Integrations panel and believed the LLM was running, when nothing was being
+called at all — and the panel exists precisely to answer questions a browser
+cannot.
+
+Reporting the accessors rather than the reads also means the endpoint can no
+longer disagree with the backend by construction, which is the same property
+`sanitizeParse` and `isPhoneKey` buy one file over. The KEY list is untouched
+and still `Boolean(env(k, null))`, so the handler still cannot hold a secret.
+
+Two tests, both source scans — this is a fact about where a value comes from, and
+there is no behaviour to drive without a live serverless runtime.
+
+Gate: `121.13 kB` gz · **1210 tests** · 0 lint errors (88 warnings) · style OK.

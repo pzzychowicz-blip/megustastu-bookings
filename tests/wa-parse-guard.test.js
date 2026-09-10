@@ -289,3 +289,22 @@ describe("CT-WA-06 — an outbound message is capped, both ways out", () => {
     expect(body.slice(0, body.indexOf("function handleResend"))).toMatch(/lastMessageSnippet: snippet\(/);
   });
 });
+
+// ── CT-WA-07 ────────────────────────────────────────────────────────────────
+// /api/wa-config returned `env("WA_LLM_MODE", "mock")` — the RAW string — while
+// the backend runs on llmMode(), which compares `=== "live"` exactly. Measured
+// across eight values: "LIVE", "Live", "live ", "true" and "1" each displayed as
+// themselves in the Admin tab while the backend was in mock.
+describe("CT-WA-07 — the Admin tab shows the mode the backend is actually in", () => {
+  it("wa-config reports through the accessors, not the raw env read", () => {
+    const src = read("api/wa-config.js");
+    expect(src).toMatch(/modes:\s*\{\s*llm:\s*llmMode\(\),\s*send:\s*sendMode\(\)\s*\}/);
+    expect(src).not.toMatch(/llm:\s*env\(/);
+    expect(src).not.toMatch(/send:\s*env\(/);
+    expect(src).toMatch(/import \{[^}]*llmMode[^}]*sendMode[^}]*\} from "\.\/_lib\/env\.js"/);
+  });
+  it("the KEY list still reports booleans only — it cannot hold a value", () => {
+    const src = read("api/wa-config.js");
+    expect(src).toMatch(/set\[k\] = Boolean\(env\(k, null\)\)/);
+  });
+});

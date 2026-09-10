@@ -29,7 +29,7 @@
 // rather than inventing a "no" — an unrecognised key is a question this
 // deployment cannot answer, which is different from a key that is not set.
 
-import { env } from "./_lib/env.js";
+import { env, llmMode, sendMode } from "./_lib/env.js";
 import { verifyStaffToken, staffAuthError } from "./_lib/rtdb.js";
 
 // Every key `api/_lib/env.js` reads, plus the two the harness/sandbox use. Kept
@@ -66,8 +66,18 @@ export default async function handler(req, res) {
   // is set" and "the LLM is actually being called" are different facts and the
   // second is the one that spends money. Values, not booleans: these are the
   // strings "mock"/"live" and neither is a secret.
+  //
+  // v18.0.0 phase 6 (CT-WA-07): the EFFECTIVE mode, through the same accessors
+  // the backend runs on — not `env("WA_LLM_MODE", "mock")`, the raw string.
+  // `llmMode()`/`sendMode()` compare `=== "live"` exactly, so `"LIVE"`, `"Live"`,
+  // `"live "`, `"true"` and `"1"` all mean MOCK; measured, each of them used to
+  // display as itself in the Admin tab while the backend was mocking. The
+  // direction is what makes it worth a fix rather than a note — it read as more
+  // capable than it was, on the value this handler's own header calls the one
+  // that spends money, so an operator who typed `LIVE` would have believed the
+  // LLM was running.
   res.status(200).json({
     set,
-    modes: { llm: env("WA_LLM_MODE", "mock"), send: env("WA_SEND_MODE", "mock") },
+    modes: { llm: llmMode(), send: sendMode() },
   });
 }
