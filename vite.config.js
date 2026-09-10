@@ -1,3 +1,7 @@
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import process from 'node:process'
 import { defineConfig, configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
@@ -94,6 +98,67 @@ function stripSimulator(isSandbox) {
   };
 }
 
+
+// ── v18.0.0 phase 6: the install card names the RIGHT restaurant ─────────────
+//
+// `public/manifest.webmanifest` is the PWA install card and the home-screen add
+// sheet. Its `name`/`short_name` are the APP's name and are pinned to `APP_NAME`
+// by `tests/stylesheet.test.js`; its `description` was the last place in the
+// repo where a RESTAURANT's name was authored into a static file — and a static
+// file imports nothing, so a per-tenant value there is a build step rather than
+// a constant. That is what this is.
+//
+// The source file is now tenant-NEUTRAL ("Staff booking management"), so it is
+// correct standing alone and names nobody. This appends the restaurant from
+// `src/tenants/<slug>.js` → `profile.name`, the same module `firebase.js`
+// selects with `VITE_TENANT` and the same one the WhatsApp prompts take their
+// context from.
+//
+// It runs in BOTH dev and build, from ONE loader, because two paths that merely
+// agree today are two paths: a middleware serves the generated file on the dev
+// server, and `closeBundle` writes it into `outDir`. `closeBundle` and not
+// `generateBundle` — Vite copies `public/` AFTER the bundle is emitted, so an
+// emitted asset of the same name is overwritten by the source file; writing last
+// is what makes the generated one win.
+function tenantManifest() {
+  let outDir = "dist";
+  async function build() {
+    const slug = process.env.VITE_TENANT || "mgt";
+    // An ABSOLUTE file URL, and it has to be. Vite bundles this config into
+    // `node_modules/.vite-temp/` before running it, so a relative specifier
+    // resolves against THAT directory and the import fails with a
+    // `.vite-temp/src/tenants/mgt.js` that has never existed. `process.cwd()` is
+    // the project root during both `serve` and `build`, which is also what makes
+    // the readFileSync below correct.
+    const root = process.cwd();
+    const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+    const src = JSON.parse(readFileSync(join(root, "public", "manifest.webmanifest"), "utf8"));
+    // Appended, never replaced: the neutral sentence is the one thing this
+    // cannot get wrong, and a tenant with no `name` still gets a usable card.
+    const name = profile && profile.name ? String(profile.name).trim() : "";
+    return JSON.stringify(
+      Object.assign({}, src, { description: name ? src.description + " for " + name : src.description }),
+      null, 2,
+    ) + "\n";
+  }
+  return {
+    name: "mgt-tenant-manifest",
+    configResolved(cfg) { outDir = cfg.build.outDir || "dist"; },
+    configureServer(server) {
+      server.middlewares.use(function (req, res, next) {
+        if ((req.url || "").split("?")[0] !== "/manifest.webmanifest") return next();
+        build().then(function (body) {
+          res.setHeader("Content-Type", "application/manifest+json");
+          res.end(body);
+        }, next);
+      });
+    },
+    async closeBundle() {
+      writeFileSync(join(outDir, "manifest.webmanifest"), await build());
+    },
+  };
+}
+
 // /code-review: hoisted out of the manualChunks callback. A regex literal is
 // re-evaluated every time control reaches it, so inline these allocated two
 // RegExp objects per module id inspected, on every build.
@@ -110,7 +175,7 @@ export default defineConfig(function ({ command }) {
   // Exactly `WA_SANDBOX`'s two truthy cases; see the note above the plugin.
   const isSandbox = command === "serve" || process.env.VITE_FB_TARGET === "dev";
   return {
-  plugins: [react(), stripSimulator(isSandbox)],
+  plugins: [react(), stripSimulator(isSandbox), tenantManifest()],
 
   // ── The rules suite runs somewhere else, on purpose ──────────────────────
   // `tests/rules/**` drives a LOCAL Firebase RTDB emulator against the real

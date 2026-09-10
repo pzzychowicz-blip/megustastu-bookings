@@ -22205,3 +22205,60 @@ row number, not a row** — the same family as the synthetic `:active` press and
 the accessible name read out of an automation tree.
 
 Gate: `121.58 kB` gz · **1215 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 53 (phase 6, resolving ROADMAP) — the install card names the right restaurant
+
+`public/manifest.webmanifest`'s `description` read *"Staff booking management for
+Me Gustas Tú"* — the PWA install card and the home-screen add sheet, and the last
+place in the repo where a RESTAURANT's name was authored into a static file.
+Phase 2 pinned the manifest's `name`/`short_name` to `APP_NAME`, but that is the
+APP's name; a static file imports nothing, so a per-tenant value there is a build
+step rather than a constant. Deferred at the time, on the reasoning that dropping
+the name would make MGT's card say less for a tenant that does not exist yet.
+
+**Patryk's call: generate it.** So the card is correct for every deployment and
+the entry closes for real rather than by decision.
+
+`tenantManifest()` in `vite.config.js`. The SOURCE file is now tenant-neutral —
+*"Staff booking management"* — so it is correct standing alone and names nobody;
+the plugin **appends** the restaurant from `src/tenants/<slug>.js` →
+`profile.name`, the same module `firebase.js` selects with `VITE_TENANT`.
+Appending rather than replacing is deliberate: the neutral sentence is the one
+thing this cannot get wrong, and a tenant with no `name` still gets a usable
+card.
+
+**Two hooks, ONE loader** — a middleware serves the generated file on the dev
+server and `closeBundle` writes it into `outDir` — because a build-only version
+would leave the dev server showing different text from production, which is the
+"two conditions that merely agree" rule this config already states about
+`stripSimulator`.
+
+Two build-system facts worth carrying:
+
+- **`closeBundle`, not `generateBundle`.** Vite copies `public/` AFTER the
+  bundle is emitted, so an emitted asset of the same name is silently overwritten
+  by the source file. Writing last is what makes the generated one win.
+- **The tenant import must be an ABSOLUTE file URL.** Vite bundles this config
+  into `node_modules/.vite-temp/` before running it, so `import("./src/tenants/…")`
+  resolves against THAT directory — the first version failed with
+  `Cannot find module …/.vite-temp/src/tenants/mgt.js`. `process.cwd()` is the
+  project root in both `serve` and `build`, which is also what makes the
+  `readFileSync` correct.
+
+**The icon family was the other half of that ROADMAP entry and turns out not to
+be a problem at all**: `scripts/gen-icons.py`'s v17.4.2 mark carries **no type**,
+so no icon in `public/` contains a restaurant's name — measured against the
+generator's own source, not assumed. The entry had it as "the same question one
+size up"; it is not a question.
+
+Verified in both places: `dist/manifest.webmanifest` and a cache-busted
+`GET /manifest.webmanifest` on the dev server both read *"Staff booking
+management for Me Gustas Tú"*, while `public/manifest.webmanifest` names nobody.
+
+Four tests in `tests/stylesheet.test.js`, beside the existing `APP_NAME` copy
+count (still 2 — the generation does not touch `name`/`short_name`). One is
+`it.runIf` on `dist/`, the `tests/csp.test.js` pattern. The stale comment there
+saying the description "deliberately still names the RESTAURANT … on ROADMAP.md
+as pending tenant work" is gone in the same commit.
+
+Gate: `121.58 kB` gz · **1219 tests** · 0 lint errors (88 warnings) · style OK.

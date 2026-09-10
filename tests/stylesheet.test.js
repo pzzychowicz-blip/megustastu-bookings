@@ -31,7 +31,7 @@
 // where a selector should be) is visible without full spec compliance.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { APP_NAME } from "../src/lib/constants.js";
@@ -320,10 +320,10 @@ describe("the app stylesheet (src/index.css)", () => {
 // literal `<title>` (the head already carries multi-line comments) or an inline
 // SVG `<title>` would have shadowed the real one silently.
 //
-// The manifest's `description` deliberately still names the RESTAURANT ("Staff
-// booking management for Me Gustas Tú") and is NOT checked here — per-tenant
-// text is a different problem from a drifted copy of the app's name, and it is
-// on ROADMAP.md as pending tenant work.
+// The manifest's `description` is a different question from a drifted copy of
+// the app's name, and it is answered elsewhere in this file: v18.0.0 phase 6
+// made the SOURCE file tenant-neutral and generates the restaurant half at build
+// from `src/tenants/<slug>.js`. See "the install card" below.
 describe("the app's own name (APP_NAME)", () => {
   const MANIFEST_SRC = readFileSync(
     join(ROOT, "public", "manifest.webmanifest"), "utf8"
@@ -400,5 +400,43 @@ describe("the app's own name (APP_NAME)", () => {
     expect(count(MANIFEST_SRC), "manifest.webmanifest").toBe(2);
     // sw.js: the file header comment, the offline <title>, the offline body.
     expect(count(SW), "sw.js").toBe(3);
+  });
+});
+
+// ── The install card (v18.0.0 phase 6) ──────────────────────────────────────
+// `public/manifest.webmanifest` was the last place in the repo where a
+// RESTAURANT's name was authored into a static file. A static file imports
+// nothing, so a per-tenant value there is a build step rather than a constant —
+// `vite.config.js`'s `tenantManifest()` plugin, which serves the generated file
+// on the dev server and writes it into `outDir` on a build, from ONE loader.
+describe("the install card names the tenant, and the source names nobody", () => {
+  const SRC = readFileSync(join(ROOT, "public", "manifest.webmanifest"), "utf8");
+  const TENANT = readFileSync(join(ROOT, "src", "tenants", "mgt.js"), "utf8");
+  const restaurant = (TENANT.match(/name:\s*"([^"]+)"/) || [])[1];
+
+  it("the tenant module is where the restaurant's name lives", () => {
+    expect(restaurant).toBeTruthy();
+  });
+  it("the SOURCE manifest names no restaurant, and stands alone without one", () => {
+    expect(SRC).not.toContain(restaurant);
+    expect(JSON.parse(SRC).description).toBe("Staff booking management");
+  });
+  it("the plugin is actually wired into the build", () => {
+    const cfg = readFileSync(join(ROOT, "vite.config.js"), "utf8");
+    expect(cfg).toMatch(/function tenantManifest\(/);
+    expect(cfg).toMatch(/plugins:\s*\[[^\]]*tenantManifest\(\)/);
+    // Both halves, from one loader — a build-only version would leave the dev
+    // server serving different text from production.
+    expect(cfg).toMatch(/configureServer/);
+    expect(cfg).toMatch(/closeBundle/);
+  });
+  // `dist/` only exists after a build, like tests/csp.test.js's built-html check.
+  const DIST = join(ROOT, "dist", "manifest.webmanifest");
+  it.runIf(existsSync(DIST))("the BUILT manifest names the tenant's restaurant", () => {
+    const built = JSON.parse(readFileSync(DIST, "utf8"));
+    expect(built.description).toBe("Staff booking management for " + restaurant);
+    // The app's own name is untouched by the generation.
+    expect(built.name).toBe(JSON.parse(SRC).name);
+    expect(built.short_name).toBe(JSON.parse(SRC).short_name);
   });
 });
