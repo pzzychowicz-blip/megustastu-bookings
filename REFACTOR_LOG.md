@@ -22262,3 +22262,41 @@ saying the description "deliberately still names the RESTAURANT … on ROADMAP.m
 as pending tenant work" is gone in the same commit.
 
 Gate: `121.58 kB` gz · **1219 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 54 (phase 6) — ROADMAP: every entry resolved, including the two that were never pending work
+
+Patryk read the file and asked for all seven entries settled. Four were fixes
+(CT-WA-05…08, above), two were behaviour decisions he took (the voucher
+walk-back, the install card), and **two were not pending work at all** — which is
+what this commit records, because `ROADMAP.md`'s own header says a settled item
+is DELETED rather than annotated, and both had been sitting there being read as
+open.
+
+**`TENANT_WA_CONTEXT` duplicating `profile.waContext` was a decision, not a
+question.** The entry says so in its own words — "the alternative is viable and
+was not taken" — and the reason still holds: the env var matches how all ten
+other backend values arrive, and the alternative (the serverless function
+importing `src/tenants/` by slug at runtime) would need a second variable naming
+the tenant. Phase 6's own `tenantManifest()` plugin does exactly that import from
+Node, which is worth stating because it looks like evidence for the other side
+and is not: a Vite config runs at BUILD time in the repo, and a Vercel function
+runs in a container that has no `VITE_TENANT`. Drift is bounded and TESTED —
+`tests/wa-tenant-context.test.js` pins the fallback to the profile's exact
+string, so the two cannot silently disagree. Deleted; the decision is here.
+
+**The `wa-sandbox` `.vercelignore` item was a standing instruction for another
+branch.** It is not pending work on `main` — the entry said as much — and
+`ROADMAP.md` is a `main` file the sandbox branch never sees, so it was recorded
+in the one place that could not act on it. Its real home is `.vercelignore`'s own
+header, which carries it on both branches; **it is now also in
+`MGT_WA_Sandbox_MOUNT.md`**, the card attached to sandbox sessions, so it is
+reachable at the moment it matters rather than only in the file being edited.
+Deleted from `ROADMAP.md`.
+
+What remains is **phase 7 alone** — docs, README, ship — with the post-merge
+order (prod boot banner → the rules console step → bootstrap admin → assign
+levels → verify the lockout guard → flip `enforceRoles` outside service hours)
+kept where a reader will find it. `Deferred` and `Ideas` are both empty, which is
+the accurate state of the repo rather than a tidy one.
+
+Gate: `121.58 kB` gz · **1219 tests** · 0 lint errors (88 warnings) · style OK.
