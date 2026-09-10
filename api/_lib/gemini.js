@@ -319,17 +319,36 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
   // space, measured — so the exposure was one line deep, and the two prompt
   // paths disagreeing about how to hand the model a customer's words was the
   // more durable half of the defect. Now they cannot.
-  const lines = list.map((m) => (m.direction === "in" ? "CUSTOMER: " : "STAFF: ") + JSON.stringify(String(m.text).replace(/\s+/g, " ").trim()));
+  // The turn is kept as {tag, text} rather than as a built string, because the
+  // cap at the bottom has to truncate the TEXT and re-quote. /code-review
+  // v18.0.0 phase 6: the previous `kept.join("\n").slice(-WA_PARSE_TEXT_LEN)`
+  // was written when a line was plain text, and CT-WA-08's quoting turned it
+  // into a hazard — slicing a built line cuts INSIDE the JSON literal and hands
+  // the model a closing quote with no opening one, in the very prompt whose new
+  // instruction says the quotes are what mark a speaker's own words.
+  const turns = list.map((m) => ({
+    tag: m.direction === "in" ? "CUSTOMER: " : "STAFF: ",
+    text: String(m.text).replace(/\s+/g, " ").trim(),
+  }));
+  const line = (t) => t.tag + JSON.stringify(t.text);
   const kept = [];
   let budget = WA_PARSE_TEXT_LEN;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const cost = lines[i].length + 1; // +1 for the joining newline
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const cost = line(turns[i]).length + 1; // +1 for the joining newline
     if (kept.length && cost > budget) break;
     budget -= cost;
-    kept.unshift(lines[i]);
+    kept.unshift(turns[i]);
   }
-  // A single line longer than the entire budget still has to be capped.
-  const transcript = kept.join("\n").slice(-WA_PARSE_TEXT_LEN);
+  // The NEWEST turn is admitted whatever it costs (the loop's `kept.length &&`),
+  // so it is the only one that can overrun — and `kept` is oldest-first, so it
+  // is the last element. Truncating its text rather than the built line keeps
+  // every line a well-formed literal; escaping makes the result a little SHORTER
+  // than the budget rather than longer, which is the safe direction.
+  if (budget < 0) {
+    const newest = kept[kept.length - 1];
+    newest.text = newest.text.slice(0, Math.max(0, newest.text.length + budget));
+  }
+  const transcript = kept.map(line).join("\n");
   const now = new Date();
   const ctx = {
     todayIso: now.toISOString().slice(0, 10),

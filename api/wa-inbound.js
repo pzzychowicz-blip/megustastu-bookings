@@ -38,7 +38,7 @@ import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
-import { normalizePhone } from "../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -209,7 +209,11 @@ export default async function handler(req, res) {
         for (const s of Array.isArray(value.statuses) ? value.statuses : []) {
           try {
             const phoneKey = normalizePhone("+" + String(s.recipient_id || "").replace(/^\+/, ""));
-            if (phoneKey && s.id && s.status) {
+            // isPhoneKey, not truthiness — `normalizePhone("+")` is `"+"`, which
+            // is truthy and is nobody. CT-WA-04 replaced this test in
+            // `processInbound` and left the statuses branch of the same handler
+            // spelling it the old way: one rule, two spellings, one file.
+            if (isPhoneKey(phoneKey) && s.id && s.status) {
               const ok = await updateMessageStatusByWamid(phoneKey, s.id, s.status);
               if (ok) results.statuses++;
             }

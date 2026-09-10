@@ -421,8 +421,11 @@ one was set. Nothing is deleted; hidden is not deleted.
 Completing a booking asked whether to redeem; walking that booking back out of
 `completed` — to Confirmed, Seated, Pending or Cancelled — left the ledger entry
 and the spent balance where they were, with no un-redeem control anywhere in the
-app. `voucherToRestore` is `voucherToAsk`'s exact mirror, at the SAME two funnels
-and behind the SAME `redeemAskedRef` (a status change is either into `completed`
+app. `voucherToRestore` is `voucherToAsk`'s exact mirror, behind the SAME
+`redeemAskedRef` — but at THREE funnels rather than two (`/code-review`):
+`updateStatus` hands `"cancelled"` straight to the cancel confirm and never
+reaches its own gate, so `doCancelBooking` consults it as well, or the List
+card's Cancel keeps a redemption the edit form would have asked about (a status change is either into `completed`
 or out of it, so the two prompts can never both be pending and a second ref would
 be a second thing to keep in step). **Its gate is "is this booking LEAVING
 completed", never a list of target statuses** — every other status is a visit that

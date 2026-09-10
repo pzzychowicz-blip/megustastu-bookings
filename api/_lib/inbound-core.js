@@ -211,6 +211,13 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0 }, afterRe
     preloadedConv: conv,
     willParse: true, // flags "analyzing…" until applyParse lands the draft
   });
+  // /code-review v18.0.0 phase 6: nothing was stored, so there is nothing to
+  // parse. `api/wa-inbound.js` has always guarded this — `parseJobs.push` sits
+  // on the non-skipped branch — and this second scheduler did not, so a junk
+  // phone or a repeated wamid still bought a live, billed Gemini call whose
+  // result `applyParse` then discarded on the null key. The rule applied at one
+  // of the two places that schedule a parse.
+  if (r.skipped || !r.phoneKey) return r;
   afterResponse((async () => {
     try {
       const hours = await readOperatingHours();

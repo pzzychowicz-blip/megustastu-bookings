@@ -372,3 +372,76 @@ describe("CT-WA-08 — a customer cannot forge a turn in the transcript", () => 
     expect(body.slice(0, body.indexOf("const prompt"))).toMatch(/JSON\.stringify\(/);
   });
 });
+
+
+// /code-review v18.0.0 phase 6: CT-WA-08's quoting turned the transcript's old
+// tail-slice into a hazard — slicing a BUILT line cuts inside the JSON literal.
+describe("CT-WA-08 follow-up — the cap truncates the text, never the literal", () => {
+  async function transcriptFor(history) {
+    const captured = [];
+    const realFetch = globalThis.fetch;
+    const realLlm = process.env.WA_LLM_MODE, realKey = process.env.GEMINI_API_KEY;
+    process.env.WA_LLM_MODE = "live";
+    process.env.GEMINI_API_KEY = "probe-key-never-used";
+    globalThis.fetch = async (_url, init) => {
+      captured.push(JSON.parse(init.body).contents[0].parts[0].text);
+      return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"intent":"other","language":"es","confidence":"low"}' }] } }] }) };
+    };
+    try { await parseThread(history, {}); } finally {
+      globalThis.fetch = realFetch;
+      if (realLlm === undefined) delete process.env.WA_LLM_MODE; else process.env.WA_LLM_MODE = realLlm;
+      if (realKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = realKey;
+    }
+    return captured[0].split("Transcript:")[1].trim();
+  }
+  // Every line must be `SPEAKER: "…"` — a complete literal, both quotes present.
+  const wellFormed = (t) => t.split("\n").every((l) => /^(CUSTOMER|STAFF): ".*"$/.test(l));
+
+  it("an oversized newest turn is truncated and still a complete literal", async () => {
+    const t = await transcriptFor([{ direction: "in", text: "z".repeat(5000) }]);
+    expect(wellFormed(t)).toBe(true);
+    expect(t.length).toBeLessThanOrEqual(1000 + "CUSTOMER: ".length + 2);
+  });
+  it("holds when the oversized turn follows earlier ones", async () => {
+    const t = await transcriptFor([
+      { direction: "in", text: "hola" },
+      { direction: "out", text: "para cuantos?" },
+      { direction: "in", text: "y".repeat(5000) },
+    ]);
+    expect(wellFormed(t)).toBe(true);
+  });
+  it("holds when the oversized turn needs JSON escaping", async () => {
+    const nasty = ['a', '"', 'b', String.fromCharCode(92), 'c'].join("").repeat(400);
+    const t = await transcriptFor([{ direction: "in", text: nasty }]);
+    expect(wellFormed(t)).toBe(true);
+    expect(() => t.split("\n").map((l) => JSON.parse(l.replace(/^(CUSTOMER|STAFF): /, "")))).not.toThrow();
+  });
+  it("an ordinary thread is untouched by the cap", async () => {
+    const t = await transcriptFor([{ direction: "in", text: "hola" }, { direction: "out", text: "dime" }]);
+    expect(t).toBe('CUSTOMER: "hola"\nSTAFF: "dime"');
+  });
+});
+
+// /code-review v18.0.0 phase 6: the sim scheduler parsed what it had not stored.
+describe("injectSimInbound does not pay for a message it dropped", () => {
+  it("returns before scheduling when processInbound skipped", () => {
+    const src = read("api/_lib/inbound-core.js");
+    const body = src.slice(src.indexOf("export async function injectSimInbound"));
+    const guard = body.indexOf("r.skipped");
+    const schedule = body.indexOf("afterResponse(");
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(schedule);
+  });
+  it("which is the guard api/wa-inbound.js already had", () => {
+    expect(read("api/wa-inbound.js")).toMatch(/if \(isText\) parseJobs\.push/);
+  });
+});
+
+// /code-review v18.0.0 phase 6: one rule, one spelling, inside one file.
+describe("CT-WA-04 follow-up — the statuses loop uses isPhoneKey too", () => {
+  it("no branch of the webhook tests a phone key by truthiness", () => {
+    const src = read("api/wa-inbound.js");
+    expect(src).not.toMatch(/if \(phoneKey && s\.id/);
+    expect((src.match(/isPhoneKey\(/g) || []).length).toBeGreaterThanOrEqual(1);
+  });
+});

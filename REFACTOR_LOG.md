@@ -22366,3 +22366,43 @@ Also: the dead `b ? … : ""` ternary in `voucherToRestore`, three lines after a
 early return on `!b`.
 
 Gate: `121.63 kB` gz · **1219 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 57 (phase 6) — `/code-review` fixes 3/4: three rules that stopped one site short
+
+All three are the same shape as the findings they follow, which is the point
+worth recording: a fix that applies a rule at one of two places leaves the
+defect it was written for.
+
+**`injectSimInbound` parsed what it had not stored.** `api/wa-inbound.js` has
+always guarded this — `parseJobs.push` sits on the non-skipped branch — and the
+sim's scheduler did not, so a junk phone or a repeated wamid still bought a live,
+billed Gemini call whose result `applyParse` then discarded on the null key. CT-WA-04
+made that MORE reachable by adding `"+"` to the skipped set, which is how it
+surfaced.
+
+**The statuses loop still tested a phone key by truthiness.** CT-WA-04 replaced
+`if (!phoneKey)` with `isPhoneKey` in `processInbound` and left
+`if (phoneKey && s.id && s.status)` in the statuses branch of the same handler —
+one rule, two spellings, one file, in the commit whose whole subject was one rule
+existing in two places.
+
+**CT-WA-08's quoting turned the transcript's tail-slice into a hazard.**
+`kept.join("\n").slice(-WA_PARSE_TEXT_LEN)` was written when a line was plain
+text; once each turn is `JSON.stringify`d, slicing a BUILT line cuts inside the
+literal and hands the model a closing quote with no opening one — in the very
+prompt whose new instruction says the quotes are what mark a speaker's own words.
+`parseThread` now keeps turns as `{tag, text}` and caps the TEXT before quoting,
+so every line is a complete literal. Only the newest turn can overrun (the loop
+admits it whatever it costs), and JSON escaping makes the truncated result a
+little SHORTER than the budget rather than longer — the safe direction.
+
+Seven tests, including a well-formedness check that `JSON.parse`s every line back
+and a case built from `"` and a backslash so the escaping is exercised rather
+than assumed. All three sabotages fail them (5 red).
+
+**Re-measured against the emulator afterwards, whole probe suite**: the ten HMAC
+cases, replay idempotency, the three timestamp cases and the envelope-shape cases
+all read exactly as before — and **W13 now reports `"read"` where it reported
+`"delivered"`**, which is CT-WA-05 confirmed end-to-end rather than by unit test.
+
+Gate: `121.63 kB` gz · **1226 tests** · 0 lint errors (88 warnings) · style OK.
