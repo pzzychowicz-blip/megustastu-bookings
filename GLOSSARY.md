@@ -266,14 +266,18 @@ Where the real ambiguity lives.
 | A voucher that has been taken out of use | **voided** (`status: "void"`) | Not deleted — deleting would free the number for re-issue. **A voucher is never deleted anywhere in the app.** |
 | A completed booking whose voucher was never recorded | **unsettled** (`isUnsettled`, `UnsettledBanner.jsx`) | Reached by the close-time auto-complete (nobody is there to answer) or by "Complete without using it". Surfaces as a strip section that clears itself when recorded. |
 | What a voucher has left | **remaining** (`remainingOf`) | DERIVED as `value − redeemedTotal(ledger)`, never decremented — which is what makes a replayed redemption idempotent. |
+| A voucher used on a visit | **redemption** (`v.redemptions[bookingId]`; `applyRedemption` / `removeRedemption`, `lib/vouchers.js`) | One ledger entry per booking, keyed by the booking's id — so a retried or replayed redemption rewrites the same entry instead of adding a second, and a walk-back removes exactly that one. **Remaining** is derived from these. |
 
 ## 9. Settings and admin
 
-Eight tabs, split by **audience**: what the restaurant *is*, then what it
+Nine tabs, split by **audience**: what the restaurant *is*, then what it
 *holds*, then how *you* look at it, then reference — and, since v18.0.0, who may
-do what. **Two tabs are conditional, on different questions**: Admin appears
-solely for an account with `settingsAdmin` (*may you*), and Vouchers disappears
-when its module is switched off (*does this restaurant have it*).
+do what. **A tab can be conditional on two different questions, asked in this
+order** by `visibleTabs`: a **module** gate hides it from everybody, admin
+included, when the restaurant does not have the feature — Vouchers, WhatsApp
+(*does this restaurant have it*); a **capability** gate shows it only to an
+account holding one of its capabilities — General, Layout, Reminders, WhatsApp,
+Admin (*may you*). Customers, App and Shortcuts are always there.
 
 | What you see | Correct term | What it does |
 |---|---|---|
@@ -287,9 +291,9 @@ when its module is switched off (*does this restaurant have it*).
 | Drag-and-drop room editor | **floor plan editor** (`FloorPlanEditor.jsx`) | Snap-10 canvas, walls, doors, per-side chairs. |
 | "Shared across all devices" | **restaurant-wide setting** | The six `settings/*` nodes. |
 | "This device only" | **per-device setting** | App width, the four zoom values, the saved split layout — properties of the screen. |
-| A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view. Tri-state: `null` means never chosen. |
+| A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view. Tri-state: `null` means never chosen — and `theme` takes a third value, `"auto"` (the **automatic theme**). |
 | The Admin tab body | **Admin** (`AdminSettings.jsx`) | People, their levels, invitations, and the enforcement switch. Admin-only at both layers — the tab is filtered out, and the rules refuse the writes regardless. |
-| Staff · Manager · Admin | **level** (`role`, `/roles/{uid}`) | The three named tiers. `staff` runs a service; `manager` owns money and configuration; `admin` also administers the app. An absent level reads as **staff**. |
+| Staff · Manager · Admin | **level** (`role`, `/roles/{uid}`) | The three named tiers. `staff` runs a service; `manager` owns money and configuration; `admin` also administers the app. An absent level reads as **staff**. The names on screen ARE the code's values — `staff` · `manager` · `admin` — unlike **optimiser** / `optimizer`, this file's one deliberate UI-vs-code split, so there is no second spelling to look for. |
 | A single ticked cell on someone's row | **extra** (`/roles/{uid}/extras/{cap}`) | One capability granted to one person **on top of** their level. The map that ADDS; its opposite is a **deny**, so a level is always a floor. |
 | A cell switched **off** on someone's row (red ✕) | **deny** (`/roles/{uid}/denies/{cap}`) | One capability taken away from one person, below what their level grants — v18.0.0 phase 3, Patryk's call, because a level that cannot be reduced is a minimum rather than a default. A tick and a deny can never both be set for one capability: `setCapability` clears both maps and picks one from the level, so the screen only asks "should this person have this?". A deny is a present `true`, never `false` — the rules test `.val() !== true`. An admin may not deny their own `settingsAdmin`; that is the last-admin invariant. |
 | "Export the data" | **`dataExport`** | The one gated capability with **no rule behind it**, and `CAPABILITIES` says so rather than letting the enforced chip imply otherwise: the backup file is built client-side out of reads, and `.read` is `auth != null` at the root, so gating it server-side would mean restructuring every read in the app. Hiding the button covers the real threat and no more. |

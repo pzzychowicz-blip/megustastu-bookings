@@ -22693,3 +22693,26 @@ Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style O
   reasoning lives — one answer, found from two places.
 
 Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 65 (phase 7) — GLOSSARY: what the release named, and two lines it had outgrown
+
+**The plan's vocabulary list was checked row by row rather than written.** Voucher
+code, voided, unsettled, remaining, redeem prompt, voucher picker, level, extra,
+deny, capability, rule-enforced capability, capability grid, module registry,
+module switch, hide warning, integrations panel, role enforcement, pending
+invitation, tenant and app name were already there — added by the phases that
+shipped them, which is how the plan intended the file to be kept. Two things were
+not: **redemption** (the ledger entry, keyed by booking) now has a row, and the
+**level** row now says the names on screen ARE the code's. The plan asked for that
+sentence because the file's one deliberate UI-vs-code split — optimiser /
+`optimizer` — is exactly what makes a reader expect a second one.
+
+**Two lines the release had outgrown.** The Settings intro still said "Eight tabs"
+and "Two tabs are conditional" over a list of nine in which six are gated. It is
+rewritten from `visibleTabs` itself rather than from memory: the module gate first
+(Vouchers, WhatsApp), the capability gate second (General, Layout, Reminders,
+WhatsApp, Admin), and Customers, App and Shortcuts always present. And the **user
+preference** row predated `theme: "auto"` from this session's commit 61 — a doc
+that commit should have moved and did not, found here.
+
+Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
