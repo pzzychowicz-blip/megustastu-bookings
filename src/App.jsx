@@ -65,6 +65,10 @@ import {
   kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   savedToast,
+  // v18.0.0 session 8 (C7): the last minute a booking may start, and the
+  // formatter for it. `toTime` was removed here as a dead import once; it has a
+  // caller again.
+  lastStartMins, toTime,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -317,7 +321,8 @@ const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
-import { todayStr, stepDate } from "./lib/day";
+// v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
+import { todayStr, stepDate, WEEKDAY_LONG } from "./lib/day";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -2673,8 +2678,16 @@ function BookingApp({uid}){
       // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
       // viewed day, and block a closed day outright.
       const fh=hoursFor(f.date);
-      if(fh.closed){const wd=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
+      if(fh.closed){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
       if(sm<fh.open*60||sm>fh.close*60){setErrorField("time");setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
+      // v18.0.0 session 8 (C7): a start exactly AT closing passed the test above
+      // (`sm > close*60`), and `findTimes` has never offered one — it stops at
+      // close − 15. A 22:00 booking on a day that closes at 22:00 is a party
+      // arriving as the door is locked, and the close-time auto-complete flips
+      // it to completed on the next 15s tick, so it reads as a visit that
+      // already happened. The message names the last start rather than the
+      // close, because that is the number somebody needs to type.
+      if(sm>=fh.close*60){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
       const cleanPhone=cleanPhoneOf(f.phone);

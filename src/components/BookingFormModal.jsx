@@ -43,8 +43,12 @@ import {
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor, seatingClosed,
   // v18.0.0 session 8 (item 3): what the form previews must agree with.
-  tablesPinned
+  tablesPinned,
+  // v18.0.0 session 8 (C7): the Time field's max is the last START, not close.
+  lastStartMins
 } from "../lib/booking-logic";
+// v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
+import { WEEKDAY_LONG } from "../lib/day";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -56,7 +60,8 @@ import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
-const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// v18.0.0 session 8: WEEKDAY_NAMES is gone — the list lives in lib/day.js, and
+// this file held BOTH a named copy and an inline one twelve lines apart.
 
 // v17.12.0: the id the error message renders under and the invalid field points
 // at. A module const, not an export — a plain const export from a component
@@ -482,7 +487,7 @@ export function BookingFormModal({
   // under its mark, and this is one sentence with no rows, which is exactly the
   // one-line shape the strip already has a precedent for.
   const closedBanner=fh.closed?<AlertPanel role="warn" icon={ClosedIcon} style={{marginBottom:12}}
-    title={"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."} />:null;
+    title={"Closed on "+WEEKDAY_LONG[new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."} />:null;
 
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
@@ -826,7 +831,9 @@ export function BookingFormModal({
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
             min={String(fh.open).padStart(2, "0") + ":00"}
-            max={fh.close >= 24 ? "23:59" : String(fh.close).padStart(2, "0") + ":00"}
+            /* v18.0.0 session 8 (C7): the last start, not the close. `lastStartMins`
+               caps at midnight, so the ">= 24" branch this replaced is inside it. */
+            max={toTime(lastStartMins(fh.close))}
             className="mgt-hover-scale"
             style={inp()} />;}}</Fld><Fld label="Seating preference">{function(fid){return <select
             id={fid}
@@ -887,7 +894,7 @@ export function BookingFormModal({
             <div style={{textAlign:"left"}}>
               <div style={{fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-primary)"}}>Repeat weekly</div>
               <div style={{fontSize: T.body,fontWeight: FW.regular,color:"var(--text-faint)",marginTop:2}}>
-                {"Create a standing booking every "+(WEEKDAY_NAMES[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
+                {"Create a standing booking every "+(WEEKDAY_LONG[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
               </div>
             </div>
             <Toggle label="Repeat weekly" on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />

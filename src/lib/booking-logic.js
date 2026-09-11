@@ -833,6 +833,20 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
 //   2. OUTWARD EARLY-STOP: scan from `around` outwards and stop after 10 valid
 //      slots per side — exactly what formatSugg would keep. Result is returned
 //      ascending, so formatSugg's slice sees the identical list.
+// ── v18.0.0 session 8 (C7): the last minute a booking may START ─────────────
+// `findTimes` has encoded this as `close*60 - 15` since v14 and never offered a
+// later slot; `doSave` did not know it, and its range test was `sm > close*60`
+// — so a start exactly AT closing passed. A 22:00 booking on a day that closes
+// at 22:00 is a party arriving as the door is locked, and worse than useless:
+// the close-time auto-complete in `usePersistence` flips it to completed on the
+// next 15s tick, so it reads as a visit that already happened.
+//
+// The cap at midnight is the app's own rule that no booking may START after it
+// (constants.js allows a close of 24 or 25 as an EXTEND window only), so a
+// restaurant closing at 01:00 still takes its last booking at 23:45.
+export function lastStartMins(close){
+  return Math.min(Number(close)||0,24)*60-15;
+}
 export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
@@ -853,7 +867,7 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
     if(Date.now()-t0>BUDGET_MS) return false; // budget spent — skip the expensive trial
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   }
-  var first=h.open*60,last=h.close*60-15;
+  var first=h.open*60,last=lastStartMins(h.close);
   var CAP=10; // formatSugg keeps 10 per side — scanning further is wasted work
   // Stay on the quarter-hour grid even when `around` isn't grid-aligned (the old
   // fixed-grid scan only ever produced grid slots): step outwards from the

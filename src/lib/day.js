@@ -181,6 +181,21 @@ export function stepDate(dateStr, n) {
 // Exported (/code-review): the Reminders summary and the standing-booking rows
 // read it rather than keeping their own byte-identical copies.
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// v18.0.0 session 8: the LONG list, for the same reason and two versions later.
+// Session 7 consolidated the short one; the long one was in FOUR places —
+// `DaySheet`'s `WD`, `BookingFormModal`'s `WEEKDAY_NAMES`, an inline copy in
+// that SAME file's closed-day banner, and another inline copy in `doSave`. A
+// named constant and an inline copy of it in one file is the shape this repo
+// keeps finding: the copy that drifts is the one nobody is looking at.
+//
+// The LIST only, deliberately — not a `weekdayLong()` to match `weekdayShort()`.
+// Its callers disagree about what an unreadable date should do (`weekdayShort`
+// returns "" for anything non-canonical, `DaySheet` prints "" only for an
+// unparseable one, and `doSave` falls back to "that day"), and those are
+// three considered answers rather than three copies of one. Sharing the DATA
+// removes the duplication; sharing the lookup would change behaviour in a print
+// sheet under cover of a tidy-up.
+export const WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export function weekdayShort(dateStr) {
   // The typeof is NOT redundant with stepUTC's own: stepUTC(null) returns null,
   // which is `===` the input, and `new Date(null)` is the epoch — a Thursday. The

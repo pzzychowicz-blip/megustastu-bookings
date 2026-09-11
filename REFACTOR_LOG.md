@@ -23356,3 +23356,41 @@ No new tests: this is App wiring on top of predicates that already have them
 back from RTDB.
 
 Gate: `124.75 kB` gz · **1303 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 86 (session 8, C7) — the last start is before closing
+
+`doSave`'s range test was `sm > fh.close*60`, so a start **exactly at** closing
+passed. `findTimes` has never offered one — it stops at `close − 15` and has
+since v14 — so the suggestions and the validation disagreed, and the validation
+was the wrong one.
+
+A 22:00 booking on a day that closes at 22:00 is a party arriving as the door is
+locked. Worse, the close-time auto-complete in `usePersistence` flips it to
+`completed` on the next 15-second tick, so within moments it reads as a visit
+that already happened — the same mechanism that made `seated` unofferable past
+close in v17.16.12.
+
+`lastStartMins(close)` is the rule, and it has **three** readers now:
+`findTimes`, which had it inline; `doSave`'s new refusal, whose message names
+the last start rather than the close, because that is the number somebody needs
+to type ("The last start on Fridays is 21:45."); and the form's Time field,
+whose `max` becomes that minute. The midnight cap lives inside it — a close of
+24 or 25 is an EXTEND window rather than a booking window, and the app's rule
+has always been that no booking may START after midnight, so the `>= 24` branch
+the Time field used to carry is now one `Math.min`.
+
+**And the weekday list, which the message needed.** Session 7 consolidated the
+SHORT weekday list into `lib/day.js`; the LONG one was still in **four** places
+— `DaySheet`'s `WD`, `BookingFormModal`'s `WEEKDAY_NAMES`, an inline copy in
+that same file's closed-day banner twelve lines from the constant, and another
+inline copy in `doSave`. `WEEKDAY_LONG` replaces all four.
+
+The **list** only, deliberately, not a `weekdayLong()` to match `weekdayShort()`.
+Its callers disagree about what an unreadable date should produce —
+`weekdayShort` returns `""` for anything non-canonical, `DaySheet` returns `""`
+only for an unparseable one, `doSave` falls back to "that day" — and those are
+three considered answers, not three copies of one. Sharing the data removes the
+duplication; sharing the lookup would have changed what the print sheet does
+under cover of a tidy-up.
+
+Gate: `124.69 kB` gz · **1305 tests** · 0 lint errors (88 warnings) · style OK.

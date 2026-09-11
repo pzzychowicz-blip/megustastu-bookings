@@ -26,7 +26,7 @@ import {
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
-  tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast,
+  tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2100,6 +2100,21 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (C7) — the last start is before closing ───────────────
+describe("lastStartMins", () => {
+  it("is a quarter of an hour before close", () => {
+    expect(lastStartMins(22)).toBe(21 * 60 + 45);
+    expect(lastStartMins(23)).toBe(22 * 60 + 45);
+    expect(lastStartMins(13)).toBe(12 * 60 + 45);
+  });
+
+  it("never lets a booking start after midnight, whatever the close", () => {
+    // 24 and 25 are legal closes — an EXTEND window, not a booking window.
+    expect(lastStartMins(24)).toBe(23 * 60 + 45);
+    expect(lastStartMins(25)).toBe(23 * 60 + 45);
   });
 });
 
