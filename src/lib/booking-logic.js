@@ -1162,6 +1162,21 @@ export function tablesPinned(status,hasManual,cleared){
   if(hasManual||cleared) return false;
   return status==="seated"||status==="completed"||status==="cancelled";
 }
+// C2: a booking with no table could be seated, from every door — and once
+// seated it is `isLocked`, which `applyOpt` reads as "copy its tables through",
+// so a locked booking holding `[]` is never placed again by anything. The party
+// is at a table nobody recorded, the floor plan shows the room emptier than it
+// is, and no later pass corrects it. Refused at the door instead, with the
+// thing to do rather than a silent no-op.
+//
+// Only the TRANSITION is refused, never a later save of a booking already in
+// that state: the app declines to create the anomaly, and declines to hold
+// somebody's notes edit hostage to one that already exists.
+export function seatRefusal(b){
+  if(!b) return null;
+  if(!(b.tables||[]).length) return "Assign a table before seating this booking.";
+  return null;
+}
 // The refusal when a pinned party no longer fits the tables it is sitting at
 // (Patryk chose refuse over warn: the guests are already there, so the app
 // cannot quietly decide the arithmetic is close enough). `comboCapBest` is the

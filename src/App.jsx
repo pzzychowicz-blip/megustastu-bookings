@@ -51,6 +51,8 @@ import {
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   // v18.0.0 session 8 (C1): and leaving seated puts the booked plan back.
   unseatRestore,
+  // v18.0.0 session 8 (C2): and it cannot be seated with no table at all.
+  seatRefusal,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2425,8 +2427,13 @@ function BookingApp({uid}){
         // `replacePinnedClashes` could NOT re-place arrives there with no
         // tables, which is exactly the input that guard was written for.
         if(pinned&&f.status==="seated"){
-          if(orig&&f.date!==orig.date){setErrorField("date");setError("A seated booking can't be moved to another date — change the status first.");return;}
           const seatB=fin.find(function(b){return b.id===editId;});
+          // C2, at the form's door. Gated on `seatingNow` for the reason the
+          // predicate's own note gives: the app refuses to CREATE a seated
+          // booking with no table, and does not hold an unrelated edit of one
+          // that already exists hostage to it.
+          if(seatingNow){const noTable=seatRefusal(seatB);if(noTable){setError(noTable);return;}}
+          if(orig&&f.date!==orig.date){setErrorField("date");setError("A seated booking can't be moved to another date — change the status first.");return;}
           const fitRefusal=seatedFitRefusal(size,seatB?seatB.tables:[]);
           if(fitRefusal){setError(fitRefusal);return;}
           const lockedClash=pinnedClashParties(fin,f.date,editId).locked;
@@ -3155,6 +3162,15 @@ function BookingApp({uid}){
     // only after one has been answered. Not gated on `ok`: a write held by the
     // stale gate still shows the seat, and the party is sitting down either way.
     const seatCur=bookings.find(function(x){return x.id===id;});
+    // v18.0.0 session 8 (C2): this door covers the quick-status popup, the List
+    // card's button and the S key — all three call here — so one check answers
+    // for all of them. A refusal TOAST rather than a disabled button or a
+    // silent return: the fix is one tap away in Assign, and a button that does
+    // nothing is the worst of the three answers.
+    if(status==="seated"&&seatCur&&seatCur.status!=="seated"){
+      const noTable=seatRefusal(seatCur);
+      if(noTable){flashRefusal(noTable);return false;}
+    }
     const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur);
     const user=getUser();
     const nowM=nowMins;

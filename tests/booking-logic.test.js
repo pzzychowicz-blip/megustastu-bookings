@@ -25,7 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
-  unseatRestore,
+  unseatRestore, seatRefusal,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2082,6 +2082,23 @@ describe("seatedFitRefusal", () => {
     expect(seatedFitRefusal(4, [])).toBe(null);
     expect(seatedFitRefusal(4, null)).toBe(null);
     expect(seatedFitRefusal(4, undefined)).toBe(null);
+  });
+});
+
+describe("seatRefusal", () => {
+  it("refuses to seat a booking that has no table", () => {
+    expect(seatRefusal(mk({ tables: [] }))).toBe("Assign a table before seating this booking.");
+    expect(seatRefusal(mk({ tables: undefined }))).toBe("Assign a table before seating this booking.");
+  });
+
+  it("says nothing when there is a table to sit at", () => {
+    expect(seatRefusal(mk({ tables: ["3"] }))).toBe(null);
+    expect(seatRefusal(mk({ tables: ["1A", "1B"] }))).toBe(null);
+  });
+
+  it("survives a booking gone from the list", () => {
+    expect(seatRefusal(null)).toBe(null);
+    expect(seatRefusal(undefined)).toBe(null);
   });
 });
 

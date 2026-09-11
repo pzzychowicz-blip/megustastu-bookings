@@ -23037,3 +23037,31 @@ save is WRITING rather than the one stored), and each of the five ways it must
 return null.
 
 Gate: `123.47 kB` gz · **1266 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 78 (session 8, C2) — a booking with no table cannot be seated
+
+Every door would seat a booking that had no table: the quick-status popup, the
+List card's button, the `S` key and the form's Save. And once seated it is
+`isLocked`, which `applyOpt` reads as *copy its tables through* — so a locked
+booking holding `[]` is **never placed again by anything**. The party is sitting
+at a table nobody recorded, the floor plan draws the room emptier than it is,
+the optimiser routes other bookings through a table that is taken, and no later
+pass corrects any of it.
+
+`seatRefusal(b)` is the predicate; `updateStatus` and `doSaveEdit` both read it,
+which is three of the four doors for free — the popup, the card and the key all
+call `updateStatus`.
+
+**A refusal toast, not a disabled button and not a silent return.** The existing
+`flashRefusal` channel (permissions already use it) says what to do — "Assign a
+table before seating this booking." — and the Assign button is one tap away. A
+button that does nothing when pressed is the worst of the three answers, and it
+is what the code did.
+
+**Only the TRANSITION is refused.** A booking that is already seated with no
+table is an anomaly that exists; refusing every later save of it would hold a
+notes edit hostage to a state the person editing did not create. The app
+declines to CREATE the anomaly. That is why the form's check is gated on
+`seatingNow` rather than on the draft's status.
+
+Gate: `123.57 kB` gz · **1269 tests** · 0 lint errors (88 warnings) · style OK.
