@@ -22856,3 +22856,57 @@ beside the voucher gates that make the same lookup. No behaviour change:
 `seatNoteFor` still returns null for a booking gone from the list.
 
 Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 75 (session 7 /code-review) — what the review checked, fixed and left
+
+Run at `max` over session 7's nine commits (59–67), on Patryk's instruction to
+check everything without subagents and fix every finding; his one
+named fix is Commit 68. **Seven findings survived verification, and all seven
+are fixed:**
+
+| Finding | Verdict | Commit |
+|---|---|---|
+| ⇧D silently dead while Automatic dark mode is on | confirmed | 69 |
+| Runbook step 4 — a device open since step 1 never registers | confirmed | 70 |
+| Runbook step 5 — "the control is disabled" | confirmed | 70 |
+| README — "790+" where the approved 800 is now true | confirmed | 71 |
+| Date pill — no focus ring at all without `:has()` | plausible | 72 |
+| A third byte-identical Sun-first weekday list | confirmed | 73 |
+| `updateStatus`'s double lookup | confirmed | 74 |
+
+**Checked and sound — written down so nobody re-derives it.** The modal stack's
+setter is functional (`setStack(prev => …)`), so `setVoucherBack(null)` +
+`setSeatNote(snap)`, and `setShowForm(false)` + `setSeatNote(snap)`, both apply in
+one tick. The rules put no `.validate` on `prefs/theme`, so `"auto"` writes in
+production as it did in DEV. No serverless function writes `/bookings`, so the
+README's "no LLM output changes a booking without a staff action" holds in the
+code. Every seat path reaches `updateStatus` or `doSaveEdit` — the quick-status
+popup calls `onStatus` and then closes, the List card, the `S` key. `mgt-theme`
+has no reader beyond `readThemePref` and the boot script. The form's duration
+stepper clamps to the same 15–480 as Book Again, and its `auto` is the same
+`getDur`. The docs' figures re-measured true: 37 test files matching `CLAUDE.md`'s
+list name for name, 16 rev pairs, 9 tabs, 18 tags, and the runbook's four
+cross-referenced sections and its `mgt-prod` alias all exist.
+
+**Verified live in DEV after the fixes.** The App tab reads "Automatic dark mode",
+with "Controlled by Automatic dark mode." under the locked switch. ⇧D under
+Automatic showed the refusal and left the theme alone. The header pill's wrapper
+draws `solid 2px` offset `2px` with the input's own outline `none`, and
+`CSS.supports("selector(:has(*))")` is true. The Reminders tab lists "Weekly: Sun",
+"Weekly: Wed" and "Weekly: Thu" from the shared list. "QA Seat note", walked back
+from completed to confirmed and seated from its List card, raised the note — "2
+guests · 14:00", 1B, all three lines — and Done closed it. The standing-booking
+rows could not be looked at: standing bookings are off in DEV and render none, and
+`RULE_WD` is now the same array by import.
+
+**Left, and said so:**
+- **Seating from the edit form drops a length changed in the same save** — found
+  by reading `doSaveEdit`, not reproduced, pre-existing since v14 and outside this
+  session's lines; `ROADMAP.md` → Deferred carries the mechanism.
+- **`DateField` on iPhone and iPad Safari and on the Android tablet** — still not
+  seen on a device.
+
+DEV data this pass changed: "QA Seat note" is now seated (it was completed), and
+the account's theme is back to explicit light, as found.
+
+Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.

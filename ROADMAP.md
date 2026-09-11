@@ -35,6 +35,20 @@ session and keeping it in sync.
   and ordered: the six steps, and where each one's detail lives, are
   `database.rules.README.md` § *v18.0.0 — the production deploy, in order*.
   Delete this entry when the last of them — `enforceRoles` on — is done.
+- **Seating a booking from the edit form drops a length changed in the same
+  save.** Found by READING at session 7's `/code-review`, not reproduced —
+  reproduce it first. When `doSaveEdit` moves a booking INTO seated with its time
+  and date untouched, `applySeatedShift(orig, …)` pins the scheduled end from the
+  STORED `duration`, before `formPlan` is computed, and its `newDuration` then
+  overwrites `saveDur`, `saveCustDur` and `saveOrigDurFinal`. So a new length on
+  the stepper — or a party-size change, which re-derives the default length — made
+  in the save that seats the party is silently discarded, and `plannedDuration`
+  (Book Again's source) carries the old length onward. Pre-existing since v14.
+  The likely fix shifts from the booking as it is being SAVED (`duration:
+  formPlan` when the plan changed); `doSaveEdit` is the app's most dangerous
+  function, so it wants its own commit, the decision pulled into `lib/` with a
+  test, and a live check between 13:00 and 22:00, when a seated shift lands inside
+  opening hours.
 
 ## Designed, not implemented
 
