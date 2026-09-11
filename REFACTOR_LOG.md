@@ -23216,3 +23216,41 @@ refuses, and a manual-table save is already gated by `doSave`'s own
 live verification list, and the wording changes only if a save can still do it.
 
 Gate: `124.45 kB` gz · **1289 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 82 (session 8, R5) — history stops recording a phone nobody typed
+
+Measured live 2026-09-11: **4 of 4** ordinary edits of bookings without a phone
+wrote `phone none→+34` into the booking's history, while the stored phone stayed
+`""`.
+
+The cause is an asymmetry inside one line of `diffBooking`. The stored side was
+read RAW (`orig.phone || ""`); the form side had half the rule applied — a bare
+`"+"` counted as nothing, the configured prefix did not. `openEdit` seeds
+`generalSettings.phonePrefix` into the field of a booking that has no phone, so
+such a booking **differed from itself on every save**.
+
+Two consequences, and the second is the one that matters more. The history gained
+an entry describing a change that did not happen — in the audit trail staff rely
+on to answer "who moved this booking and when". And `editChanged` is derived from
+this same string, so the **Undo pill was armed** for a save that changed nothing:
+an offer to undo a non-change, which if taken writes a booking back over whatever
+another device did in the meantime.
+
+The fix is one rule in one place. `enteredPhone(p, prefix)` — empty, a bare `"+"`,
+or exactly the untouched prefix all mean "no phone", because the prefix is a
+typing convenience the form puts in the field rather than data. App's
+`cleanPhoneOf` has applied exactly that on the SAVE path since v17.0.0 and now
+delegates to it; `diffBooking` applies it to **both** sides. The prefix is passed
+in because it is a restaurant setting and `booking-logic.js` reads no settings —
+the same reason `hoursFor` takes a date rather than consulting a hook.
+
+**This had to land before the activity log (J)**, which is built out of the same
+history entries: without it the new log would start life full of edits that never
+happened, one per save of every phone-less booking in the restaurant.
+
+Six tests: the predicate's three "no phone" shapes and the numbers it must keep
+(including `+345`, a prefix plus one digit, which IS a number), and `diffBooking`
+reporting "no field changes" for the seeded prefix and for a bare `+`, while
+still recording a phone genuinely added or genuinely removed.
+
+Gate: `124.45 kB` gz · **1295 tests** · 0 lint errors (88 warnings) · style OK.

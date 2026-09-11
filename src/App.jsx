@@ -59,6 +59,8 @@ import {
   seatedShiftFor,
   // v18.0.0 session 8 (C): are the tables it has still usable for this window?
   tablesFreeFor,
+  // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
+  enteredPhone,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -1100,10 +1102,11 @@ function BookingApp({uid}){
   const { userPrefs, prefsLoaded, saveUserPrefs } = useUserPrefs(uid);
   // A phone value that is empty, a bare "+", or exactly the untouched prefix
   // seed counts as "no phone" (the prefix is a typing convenience, not data).
-  function cleanPhoneOf(p){
-    const t=p==null?"":String(p).trim();
-    return (t===""||t==="+"||t===generalSettings.phonePrefix)?"":t;
-  }
+  // v18.0.0 session 8 (R5): the rule moved to `enteredPhone` in booking-logic
+  // so `diffBooking` can apply the SAME one. This stays as the name the save
+  // path has used since v17.0.0, and supplies the setting the pure module
+  // cannot read.
+  function cleanPhoneOf(p){ return enteredPhone(p,generalSettings.phonePrefix); }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
   // Owns bookings/tableBlocks state, Firebase listeners, savers, and the
@@ -2405,7 +2408,7 @@ function BookingApp({uid}){
         // NOT be armed (saveBookings still returns true for an empty patch —
         // persist() skips the write but reports dispatched — so `ok` alone
         // would offer an Undo for a save that changed nothing).
-        const editDiff=orig?diffBooking(orig,f,size):"";
+        const editDiff=orig?diffBooking(orig,f,size,generalSettings.phonePrefix):"";
         const editChanged=!!orig&&editDiff!=="saved (no field changes)";
         const editHist=orig?histEntry("edited: "+editDiff,getUser()):histEntry("edited",getUser());
         // v14 p1: scheduledTime resolution.

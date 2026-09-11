@@ -26,7 +26,7 @@ import {
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
-  tablesFreeFor, trialFits,
+  tablesFreeFor, trialFits, enteredPhone,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2100,6 +2100,61 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (R5) — history stops recording a phone nobody typed ───
+describe("enteredPhone", () => {
+  it("treats empty, a bare + and the untouched prefix as no phone", () => {
+    expect(enteredPhone("", "+34")).toBe("");
+    expect(enteredPhone("+", "+34")).toBe("");
+    expect(enteredPhone("+34", "+34"), "the seed, untouched").toBe("");
+    expect(enteredPhone("  +34  ", "+34")).toBe("");
+    expect(enteredPhone(null, "+34")).toBe("");
+    expect(enteredPhone(undefined, "+34")).toBe("");
+  });
+
+  it("keeps a number somebody actually typed", () => {
+    expect(enteredPhone("+34600111222", "+34")).toBe("+34600111222");
+    expect(enteredPhone(" 600111222 ", "+34")).toBe("600111222");
+    expect(enteredPhone("+345", "+34"), "a prefix plus one digit is a number").toBe("+345");
+  });
+});
+
+describe("diffBooking and the phone that never changed (R5)", () => {
+  // The form as `openEdit` builds it for a booking with no phone: the prefix is
+  // seeded into the field, and nothing else is touched.
+  function untouchedForm(orig, phone) {
+    return {
+      name: orig.name, size: orig.size, time: orig.time, date: orig.date,
+      preference: orig.preference, phone: phone, customDur: null,
+      status: orig.status, notes: "", deposit: "", voucherCode: "",
+      manualTables: [], preferredTables: [],
+    };
+  }
+
+  it("records nothing when the only 'change' is the seeded prefix", () => {
+    const orig = mk({ phone: "" });
+    expect(diffBooking(orig, untouchedForm(orig, "+34"), orig.size, "+34"))
+      .toBe("saved (no field changes)");
+  });
+
+  it("records nothing for a bare + either", () => {
+    const orig = mk({ phone: "" });
+    expect(diffBooking(orig, untouchedForm(orig, "+"), orig.size, "+34"))
+      .toBe("saved (no field changes)");
+  });
+
+  it("still records a phone that really was added", () => {
+    const orig = mk({ phone: "" });
+    expect(diffBooking(orig, untouchedForm(orig, "+34600111222"), orig.size, "+34"))
+      .toContain("phone none→+34600111222");
+  });
+
+  it("still records one that was removed", () => {
+    const orig = mk({ phone: "+34600111222" });
+    expect(diffBooking(orig, untouchedForm(orig, "+34"), orig.size, "+34"))
+      .toContain("phone +34600111222→none");
   });
 });
 
