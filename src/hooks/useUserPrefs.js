@@ -60,7 +60,7 @@ import { dbError } from "../lib/dbError";
 // and the scalar keeps the node present once written (the priorities lesson).
 export const DEFAULT_USER_PREFS = {
   v: 1,
-  theme: null,          // "dark" | "light" | null (null = follow the OS)
+  theme: null,          // "dark" | "light" | "auto" | null (null = never chosen)
   reduceMotion: null,   // boolean | null
   planGestures: null,   // boolean | null
   navLocked: null,      // boolean | null
@@ -82,7 +82,7 @@ export const DEFAULT_USER_PREFS = {
 // turning Split View off must also forget the saved split layout, or it comes
 // back the moment the feature is re-enabled.
 //
-// `theme` is deliberately NOT here. It is a tri-state string with a `?theme=`
+// `theme` is deliberately NOT here. It is a string pref (dark · light · auto, or null for never chosen) with a `?theme=`
 // override that must skip both the apply and the seed branches, and folding
 // those into a table would hide the one pref whose special cases have bitten.
 export const PREF_SPEC = {
@@ -113,7 +113,10 @@ export function sanitizeUserPrefs(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   return {
     v: 1,
-    theme: src.theme === "dark" ? "dark" : src.theme === "light" ? "light" : null,
+    // v18.0.0 session 7: "auto" is Automatic — follow this device's OS — kept as a
+    // CHOICE. null cannot carry it: null means "never chosen", which App's seeding
+    // effect fills from the next device to sign in with an explicit value.
+    theme: src.theme === "dark" || src.theme === "light" || src.theme === "auto" ? src.theme : null,
     reduceMotion: triBool(src.reduceMotion),
     planGestures: triBool(src.planGestures),
     navLocked: triBool(src.navLocked),

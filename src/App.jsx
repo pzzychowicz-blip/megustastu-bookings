@@ -387,7 +387,8 @@ const DEV_THEME_FORCED=devThemeOverride()!==undefined;
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
 // preference for useThemeMode: true (dark) | false (light) | undefined (follow
-// the OS live). MUST mirror the no-flash inline script in index.html — same key,
+// the OS live — which is also what "auto", v18.0.0's Automatic, reads as). MUST
+// mirror the no-flash inline script in index.html — same key,
 // same value convention ("dark"/"light"), and since v17.9.0 the same
 // ?theme= override, which wins over the stored key at both sites.
 function readThemePref(){
@@ -1338,6 +1339,10 @@ function BookingApp({uid}){
   const [themePref,setThemePref]=useState(readThemePref);
   const isDark=useThemeMode(themePref);
   function onToggleDark(){
+    // v18.0.0 session 7: locked while Automatic is on — Patryk's choice. The
+    // switch renders disabled; this guard keeps any other caller from quietly
+    // replacing Automatic with a fixed look.
+    if(themePref===undefined) return;
     const next=!isDark;
     // v17.6.0: localStorage stays as the PRE-MOUNT cache — index.html's
     // no-flash script reads this key before React mounts and long before
@@ -1349,6 +1354,28 @@ function BookingApp({uid}){
     // must not persist — the override exists so a theme can be inspected without
     // touching the signed-in user's saved settings.
     if(!DEV_THEME_FORCED) saveUserPrefs({theme:next?"dark":"light"});
+  }
+  // v18.0.0 session 7: the Automatic switch (Settings → App) — follow this
+  // device's light/dark setting, live. Stored on the account as "auto", NEVER as
+  // null: null means "never chosen", and the seeding effect below fills a
+  // never-chosen account from the next device to sign in with an explicit
+  // value, so Automatic picked on the iPad would be overwritten by the tablet.
+  // Turning it OFF keeps the look the device is showing right now, as an explicit
+  // choice — the least surprising answer, since nothing on screen changes.
+  function onToggleAutoTheme(){
+    if(themePref===undefined){
+      const dark=isDark;
+      try{localStorage.setItem("mgt-theme",dark?"dark":"light");}catch{/* ignore */}
+      setThemePref(dark);
+      if(!DEV_THEME_FORCED) saveUserPrefs({theme:dark?"dark":"light"});
+    }else{
+      // localStorage holds "auto" rather than dropping the key: the no-flash
+      // script already follows the OS for anything that is not "dark"/"light",
+      // and an explicit value reads as a choice to whoever looks next.
+      try{localStorage.setItem("mgt-theme","auto");}catch{/* ignore */}
+      setThemePref(undefined);
+      if(!DEV_THEME_FORCED) saveUserPrefs({theme:"auto"});
+    }
   }
   // v17.0.0 correction: per-device app width (see readAppWidth above).
   const [appWidth,setAppWidth]=useState(readAppWidth);
@@ -1470,6 +1497,10 @@ function BookingApp({uid}){
       const dark=userPrefs.theme==="dark";
       try{localStorage.setItem("mgt-theme",userPrefs.theme);}catch{/* ignore */}
       setThemePref(dark);
+    }else if(userPrefs.theme==="auto"){
+      // v18.0.0 session 7: Automatic, chosen on some device of this account.
+      try{localStorage.setItem("mgt-theme","auto");}catch{/* ignore */}
+      setThemePref(undefined);
     }else if(themePref!==undefined){
       // Only seed an EXPLICIT device preference. `undefined` means this device
       // follows the OS, which is the absence of a choice — writing it up would
@@ -4395,6 +4426,8 @@ function BookingApp({uid}){
             onDirty={setSettingsDirty}
             isDark={isDark}
             onToggleDark={onToggleDark}
+            autoTheme={themePref===undefined}
+            onToggleAutoTheme={onToggleAutoTheme}
             appWidth={appWidth}
             onSetAppWidth={onSetAppWidth}
             reduceMotion={reduceMotion}

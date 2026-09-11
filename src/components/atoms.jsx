@@ -1761,10 +1761,16 @@ export function SmallTag({ label, style }) {
 // ("Active" / "Inactive") makes one control read as two. It has no default: a
 // default here would be a silent twenty-first answer to a question every call
 // site has to answer for itself, which is `ModalTitle`'s `background` lesson.
-export function Toggle({ on, onClick, label }) {
+export function Toggle({ on, onClick, label, disabled = false }) {
   return (
     <button
       onClick={onClick}
+      // v18.0.0 session 7: a switch that is CONTROLLED by another one (Dark mode
+      // under Automatic). The native attribute, not aria-disabled: it takes the
+      // switch out of the tab order and out of the hover lift and press dip,
+      // which already read `:not(:disabled)`. Dimmed like the steppers' disabled
+      // arrows; the row beside it says why.
+      disabled={disabled}
       role="switch"
       aria-checked={!!on}
       aria-label={label}
@@ -1772,7 +1778,8 @@ export function Toggle({ on, onClick, label }) {
       style={{
         width: 48, height: 26,   /* @canvas */ borderRadius: R.pill,
         border: "1px solid var(--border-glass)",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
         background: on ? "var(--toggle-on)" : "var(--toggle-off)",
         position: "relative", flexShrink: 0,
         boxShadow: "var(--shadow-well)",
@@ -1780,7 +1787,7 @@ export function Toggle({ on, onClick, label }) {
         // because an INLINE transition beats .mgt-hover-scale's stylesheet one,
         // so omitting it left this button's hover lift with nothing to ease
         // (the same shorthand-collision class as the v17.8.0 hover/press fix).
-        transition: "background-color " + M.move + ", transform " + M.tap
+        transition: "background-color " + M.move + ", transform " + M.tap + ", opacity " + M.move
       }}
     >
       <div style={{

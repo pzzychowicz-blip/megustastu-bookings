@@ -22528,3 +22528,58 @@ either way — the header row measured identically at 1024 and 1280, because the
 app's own width is capped on this device.
 
 Gate: `121.96 kB` gz (+0.26) · **1237 tests** (+4) · 0 lint errors (88 warnings) · style OK.
+
+### Commit 61 (session 7) — Automatic dark mode: follow the device, as a choice
+
+The theme already followed the OS for an account that had never touched Dark
+mode — and that was the only way to get it: the first tap on the switch wrote an
+explicit look, and nothing could ever put it back. **Settings → App now has an
+Automatic switch** — Patryk's "follow the device" over a sunset schedule or fixed
+hours — above **Dark mode**, which is **locked while Automatic is on**, his choice
+over "a tap takes over" and over one three-way control.
+
+**Stored as `theme: "auto"`, never as `null` — the one decision here that could
+have gone wrong silently.** `null` already means "never chosen", and the
+prefs-seeding effect fills a never-chosen account from the next device to sign in
+with an explicit local value. Automatic stored as `null` on the iPad would have
+been overwritten by the tablet's `"dark"` the next time it mounted, with no error
+anywhere. `sanitizeUserPrefs` now keeps `"auto"`, the seeding effect applies it,
+and `onToggleAutoTheme` writes it. Turning Automatic OFF keeps the look the device
+is showing at that moment, as an explicit choice, so nothing on screen moves.
+
+**No boot-script edit and no CSP pin change.** The no-flash script already follows
+the OS for any stored value that is not `"dark"` or `"light"`, so `"auto"` —
+written to `localStorage` rather than dropping the key — paints correctly before
+React mounts. That property is now a test that runs the REAL script bytes in a
+`vm` context in both OS directions, because the next edit to the script is
+exactly what could quietly break it. Only its HTML comment changed, which sits
+outside the hashed bytes; `tests/csp.test.js` still passing is the proof.
+
+`Toggle` gains `disabled`: the native attribute — out of the tab order, out of the
+hover lift and press dip, which already read `:not(:disabled)` — dimmed to 0.4
+with the `not-allowed` cursor, as the steppers do. The Dark mode title fades to
+`--text-faint` and "Controlled by Automatic." reveals under it, so the dimmed
+switch says why. `onToggleDark` refuses while Automatic is on as well, so no other
+caller can quietly replace it with a fixed look.
+
+**Verified live in DEV, in both directions, sampled per frame.** From an account
+holding explicit light: Automatic ON flipped the page to the OS's dark within one
+sampled frame of the click, wrote `localStorage` `"auto"`, and dimmed Dark mode to
+**0.4** (1 → 0.88 → 0.57 → 0.43 → 0.4 over ~250 ms) with `disabled` and
+`not-allowed`; a click on the dimmed switch changed nothing. With the pane's OS
+emulation flipped to light and back, the page followed live both times, the
+locked switch reporting the OS state. **The account, not only the device, holds
+`"auto"`:** a stale `"dark"` planted in `localStorage` came back as `"auto"` after
+a reload, which only the seeding effect reading the node can do. "Controlled by
+Automatic." reveals over ~555 ms (0 → 16 px, opacity 0 → 1) and collapses over
+~566 ms before it unmounts — in and out. Turning Automatic OFF kept the look on
+screen as an explicit choice (`"dark"` with the OS dark, `"light"` with it
+light), which is also how the DEV account was left: explicit light, as found.
+
+**A measurement lesson from this pass, recorded rather than smoothed away.** One
+batch of clicks closed Settings instead of toggling the switch: the page's CSS
+viewport was 884 px while the screenshot frame was 800, so a click placed at the
+switch's CSS coordinates landed on the scrim. The switch was not broken — the
+instrument was. Every click after that was made by element ref.
+
+Gate: `122.04 kB` gz (+0.08) · **1240 tests** (+3) · 0 lint errors (88 warnings) · style OK.

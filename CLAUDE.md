@@ -513,6 +513,17 @@ every configured device on first login.
 the absence of a choice, and writing it up would freeze the user to whatever
 the OS said at first login.
 
+**v18.0.0 session 7 makes following the OS a CHOICE as well: `theme: "auto"`**,
+the Settings → App **Automatic** switch, with Dark mode locked while it is on.
+It is stored explicitly because `null` cannot carry it — `null` is "never
+chosen", which the seeding effect fills from the next device to sign in with an
+explicit value, so Automatic picked on one device would be overwritten by
+another. `"auto"` reads as `undefined` at every theme site (`readThemePref`,
+`useThemeMode`, the no-flash script), so it needed no boot-script edit and no new
+CSP hash; `tests/prefs.test.js` runs the real script bytes to keep it that way.
+A device-local `"auto"` is still not seeded up: for a never-chosen account it
+already means what the account gets.
+
 **v17.14.0: the four BOOLEANS are driven by `PREF_SPEC`** (`useUserPrefs.js`),
 which states each one's localStorage key and default direction once instead of
 App writing it out three times. The house convention it encodes: **only the
