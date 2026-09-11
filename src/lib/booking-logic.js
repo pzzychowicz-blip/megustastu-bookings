@@ -748,13 +748,19 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
   var result=applyOpt(base,date,blocks);
   var assigned=result.find(function(b){return b.id===trialId;});
   if(!assigned||!assigned.tables||!assigned.tables.length) return null;
-  // Displacement check only for new bookings (not edits)
-  if(!editId){
-    var prevAssigned=bookings.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0;});
-    var displaced=result.filter(function(b){return b.id!==trialId&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-    var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
-    if(kicked.length>0) return null;
-  }
+  // v18.0.0 session 8 (C5): the displacement check runs for an EDIT too. It was
+  // gated on `!editId`, so the form's availability preview answered a different
+  // question from the one Save asks — `doSaveEdit` has always refused a save
+  // that would kick an existing booking, while this said the tables were
+  // available and even drew them. A preview that disagrees with the save is
+  // worse than no preview.
+  //
+  // The edited booking cannot be its own casualty: `displaced` excludes
+  // `trialId`, so its presence in `prevAssigned` is harmless.
+  var prevAssigned=bookings.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0;});
+  var displaced=result.filter(function(b){return b.id!==trialId&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
+  var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
+  if(kicked.length>0) return null;
   return assigned.tables;
 }
 // v16.3.0 perf rewrite — same output, a fraction of the work. The old shape ran
@@ -1217,6 +1223,21 @@ export function seatClashParties(tables,date,id,list){
 export function completedSeatedPatch(b,today,nowM){
   var actual=Math.max(15,seatedElapsed(b,today,nowM));
   return {status:"completed",duration:actual,customDur:actual,stayedMin:actual};
+}
+// ── v18.0.0 session 8 (C): are these tables still usable for this window? ────
+// The question a save has to ask when it changes a booking's WINDOW without
+// changing anything `needsR` looks at — a length edit, a revival from
+// cancelled/completed, the un-seat restore. Same slot construction as
+// `findFreeSlot` (completed excluded, blocks included, turnaround padding via
+// bookEnd/padEnd), so "free" means the same thing to both.
+export function tablesFreeFor(list,date,id,tables,s,e,blocks){
+  var ids=Array.isArray(tables)?tables:[];
+  if(!ids.length) return false;
+  var slots=(list||[]).filter(function(b){
+    return b&&b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==id&&(b.tables||[]).length>0;
+  }).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
+  if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
+  return canAssign(ids,slots,s,padEnd(e));
 }
 // C2: a booking with no table could be seated, from every door — and once
 // seated it is `isLocked`, which `applyOpt` reads as "copy its tables through",

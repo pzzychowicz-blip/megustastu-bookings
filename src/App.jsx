@@ -57,6 +57,8 @@ import {
   seatClashParties, completedSeatedPatch,
   // v18.0.0 session 8 (item 5b): the shift, from the booking as it is SAVED.
   seatedShiftFor,
+  // v18.0.0 session 8 (C): are the tables it has still usable for this window?
+  tablesFreeFor,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2270,7 +2272,10 @@ function BookingApp({uid}){
           seatedShift=seatedShiftFor(orig,nowMins,liveBookings,today,planChanged?formPlan:0);
         }
         const needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
-        const prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
+        // v18.0.0 session 8 (C4): `prefOnly` is gone. It existed only to EXEMPT
+        // a preference-or-preferred-tables change from the displacement guard,
+        // and a preference change moves tables like any other — it can leave
+        // somebody else with none. The exemption is the finding.
         let saveDur=planChanged?formPlan:(orig?(orig.duration||90):formPlan);
         const saveOrigDur=planChanged?formPlan:origPlan;
         let saveCustDur=planChanged?(f.customDur||null):(orig?(orig.customDur||null):(f.customDur||null));
@@ -2370,6 +2375,30 @@ function BookingApp({uid}){
         // once to unlock and once to restore — and two copies of a condition
         // that must agree is how they stop agreeing.
         const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM&&!pinned;
+        // ── v18.0.0 session 8 (C): two questions, not one ────────────────────
+        // `needsR` was answering both "must the placement be re-checked?" and
+        // "must the tables be re-chosen?", and a length change and a revival
+        // are in NEITHER of its terms — so those saves went straight to
+        // `bookingsAfterAction`, whose optimiser-OFF branch keeps every
+        // booking's tables, including one somebody else now holds.
+        //
+        // Measured live 2026-09-11: R3 — a 17:00 booking extended 90 → 120 was
+        // saved ON TOP of another party's 18:30 booking on 5A, and the
+        // reconciliation effect moved it to 1B 400ms later under "Resolved a
+        // table conflict after syncing"; R4 — a cancelled booking walked back
+        // to Confirmed kept a table that had since been given away, and went
+        // the same way. Neither had synced anything.
+        //
+        // So: re-CHECK on a window change of any kind; re-CHOOSE only when the
+        // tables it has no longer work for that window. A check-only save that
+        // is still free keeps exactly the tables it had.
+        const revived=!!orig&&(orig.status==="cancelled"||orig.status==="completed")&&f.status!=="cancelled"&&f.status!=="completed";
+        const recheck=needsR||planChanged||revived||!!unseat;
+        const winStart=toMins(saveTime);
+        const keepsWindowTables=(recheck&&!needsR&&!mt.length&&!pinned)
+          ? tablesFreeFor(bookings,f.date,editId,(orig&&orig.tables)||[],winStart,winStart+saveDur,tableBlocks)
+          : false;
+        const forceReassign=!mt.length&&!pinned&&(needsR||(recheck&&!keepsWindowTables));
         // v17.4.0: the diff string is computed ONCE — it feeds the history entry
         // AND the undo gate below. diffBooking returns the sentinel "saved (no
         // field changes)" when nothing moved, which is exactly when undo must
@@ -2413,7 +2442,7 @@ function BookingApp({uid}){
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
           });
-          let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length&&!pinned,optStateForSave);
+          let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,forceReassign,optStateForSave);
           // v18.0.0 session 8 (C1): the flags go back to what they WERE, not to
           // "does it have tables now". `wasSeatedLocked` is `isLocked(orig)`,
           // which is true for any seated booking — so walking an ordinary one
@@ -2460,7 +2489,7 @@ function BookingApp({uid}){
           const lockedClash=pinnedClashParties(fin,f.date,editId).locked;
           if(lockedClash.length){setError(pinnedClashRefusal(lockedClash[0]));return;}
         }
-        if(!mt.length&&needsR&&!prefOnly){
+        if(!mt.length&&recheck){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
           const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
@@ -2476,7 +2505,7 @@ function BookingApp({uid}){
         // use — a booking the app could not place shows "No table assigned"
         // and carries `_conflict` with `tables: []`; cancel it, then correct
         // its party size, and the edit is refused for a table it never had.
-        if(!mt.length&&needsR&&!editFinished){
+        if(!mt.length&&recheck&&!editFinished){
           const editedInFin=fin.find(function(b){return b.id===editId;});
           if(editedInFin&&(!editedInFin.tables||!editedInFin.tables.length)){setError("No tables available at this time — see suggestions below.");return;}
         }

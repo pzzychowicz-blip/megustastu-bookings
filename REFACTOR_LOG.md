@@ -23162,3 +23162,57 @@ it is past midnight. The ROADMAP entry asked for a check between 13:00 and
 22:00; it is on session 8's verification list.
 
 Gate: `124.34 kB` gz · **1281 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 81 (session 8, C) — a length change or a revival runs the table checks
+
+**One variable was answering two questions.** `needsR` meant both *must the
+placement be re-checked?* and *must the tables be re-chosen?*, and its terms are
+size, time, date, preference, preferred tables and an explicit clear. A LENGTH
+change is in none of them. Neither is a REVIVAL from cancelled or completed. So
+those saves went straight to `bookingsAfterAction`, whose optimiser-OFF branch
+keeps every booking's tables — including a table somebody else now holds.
+
+Both measured live, 2026-09-11, optimiser off (today, after the cutoff):
+
+- **R3** — a 17:00 booking extended 90 → 120 minutes was **saved on top of**
+  another party's 18:30 booking on 5A. Within 400ms the v15.6.1 reconciliation
+  effect moved it to 1B and toasted "Resolved a table conflict **after
+  syncing**." Nothing had synced. The app created the conflict, fixed it, and
+  blamed the network.
+- **R4** — a cancelled booking on table 6, its table since given to somebody
+  else, walked back to Confirmed with nothing else changed: saved onto 6, moved
+  to 1A, same toast.
+
+The split is now explicit. `recheck` = `needsR` **or** the plan changed **or**
+the booking was revived **or** the un-seat restore moved the window (commit 77's
+restore changes a booking's start and length, which is exactly the class of
+change this commit is about — it would otherwise have been the fourth). The
+tables are RE-CHOSEN only when the ones it has no longer work, which
+`tablesFreeFor` answers using `findFreeSlot`'s own slot construction, so "free"
+means the same thing to both. A check-only save whose tables are still free
+keeps exactly the tables it had; one whose tables are taken is re-placed like a
+time edit; one that fits nowhere is refused with the existing message.
+
+**C4 — `prefOnly` is deleted, not re-pointed.** Its only job was to EXEMPT a
+preference or preferred-tables change from the displacement guard, and a
+preference change moves tables like any other change: it can leave another
+booking with none. The exemption was the finding.
+
+**C5 — `trialFits` runs the displacement check for an EDIT too.** It was gated
+on `!editId`, so the form's availability preview answered a different question
+from the one Save asks: `doSaveEdit` has always refused a save that would kick
+an existing booking, while the preview said the tables were available and drew
+them. Pinned by a two-table custom layout — A and B joining into one 4-top, the
+smallest arrangement where "it fits" and "it fits without throwing somebody out"
+give different answers: growing a party to 4 needs both tables, and the test
+asserts `null` with a neighbour present and `["A","B"]` without one.
+
+**C9 is not reworded, and that is deliberate.** The toast says "after syncing"
+because until now an own save could produce a conflict for the reconciler to
+find. With this commit and commit 76 it should no longer be able to: a
+non-pinned save re-checks its window, a pinned one re-places around itself or
+refuses, and a manual-table save is already gated by `doSave`'s own
+`canAssign`. That is reasoning, not a measurement — the re-measure is on the
+live verification list, and the wording changes only if a save can still do it.
+
+Gate: `124.45 kB` gz · **1289 tests** · 0 lint errors (88 warnings) · style OK.

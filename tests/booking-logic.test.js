@@ -26,6 +26,7 @@ import {
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
+  tablesFreeFor, trialFits,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2099,6 +2100,72 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (C) — a window change re-checks the placement ─────────
+describe("tablesFreeFor", () => {
+  const busy = mk({ id: "sitting", time: "13:00", duration: 90, tables: ["3"] });
+  const from = 13 * 60, to = 13 * 60 + 90;
+
+  it("says no when another booking holds the table in that window", () => {
+    expect(tablesFreeFor([busy], D, "other", ["3"], from, to, [])).toBe(false);
+  });
+
+  it("excludes the booking being saved from its own busy set", () => {
+    expect(tablesFreeFor([busy], D, "sitting", ["3"], from, to, [])).toBe(true);
+  });
+
+  it("says yes outside that booking's window", () => {
+    expect(tablesFreeFor([busy], D, "other", ["3"], 15 * 60, 15 * 60 + 90, [])).toBe(true);
+  });
+
+  it("a finished visit frees the table — the same rule every other busy-set uses", () => {
+    const done = mk({ id: "done", time: "13:00", duration: 90, tables: ["3"], status: "completed" });
+    const gone = mk({ id: "gone", time: "13:00", duration: 90, tables: ["3"], status: "cancelled" });
+    expect(tablesFreeFor([done], D, "other", ["3"], from, to, [])).toBe(true);
+    expect(tablesFreeFor([gone], D, "other", ["3"], from, to, [])).toBe(true);
+  });
+
+  it("another day does not stand in the way", () => {
+    expect(tablesFreeFor([busy], "2099-06-16", "other", ["3"], from, to, [])).toBe(true);
+  });
+
+  it("no tables is not free", () => {
+    expect(tablesFreeFor([busy], D, "other", [], from, to, [])).toBe(false);
+    expect(tablesFreeFor([busy], D, "other", null, from, to, [])).toBe(false);
+  });
+});
+
+describe("trialFits displacement check (C5)", () => {
+  // Two tables that join into one 4-top, so a party of 4 can only be seated by
+  // taking BOTH — which is the smallest arrangement where "it fits" and "it
+  // fits without throwing somebody out" are different answers.
+  afterEach(() => setLayout(DEFAULT_LAYOUT));
+  function twoTables() {
+    setLayout(Object.assign({}, DEFAULT_LAYOUT, {
+      tables: [{ id: "A", capacity: 2, zone: "outdoor" }, { id: "B", capacity: 2, zone: "outdoor" }],
+      joinGroups: [["A", "B"]],
+      comboCaps: {},
+      megaCombos: [],
+      priorities: { v: 1 },      // present-but-empty → the generic capacity path
+    }));
+  }
+
+  it("refuses an EDIT that would leave another booking with no table", () => {
+    twoTables();
+    const day = [
+      mk({ id: "x", time: "13:00", duration: 90, size: 2, tables: ["A"] }),
+      mk({ id: "y", time: "13:00", duration: 90, size: 2, tables: ["B"] }),
+    ];
+    // Growing x to 4 needs A+B, which leaves y with nowhere to go.
+    expect(trialFits(day, D, "13:00", 4, "auto", 90, [], "x", null, false)).toBe(null);
+  });
+
+  it("still fits the same edit when there is nobody to displace", () => {
+    twoTables();
+    const day = [mk({ id: "x", time: "13:00", duration: 90, size: 2, tables: ["A"] })];
+    expect(trialFits(day, D, "13:00", 4, "auto", 90, [], "x", null, false)).toEqual(["A", "B"]);
   });
 });
 
