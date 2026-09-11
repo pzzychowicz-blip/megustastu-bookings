@@ -5,6 +5,37 @@ RTDB Security Rules. There are now **two routes** to apply them, and every per-v
 "Deployment" section below describes the console one because that is how every release
 up to and including v18.0.0 was published.
 
+## v18.0.0 — the production deploy, in order
+
+**After the release merges — never before.** Every step is one this file already
+describes in its own section below; this is the order, and each step names where
+its detail lives rather than repeating it.
+
+1. **The app first.** Confirm the production boot banner (or
+   `window.__MGT_BUILD__`) reads **18.0.0** before touching the rules — app first,
+   rules second, as every v18.0.0 section below says, for the reasons each gives.
+2. **Then the rules, once.** Publish `database.rules.json` to PROD by the console
+   or `npm run rules:deploy -- mgt-prod` (*Applying the rules — two routes*). This
+   one publish carries every rules change in the release — the new
+   `/vouchers/$code`, `/roles/$uid`, `/invites/$inviteId`, `settings/admin` +
+   `adminRev` and `settings/voucherDefaults` + `voucherDefaultsRev`, none of which
+   exist in `main`'s rules, plus the role gates added to the existing ones. Read
+   the alias back before pressing enter.
+3. **Create the bootstrap admin by hand** at `/roles/<your uid>` (*The one manual
+   step: bootstrapping the first admin*). Nothing in the app can create it, by
+   design.
+4. **Give every real account a level** in Settings → Admin. Nothing changes for
+   anyone while `enforceRoles` is off; once it is on, an account with no row reads
+   as **staff** — so this step is what decides who notices step 6.
+5. **Check the last-admin guard refuses** — try to demote the only admin: the
+   control is disabled, and a direct write is refused by the rules (*The
+   last-admin guarantee, and why it is not a count*).
+6. **Only then turn `settings/admin.enforceRoles` on, outside service hours.** One
+   console value, reversible in one console value (*`enforceRoles` — off, and what
+   that means*).
+
+`ROADMAP.md` carries a one-line pointer to this section until step 6 is done.
+
 ## Applying the rules — two routes
 
 **1 · The Firebase console** (Realtime Database → Rules → paste → Publish). Paste from
@@ -124,23 +155,27 @@ again. No login, no network, nothing cached between runs.
 Neither one leans on the other. The failure this guards against is silent, and
 would matter exactly once.
 
-**There is no `.firebaserc` in this repo, deliberately.** Without a default
-project, `firebase deploy` has no target and errors out instead of publishing
-rules somewhere. Applying the rules stays the manual console step described
-below — the emulator is for *attacking* them, not for shipping them.
+~~**There is no `.firebaserc` in this repo, deliberately.**~~ **Superseded in
+v18.0.0 phase 2**, which added one — and the guarantee this paragraph described
+moved rather than disappeared. It said a bare `firebase deploy` had no target and
+would error instead of publishing. That is still true, because **`.firebaserc`
+declares no default alias**: omitting the alias fails before contacting anything
+(verified — see *Applying the rules — two routes* at the top). What changed is
+that deploying is now a sanctioned route, `npm run rules:deploy -- <alias>`, which
+names its project every time.
 
-**So: never run `firebase deploy` from this repo.** `firebase.json` has to map
-`database.rules` for `emulators:exec` to load them, and that makes
-`firebase deploy --only database` a *working* command here for the first time.
-A single `firebase use <prod-project>` would then publish whatever
-`database.rules.json` currently says — PROBE behaviour and all — into
-production, bypassing the review that the manual console step exists to force.
-The absent `.firebaserc` is the only thing in the way, and it stops being one
-the moment somebody names the project.
+**So: never run a bare `firebase deploy`, and never `firebase use` a project.**
+`firebase.json` maps `database.rules` for `emulators:exec`, which makes
+`firebase deploy --only database` a working command here. A default project set
+with `firebase use <prod-project>` would let it publish whatever
+`database.rules.json` currently says — PROBE behaviour and all — without an alias
+being read back first. The emulator is for *attacking* the rules; shipping them
+goes through the explicit alias, after the app, in the order the top of this file
+gives.
 
 ### What the suite asserts
 
-127 tests as of v17.16.11, run on every PR by the `rules` job in
+257 tests as of 2026-09-11, v18.0.0 (measured — this line read 127 from v17.16.11 until then), run on every PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
 the rig itself is pointed at a loopback emulator and a `demo-` project — and,
 since v17.16.7, that the root carries **no** `.write` key, which is asserted as
@@ -148,8 +183,8 @@ an ABSENCE because that absence is the whole of the access-control change and a
 re-added root grant would leave every other test in this file green. The next
 groups are what you would expect: the `auth != null` boundary, the per-`$id`
 booking CAS (`updatedAt` strictly greater **and** `baseUpdatedAt` equal to
-stored — the pair that closed the 2026-07-05 overwrite incident), and the twelve
-`<name>Rev` pairs, each swept for repeated / skipped / lower / absent /
+stored — the pair that closed the 2026-07-05 overwrite incident), and the sixteen
+`<name>Rev` pairs (counted 2026-09-11), each swept for repeated / skipped / lower / absent /
 non-numeric revisions, and — v17.16.7 — for a bare `remove()` of the node and of
 its rev.
 

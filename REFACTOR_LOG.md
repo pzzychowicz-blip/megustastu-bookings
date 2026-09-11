@@ -22716,3 +22716,23 @@ preference** row predated `theme: "auto"` from this session's commit 61 — a do
 that commit should have moved and did not, found here.
 
 Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 66 (phase 7) — the rules runbook: the deploy in order, and a paragraph phase 2 made false
+
+- **A top section, "v18.0.0 — the production deploy, in order".** The six
+  post-merge steps, each naming the section that already holds its detail rather
+  than restating it. Which nodes are new was read, not remembered: none of
+  `vouchers`, `roles`, `invites`, `settings/admin`, `adminRev`, `voucherDefaults` or
+  `voucherDefaultsRev` appears in `origin/main`'s `database.rules.json`. Patryk's
+  call on placement: the procedure lives here, where every console step already
+  lives, and ROADMAP keeps a one-line pointer until it is done (commit 67).
+- **"There is no `.firebaserc` in this repo, deliberately" — and "never run
+  `firebase deploy`"** — true until phase 2 added `.firebaserc` and `rules:deploy`,
+  and contradicted by the section at the top of the same file ever since. Struck and
+  superseded in place: the guarantee MOVED (no default alias, verified to fail before
+  contacting anything) rather than disappeared, and the rule that remains is "never a
+  bare deploy, never `firebase use`".
+- **The suite paragraph's figures:** "127 tests as of v17.16.11" → **257**, and "the
+  twelve `<name>Rev` pairs" → **sixteen**, both measured this session.
+
+Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
