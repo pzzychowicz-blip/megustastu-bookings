@@ -58,6 +58,10 @@ import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, Stat
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
+// v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
+// two predicates the "carried from" note is derived with.
+import { guestOpenVouchers, normalizeCode, isUnsettled } from "../lib/vouchers";
+import { matchesIdentity } from "../lib/customers";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
 // v18.0.0 session 8: WEEKDAY_NAMES is gone — the list lives in lib/day.js, and
@@ -395,6 +399,35 @@ export function BookingFormModal({
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
   },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
   const formAvail=availScan.value;
+
+  // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
+  // Read once per mount, like the picker's own and the Vouchers tab's: expiry is
+  // a day-scale concept, and a `Date.now()` in a render body is both impure and
+  // — once it reaches a dep array — fatal to the memo it sits in.
+  const [voucherNow]=useState(function(){return Date.now();});
+  // The identity is the DRAFT's, not a stored booking's, so typing a known
+  // phone into a brand-new booking is enough to be recognised — which is the
+  // moment the suggestion is worth making. `matchesIdentity` is the app's one
+  // identity rule; a second one growing here is the defect this repo keeps
+  // recording, so `lib/vouchers` takes the guest's BOOKINGS and imports nothing.
+  const voucherSuggestions=useMemo(function(){
+    if(!vouchersOn||form.voucherCode) return [];
+    const ident={phone:form.phone,guestId:form.guestId};
+    if(!hasRealPhone(form.phone)&&!form.guestId) return [];
+    const mine=bookings.filter(function(b){return matchesIdentity(b,ident);});
+    if(!mine.length) return [];
+    return guestOpenVouchers(mine,vouchersByCode,bookings,voucherNow,editId);
+  },[vouchersOn,form.voucherCode,form.phone,form.guestId,bookings,vouchersByCode,voucherNow,editId]);
+  // Why a code is already in the field when nobody typed it. Derived from
+  // `returnOf` rather than carried as a draft field: a note about the draft is
+  // not part of it, and a new field would join the unsaved-changes baseline.
+  const voucherCarriedFrom=(function(){
+    if(!form.voucherCode||!form.returnOf) return null;
+    const src=bookings.find(function(b){return b.id===form.returnOf;});
+    if(!src||normalizeCode(src.voucherCode)!==normalizeCode(form.voucherCode)) return null;
+    const d=/^\d{4}-\d{2}-\d{2}$/.test(src.date||"")?src.date.slice(8,10)+"/"+src.date.slice(5,7):src.date;
+    return "Carried from the "+d+" visit"+(isUnsettled(src,vouchersByCode)?" — that visit was never recorded against it.":".");
+  })();
 
   // v18.0.0 session 8 (item 3): a seated party cannot be moved to another day —
   // its tables are pinned to the room it is sitting in, and those tables belong
@@ -899,6 +932,8 @@ export function BookingFormModal({
           vouchersByCode={vouchersByCode}
           bookings={bookings}
           bookingId={editId}
+          carriedFrom={voucherCarriedFrom}
+          suggestions={voucherSuggestions}
           currency={currency} />
       ):null}</Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
         <Section>

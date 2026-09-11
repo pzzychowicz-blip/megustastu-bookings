@@ -18,6 +18,7 @@ import {
   attachedElsewhere, isUnsettled,
   sanitizeVoucher, sanitizeVouchers, voucherIndex,
   validateIssue, applyRedemption, removeRedemption, redeemableAmount, attachRefusal, searchVouchers,
+  guestOpenVouchers,
 } from "../src/lib/vouchers.js";
 
 function v(o) {
@@ -443,6 +444,58 @@ describe("validateIssue", () => {
       taken.add(r.code);
     }
     expect(taken.size).toBe(60);
+  });
+});
+
+// ── v18.0.0 session 8 (items 2b, 7) — a guest's vouchers follow them ────────
+describe("guestOpenVouchers", () => {
+  const NOW = 5000;
+  const open = (code, value) => sanitizeVoucher({ value, remaining: value, issuedAt: 1000 }, code);
+  const bk = (o) => Object.assign(
+    { id: "b1", date: "2026-09-01", time: "20:00", status: "completed", voucherCode: "" }, o);
+
+  it("offers a code the guest has used whose voucher is still open", () => {
+    const idx = { ABCD2345: open("ABCD2345", 50) };
+    const out = guestOpenVouchers([bk({ voucherCode: "ABCD2345" })], idx, [], NOW, null);
+    expect(out.map((e) => e.code)).toEqual(["ABCD2345"]);
+    expect(out[0].remaining).toBe(50);
+  });
+
+  it("skips a voucher that is spent or void — a dead end is not a suggestion", () => {
+    const spent = applyRedemption(open("ABCD2345", 50), "bx", 50, 1000, "me");
+    expect(guestOpenVouchers([bk({ voucherCode: "ABCD2345" })], { ABCD2345: spent }, [], NOW, null)).toEqual([]);
+    const voided = sanitizeVoucher(Object.assign({}, open("BBBB2345", 50), { status: "void" }), "BBBB2345");
+    expect(guestOpenVouchers([bk({ voucherCode: "BBBB2345" })], { BBBB2345: voided }, [], NOW, null)).toEqual([]);
+  });
+
+  it("skips one already on another LIVE booking — the one-live-booking rule", () => {
+    const idx = { ABCD2345: open("ABCD2345", 50) };
+    const live = [bk({ id: "other", status: "confirmed", voucherCode: "ABCD2345" })];
+    expect(guestOpenVouchers([bk({ voucherCode: "ABCD2345" })], idx, live, NOW, null)).toEqual([]);
+  });
+
+  it("is newest use first, and names each code once", () => {
+    const idx = { ABCD2345: open("ABCD2345", 50), BBBB2345: open("BBBB2345", 20) };
+    const list = [
+      bk({ id: "old", date: "2026-08-01", voucherCode: "ABCD2345" }),
+      bk({ id: "new", date: "2026-09-10", voucherCode: "BBBB2345" }),
+      bk({ id: "dup", date: "2026-07-01", voucherCode: "BBBB2345" }),
+    ];
+    expect(guestOpenVouchers(list, idx, [], NOW, null).map((e) => e.code)).toEqual(["BBBB2345", "ABCD2345"]);
+  });
+
+  it("flags a visit that completed without recording the voucher, rather than hiding it", () => {
+    const idx = { ABCD2345: open("ABCD2345", 50) };
+    const out = guestOpenVouchers([bk({ voucherCode: "ABCD2345" })], idx, [], NOW, null);
+    expect(out[0].unsettled, "completed, carrying a code, no ledger entry").toBe(true);
+  });
+
+  it("excludes the booking being written, and survives nothing to say", () => {
+    const idx = { ABCD2345: open("ABCD2345", 50) };
+    expect(guestOpenVouchers([bk({ id: "me", voucherCode: "ABCD2345" })], idx, [], NOW, "me")).toEqual([]);
+    expect(guestOpenVouchers(null, idx, [], NOW, null)).toEqual([]);
+    expect(guestOpenVouchers([bk({ voucherCode: "ZZZZ9999" })], idx, [], NOW, null),
+      "a code with no voucher behind it").toEqual([]);
   });
 });
 

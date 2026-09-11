@@ -305,7 +305,10 @@ import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
 import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
-import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode } from "./lib/vouchers";
+// v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
+// source visit's voucher, and only when the same rule the picker applies allows
+// it, so the form never opens holding an attachment Save would refuse.
+import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -2142,6 +2145,26 @@ function BookingApp({uid}){
     const againSize=sourceBooking.size||2;
     const planned=plannedDuration(sourceBooking);
     const againDur=planned?Math.max(15,Math.min(480,planned)):null;
+    // ── v18.0.0 session 8 (item 7): the guest's voucher comes with them ───────
+    // Patryk: a voucher that was not fully redeemed must follow the guest into
+    // the next booking. From a COMPLETED visit only — Patryk's call for the
+    // seated case, and the one-live-booking rule is why: a seated visit is
+    // still live and still holds its voucher, so copying the code here would
+    // create exactly the conflict `attachRefusal` exists to refuse. That guest
+    // is offered the carry at COMPLETION instead.
+    //
+    // Gated on the same predicate the picker uses, so the form never opens
+    // holding an attachment that Save would reject: a voided, spent or expired
+    // voucher, or one already on somebody's live booking, simply does not ride
+    // along. `bookingId` is null because the booking does not exist yet.
+    const againCode=(function(){
+      if(!vouchersOn||sourceBooking.status!=="completed") return "";
+      const c=normalizeCode(sourceBooking.voucherCode);
+      if(!c) return "";
+      const v=vouchersByCode[c];
+      if(!v) return "";
+      return attachRefusal(v,c,bookings,null,Date.now())?"":c;
+    })();
     openForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
       phone:sourceBooking.phone||generalSettings.phonePrefix,
@@ -2153,6 +2176,7 @@ function BookingApp({uid}){
       notes:"",
       customDur:againDur&&againDur!==getDur(againSize)?againDur:null,
       manualTables:[],
+      voucherCode:againCode,
       status:"confirmed",
       returnOf:sourceBooking.id,
       // v17.10.0: Book Again on a PHONE-LESS guest is the same assertion as

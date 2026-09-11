@@ -510,6 +510,53 @@ export function attachRefusal(v, code, bookings, bookingId, now) {
   return "";
 }
 
+// ── v18.0.0 session 8 (items 2b, 7): a guest's vouchers follow them ──────────
+// Patryk: *"vouchers must follow the guest who is being booked again and suggest
+// adding a voucher if the voucher has not been fully redeemed."*
+//
+// It takes the guest's BOOKINGS rather than a customer or an identity, so this
+// module keeps importing nothing: the caller builds that list with
+// `matchesIdentity` (customers.js), which keeps ONE identity rule in the app
+// rather than a second one growing here.
+//
+// What comes back is every code that guest has used whose voucher is still
+// `open` and is not already on another LIVE booking — `attachedElsewhere`'s
+// one-live-booking rule, so a suggestion can never create the conflict the
+// picker would refuse a moment later. Newest use first, because the voucher
+// somebody is holding is almost always the one from the last visit.
+//
+// `unsettled` rides along rather than being filtered out: a visit that completed
+// carrying a voucher with no ledger entry is money the restaurant has NOT
+// recorded, and the right answer is to say so beside the suggestion, not to hide
+// the voucher from the person who could settle it.
+export function guestOpenVouchers(guestBookings, vouchersByCode, bookings, now, excludeId) {
+  const seen = {};
+  const out = [];
+  (Array.isArray(guestBookings) ? guestBookings : [])
+    .filter((b) => b && b.id !== excludeId && normalizeCode(b.voucherCode))
+    .slice()
+    .sort((a, b) =>
+      String(b.date || "").localeCompare(String(a.date || "")) ||
+      String(b.time || "").localeCompare(String(a.time || "")))
+    .forEach((b) => {
+      const code = normalizeCode(b.voucherCode);
+      if (seen[code]) return;
+      seen[code] = true;
+      const v = vouchersByCode && vouchersByCode[code];
+      if (!v) return;
+      if (voucherState(v, now) !== "open") return;
+      if (attachedElsewhere(bookings, code, excludeId)) return;
+      out.push({
+        code,
+        voucher: v,
+        remaining: remainingOf(v),
+        from: b,
+        unsettled: isUnsettled(b, vouchersByCode),
+      });
+    });
+  return out;
+}
+
 // Vouchers matching a typed query, for the booking form's suggestion dropdown.
 //
 // It lives here rather than in the picker for `searchCustomers`'s reason: the

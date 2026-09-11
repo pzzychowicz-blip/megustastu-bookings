@@ -58,7 +58,7 @@ import { Fld, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn } from "./atoms";
 
 const STATE_TONE = { open: "success", spent: "neutral", expired: "warn", void: "danger" };
 
-export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookings, bookingId, currency = "€" }) {
+export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookings, bookingId, currency = "€", carriedFrom, suggestions }) {
   const [typed, setTyped] = useState("");
   const [err, setErr] = useState("");
   const [focus, setFocus] = useState(false);
@@ -117,6 +117,14 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               ? "You will be asked how much of it the bill used when this booking is completed."
               : "This number is not in the voucher list — it may have been recorded on another device."}
         </div>
+        {/* v18.0.0 session 8 (item 7): where an attached voucher CAME FROM, when
+            it was not typed here. Book Again pre-attaches the source visit's
+            open voucher, and a code that appears by itself needs to say why —
+            otherwise the only way to find out is to remember. Removable like any
+            other attachment; this is a note, not a lock. */}
+        {carriedFrom ? (
+          <div style={{ fontSize: T.micro, color: S.muted, marginTop: 2 }}>{carriedFrom}</div>
+        ) : null}
       </Fld>
     );
   }
@@ -156,6 +164,41 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
     <Fld label="Gift voucher">{function (fid) {
       return (
         <div>
+          {/* v18.0.0 session 8 (item 2b): a recognised guest's own open
+              vouchers, offered before anybody types. The list comes from
+              `guestOpenVouchers`, which has already applied the
+              one-live-booking rule — so a row here can always be attached, and
+              tapping one can never produce the refusal the picker would show a
+              moment later. Capped at three: this is a prompt, not a catalogue,
+              and the typed field below is still there for the rest. */}
+          {suggestions && suggestions.length ? (
+            <div style={{ marginBottom: 8 }}>
+              {suggestions.slice(0, 3).map(function (s) {
+                return (
+                  <div key={s.code}
+                    style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}>
+                    <span style={{ fontSize: T.body, color: S.text }}>
+                      {"This guest has voucher "}
+                      <strong style={{ fontVariantNumeric: "tabular-nums" }}>{formatCode(s.code)}</strong>
+                      {"  ·  " + s.remaining + " " + currency + " left"}
+                    </span>
+                    {/* Not hidden when the last visit never recorded it: that is
+                        money the restaurant has not accounted for, and the
+                        person who can settle it is the one looking at this. */}
+                    {s.unsettled ? <OutlineChip tone="warn">last visit not recorded</OutlineChip> : null}
+                    <span style={{ flex: 1 }} />
+                    <button type="button"
+                      onClick={function () { attach(s.code); }}
+                      aria-label={"Attach voucher " + formatCode(s.code) + " to this booking"}
+                      className="mgt-hover-scale"
+                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill })}>
+                      Attach
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
           <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
               <input

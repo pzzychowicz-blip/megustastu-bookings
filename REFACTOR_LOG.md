@@ -23543,3 +23543,51 @@ balance is explicable months later.
 Gate: `124.97 kB` gz · **1312 tests** · 0 lint errors (88 warnings) · style OK.
 Rules: **261 tests** (session 7's 257, plus these four — re-measured, not
 carried forward).
+
+### Commit 90 (session 8, items 2b + 7) — a guest's vouchers follow them
+
+Patryk: *"vouchers must follow the guest who is being booked again and suggest
+adding a voucher if the voucher has not been fully redeemed."*
+
+`guestOpenVouchers(guestBookings, vouchersByCode, bookings, now, excludeId)`
+takes the guest's **bookings** rather than a customer or an identity, so
+`lib/vouchers.js` goes on importing nothing: the caller builds that list with
+`matchesIdentity` (`lib/customers.js`), which keeps ONE identity rule in the app
+instead of a second one quietly growing in the money module. It returns every
+code that guest has used whose voucher is still `open` and is **not already on
+another live booking** — `attachedElsewhere`'s one-live-booking rule — newest use
+first, each code once.
+
+**`unsettled` rides along rather than being filtered out**, and that is the one
+judgement call in the helper. A visit that completed carrying a voucher with no
+ledger entry is money the restaurant has not recorded; hiding that voucher would
+hide the problem from the one person positioned to fix it. So the row is offered
+with "last visit not recorded" on it.
+
+**Book Again pre-attaches from a COMPLETED source only.** This is Patryk's
+answer to the question he asked at the top of the session — what should Book
+Again do from a SEATED booking — and the one-live-booking rule is why it is the
+right one: a seated visit is still live and still holds its voucher, so copying
+the code into a new draft would create exactly the conflict `attachRefusal`
+exists to refuse. That guest is offered the carry **at completion** instead
+(next commit). The pre-attach is itself gated on `attachRefusal`, so the form
+can never open holding an attachment that Save would then reject — a voided,
+spent or expired voucher simply does not ride along.
+
+**The suggestion keys on the DRAFT's identity, not on a stored booking's.**
+Typing a known phone into a brand-new booking is enough to be recognised, which
+is the moment the suggestion is worth making. Up to three rows, because this is a
+prompt rather than a catalogue and the typed field is still there for the rest;
+every row is attachable by construction, since the helper has already applied the
+rule the picker would otherwise refuse it by a moment later.
+
+"Carried from the 11/09 visit" is **derived** from `returnOf` rather than stored
+as a draft field. A note ABOUT the draft is not part of it, and a new field would
+have joined the unsaved-changes baseline — so Book Again would have opened a form
+that was already dirty.
+
+Six tests on the helper: the open case, the dead ends it skips (spent, void), the
+one-live-booking rule, newest-first with each code once, the unsettled flag, and
+the booking being written excluded.
+
+Gate: `125.59 kB` gz · **1318 tests** · 0 lint errors (88 warnings) · style OK.
