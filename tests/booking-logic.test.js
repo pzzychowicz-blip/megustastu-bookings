@@ -25,7 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
-  unseatRestore, seatRefusal,
+  unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2099,6 +2099,57 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+describe("seatClashParties", () => {
+  const room = [
+    mk({ id: "sitting", name: "López", status: "seated", time: "19:02", tables: ["3"] }),
+    mk({ id: "later", name: "Pau", time: "21:00", tables: ["3"] }),
+    mk({ id: "elsewhere", name: "Rita", status: "seated", time: "19:30", tables: ["4"] }),
+  ];
+
+  it("names the party still at the table", () => {
+    const out = seatClashParties(["3"], D, "arriving", room);
+    expect(out.length).toBe(1);
+    expect(out[0].booking.name).toBe("López");
+    expect(out[0].tables).toEqual(["3"]);
+  });
+
+  it("ignores a booking that is not SEATED — that is the optimiser's problem", () => {
+    const out = seatClashParties(["3"], D, "arriving", room);
+    expect(out.map((e) => e.booking.id)).not.toContain("later");
+  });
+
+  it("ignores a seated party at a different table, date, or the booking itself", () => {
+    expect(seatClashParties(["4"], D, "elsewhere", room), "itself").toEqual([]);
+    expect(seatClashParties(["5A"], D, "arriving", room), "another table").toEqual([]);
+    expect(seatClashParties(["3"], "2099-06-16", "arriving", room), "another day").toEqual([]);
+  });
+
+  it("reports only the tables actually shared", () => {
+    const out = seatClashParties(["3", "4"], D, "arriving", room);
+    expect(out.map((e) => e.booking.name).sort()).toEqual(["López", "Rita"]);
+    expect(out.find((e) => e.booking.name === "Rita").tables).toEqual(["4"]);
+  });
+
+  it("has nothing to say with no tables", () => {
+    expect(seatClashParties([], D, "arriving", room)).toEqual([]);
+    expect(seatClashParties(null, D, "arriving", room)).toEqual([]);
+    expect(seatClashParties(["3"], D, "arriving", null)).toEqual([]);
+  });
+});
+
+describe("completedSeatedPatch", () => {
+  it("is the seated→completed arithmetic, from one place", () => {
+    const b = mk({ date: today, time: "13:00", status: "seated", duration: 90 });
+    const patch = completedSeatedPatch(b, today, 13 * 60 + 47);
+    expect(patch).toEqual({ status: "completed", duration: 47, customDur: 47, stayedMin: 47 });
+  });
+
+  it("keeps the 15-minute floor a party that just sat down would otherwise break", () => {
+    const b = mk({ date: today, time: "13:00", status: "seated", duration: 90 });
+    expect(completedSeatedPatch(b, today, 13 * 60 + 2).duration).toBe(15);
   });
 });
 

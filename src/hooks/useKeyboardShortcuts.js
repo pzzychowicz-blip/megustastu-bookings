@@ -76,6 +76,9 @@ function escapeAction(K,id){
     case "voucherback": return function(){K.setVoucherBack(null);};
     // v18.0.0 session 7: Escape is "Done" — there is no decision in a note.
     case "seatnote":    return function(){K.setSeatNote(null);};
+    // v18.0.0 session 8 (C3): Escape is "Back" — the seat does NOT happen. The
+    // safe direction for a prompt whose other two answers both change a table.
+    case "seatclash":   return function(){K.setSeatClash(null);};
     case "reshuffle":   return function(){K.setConfirmReshuffle(false);};
     case "cancel":      return function(){K.setConfirmCancel(null);};
     case "del":         return function(){K.setConfirmDel(null);};

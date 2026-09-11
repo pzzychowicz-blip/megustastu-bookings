@@ -1162,6 +1162,36 @@ export function tablesPinned(status,hasManual,cleared){
   if(hasManual||cleared) return false;
   return status==="seated"||status==="completed"||status==="cancelled";
 }
+// C3: seating never asked whether the table still had somebody at it. The two
+// parties then hold the same table with both bookings `isLocked`, which is the
+// one clash `applyOpt` cannot separate and the reconciler deliberately leaves
+// alone — so nothing moves, and until v17.11.0's ClashBanner nothing said so
+// either. `applySeatedShift` looks at the same overlap but only to decline to
+// SHIFT the time; it seats the party regardless.
+//
+// Only a party that is actually SEATED counts. A confirmed booking later in the
+// evening is the optimiser's problem and it has one (the displacement guard);
+// somebody physically at the table is a question only a person can answer.
+export function seatClashParties(tables,date,id,list){
+  var ids=Array.isArray(tables)?tables:[];
+  if(!ids.length) return [];
+  var out=[];
+  (list||[]).forEach(function(o){
+    if(!o||o.id===id||o.date!==date||o.status!=="seated") return;
+    var shared=(o.tables||[]).filter(function(t){return ids.indexOf(t)>=0;});
+    if(shared.length) out.push({booking:o,tables:shared});
+  });
+  return out;
+}
+// The fields a seated→completed transition writes, as one place rather than
+// two. `updateStatus` has computed these inline since v16.2.0 and the seat-clash
+// prompt's "Complete them & seat" needs exactly the same arithmetic — a second
+// copy of the truncation rule is how the two would stop agreeing about what a
+// finished visit lasted.
+export function completedSeatedPatch(b,today,nowM){
+  var actual=Math.max(15,seatedElapsed(b,today,nowM));
+  return {status:"completed",duration:actual,customDur:actual,stayedMin:actual};
+}
 // C2: a booking with no table could be seated, from every door — and once
 // seated it is `isLocked`, which `applyOpt` reads as "copy its tables through",
 // so a locked booking holding `[]` is never placed again by anything. The party

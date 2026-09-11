@@ -53,6 +53,8 @@ import {
   unseatRestore,
   // v18.0.0 session 8 (C2): and it cannot be seated with no table at all.
   seatRefusal,
+  // v18.0.0 session 8 (C3): nor onto a table somebody is still sitting at.
+  seatClashParties, completedSeatedPatch,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -293,6 +295,7 @@ import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, mo
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
+import { SeatClashModal } from "./components/SeatClashModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
 import { useRecurring } from "./hooks/useRecurring";
 // v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
@@ -957,6 +960,10 @@ function BookingApp({uid}){
   // v18.0.0 session 7: the seat note — a SNAPSHOT from seatNoteFor, not an id.
   const seatNote = modalOpen.seatnote || null;
   const setSeatNote = setModalFns.seatnote;
+  // v18.0.0 session 8 (C3): the seat-clash question, also a SNAPSHOT — taken
+  // when the seat was refused, so the card cannot change under the reader.
+  const seatClash = modalOpen.seatclash || null;
+  const setSeatClash = setModalFns.seatclash;
   // v18.0.0 phase 3: the capability grid, opened from the Admin tab. Its
   // payload is the uid whose row is selected — a non-empty string, so the
   // stack's falsy-closes semantics are safe here.
@@ -967,6 +974,12 @@ function BookingApp({uid}){
   // `finally`, which is what stops a throw in the re-entered action from
   // leaving every future completion un-askable.
   const redeemAskedRef = useRef(false);
+  // v18.0.0 session 8 (C3): the seat-clash question's own "already asked" ref.
+  // Deliberately NOT shared with the one above, which covers two prompts that
+  // cannot both be pending: this one CAN be pending alongside a redeem prompt,
+  // because clearing the party at the table is a completion and a completion is
+  // exactly what raises that prompt.
+  const seatAskedRef = useRef(false);
   const showHistory = !!modalOpen.history;
   const setShowHistory = setModalFns.history;
   const showPrefPicker = !!modalOpen.prefpicker;
@@ -2638,6 +2651,17 @@ function BookingApp({uid}){
         setVoucherBack({id:editId,status:f.status,from:"form"});
         return;
       }
+      // v18.0.0 session 8 (C3): the form's door to the same question, at the
+      // same point as the voucher gates — after validation, immediately before
+      // the dispatch, so a save about to be refused for a missing name never
+      // asks about somebody else's table first.
+      if(editId&&!seatAskedRef.current&&f.status==="seated"){
+        const seatOrig=bookings.find(function(x){return x.id===editId;});
+        if(seatOrig&&seatOrig.status!=="seated"){
+          const parties=seatClashParties(mt.length?mt:(seatOrig.tables||[]),f.date,editId,bookings);
+          if(parties.length){setSeatClash({id:editId,status:"seated",from:"form",others:seatClashSnap(parties)});return;}
+        }
+      }
       if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
@@ -3035,6 +3059,7 @@ function BookingApp({uid}){
     setVoucherAsk:setVoucherAsk,
     setVoucherBack:setVoucherBack,
     setSeatNote:setSeatNote,
+    setSeatClash:setSeatClash,
     blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
@@ -3142,6 +3167,62 @@ function BookingApp({uid}){
     redeemAskedRef.current=true;
     try{ return fn(); } finally { redeemAskedRef.current=false; }
   }
+  // ── v18.0.0 session 8 (C3): the seat-clash prompt ───────────────────────────
+  // Same three moves as the voucher prompts: a snapshot goes into the modal, a
+  // ref marks the question asked, and the interrupted action is re-entered by
+  // the answer rather than duplicated inside it.
+  function seatClashSnap(parties){
+    return parties.map(function(e){return {id:e.booking.id,name:e.booking.name||"",time:e.booking.time||"",tables:e.tables};});
+  }
+  function withSeatAsked(fn){
+    seatAskedRef.current=true;
+    try{ return fn(); } finally { seatAskedRef.current=false; }
+  }
+  // `doSave` returns nothing, so "did the save land" is read off `saveGuardRef`
+  // — the v18.0.0 /code-review finding, and the same reading `settleVoucher`
+  // makes two functions up.
+  function resumeSeat(ask){
+    return withSeatAsked(function(){
+      if(ask.from!=="form") return updateStatus(ask.id,ask.status);
+      doSave();
+      return !mayDispatch(saveGuardRef.current);
+    });
+  }
+  function seatAnyway(){
+    const ask=seatClash;
+    if(!ask) return;
+    setSeatClash(null);
+    resumeSeat(ask);
+  }
+  function seatAfterClearing(){
+    const ask=seatClash;
+    if(!ask) return;
+    setSeatClash(null);                        // dismissed before the permission test, per settleVoucher
+    if(refused("bookingStatus")) return;
+    const ids=(ask.others||[]).map(function(o){return o.id;});
+    const user=getUser();
+    const nowM=nowMins;
+    // One write for the parties leaving, then the seat. Both are function-form,
+    // and `saveBookings` computes from the `bookingsRef` mirror it updates as it
+    // dispatches, so the second sees the first — they compose without waiting
+    // for a render. `completedSeatedPatch` is the same arithmetic `updateStatus`
+    // applies, from one place, so the two cannot disagree about how long a
+    // visit lasted.
+    //
+    // A cleared party carrying a voucher lands UNSETTLED rather than raising the
+    // redeem prompt in the middle of somebody else being seated. That is a state
+    // the app defines, detects and shows in the strip — the close-time
+    // auto-complete produces it for the same reason — and it is the honest
+    // trade: the question gets asked, later, by the section that exists for it.
+    saveBookings(function(prev){
+      return prev.map(function(b){
+        if(ids.indexOf(b.id)<0||b.status!=="seated") return b;
+        return Object.assign({},b,completedSeatedPatch(b,today,nowM),
+          {history:(b.history||[]).concat([histEntry("status → completed (table cleared to seat another party)",user)])});
+      });
+    });
+    resumeSeat(ask);
+  }
   function updateStatus(id,status){if(refused("bookingStatus"))return;
     if(status==="cancelled"){setConfirmCancel(id);return;}
     // v18.0.0: stop and ask before the status lands. `updateStatus` is the one
@@ -3170,6 +3251,13 @@ function BookingApp({uid}){
     if(status==="seated"&&seatCur&&seatCur.status!=="seated"){
       const noTable=seatRefusal(seatCur);
       if(noTable){flashRefusal(noTable);return false;}
+      // C3, at the same door. After the refusal above, because "there is no
+      // table" and "somebody is at the table" are different sentences and the
+      // first has no question in it.
+      if(!seatAskedRef.current){
+        const parties=seatClashParties(seatCur.tables,seatCur.date,id,bookings);
+        if(parties.length){setSeatClash({id:id,status:status,from:"status",others:seatClashSnap(parties)});return false;}
+      }
     }
     const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur);
     const user=getUser();
@@ -4528,7 +4616,7 @@ function BookingApp({uid}){
               const v=vouchersByCode[normalizeCode(b.voucherCode)];
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
               return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". You are moving it back out of Completed — restore that amount to the voucher, or keep it redeemed?";
-            })()}</div><div style={{fontSize: T.small,color:S.sub}}>Restoring puts the balance back and removes this visit from the voucher&rsquo;s history. Keeping it redeemed leaves the record as it is.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>Restoring puts the balance back and removes this visit from the voucher&rsquo;s history. Keeping it redeemed leaves the record as it is.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

@@ -68,6 +68,11 @@ export const MODAL_Z=[
   // walked back. Same rank as its twin because only one of the two can ever be
   // open — a status change is either into `completed` or out of it.
   "voucherback",
+  // v18.0.0 session 8 (C3): the seat-clash confirm — "table 3 still has López
+  // seated". Raised BEFORE the seat lands, so it ranks below the seat note,
+  // which is raised AFTER one does. The two can never be open together: this
+  // one closes when it is answered and the note opens on the far side of it.
+  "seatclash",
   // v18.0.0 session 7: the seat note, raised BY a seat. It opens only after a
   // voucher walk-back prompt has been answered — never beside one — and above
   // the booking form, which a form-path seat has just closed.

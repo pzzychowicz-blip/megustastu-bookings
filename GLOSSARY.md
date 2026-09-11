@@ -176,6 +176,7 @@ The distinction is load-bearing: a **modal** is a dialog (scrim, focus trap,
 | From/To over a table | **table block editor** (`BlockModal.jsx`) | Makes a table unavailable for a window. |
 | Search over all dates | **find a booking** (`SearchPanel.jsx`) | `/` shortcut. Jumps to the day and focuses the card. |
 | Week / Month popover | **More** (`WeekView.jsx`) | `M`. Opened from Summary's More button. |
+| "That table is still occupied" before a party is seated | **seat-clash confirm** (`SeatClashModal.jsx`, modal id `seatclash`) | Asked when the table you are seating a party onto still has a seated party at it (v18.0.0 session 8). Three answers — *Complete them & seat* · *Seat anyway* · *Back* — because refusing outright is wrong (most evenings the previous party has left and nobody tapped Complete) and seating silently is the bug. Escape and the backdrop mean Back. Raised from both seating doors through `seatClashParties` |
 | Per-booking audit trail | **history popup** (`HistoryPopup.jsx`) | |
 | Dot + popover in the header | **connection status** (`ConnectionStatus.jsx`) | Green/amber/red. Lists connected devices and the signed-in email; holds Log out and Reconnect now. |
 | Floating message, bottom centre | **status toast** (`StatusToasts.jsx`) | **One slot** — the highest-priority live toast only, crossfading in place. `role="status"`. |

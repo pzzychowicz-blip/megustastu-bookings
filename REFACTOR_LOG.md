@@ -23065,3 +23065,58 @@ declines to CREATE the anomaly. That is why the form's check is gated on
 `seatingNow` rather than on the draft's status.
 
 Gate: `123.57 kB` gz · **1269 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 79 (session 8, C3) — seating onto a table somebody is still at asks first
+
+Seating never checked whether the table still had a party at it. The result is
+the one clash the app cannot fix by itself: both bookings are `isLocked`,
+`applyOpt` copies a locked booking's tables straight through, and the
+reconciler's OFF branch explicitly gives up on an all-locked overlap
+(`if(!movable.length) break;`). So the table stays double-held until a person
+notices — and until v17.11.0's `ClashBanner` nothing even said so.
+`applySeatedShift` looks at exactly this overlap, but only to decline to SHIFT
+the time; it seats the party either way.
+
+**THREE answers, because the two obvious ones are each wrong half the time.**
+Refusing outright is wrong: most evenings the previous party has simply left
+without anybody tapping Complete, and an app that refuses in that case is an app
+staff learn to work around. Seating silently is the bug. So: **Complete them &
+seat** (what actually happened in the room), **Seat anyway** (a genuine share, or
+a correction that will follow), **Back** — and Escape and the backdrop are Back,
+the direction that changes nothing.
+
+`seatClashParties(tables, date, id, list)` is the predicate, read by both doors
+— `updateStatus` (popup, List card, `S`) and `doSave` (the form). Only a party
+that is actually **seated** counts: a confirmed booking later that evening is the
+optimiser's problem and already has a guard, while somebody physically at the
+table is a question only a person can answer.
+
+**`completedSeatedPatch` came out of `updateStatus` rather than being written
+twice.** "Complete them & seat" needs exactly the seated→completed arithmetic
+v16.2.0 put inline there — the truncation to the real span, the 15-minute floor,
+`stayedMin` — and a second copy is how two places stop agreeing about how long a
+visit lasted. `updateStatus` now reads the same function.
+
+Two things worth knowing about the answer path. The clearing write and the seat
+are **two function-form `saveBookings` calls that compose**: the hook computes
+from the `bookingsRef` mirror it updates as it dispatches, so the second sees the
+first without waiting for a render — which also means `updateStatus` re-enters
+with a STALE `bookings`, where the cleared party still reads as seated, and
+`seatAskedRef` is what stops it asking the same question again. And a cleared
+party carrying a voucher lands **unsettled** rather than raising the redeem
+prompt in the middle of somebody else being seated: a state the app defines,
+detects and surfaces in the strip (the close-time auto-complete produces it for
+the same reason), so the money question is asked later by the section that exists
+for it.
+
+`seatAskedRef` is separate from `redeemAskedRef` on purpose. That one is shared
+by two prompts *because* they cannot both be pending — a status change is either
+into `completed` or out of it. This one can be pending alongside a redeem
+prompt, since clearing the table IS a completion.
+
+New modal id `seatclash`, its `escapeAction` case and its `MODAL_Z` rank in this
+same commit — `tests/modal-stack.test.js` fails the build otherwise, which is
+the guard working rather than a formality. It ranks BELOW `seatnote`: this one is
+raised before the seat lands and that one after, so they are never open together.
+
+Gate: `124.29 kB` gz · **1276 tests** · 0 lint errors (88 warnings) · style OK.
