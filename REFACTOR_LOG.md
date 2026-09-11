@@ -22736,3 +22736,18 @@ Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style O
   twelve `<name>Rev` pairs" → **sixteen**, both measured this session.
 
 Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 67 (phase 7) — ROADMAP: phase 7's entry goes, the deploy stays pending
+
+"Designed, not implemented" held a single entry, phase 7 itself. Its docs landed in
+commits 63–66 and `/code-review and ship` is this PR, so the entry is deleted in the
+PR that ships it and the section reads "nothing pending".
+
+Its post-merge steps did not ship with it — they begin when the release merges — so
+they are still pending work, and deleting them with the entry would have lost the
+only place pending work is looked for. Per Patryk, the procedure lives in the rules
+runbook (commit 66) and ROADMAP keeps a one-line entry under Deferred that POINTS at
+it, to be deleted when `enforceRoles` is on. One file says how; one says it is still
+to do.
+
+Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
