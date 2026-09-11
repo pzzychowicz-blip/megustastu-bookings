@@ -1370,11 +1370,17 @@ main:focus { outline: none; }
    pill-shaped and offset, not a rectangle inside the pill. Both halves or
    neither: hiding the input's ring without drawing the wrapper's would leave a
    keyboard user no focus signal at all, which is why the second selector is in
-   the stylesheet test's critical list. */
-.mgt-datefield input:focus-visible { outline: none; }
-.mgt-datefield:has(input:focus-visible) {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+   the stylesheet test's critical list.
+   /code-review: and both sit inside @supports selector(:has(*)), because that
+   is what makes "both halves or neither" true rather than hoped. Outside it, a
+   browser without :has() dropped the wrapper's rule as an invalid selector and
+   still applied the hide. There the input now keeps the global ring above. */
+@supports selector(:has(*)) {
+  .mgt-datefield input:focus-visible { outline: none; }
+  .mgt-datefield:has(input:focus-visible) {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
 }
 
 /* v17.12.0: visually hidden, but PRESENT to assistive technology — the

@@ -308,6 +308,8 @@ explaining why is usually the one to read.
   neither: hiding one ring without drawing the other leaves no focus signal at
   all, which is why the second selector is a stylesheet critical selector.
   Measured live: input `outline: none`, wrapper `solid 2px` offset `2px`.
+  Both rules sit inside `@supports selector(:has(*))` (/code-review), so a
+  browser without `:has()` keeps the input's own ring instead of losing both.
 
 - **A status button carries its OWN mark, from ONE source (v17.10.0).** Every
   button that moves a booking to another status used to be prefixed with the

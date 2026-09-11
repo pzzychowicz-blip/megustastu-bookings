@@ -22818,3 +22818,17 @@ was not yet true. It is now — `git rev-list --count HEAD` read **800** before
 this review's fixes — so the line says **800+**, his figure.
 
 Gate: `122.45 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 72 (session 7 /code-review) — the date pill's ring: both halves or neither, for real
+
+`.mgt-datefield` hid the input's focus ring unconditionally but drew the
+replacement only through `:has()`. In a browser without `:has()` the second rule
+is dropped as an invalid selector while the first still applies — no focus signal
+on either date field, the outcome its own comment said the pair exists to
+prevent. Both rules now sit inside `@supports selector(:has(*))`, so outside it
+the input keeps the global ring. Nothing the restaurant runs lacks `:has()`
+today, and the timeline ghost already relies on it, so this makes the promise
+structural rather than fixing a failure anybody met. The critical-selector guard
+still finds the wrapper rule inside the block; DESIGN.md says where it lives.
+
+Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
