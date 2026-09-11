@@ -24,12 +24,20 @@ its detail lives rather than repeating it.
 3. **Create the bootstrap admin by hand** at `/roles/<your uid>` (*The one manual
    step: bootstrapping the first admin*). Nothing in the app can create it, by
    design.
-4. **Give every real account a level** in Settings → Admin. Nothing changes for
-   anyone while `enforceRoles` is off; once it is on, an account with no row reads
-   as **staff** — so this step is what decides who notices step 6.
-5. **Check the last-admin guard refuses** — try to demote the only admin: the
-   control is disabled, and a direct write is refused by the rules (*The
-   last-admin guarantee, and why it is not a count*).
+4. **Give every real account a level** in Settings → Admin. **Reload the app on
+   every device first**, or have each account open it once: an account appears in
+   the panel only when its own row exists, and the app writes that row as it
+   loads — a write the old rules refuse, so a device that loaded 18.0.0 before
+   step 2 had it refused silently and does not try again until it reloads
+   (`useRoles`' self-registration). Nothing changes for anyone while
+   `enforceRoles` is off; once it is on, an account with no row reads as
+   **staff** — so this step is what decides who notices step 6.
+5. **Check the last-admin guard refuses** — on your own row, choose a lower
+   level: the panel refuses with "You can't remove your own admin access — ask
+   another admin to do it." and the row stays Admin (the same refusal meets
+   Remove, and your own capability grid's admin cell is locked outright). A
+   direct write is refused by the rules (*The last-admin guarantee, and why it is
+   not a count*).
 6. **Only then turn `settings/admin.enforceRoles` on, outside service hours.** One
    console value, reversible in one console value (*`enforceRoles` — off, and what
    that means*).
@@ -268,7 +276,9 @@ Patryk chose the derived form instead: **an admin may not strip their own
 `settingsAdmin`**, by level or by extra. Only a holder may write `/roles` at
 all, so the set shrinks exclusively when one admin demotes *another* — and the
 demoter still holds it. Zero is unreachable. One clause, no new state, and the
-Admin panel disables exactly what the rule refuses instead of approximating it.
+Admin panel asks the rule's own question (`wouldRemoveOwnAdmin`) instead of
+approximating it: your own capability grid's admin cell is locked, and a lower
+level or Remove on your own row is refused with the reason on screen.
 
 The cost, stated on screen: an admin who wants to step down asks another admin.
 

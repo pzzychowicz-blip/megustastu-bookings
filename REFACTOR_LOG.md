@@ -22787,3 +22787,26 @@ the theme `dark` and `localStorage` `"auto"`, and the toast showed over the
 timeline.
 
 Gate: `122.45 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 70 (session 7 /code-review) — the deploy runbook's steps 4 and 5, as the app behaves
+
+Two steps of the production procedure described behaviour the code does not
+have. Both were found by reading the code the steps rely on:
+
+- **Step 4** said to give every account a level, not that an account is listed
+  only once its own `/roles` row exists — and the app writes that row as it loads
+  (`useRoles`' self-registration), a write the OLD rules refuse. The effect
+  swallows the refusal by design and runs once per `[ready, uid, userEmail]`, so a
+  device that loaded 18.0.0 before step 2 does not try again until it reloads: its
+  account would be missing from the panel when levels are handed out, and would
+  read as staff after step 6 — a manager losing money and configuration access on
+  a service day. The step now says to reload every device first.
+- **Step 5** said demoting the only admin finds "the control is disabled". Only
+  the capability grid's admin cell on your own row is; the Level select and Remove
+  are live, and `setRole` / `removeUser` refuse through `wouldRemoveOwnAdmin` with
+  "You can't remove your own admin access — ask another admin to do it." Someone
+  told to expect a disabled control reads an enabled one as the guard missing. The
+  step now names what you will see, and the phase 3 section's same sentence ("the
+  Admin panel disables exactly what the rule refuses") is corrected in place.
+
+Gate: `122.45 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
