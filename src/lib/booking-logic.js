@@ -1109,6 +1109,34 @@ export function seatNoteFor(prevStatus,nextStatus,b){
   if(!notes) return null;
   return {id:b.id,name:b.name||"",size:Number(b.size)||0,time:b.scheduledTime||b.time||"",tables:Array.isArray(b.tables)?b.tables.slice():[],notes:notes};
 }
+// ── v18.0.0 session 8 (C1): leaving seated puts the booked plan back ─────────
+// `applySeatedShift` moves `time` to the moment the party sat down and rewrites
+// `duration` AND `originalDuration` so the scheduled END stays pinned — a 20:30
+// booking for 150 minutes, seated at 20:15, is stored as 20:15 for 165. Nothing
+// undid that. Walking the booking back to Confirmed left it at 20:15 for 165,
+// which is a reservation nobody made, and every later read — the timeline block,
+// Book Again, the day sheet — showed the arrival time as the booked time.
+//
+// `scheduledTime` is the one field the shift never touches, so the plan is
+// recoverable exactly: the booked start IS `scheduledTime`, and the booked
+// length is `plannedDuration`. `customDur` follows `openEdit`'s rule — a length
+// is custom only when it differs from the size default — so an ordinary booking
+// walked back does not acquire a custom length equal to the default.
+//
+// Null when there is nothing to put back, so neither door writes a history
+// entry for a restore that restores nothing: no readable `scheduledTime` (a
+// pre-v14 booking), no recoverable length, or a booking that was never shifted.
+export function unseatRestore(b,size){
+  if(!b) return null;
+  var sched=isReadableTime(b.scheduledTime)?b.scheduledTime:null;
+  if(!sched||!isReadableTime(b.time)) return null;
+  var planned=plannedDuration(b);
+  if(!planned) return null;
+  var stored=Number(b.originalDuration)||Number(b.duration)||0;
+  if(b.time===sched&&planned===stored) return null;
+  var n=Number(size)||Number(b.size)||2;
+  return {time:sched,duration:planned,originalDuration:planned,customDur:planned===getDur(n)?null:planned};
+}
 // ── v18.0.0 session 8 (item 3): a booking SAVED as seated keeps its tables ───
 // v17.15.5 established this rule for a FINISHED booking — while it is being
 // saved as completed or cancelled its tables are a RECORD, so they are carried

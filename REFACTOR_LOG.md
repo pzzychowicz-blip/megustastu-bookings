@@ -22984,3 +22984,56 @@ Live verification is deferred to the 13:00–22:00 window — it is past midnigh
 and outside opening hours a seated shift does not land inside the day.
 
 Gate: `123.13 kB` gz · **1261 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 77 (session 8, C1) — leaving seated puts the booked plan back
+
+`applySeatedShift` moves a booking's `time` to the moment the party sat down and
+rewrites `duration` AND `originalDuration` so the scheduled END stays pinned —
+20:30 for 150, seated at 20:15, is stored as **20:15 for 165**. **Nothing undid
+it.** Walking the booking back to Confirmed left it at 20:15 for 165, which is a
+reservation nobody made, and every later read — the timeline block, the day
+sheet, Book Again — showed the moment the guests arrived as the time they had
+booked. `updateStatus` had a seat branch and no inverse at all.
+
+`scheduledTime` is the one field the shift never touches, so the plan is
+recoverable exactly rather than approximately: the booked start IS
+`scheduledTime` and the booked length is `plannedDuration` (session 7's helper,
+written for Book Again, which needed the same number for the same reason).
+`customDur` follows `openEdit`'s rule — a length is custom only when it differs
+from the size default — so an ordinary booking walked back does not acquire a
+custom length that happens to equal the default.
+
+**One helper, both doors.** `unseatRestore(b, size)` is read by `doSaveEdit` and
+by `updateStatus`, so the form's Save, the quick-status popup, the List card and
+the `S`/`C` keys cannot disagree about what a booking goes back to. It returns
+**null** when there is nothing to put back — a pre-v14 booking with no
+`scheduledTime`, an unreadable time, no recoverable length, or a booking that was
+never shifted — so neither door writes a history entry for a restore that
+restored nothing.
+
+Two gates on the form path, and they are not the same gate. The whole restore
+waits on `timeUntouched`, exactly as the shift does: an explicit edit in this
+save wins over an automatic value. The LENGTH half additionally waits on
+`!planChanged`, so a length typed in the same save survives — the start still
+moves back in that case, because a start and a length are two decisions and only
+one of them was made here. Confirmed and Pending only: a completed or cancelled
+visit's times are the record of what happened, and completion truncates the
+duration on purpose (v16.2.0).
+
+**And the second half of C1, which is one line and was doing real damage.**
+`unlockForOpt`'s restore wrote `_locked` / `_manual` as `tables.length > 0` —
+i.e. "does it have tables now" rather than "what was it before". `wasSeatedLocked`
+is `isLocked(orig)`, which is TRUE for any seated booking, so walking an ordinary
+seated booking back to Confirmed with a time change stamped it `_locked` +
+`_manual` and quietly turned it into a manual arrangement the optimiser would
+never touch again. It now restores `orig._locked` / `orig._manual`: a walk-in,
+which really was locked before the seat, still comes back locked; an ordinary
+booking does not become one. Same defect shape as the row above it — a flag
+derived from the wrong question, where both answers agree in the common case.
+
+Five tests on the helper: the exact inverse of a late seat and of an early one,
+`openEdit`'s `customDur` rule in both directions (including reading the size the
+save is WRITING rather than the one stored), and each of the five ways it must
+return null.
+
+Gate: `123.47 kB` gz · **1266 tests** · 0 lint errors (88 warnings) · style OK.

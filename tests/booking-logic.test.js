@@ -25,6 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
+  unseatRestore,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2183,5 +2184,49 @@ describe("replacePinnedClashes", () => {
     ];
     const out = replacePinnedClashes(stuck, D, "seat", [], false);
     expect(out.find((b) => b.id === "lock").tables, "left for the refusal to name").toEqual(["3"]);
+  });
+});
+
+// ── v18.0.0 session 8 (C1) — leaving seated puts the booked plan back ────────
+describe("unseatRestore", () => {
+  it("undoes the seated shift exactly — the booked start and the booked length", () => {
+    // 20:30 for 150 min, seated at 20:15: applySeatedShift pinned the 23:00 end
+    // and stored 20:15 for 165.
+    const b = mk({ scheduledTime: "20:30", time: "20:15", duration: 165, originalDuration: 165 });
+    expect(unseatRestore(b, 2)).toEqual({ time: "20:30", duration: 150, originalDuration: 150, customDur: 150 });
+  });
+
+  it("follows openEdit's rule for customDur — a default length is not a custom one", () => {
+    // Restores to 90, which IS the size-2 default.
+    const b = mk({ scheduledTime: "20:30", time: "20:15", duration: 105, originalDuration: 105 });
+    expect(unseatRestore(b, 2).customDur, "90 is getDur(2)").toBe(null);
+    expect(unseatRestore(b, 2).duration).toBe(90);
+  });
+
+  it("reads the size the save is writing, not the size that was stored", () => {
+    // Restores to 120 — custom for a party of 2, the default for a party of 5.
+    const b = mk({ size: 2, scheduledTime: "20:30", time: "20:00", duration: 150, originalDuration: 150 });
+    expect(unseatRestore(b, 2).customDur).toBe(120);
+    expect(unseatRestore(b, 5).customDur, "120 is getDur(5)").toBe(null);
+  });
+
+  it("is null when there is nothing to put back", () => {
+    expect(unseatRestore(mk({ scheduledTime: "20:30", time: "20:30", duration: 90, originalDuration: 90 })),
+      "never shifted").toBe(null);
+    expect(unseatRestore(mk({ scheduledTime: "", time: "20:15", duration: 165 })),
+      "pre-v14, no scheduledTime").toBe(null);
+    expect(unseatRestore(mk({ scheduledTime: "20:30", time: "8 in the evening", duration: 165 })),
+      "an unreadable time is not arithmetic").toBe(null);
+    expect(unseatRestore(mk({ scheduledTime: "20:30", time: "20:15", duration: 0, originalDuration: 0 })),
+      "no recoverable length").toBe(null);
+    expect(unseatRestore(null)).toBe(null);
+  });
+
+  it("restores an EARLY seat too, where the shift made the booking longer", () => {
+    // 20:30 for 90, seated at 20:00 → stored 20:00 for 120.
+    const b = mk({ scheduledTime: "20:30", time: "20:00", duration: 120, originalDuration: 120 });
+    const r = unseatRestore(b, 2);
+    expect(r.time).toBe("20:30");
+    expect(r.duration).toBe(90);
   });
 });

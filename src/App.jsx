@@ -49,6 +49,8 @@ import {
   seatNoteFor,
   // v18.0.0 session 8 (item 3): a booking saved as seated keeps its tables.
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
+  // v18.0.0 session 8 (C1): and leaving seated puts the booked plan back.
+  unseatRestore,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2279,6 +2281,27 @@ function BookingApp({uid}){
           saveDur=seatedShift.newDuration;
           saveCustDur=seatedShift.newDuration;
         }
+        // v18.0.0 session 8 (C1): the seated shift's inverse. Walking a booking
+        // out of seated to Confirmed or Pending puts the booked start and the
+        // booked length back — `applySeatedShift` had rewritten both and nothing
+        // undid it, so the booking kept the time the party arrived as the time
+        // it was booked for. Not for completed or cancelled: a finished visit's
+        // times are the record of what happened, and completion truncates the
+        // duration deliberately (v16.2.0).
+        //
+        // Gated on `timeUntouched` for the same reason the shift is — an
+        // explicit edit in this save wins over the automatic value — and the
+        // LENGTH half additionally on `!planChanged`, so a length typed in the
+        // same save survives. The start still moves back in that case: a start
+        // and a length are two decisions, and only one of them was made here.
+        const unseating=orig&&orig.status==="seated"&&(f.status==="confirmed"||f.status==="pending")&&timeUntouched;
+        const unseat=unseating?unseatRestore(orig,size):null;
+        if(unseat){
+          saveTime=unseat.time;
+          if(!planChanged){saveDur=unseat.duration;saveCustDur=unseat.customDur;}
+        }
+        // Built here, where both halves of what was actually written are known.
+        const unseatHist=unseat?histEntry("un-seated: time restored "+orig.time+" → "+saveTime+(planChanged?"":", length "+(orig.duration||0)+" → "+saveDur+" min"),getUser()):null;
         const clearM=!!f._clearManual;
         const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
         // ── v17.15.5: a FINISHED booking's tables are a historical record ────
@@ -2344,7 +2367,7 @@ function BookingApp({uid}){
         // v14 p1 (Issue 2 fix #2): when a seated-shift happens, originalDuration
         // must also move to the new duration so the ghost bar anchors at the true
         // scheduled end (e.g. 20:15 + 105 = 22:00), not at the stale 21:45.
-        const saveOrigDurFinal=seatedShift?seatedShift.newDuration:saveOrigDur;
+        const saveOrigDurFinal=seatedShift?seatedShift.newDuration:((unseat&&!planChanged)?unseat.originalDuration:saveOrigDur);
         // v14: when seating, force no-reshuffle of other bookings (same rule as
         // updateStatus). The seated-shift must not trigger cascading table moves.
         const optStateForSave=seatingNow?false:autoOptimizer;
@@ -2361,13 +2384,21 @@ function BookingApp({uid}){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
+              if(unseatHist) h=h.concat([unseatHist]);
               return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
           });
           let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length&&!pinned,optStateForSave);
-          if(unlockForOpt){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+          // v18.0.0 session 8 (C1): the flags go back to what they WERE, not to
+          // "does it have tables now". `wasSeatedLocked` is `isLocked(orig)`,
+          // which is true for any seated booking — so walking an ordinary one
+          // back to Confirmed with a time change stamped it `_locked` +
+          // `_manual` and quietly turned it into a manual arrangement the
+          // optimiser would never touch again. A walk-in, which really was
+          // locked before the seat, still comes back locked.
+          if(unlockForOpt){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:!!(orig&&orig._locked),_manual:!!(orig&&orig._manual)});return b;});}
           // v18.0.0 session 8: with the tables pinned, the optimiser-OFF path
           // keeps EVERY booking's tables — including anyone the new window now
           // overlaps. Re-place them here, before Save, rather than saving the
@@ -3152,6 +3183,19 @@ function BookingApp({uid}){
           // visit (booking-logic's stayedMins). Only a genuine seated→completed
           // transition reaches here, which is exactly the gate the tag needs.
           extra.stayedMin=actualDur;
+        }
+        // v18.0.0 session 8 (C1): the other door out of seated. Same restore as
+        // the form's — one helper, so the popup, the List card and the S key
+        // cannot disagree with Save about what a booking goes back to.
+        if((status==="confirmed"||status==="pending")&&x.status==="seated"){
+          const back=unseatRestore(x,x.size);
+          if(back){
+            extra.time=back.time;
+            extra.duration=back.duration;
+            extra.originalDuration=back.originalDuration;
+            extra.customDur=back.customDur;
+            histEntries.push(histEntry("un-seated: time restored "+x.time+" → "+back.time+", length "+(x.duration||0)+" → "+back.duration+" min",user));
+          }
         }
         if(status==="seated"&&x.status!=="seated"){
           const shift=applySeatedShift(x,nowM,b,today);
