@@ -22832,3 +22832,17 @@ structural rather than fixing a failure anybody met. The critical-selector guard
 still finds the wrapper rule inside the block; DESIGN.md says where it lives.
 
 Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 73 (session 7 /code-review) — one Sun-first weekday list
+
+`weekdayShort`'s `WEEKDAY_SHORT` was a third byte-identical copy of the Sun-first
+weekday names — `Reminders.jsx`'s `DAY_SHORT_LABELS` and `Settings.jsx`'s
+`RULE_WD` were the other two — with nothing tying them: this file's own "any fact
+written out N times" shape, arriving in the commit that put the weekday in the
+date fields. `day.js` imports nothing, which is exactly what lets it be the
+source: it now exports `WEEKDAY_SHORT`, `Reminders.jsx` imports it, and
+`Settings.jsx` imports it under its old name (`RULE_WD`) so its two call sites did
+not move. The Mon-first shapes — `WeekView`'s rows, `ReminderEditor`'s picker, the
+opening-hours pairs — are different lists and are left alone.
+
+Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.

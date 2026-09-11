@@ -35,8 +35,10 @@ import { BTN, R, M, T, FW, H, IC, APP_NAME } from "../lib/constants";
 // v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
 import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 
-// v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
-const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay
+// order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
+// which this line used to copy byte for byte.
+import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools

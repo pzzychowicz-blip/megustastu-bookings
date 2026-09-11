@@ -177,7 +177,10 @@ export function stepDate(dateStr, n) {
 // `stepDate(d, 0) === d` — so "2026-8-3" (which navigates, see isReadableDate)
 // and "2026-02-30" (which rolls over) both read "", because the input beside
 // them is blank. All-UTC like everything else in this file.
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+//
+// Exported (/code-review): the Reminders summary and the standing-booking rows
+// read it rather than keeping their own byte-identical copies.
+export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function weekdayShort(dateStr) {
   // The typeof is NOT redundant with stepUTC's own: stepUTC(null) returns null,
   // which is `===` the input, and `new Date(null)` is the epoch — a Thursday. The
