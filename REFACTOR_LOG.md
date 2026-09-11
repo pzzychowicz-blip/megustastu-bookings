@@ -22672,3 +22672,24 @@ to the draft Patryk approved, keeping his structure and voice:
   functions; the test, rules, lint and style commands beside dev and build.
 
 Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK · `test:rules` **257**.
+
+### Commit 64 (phase 7) — CLAUDE.md: the scope line this release reversed, and four figures measured
+
+- **"Out of scope → Multi-tenancy — no plans to generalise"** was the one line in
+  the file this release made false. It is struck through and superseded in place —
+  the convention the Tests bullet beside it already uses — pointing at the design
+  document, whose status line now carries a dated revision block recording that all
+  five of its phases have shipped, two before this release set out to implement it.
+- **Four figures, each re-measured rather than extended by arithmetic:** unit tests
+  **30 files / 1068 → 37 / 1245** (`ls tests/*.test.js`, `npm test`), with the file
+  list REGENERATED from `ls` — it lacked the seven WhatsApp test files the port and
+  its crash test added; rules tests **149 → 257** (`npm run test:rules` against the
+  emulator); rev pairs **fourteen → sixteen**, counted from `database.rules.json`.
+- **Two Gotchas rows that point rather than restate** — never delete a voucher, never
+  store a secret in RTDB. The plan's phase 7 list assumed both rules were missing;
+  both were already written in prose (the persisted-collections paragraph, the
+  Integrations paragraph). A trap explained only mid-paragraph is not found where
+  traps are looked for, so each row exists for findability and names where the
+  reasoning lives — one answer, found from two places.
+
+Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
