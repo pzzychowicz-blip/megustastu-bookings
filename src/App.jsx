@@ -63,6 +63,8 @@ import {
   enteredPhone,
   // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
   kitchenRelevant,
+  // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
+  savedToast,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -1833,7 +1835,10 @@ function BookingApp({uid}){
     return map;
   },[freeingList]);
 
-  function flash(){setReshuffled(true);setTimeout(function(){setReshuffled(false);},3000);}
+  // v18.0.0 session 8 (C8): `kind` is what the ACTION did, for the toast to
+  // read. `"saved"` means this action suppressed the optimiser, so it must not
+  // claim a reshuffle; every other caller passes nothing and is unchanged.
+  function flash(kind){setReshuffled(kind||true);setTimeout(function(){setReshuffled(false);},3000);}
   function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
 
   // v15.6.1 — Post-sync conflict reconciliation.
@@ -2523,7 +2528,9 @@ function BookingApp({uid}){
         // WhatsApp sandbox: if this edit came from a modify request's "Apply
         // changes", auto-mark that request handled — but only on a real save.
         wa.completeModifyApply(editId, ok);
-        if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash();
+        // C8: a save that seats passes `optStateForSave: false`, so no table was
+        // re-optimised and the toast must not say one was.
+        if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash(seatingNow?"saved":null);
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
         if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
@@ -3366,7 +3373,8 @@ function BookingApp({uid}){
       const optState=(status==="seated")?false:autoOptimizer;
       return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
     });
-    if(ok&&(status==="completed"||status==="seated")) flash();
+    // C8: same at this door — `optState` is false for a seat (see below).
+    if(ok&&(status==="completed"||status==="seated")) flash(status==="seated"?"saved":null);
     if(seatSnap) setSeatNote(seatSnap);
     // v18.0.0: returned so the redeem path can gate the voucher write on the
     // BOOKING write having actually dispatched — see `settleVoucher`.
@@ -4556,11 +4564,11 @@ function BookingApp({uid}){
                 waitAddedShown={waitAddedShown}
                 undoInfo={undoInfo}
                 onUndo={undoLastAction}
-                undoNote={reshuffled&&optimizerActiveFor(viewDate,autoOptimizer)?"tables re-optimised":""}
+                undoNote={reshuffled&&reshuffled!=="saved"&&optimizerActiveFor(viewDate,autoOptimizer)?"tables re-optimised":""}
                 permMsg={permMsg}
                 dragMsg={dragMsg}
                 reshuffled={reshuffled}
-                reshuffledMsg={optimizerActiveFor(viewDate,autoOptimizer)?"Tables re-optimised.":"Booking saved."}
+                reshuffledMsg={savedToast(reshuffled,optimizerActiveFor(viewDate,autoOptimizer))}
                 loadShown={loadBannerShown}
                 loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
                 /* v17.12.0 (review fix): the view — the actual "page behind the

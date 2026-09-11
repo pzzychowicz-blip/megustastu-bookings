@@ -23282,3 +23282,28 @@ Six tests, including the two that would have caught this — the notes-only edit
 and the seat, both `false` — and the revival cases, both `true`.
 
 Gate: `124.52 kB` gz · **1301 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 84 (session 8, C8) — a seat says "Booking saved."
+
+The save toast picked its sentence from `optimizerActiveFor(viewDate, …)` — the
+state of the toggle on the day you happen to be LOOKING at — rather than from
+what the action did. A seat passes `autoOptimizerState: false` into
+`bookingsAfterAction` **precisely so that nobody else moves when a party sits
+down** (the rule has been in this file since v14). So on any day with the
+optimiser on, seating a booking announced a reshuffle the app had gone out of
+its way to suppress.
+
+`flash(kind)` carries what the action did; `savedToast(kind, optimiserActive)`
+turns it into the sentence. Both seating doors pass `"saved"` — `updateStatus`
+for the popup, the List card and `S`, and `doSaveEdit` for the form — and the
+other eight `flash()` call sites pass nothing and are unchanged.
+
+**The Undo pill had the same defect one line up**, and it is fixed in the same
+commit: `undoNote` read the identical condition, so undoing a seat offered to
+put back "tables re-optimised" that were never re-optimised.
+
+Four tests. A toast is presentation, but the sentence it prints is a factual
+claim about what the app just did, and that part belongs in `lib/` with the rest
+of the claims.
+
+Gate: `124.59 kB` gz · **1303 tests** · 0 lint errors (88 warnings) · style OK.

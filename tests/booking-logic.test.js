@@ -26,7 +26,7 @@ import {
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
-  tablesFreeFor, trialFits, enteredPhone, kitchenRelevant,
+  tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2100,6 +2100,19 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (C8) — the toast claims only what the action did ──────
+describe("savedToast", () => {
+  it("never claims a reshuffle for an action that suppressed the optimiser", () => {
+    expect(savedToast("saved", true), "a seat, on a day with the optimiser on").toBe("Booking saved.");
+    expect(savedToast("saved", false)).toBe("Booking saved.");
+  });
+
+  it("keeps the old derivation for every other action", () => {
+    expect(savedToast(true, true)).toBe("Tables re-optimised.");
+    expect(savedToast(true, false)).toBe("Booking saved.");
   });
 });
 

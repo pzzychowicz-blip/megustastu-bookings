@@ -359,6 +359,21 @@ export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=is
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
   updatedAt:Number(b.updatedAt)||0};}
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
+// ── v18.0.0 session 8 (C8): what the save toast is allowed to claim ─────────
+// "Tables re-optimised." was chosen from `optimizerActiveFor(viewDate, …)` —
+// the state of the TOGGLE on the day you happen to be looking at — rather than
+// from what the action did. A seat passes `autoOptimizerState: false` into
+// `bookingsAfterAction` precisely so that nobody else moves when a party sits
+// down, so on any day with the optimiser on, seating a booking announced a
+// reshuffle that had been explicitly suppressed.
+//
+// An action that suppressed the optimiser says `"saved"`; everything else keeps
+// the old derivation. A toast is presentation, but the sentence it prints is a
+// factual claim about what the app just did, and that part is testable.
+export function savedToast(kind,optimiserActive){
+  if(kind==="saved") return "Booking saved.";
+  return optimiserActive?"Tables re-optimised.":"Booking saved.";
+}
 // ── v18.0.0 session 8 (R6): does this save change what the KITCHEN sees? ────
 // "Kitchen may be busy" counts the STARTS in a slot — how many parties the pass
 // has to cook for at once. `save()` raised it on any save whose slot was busy,
