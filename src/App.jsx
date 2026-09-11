@@ -45,6 +45,8 @@ import {
   seatedElapsed,
   // v18.0.0 session 7: the length Book Again carries over.
   plannedDuration,
+  // v18.0.0 session 7: the seat note's one predicate.
+  seatNoteFor,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -284,6 +286,7 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
+import { SeatNoteModal } from "./components/SeatNoteModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
 import { useRecurring } from "./hooks/useRecurring";
 // v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
@@ -945,6 +948,9 @@ function BookingApp({uid}){
   // to Confirmed/Seated while its voucher carries a redemption for this visit.
   const voucherBack = modalOpen.voucherback || null;
   const setVoucherBack = setModalFns.voucherback;
+  // v18.0.0 session 7: the seat note — a SNAPSHOT from seatNoteFor, not an id.
+  const seatNote = modalOpen.seatnote || null;
+  const setSeatNote = setModalFns.seatnote;
   // v18.0.0 phase 3: the capability grid, opened from the Admin tab. Its
   // payload is the uid whose row is selected — a non-empty string, so the
   // stack's falsy-closes semantics are safe here.
@@ -2399,6 +2405,12 @@ function BookingApp({uid}){
         // open with an error and the guard READY, so Save still works.
         saveGuardRef.current=DISPATCHED;
         setShowForm(false);setViewDate(f.date);
+        // v18.0.0 session 7: the seat note, at the form's door — here, after the
+        // dispatch and the close, and never earlier: every early return above
+        // leaves the form open with an error, and none of those is a seat. The
+        // snapshot is the EDITED booking, so a note typed in this save is shown.
+        const seatSnap=seatNoteFor(orig&&orig.status,f.status,fin.find(function(b){return b.id===editId;}));
+        if(seatSnap) setSeatNote(seatSnap);
   }
   function doSaveNew(f,v){
     const size=v.size,dur=v.dur,cleanPhone=v.cleanPhone,mt=v.mt;
@@ -2945,6 +2957,7 @@ function BookingApp({uid}){
     confirmKitchen:confirmKitchen,setConfirmKitchen:setConfirmKitchen,
     setVoucherAsk:setVoucherAsk,
     setVoucherBack:setVoucherBack,
+    setSeatNote:setSeatNote,
     blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
@@ -3066,6 +3079,12 @@ function BookingApp({uid}){
       setVoucherBack({id:id,status:status,from:"status"});
       return false;
     }
+    // v18.0.0 session 7: the seat note, at this door. Taken from the booking as
+    // it stands BEFORE the write (a seat moves no tables) and raised after it —
+    // past both voucher gates above, so it can never open beside a money prompt,
+    // only after one has been answered. Not gated on `ok`: a write held by the
+    // stale gate still shows the seat, and the party is sitting down either way.
+    const seatSnap=seatNoteFor((bookings.find(function(x){return x.id===id;})||{}).status,status,bookings.find(function(x){return x.id===id;}));
     const user=getUser();
     const nowM=nowMins;
     const ok=saveBookings(function(b){
@@ -3114,6 +3133,7 @@ function BookingApp({uid}){
       return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
     });
     if(ok&&(status==="completed"||status==="seated")) flash();
+    if(seatSnap) setSeatNote(seatSnap);
     // v18.0.0: returned so the redeem path can gate the voucher write on the
     // BOOKING write having actually dispatched — see `settleVoucher`.
     return ok;
@@ -4408,7 +4428,7 @@ function BookingApp({uid}){
               const v=vouchersByCode[normalizeCode(b.voucherCode)];
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
               return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". You are moving it back out of Completed — restore that amount to the voucher, or keep it redeemed?";
-            })()}</div><div style={{fontSize: T.small,color:S.sub}}>Restoring puts the balance back and removes this visit from the voucher&rsquo;s history. Keeping it redeemed leaves the record as it is.</div></Overlay>:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>Restoring puts the balance back and removes this visit from the voucher&rsquo;s history. Keeping it redeemed leaves the record as it is.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

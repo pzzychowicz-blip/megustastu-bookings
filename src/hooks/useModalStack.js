@@ -68,6 +68,10 @@ export const MODAL_Z=[
   // walked back. Same rank as its twin because only one of the two can ever be
   // open — a status change is either into `completed` or out of it.
   "voucherback",
+  // v18.0.0 session 7: the seat note, raised BY a seat. It opens only after a
+  // voucher walk-back prompt has been answered — never beside one — and above
+  // the booking form, which a form-path seat has just closed.
+  "seatnote",
   "history",
   "settings",
   // v18.0.0 phase 3: the capability grid opens from INSIDE the Settings

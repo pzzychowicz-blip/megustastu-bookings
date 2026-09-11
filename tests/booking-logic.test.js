@@ -23,7 +23,7 @@ import {
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
-  plannedDuration,
+  plannedDuration, seatNoteFor,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -1999,5 +1999,45 @@ describe("plannedDuration — the length a booking was BOOKED for (v18.0.0 sessi
     expect(plannedDuration(null)).toBe(null);
     expect(plannedDuration({ time: "13:00" })).toBe(null);
     expect(plannedDuration({ time: "13:00", duration: 0, originalDuration: 0 })).toBe(null);
+  });
+});
+
+describe("seatNoteFor — what the seat note shows (v18.0.0 session 7)", () => {
+  // One predicate for both doors a booking is seated through, so this is where
+  // "when does the popover open" is decided — and the only place it can be pinned.
+  it("a move INTO seated with a note returns a snapshot of the booking as it will stand", () => {
+    const b = mk({ id: "s1", name: "Maria López", size: 4, time: "20:15", scheduledTime: "20:30", tables: ["5A"], notes: "  Birthday — cake with dessert.\nNut allergy.  " });
+    expect(seatNoteFor("confirmed", "seated", b)).toEqual({
+      id: "s1", name: "Maria López", size: 4, time: "20:30", tables: ["5A"],
+      notes: "Birthday — cake with dessert.\nNut allergy.",
+    });
+  });
+
+  it("the time is the BOOKED time — the seated shift has just moved `time` to now", () => {
+    expect(seatNoteFor("confirmed", "seated", mk({ time: "20:15", scheduledTime: "20:30", notes: "x" })).time).toBe("20:30");
+    // A legacy row with no scheduledTime still names a time.
+    expect(seatNoteFor("confirmed", "seated", { id: "l", time: "13:00", size: 2, notes: "x" }).time).toBe("13:00");
+  });
+
+  it("is null for anything that is not a seat", () => {
+    const b = mk({ notes: "Nut allergy" });
+    expect(seatNoteFor("seated", "seated", b), "re-saving a party already seated").toBe(null);
+    expect(seatNoteFor("confirmed", "completed", b)).toBe(null);
+    expect(seatNoteFor("seated", "confirmed", b)).toBe(null);
+    expect(seatNoteFor("confirmed", "cancelled", b)).toBe(null);
+  });
+
+  it("is null when there is nothing to read", () => {
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: "" }))).toBe(null);
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: "   \n " }))).toBe(null);
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: undefined }))).toBe(null);
+    expect(seatNoteFor("confirmed", "seated", null), "a booking gone from the list").toBe(null);
+  });
+
+  it("the snapshot is a copy — mutating the booking afterwards cannot change what is on screen", () => {
+    const b = mk({ tables: ["1A", "1B"], notes: "Wheelchair" });
+    const snap = seatNoteFor("confirmed", "seated", b);
+    b.tables.push("2");
+    expect(snap.tables).toEqual(["1A", "1B"]);
   });
 });

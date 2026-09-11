@@ -1086,6 +1086,29 @@ export function plannedDuration(b){
   const len=toMins(b.time)+stored-toMins(sched);
   return len>0?len:stored;
 }
+// ── v18.0.0 session 7: what the seat note shows ──────────────────────────────
+// A booking's notes are where "nut allergy" and "birthday cake with dessert"
+// live, and the moment they matter is when the party sits down. Patryk: seating a
+// booking that has notes raises a popover with the note and one button.
+//
+// ONE predicate for the two doors a booking is seated through — `updateStatus`
+// (the quick-status popup, the List card, the S key) and `doSaveEdit` (the form's
+// Save) — so they cannot disagree about when it opens. Only a move INTO seated
+// (re-saving a party already seated is not a seat), only a note with something in
+// it. `b` is the booking as it will stand — the form path passes the EDITED one,
+// so a note typed in the same save is the note shown.
+//
+// Returns a SNAPSHOT, not an id: the popover renders what was true at the seat,
+// which is what makes its height static and keeps a booking deleted on another
+// device in those seconds from blanking it. `time` is the booked time — the
+// seated shift has just moved `time` to now, and staff know a party by its
+// booking ("the 20:30 López party"), the reasoning Book Again already uses.
+export function seatNoteFor(prevStatus,nextStatus,b){
+  if(!b||nextStatus!=="seated"||prevStatus==="seated") return null;
+  const notes=typeof b.notes==="string"?b.notes.trim():"";
+  if(!notes) return null;
+  return {id:b.id,name:b.name||"",size:Number(b.size)||0,time:b.scheduledTime||b.time||"",tables:Array.isArray(b.tables)?b.tables.slice():[],notes:notes};
+}
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
   var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});

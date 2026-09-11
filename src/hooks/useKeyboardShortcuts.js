@@ -74,6 +74,8 @@ function escapeAction(K,id){
     // change — the same shape as its twin above, and the safe direction for a
     // prompt about money: dismissing it moves nothing.
     case "voucherback": return function(){K.setVoucherBack(null);};
+    // v18.0.0 session 7: Escape is "Done" — there is no decision in a note.
+    case "seatnote":    return function(){K.setSeatNote(null);};
     case "reshuffle":   return function(){K.setConfirmReshuffle(false);};
     case "cancel":      return function(){K.setConfirmCancel(null);};
     case "del":         return function(){K.setConfirmDel(null);};

@@ -22583,3 +22583,67 @@ switch's CSS coordinates landed on the scrim. The switch was not broken — the
 instrument was. Every click after that was made by element ref.
 
 Gate: `122.04 kB` gz (+0.08) · **1240 tests** (+3) · 0 lint errors (88 warnings) · style OK.
+
+### Commit 62 (session 7) — the seat note: a party's notes, at the moment it sits down
+
+A booking's notes are where "nut allergy", "birthday cake with dessert" and
+"wheelchair — step-free table" live, and until now nothing put them in front of
+the person seating the party: a line on a List card, a dog-ear on a timeline
+block. **Seating a booking that has notes now raises a popover with the note and
+one button, Done** — Patryk offered "Close" or "Done"; Done is the house word for
+dismissing a panel with no decision in it (the waitlist, search and roles panels).
+
+**Two doors, one predicate.** A booking is seated through `updateStatus` (the
+quick-status popup, the List card's button, the `S` key) or through `doSaveEdit`
+(the edit form's Save — its status row only sets the draft). Patryk chose every
+seat action, so both doors raise it, through `seatNoteFor(prevStatus,
+nextStatus, b)` in `booking-logic.js`, and the two cannot disagree about when it
+opens: only a move INTO seated, only a note with something in it. At the form's
+door it is raised after the dispatch and the close — never earlier, because every
+early return leaves the form open with an error and none of those is a seat — and
+from the EDITED booking, so a note typed in the same save is the note shown. At
+`updateStatus` it is taken before the write and raised after it, past both
+voucher gates, so it can never open beside a money prompt, only after one has been
+answered. Walk-ins never raise it: the person typing the note is the one seating
+them. A Gotchas row in `CLAUDE.md` says a third door must call it too.
+
+**It renders a snapshot, not a live lookup.** `seatNoteFor` returns the name,
+party size, booked time, tables and trimmed note as they stand at the seat. That
+makes the modal's `@static-height` claim true rather than hoped — nothing on it
+can change while it is up — and a booking deleted on another device in those
+seconds does not blank the note under the reader. The time is the booked
+`scheduledTime`: the seated shift has just moved `time` to now, and staff know a
+party by its booking.
+
+`seatnote` joins `MODAL_Z` after `voucherback`, with its `escapeAction` case
+(Escape is Done) and `setSeatNote` in the keyboard context — the three wirings
+`tests/modal-stack.test.js` holds together.
+
+**Verified live in DEV at every door, and where it must not open.** A booking for
+14:00 with a two-line note ("Birthday — cake with dessert." / "One guest allergic
+to nuts."):
+
+- **The List card's Seated** → a dialog named "Note — QA Seat note", "2 guests ·
+  14:00" (the booked time — the seat had just shifted `time` to 11:17), the 1B
+  badge, both lines with the line break kept, and Done. **Escape** played the
+  card's exit (opacity 1 → 0.93 → 0.75 → 0.42 → 0 over ~250 ms) before
+  unmounting, and the booking stayed seated.
+- **The `S` key** on the selected card → the same note; **Done** closed it the
+  same way (1 → 0.83 → 0.55 → 0.08 → 0).
+- **The form's Save**, with Seated chosen and a third line typed into the note in
+  the same save → the form closed and the note showed **all three lines**: the
+  snapshot is the edited booking. Before that, the same save was refused by the
+  form — the booking's shifted 11:18 start is outside opening hours — and **no
+  note opened**. The rule that it is raised only at the dispatch, never before
+  validation, was observed rather than assumed.
+- **No note** — seating a booking without notes opened nothing, and walking a
+  seated booking back to Confirmed opened nothing.
+- **A walk-in** created with a note ("Walk-in 1", table 2) was seated with no
+  popover, its note on its card.
+
+Not driven separately, and said so rather than implied: the quick-status popup,
+which is the same `updateStatus` door as the List button and the `S` key; and the
+voucher walk-back interplay, which needs a redeemed voucher — there the ordering
+is the code's (the snapshot is raised only after both voucher gates return).
+
+Gate: `122.40 kB` gz (+0.36) · **1245 tests** (+5) · 0 lint errors (88 warnings) · style OK.
