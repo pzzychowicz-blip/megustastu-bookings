@@ -1348,7 +1348,10 @@ function BookingApp({uid}){
     // v18.0.0 session 7: locked while Automatic dark mode is on — Patryk's choice. The
     // switch renders disabled; this guard keeps any other caller from quietly
     // replacing Automatic with a fixed look.
-    if(themePref===undefined) return;
+    // /code-review: and it SAYS so. The other caller is ⇧D — global, and listed
+    // in Shortcuts — and a bare return there read as a dead key for every
+    // account that never chose a theme, which reads as Automatic by default.
+    if(themePref===undefined){flashRefusal("Dark mode follows this device while Automatic dark mode is on — turn it off in Settings → App.");return;}
     const next=!isDark;
     // v17.6.0: localStorage stays as the PRE-MOUNT cache — index.html's
     // no-flash script reads this key before React mounts and long before
@@ -2680,11 +2683,16 @@ function BookingApp({uid}){
   //
   // It REFUSES rather than doing nothing. A control that silently no-ops reads
   // as broken, which is the v17.16.12 lesson about `seated` after close.
-  function refused(cap){
-    if(can(cap)) return false;
-    setPermMsg("You don't have permission to "+capLabel(cap)+".");
+  // /code-review (session 7): the refusal toast on its own — `refused` is one
+  // caller, and ⇧D under Automatic dark mode (onToggleDark) is the other.
+  function flashRefusal(text){
+    setPermMsg(text);
     clearTimeout(permMsgTimer.current);
     permMsgTimer.current=setTimeout(function(){setPermMsg(null);},3500);
+  }
+  function refused(cap){
+    if(can(cap)) return false;
+    flashRefusal("You don't have permission to "+capLabel(cap)+".");
     return true;
   }
   function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}

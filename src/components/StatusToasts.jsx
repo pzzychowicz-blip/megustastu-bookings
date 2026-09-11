@@ -43,7 +43,8 @@
 //                    the only cue that the optimizer moved OTHER bookings.
 //                    App passes it when a reshuffle actually happened.
 //  dragMsg         — v17.0.0 {text, good} | null (timeline drag&drop feedback)
-//  permMsg         — v18.0.0 string | null (a capability refusal). Ranked ABOVE
+//  permMsg         — v18.0.0 string | null (a refusal: a capability the account
+//                    lacks, or ⇧D while Automatic dark mode is on). Ranked ABOVE
 //                    dragMsg: it is the answer to something the user just did,
 //                    and it must not be hidden by feedback about something else.
 //  reshuffled      — the post-save flag

@@ -22765,3 +22765,25 @@ nothing else. `index.html` moved only inside its HTML comment, outside the
 hashed boot script — `tests/csp.test.js` passing is the check.
 
 Gate: `122.41 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 69 (session 7 /code-review) — ⇧D says why it will not switch
+
+The review's one user-facing defect. `onToggleDark` returns while Automatic dark
+mode is on — the lock Patryk chose — and its comment said that keeps "any other
+caller" from replacing Automatic with a fixed look. The other caller is **⇧D**:
+global, listed in Shortcuts as "Toggle dark / light mode", and — because an
+account that never chose a theme reads as Automatic — dead by default, silently,
+for exactly the accounts it used to work for. The lock stays; the silence goes.
+The guard now raises the refusal toast: "Dark mode follows this device while
+Automatic dark mode is on — turn it off in Settings → App." `refused`'s toast
+body moved into `flashRefusal(text)`, which both call, so there is still one
+timer and one slot — `permMsg`, whose prop note now says it carries either
+refusal.
+
+**Verified live in DEV.** With Automatic dark mode on (its switch
+`aria-checked="true"`, Dark mode `disabled`, "Controlled by Automatic dark mode."
+shown, `localStorage` `"auto"`), Settings closed and focus on the body, ⇧D left
+the theme `dark` and `localStorage` `"auto"`, and the toast showed over the
+timeline.
+
+Gate: `122.45 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
