@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -54,7 +54,7 @@ import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section,
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
@@ -612,15 +612,27 @@ export function BookingFormModal({
           onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>
       );})}</div></Section>:null;
 
+  // v18.0.0 session 8 (item 6): icon-only. It was the words "History (4)" and
+  // took the width of three controls in a footer that also holds Book again and
+  // Delete. The COUNT is not dropped — it moves into the accessible name and the
+  // tooltip, because it is the reason to press the button: "History, 1 entry"
+  // and "History, 12 entries" are different propositions.
+  //
+  // A SQUARE at `H.chrome`, and NOT the `H.control` the plan named: the two
+  // buttons beside it are `minHeight: 36`, which is `H.chrome`, so a 40px square
+  // would stand taller than its own row. Match the row.
   const historyBtn=(function(){
     if(!editId) return null;
     const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur||!cur.history||!cur.history.length) return null;
+    const n=cur.history.length;
     return (
       <button
         onClick={function(){onOpenHistory();}}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize: T.body,background:"var(--app-btn-slate)",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
+        aria-label={"History, "+n+" "+(n===1?"entry":"entries")}
+        title={"History ("+n+")"}
+        style={mkBtn({background:"var(--app-btn-slate)",padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
     );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is

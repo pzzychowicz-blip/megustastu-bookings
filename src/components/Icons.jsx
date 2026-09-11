@@ -357,6 +357,35 @@ export function AlertIcon(props) {
 // permission problem) and not a calendar (which is what every DATE control in
 // the app already is); a struck circle is the one mark that says "not today"
 // without competing with either.
+// v18.0.0 session 8 (item 6) — the per-booking history, as a mark. Patryk chose
+// a clock with a counter-clockwise arrow over the other candidates: the button
+// was the words "History (4)" and took the width of three controls in a footer
+// that already holds Book Again and Delete.
+//
+// Three shapes, and the arc is what carries the meaning. A plain clock face is
+// "time", not "what happened to this"; the anticlockwise sweep is the "back
+// through time" convention every restore/undo-history control uses. The gap in
+// the arc sits at the top-LEFT so the corner arrowhead reads as returning, and
+// the hands point to 7:30 rather than 3:00 — a horizontal hand at this size
+// merges with the arrowhead's own horizontal stroke.
+//
+// **Judged rasterised, magnified 10×, beside ClosedIcon and WaitIcon** — the
+// DepositIcon lesson, and it decided the size rather than confirming it. At
+// **14px** (`IC.control`) the hands merge into the arc's lower-left and the
+// mark reads as a filled disc with a notch out of it; at **18px**
+// (`IC.chrome`) all three shapes stay distinct. So it ships at `IC.chrome`, in
+// an icon-only button — which is the size such a button wants anyway — and it
+// is NOT a candidate for a timeline block flag or a List row tag, where the
+// set's marks render at `IC.control`.
+export function HistoryIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M3.2 12a8.8 8.8 0 1 0 2.8-6.5" />
+      <path d="M3 3.6v4.8h4.8" />
+      <path d="M12 7.4V12l3.4 2" />
+    </Svg>
+  );
+}
 export function ClosedIcon(props) {
   return (
     <Svg {...props}>

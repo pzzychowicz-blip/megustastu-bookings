@@ -361,6 +361,19 @@ explaining why is usually the one to read.
   that list matches selectors, and both `button` and `[role="button"]` already
   appear in other preludes, so either entry would have passed with the rule gone.
 
+- **v18.0.0 session 8: `HistoryIcon`, and the size was MEASURED rather than
+  chosen.** A clock face with a counter-clockwise arc and a corner arrowhead at
+  the top-left — the "back through time" convention, where a plain clock face
+  would say "time" rather than "what happened to this". Rasterised at both sizes
+  it could ship at and magnified 10× beside `ClosedIcon` and `WaitIcon` (the
+  `DepositIcon` lesson): at **14px** (`IC.control`) the hands merge into the
+  arc's lower-left and the whole mark reads as a filled disc with a notch taken
+  out of it; at **18px** (`IC.chrome`) all three shapes stay distinct. So it
+  ships at `IC.chrome` in an icon-only button, and it is **not** a candidate for
+  a timeline block flag or a List row tag, where this set's marks render at
+  `IC.control`. The button it replaced was the words "History (4)"; the count
+  moved into the accessible name and the tooltip rather than being lost.
+
 - **v17.9.0: no control wears a typographic mark.** Dismiss, confirm, disclose,
   navigate, rename, print, download, assign, "preferred" and the status
   chevrons are all SVG from `Icons.jsx` — and so is every flag on a timeline

@@ -280,6 +280,20 @@ describe("live regions (WCAG 4.1.3)", () => {
         "CHILD is conditional, or it announces nothing on the first error");
     }
   });
+
+  // v18.0.0 session 8 (item 6). The History button lost its visible text, so the
+  // count reaches a screen reader through the NAME or not at all.
+  it("the icon-only History button keeps its count in the name", () => {
+    has(BookingForm, "History name", /aria-label=\{"History, "/,
+      "the button is an icon now; a bare \"History\" would drop the one fact " +
+      "that says whether it is worth opening");
+    has(BookingForm, "History count is pluralised", /"entry":"entries"/,
+      "\"History, 1 entries\" is the kind of thing only a screen-reader user " +
+      "ever hears, which is exactly why it gets pinned");
+    hasnt(BookingForm, "History visible text", /\{"History \("\+cur\.history\.length/,
+      "if the words come back the icon and this pin are both stale — and the " +
+      "name would then be a Label-in-Name violation rather than the only name");
+  });
 });
 
 // v17.14.0. The strip and the toasts have spoken since v17.12.0; the VIEW did

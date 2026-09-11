@@ -23394,3 +23394,48 @@ duplication; sharing the lookup would have changed what the print sheet does
 under cover of a tidy-up.
 
 Gate: `124.69 kB` gz · **1305 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 87 (session 8, item 6) — the History button is an icon
+
+Patryk: *"Replace the History button with an icon only… It will take less space
+than a button with a text."* It was the words "History (4)" in a footer that
+also holds Book again and Delete — the width of three controls for the one that
+opens a read-only list.
+
+`HistoryIcon` is a clock face with a counter-clockwise arc and a corner
+arrowhead at the top-left (Patryk's choice of the two offered). The arc is what
+carries the meaning: a plain clock face says "time", not "what happened to
+this". The hands point to 7:30 rather than 3:00, because a horizontal hand at
+this size merges with the arrowhead's own horizontal stroke.
+
+**The size was measured, not chosen.** Rasterised at both sizes it could ship at
+and magnified 10× beside `ClosedIcon` and `WaitIcon` — the `DepositIcon` lesson,
+which says to judge an icon at the size it SHIPS at rather than the 24 it is
+drawn at. At **14px** (`IC.control`) the hands merge into the arc's lower-left
+and the mark reads as a filled disc with a notch taken out of it; at **18px**
+(`IC.chrome`) all three shapes stay distinct. So it ships at `IC.chrome`, and it
+is recorded as **not** a candidate for a timeline block flag or a List row tag,
+where this set's marks render at `IC.control`.
+
+**One deviation from the plan, and the live page settled it.** The plan said a
+square at `H.control` (40). Its two neighbours are `minHeight: 36` — `H.chrome`
+— so a 40px square would have stood taller than its own row. Measured in the
+running app: the button is **36×36** and the Delete button beside it is 36.
+
+**The count is not dropped, it moves.** `aria-label="History, 2 entries"` and
+`title="History (2)"`, with the singular cased — "History, 1 entry". The count
+is the reason to press the button, and an icon-only control that says only
+"History" has thrown away the one fact that says whether it is worth opening.
+
+Verified in the running app (rendered attributes read from the DOM — **not** a
+CDP-computed accessible name, which is a different measurement and the v17.16.3
+lesson): one History button, `aria-label` "History, 2 entries", `title`
+"History (2)", **empty** visible text, an `<svg>` inside, 36×36, row heights
+`[36, 36]`.
+
+Three a11y pins: the name begins with "History, ", the count is pluralised, and
+the old visible text is gone — because if the words come back, the name becomes
+a Label-in-Name violation rather than the only name. GLOSSARY gains the control;
+`DESIGN.md` gains the icon and the size it was judged at.
+
+Gate: `124.81 kB` gz · **1306 tests** · 0 lint errors (88 warnings) · style OK.
