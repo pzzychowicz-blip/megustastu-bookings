@@ -264,6 +264,7 @@ Where the real ambiguity lives.
 
 ---
 
+| The "Copy" button beside a voucher number | **Copy** (`CopyBtn`, `VouchersSettings.jsx`) | Puts the formatted number on the clipboard, in Settings → Vouchers and on the "Issued …" confirmation (v18.0.0 session 8). A TEXT button, not an icon: the usual copy glyph is two overlapping sheets, which is `ClashIcon`'s silhouette, and that mark is an identity in the notification strip's tally. The word and the name change together ("Copy" → "Copied"), which keeps Label-in-Name true in both states |
 | A gift voucher's number | **voucher code** (`normalizeCode`, `lib/vouchers.js`) | The child key of `/vouchers/{CODE}`, so uniqueness is a property of the storage. Generated codes avoid `0/O` and `1/I/L`; a manual code is stored exactly as typed. |
 | A voucher that has been taken out of use | **voided** (`status: "void"`) | Not deleted — deleting would free the number for re-issue. **A voucher is never deleted anywhere in the app.** |
 | A completed booking whose voucher was never recorded | **unsettled** (`isUnsettled`, `UnsettledBanner.jsx`) | Reached by the close-time auto-complete (nobody is there to answer) or by "Complete without using it". Surfaces as a strip section that clears itself when recorded. |

@@ -23439,3 +23439,53 @@ a Label-in-Name violation rather than the only name. GLOSSARY gains the control;
 `DESIGN.md` gains the icon and the size it was judged at.
 
 Gate: `124.81 kB` gz · **1306 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 88 (session 8, item 2a) — a voucher number can be selected, and copied
+
+Patryk: *"the voucher number must be selectable to copy and paste from Settings →
+Vouchers."* Measured live 2026-09-11 (R7): it computed **`user-select: none`**.
+Not awkward to select — impossible, by any means, on any device.
+
+The cause is one line of `src/index.css`: `button, [role="button"] { user-select:
+none }`, which exists so a press-and-hold on a control does not raise the OS text
+callout. The voucher number sat INSIDE the row's `role="button"`, so it inherited
+a rule written for controls.
+
+**That role was doing a second kind of damage.** ARIA makes a button's children
+presentational, so a Copy button could not simply be added beside the number —
+it would have been invisible to assistive technology, the
+container-of-controls defect `tests/a11y.test.js` exists for. Both halves have
+one fix: the number moves OUT, and the REST of the header becomes a real
+`<button aria-expanded>` carrying the chips. The row's name is unchanged, so it
+still says which voucher and in what state.
+
+**Copy is a TEXT button, and that is a decision rather than a default.** The
+natural copy glyph is two overlapping sheets, which is `ClashIcon`'s silhouette
+— and that icon is an IDENTITY in the notification strip's collapsed tally,
+where two marks for two meanings is exactly what its own v17.11.0 note exists to
+prevent.
+
+Two details worth carrying. `CopyBtn` owns its live region rather than sharing
+one in the panel, because the same control is used in a second place (the
+"Issued …" confirmation) and a shared region would make that call site depend on
+which parent it happened to sit under; it is always mounted and starts empty,
+since a live region created already holding its message announces nothing. And
+on that confirmation the button sits **beside** the `role="status"` div rather
+than inside it — a live region nested in a live region announces twice.
+
+The visible word and the name change together — "Copy" → "Copied", "Copy voucher
+X" → "Copied voucher X" — which keeps Label-in-Name true in both states: a
+control whose visible text is "Copied" has to contain that word in its name.
+
+**Verified in the running app**, the same way the defect was measured: the number
+computes **`user-select: text`**, `closest('button,[role="button"]')` is null, the
+button is named "Copy voucher 6NH7-B7MF", and clicking it flips the text and the
+name to "Copied …" while the region announces "Copied FCCR-EGT8". The clipboard
+**read-back was refused** (`NotAllowedError`) — a browser permission in an
+automation context, not an app fault; the write itself resolved, because
+`setDone(true)` runs only in `writeText`'s fulfilment handler. Selection by a
+finger stays a device check for Patryk.
+
+Four a11y pins, and `VouchersSettings` joins the files that test reads.
+
+Gate: `124.82 kB` gz · **1307 tests** · 0 lint errors (88 warnings) · style OK.

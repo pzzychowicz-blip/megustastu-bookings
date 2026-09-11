@@ -64,6 +64,7 @@ const Walkin = read("components/WalkinForm.jsx");
 const Connection = read("components/ConnectionStatus.jsx");
 const Reminder = read("components/ReminderEditor.jsx");
 const Admin = read("components/AdminSettings.jsx");
+const Vouchers = read("components/VouchersSettings.jsx");
 // v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
 // is where it can fail invisibly (hidden in a way that also makes it
 // unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
@@ -293,6 +294,23 @@ describe("live regions (WCAG 4.1.3)", () => {
     hasnt(BookingForm, "History visible text", /\{"History \("\+cur\.history\.length/,
       "if the words come back the icon and this pin are both stale — and the " +
       "name would then be a Label-in-Name violation rather than the only name");
+  });
+
+  // v18.0.0 session 8 (item 2a). The voucher number sat inside the row's
+  // `role="button"`, which is BOTH why it computed `user-select: none`
+  // (measured live) and why a Copy button could not go beside it — a button's
+  // children are presentational.
+  it("the voucher number is outside the control, and copyable", () => {
+    hasnt(Vouchers, "row role=button", /role="button"/,
+      "the number could not be selected by any means while it was in there, " +
+      "and a role=button holding a Copy button hides that button from AT");
+    has(Vouchers, "selectable number", /userSelect: "text"/,
+      "stated rather than inherited: this is the one string on the screen " +
+      "somebody is there to copy");
+    has(Vouchers, "Copy names its voucher", /"Copy voucher "/,
+      "twenty rows and one word — the name has to say WHICH (v17.15.6)");
+    has(Vouchers, "Copy stays Label-in-Name", /"Copied voucher "/,
+      "the visible word becomes \"Copied\", so the name must contain it too");
   });
 });
 

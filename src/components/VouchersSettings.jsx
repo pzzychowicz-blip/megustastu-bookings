@@ -28,8 +28,8 @@
 //   onVoid(code, on)
 //   onSaveDefaults(partial)
 
-import { useState, useMemo } from "react";
-import { S, BTN, R, T, FW, IC } from "../lib/constants";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import {
   formatCode, normalizeCode, voucherState, remainingOf, valueOf, redeemedTotal,
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
@@ -49,6 +49,61 @@ function dateLabel(ms) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+// ── Copy the number ─────────────────────────────────────────────────────────
+// v18.0.0 session 8 (item 2a). Patryk: the voucher number must be selectable,
+// to copy and paste out of Settings → Vouchers. Measured live 2026-09-11: it
+// computed `user-select: none`, because it sat inside the row's `role="button"`
+// and `src/index.css` gives every control that rule — so the number could not
+// be selected by any means, on any device.
+//
+// A TEXT button, not an icon, and that is a considered choice rather than
+// laziness: the natural copy glyph is two overlapping sheets, which is
+// `ClashIcon`'s silhouette, and that icon is an IDENTITY in the notification
+// strip's collapsed tally (see the v17.11.0 note in Icons.jsx). Two marks for
+// two meanings in one app is the thing that note exists to prevent.
+//
+// Self-contained on purpose: the live region is INSIDE the button rather than
+// one shared region in the panel, because the same control is used in a second
+// place (the issue confirmation) and a shared region would make that call site
+// depend on which parent it happens to sit in. It is always mounted and starts
+// empty — a live region created already holding its message announces nothing.
+//
+// The visible word changes with the name ("Copy" → "Copied", "Copy voucher X" →
+// "Copied voucher X"), which keeps Label-in-Name true in both states: a control
+// whose visible text is "Copied" must contain that word in its name.
+function CopyBtn({ code }) {
+  const [done, setDone] = useState(false);
+  const timer = useRef(null);
+  useEffect(function () { return function () { clearTimeout(timer.current); }; }, []);
+  const text = formatCode(code);
+  function doCopy(e) {
+    // The row around it is no longer a button, but the issue confirmation sits
+    // inside other handlers — stopping here costs nothing and cannot surprise.
+    e.stopPropagation();
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+    navigator.clipboard.writeText(text).then(function () {
+      setDone(true);
+      clearTimeout(timer.current);
+      // Cleared so a SECOND copy re-announces: a live region speaks when its
+      // text CHANGES, and re-setting the same string is not a change.
+      timer.current = setTimeout(function () { setDone(false); }, 2000);
+    }, function () {});
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={doCopy}
+        aria-label={(done ? "Copied voucher " : "Copy voucher ") + text}
+        className="mgt-hover-scale"
+        style={mkBtn({ fontSize: T.body, minHeight: H.compact, background: BTN.nav })}>
+        {done ? "Copied" : "Copy"}
+      </button>
+      <span className="mgt-sr-only" role="status" aria-live="polite">{done ? "Copied " + text : ""}</span>
+    </>
+  );
+}
+
 // ── One voucher row ──────────────────────────────────────────────────────────
 function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
   const state = voucherState(v, now);
@@ -56,41 +111,50 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
   const led = Object.keys(v.redemptions || {});
   return (
     <div style={{ border: "1px solid var(--border-soft)", borderRadius: R.card, marginBottom: 6, background: "var(--bg-card)" }}>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        // The row's name has to carry the voucher, or every row in the list
-        // announces identically — v17.15.6's dynamic-label rule.
-        aria-label={"Voucher " + formatCode(v.code) + ", " + STATE_LABEL[state] + ", " + money(remainingOf(v), currency) + " left"}
-        onClick={onToggle}
-        // Making an element focusable makes the browser scroll it into view on
-        // MOUSEDOWN, so the row moves out from under the finger between press
-        // and release and the click is lost (measured up to 297px on a List
-        // card, v17.12.0). preventDefault here suppresses only focus — not the
-        // click, not pointer events.
-        onMouseDown={function (e) { e.preventDefault(); }}
-        onKeyDown={function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className="mgt-hover-scale"
-        // borderRadius is REQUIRED on any .mgt-hover-scale element: since
-        // v17.7.0 the hover rule no longer supplies one but still paints an
-        // opaque --bg-hover-card, so a radius-less element renders that fill as
-        // a hard-edged rectangle inside its own rounded card.
-        style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}>
+      {/* v18.0.0 session 8 (item 2a): the number is OUT of the disclosure
+          control. It used to sit inside a `role="button"`, which makes its
+          children presentational AND subscribes it to `src/index.css`'s
+          `user-select: none` control rule — so the one thing on this screen
+          somebody needs to copy was the one thing that could not be selected.
+          Moving the number out and making the REST a real <button> also
+          settles the other half: a `role="button"` holding a Copy button is
+          the container-of-controls defect `tests/a11y.test.js` exists for. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{formatCode(v.code)}</div>
+          <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums", userSelect: "text", cursor: "text" }}>{formatCode(v.code)}</div>
           <div style={{ fontSize: T.body, color: S.muted }}>
             {money(valueOf(v), currency) + " issued  ·  " + (v.expiresAt ? "expires " + dateLabel(v.expiresAt) : "no expiry")}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
+        <CopyBtn code={v.code} />
+        <button
+          type="button"
+          aria-expanded={open}
+          // The control's name has to carry the voucher, or every row in the
+          // list announces identically — v17.15.6's dynamic-label rule. The
+          // chips inside are presentational, which is correct here and was
+          // correct before: their meaning is in this name.
+          aria-label={"Voucher " + formatCode(v.code) + ", " + STATE_LABEL[state] + ", " + money(remainingOf(v), currency) + " left"}
+          onClick={onToggle}
+          // Making an element focusable makes the browser scroll it into view
+          // on MOUSEDOWN, so it moves out from under the finger between press
+          // and release and the click is lost (measured up to 297px on a List
+          // card, v17.12.0). preventDefault here suppresses only focus — not
+          // the click, not pointer events.
+          onMouseDown={function (e) { e.preventDefault(); }}
+          className="mgt-hover-scale"
+          // borderRadius is REQUIRED on any .mgt-hover-scale element: since
+          // v17.7.0 the hover rule no longer supplies one but still paints an
+          // opaque --bg-hover-card, so a radius-less element renders that fill
+          // as a hard-edged rectangle inside its own rounded card.
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: BTN.nav, borderRadius: R.card })}>
           <OutlineChip tone={STATE_TONE[state]}>{STATE_LABEL[state]}</OutlineChip>
           <OutlineChip tone="neutral">{money(remainingOf(v), currency) + " left"}</OutlineChip>
           {v.origin === "manual" ? <OutlineChip tone="neutral">manual</OutlineChip> : null}
           <span style={{ display: "flex", color: S.muted }}>
             {open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}
           </span>
-        </div>
+        </button>
       </div>
 
       <Reveal show={open}>
@@ -269,9 +333,17 @@ export function VouchersTabContent({
         <Reveal show={!!issueErr}>
           <InlineAlert style={{ marginTop: 8 }}>{issueErr}</InlineAlert>
         </Reveal>
+        {/* v18.0.0 session 8 (item 2a): the number you have just issued is the
+            one most likely to be copied — it is about to be typed into a card
+            or a message. CopyBtn sits BESIDE the announcement rather than
+            inside it: this div is already a `role="status"`, and a live region
+            nested in a live region announces twice. */}
         <Reveal show={!!issued}>
-          <div role="status" style={{ marginTop: 8, fontSize: T.body, color: S.text }}>
-            {"Issued "}<strong style={{ fontVariantNumeric: "tabular-nums" }}>{formatCode(issued)}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <div role="status" style={{ fontSize: T.body, color: S.text }}>
+              {"Issued "}<strong style={{ fontVariantNumeric: "tabular-nums" }}>{formatCode(issued)}</strong>
+            </div>
+            {issued ? <CopyBtn code={issued} /> : null}
           </div>
         </Reveal>
       </Section>
