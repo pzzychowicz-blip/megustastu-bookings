@@ -390,7 +390,7 @@ const DEV_THEME_FORCED=devThemeOverride()!==undefined;
 // ── v14.2.0: Dark-mode preference reader ──────────────────────────────────────
 // Per-device theme lives in localStorage["mgt-theme"]. Returns the explicit
 // preference for useThemeMode: true (dark) | false (light) | undefined (follow
-// the OS live — which is also what "auto", v18.0.0's Automatic, reads as). MUST
+// the OS live — which is also what "auto", v18.0.0's Automatic dark mode, reads as). MUST
 // mirror the no-flash inline script in index.html — same key,
 // same value convention ("dark"/"light"), and since v17.9.0 the same
 // ?theme= override, which wins over the stored key at both sites.
@@ -1345,7 +1345,7 @@ function BookingApp({uid}){
   const [themePref,setThemePref]=useState(readThemePref);
   const isDark=useThemeMode(themePref);
   function onToggleDark(){
-    // v18.0.0 session 7: locked while Automatic is on — Patryk's choice. The
+    // v18.0.0 session 7: locked while Automatic dark mode is on — Patryk's choice. The
     // switch renders disabled; this guard keeps any other caller from quietly
     // replacing Automatic with a fixed look.
     if(themePref===undefined) return;
@@ -1361,7 +1361,7 @@ function BookingApp({uid}){
     // touching the signed-in user's saved settings.
     if(!DEV_THEME_FORCED) saveUserPrefs({theme:next?"dark":"light"});
   }
-  // v18.0.0 session 7: the Automatic switch (Settings → App) — follow this
+  // v18.0.0 session 7: the Automatic dark mode switch (Settings → App) — follow this
   // device's light/dark setting, live. Stored on the account as "auto", NEVER as
   // null: null means "never chosen", and the seeding effect below fills a
   // never-chosen account from the next device to sign in with an explicit
@@ -1504,7 +1504,7 @@ function BookingApp({uid}){
       try{localStorage.setItem("mgt-theme",userPrefs.theme);}catch{/* ignore */}
       setThemePref(dark);
     }else if(userPrefs.theme==="auto"){
-      // v18.0.0 session 7: Automatic, chosen on some device of this account.
+      // v18.0.0 session 7: Automatic dark mode, chosen on some device of this account.
       try{localStorage.setItem("mgt-theme","auto");}catch{/* ignore */}
       setThemePref(undefined);
     }else if(themePref!==undefined){

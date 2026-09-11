@@ -22751,3 +22751,17 @@ it, to be deleted when `enforceRoles` is on. One file says how; one says it is s
 to do.
 
 Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 68 (session 7 /code-review) — "Automatic" reads "Automatic dark mode"
+
+Patryk's one named fix for this review. The row said **Automatic** while its
+switch was already named "Automatic dark mode", and on a tab of device and
+account settings "Automatic" alone does not say what it automates. The title and
+the hint under the locked Dark mode switch — "Controlled by Automatic dark mode."
+— now say the switch's own name, and GLOSSARY, DESIGN.md, `CLAUDE.md`, the hooks
+note and the code comments that quote the label follow. The GLOSSARY **term**
+stays *automatic theme* and the stored value stays `"auto"`: a label changed,
+nothing else. `index.html` moved only inside its HTML comment, outside the
+hashed boot script — `tests/csp.test.js` passing is the check.
+
+Gate: `122.41 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.

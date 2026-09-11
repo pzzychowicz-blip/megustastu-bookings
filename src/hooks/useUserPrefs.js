@@ -113,7 +113,7 @@ export function sanitizeUserPrefs(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   return {
     v: 1,
-    // v18.0.0 session 7: "auto" is Automatic — follow this device's OS — kept as a
+    // v18.0.0 session 7: "auto" is Automatic dark mode — follow this device's OS — kept as a
     // CHOICE. null cannot carry it: null means "never chosen", which App's seeding
     // effect fills from the next device to sign in with an explicit value.
     theme: src.theme === "dark" || src.theme === "light" || src.theme === "auto" ? src.theme : null,

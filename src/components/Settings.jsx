@@ -307,14 +307,14 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
         Settings follow your account on every device, except where noted.
       </div>
       <Section style={{ marginBottom: 18 }}>
-        {/* v18.0.0 session 7: Automatic — follow this device's light/dark
+        {/* v18.0.0 session 7: Automatic dark mode — follow this device's light/dark
             setting — as its own switch ABOVE Dark mode, with Dark mode LOCKED
             while it is on (Patryk's choice over "a tap takes over" and over one
             three-way control). An account that never chose reads as Automatic,
             which is exactly what it got before this switch existed. */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Automatic</div>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Automatic dark mode</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
               Follows this device&rsquo;s light/dark setting.
             </div>
@@ -326,7 +326,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
             <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: autoTheme ? "var(--text-faint)" : "var(--text-primary)", transition: "color " + M.move }}>Dark mode</div>
             <Reveal show={autoTheme}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-                Controlled by Automatic.
+                Controlled by Automatic dark mode.
               </div>
             </Reveal>
           </div>

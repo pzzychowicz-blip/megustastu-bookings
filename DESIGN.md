@@ -628,13 +628,13 @@ explaining why is usually the one to read.
   the no-flash boot script is still inline there, pinned in the CSP by hash.
 - Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `src/index.css`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
 - **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
-- **v18.0.0 session 7: the Automatic switch, and a third stored value.**
-  Settings → App shows **Automatic** (follow this device's light/dark setting,
+- **v18.0.0 session 7: the Automatic dark mode switch, and a third stored value.**
+  Settings → App shows **Automatic dark mode** (follow this device's light/dark setting,
   live) above **Dark mode**, and Dark mode is **locked while Automatic is on** —
   the `Toggle` atom's new `disabled` prop: native `disabled`, dimmed to 0.4 with
   the `not-allowed` cursor (the steppers' precedent), and the hover lift and
   press dip already skip `:disabled`. The row title fades to `--text-faint` and
-  "Controlled by Automatic." reveals under it, so the dimmed switch says why.
+  "Controlled by Automatic dark mode." reveals under it, so the dimmed switch says why.
   The stored value is `"auto"`, which every theme site already read as "follow
   the OS", so the no-flash script and its CSP pin did not move.
 - **v17.9.0: a DEV-only `?theme=dark` / `?theme=light` override, and it is the

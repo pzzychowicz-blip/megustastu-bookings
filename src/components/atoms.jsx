@@ -1766,7 +1766,7 @@ export function Toggle({ on, onClick, label, disabled = false }) {
     <button
       onClick={onClick}
       // v18.0.0 session 7: a switch that is CONTROLLED by another one (Dark mode
-      // under Automatic). The native attribute, not aria-disabled: it takes the
+      // under Automatic dark mode). The native attribute, not aria-disabled: it takes the
       // switch out of the tab order and out of the hover lift and press dip,
       // which already read `:not(:disabled)`. Dimmed like the steppers' disabled
       // arrows; the row beside it says why.
