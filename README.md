@@ -14,7 +14,7 @@ booking.
 - **Live:** [megustastu-bookings.vercel.app](https://megustastu-bookings.vercel.app)
   (behind a staff login: this is the restaurant's production system, not a demo)
 - **Screenshots of every major feature:** [pz-my-page.vercel.app](https://pz-my-page.vercel.app/)
-- **Status:** production, v18 · 790+ commits · 18 tagged releases
+- **Status:** production, v18 · 800+ commits · 18 tagged releases
 
 ## Who uses it
 

@@ -22810,3 +22810,11 @@ have. Both were found by reading the code the steps rely on:
   Admin panel disables exactly what the rule refuses") is corrected in place.
 
 Gate: `122.45 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 71 (session 7 /code-review) — the README's commit count, as approved
+
+Commit 63 held the status line at "790+ commits" because Patryk's approved "800"
+was not yet true. It is now — `git rev-list --count HEAD` read **800** before
+this review's fixes — so the line says **800+**, his figure.
+
+Gate: `122.45 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
