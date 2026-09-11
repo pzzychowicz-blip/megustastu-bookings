@@ -3092,7 +3092,8 @@ function BookingApp({uid}){
     // past both voucher gates above, so it can never open beside a money prompt,
     // only after one has been answered. Not gated on `ok`: a write held by the
     // stale gate still shows the seat, and the party is sitting down either way.
-    const seatSnap=seatNoteFor((bookings.find(function(x){return x.id===id;})||{}).status,status,bookings.find(function(x){return x.id===id;}));
+    const seatCur=bookings.find(function(x){return x.id===id;});
+    const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur);
     const user=getUser();
     const nowM=nowMins;
     const ok=saveBookings(function(b){

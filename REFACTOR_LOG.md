@@ -22846,3 +22846,13 @@ not move. The Mon-first shapes — `WeekView`'s rows, `ReminderEditor`'s picker,
 opening-hours pairs — are different lists and are left alone.
 
 Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 74 (session 7 /code-review) — the seat note's lookup, once
+
+`updateStatus` built the seat-note snapshot with the same `bookings.find` written
+twice on one line — once for the previous status, once for the booking — so a
+reader had to check the two lambdas agreed. One `const seatCur` now says it once,
+beside the voucher gates that make the same lookup. No behaviour change:
+`seatNoteFor` still returns null for a booking gone from the list.
+
+Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
