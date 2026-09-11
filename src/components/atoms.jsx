@@ -1865,6 +1865,12 @@ export function Kbd({ k }) {
 export function DateField({ value, onChange, style, inputProps }) {
   const inputRef = useRef(null);
   const wd = weekdayShort(value);
+  // v18.0.0 session 8: read-only is read off `inputProps` rather than taken as
+  // a prop of its own, so a caller marks the INPUT read-only once and the pill
+  // around it follows. Without this the wrapper still opened the picker on a
+  // click — a read-only field that silently shows a calendar is the "hidden
+  // control that is present and useless" shape, one door along.
+  const ro = !!(inputProps && inputProps.readOnly);
   function openPicker(e) {
     const el = inputRef.current;
     if (!el || e.target === el) return;
@@ -1873,8 +1879,8 @@ export function DateField({ value, onChange, style, inputProps }) {
   return (
     <div
       className="mgt-hover-scale mgt-datefield"
-      onClick={openPicker}
-      style={Object.assign({ display: "flex", alignItems: "center", gap: SP.snug, cursor: "pointer" }, style)}
+      onClick={ro ? undefined : openPicker}
+      style={Object.assign({ display: "flex", alignItems: "center", gap: SP.snug, cursor: ro ? "default" : "pointer" }, style)}
     >
       {wd ? <span style={{ minWidth: "2.2em", fontWeight: FW.bold, flexShrink: 0 }}>{wd}</span> : null}
       <input

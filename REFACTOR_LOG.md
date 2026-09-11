@@ -22910,3 +22910,77 @@ DEV data this pass changed: "QA Seat note" is now seated (it was completed), and
 the account's theme is back to explicit light, as found.
 
 Gate: `122.46 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 76 (session 8, item 3) — a booking saved as seated keeps its tables
+
+Patryk, opening session 8: *"When a table has got Seated status and I edit
+something like Time it cannot be reseated. It must be locked because it means the
+guests are already seating at the table."*
+
+**Reproduced first.** A seated party on table 3, its time changed 15:45 → 16:00
+in the edit form, saved onto **1A** and stamped `_locked` + `_manual` — read back
+from RTDB, not off the screen. The form had previewed the move beforehand:
+"(auto) · was: 3".
+
+**The optimiser was never wrong about this**, which is why it survived so long.
+`isLocked` has covered `status === "seated"` since the beginning, and `applyOpt`
+copies a locked booking's tables through verbatim. What moved the party was
+`unlockForOpt` in `doSaveEdit`, which rewrites the status to `"confirmed"` BEFORE
+`bookingsAfterAction` *precisely so* the optimiser will consider a booking it
+would otherwise skip — the same mechanism behind v17.15.5's two completed-booking
+bugs, one status along. "Seated is locked" was true of the optimiser and false of
+the form.
+
+So this is v17.15.5's `editFinished` widened from "finished" to "physically at
+the table", as **one** predicate — `tablesPinned(status, hasManual, cleared)` —
+because the flag written twice is how two copies of a condition stop agreeing,
+which is the reason that version hoisted `unlockForOpt` out of `buildNext` in the
+first place. An explicit manual assignment or an explicit clear still wins: those
+are a person saying so, which is different from the optimiser deciding on its own.
+
+**Three things the one-line version would have missed, each found by asking what
+the rest of the save then does:**
+
+- **`forceReassign` is a second door.** Leaving the status alone is not enough —
+  `bookingsAfterAction`'s optimiser-OFF branch takes `changedId` and
+  `forceReassign` and re-places that booking by itself, through `findFreeSlot`.
+  It now receives `!pinned` too.
+- **The preview has to agree with the save.** `availScan` scanned for free tables
+  for a booking that was going to keep the ones it had, so on a full evening it
+  announced "No tables available" over a save that would succeed; and the tables
+  row showed the optimiser's proposal plus "was: 3" for tables nothing was going
+  to move. A preview that disagrees with the save is worse than no preview —
+  it was the visible half of this bug.
+- **Pinning CREATES a clash the OFF branch will not resolve.** With every
+  booking's tables kept, a seated party whose window grows over somebody else's
+  is simply saved on top of them, and the v15.6.1 reconciliation effect moves
+  that somebody 400ms later under a toast reading "Resolved a table conflict
+  after syncing" — for this device's own save (R3/R4's mechanism, and C9's
+  wording). `replacePinnedClashes` re-places the unlocked party BEFORE the save,
+  newest-first on `reconcile`'s own tie-break so the manual and automatic paths
+  choose the same booking. With the optimiser ON `applyOpt` has already done it,
+  so the call returns its input.
+
+**What a pinned save now refuses**, each leaving the form open with its message:
+a party that no longer fits the tables it is sitting at ("Party of 5 doesn't fit
+table 3 (seats 2). Assign tables that seat 5." — Patryk chose refuse over warn,
+and the form's own Assign button is the way through); a clash with a booking that
+is itself locked or seated, named ("Table 3 is also held by López at 14:00, who
+is seated."); and a move to another DATE, which the form also makes read-only
+while the draft is seated, since pinned tables belong to that date's schedule.
+`DateField` reads `readOnly` off `inputProps` and stops opening the picker — a
+read-only field that still shows a calendar is the "present and useless control"
+shape one door along. A booking `replacePinnedClashes` could not re-place arrives
+at the EXISTING displacement guard with no tables, which is exactly the input
+that guard was written for, so it needed no new refusal of its own.
+
+Five pure functions, sixteen tests: the predicate's truth table including the two
+overrides, each refusal's wording (including the empty-intersection branch
+`findClashes` documents — "Those tables are also held by", never "Table  is"),
+the clash split by whether a party can be moved, and `replacePinnedClashes` on
+both optimiser branches plus its identity contract and its give-up case.
+
+Live verification is deferred to the 13:00–22:00 window — it is past midnight,
+and outside opening hours a seated shift does not land inside the day.
+
+Gate: `123.13 kB` gz · **1261 tests** · 0 lint errors (88 warnings) · style OK.

@@ -1109,6 +1109,98 @@ export function seatNoteFor(prevStatus,nextStatus,b){
   if(!notes) return null;
   return {id:b.id,name:b.name||"",size:Number(b.size)||0,time:b.scheduledTime||b.time||"",tables:Array.isArray(b.tables)?b.tables.slice():[],notes:notes};
 }
+// ── v18.0.0 session 8 (item 3): a booking SAVED as seated keeps its tables ───
+// v17.15.5 established this rule for a FINISHED booking — while it is being
+// saved as completed or cancelled its tables are a RECORD, so they are carried
+// through verbatim and it is never handed to the optimiser. A SEATED booking is
+// the same rule for a different reason: the party is physically at those tables.
+//
+// The optimiser itself was never wrong about this. `isLocked` has covered
+// `status === "seated"` since the beginning and `applyOpt` copies a locked
+// booking's tables straight through. What moved a seated party was
+// `unlockForOpt` in `doSaveEdit`, which rewrites the status to "confirmed"
+// BEFORE the optimiser runs, precisely so it WILL consider a booking it would
+// otherwise skip — the same mechanism that produced v17.15.5's two bugs, one
+// status along. Measured live 2026-09-11: a seated party on table 3, its time
+// edited 15:45 → 16:00, saved onto **1A** and stamped `_locked` + `_manual`,
+// with the form having previewed "(auto) · was: 3" first.
+//
+// ONE predicate, read by every site that has to agree — the flag written twice
+// is how two copies of a condition stop agreeing, which is why v17.15.5 hoisted
+// `unlockForOpt` out of `buildNext` in the first place. An explicit manual
+// assignment or an explicit clear still wins: those are a person saying so,
+// which is different from the optimiser deciding on its own.
+export function tablesPinned(status,hasManual,cleared){
+  if(hasManual||cleared) return false;
+  return status==="seated"||status==="completed"||status==="cancelled";
+}
+// The refusal when a pinned party no longer fits the tables it is sitting at
+// (Patryk chose refuse over warn: the guests are already there, so the app
+// cannot quietly decide the arithmetic is close enough). `comboCapBest` is the
+// capacity rule the manual picker already uses, so the form's own Assign button
+// is the way through. Null when it fits — and null when there are no tables at
+// all, which is a different sentence and a different refusal.
+export function seatedFitRefusal(size,tables){
+  var ids=Array.isArray(tables)?tables:[];
+  if(!ids.length) return null;
+  var cap=comboCapBest(ids);
+  if(cap>=size) return null;
+  return "Party of "+size+" doesn't fit "+(ids.length>1?"tables ":"table ")+ids.join("+")+" (seats "+cap+"). Assign tables that seat "+size+".";
+}
+// Who does a pinned booking now clash with, and can they be moved? Split,
+// because the two answers are different sentences: an unlocked booking is
+// re-placed AROUND the party that is already sitting down, and a locked or
+// seated one is refused by name — there is nowhere to put a second party that
+// is also already at its table.
+export function pinnedClashParties(list,date,pinnedId){
+  var out={locked:[],movable:[]};
+  findClashes(list,date).forEach(function(c){
+    if(c.a!==pinnedId&&c.b!==pinnedId) return;
+    var otherId=c.a===pinnedId?c.b:c.a;
+    var other=(list||[]).find(function(b){return b.id===otherId;});
+    if(!other) return;
+    (isLocked(other)?out.locked:out.movable).push({booking:other,tables:c.tables});
+  });
+  return out;
+}
+// `tables` can legitimately be EMPTY — see findClashes: two bookings can need
+// the same physical join without sharing a table id. "Table  is also held by"
+// is a sentence with no table in it, so the wording branches rather than
+// interpolating whatever came back.
+export function pinnedClashRefusal(entry){
+  if(!entry||!entry.booking) return null;
+  var b=entry.booking;
+  var t=(entry.tables||[]).join("+");
+  return (t?("Table "+t+" is"):"Those tables are")+" also held by "+(b.name||"another booking")
+    +(b.time?(" at "+b.time):"")+", who is "+(b.status==="seated"?"seated":"locked to it")
+    +". Assign different tables.";
+}
+// Re-place whatever a pinned save displaces, newest first — `reconcile`'s own
+// tie-break, so the manual and the automatic path choose the same booking to
+// move and a second device reconciling the same data agrees.
+//
+// With the optimiser ON this is already done by the time it runs (`applyOpt`
+// treats a seated booking as locked and places everyone else around it), so
+// this is what makes the OFF path give the same answer instead of saving the
+// clash and leaving the reconciler to move somebody 400ms later under a toast
+// that says "after syncing". A booking it cannot place comes back with no
+// tables, which is the existing displacement refusal's input.
+//
+// Returns its INPUT array when nothing moved (the v17.14.0 identity contract).
+export function replacePinnedClashes(list,date,pinnedId,blocks,autoOptimizerState){
+  var next=list;
+  var guard=0;
+  while(guard++<8){
+    var movable=pinnedClashParties(next,date,pinnedId).movable;
+    if(!movable.length) break;
+    var pick=movable.map(function(e){return e.booking;})
+      .sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0)||(a.id<b.id?1:-1);})[0];
+    var after=bookingsAfterAction(next,date,blocks,pick.id,true,autoOptimizerState);
+    if(after===next) break; // it cannot be moved; the refusal below names it
+    next=after;
+  }
+  return next;
+}
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
   var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});

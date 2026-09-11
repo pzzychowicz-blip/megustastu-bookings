@@ -24,6 +24,7 @@ import {
   sanitizeBlock, sanitizeBlocks,
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
+  tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2039,5 +2040,148 @@ describe("seatNoteFor — what the seat note shows (v18.0.0 session 7)", () => {
     const snap = seatNoteFor("confirmed", "seated", b);
     b.tables.push("2");
     expect(snap.tables).toEqual(["1A", "1B"]);
+  });
+});
+
+// ── v18.0.0 session 8 (item 3) — a booking SAVED as seated keeps its tables ──
+describe("tablesPinned", () => {
+  it("pins the three statuses whose tables are a fact, not a proposal", () => {
+    expect(tablesPinned("seated", false, false), "the party is at them").toBe(true);
+    expect(tablesPinned("completed", false, false), "v17.15.5 — a record").toBe(true);
+    expect(tablesPinned("cancelled", false, false)).toBe(true);
+    expect(tablesPinned("confirmed", false, false)).toBe(false);
+    expect(tablesPinned("pending", false, false)).toBe(false);
+  });
+
+  it("an explicit manual assignment or an explicit clear still wins", () => {
+    expect(tablesPinned("seated", true, false), "somebody chose tables").toBe(false);
+    expect(tablesPinned("seated", false, true), "somebody cleared them").toBe(false);
+    expect(tablesPinned("completed", true, false)).toBe(false);
+  });
+});
+
+describe("seatedFitRefusal", () => {
+  it("refuses a party that no longer fits the table it is sitting at", () => {
+    // Table 3 is one of the eight outdoor 2-tops in the MGT seed.
+    expect(seatedFitRefusal(5, ["3"])).toContain("Party of 5 doesn't fit table 3 (seats 2)");
+    expect(seatedFitRefusal(5, ["3"])).toContain("Assign tables that seat 5.");
+  });
+
+  it("says nothing when the party fits", () => {
+    expect(seatedFitRefusal(2, ["3"])).toBe(null);
+    expect(seatedFitRefusal(1, ["3"])).toBe(null);
+  });
+
+  it("pluralises the tables it names", () => {
+    expect(seatedFitRefusal(99, ["1A", "1B"])).toContain("tables 1A+1B");
+    expect(seatedFitRefusal(99, ["3"])).toContain("table 3");
+  });
+
+  it("is silent with no tables at all — that is a different refusal", () => {
+    expect(seatedFitRefusal(4, [])).toBe(null);
+    expect(seatedFitRefusal(4, null)).toBe(null);
+    expect(seatedFitRefusal(4, undefined)).toBe(null);
+  });
+});
+
+describe("pinnedClashParties / pinnedClashRefusal", () => {
+  // One seated party pinned to table 3; a confirmed booking that can be moved
+  // off it, and a walk-in that cannot.
+  function day() {
+    return [
+      mk({ id: "seat", name: "Ana", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "move", name: "Pau", time: "13:30", tables: ["3"] }),
+      mk({ id: "lock", name: "López", time: "14:00", tables: ["3"], _locked: true }),
+    ];
+  }
+
+  it("splits the clashing parties by whether they can be moved", () => {
+    const out = pinnedClashParties(day(), D, "seat");
+    expect(out.movable.map((e) => e.booking.id)).toEqual(["move"]);
+    expect(out.locked.map((e) => e.booking.id)).toEqual(["lock"]);
+    expect(out.movable[0].tables, "the shared table, for the wording").toEqual(["3"]);
+  });
+
+  it("ignores a clash the pinned booking is not part of", () => {
+    const out = pinnedClashParties(day(), D, "move");
+    expect(out.locked.map((e) => e.booking.id).sort()).toEqual(["lock", "seat"]);
+    expect(out.movable).toEqual([]);
+  });
+
+  it("is empty when nothing overlaps", () => {
+    const clean = [
+      mk({ id: "seat", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "other", time: "13:30", tables: ["4"] }),
+    ];
+    const out = pinnedClashParties(clean, D, "seat");
+    expect(out.locked).toEqual([]);
+    expect(out.movable).toEqual([]);
+  });
+
+  it("names the table, the party and why it cannot be asked to move", () => {
+    const out = pinnedClashParties(day(), D, "seat");
+    const msg = pinnedClashRefusal(out.locked[0]);
+    expect(msg).toContain("Table 3 is also held by López at 14:00");
+    expect(msg).toContain("locked to it");
+    expect(pinnedClashRefusal({ booking: mk({ name: "Ana", status: "seated", time: "13:00" }), tables: ["3"] }))
+      .toContain("who is seated");
+  });
+
+  it("does not write a sentence with no table in it", () => {
+    // findClashes returns an EMPTY intersection when two bookings need the same
+    // physical join without sharing an id — reachable in a custom layout.
+    const msg = pinnedClashRefusal({ booking: mk({ name: "Pau", time: "13:30" }), tables: [] });
+    expect(msg).toContain("Those tables are also held by Pau");
+    expect(msg).not.toContain("Table  is");
+  });
+
+  it("survives a booking that is no longer in the list", () => {
+    expect(pinnedClashRefusal(null)).toBe(null);
+    expect(pinnedClashRefusal({ tables: ["3"] })).toBe(null);
+  });
+});
+
+describe("replacePinnedClashes", () => {
+  it("moves the other booking and leaves the seated party where it is sitting", () => {
+    const list = [
+      mk({ id: "seat", name: "Ana", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "move", name: "Pau", time: "13:30", tables: ["3"] }),
+    ];
+    const out = replacePinnedClashes(list, D, "seat", [], true);
+    expect(out.find((b) => b.id === "seat").tables, "the party did not move").toEqual(["3"]);
+    const moved = out.find((b) => b.id === "move").tables;
+    expect(moved.length).toBeGreaterThan(0);
+    expect(moved).not.toEqual(["3"]);
+    expect(findConflicts(out, D), "and the day is clean").toEqual([]);
+  });
+
+  it("does the same with the optimiser OFF, which is where the clash used to survive", () => {
+    // Today + autoOptimizer false is the only combination that takes the
+    // optimiser-OFF branch, which keeps EVERY booking's tables — so before this
+    // the clash was saved and the reconciler moved somebody afterwards.
+    const list = [
+      mk({ id: "seat", date: today, name: "Ana", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "move", date: today, name: "Pau", time: "13:30", tables: ["3"] }),
+    ];
+    const out = replacePinnedClashes(list, today, "seat", [], false);
+    expect(out.find((b) => b.id === "seat").tables).toEqual(["3"]);
+    expect(out.find((b) => b.id === "move").tables).not.toEqual(["3"]);
+  });
+
+  it("returns its INPUT when there is nothing to move (the identity contract)", () => {
+    const clean = [
+      mk({ id: "seat", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "other", time: "13:30", tables: ["4"] }),
+    ];
+    expect(replacePinnedClashes(clean, D, "seat", [], true)).toBe(clean);
+  });
+
+  it("gives up rather than looping when the only clash is with a locked party", () => {
+    const stuck = [
+      mk({ id: "seat", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "lock", time: "13:30", tables: ["3"], _locked: true }),
+    ];
+    const out = replacePinnedClashes(stuck, D, "seat", [], false);
+    expect(out.find((b) => b.id === "lock").tables, "left for the refusal to name").toEqual(["3"]);
   });
 });

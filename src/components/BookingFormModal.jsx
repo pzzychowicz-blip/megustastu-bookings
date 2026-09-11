@@ -41,7 +41,9 @@ import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
-  optimizerActiveFor, seatingClosed
+  optimizerActiveFor, seatingClosed,
+  // v18.0.0 session 8 (item 3): what the form previews must agree with.
+  tablesPinned
 } from "../lib/booking-logic";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
@@ -372,14 +374,29 @@ export function BookingFormModal({
     const d=form.customDur||getDur(size);
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     if(mt) return {ok:true,tables:mt,sugg:null};
+    // v18.0.0 session 8 (item 3): a draft saved as seated — or as finished —
+    // carries the tables it already has, so scanning for free ones answers a
+    // question nobody asked. On a full evening it answered "No tables
+    // available" over a save that was going to succeed, which is the same
+    // disagreement between the preview and Save as the "(auto) · was: 3" line.
+    if(editId&&tablesPinned(form.status,false,!!form._clearManual)){
+      const cur=bookings.find(function(b){return b.id===editId;});
+      if(cur&&(cur.tables||[]).length) return {ok:true,tables:cur.tables,sugg:null};
+    }
     const noResh=!optimizerActiveFor(form.date,autoOptimizer);
     const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
     if(tables) return {ok:true,tables:tables,sugg:null};
     const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
-  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
+  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
   const formAvail=availScan.value;
 
+  // v18.0.0 session 8 (item 3): a seated party cannot be moved to another day —
+  // its tables are pinned to the room it is sitting in, and those tables belong
+  // to THIS date's schedule. Keyed on the DRAFT status, so choosing >Confirmed
+  // in the Status row unlocks it in the same open of the form. `doSaveEdit`
+  // refuses it as well: this is the affordance, that is the guarantee.
+  const dateLocked=!!editId&&form.status==="seated";
   const tablesBtn=(function(){
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     const previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
@@ -399,13 +416,17 @@ export function BookingFormModal({
       const cleared=!!form._clearManual;
       const curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
       const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
-      const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
+      // v18.0.0 session 8 (item 3): a draft saved as seated or finished carries
+      // its tables through, so the preview shows THOSE — not the optimiser's
+      // proposal for a booking it is never going to be asked about.
+      const pinnedTbl=cur&&tablesPinned(form.status,!!mt,cleared)?curTbl:null;
+      const showTbl=mt||pinnedTbl||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
         <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
-      if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
+      if((changed||cleared)&&!mt&&!pinnedTbl&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
       if(mt) leftEls.push(<button
         key="clrmt"
         className="mgt-hover-scale mgt-press"
@@ -795,7 +816,7 @@ export function BookingFormModal({
             style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <DateField
             /* v18.0.0 session 7: the weekday inside the pill. Fld's id and
                state attrs name the INPUT, so they ride in inputProps. */
-            inputProps={Object.assign({id:fid},attrs)}
+            inputProps={Object.assign({id:fid},attrs,dateLocked?{readOnly:true,"aria-readonly":true}:null)}
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
             style={inp()} />;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input

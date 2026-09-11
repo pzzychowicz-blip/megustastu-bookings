@@ -47,6 +47,8 @@ import {
   plannedDuration,
   // v18.0.0 session 7: the seat note's one predicate.
   seatNoteFor,
+  // v18.0.0 session 8 (item 3): a booking saved as seated keeps its tables.
+  tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2312,10 +2314,16 @@ function BookingApp({uid}){
         // placement, and seating→completing one in the same save should pin the
         // table it was actually sat at.
         const editFinished=f.status==="completed"||f.status==="cancelled";
+        // v18.0.0 session 8 (item 3): the same rule, one status wider — a
+        // booking being saved as SEATED keeps its tables too, because the party
+        // is sitting at them. `tablesPinned` is the one predicate; see its note
+        // in booking-logic.js for what was measured. `editFinished` survives for
+        // exactly one guard below, where the two questions genuinely differ.
+        const pinned=tablesPinned(f.status,mt.length>0,clearM);
         // Hoisted out of buildNext: this exact expression was written twice —
         // once to unlock and once to restore — and two copies of a condition
         // that must agree is how they stop agreeing.
-        const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM&&!editFinished;
+        const unlockForOpt=needsR&&wasSeatedLocked&&!mt.length&&!clearM&&!pinned;
         // v17.4.0: the diff string is computed ONCE — it feeds the history entry
         // AND the undo gate below. diffBooking returns the sentinel "saved (no
         // field changes)" when nothing moved, which is exactly when undo must
@@ -2353,13 +2361,22 @@ function BookingApp({uid}){
             if(b.id===editId){
               let h=(b.history||[]).concat([editHist]);
               if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
-              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||editFinished)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+              return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
             }
             if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
             return b;
           });
-          let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length,optStateForSave);
+          let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,needsR&&!mt.length&&!pinned,optStateForSave);
           if(unlockForOpt){out=out.map(function(b){if(b.id===editId) return Object.assign({},b,{status:f.status,_locked:b.tables&&b.tables.length>0,_manual:b.tables&&b.tables.length>0});return b;});}
+          // v18.0.0 session 8: with the tables pinned, the optimiser-OFF path
+          // keeps EVERY booking's tables — including anyone the new window now
+          // overlaps. Re-place them here, before Save, rather than saving the
+          // clash and leaving the reconciliation effect to move somebody 400ms
+          // later under a toast that blames syncing (R3/R4's own mechanism).
+          // With the optimiser ON this has already happened inside `applyOpt`,
+          // which places everyone around a locked booking, so the call is a
+          // no-op there and returns its input.
+          if(pinned&&needsR) out=replacePinnedClashes(out,f.date,editId,tableBlocks,optStateForSave);
           return out;
         }
         // /code-review perf: buildNext runs a full optimiser pass (expensive on
@@ -2370,6 +2387,20 @@ function BookingApp({uid}){
         // v15.7.0 capture-intent contract requires.
         const buildNextMemo=memoByPrev(buildNext);
         const fin=buildNextMemo(bookings);
+        // v18.0.0 session 8 (item 3) — the pinned save's own refusals, in the
+        // order the party at the table makes necessary. Each leaves the form
+        // open with its message, like every other refusal here. The
+        // displacement guard below is deliberately the one after: a booking
+        // `replacePinnedClashes` could NOT re-place arrives there with no
+        // tables, which is exactly the input that guard was written for.
+        if(pinned&&f.status==="seated"){
+          if(orig&&f.date!==orig.date){setErrorField("date");setError("A seated booking can't be moved to another date — change the status first.");return;}
+          const seatB=fin.find(function(b){return b.id===editId;});
+          const fitRefusal=seatedFitRefusal(size,seatB?seatB.tables:[]);
+          if(fitRefusal){setError(fitRefusal);return;}
+          const lockedClash=pinnedClashParties(fin,f.date,editId).locked;
+          if(lockedClash.length){setError(pinnedClashRefusal(lockedClash[0]));return;}
+        }
         if(!mt.length&&needsR&&!prefOnly){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
           const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
