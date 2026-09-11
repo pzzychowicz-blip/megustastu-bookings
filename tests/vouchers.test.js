@@ -494,6 +494,55 @@ describe("applyRedemption / removeRedemption", () => {
     expect(applyRedemption(null, "b1", 5, 1, "me")).toBe(null);
   });
 
+  // ── v18.0.0 session 8 (item 5a) — the reversal leaves a record ─────────────
+  it("moves the entry into `reversals` instead of dropping it", () => {
+    const a = applyRedemption(base(), "b1", 20, 1000, "her@x");
+    const back = removeRedemption(a, "b1", 2000, "him@x");
+    expect(Object.keys(back.redemptions), "gone from the ledger").toEqual([]);
+    expect(back.reversals.b1_2000).toEqual({
+      bookingId: "b1", amount: 20,
+      redeemedAt: 1000, redeemedBy: "her@x",
+      reversedAt: 2000, reversedBy: "him@x",
+    });
+  });
+
+  it("keeps BOTH when a voucher is redeemed, reversed, redeemed and reversed again", () => {
+    // Keyed per REVERSAL, not per booking — the same booking can do this twice.
+    let v = applyRedemption(base(), "b1", 20, 1000, "me");
+    v = removeRedemption(v, "b1", 2000, "me");
+    v = applyRedemption(v, "b1", 25, 3000, "me");
+    v = removeRedemption(v, "b1", 4000, "me");
+    expect(Object.keys(v.reversals).sort()).toEqual(["b1_2000", "b1_4000"]);
+    expect(v.reversals.b1_2000.amount).toBe(20);
+    expect(v.reversals.b1_4000.amount).toBe(25);
+  });
+
+  it("leaves the balance derived from the LEDGER, not from the record", () => {
+    const a = applyRedemption(base(), "b1", 20, 1000, "me");
+    const back = removeRedemption(a, "b1", 2000, "me");
+    expect(back.remaining, "the money came back in full").toBe(50);
+    expect(redeemedTotal(back)).toBe(0);
+  });
+
+  // THE SILENT TRAP. sanitizeVoucher is a whitelist: a field missing from it is
+  // deleted by the next write to that voucher, with no error anywhere.
+  it("survives an unrelated write to the same voucher", () => {
+    const a = applyRedemption(base(), "b1", 20, 1000, "me");
+    const back = removeRedemption(a, "b1", 2000, "me");
+    const later = sanitizeVoucher(Object.assign({}, back, { notes: "left a note" }), back.code);
+    expect(later.notes).toBe("left a note");
+    expect(later.reversals.b1_2000, "the trail is still there").toBeTruthy();
+    expect(later.reversals.b1_2000.amount).toBe(20);
+  });
+
+  it("keeps the reversals' keys sorted, for contentKey's key-order compare", () => {
+    let v = applyRedemption(base(), "b2", 10, 1000, "me");
+    v = removeRedemption(v, "b2", 9000, "me");
+    v = applyRedemption(v, "b1", 10, 1000, "me");
+    v = removeRedemption(v, "b1", 3000, "me");
+    expect(Object.keys(v.reversals)).toEqual(["b1_3000", "b2_9000"]);
+  });
+
   it("keeps the ledger's keys SORTED, so the write-diff sees no phantom change", () => {
     // write-path.js's contentKey is a JSON.stringify compare and is key-order
     // sensitive. Without the sort, a ledger read back from RTDB could differ

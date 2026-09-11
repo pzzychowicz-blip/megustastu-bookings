@@ -1123,6 +1123,43 @@ const voucher = (o = {}) => Object.assign({
 // /vouchers, one child per changed voucher (useVouchers' diff-write).
 const writeVoucher = (db, code, value) => db.ref("vouchers").update({ [code]: value });
 
+// ── v18.0.0 session 8 (item 5a): the reversal trail's SHAPE ─────────────────
+// Hand-written, because the `PAIRS` sweep cannot see a nested map — it walks
+// the rev pairs, and this is a child of `/vouchers/$code`.
+//
+// **Honestly not append-only server-side, and the runbook says so.** The whole
+// child is written under its CAS, `.validate` does not run on a deleted child,
+// and `.write` cannot be revoked lower down (CT-2A-06). What these rules buy is
+// that a reversal cannot be stored in a shape nothing can read; the guarantee
+// that one is never removed is the client plus the tests above it.
+describe("vouchers — the reversal trail's shape", () => {
+  const REV = {
+    bookingId: "b1", amount: 20,
+    redeemedAt: 1000, redeemedBy: "her@x",
+    reversedAt: 2000, reversedBy: "him@x",
+  };
+  const withRev = (o) => voucher({ baseUpdatedAt: 0, reversals: { b1_2000: Object.assign({}, REV, o) } });
+
+  it("accepts a well-shaped reversal", async () => {
+    await assertSucceeds(writeVoucher(staff(), "ABCD2345", withRev({})));
+  });
+
+  it("refuses an amount that is not a number", async () => {
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ amount: "twenty" })));
+  });
+
+  it("refuses a negative amount", async () => {
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ amount: -5 })));
+  });
+
+  it("refuses timestamps and emails of the wrong type", async () => {
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ reversedAt: "soon" })));
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ redeemedAt: "then" })));
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ reversedBy: 7 })));
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ bookingId: 7 })));
+  });
+});
+
 describe("vouchers — the per-$code CAS", () => {
   it("an anonymous client can neither read nor write", async () => {
     await assertFails(anon().ref("vouchers").once("value"));

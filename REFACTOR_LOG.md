@@ -23489,3 +23489,57 @@ finger stays a device check for Patryk.
 Four a11y pins, and `VouchersSettings` joins the files that test reads.
 
 Gate: `124.82 kB` gz · **1307 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 89 (session 8, item 5a) — a voucher reversal leaves a record
+
+`ROADMAP.md` → Deferred, raised by `/code-review` at phase 6 and deliberately not
+fixed there because it changes the persisted voucher shape.
+
+`applyRedemption` stamps `by: <email>` and `at` on every ledger entry;
+`removeRedemption` **deleted** the entry and recorded nothing, so a balance could
+be restored with no mark on the money record itself. The trail was not absent —
+the booking's own `history` carries the status change, and a restore only ever
+happens behind the walk-back prompt — but `/vouchers` has **no backups** and is
+the one place somebody looks when the numbers disagree.
+
+The entry is now MOVED rather than dropped, into
+`reversals["<bookingId>_<reversedAt>"]`, carrying both ends of its life:
+`amount`, `redeemedAt` / `redeemedBy`, `reversedAt` / `reversedBy`. **Keyed per
+reversal, not per booking**, so redeem → reverse → redeem → reverse keeps both —
+pinned by a test that does exactly that. `remaining` stays derived from the
+ledger, so nothing about the balance moves: this is a record beside the money,
+not a second source of truth for it.
+
+**The silent one, and it is the whole reason this needed a commit rather than a
+line.** `sanitizeVoucher` is a WHITELIST. Without `reversals` in it the trail
+would be erased by the next unrelated write to that voucher — no error, no
+warning, just gone — which is `UNDO_FIELDS`' failure shape one collection over.
+The test for it is the one worth copying: make a reversal, then do an
+**unrelated** write (a note) to the same voucher, and assert the trail is still
+there. The keys are sorted for `sortedLedger`'s reason — `contentKey` is a
+key-order-sensitive `JSON.stringify` compare, so an unsorted map reads as a
+change and writes on every pass.
+
+`unredeemVoucher` reads `Date.now()` ONCE outside the updater, the same shape
+`redeemVoucher` uses: a retry then replays the same key rather than minting a
+second record of one reversal.
+
+**Rules: a shape validate under `vouchers/$code/reversals/$rid`, and it is
+honestly NOT append-only server-side.** The whole child is written under its CAS,
+`.validate` does not run on a deleted child, and `.write` cannot be revoked lower
+down (CT-2A-06, measured). What the rules buy is that a reversal cannot be stored
+in a shape nothing can read; the guarantee that one is never REMOVED is the
+client plus the tests above it. Four hand-written emulator tests — hand-written
+because the `PAIRS` sweep walks rev pairs and cannot see a nested map.
+
+**The deploy runbook needs no new line**, which is worth stating rather than
+leaving the reader to check: step 2 already names `/vouchers/$code` as wholly new
+to production, so this sub-shape ships inside a node that is already listed.
+
+The expanded row lists reversals under the redemptions, dashed and in the muted
+ink — this is what did NOT end up being spent, and it exists so a restored
+balance is explicable months later.
+
+Gate: `124.97 kB` gz · **1312 tests** · 0 lint errors (88 warnings) · style OK.
+Rules: **261 tests** (session 7's 257, plus these four — re-measured, not
+carried forward).

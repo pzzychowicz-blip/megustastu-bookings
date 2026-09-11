@@ -326,8 +326,35 @@ export function sanitizeVoucher(v, key) {
         ? null
         : Number(src.expiresAt) || null,
     redemptions: sortedLedger(src.redemptions),
+    // v18.0.0 session 8 (item 5a) — THE SILENT TRAP. This function is a
+    // WHITELIST: a field missing from it is deleted by the next voucher write,
+    // with no error anywhere. Without this line the reversal trail would be
+    // erased by the next unrelated edit to the same voucher — the `UNDO_FIELDS`
+    // failure shape, one collection over. Sorted for `sortedLedger`'s reason:
+    // `contentKey` is a key-order-sensitive `JSON.stringify` compare.
+    reversals: sortedReversals(src.reversals),
     updatedAt: Number(src.updatedAt) || 0,
   };
+}
+// The reversals map's own normaliser. A different field set from `sortedLedger`
+// — it records BOTH ends of the redemption's life (who took it and when, who
+// gave it back and when), which is the whole point of keeping it.
+function sortedReversals(rev) {
+  if (!rev || typeof rev !== "object") return {};
+  const out = {};
+  Object.keys(rev).sort().forEach((k) => {
+    const e = rev[k];
+    if (!e || typeof e !== "object") return;
+    out[k] = {
+      bookingId: typeof e.bookingId === "string" ? e.bookingId : "",
+      amount: clampMoney(e.amount),
+      redeemedAt: Number(e.redeemedAt) || 0,
+      redeemedBy: typeof e.redeemedBy === "string" ? e.redeemedBy : "",
+      reversedAt: Number(e.reversedAt) || 0,
+      reversedBy: typeof e.reversedBy === "string" ? e.reversedBy : "",
+    };
+  });
+  return out;
 }
 
 // The ledger's keys are SORTED, and that is a write-path requirement rather than
@@ -422,12 +449,40 @@ export function applyRedemption(v, bookingId, amount, at, by) {
 }
 
 // The exact inverse — the booking was completed by mistake, or reopened.
-export function removeRedemption(v, bookingId) {
+//
+// ── v18.0.0 session 8 (item 5a, ROADMAP): it MOVES the entry, never drops it ──
+// `applyRedemption` stamps `by: <email>` on every ledger entry; this deleted the
+// entry and recorded nothing, so a balance could be restored with no mark on the
+// money record itself. The trail was not absent — the booking's own `history`
+// carries the status change, and a restore only ever happens behind the
+// walk-back prompt — but `/vouchers` has NO BACKUPS and is the one place
+// somebody looks when the numbers disagree.
+//
+// Keyed `<bookingId>_<reversedAt>` rather than by booking, so redeem → reverse →
+// redeem → reverse keeps BOTH. `remaining` stays derived from the ledger, so
+// nothing about the balance moves; this is a record beside it, not a second
+// source of truth for it.
+export function removeRedemption(v, bookingId, at, by) {
   if (!v || !bookingId || !isRedeemedBy(v, bookingId)) return v;
   const led = Object.assign({}, v.redemptions);
+  const gone = led[bookingId] || {};
   delete led[bookingId];
+  const when = Number(at) || Date.now();
+  const rev = Object.assign({}, v.reversals);
+  rev[bookingId + "_" + when] = {
+    bookingId,
+    amount: clampMoney(gone.amount),
+    redeemedAt: Number(gone.at) || 0,
+    redeemedBy: typeof gone.by === "string" ? gone.by : "",
+    reversedAt: when,
+    reversedBy: typeof by === "string" ? by : "",
+  };
   return sanitizeVoucher(
-    Object.assign({}, v, { redemptions: led, remaining: clampMoney(valueOf(v) - redeemedTotal({ redemptions: led })) }),
+    Object.assign({}, v, {
+      redemptions: led,
+      reversals: rev,
+      remaining: clampMoney(valueOf(v) - redeemedTotal({ redemptions: led })),
+    }),
     v.code
   );
 }

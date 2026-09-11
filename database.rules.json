@@ -34,6 +34,16 @@
             "at":     { ".validate": "newData.isNumber()" },
             "by":     { ".validate": "newData.isString()" }
           }
+        },
+        "reversals": {
+          "$rid": {
+            "bookingId":  { ".validate": "newData.isString()" },
+            "amount":     { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "redeemedAt": { ".validate": "newData.isNumber()" },
+            "redeemedBy": { ".validate": "newData.isString()" },
+            "reversedAt": { ".validate": "newData.isNumber()" },
+            "reversedBy": { ".validate": "newData.isString()" }
+          }
         }
       }
     },

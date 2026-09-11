@@ -215,15 +215,24 @@ export function useVouchers({ setWriteWarning, userEmail }) {
   // `removeRedemption` is the pure inverse of `applyRedemption` and recomputes
   // `remaining` from the ledger the same way — so applying it twice gives the
   // same answer, which is what makes it safe under the retry queue.
+  //
+  // v18.0.0 session 8 (item 5a): it records WHO reversed it and WHEN, the same
+  // two facts `redeemVoucher` stamps on the way in — `removeRedemption` now
+  // moves the entry into the voucher's `reversals` map instead of dropping it.
+  // `at` is read once outside the updater so a retry replays the same key
+  // (`<bookingId>_<reversedAt>`) rather than minting a second record of one
+  // reversal, which is the same reasoning that puts `Date.now()` outside
+  // `redeemVoucher`'s updater above.
   const unredeemVoucher = useCallback(function (code, bookingId) {
     const c = normalizeCode(code);
     if (!c || !bookingId) return false;
+    const at = Date.now();
     return saveVouchers(function (prev) {
       return prev.map(function (v) {
-        return v.code === c ? removeRedemption(v, bookingId) : v;
+        return v.code === c ? removeRedemption(v, bookingId, at, userEmail || "") : v;
       });
     });
-  }, [saveVouchers]);
+  }, [saveVouchers, userEmail]);
 
   // ── Voiding ─────────────────────────────────────────────────────────────────
   const voidVoucher = useCallback(function (code, on) {

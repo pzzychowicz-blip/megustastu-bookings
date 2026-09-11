@@ -109,6 +109,11 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
   const state = voucherState(v, now);
   const spent = redeemedTotal(v);
   const led = Object.keys(v.redemptions || {});
+  // v18.0.0 session 8 (item 5a): reversals, newest first — a restored balance
+  // used to leave no mark on the money record at all.
+  const revs = Object.keys(v.reversals || {}).sort(function (a, b) {
+    return (v.reversals[b].reversedAt || 0) - (v.reversals[a].reversedAt || 0);
+  });
   return (
     <div style={{ border: "1px solid var(--border-soft)", borderRadius: R.card, marginBottom: 6, background: "var(--bg-card)" }}>
       {/* v18.0.0 session 8 (item 2a): the number is OUT of the disclosure
@@ -182,6 +187,28 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
           ) : (
             <div style={{ fontSize: T.body, color: S.muted, marginBottom: 8 }}>Not redeemed yet.</div>
           )}
+
+          {/* The reversals, under the redemptions and visibly quieter: this is
+              what DID NOT end up being spent, and it exists so that a restored
+              balance is explicable months later. */}
+          {revs.length ? (
+            <div style={{ marginBottom: 8 }}>
+              {revs.map(function (rid) {
+                const e = v.reversals[rid];
+                const b = (bookings || []).find(function (x) { return x.id === e.bookingId; });
+                return (
+                  <div key={rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, border: "1px dashed var(--border-soft)", marginBottom: 4 }}>
+                    <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.muted, minWidth: 84 }}>{"Reversed " + money(e.amount, currency)}</span>
+                    <span style={{ fontSize: T.body, color: S.muted }}>
+                      {(b ? (b.date + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + e.bookingId)
+                        + (e.reversedBy ? "  ·  by " + e.reversedBy : "")
+                        + (e.reversedAt ? "  ·  " + dateLabel(e.reversedAt) : "")}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
 
           {/* Void / un-void. The only destructive-looking action there is, and
               it is not destructive: the record and its number both stay. */}
