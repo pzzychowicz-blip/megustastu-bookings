@@ -55,6 +55,8 @@ import {
   seatRefusal,
   // v18.0.0 session 8 (C3): nor onto a table somebody is still sitting at.
   seatClashParties, completedSeatedPatch,
+  // v18.0.0 session 8 (item 5b): the shift, from the booking as it is SAVED.
+  seatedShiftFor,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2250,19 +2252,25 @@ function BookingApp({uid}){
         // v14: detect confirmed→seated transition here. Only auto-shift time if
         // staff did NOT manually edit time/date in the form (otherwise their
         // explicit edit wins). Compute BEFORE needsR so we can suppress reshuffle.
+        // v18.0.0 session 8 (item 5b): the plan numbers are computed ABOVE the
+        // seated shift now, because the shift needs them. They sat below it,
+        // and that ordering IS the ROADMAP entry this commit deletes — the
+        // shift pinned the scheduled end from the STORED duration and then
+        // overwrote every length the form had just set.
+        const formPlan=f.customDur||getDur(size);
+        const origPlan=orig?(orig.originalDuration||orig.duration||90):formPlan;
+        const planChanged=formPlan!==origPlan;
         const seatingNow=orig&&orig.status!=="seated"&&f.status==="seated";
         const timeUntouched=orig&&f.time===orig.time&&f.date===orig.date;
         let seatedShift=null;
         if(seatingNow&&timeUntouched){
           // Use live-synced bookings so overstaying seated guests' tables are
-          // correctly treated as occupied when the overlap guard runs.
-          seatedShift=applySeatedShift(orig,nowMins,liveBookings,today);
+          // correctly treated as occupied when the overlap guard runs. The
+          // length handed in is the one being SAVED — see seatedShiftFor.
+          seatedShift=seatedShiftFor(orig,nowMins,liveBookings,today,planChanged?formPlan:0);
         }
         const needsR=!orig||size!==orig.size||f.time!==orig.time||f.date!==orig.date||f.preference!==orig.preference||f._clearManual||prefTablesChanged;
         const prefOnly=orig&&size===orig.size&&f.time===orig.time&&f.date===orig.date&&!f._clearManual;
-        const formPlan=f.customDur||getDur(size);
-        const origPlan=orig?(orig.originalDuration||orig.duration||90):formPlan;
-        const planChanged=formPlan!==origPlan;
         let saveDur=planChanged?formPlan:(orig?(orig.duration||90):formPlan);
         const saveOrigDur=planChanged?formPlan:origPlan;
         let saveCustDur=planChanged?(f.customDur||null):(orig?(orig.customDur||null):(f.customDur||null));

@@ -23120,3 +23120,45 @@ the guard working rather than a formality. It ranks BELOW `seatnote`: this one i
 raised before the seat lands and that one after, so they are never open together.
 
 Gate: `124.29 kB` gz · **1276 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 80 (session 8, item 5b) — seating from the form keeps a length set in the same save
+
+`ROADMAP.md` → Deferred, raised by session 7's `/code-review` **by reading** and
+carrying its own instruction: *reproduce it first*.
+
+**Reproduced.** A confirmed booking at 16:15 for 90 minutes; one save setting the
+status to Seated **and** the length to 120, at 15:56. Stored: **109 / 109 / 109**
+— `duration`, `originalDuration`, `customDur` — with the booking's own history
+entry reading "duration 90→120min". The app recorded the change it had just
+discarded. The right answer is **139**, an 18:15 end.
+
+The cause is an ORDERING, and it is one of the plainest this file records.
+`applySeatedShift` pins the scheduled END from `booking.duration`; in
+`doSaveEdit` it ran **before** `formPlan` was computed, and its `newDuration`
+then overwrote `saveDur`, `saveCustDur` and `saveOrigDurFinal`. So every length
+the form had just set was replaced by one derived from the stored one. And
+because `originalDuration` is overwritten too, `plannedDuration` — Book Again's
+source since session 7 — carried the old length onward into the next booking.
+Pre-existing since v14.
+
+The fix is to compute the plan numbers ABOVE the shift and hand the shift the
+booking **as it is being saved**. `seatedShiftFor(b, nowM, list, today,
+savedDuration)` is a separate function rather than a new argument on
+`applySeatedShift`, because the quick-status door has no form and no such
+length: there the stored duration IS the one being saved, and a parameter that
+door must remember to pass would be a second way to get this wrong.
+
+Six tests, replaying R2's own numbers in both directions — **139** with the
+length being saved, and the defect's **109** without it, so the test says what
+the bug was as well as what the fix is. Plus: identical to `applySeatedShift`
+whenever the length has not moved, a non-length ignored (`"many"`, `-30`,
+`null`), and every refusal the underlying function makes still made.
+
+`ROADMAP.md`'s Deferred entry is deleted in this commit, per the workflow rule
+that nothing shipped stays there.
+
+**Not yet verified live** — a seated shift only lands inside opening hours, and
+it is past midnight. The ROADMAP entry asked for a check between 13:00 and
+22:00; it is on session 8's verification list.
+
+Gate: `124.34 kB` gz · **1281 tests** · 0 lint errors (88 warnings) · style OK.

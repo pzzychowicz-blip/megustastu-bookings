@@ -25,7 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
-  unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch,
+  unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2099,6 +2099,49 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (item 5b) — the ROADMAP entry, replayed ───────────────
+describe("seatedShiftFor", () => {
+  // R2's own numbers, measured live 2026-09-11: a 16:15 booking for 90, one
+  // save setting Seated AND 120 minutes, at 15:56.
+  const r2 = () => mk({ date: today, time: "16:15", duration: 90, originalDuration: 90, tables: ["2"] });
+  const at = 15 * 60 + 56;
+
+  it("pins the end from the length being SAVED, not the one stored", () => {
+    const b = r2();
+    const fixed = seatedShiftFor(b, at, [b], today, 120);
+    expect(fixed.newDuration, "15:56 → an 18:15 end").toBe(139);
+    expect(fixed.newTime).toBe("15:56");
+    expect(fixed.direction).toBe("early");
+  });
+
+  it("reproduces the defect when the length is NOT being changed", () => {
+    const b = r2();
+    // 0 means "no new length" — the stored 90 pins a 17:45 end, which is the
+    // 109 that was actually written to the database.
+    expect(seatedShiftFor(b, at, [b], today, 0).newDuration).toBe(109);
+    expect(seatedShiftFor(b, at, [b], today).newDuration, "and with no argument at all").toBe(109);
+  });
+
+  it("agrees with applySeatedShift whenever the length has not moved", () => {
+    const b = r2();
+    expect(seatedShiftFor(b, at, [b], today, 90)).toEqual(applySeatedShift(b, at, [b], today));
+  });
+
+  it("ignores a length that is not a length", () => {
+    const b = r2();
+    const stored = applySeatedShift(b, at, [b], today);
+    expect(seatedShiftFor(b, at, [b], today, "many")).toEqual(stored);
+    expect(seatedShiftFor(b, at, [b], today, -30)).toEqual(stored);
+    expect(seatedShiftFor(b, at, [b], today, null)).toEqual(stored);
+  });
+
+  it("keeps every refusal applySeatedShift makes", () => {
+    const b = r2();
+    expect(seatedShiftFor(null, at, [b], today, 120)).toBe(null);
+    expect(seatedShiftFor(b, 20 * 60, [b], today, 120), "seated past its own end").toBe(null);
   });
 });
 

@@ -1063,6 +1063,32 @@ export function applySeatedShift(booking,nowM,allBookings,today){
   if(!Number.isFinite(newDuration)||newDuration<=0||newDuration>1440) return null;
   return {newTime:toTime(nm),newDuration:newDuration,oldTime:booking.time,direction:nm<scheduledStart?"early":"late"};
 }
+// ── v18.0.0 session 8 (item 5b — ROADMAP) ───────────────────────────────────
+// The shift must be computed from the booking AS IT IS BEING SAVED, not as it
+// is stored.
+//
+// `applySeatedShift` pins the scheduled END from `booking.duration`. In
+// `doSaveEdit` it ran BEFORE `formPlan` was computed, and its `newDuration`
+// then overwrote `saveDur`, `saveCustDur` AND `saveOrigDurFinal` — so a length
+// typed on the stepper, or re-derived by a party-size change, in the same save
+// that SEATS the party was silently discarded. `plannedDuration` then carried
+// the old length onward into Book Again. Pre-existing since v14.
+//
+// Measured live 2026-09-11 (R2): a 16:15 booking for 90 minutes, one save
+// setting Seated **and** 120 minutes at 15:56, stored **109 / 109 / 109** — the
+// 17:45 end pinned from the stored 90 — while the booking's own history entry
+// read "duration 90→120min". The right answer is **139**, an 18:15 end.
+//
+// A separate function rather than an argument to `applySeatedShift`, because
+// the quick-status door has no form and no such length: there, the stored
+// duration IS the one being saved, and a parameter it must remember to pass
+// would be a second way to get this wrong.
+export function seatedShiftFor(b,nowM,list,today,savedDuration){
+  if(!b) return null;
+  var dur=Number(savedDuration);
+  var base=(Number.isFinite(dur)&&dur>0&&dur!==b.duration)?Object.assign({},b,{duration:dur}):b;
+  return applySeatedShift(base,nowM,list,today);
+}
 // ── v18.0.0 session 7: the length a booking was BOOKED for ───────────────────
 // Book Again carries this over (Patryk, 2026-09-11): the plan, not the stay.
 // It cannot be read off one field, because two writes rewrite them after the
