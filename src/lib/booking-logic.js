@@ -1063,6 +1063,29 @@ export function applySeatedShift(booking,nowM,allBookings,today){
   if(!Number.isFinite(newDuration)||newDuration<=0||newDuration>1440) return null;
   return {newTime:toTime(nm),newDuration:newDuration,oldTime:booking.time,direction:nm<scheduledStart?"early":"late"};
 }
+// ── v18.0.0 session 7: the length a booking was BOOKED for ───────────────────
+// Book Again carries this over (Patryk, 2026-09-11): the plan, not the stay.
+// It cannot be read off one field, because two writes rewrite them after the
+// booking is made:
+//   • the seated shift (applySeatedShift, above) moves `time` to the moment of
+//     seating and rewrites `duration` AND `originalDuration` so the scheduled
+//     END stays pinned — 20:30 for 150, seated at 20:15, stores 165;
+//   • completion truncates `duration` (never `originalDuration`) to the real
+//     stay, and an overstay grows it live (syncLiveDurations).
+// `scheduledTime` is the one value neither touches, and the shift keeps
+// `time + originalDuration` equal to the scheduled end — so the plan is that
+// end minus the scheduled start. Where it cannot be computed (an unreadable
+// time, or a recovered end that is not after the start) the stored length
+// stands rather than an invented one; null only when there is no length at all.
+export function plannedDuration(b){
+  if(!b) return null;
+  const stored=Number(b.originalDuration)||Number(b.duration);
+  if(!Number.isFinite(stored)||stored<=0) return null;
+  const sched=isReadableTime(b.scheduledTime)?b.scheduledTime:b.time;
+  if(!isReadableTime(b.time)||!isReadableTime(sched)) return stored;
+  const len=toMins(b.time)+stored-toMins(sched);
+  return len>0?len:stored;
+}
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
   var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});

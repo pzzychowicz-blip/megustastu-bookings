@@ -22432,3 +22432,44 @@ handler.** Noise, on cold start only. Reported as checked rather than fixed —
 the repo's own lesson about a perf fix aimed at something that measures as noise.
 
 Gate: `121.63 kB` gz · **1226 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 59 (session 7) — Book Again carries the length that was booked
+
+Session 7 opened with four changes Patryk asked for **before** Phase 7's docs,
+planned in two rounds of questions and recorded as "Session 7 additions" in the
+plan file. This is the first of them.
+
+`bookAgain` hard-coded `customDur: null`, so every Book Again opened at the size
+default: a party booked for 150 minutes came back at 90, and nothing on the form
+said a length had been dropped. **It now carries the source's PLANNED length** —
+Patryk's choice over the actual stay, and the reasoning this function already
+applied to the time, where it reads `scheduledTime` rather than the
+seated-shifted `time`.
+
+The planned length cannot be read off one field, which is the whole of the
+change. Two writes rewrite the fields after a booking is made: **the seated
+shift** moves `time` to the moment of seating and rewrites `duration` *and*
+`originalDuration` so the scheduled END stays pinned, and **completion**
+truncates `duration` to the stay (an overstay grows it live). `scheduledTime` is
+the one value neither touches, so `plannedDuration(b)` (`booking-logic.js`)
+returns `time + originalDuration − scheduledTime` — the scheduled end minus the
+scheduled start — and keeps the stored length wherever that cannot be computed
+rather than inventing one. Two of its seven tests drive the **real**
+`applySeatedShift`, so they fail if the shift ever stops pinning the end, not
+only if the helper changes.
+
+It lands as `customDur` only when it differs from the size default — the rule
+`openEdit` already uses — so a default-length booking still re-derives when the
+guest count changes, and the form's **Reset** appears exactly when a length was
+carried. Clamped to the form stepper's own 15–480 bounds, so a corrupt legacy
+length (the pre-v17.16.2 `1440`) cannot ride into a new booking.
+
+**Verified live in DEV**, not only by the tests. A 4-guest booking for 13:00 at
+150 minutes, seated at 10:47, stored **283 min** ending 15:30 — the edit form
+showed exactly that — and Book Again on it opened at **13:00 · 150 min · End
+15:30**, with Reset. And the other half of the rule, on a 2-guest
+booking left at its default length and seated at 10:49 (stored **251 min**): Book
+Again opened at **13:30 · 90 min · End 15:00, with no Reset** — no custom
+duration carried, so it still follows the guest count.
+
+Gate: `121.70 kB` gz (+0.07) · **1233 tests** (+7) · 0 lint errors (88 warnings) · style OK.

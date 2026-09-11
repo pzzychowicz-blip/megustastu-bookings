@@ -23,6 +23,7 @@ import {
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
+  plannedDuration,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -1950,5 +1951,53 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
       .filter(({ l }) => /deposit:/.test(l) && /status:/.test(l) && !/voucherCode:/.test(l))
       .map(({ n }) => n);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("plannedDuration — the length a booking was BOOKED for (v18.0.0 session 7)", () => {
+  // Book Again's source. The seated shift is driven for REAL below rather than
+  // hand-copied into a fixture, so these fail if the shift ever stops pinning
+  // the scheduled end — the one property the recovery depends on — and not
+  // only when the helper itself changes.
+  it("a booking never seated keeps its stored length", () => {
+    expect(plannedDuration(mk({ time: "20:30", scheduledTime: "20:30", duration: 150, originalDuration: 150 }))).toBe(150);
+  });
+
+  it("seated EARLY through the real applySeatedShift: the plan comes back, not the shifted length", () => {
+    const b = mk({ time: "20:30", scheduledTime: "20:30", duration: 150, originalDuration: 150 });
+    const shift = applySeatedShift(b, toMins("20:15"), [b], D);
+    expect(shift).toMatchObject({ newTime: "20:15", newDuration: 165 });
+    const seated = Object.assign({}, b, { status: "seated", time: shift.newTime, duration: shift.newDuration, originalDuration: shift.newDuration });
+    expect(plannedDuration(seated)).toBe(150);
+  });
+
+  it("seated LATE through the real shift: the same recovery the other way", () => {
+    const b = mk({ time: "20:30", scheduledTime: "20:30", duration: 150, originalDuration: 150 });
+    const shift = applySeatedShift(b, toMins("20:50"), [b], D);
+    expect(shift).toMatchObject({ newTime: "20:50", newDuration: 130 });
+    const seated = Object.assign({}, b, { status: "seated", time: shift.newTime, duration: shift.newDuration, originalDuration: shift.newDuration });
+    expect(plannedDuration(seated)).toBe(150);
+  });
+
+  it("completion and an overstay rewrite `duration`, never the plan", () => {
+    // Completed after an early seat: `duration` truncated to the 130-minute stay.
+    expect(plannedDuration(mk({ status: "completed", time: "20:15", scheduledTime: "20:30", duration: 130, customDur: 130, stayedMin: 130, originalDuration: 165 }))).toBe(150);
+    // Still seated and overstaying: `duration` grown live by syncLiveDurations.
+    expect(plannedDuration(mk({ status: "seated", time: "20:30", scheduledTime: "20:30", duration: 200, customDur: 200, originalDuration: 150 }))).toBe(150);
+  });
+
+  it("a legacy row with no originalDuration or scheduledTime falls back to what it has", () => {
+    expect(plannedDuration({ time: "13:00", duration: 120 })).toBe(120);
+  });
+
+  it("never invents a length — an unreadable time, or an end not after the start, keeps the stored one", () => {
+    expect(plannedDuration({ time: "8 in the evening", scheduledTime: "20:30", duration: 90, originalDuration: 90 })).toBe(90);
+    expect(plannedDuration({ time: "13:00", scheduledTime: "20:30", duration: 60, originalDuration: 60 })).toBe(60);
+  });
+
+  it("is null only when there is no length at all", () => {
+    expect(plannedDuration(null)).toBe(null);
+    expect(plannedDuration({ time: "13:00" })).toBe(null);
+    expect(plannedDuration({ time: "13:00", duration: 0, originalDuration: 0 })).toBe(null);
   });
 });

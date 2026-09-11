@@ -43,6 +43,8 @@ import {
   lateState, freeingSoon, rankCombosContaining, comboExistsFor,
   undoSnapshots, applyUndo,
   seatedElapsed,
+  // v18.0.0 session 7: the length Book Again carries over.
+  plannedDuration,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2049,16 +2051,29 @@ function BookingApp({uid}){
     if(!sourceBooking) return;
     pendingWaitlistRef.current=null;
     const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
+    // v18.0.0 session 7: the source's PLANNED length rides along — Patryk's
+    // choice over the actual stay, and the same reason this function reads
+    // scheduledTime above: Book Again copies the plan. `plannedDuration`
+    // recovers it through the seated shift, which rewrites `duration` AND
+    // `originalDuration`. It is a custom duration only when it differs from the
+    // size default — openEdit's rule — so a default-length booking still
+    // re-derives when the guest count changes. Clamped to the form stepper's own
+    // 15–480 bounds (BookingFormModal), so a corrupt legacy length cannot ride
+    // into a new booking. This was `customDur:null`, which opened every Book
+    // Again at the size default and silently dropped a long booking's length.
+    const againSize=sourceBooking.size||2;
+    const planned=plannedDuration(sourceBooking);
+    const againDur=planned?Math.max(15,Math.min(480,planned)):null;
     openForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
       phone:sourceBooking.phone||generalSettings.phonePrefix,
       date:"",
       time:schedTime,
-      size:sourceBooking.size||2,
+      size:againSize,
       preference:sourceBooking.preference||"auto",
       preferredTables:Array.isArray(sourceBooking.preferredTables)?sourceBooking.preferredTables.slice():[],
       notes:"",
-      customDur:null,
+      customDur:againDur&&againDur!==getDur(againSize)?againDur:null,
       manualTables:[],
       status:"confirmed",
       returnOf:sourceBooking.id,
