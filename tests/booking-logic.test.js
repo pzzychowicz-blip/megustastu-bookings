@@ -26,7 +26,7 @@ import {
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
-  tablesFreeFor, trialFits, enteredPhone,
+  tablesFreeFor, trialFits, enteredPhone, kitchenRelevant,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2100,6 +2100,46 @@ describe("seatRefusal", () => {
   it("survives a booking gone from the list", () => {
     expect(seatRefusal(null)).toBe(null);
     expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (R6) — the kitchen asks about kitchen things ──────────
+describe("kitchenRelevant", () => {
+  const orig = mk({ time: "20:00", date: D, size: 2, duration: 90, originalDuration: 90 });
+  const same = { date: D, time: "20:00", customDur: null, status: "confirmed" };
+
+  it("always asks about a new booking", () => {
+    expect(kitchenRelevant(null, same, 2)).toBe(true);
+  });
+
+  it("does NOT ask when nothing the kitchen sees has moved", () => {
+    expect(kitchenRelevant(orig, same, 2), "a notes-only edit").toBe(false);
+    expect(kitchenRelevant(orig, { ...same, status: "seated" }, 2), "seating adds no start").toBe(false);
+  });
+
+  it("asks about when, for how many, and for how long", () => {
+    expect(kitchenRelevant(orig, { ...same, time: "20:15" }, 2)).toBe(true);
+    expect(kitchenRelevant(orig, { ...same, date: "2099-06-16" }, 2)).toBe(true);
+    expect(kitchenRelevant(orig, same, 4), "a bigger party").toBe(true);
+    expect(kitchenRelevant(orig, { ...same, customDur: 120 }, 2), "a longer sitting").toBe(true);
+  });
+
+  it("asks again when a booking comes back from cancelled or completed", () => {
+    const off = mk({ ...orig, status: "cancelled" });
+    const done = mk({ ...orig, status: "completed" });
+    expect(kitchenRelevant(off, same, 2)).toBe(true);
+    expect(kitchenRelevant(done, same, 2)).toBe(true);
+  });
+
+  it("does not ask when a booking is LEAVING the count", () => {
+    expect(kitchenRelevant(orig, { ...same, status: "cancelled" }, 2)).toBe(false);
+    expect(kitchenRelevant(orig, { ...same, status: "completed" }, 2)).toBe(false);
+  });
+
+  it("a size change that re-derives the default length still asks once", () => {
+    // size 5 moves the default length 90 → 120; both terms fire, and the answer
+    // is one prompt either way.
+    expect(kitchenRelevant(orig, same, 5)).toBe(true);
   });
 });
 

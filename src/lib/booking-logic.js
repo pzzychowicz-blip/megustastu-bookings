@@ -359,6 +359,30 @@ export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=is
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
   updatedAt:Number(b.updatedAt)||0};}
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
+// ── v18.0.0 session 8 (R6): does this save change what the KITCHEN sees? ────
+// "Kitchen may be busy" counts the STARTS in a slot — how many parties the pass
+// has to cook for at once. `save()` raised it on any save whose slot was busy,
+// including one that changed nothing the kitchen could possibly care about.
+// Measured live 2026-09-11: editing only the NOTES of a booking in a busy slot
+// raised the confirm, so the person correcting a typo was asked to approve a
+// kitchen load their edit did not add to — and the dialog they must dismiss is
+// the same one that means something real on the save after it.
+//
+// What the kitchen sees is a start: when, for how many, for how long. A new
+// booking is a new start; so is a booking coming back from cancelled or
+// completed, which is a start the count had stopped including. A seat, a phone,
+// a note, a deposit, a voucher and a table move are not.
+export function kitchenRelevant(orig,f,size){
+  if(!orig) return true;
+  if(f.date!==orig.date||f.time!==orig.time) return true;
+  if(size!==orig.size) return true;
+  var formDur=f.customDur||getDur(size);
+  var origDur=orig.originalDuration||orig.duration||90;
+  if(formDur!==origDur) return true;
+  var wasOff=orig.status==="cancelled"||orig.status==="completed";
+  var backOn=f.status!=="cancelled"&&f.status!=="completed";
+  return wasOff&&backOn;
+}
 // ── v18.0.0 session 8 (R5): what counts as a phone somebody ENTERED ─────────
 // Empty, a bare "+", or exactly the untouched prefix seed all mean "no phone" —
 // the prefix is a typing convenience the form puts in the field, not data.

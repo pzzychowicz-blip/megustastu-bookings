@@ -61,6 +61,8 @@ import {
   tablesFreeFor,
   // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
   enteredPhone,
+  // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
+  kitchenRelevant,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime
@@ -2723,8 +2725,12 @@ function BookingApp({uid}){
     const f=formRef.current;
     if(!f.time) return doSave();
     const size=Number(f.size)||2;const d=f.customDur||getDur(size);
+    // v18.0.0 session 8 (R6): ask only about a save the kitchen would notice.
+    // A notes-only edit in a busy slot raised this confirm, which trains people
+    // to tap past the dialog that means something on the save after it.
+    const kitchenOrig=editId?bookings.find(function(b){return b.id===editId;}):null;
     const load=getKitchenLoad(bookings,f.date,f.time,d,editId);
-    if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
+    if(kitchenRelevant(kitchenOrig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
       setConfirmKitchen("form");return;
     }
     setConfirmKitchen(null);doSave();

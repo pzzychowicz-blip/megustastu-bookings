@@ -23254,3 +23254,31 @@ reporting "no field changes" for the seeded prefix and for a bare `+`, while
 still recording a phone genuinely added or genuinely removed.
 
 Gate: `124.45 kB` gz · **1295 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 83 (session 8, R6) — the kitchen asks only about a change the kitchen sees
+
+Measured live 2026-09-11: editing **only the notes** of a booking in a slot with
+two other starts raised "Kitchen may be busy". `save()` consulted
+`getKitchenLoad` on every save whose slot was busy, without ever asking whether
+the save added anything to that load.
+
+The cost is not the extra tap. It is that the dialog someone taps past on a
+notes edit is **the same dialog** that means something real on the save after
+it, and a confirm that fires when it has nothing to say is a confirm nobody
+reads — the reasoning already in this file for why the module switch does not
+confirm every toggle.
+
+What the kitchen sees is a START: when, for how many, for how long. So
+`kitchenRelevant(orig, f, size)` asks about a new booking, a date, time, size or
+length change, and a booking coming back from cancelled or completed — which is
+a start the count had stopped including. A seat, a phone number, a note, a
+deposit, a voucher, a preference and a table move are not kitchen facts, and a
+booking **leaving** the count never asks at all.
+
+Walk-ins are unaffected and needed no thought: a walk-in is always a new start,
+and `useWalkin` raises the same confirm through its own path.
+
+Six tests, including the two that would have caught this — the notes-only edit
+and the seat, both `false` — and the revival cases, both `true`.
+
+Gate: `124.52 kB` gz · **1301 tests** · 0 lint errors (88 warnings) · style OK.
