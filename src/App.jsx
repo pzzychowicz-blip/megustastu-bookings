@@ -2994,7 +2994,25 @@ function BookingApp({uid}){
   // so a staff member is refused at the point of intent rather than after
   // reading a "this cannot be undone" dialog and tapping Delete.
   function requestDelete(id){if(refused("bookingDelete")) return;setConfirmDel(id);}
-  function delBooking(id){if(refused("bookingDelete")) return;
+  function delBooking(id){if(refused("bookingDelete")) return false;
+    // v18.0.0 session 8 (C6): the money question, before the record goes.
+    // Deleting a booking that had redeemed against a voucher asked NOTHING and
+    // left the ledger entry behind — pointing at a booking that no longer
+    // exists, which Settings → Vouchers renders as the literal text
+    // "booking <id>" because there is no name left to resolve. The balance
+    // stayed spent, so a guest's remaining money quietly belonged to a visit
+    // nobody can look up.
+    //
+    // The same prompt as the walk-back, with `from: "delete"`: the question is
+    // identical (restore the balance, or leave it spent?) and a second dialog
+    // asking it differently is a second thing to keep in step. Escape abandons
+    // the delete entirely, which is the safe direction — the booking is still
+    // there to try again.
+    if(!redeemAskedRef.current&&voucherHeldBy(id)){
+      setConfirmDel(null);
+      setVoucherBack({id:id,from:"delete"});
+      return false;
+    }
     const target=bookings.find(function(x){return x.id===id;});
     // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
     // skipDates so the generator never resurrects it. Done BEFORE the booking
@@ -3007,7 +3025,7 @@ function BookingApp({uid}){
     // warning so the tap isn't a mystery no-op.
     if(target&&target.recurringId&&target.recurringDate){
       const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
-      if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return;}
+      if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return false;}
     }
     function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
@@ -3027,7 +3045,11 @@ function BookingApp({uid}){
     // added above deliberately STAYS on undo — the restored occurrence keeps
     // its deterministic id, so the generator never duplicates it, and the
     // skipDate just stops a REGENERATION it no longer needs to do.
-    if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}}
+    if(ok){flash();armUndo(undoDelta(bookings,postDel),id,"delete",false);}
+    // v18.0.0 session 8 (C6): returned so `settleVoucherBack` can keep
+    // `settleVoucher`'s ordering — the booking write first, the money only if
+    // it landed.
+    return ok;}
 
   // ── v17.12.0: is ANY modal open? ───────────────────────────────────────────
   // One derivation, in the component that owns all seventeen pieces of state.
@@ -3198,11 +3220,18 @@ function BookingApp({uid}){
   // statuses: every status other than completed is a visit that did not finish
   // the way the ledger says it did, and enumerating them is how the next one
   // added gets missed.
-  function voucherToRestore(id,status){
+  // v18.0.0 session 8 (C6): "does this booking hold money on a voucher", with
+  // no opinion about status. `voucherToRestore` asked the same question wrapped
+  // in a walk-back gate, and a DELETE has no target status to test — so the
+  // question is separated from the occasion for asking it.
+  //
+  // Status-free on purpose rather than by omission: answering "keep it
+  // redeemed" to a walk-back leaves a redemption on a booking that is no longer
+  // completed, so a ledger entry can outlive the status that created it.
+  function voucherHeldBy(id){
     if(!vouchersOn) return null;
-    if(status==="completed") return null;
     const b=bookings.find(function(x){return x.id===id;});
-    if(!b||b.status!=="completed") return null;   // only a walk-back, never a first pass
+    if(!b) return null;
     const code=normalizeCode(b.voucherCode);
     if(!code) return null;
     const v=vouchersByCode[code];
@@ -3211,6 +3240,12 @@ function BookingApp({uid}){
     // voucher redeemed by a DIFFERENT booking is not this booking's to restore.
     if(!isRedeemedBy(v,id)) return null;
     return v;
+  }
+  function voucherToRestore(id,status){
+    if(status==="completed") return null;
+    const b=bookings.find(function(x){return x.id===id;});
+    if(!b||b.status!=="completed") return null;   // only a walk-back, never a first pass
+    return voucherHeldBy(id);
   }
   // Re-enter the action the modal interrupted, with the question marked asked.
   // ONE ref covers both prompts, deliberately: a status change is either INTO
@@ -3444,18 +3479,28 @@ function BookingApp({uid}){
     if(!ask) return;
     setVoucherBack(null);                      // see settleVoucher on the order
     if(refused("voucherRedeem")) return;
+    // v18.0.0 session 8 (C6): the code is read BEFORE the write, not after.
+    // The ordering contract is untouched — the booking write still goes first
+    // and the money moves only if it landed — but the DELETE funnel removes the
+    // booking, and a lookup afterwards would find nothing and silently skip the
+    // restore. (It happens to survive today, because this render's `bookings`
+    // closure is not the state the write replaces; that is a property of React
+    // rather than of this function, and too quiet to depend on.)
+    const held=bookings.find(function(x){return x.id===ask.id;});
+    const code=held?normalizeCode(held.voucherCode):"";
     const ok=withRedeemAsked(function(){
-      // Three funnels now, not two — `doCancelBooking` is its own door because
+      // FOUR funnels now. `doCancelBooking` is its own door because
       // `updateStatus` hands "cancelled" straight to the confirm and never
-      // reaches its own gate. It returns the save's `ok` for this caller.
+      // reaches its own gate; `delBooking` is its own for the same shape — the
+      // delete confirm is a door the status gates never see. Each returns the
+      // save's `ok` for this caller.
+      if(ask.from==="delete") return delBooking(ask.id);
       if(ask.from==="cancel") return doCancelBooking(ask.id,ask.noShow);
       if(ask.from!=="form") return updateStatus(ask.id,ask.status);
       doSave();
       return !mayDispatch(saveGuardRef.current);
     });
     if(!ok||!restore) return;
-    const b=bookings.find(function(x){return x.id===ask.id;});
-    const code=b?normalizeCode(b.voucherCode):"";
     if(code) unredeemVoucher(code,ask.id);
   }
   function doCancelBooking(id,noShow){
@@ -4669,8 +4714,9 @@ function BookingApp({uid}){
               const b=bookings.find(function(x){return x.id===voucherBack.id;})||{};
               const v=vouchersByCode[normalizeCode(b.voucherCode)];
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
-              return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". You are moving it back out of Completed — restore that amount to the voucher, or keep it redeemed?";
-            })()}</div><div style={{fontSize: T.small,color:S.sub}}>Restoring puts the balance back and removes this visit from the voucher&rsquo;s history. Keeping it redeemed leaves the record as it is.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+              const why=voucherBack.from==="delete"?"You are deleting this booking":"You are moving it back out of Completed";
+              return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". "+why+" — restore that amount to the voucher, or keep it redeemed?";
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

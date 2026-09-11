@@ -23307,3 +23307,52 @@ claim about what the app just did, and that part belongs in `lib/` with the rest
 of the claims.
 
 Gate: `124.59 kB` gz · **1303 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 85 (session 8, C6) — deleting a booking that redeemed a voucher asks
+
+Deleting a booking that had redeemed against a voucher asked **nothing**. The
+ledger entry stayed behind, keyed by a booking id that no longer resolves —
+which is why `VouchersSettings` has a branch printing the literal text
+`"booking " + id` when it cannot find a name. The balance stayed spent, so a
+guest's remaining money belonged to a visit nobody can look up, in a collection
+with no backups.
+
+It raises **the same prompt as the walk-back**, with `from: "delete"`. The
+question is identical — restore the balance, or leave it spent? — and a second
+dialog asking it differently is a second thing to keep in step. Escape abandons
+the delete entirely, which is the safe direction: the booking is still there to
+try again.
+
+**`voucherHeldBy` separates the question from the occasion for asking it.**
+`voucherToRestore` wrapped "does this booking hold money on a voucher" inside a
+walk-back gate (`status !== "completed"` on the way in, `b.status === "completed"`
+on the record), and a delete has no target status to test. The new predicate is
+status-FREE on purpose rather than by omission: answering "keep it redeemed" to a
+walk-back leaves a redemption on a booking that is no longer completed, so a
+ledger entry can outlive the status that created it. `voucherToRestore` is now
+that gate plus a call to it.
+
+**Four funnels, not three.** `delBooking` joins `doCancelBooking` for the same
+structural reason that one exists: the delete confirm is a door neither
+`updateStatus`'s gates nor `doSave`'s ever see. It returns the save's `ok` now,
+so `settleVoucher`'s ordering holds here too — the booking write first, the money
+only if it landed.
+
+One hazard found by reading rather than by running: `settleVoucherBack` looked
+the booking up **after** the write to find its code, and the delete funnel
+removes the booking. It survives today only because this render's `bookings`
+closure is not the state the write replaces — a property of React, not of this
+function, and too quiet to depend on. The code is read before the write now; the
+ordering contract is untouched.
+
+The modal's copy branches on `from`: "You are deleting this booking" rather than
+"You are moving it back out of Completed", and the secondary line says plainly
+that keeping it redeemed leaves the amount spent against a booking that will not
+exist — **and that the booking is deleted either way**, which is the one thing
+neither button says on its own.
+
+No new tests: this is App wiring on top of predicates that already have them
+(`isRedeemedBy`). It is on the live list — both answers, with the ledger read
+back from RTDB.
+
+Gate: `124.75 kB` gz · **1303 tests** · 0 lint errors (88 warnings) · style OK.
