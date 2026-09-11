@@ -40,8 +40,9 @@ admin has not enabled the module. The one thing still not shipped is the
 | Two views at once, with a draggable divider | **split view** (`SplitLayout.jsx`, `split` state) | Tablet/desktop only (≥600px). The same view can never fill both panes. |
 | The two-step popup that sets a split up | **split menu** (`SplitMenu.jsx`) | Direction, then which second view. |
 | Corner brackets around one pane | **focused pane** | Which half the keyboard acts on. |
-| ‹ date › row under the header | **date-nav row** (`<nav aria-label="Date">`) | Previous day · viewed date · next day. |
+| ‹ date › row under the header | **date-nav row** (`<nav aria-label="Date">`) | Previous day · viewed date · next day. The viewed date is a **date field**, so it names its weekday. |
 | The date currently on screen | **viewed date** (`viewDate`) | Distinct from **today** — most notifications are today-only, clashes are not. |
+| "Fri 11/09/2026" — a date pill that names its weekday | **date field** (`DateField`, `atoms.jsx`) | A native date input with its weekday inside the same pill (v18.0.0 session 7): the header's viewed date and the booking form's Date field. No date, no weekday. Its focus ring is drawn on the pill, not on the input inside it. |
 | Pinned header and nav that don't scroll away | **fixed shell** (`shellFixed`) | One layout mode behind both "Lock navigation" and split view. |
 | A pill that appears at the top-left on Tab | **skip link** (`.mgt-skip`) | Jumps keyboard focus past the header to the bookings. |
 

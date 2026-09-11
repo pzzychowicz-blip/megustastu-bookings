@@ -55,6 +55,7 @@ const CRITICAL_SELECTORS = [
   ".mgt-press:active",                // the press dim — the v17.8.0 casualty
   "button:active",                    // the universal press-scale
   ":focus-visible",                   // the keyboard ring
+  ".mgt-datefield:has(input:focus-visible)", // the date pill's ring — DateField hides its input's own
   ".mgt-notif",                       // the strip's section hairlines
   ".mgt-card-in",                     // modal/popover entrance
   ".mgt-card-out",                    // modal/popover exit

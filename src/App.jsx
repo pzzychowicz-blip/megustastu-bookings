@@ -66,7 +66,7 @@ import { placeWaitlist } from "./lib/waitlist-match";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { Overlay, ModalTitle, mkBtn, mkSolidBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { appBannerSections } from "./components/AppBanners";
@@ -4198,12 +4198,13 @@ function BookingApp({uid}){
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
               aria-label="Next day"
               title="Next day (→)"
-              ><ChevronRightIcon size={IC.chrome} /></button><input
-              type="date"
-              aria-label="Viewed date"
+              ><ChevronRightIcon size={IC.chrome} /></button><DateField
+              /* v18.0.0 session 7: the weekday inside the pill ("Fri
+                 11/09/2026"). The pill's look moved onto DateField's wrapper
+                 unchanged; the input's own name rides in inputProps. */
+              inputProps={{"aria-label":"Viewed date"}}
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
-              className="mgt-hover-scale"
               style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"

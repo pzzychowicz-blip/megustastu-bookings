@@ -14,6 +14,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
+import { weekdayShort } from "../lib/day";
 import { AlertIcon, ChevronRightIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -1829,3 +1830,55 @@ export function Kbd({ k }) {
   );
 }
 
+// ── DateField (v18.0.0 session 7) ────────────────────────────────────────────
+// A native <input type="date"> with its WEEKDAY inside the same pill: "Fri
+// 11/09/2026". Patryk's call for the header's viewed date and the booking form's
+// Date field — the two places staff read "which day is this" — and inside the
+// field rather than beside it, so it reads as one date and adds no element to a
+// crowded header row. The More popover already names its days.
+//
+// The pill is the WRAPPER; the input inside it is transparent and borderless.
+// Three consequences, each load-bearing:
+//   • `style` is the LOOK and lands on the wrapper — the header's date chrome or
+//     mkInp, unchanged. `inputProps` carries the input's own attributes (its id,
+//     its aria-label, Fld's state attrs), because those name the CONTROL.
+//   • The keyboard ring moves to the pill. `.mgt-datefield` in index.css hides
+//     the input's own ring and draws the global one on the wrapper through
+//     `:has(input:focus-visible)` — pill-shaped and offset, like every other
+//     control, rather than a rectangle inside the pill.
+//   • The weekday has a FIXED slot. "Wed" is the widest name, measured at 2.06em
+//     bold in the app's font against 1.15em for "Fri", so a width that followed
+//     the text would nudge everything right of the header's pill by up to 13px
+//     on every step through the week.
+//
+// A tap on the weekday or the padding opens the picker (`showPicker`, focus
+// where a browser has none); a tap on the input keeps its native behaviour.
+// `weekdayShort` is "" for exactly what the input refuses to display, so a blank
+// date — Book Again opens with one — shows no weekday either.
+export function DateField({ value, onChange, style, inputProps }) {
+  const inputRef = useRef(null);
+  const wd = weekdayShort(value);
+  function openPicker(e) {
+    const el = inputRef.current;
+    if (!el || e.target === el) return;
+    try { el.showPicker(); } catch { el.focus(); }
+  }
+  return (
+    <div
+      className="mgt-hover-scale mgt-datefield"
+      onClick={openPicker}
+      style={Object.assign({ display: "flex", alignItems: "center", gap: SP.snug, cursor: "pointer" }, style)}
+    >
+      {wd ? <span style={{ minWidth: "2.2em", fontWeight: FW.bold, flexShrink: 0 }}>{wd}</span> : null}
+      <input
+        ref={inputRef}
+        /* @no-lift the pill around it lifts as one control */
+        type="date"
+        value={value}
+        onChange={onChange}
+        {...inputProps}
+        style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
+      />
+    </div>
+  );
+}

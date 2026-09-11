@@ -299,7 +299,15 @@ explaining why is usually the one to read.
   `padding-inline` gutters. **Nothing else in the app may wear a plain outline** —
   `ViewSwitcher`'s split-pane marker was `outline: 2px solid white` and became
   indistinguishable from focus the moment a real ring existed; it is an inset
-  underline now.
+  underline now. **A control whose pill is a WRAPPER takes the ring on the
+  wrapper (v18.0.0 session 7).** `DateField` draws its pill on a `<div>` around a
+  transparent native date input, so the weekday can sit inside the field. Left
+  alone, the input would wear this ring as a rectangle INSIDE the pill; so
+  `.mgt-datefield` hides the input's ring and draws the same one — same token, same
+  2px offset — on the wrapper through `:has(input:focus-visible)`. Both halves or
+  neither: hiding one ring without drawing the other leaves no focus signal at
+  all, which is why the second selector is a stylesheet critical selector.
+  Measured live: input `outline: none`, wrapper `solid 2px` offset `2px`.
 
 - **A status button carries its OWN mark, from ONE source (v17.10.0).** Every
   button that moves a booking to another status used to be prefixed with the

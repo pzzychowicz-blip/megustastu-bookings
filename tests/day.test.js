@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import process from "node:process";
-import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate } from "../src/lib/day.js";
+import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate, weekdayShort } from "../src/lib/day.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const REAL_TZ = process.env.TZ;
@@ -351,5 +351,32 @@ describe("EMPTY_FORM.date tracks today", () => {
     expect(Object.assign({}, EMPTY_FORM, { date: "2026-01-01" }).date).toBe("2026-01-01");
     // Not an own-property trap: it survives serialisation like any value.
     expect(JSON.parse(JSON.stringify(EMPTY_FORM)).date).toBe(todayStr());
+  });
+});
+
+describe("weekdayShort — the weekday a date field shows (v18.0.0 session 7)", () => {
+  it("names each day of a known week, in order", () => {
+    // 2026-09-07 is a Monday; stepping with addDays keeps the fixture honest.
+    const names = [0, 1, 2, 3, 4, 5, 6].map((n) => weekdayShort(addDays("2026-09-07", n)));
+    expect(names).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  });
+
+  it("is all-UTC — the same answer ahead of UTC, in the Canaries and behind it", () => {
+    const prev = process.env.TZ;
+    try {
+      for (const tz of ["Pacific/Kiritimati", "Atlantic/Canary", "Pacific/Pago_Pago"]) {
+        process.env.TZ = tz;
+        expect(weekdayShort("2026-09-11"), tz).toBe("Fri");
+        expect(weekdayShort("2026-03-29"), tz).toBe("Sun"); // the Canary spring-forward day
+      }
+    } finally {
+      if (prev === undefined) delete process.env.TZ; else process.env.TZ = prev;
+    }
+  });
+
+  it("is blank for exactly what a native date input refuses to show", () => {
+    for (const v of ["", "2026-8-3", "2026-02-30", "11/09/2026", "not-a-date", null, undefined, 20260911]) {
+      expect(weekdayShort(v), String(v)).toBe("");
+    }
   });
 });

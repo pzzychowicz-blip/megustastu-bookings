@@ -166,6 +166,26 @@ export function stepDate(dateStr, n) {
   return out !== null ? out : addDays(todayStr(), n);
 }
 
+// v18.0.0 session 7: the weekday, abbreviated, for the date fields that show it
+// inside the pill — "Fri 11/09/2026" (`DateField`, atoms.jsx). A native
+// <input type="date"> cannot show one, and staff check which day they are on by
+// its weekday.
+//
+// "" for anything that is not a CANONICAL date, which is exactly the set the
+// native input refuses to display: a field showing no date must show no weekday.
+// Canonical is `stepUTC(v, 0) === v` — the same test `openNew` relies on via
+// `stepDate(d, 0) === d` — so "2026-8-3" (which navigates, see isReadableDate)
+// and "2026-02-30" (which rolls over) both read "", because the input beside
+// them is blank. All-UTC like everything else in this file.
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export function weekdayShort(dateStr) {
+  // The typeof is NOT redundant with stepUTC's own: stepUTC(null) returns null,
+  // which is `===` the input, and `new Date(null)` is the epoch — a Thursday. The
+  // test caught exactly that.
+  if (typeof dateStr !== "string" || stepUTC(dateStr, 0) !== dateStr) return "";
+  return WEEKDAY_SHORT[new Date(dateStr).getUTCDay()];
+}
+
 // NOW, expressed in minutes since midnight of `dateStr` — the one axis on which
 // `nowOn(b.date, today, nowMins)` and `toMins(b.time)` may be compared.
 //

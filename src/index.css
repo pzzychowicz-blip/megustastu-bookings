@@ -1363,6 +1363,20 @@ main:focus { outline: none; }
 /* The ring is the only focus signal; never let a UA default double it. */
 :focus:not(:focus-visible) { outline: none; }
 
+/* v18.0.0 session 7: DateField (atoms.jsx) puts a native date input INSIDE a
+   pill, so the weekday can sit beside the date. The pill is the control, so
+   the ring belongs on it: the input's own ring is hidden, and the rule above's
+   ring is drawn on the wrapper while the input inside it is focus-visible —
+   pill-shaped and offset, not a rectangle inside the pill. Both halves or
+   neither: hiding the input's ring without drawing the wrapper's would leave a
+   keyboard user no focus signal at all, which is why the second selector is in
+   the stylesheet test's critical list. */
+.mgt-datefield input:focus-visible { outline: none; }
+.mgt-datefield:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* v17.12.0: visually hidden, but PRESENT to assistive technology — the
    carrier for live-region text that has no on-screen equivalent. It is
    not `display:none` and not `visibility:hidden`: both remove the node

@@ -22473,3 +22473,58 @@ Again opened at **13:30 · 90 min · End 15:00, with no Reset** — no custom
 duration carried, so it still follows the guest count.
 
 Gate: `121.70 kB` gz (+0.07) · **1233 tests** (+7) · 0 lint errors (88 warnings) · style OK.
+
+### Commit 60 (session 7) — the date fields name their weekday
+
+A native `<input type="date">` cannot show a weekday, and staff check which day
+they are on by it. **The header's viewed date and the booking form's Date field
+now read "Fri 11/09/2026" inside one pill** — Patryk's placement over a label
+beside the pill, which would have added an element to a crowded header row. The
+reminder editor's date was offered and left alone; the More popover already
+names its days.
+
+`DateField` (`atoms.jsx`) draws the pill on a wrapper around a transparent,
+borderless native input, and three things follow from that shape:
+
+- **The call site's look moves onto the wrapper unchanged** (`style` — the
+  header's date chrome, or `mkInp`), while what NAMES the control stays on the
+  input (`inputProps` — the header's `aria-label`, `Fld`'s id and state attrs).
+  Measured: the header input still announces "Viewed date", and the form's
+  `<label for>` still resolves to "Date".
+- **The keyboard ring moves to the pill.** Left alone, the input would wear the
+  global ring as a rectangle inside the pill; `.mgt-datefield` hides it and draws
+  the same ring on the wrapper through `:has(input:focus-visible)`. Both halves
+  or neither — hiding one without drawing the other is no focus signal at all —
+  so the second selector joined the stylesheet test's critical list. Measured:
+  input `outline: none`, wrapper `solid 2px` offset `2px`, pill-shaped on screen.
+- **The weekday has a fixed 2.2em slot.** "Wed" measures 2.06em bold in the
+  app's font against 1.15em for "Fri"; a width that followed the text would have
+  nudged everything right of the header pill by up to 13px on every step through
+  the week. Measured stepping Sat → Fri: the pill held **186.8px** on all seven.
+
+A tap on the weekday or the pill's padding opens the picker — with `showPicker`
+stubbed in the page to count calls, one tap on "Fri" made exactly one call, on
+the "Viewed date" input — and a tap on the input keeps its native behaviour.
+
+`weekdayShort` (`day.js`) is "" for anything that is not a canonical date, which
+is exactly what the native input refuses to display, so a blank date shows no
+weekday. **Its test caught a real bug before it shipped**: `stepUTC(null)`
+returns `null`, which is `===` the input, and `new Date(null)` is the epoch — a
+Thursday. A `typeof` guard now comes first, with that reason beside it.
+
+**Also verified live:** the booking form's Date field reads "Fri 11.09.2026"
+with its `<label for>` still resolving to "Date" — checked in the light theme,
+the header in both; a Book Again form, whose date starts blank, shows **no**
+weekday; and on a 375px phone the pill fits with no horizontal overflow.
+
+**A layout suspicion, checked and withdrawn.** The pill is 37px wider than the
+bare input it replaced (186.8 vs 150), and at the Browser pane's width the
+summary panel beside it wraps its counts onto two lines — which read like a
+consequence, and was reported in passing as one before it was measured. It is
+not: with the pill forced back to 150px in the live page the summary stayed at
+the **same 58px** (598px wide against 561px). The wrap is the summary's own
+content on a day with bookings. Emulating wider viewports could not settle it
+either way — the header row measured identically at 1024 and 1280, because the
+app's own width is capped on this device.
+
+Gate: `121.96 kB` gz (+0.26) · **1237 tests** (+4) · 0 lint errors (88 warnings) · style OK.
