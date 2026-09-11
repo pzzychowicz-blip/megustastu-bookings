@@ -22647,3 +22647,28 @@ voucher walk-back interplay, which needs a redeemed voucher — there the orderi
 is the code's (the snapshot is raised only after both voucher gates return).
 
 Gate: `122.40 kB` gz (+0.36) · **1245 tests** (+5) · 0 lint errors (88 warnings) · style OK.
+
+### Commit 63 (phase 7) — the README describes the app that exists
+
+`README.md` still said "production, v16 · 130+ commits", listed WhatsApp as in
+progress, and said nothing about tests, CI or the crash-test practice — the most
+distinctive engineering in the repo, invisible to anyone reading it. Rewritten
+to the draft Patryk approved, keeping his structure and voice:
+
+- **Status** — `v18 · 790+ commits · 18 tagged releases`, measured:
+  `git rev-list --count HEAD` read **795** before this commit and `git tag`
+  lists 18. The approved draft said "800", which is true only once this PR's own
+  commits have landed, so the line says what is true at the commit. "With
+  changelogs" is dropped — there are 15 changelog files for 18 tags.
+- **Highlights** — the data-loss bullet names both incidents and both structural
+  fixes (the empty-overwrite write guard, then the per-booking compare-and-swap).
+  Four new bullets: roles enforced server-side; WhatsApp in production behind a
+  switch, carrying the property the WhatsApp crash test measured — no LLM output
+  changes a booking without a staff action; readiness to serve another
+  restaurant; and testing, with **1,245 unit tests and 257 rules tests**, both
+  counts run for this commit (`npm test`; `npm run test:rules` against the
+  emulator, which `CLAUDE.md` still recorded as 149).
+- **Stack and Development** — Vitest, GitHub Actions, the Gemini API and Vercel's
+  functions; the test, rules, lint and style commands beside dev and build.
+
+Gate: `122.40 kB` gz · **1245 tests** · 0 lint errors (88 warnings) · style OK · `test:rules` **257**.
