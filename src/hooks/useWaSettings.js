@@ -26,6 +26,9 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 export const DEFAULT_WA_SETTINGS = {
   v: 1,
@@ -105,9 +108,13 @@ export function useWaSettings({ enabled } = {}) {
       console.warn("[SAFE] Refused to write WhatsApp settings — initial read has not completed yet.");
       return;
     }
-    const next = sanitizeWa({ ...waSettings, ...(partial || {}) });
+    const prev = waSettings;
+    const next = sanitizeWa({ ...prev, ...(partial || {}) });
     setWa(next);
-    writeWithRev("settings/whatsapp", next, revRef);
+    writeWithRev("settings/whatsapp", next, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/whatsapp", prev, next);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { waSettings, saveWaSettings };

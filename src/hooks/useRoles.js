@@ -39,6 +39,12 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ref, onValue, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError, describeWriteError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log. `saveKeyed` serves both /roles and
+// /invites and takes the node as its first argument, so one hook point names
+// whichever it was. The self-registration stub at sign-in is NOT logged — a
+// refusal there is expected and routine on every sign-in after the first.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
 import {
@@ -143,7 +149,12 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
     if (isDuplicatePatch(sig, lastPatchSigRef.current, nowMs)) return true;
     lastPatchSigRef.current = { sig: sig, at: nowMs };
 
-    update(ref(db, node), patch).catch(function (err) {
+    // v18.0.0 session 8: `node` is "roles" or "invites", so one hook point names
+    // whichever this call was for. Success path only — `.then` before `.catch`.
+    update(ref(db, node), patch).then(function () {
+      const entry = settingsWriteEntry(node, prev, computed);
+      if (entry) emitActivity([entry]);
+    }).catch(function (err) {
       console.warn(describeWriteError(node, err));
       setWriteWarning("Couldn't save that change — this device's data was out of date, or you do not have permission. Please reload and try again.");
     });
@@ -369,11 +380,18 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
       console.warn("[SAFE] Refused to write settings/admin — initial read has not completed yet.");
       return false;
     }
-    const next = sanitizeAdminSettings(Object.assign({}, adminRef.current, fields));
+    // Captured ABOVE the mirror assignment — the payload is a MERGE onto what is
+    // stored, so reading it afterwards would compare the merged value with
+    // itself and report that nothing changed.
+    const prev = adminRef.current;
+    const next = sanitizeAdminSettings(Object.assign({}, prev, fields));
     adminRef.current = next;
     setAdminSettings(next);
     writeWithRev("settings/admin", next, adminRevRef, function () {
       setWriteWarning(failMsg);
+    }, function () {
+      const entry = settingsWriteEntry("settings/admin", prev, next);
+      if (entry) emitActivity([entry]);
     });
     return true;
   }, [setWriteWarning]);

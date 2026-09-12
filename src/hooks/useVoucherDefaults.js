@@ -33,6 +33,9 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clampStep } from "../lib/clamp";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 // 12 months is the plan's decision, and it is a SETTING rather than a rule
 // precisely because the right answer is a legal question: Spanish consumer law
@@ -78,9 +81,13 @@ export function useVoucherDefaults() {
       console.warn("[SAFE] Refused to write voucher defaults — initial read has not completed yet.");
       return;
     }
-    const next = sanitizeVoucherDefaults({ ...voucherDefaults, ...(partial || {}) });
+    const prev = voucherDefaults;
+    const next = sanitizeVoucherDefaults({ ...prev, ...(partial || {}) });
     setVD(next);
-    writeWithRev("settings/voucherDefaults", next, revRef);
+    writeWithRev("settings/voucherDefaults", next, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/voucherDefaults", prev, next);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { voucherDefaults, saveVoucherDefaults };

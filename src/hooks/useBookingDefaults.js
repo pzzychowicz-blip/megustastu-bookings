@@ -37,6 +37,9 @@ import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clampStep } from "../lib/clamp";
 import { setDurTiers, setTurnBuffer } from "../lib/constants";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 export const MAX_TIERS = 6;
 
@@ -157,11 +160,15 @@ export function useBookingDefaults(){
       console.warn("[SAFE] Refused to write booking defaults — initial read has not completed yet.");
       return;
     }
-    const next = sanitizeBookingDefaults({ ...bookingDefaults, ...(partial || {}) });
+    const prev = bookingDefaults;
+    const next = sanitizeBookingDefaults({ ...prev, ...(partial || {}) });
     setDurTiers(next);
     setTurnBuffer(next);
     setBD(next);
-    writeWithRev("settings/bookingDefaults", next, revRef);
+    writeWithRev("settings/bookingDefaults", next, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/bookingDefaults", prev, next);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { bookingDefaults, saveBookingDefaults };

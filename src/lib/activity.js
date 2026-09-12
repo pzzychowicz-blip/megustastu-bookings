@@ -291,13 +291,34 @@ function newKeys(was, now) {
 // user changed anything, so an unconditional entry would log a row every time
 // somebody opened a settings tab and pressed save.
 export function settingsWriteEntry(path, prev, next, ctx) {
+  const opts = ctx || {};
+  const auto = opts.auto === true ? true : undefined;
+  const kind = kindForPath(path);
+  const label = NODE_LABEL[path] || path;
+
+  // ── A LIST node is not a settings object, and a key diff lies about it ─────
+  // `waitlist`, `reminders`, `roles`, `invites` and the standing rules are
+  // ARRAYS. A shallow key diff over an array compares INDICES, so it produces
+  // "changed the waitlist · 0, 2" — positions nobody can see — and inserting one
+  // entry at the front renumbers everything after it and reports the whole list
+  // as changed. The honest statement about a list is how long it is.
+  if (Array.isArray(prev) || Array.isArray(next)) {
+    const a = Array.isArray(prev) ? prev.length : 0;
+    const b = Array.isArray(next) ? next.length : 0;
+    if (a === b && same(prev, next)) return null;
+    if (a === b) return clean({ kind: kind, auto: auto, text: "changed " + label });
+    return clean({
+      kind: kind, auto: auto,
+      text: (b > a ? "added to " : "removed from ") + label + " · " + a + " → " + b,
+    });
+  }
+
   const keys = changedKeys(prev, next);
   if (!keys.length) return null;
-  const opts = ctx || {};
   return clean({
-    kind: kindForPath(path),
-    auto: opts.auto === true ? true : undefined,
-    text: "changed " + (NODE_LABEL[path] || path) + " · " + keys.join(", "),
+    kind: kind,
+    auto: auto,
+    text: "changed " + label + " · " + keys.join(", "),
   });
 }
 

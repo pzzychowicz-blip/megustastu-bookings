@@ -23877,3 +23877,79 @@ tests** · 0 lint errors (88 warnings) · style OK.
 
 *(The remaining `/activity` work is now: 95 the writer hook points · 96 the
 Admin-tab UI · 97 erasure and the prune · 98 the docs sweep.)*
+
+### Commit 95 (session 8, item 1) — the writer hook points
+
+**17 call sites across 14 hooks**, plus one new callback on `revGuard`. Nothing
+writes to `/activity` yet, and that is stated first because it bounds what this
+commit can claim: no sink is installed until `useActivityLog` lands with the UI,
+so `emitActivity` is a no-op and the verification here is the gate plus the
+emulator's rules tests — **not** an entry observed arriving in DEV. The
+end-to-end proof belongs to the next commit.
+
+**The plan said hook `revGuard.writeWithRev` centrally, and that is not where
+the hook points went.** `writeWithRev(path, value, revRef, onReject)` never
+receives `prev` — by the time it is called every caller has already overwritten
+its own mirror — so `settingsWriteEntry(path, prev, next)`, which the plan
+itself specifies, is not computable there. The alternatives were threading
+`prev` through as a new parameter at eighteen sites, or a path-keyed deny-list
+inside the primitive; the second puts product policy in a write function and
+still cannot name which keys changed. Emitting from each hook's SAVE FUNCTION
+costs more edits and buys three things: `revGuard` stays policy-free, `prev` and
+`next` sit one line apart where the diff is obviously right, and the plan's two
+exclusions become hooks nobody edited rather than names in a list.
+
+**`revGuard` gained exactly one thing, and a measurement is why.** The obvious
+way to reach the success path is to chain onto the promise `writeWithRev`
+returns — and that is wrong in the quiet direction: **a `.catch()` whose handler
+returns normally produces a FULFILLED promise**, so `writeWithRev(...).then(log)`
+runs on a REJECTED write too. Measured on plain promises rather than reasoned
+about; the `.then` ran with `value: undefined` after the catch had already
+reported the failure. Every refused or parked write would have been logged as
+though it landed, turning the log into a record of what people TRIED to do — a
+worse artefact than no log, because it would be believed. So the success path is
+handed out explicitly as `onDone`, wrapped in its own `try` so a throwing log
+entry cannot be caught by the `.catch` below it and reported as a failed write.
+The file's own comment — "returns the update() promise (already .catch-handled
+via onReject)" — was the sentence that invites the mistake, and it now says what
+that costs. `tests/rev-guard.test.js` pins both halves: the promise fact, and
+the code shape read out of the source. **Stripped**, because `revGuard.js` now
+contains several paragraphs about `.then` and `.catch` explaining this very
+trap, and a raw read would cheerfully match the explanation.
+
+**One ordering invariant, seventeen times, with a silent failure mode.** `prev`
+must be captured ABOVE the mirror or state assignment; read it one line later
+and it is the same object as `next`, so the diff reports that nothing changed
+and the entry is empty rather than visibly wrong. `useOperatingHours` needed
+more than the pattern: it writes `{ days: next }`, so its `prev` is wrapped to
+the same shape or every one of the seven day keys reads as changed on every
+edit.
+
+**A defect found MID-WIRING, after two hooks had already been wired on the
+broken assumption.** `settingsWriteEntry` key-diffs its two arguments — and
+`waitlist`, `reminders`, `roles`, `invites` and the standing rules are ARRAYS.
+A shallow key diff over an array compares INDICES, so it produced "changed the
+waitlist · 0, 2", naming positions nobody can see, and inserting one entry at
+the FRONT renumbers everything after it and reports the whole list as changed. A
+list node now reports its SIZE ("added to the waitlist · 1 → 2"), an unchanged
+one still returns null, and a same-length change says so without pretending to
+know which entry. Four tests, including the front-insertion case.
+
+**And `useWaitlist` was briefly half-wired by my own edit** — the anchor covered
+the three lines above the write, so `prev` was captured and never used: an
+unused variable and a silent gap in the log. Found by re-reading the diff rather
+than by the gate, and it is now a test, because "nobody wired this" and
+"somebody decided not to wire this" look identical in source.
+
+**Five things are deliberately NOT logged, and four of them are pinned**:
+`reminderFires` (the app recording its own timer firing, while nobody is in the
+restaurant), `settings/users/$uid/prefs` (one person's theme is not a restaurant
+record), `useWhatsApp`'s `DEFAULT_TEMPLATES` seed (the app populating a node
+when a module is switched on), the legacy array→keyed bookings migration (a
+one-time shape conversion), and `useRoles`' self-registration stub, whose own
+comment already notes that a refusal there is expected and routine on every
+sign-in after the first.
+
+Gate: `126.42 → 128.20 kB` gz — **+1.78 kB** for the whole feature so far,
+measured rather than predicted — · **1382 → 1397 tests** · 0 lint errors (88
+warnings) · style OK.

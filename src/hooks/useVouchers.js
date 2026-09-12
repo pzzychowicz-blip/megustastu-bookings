@@ -41,6 +41,10 @@ import { ref, onValue, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError, describeWriteError } from "../lib/dbError";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
+// v18.0.0 session 8: the activity log. Both modules import nothing themselves,
+// so this adds no dependency to the write path beyond two pure functions.
+import { voucherWriteEntries } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 import {
   normalizeCode, codeSet, validateIssue, applyRedemption,
   sanitizeVoucher, sanitizeVouchers, voucherIndex, removeRedemption,
@@ -116,7 +120,18 @@ export function useVouchers({ setWriteWarning, userEmail }) {
     if (isDuplicatePatch(sig, lastPatchSigRef.current, nowMs)) return true;
     lastPatchSigRef.current = { sig: sig, at: nowMs };
 
-    update(ref(db, "vouchers"), patch).catch(function (err) {
+    // v18.0.0 session 8: the activity log, on the SUCCESS path only — a refused
+    // write must log nothing, or the log becomes a record of what people tried
+    // to do rather than of what happened. `.then` before `.catch` is what makes
+    // that true here; on `writeWithRev` it takes an explicit `onDone`, because a
+    // promise that has already been `.catch`-handled fulfils on failure.
+    //
+    // `prev` and `computed` are the pair the diff needs and both are still in
+    // scope: the mirror was reassigned above, so `prev` is the value captured
+    // before it, never `vouchersRef.current` read again here.
+    update(ref(db, "vouchers"), patch).then(function () {
+      emitActivity(voucherWriteEntries(prev, computed, { auto: isSilent === true }));
+    }).catch(function (err) {
       console.warn(describeWriteError("vouchers", err));
       if (!isSilent) setWriteWarning("Couldn't save the voucher — this device's data was out of date. It has been refreshed; please redo the change.");
     });

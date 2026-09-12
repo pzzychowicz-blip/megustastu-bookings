@@ -30,6 +30,9 @@ import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 import { todayStr } from "../lib/day";
 
 export function useWaitlist({ setWriteWarning }){
@@ -44,13 +47,19 @@ export function useWaitlist({ setWriteWarning }){
       if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
       return;
     }
-    const computed=typeof next==="function"?next(waitlistRef.current):next;
+    // Captured ABOVE the mirror assignment — one line later and `prev` and
+    // `computed` are the same object, so the diff reports nothing changed.
+    const prev=waitlistRef.current;
+    const computed=typeof next==="function"?next(prev):next;
     waitlistRef.current=computed;
     setWaitlist(computed);
     // v16.0.0: revision-CAS write — a stale device's overwrite is rejected
     // server-side; the rollback echo restores waitlistRef/state via onValue.
     writeWithRev("waitlist",computed,waitlistRevRef,function(){
       if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+    },function(){
+      const entry=settingsWriteEntry("waitlist",prev,computed,{auto:isSilent===true});
+      if(entry) emitActivity([entry]);
     });
   }
 

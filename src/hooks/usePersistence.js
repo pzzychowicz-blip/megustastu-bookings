@@ -32,6 +32,11 @@ import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError, onDbError, describeWriteError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log. The bookings diff and tableBlocks both
+// log; the legacy array→keyed MIGRATION deliberately does not — it is a one-time
+// shape conversion, not a person changing anything.
+import { bookingWriteEntries, settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 // v17.16.2: the pure write-path core. Everything that decides WHETHER and in
 // what shape a booking reaches the server now lives in one testable module;
 // this hook keeps the refs, listeners, effects and setState. See its header.
@@ -464,7 +469,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const nowMs=Date.now();
       if(isDuplicatePatch(sig,lastPatchSigRef.current,nowMs)) return;
       lastPatchSigRef.current={sig:sig,at:nowMs};
-      update(ref(db,"bookings"),patch).catch(function(err){
+      // v18.0.0 session 8: the activity log, on the SUCCESS path only. `.then`
+      // BEFORE `.catch` is what makes that true — a `.catch`-handled promise
+      // FULFILS, so the reverse order would log every refused or parked write
+      // as though it had landed, turning the log into a record of what people
+      // tried to do. A retry that eventually lands logs once, when it lands.
+      update(ref(db,"bookings"),patch).then(function(){
+        emitActivity(bookingWriteEntries(prev,computed,{auto:isSilent===true}));
+      }).catch(function(err){
         // v17.16.13: the error is TAKEN now. This catch used to discard it and
         // hard-code "stale per-booking revision", which is one of at least four
         // things PERMISSION_DENIED can mean here — see describeWriteError.
@@ -515,12 +527,22 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // rollback echo then restores local state via the onValue listeners.
       writeWithRev("tableBlocks",computed,blocksRevRef,function(){
         if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+      },function(){
+        // `prev` is declared BELOW this function but read only when `persist`
+        // is CALLED, which happens after that line has run — so the closure is
+        // over an initialised binding, not a TDZ one.
+        const entry=settingsWriteEntry("tableBlocks",prev,computed,{auto:isSilent===true});
+        if(entry) emitActivity([entry]);
       });
     }
     // v17.16.10 (CT-2A-09): same conversion as saveBookings, and it also
     // collapses the two branches — the value form and the function form differ
     // only in how `computed` is obtained.
-    const computed=(typeof next==="function")?next(blocksRef.current):next;
+    //
+    // v18.0.0 session 8: `prev` captured ABOVE the mirror assignment, the same
+    // one-line ordering every activity hook point depends on.
+    const prev=blocksRef.current;
+    const computed=(typeof next==="function")?next(prev):next;
     blocksRef.current=computed;
     setTableBlocks(computed);
     persist(computed);

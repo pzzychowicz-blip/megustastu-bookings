@@ -33,6 +33,11 @@ import { mkBtn, SmallTag } from "../components/atoms";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "../components/NotificationStrip";
 import { genId } from "../lib/booking-logic";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log. `reminderFires` is deliberately NOT
+// wired — it is the app recording that it fired a reminder, not a person doing
+// something, and it writes on a timer.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 import { sameDraft } from "../lib/drafts";
 import {
   getActiveReminderBanners,
@@ -91,11 +96,16 @@ export function useReminders({ nowMins, setWriteWarning, reminderEditor, setRemi
       if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
       return;
     }
-    const computed=typeof next==="function"?next(remindersRef.current):next;
+    // Captured ABOVE the mirror assignment — see useWaitlist for the reason.
+    const prev=remindersRef.current;
+    const computed=typeof next==="function"?next(prev):next;
     remindersRef.current=computed;
     setReminders(computed);
     writeWithRev("reminders",computed,remindersRevRef,function(){
       if(!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+    },function(){
+      const entry=settingsWriteEntry("reminders",prev,computed,{auto:isSilent===true});
+      if(entry) emitActivity([entry]);
     });
   }
   function saveReminderFires(next){

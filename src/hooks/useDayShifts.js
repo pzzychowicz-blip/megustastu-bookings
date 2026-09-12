@@ -21,6 +21,9 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { weekRange } from "../lib/constants";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 // Clamp split strictly inside the service window so BOTH shifts stay non-empty;
 // coerce `enabled` to a boolean (default true). v15.0.0: the split is ONE global
@@ -67,9 +70,15 @@ export function useDayShifts(){
       console.warn("[SAFE] Refused to write dayShifts — initial read has not completed yet.");
       return;
     }
-    const next = sanitizeShifts({ ...dayShifts, ...(partial || {}) });
+    // `prev` is captured before anything is overwritten — read it later and it
+    // is the same object as `next`, so the diff reports nothing changed.
+    const prev = dayShifts;
+    const next = sanitizeShifts({ ...prev, ...(partial || {}) });
     setDS(next);
-    writeWithRev("settings/dayShifts", next, revRef);
+    writeWithRev("settings/dayShifts", next, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/dayShifts", prev, next);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { dayShifts, saveDayShifts };

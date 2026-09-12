@@ -24,6 +24,9 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 // Validate + clamp a layout config. Drops malformed/duplicate tables; coerces
 // capacity (1–20) and zone ("indoor"|"outdoor"); falls back to DEFAULT_LAYOUT
@@ -274,9 +277,15 @@ export function useLayout(){
       console.warn("[SAFE] Refused to write empty layout.");
       return;
     }
+    // `layout` is still the stored value here — `setLO` below is what replaces
+    // it, and React state does not mutate in place.
+    const prev = layout;
     setLayout(cfg);
     setLO(cfg);
-    writeWithRev("settings/layout", cfg, revRef);
+    writeWithRev("settings/layout", cfg, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/layout", prev, cfg);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { layout, saveLayout };

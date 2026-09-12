@@ -9,7 +9,7 @@
 // kind list and the prune window are stated in BOTH files and neither can read
 // the other, so the only thing standing between them is an assertion.
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -20,6 +20,11 @@ import {
 import {
   setActivitySink, emitActivity, resetActivitySink,
 } from "../src/lib/activitySink.js";
+// The hook-point sweep below reads JS source, so it strips comments first — and
+// this file is a good example of why the rule exists: several of those hooks now
+// carry paragraphs explaining which writes are deliberately NOT logged, and a
+// raw read would match the explanation instead of the code.
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const RULES = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "database.rules.json"), "utf8"
@@ -314,6 +319,35 @@ describe("settingsWriteEntry", () => {
       });
   });
 
+  it("reports a LIST node by its size, never by array indices", () => {
+    // waitlist / reminders / roles / invites / the standing rules are arrays. A
+    // key diff over one compares INDICES — "changed the waitlist · 0, 2" names
+    // positions nobody can see — and inserting an entry at the FRONT renumbers
+    // everything after it and reports the whole list as changed.
+    const grew = settingsWriteEntry("waitlist", [{ id: "w1" }], [{ id: "w1" }, { id: "w2" }]);
+    expect(grew.text).toBe("added to the waitlist · 1 → 2");
+    const shrank = settingsWriteEntry("reminders", [{ id: "r1" }, { id: "r2" }], [{ id: "r2" }]);
+    expect(shrank.text).toBe("removed from the reminders · 2 → 1");
+  });
+
+  it("does not report an index storm when one entry is inserted at the front", () => {
+    // The measured failure of the key-diff version: every index from 0 onward
+    // holds a different object, so all of them read as changed.
+    const e = settingsWriteEntry("roles", [{ uid: "b" }], [{ uid: "a" }, { uid: "b" }]);
+    expect(e.text).toBe("added to people and roles · 1 → 2");
+    expect(e.text).not.toMatch(/\b0\b\s*,/);
+  });
+
+  it("says a same-length list changed without pretending to know which entry", () => {
+    const e = settingsWriteEntry("waitlist", [{ id: "w1", size: 2 }], [{ id: "w1", size: 4 }]);
+    expect(e.text).toBe("changed the waitlist");
+  });
+
+  it("returns NULL for an untouched list, exactly as for an untouched object", () => {
+    expect(settingsWriteEntry("waitlist", [{ id: "w1" }], [{ id: "w1" }])).toBeNull();
+    expect(settingsWriteEntry("reminders", [], [])).toBeNull();
+  });
+
   it("falls back to the raw path rather than inventing a label", () => {
     expect(settingsWriteEntry("settings/somethingNew", { a: 1 }, { a: 2 }).text)
       .toBe("changed settings/somethingNew · a");
@@ -359,6 +393,84 @@ describe("isPrunable", () => {
     expect(isPrunable(null, NOW)).toBe(false);
     expect(isPrunable(undefined, NOW)).toBe(false);
     expect(isPrunable({ at: 0 }, NOW)).toBe(false);
+  });
+});
+
+// ── The writer hook points ───────────────────────────────────────────────────
+//
+// Two things a reader cannot tell apart by looking: a write nobody got round to
+// logging, and a write somebody decided not to log. The second is a decision and
+// it is pinned here, the way `tests/a11y.test.js` pins the sixty List-card
+// buttons nobody renamed ON PURPOSE.
+
+describe("the writer hook points", () => {
+  const HOOKS = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "hooks");
+  const read = (f) => stripComments(readFileSync(join(HOOKS, f), "utf8")).join("\n");
+
+  // The body of one function, so an assertion about it cannot be satisfied by a
+  // neighbouring one in the same file.
+  function bodyOf(src, decl) {
+    const at = src.indexOf(decl);
+    expect(at, decl + " was renamed or removed").toBeGreaterThan(-1);
+    const rest = src.slice(at + decl.length);
+    const next = rest.search(/\n {2}(?:const|function) /);
+    return next < 0 ? rest : rest.slice(0, next);
+  }
+
+  it("reminderFires is NOT logged — the app is not a person", () => {
+    // `saveReminderFires` records that the app showed a reminder, on a timer.
+    // Logging it would fill the activity log with the app talking to itself,
+    // and it would do so while nobody was using the restaurant.
+    const src = read("useReminders.jsx");
+    expect(bodyOf(src, "function saveReminderFires")).not.toContain("emitActivity");
+    // …while its sibling in the same file IS logged, so this is a choice about
+    // reminderFires and not a hook that was simply missed.
+    expect(bodyOf(src, "function saveReminders")).toContain("emitActivity");
+  });
+
+  it("a user's own preferences are NOT logged — one person's theme is not a record", () => {
+    // settings/users/$uid/prefs is the one settings node that is per-USER
+    // rather than restaurant-wide. Theme, reduce-motion and nav-lock are
+    // nobody else's business, and an activity log that reported them would be
+    // a log of what each member of staff finds comfortable.
+    expect(read("useUserPrefs.js")).not.toContain("activitySink");
+  });
+
+  it("the seeding write that turns WhatsApp on is NOT logged", () => {
+    // useWhatsApp seeds DEFAULT_TEMPLATES when the module is switched on. That
+    // is the app populating a node, not a person editing templates, and it
+    // would log on first load of a freshly enabled module.
+    expect(read("useWhatsApp.js")).not.toContain("activitySink");
+  });
+
+  it("every hook that imports the sink actually calls it", () => {
+    // The half-wired shape, which is what `useWaitlist` briefly was during this
+    // commit: a captured `prev`, an import, and no emit — an unused variable
+    // and a silent gap in the log.
+    const offenders = readdirSync(HOOKS)
+      .filter((f) => /\.jsx?$/.test(f))
+      .map((f) => [f, read(f)])
+      .filter(([, src]) => src.includes("lib/activitySink"))
+      .filter(([, src]) => !/emitActivity\s*\(/.test(src))
+      .map(([f]) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it("no hook emits without having captured a prev to diff against", () => {
+    // `prev` read one line late is the same object as `next`, so the diff says
+    // nothing changed and the entry is silently empty rather than visibly
+    // wrong. Counts, not ordering — ordering is not decidable by regex — but a
+    // site that forgot `prev` entirely cannot hide from this.
+    readdirSync(HOOKS)
+      .filter((f) => /\.jsx?$/.test(f))
+      .map((f) => [f, read(f)])
+      .filter(([, src]) => /emitActivity\s*\(/.test(src))
+      .forEach(([f, src]) => {
+        const emits = (src.match(/emitActivity\s*\(/g) || []).length;
+        const prevs = (src.match(/const prev\s*=/g) || []).length;
+        expect(prevs, f + " emits " + emits + " entries with " + prevs + " prev captures")
+          .toBeGreaterThanOrEqual(emits);
+      });
   });
 });
 
