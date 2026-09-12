@@ -24366,3 +24366,40 @@ row's own `flexWrap` around a three-chip disclosure and predates this.
 
 Gate: `129.22 kB` gz (unchanged) · 1402 tests · 0 lint errors (88 warnings) ·
 style OK.
+
+### Commit 102 — the active view was signalled by colour alone
+
+`src/components/ViewSwitcher.jsx` · `tests/a11y.test.js`. Session 8's follow-up
+`task_adebfeb2`, found while driving the app: the Timeline/List/Plan buttons
+carried no `aria-pressed`, `aria-current` or `aria-selected` and were not
+disabled, so which view you are in was communicated by FILL ALONE — measured in
+the running app, `rgb(0,122,255)` against `rgba(58,62,72,.55)`. That is
+CLAUDE.md's own "a status painted as a fill is never colour alone" rule broken on
+the app's PRIMARY navigation, i.e. the control every session starts from.
+Pre-existing, not caused by this branch.
+
+**The predicate was not a new decision, and that is the point.** `isActive(v)`
+already decides which buttons paint as active, so `aria-pressed` is wired to that
+same expression rather than to a second idea of "active" — two predicates that
+merely agree today are two predicates. In a split BOTH panes' views are active
+and both now read pressed: a view plainly on screen must not announce as off.
+`aria-current` carries the finer state the fill cannot — which of the two the
+keyboard is pointed at — from `isFocusedPaneView`, the same source as the inset
+underline, so that mark stops being shape-alone too; `undefined` with no split,
+because with one view there is no "which of them".
+
+**Deliberately NO `aria-label`.** These buttons have visible text, so Chrome
+computes the name from contents; a label would REPLACE a working, sayable name
+with a paraphrase (v17.15.4's Label-in-Name defect). v17.16.3 already recorded
+this exact trap here — an automation tree reported all three as named by their
+`title` — and the `title` is untouched.
+
+**Verified live at both states, against the computed attributes and the painted
+fills together.** No split: `list` pressed=true on `rgb(0,122,255)`, the other two
+pressed=false on the grey. Split `{a:timeline, b:plan}`: `timeline`
+pressed=true + current=true, `plan` pressed=true, `list` pressed=false — matching
+the three fills exactly. Three new pins in `tests/a11y.test.js`, each **proved by
+sabotage**: stripping `aria-pressed`, stripping `aria-current` and adding an
+`aria-label` each turn their test red.
+
+Gate: `129.24 kB` gz · 1405 tests · 0 lint errors (88 warnings) · style OK.

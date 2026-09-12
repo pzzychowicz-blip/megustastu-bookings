@@ -65,6 +65,7 @@ const Connection = read("components/ConnectionStatus.jsx");
 const Reminder = read("components/ReminderEditor.jsx");
 const Admin = read("components/AdminSettings.jsx");
 const Vouchers = read("components/VouchersSettings.jsx");
+const ViewSwitcher = read("components/ViewSwitcher.jsx");
 // v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
 // is where it can fail invisibly (hidden in a way that also makes it
 // unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
@@ -1324,6 +1325,34 @@ describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => 
     // every check above passes by looking at nothing.
     expect(painting.length, "if this drops the guard has stopped looking")
       .toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("the active view is not colour alone (WCAG 1.4.1, 4.1.2) — v18.0.0 session 9", () => {
+  // Measured before the fix: the three primary-navigation buttons carried no
+  // aria-pressed / aria-current / aria-selected and were not disabled, so the
+  // active view was signalled by FILL ALONE — rgb(10,132,255) against
+  // rgba(110,118,135,.5). CLAUDE.md's own "state is colour alone" rule, broken
+  // on the control every session starts from.
+  const tag = openingTagsOf(ViewSwitcher, "button")[0] || "";
+
+  it("the view buttons carry aria-pressed", () => {
+    expect(/aria-pressed=\{isActive\(v\)\}/.test(ViewSwitcher),
+      "wired to isActive, the SAME predicate that paints the fill, so the two cannot drift").toBe(true);
+  });
+
+  it("the split's focused pane is exposed too, and only in a split", () => {
+    expect(/aria-current=\{isFocusedPaneView\(v\) \? "true" : undefined\}/.test(ViewSwitcher),
+      "the inset underline is shape-alone without it; undefined when there is no split").toBe(true);
+  });
+
+  it("they are NOT given an aria-label", () => {
+    // v17.15.4's Label-in-Name defect, which v17.16.3 nearly re-introduced after
+    // an automation tree reported all three as named by their `title`. Chrome
+    // computes the name from CONTENTS; a label here would replace a working,
+    // sayable name with a paraphrase. `title` stays as a description.
+    expect(/aria-label/.test(tag), "the visible text is the name").toBe(false);
+    expect(/title=\{gesturesOn/.test(ViewSwitcher), "the title is untouched").toBe(true);
   });
 });
 
