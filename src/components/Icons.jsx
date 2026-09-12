@@ -328,6 +328,67 @@ export function ClashIcon(props) {
   );
 }
 
+// Copy the voucher number (v18.0.0 session 8) — Patryk supplied the mark: two
+// overlapping sheets inside a ring.
+//
+// ── THE RING IS LOAD-BEARING, NOT DECORATION ────────────────────────────────
+// Two overlapping squares on their own ARE `ClashIcon` directly above, and that
+// icon is an IDENTITY in the notification strip's collapsed tally rather than a
+// decoration — its own note explains that two sections wearing one mark would
+// render "⧉2 ⧉1" and say nothing. `VouchersSettings.jsx` had declined an icon
+// here for precisely that reason and shipped the word "Copy" instead. The
+// enclosure is what makes the two marks separable: a ring reads as an action you
+// can take, where ClashIcon sits bare in a tally row. Drop the circle and this
+// becomes the collision the set spent a version avoiding.
+//
+// ── THE FRONT SHEET IS FILLED ───────────────────────────────────────────────
+// The second deliberate exception to the set's no-fill rule after `StarIcon`,
+// and for StarIcon's reason: three nested outlines inside a 24-unit ring close
+// up into a blob at the sizes this ships at. The fill is also what carries the
+// "one sheet in front of another" read — with both sheets outlined, the overlap
+// is ambiguous about which is on top.
+//
+// ── THE BACK SHEET IS AN L, AND THAT IS THE LOAD-BEARING PART ───────────────
+// It is an L rather than a whole square because that is what is VISIBLE of it:
+// the front sheet covers its lower-left corner. The first version of this
+// comment stopped there and called it "fewer strokes for the same silhouette",
+// which was true and was not the reason.
+//
+// **Judged rasterised at 18px and magnified, against four candidates** — the
+// DepositIcon lesson, and it rejected the first drawing that shipped in this
+// commit rather than confirming it. What the magnification showed:
+//
+//   • The first attempt put the ring at r=10 (inner edge r=9) with the L's
+//     corner 7.78 from centre — barely one device pixel of clearance at 18px —
+//     so the L FUSED with the ring and the mark read as one filled square in a
+//     circle. At 14px the L vanished outright.
+//   • Pulling the sheets inward as a full RECT (two candidates, corners 6.0 and
+//     6.6 from centre) came out WORSE, not better: the back rect's strokes sit
+//     directly behind the filled front and the pair merged into a single tall
+//     notched blob. So clearance alone was never the fix.
+//   • The L pulled in wins because it does both things at once — it clears the
+//     ring, AND it is missing precisely the two strokes that would otherwise
+//     collide with the front sheet's fill.
+//
+// Every interior corner now sits within ~6.2 of centre, i.e. about 2.8 units
+// clear of the ring's inner edge. Checked side by side against ClashIcon at the
+// same size: ring plus filled front against two bare outlines, distinguishable
+// at a glance, which is the whole point of the enclosure.
+//
+// Ships at `IC.chrome` (18) in an icon-only button — HistoryIcon's precedent one
+// note down, and for the same measured reason rather than by copying it. At 14px
+// every candidate degraded, so it is NOT a candidate for a block flag or a List
+// row tag, where the set's marks render at `IC.control`.
+export function CopyIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.2 6.8h5.9v5.9" />
+      <rect x="7.2" y="10.4" width="6.8" height="6.8" rx="1.1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 // Working offline — a struck-through cloud. The slash is the load-bearing part
 // (a cloud alone reads as "syncing"), and it runs corner to corner so it stays
 // legible at 14px where the cloud's own outline is nearly closed.

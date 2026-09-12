@@ -29,14 +29,14 @@
 //   onSaveDefaults(partial)
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
+import { S, BTN, R, T, FW, IC, H, SP } from "../lib/constants";
 import {
   formatCode, normalizeCode, voucherState, remainingOf, valueOf, redeemedTotal,
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
 import { Section, OutlineChip, Reveal, InlineAlert, Fld, mkInp, mkBtn } from "./atoms";
-import { ChevronDownIcon, ChevronRightIcon } from "./Icons";
+import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
 
 // The four states, and the chip tone each reads as. `open` is the only one that
 // can still be spent, so it is the only one in success green.
@@ -56,11 +56,14 @@ function dateLabel(ms) {
 // and `src/index.css` gives every control that rule — so the number could not
 // be selected by any means, on any device.
 //
-// A TEXT button, not an icon, and that is a considered choice rather than
-// laziness: the natural copy glyph is two overlapping sheets, which is
-// `ClashIcon`'s silhouette, and that icon is an IDENTITY in the notification
-// strip's collapsed tally (see the v17.11.0 note in Icons.jsx). Two marks for
-// two meanings in one app is the thing that note exists to prevent.
+// It was a TEXT button until v18.0.0 session 8, on the grounds that the natural
+// copy glyph is two overlapping sheets — `ClashIcon`'s silhouette — and that
+// icon is an IDENTITY in the notification strip's collapsed tally rather than a
+// decoration. That reasoning was right about the hazard and wrong about the
+// conclusion, and Patryk's call settled it: the mark he supplied encloses the
+// two sheets in a RING, which is what separates it from ClashIcon at a glance.
+// `CopyIcon` carries the argument in full; the thing not to do is drop the
+// circle, which lands straight back on the collision.
 //
 // Self-contained on purpose: the live region is INSIDE the button rather than
 // one shared region in the panel, because the same control is used in a second
@@ -68,9 +71,15 @@ function dateLabel(ms) {
 // depend on which parent it happens to sit in. It is always mounted and starts
 // empty — a live region created already holding its message announces nothing.
 //
-// The visible word changes with the name ("Copy" → "Copied", "Copy voucher X" →
-// "Copied voucher X"), which keeps Label-in-Name true in both states: a control
-// whose visible text is "Copied" must contain that word in its name.
+// With no visible text there is nothing for Label-in-Name (WCAG 2.5.3) to
+// match, so the name is free — but it still changes with the state ("Copy
+// voucher X" → "Copied voucher X"), because the MARK changes too and a name
+// that stayed put would describe the wrong icon. Both literals are pinned by
+// `tests/a11y.test.js`, which is why they are spelled exactly as they were.
+//
+// The confirmation is the mark swapping to a CHECK, not a colour change: this
+// button is 32px of surface with no room for a word, and colour alone is not a
+// state. It reverts after 2s, with the live region doing the announcing.
 function CopyBtn({ code }) {
   const [done, setDone] = useState(false);
   const timer = useRef(null);
@@ -95,9 +104,14 @@ function CopyBtn({ code }) {
         type="button"
         onClick={doCopy}
         aria-label={(done ? "Copied voucher " : "Copy voucher ") + text}
+        title={done ? "Copied" : "Copy the number"}
         className="mgt-hover-scale"
-        style={mkBtn({ fontSize: T.body, minHeight: H.compact, background: BTN.nav })}>
-        {done ? "Copied" : "Copy"}
+        style={mkBtn({
+          padding: SP.none, minHeight: H.compact, width: H.compact,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          background: BTN.nav,
+        })}>
+        {done ? <CheckIcon size={IC.chrome} /> : <CopyIcon size={IC.chrome} />}
       </button>
       <span className="mgt-sr-only" role="status" aria-live="polite">{done ? "Copied " + text : ""}</span>
     </>
@@ -125,13 +139,20 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
           settles the other half: a `role="button"` holding a Copy button is
           the container-of-controls defect `tests/a11y.test.js` exists for. */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums", userSelect: "text", cursor: "text" }}>{formatCode(v.code)}</div>
-          <div style={{ fontSize: T.body, color: S.muted }}>
-            {money(valueOf(v), currency) + " issued  ·  " + (v.expiresAt ? "expires " + dateLabel(v.expiresAt) : "no expiry")}
+        {/* v18.0.0 session 8: the copy control sits WITH the number it copies —
+            after the number and the expiry line — rather than floated to the far
+            edge of the row. The `flex: 1` moved OUT to a wrapper holding the
+            pair, so the number still takes the slack and the disclosure control
+            still owns the right edge: nothing else in the row moved. */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums", userSelect: "text", cursor: "text" }}>{formatCode(v.code)}</div>
+            <div style={{ fontSize: T.body, color: S.muted }}>
+              {money(valueOf(v), currency) + " issued  ·  " + (v.expiresAt ? "expires " + dateLabel(v.expiresAt) : "no expiry")}
+            </div>
           </div>
+          <CopyBtn code={v.code} />
         </div>
-        <CopyBtn code={v.code} />
         <button
           type="button"
           aria-expanded={open}

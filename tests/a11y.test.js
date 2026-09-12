@@ -309,8 +309,28 @@ describe("live regions (WCAG 4.1.3)", () => {
       "somebody is there to copy");
     has(Vouchers, "Copy names its voucher", /"Copy voucher "/,
       "twenty rows and one word — the name has to say WHICH (v17.15.6)");
-    has(Vouchers, "Copy stays Label-in-Name", /"Copied voucher "/,
-      "the visible word becomes \"Copied\", so the name must contain it too");
+    has(Vouchers, "Copy names the copied state too", /"Copied voucher "/,
+      "the MARK changes on success, so a name that stayed put would describe " +
+      "the wrong icon. This why-line used to read \"the visible word becomes " +
+      "Copied\", which stopped being true the moment the text left the button — " +
+      "a pin whose reason is stale is a pin nobody can act on");
+  });
+
+  // v18.0.0 session 8 (item 4): the Copy control lost its visible text, which is
+  // the exact shape CLAUDE.md's table records as how twenty Toggles once shipped
+  // with NO accessible name — an element is named by its content and this one has
+  // none. The two literals above are that name now, so these pins are what keep
+  // them load-bearing instead of decorative.
+  it("the icon-only Copy button is a named mark, not a bare glyph", () => {
+    has(Vouchers, "Copy renders the mark", /<CopyIcon size=\{IC\.chrome\}/,
+      "IC.chrome (18), not IC.control (14): two sheets inside a ring close up " +
+      "at 14px — HistoryIcon's measured finding, one note over in Icons.jsx");
+    has(Vouchers, "Copy confirms with a check", /<CheckIcon size=\{IC\.chrome\}/,
+      "the confirmation is a mark swap because the button is 32px with no room " +
+      "for a word — and a colour change on its own is not a state");
+    hasnt(Vouchers, "Copy visible text", /\{done \? "Copied" : "Copy"\}/,
+      "if the words come back then both name pins above are stale, AND the " +
+      "names become a Label-in-Name violation rather than the only name");
   });
 });
 

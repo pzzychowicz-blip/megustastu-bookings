@@ -24254,3 +24254,78 @@ Gate: `129.13 kB` gz (unchanged) · **1401 tests** (39 files) · 0 lint errors
 accepted the four new comment blocks, which was a real risk worth checking
 rather than assuming: that guard exists because a stylesheet has no syntax
 errors, only rules that silently do not exist.
+
+### Commit 100 (session 8, item 4) — the Copy control is a mark, and it sits with the number
+
+Patryk's fourth item, in two halves. The Settings → Vouchers row's **Copy button
+becomes an icon** (the mark he supplied: two overlapping sheets inside a ring),
+and it **moves to the left** — immediately after the voucher number and the
+expiry line, instead of floated to the far edge of the row.
+
+The placement is the cheap half: `flex: 1` moved OFF the text block and ONTO a
+wrapper holding the text and the button as one pair, so the number still takes
+the slack and the disclosure control still owns the right edge. Nothing else in
+the row moved.
+
+**The icon reverses a decision this file recorded two commits ago**, and the
+reversal is the interesting part. `CopyBtn`'s comment had argued *against* an
+icon: the natural copy glyph is two overlapping sheets, which is `ClashIcon`'s
+silhouette, and that icon is an IDENTITY in the notification strip's collapsed
+tally rather than a decoration. That reasoning was **right about the hazard and
+wrong about the conclusion** — the answer was not to avoid the mark but to
+enclose it. The ring is what separates the two at a glance, so the thing not to
+do is "simplify" `CopyIcon` by dropping the circle, which lands straight back on
+the collision. Both comments now say so.
+
+**The first drawing failed, and the contact sheet is what caught it.** Judged
+rasterised at the size it ships and magnified — the DepositIcon rule — against
+four candidates plus ClashIcon for reference:
+
+| candidate | verdict |
+|---|---|
+| ring r=10 + L, corner **7.78** from centre | the L **fused with the ring**; read as one filled square in a circle, and at 14px the L vanished outright |
+| back as a full RECT, corners 6.6 / 6.0 | **worse than the original** — the rect's strokes sit directly behind the filled front and the pair merged into one tall notched blob |
+| **L pulled in, corners ~6.2** | ships — clears the ring AND is missing exactly the strokes that would collide with the fill |
+
+So **clearance alone was never the fix**, which is why the back sheet being an L
+is load-bearing rather than stroke economy — the claim the first version of that
+comment made. Every interior corner now sits ~2.8 units clear of the ring's
+inner edge. At 14px every candidate degraded, so the mark ships at `IC.chrome`
+(18) in an icon-only button and is explicitly NOT a candidate for a timeline
+block flag or a List row tag, where this set renders at `IC.control`.
+
+**It is now a control with no text content**, which is the exact shape
+CLAUDE.md's table records as how twenty `Toggle`s once shipped with no accessible
+name at all: an element is named by its content, and this one has none. The two
+`aria-label` literals ARE the name now, so `tests/a11y.test.js` gains three pins
+— the mark renders at `IC.chrome`, the confirmation is a `CheckIcon` swap, and
+the words must not come back. **One existing pin was left saying something
+false** and is fixed in the same commit: its why-line read "the visible word
+becomes *Copied*, so the name must contain it too", which stopped being true the
+moment the text left the button. A pin whose reason is stale is a pin nobody can
+act on.
+
+The confirmation is a mark swap rather than a colour change, because the button
+is 32px of surface with no room for a word and colour alone is not a state.
+
+**What is NOT verified, measured rather than assumed.** The swap could not be
+exercised from this session: `navigator.clipboard.writeText` requires transient
+user activation, and a synthetic `el.click()` confers none. Measured three ways
+— `navigator.userActivation.isActive` is **false** inside a synthetic click
+handler, and `writeText` rejects `NotAllowedError: Write permission denied` both
+from the console and from inside that handler — so `doCopy` can never reach its
+success branch here and the un-swapped mark is the expected consequence, not a
+defect. It is CLAUDE.md's "a `.click()` is not a finger" rule landing on a new
+API. The shape is unchanged from the text button that already shipped (same
+guard, same empty rejection handler), so there is no regression, but **the check
+needs one real tap to confirm** and that is Patryk's.
+
+Worth noting while it is in view, and deliberately not widened into this commit:
+that rejection handler is `function () {}`, so a genuine clipboard failure gives
+the user no feedback at all. That was equally true of the text button.
+
+Gate: **`129.22 kB`** gz (from 129.13 — the mark's three shapes) · **1402
+tests** (39 files, one new `it`) · 0 lint errors (88 warnings) · style OK. The
+button's fill/ink pair needs no new contrast entry: `--btn-nav` /
+`--text-on-accent` is already registered at the 3:1 button bar, and an icon is a
+graphical object held to the same 3:1.
