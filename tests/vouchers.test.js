@@ -18,7 +18,7 @@ import {
   attachedElsewhere, isUnsettled,
   sanitizeVoucher, sanitizeVouchers, voucherIndex,
   validateIssue, applyRedemption, removeRedemption, redeemableAmount, attachRefusal, searchVouchers,
-  guestOpenVouchers,
+  guestOpenVouchers, carryTarget,
 } from "../src/lib/vouchers.js";
 
 function v(o) {
@@ -496,6 +496,62 @@ describe("guestOpenVouchers", () => {
     expect(guestOpenVouchers(null, idx, [], NOW, null)).toEqual([]);
     expect(guestOpenVouchers([bk({ voucherCode: "ZZZZ9999" })], idx, [], NOW, null),
       "a code with no voucher behind it").toEqual([]);
+  });
+});
+
+// ── v18.0.0 session 8 (item 7) — where a leftover balance goes next ─────────
+describe("carryTarget", () => {
+  const NOW = 5000;
+  const open = (code, value) => sanitizeVoucher({ value, remaining: value, issuedAt: 1000 }, code);
+  const idx = { ABCD2345: open("ABCD2345", 50) };
+  const from = { id: "done", date: "2026-09-01", time: "20:00", status: "completed", voucherCode: "ABCD2345" };
+  const bk = (o) => Object.assign(
+    { id: "n1", date: "2026-09-18", time: "20:30", status: "confirmed", voucherCode: "" }, o);
+
+  it("offers the guest's next live booking", () => {
+    const t = carryTarget([from, bk({})], "ABCD2345", idx, [from, bk({})], NOW, from);
+    expect(t && t.id).toBe("n1");
+  });
+
+  it("prefers the booking made BY Book Again from this visit", () => {
+    const early = bk({ id: "early", date: "2026-09-05" });
+    const again = bk({ id: "again", date: "2026-09-30", returnOf: "done" });
+    const t = carryTarget([from, early, again], "ABCD2345", idx, [], NOW, from);
+    expect(t && t.id, "the guest said 'again', and this is the again").toBe("again");
+  });
+
+  it("takes the earliest when no booking points back at this visit", () => {
+    const later = bk({ id: "later", date: "2026-10-01" });
+    const sooner = bk({ id: "sooner", date: "2026-09-05" });
+    const t = carryTarget([from, later, sooner], "ABCD2345", idx, [], NOW, from);
+    expect(t && t.id).toBe("sooner");
+  });
+
+  it("never targets a booking that already carries a voucher", () => {
+    const taken = bk({ voucherCode: "BBBB2345" });
+    expect(carryTarget([from, taken], "ABCD2345", idx, [], NOW, from),
+      "two vouchers on one bill is a question this prompt cannot ask").toBe(null);
+  });
+
+  it("ignores cancelled, completed and earlier bookings", () => {
+    expect(carryTarget([from, bk({ status: "cancelled" })], "ABCD2345", idx, [], NOW, from)).toBe(null);
+    expect(carryTarget([from, bk({ status: "completed" })], "ABCD2345", idx, [], NOW, from)).toBe(null);
+    expect(carryTarget([from, bk({ date: "2026-08-01" })], "ABCD2345", idx, [], NOW, from),
+      "a visit before the one that just ended").toBe(null);
+  });
+
+  it("says nothing when the voucher is spent, void, or already following somebody", () => {
+    const spent = applyRedemption(open("ABCD2345", 50), "bx", 50, 1000, "me");
+    expect(carryTarget([from, bk({})], "ABCD2345", { ABCD2345: spent }, [], NOW, from)).toBe(null);
+    const elsewhere = [bk({ id: "other", voucherCode: "ABCD2345" })];
+    expect(carryTarget([from, bk({})], "ABCD2345", idx, elsewhere, NOW, from)).toBe(null);
+  });
+
+  it("survives having nothing to work with", () => {
+    expect(carryTarget([], "ABCD2345", idx, [], NOW, from)).toBe(null);
+    expect(carryTarget(null, "ABCD2345", idx, [], NOW, from)).toBe(null);
+    expect(carryTarget([bk({})], "", idx, [], NOW, from)).toBe(null);
+    expect(carryTarget([bk({})], "ABCD2345", idx, [], NOW, null)).toBe(null);
   });
 });
 

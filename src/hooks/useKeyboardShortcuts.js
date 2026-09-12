@@ -74,6 +74,9 @@ function escapeAction(K,id){
     // change — the same shape as its twin above, and the safe direction for a
     // prompt about money: dismissing it moves nothing.
     case "voucherback": return function(){K.setVoucherBack(null);};
+    // v18.0.0 session 8: Escape is "Not now" — the voucher stays where it is,
+    // open and attachable by hand. Nothing about the money moves.
+    case "vouchercarry": return function(){K.setVoucherCarry(null);};
     // v18.0.0 session 7: Escape is "Done" — there is no decision in a note.
     case "seatnote":    return function(){K.setSeatNote(null);};
     // v18.0.0 session 8 (C3): Escape is "Back" — the seat does NOT happen. The

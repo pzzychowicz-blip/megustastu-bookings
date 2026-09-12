@@ -529,6 +529,43 @@ export function attachRefusal(v, code, bookings, bookingId, now) {
 // carrying a voucher with no ledger entry is money the restaurant has NOT
 // recorded, and the right answer is to say so beside the suggestion, not to hide
 // the voucher from the person who could settle it.
+// ── v18.0.0 session 8 (item 7): where a leftover balance should go next ─────
+// The answer to "what about Book Again from a SEATED booking?" — Patryk's call.
+// A seated visit still HOLDS its voucher, so copying the code into a new draft
+// would create the conflict `attachRefusal` exists to refuse. The offer is made
+// at COMPLETION instead, when the balance is finally known.
+//
+// The preferred target is the booking made BY that Book Again (`returnOf`
+// pointing at this visit) — the guest said "again" and this is the "again". With
+// no such booking it is the guest's next live one, earliest first. A booking
+// that already carries a voucher is never a target: two vouchers on one bill is
+// a question this prompt cannot ask.
+//
+// Null when there is nothing to offer, which includes the voucher having been
+// spent in full — the caller is expected to know the amount just redeemed, since
+// `vouchersByCode` here is still the version from before that write.
+export function carryTarget(guestBookings, code, vouchersByCode, bookings, now, fromBooking) {
+  const c = normalizeCode(code);
+  if (!c || !fromBooking) return null;
+  const v = vouchersByCode && vouchersByCode[c];
+  if (!v || voucherState(v, now) !== "open") return null;
+  // Already following somebody — there is nothing to move.
+  if (attachedElsewhere(bookings, c, fromBooking.id)) return null;
+  const cands = (Array.isArray(guestBookings) ? guestBookings : []).filter((b) =>
+    b &&
+    b.id !== fromBooking.id &&
+    b.status !== "cancelled" &&
+    b.status !== "completed" &&
+    !normalizeCode(b.voucherCode) &&
+    String(b.date || "") >= String(fromBooking.date || ""));
+  if (!cands.length) return null;
+  const back = cands.find((b) => b.returnOf === fromBooking.id);
+  if (back) return back;
+  return cands.slice().sort((a, b) =>
+    String(a.date || "").localeCompare(String(b.date || "")) ||
+    String(a.time || "").localeCompare(String(b.time || "")))[0];
+}
+
 export function guestOpenVouchers(guestBookings, vouchersByCode, bookings, now, excludeId) {
   const seen = {};
   const out = [];

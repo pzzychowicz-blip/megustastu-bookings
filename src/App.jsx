@@ -308,11 +308,12 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal } from "./lib/vouchers";
+import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, carryTarget } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
 import { SeatClashModal } from "./components/SeatClashModal";
+import { VoucherCarryModal } from "./components/VoucherCarryModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
 import { useRecurring } from "./hooks/useRecurring";
 // v17.3.3: the global keyboard shortcuts + the neutral-space List-deselect
@@ -982,6 +983,9 @@ function BookingApp({uid}){
   // when the seat was refused, so the card cannot change under the reader.
   const seatClash = modalOpen.seatclash || null;
   const setSeatClash = setModalFns.seatclash;
+  // v18.0.0 session 8 (item 7): the carry offer, a snapshot for the same reason.
+  const voucherCarry = modalOpen.vouchercarry || null;
+  const setVoucherCarry = setModalFns.vouchercarry;
   // v18.0.0 phase 3: the capability grid, opened from the Admin tab. Its
   // payload is the uid whose row is selected — a non-empty string, so the
   // stack's falsy-closes semantics are safe here.
@@ -3172,6 +3176,7 @@ function BookingApp({uid}){
     setVoucherBack:setVoucherBack,
     setSeatNote:setSeatNote,
     setSeatClash:setSeatClash,
+    setVoucherCarry:setVoucherCarry,
     blockTarget:blockTarget,setBlockTarget:setBlockTarget,
     bookings:bookings,
     // v14.4.0: List-view selection + the handlers its A/E/S/C/Delete shortcuts call.
@@ -3500,10 +3505,56 @@ function BookingApp({uid}){
       doSave();
       return !mayDispatch(saveGuardRef.current);
     });
-    if(!ok||!amount) return;
+    if(!ok) return;
     const b=bookings.find(function(x){return x.id===ask.id;});
     const code=b?normalizeCode(b.voucherCode):"";
-    if(code) redeemVoucher(code,ask.id,amount);
+    if(code&&amount) redeemVoucher(code,ask.id,amount);
+    // v18.0.0 session 8 (item 7): and THEN ask whether the rest should follow
+    // the guest. After the booking write and after the money, so the offer is
+    // made about a visit that is actually finished — and on BOTH answers, since
+    // "Complete without using it" leaves the whole balance behind, which is the
+    // case where carrying it matters most. `!ok` still returns above: a refused
+    // completion has nothing to carry from.
+    if(code&&b) offerVoucherCarry(b,code,amount);
+  }
+  // The offer, and the one number it has to get right. `vouchersByCode` here is
+  // still the version from BEFORE the redemption dispatched a moment ago, so the
+  // balance is computed by subtracting what was just taken rather than read back
+  // — reading it back would offer the guest money that has already been spent.
+  function offerVoucherCarry(b,code,justRedeemed){
+    const v=vouchersByCode[code];
+    if(!v) return;
+    const left=Math.max(0,remainingOf(v)-(Number(justRedeemed)||0));
+    if(left<=0) return;
+    if(!hasRealPhone(b.phone)&&!b.guestId) return;   // no identity, nothing to follow
+    const ident={phone:b.phone,guestId:b.guestId};
+    const mine=bookings.filter(function(x){return matchesIdentity(x,ident);});
+    const to=carryTarget(mine,code,vouchersByCode,bookings,Date.now(),b);
+    if(!to) return;
+    setVoucherCarry({code:code,amount:left,to:to.id,name:to.name||"",date:to.date,time:to.scheduledTime||to.time,from:b.date});
+  }
+  // Move — a function-form save, so it takes the retry path like every other
+  // user write. The re-check inside the updater is not ceremony: the prompt can
+  // sit on screen while another device attaches something to that booking, and
+  // overwriting a voucher somebody else chose is the one outcome this must not
+  // produce.
+  function doVoucherCarry(){
+    const c=voucherCarry;
+    if(!c) return;
+    setVoucherCarry(null);
+    if(refused("bookingEdit")) return;
+    const user=getUser();
+    const fromLabel=/^\d{4}-\d{2}-\d{2}$/.test(c.from||"")?c.from.slice(8,10)+"/"+c.from.slice(5,7):(c.from||"");
+    const ok=saveBookings(function(prev){
+      return prev.map(function(b){
+        if(b.id!==c.to||normalizeCode(b.voucherCode)) return b;
+        return Object.assign({},b,{
+          voucherCode:c.code,
+          history:(b.history||[]).concat([histEntry("voucher "+formatCode(c.code)+" attached (carried from the "+fromLabel+" visit)",user)])
+        });
+      });
+    });
+    if(ok) flash("saved");
   }
   // settleVoucherBack(restore) — the mirror of settleVoucher, and it keeps that
   // function's hard-won ORDERING: the booking write goes first and the money
@@ -4753,7 +4804,7 @@ function BookingApp({uid}){
               const amt=v&&v.redemptions&&v.redemptions[voucherBack.id]?v.redemptions[voucherBack.id].amount:0;
               const why=voucherBack.from==="delete"?"You are deleting this booking":"You are moving it back out of Completed";
               return "This visit redeemed "+money(amt,generalSettings.currency)+" of voucher "+formatCode(v?v.code:"")+". "+why+" — restore that amount to the voucher, or keep it redeemed?";
-            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
+            })()}</div><div style={{fontSize: T.small,color:S.sub}}>{voucherBack.from==="delete"?"Restoring puts the balance back. Keeping it redeemed leaves the amount spent against a booking that will no longer exist. The booking is deleted either way.":"Restoring puts the balance back and removes this visit from the voucher’s history. Keeping it redeemed leaves the record as it is."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!seatNote}>{seatNote?<SeatNoteModal note={seatNote} onClose={function(){setSeatNote(null);}} />:null}</ModalPresence><ModalPresence show={!!seatClash}>{seatClash?<SeatClashModal clash={seatClash} onComplete={seatAfterClearing} onAnyway={seatAnyway} onBack={function(){setSeatClash(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherCarry}>{voucherCarry?<VoucherCarryModal carry={voucherCarry} currency={generalSettings.currency} onMove={doVoucherCarry} onNotNow={function(){setVoucherCarry(null);}} />:null}</ModalPresence><ModalPresence show={confirmReshuffle}>{confirmReshuffle?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmReshuffle(false);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmReshuffle(false);}}>Back</button><button

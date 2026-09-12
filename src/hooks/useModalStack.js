@@ -68,6 +68,10 @@ export const MODAL_Z=[
   // walked back. Same rank as its twin because only one of the two can ever be
   // open — a status change is either into `completed` or out of it.
   "voucherback",
+  // v18.0.0 session 8 (item 7): the carry offer, raised AFTER a redeem prompt
+  // has been answered and its write dispatched — so it ranks above both, and
+  // the two money questions are never on screen together.
+  "vouchercarry",
   // v18.0.0 session 8 (C3): the seat-clash confirm — "table 3 still has López
   // seated". Raised BEFORE the seat lands, so it ranks below the seat note,
   // which is raised AFTER one does. The two can never be open together: this

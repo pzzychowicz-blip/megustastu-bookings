@@ -23591,3 +23591,58 @@ one-live-booking rule, newest-first with each code once, the unsettled flag, and
 the booking being written excluded.
 
 Gate: `125.59 kB` gz · **1318 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 91 (session 8, item 7) — and the rest of it follows them
+
+The other half of Patryk's question, and the half that could not be answered by
+Book Again: what happens to a voucher's leftover balance when the visit using it
+is SEATED. It cannot be copied into a new draft — a seated visit still holds the
+code, so `attachRefusal`'s one-live-booking rule would refuse the attachment, and
+the balance is not known yet anyway. **Both facts settle at the same moment, and
+that moment is completion**, so the offer is made there: *"38 € is left on
+voucher 6NH7-B7MF. Move it to Ana Ruiz on Fri 18/09 at 20:00?"*
+
+`carryTarget(guestBookings, code, vouchersByCode, bookings, now, fromBooking)`
+picks the destination. It prefers the booking made BY Book Again from this visit
+(`returnOf` pointing at it) — the guest said "again" and that is the "again" —
+and otherwise takes their earliest later live booking. A booking that already
+carries a voucher is never a target: two vouchers on one bill is a question this
+prompt cannot ask.
+
+**It is offered on BOTH answers of the redeem prompt, which is why
+`settleVoucher`'s early return had to move.** That function read
+`if(!ok||!amount) return;`, folding two unrelated facts into one line: `!ok` is
+"the completion did not dispatch", and `!amount` is "the guest chose to complete
+without using the voucher" — which is the case where carrying the balance
+matters MOST, since the whole of it is left behind. They are now separate, and
+only the first returns.
+
+**The one number this had to get right is the balance**, and it is computed by
+SUBTRACTION rather than read back: `vouchersByCode` at that point is still the
+version from before the redemption dispatched a moment earlier, so
+`remainingOf(v) − justRedeemed` is what is actually left. Reading it back would
+have offered the guest money they had just spent.
+
+*Move it* writes through a **function-form `saveBookings`**, so it takes the
+retry path like every other user write — and the updater re-checks
+`normalizeCode(b.voucherCode)` on the fresh `prev` before writing. That is not
+ceremony: the prompt can sit on screen while another device attaches something to
+that booking, and overwriting a voucher somebody else chose is the one outcome
+this must not produce. The move leaves a history entry naming where it came
+from, because a code appearing on a booking nobody typed it into needs an
+explanation months later.
+
+Neither answer is destructive. Moving it ATTACHES — attaching is not redeeming,
+and the money question is asked again when that booking completes. *Not now*,
+Escape and the backdrop leave the voucher exactly as it is: open, with its
+balance, attachable by hand from the picker. `vouchercarry` ranks above
+`voucherback` in `MODAL_Z` because it is raised after that prompt has been
+answered and its write dispatched — the two money questions are never on screen
+together — and its `escapeAction` case ships in the same commit, which
+`tests/modal-stack.test.js` requires.
+
+Seven tests on the helper: the `returnOf` preference, earliest-otherwise, the
+booking that already holds a voucher, the spent and voided dead ends, the
+one-live-booking rule, and the source booking never being its own target.
+
+Gate: `126.42 kB` gz · **1325 tests** · 0 lint errors (88 warnings) · style OK.
