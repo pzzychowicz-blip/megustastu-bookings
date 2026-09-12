@@ -24403,3 +24403,42 @@ sabotage**: stripping `aria-pressed`, stripping `aria-current` and adding an
 `aria-label` each turn their test red.
 
 Gate: `129.24 kB` gz · 1405 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 103 — the Customers list was mouse-only, and so was the erasure in it
+
+`src/components/CustomersSettings.jsx` · `tests/a11y.test.js`. Session 8's other
+follow-up, `task_ac3aa8a1`. Each row in Settings → Customers was a bare `div` —
+`role: null`, `aria-label: null`, `tabIndex: -1` — carrying the click that opens
+the customer's detail, and that detail is the only route to "Delete customer &
+all data". So the list announced as nothing, could not be reached by keyboard at
+all, and the path it gated erases personal data irreversibly. Pre-existing.
+
+**It takes `VoucherRow`'s shape, including the part that is easy to skip.** The
+obvious fix — wrap the whole row in a `<button>` — would have subscribed it to
+`src/index.css`'s `user-select: none` control rule and made the PHONE NUMBER
+unselectable, and staff select it to ring the party. That is exactly the defect
+session 8 fixed one file over for voucher numbers, and it would have been
+re-introduced here in the commit fixing the keyboard. So the identity text stays
+OUT of the control (carrying `userSelect: "text"`) and only the REST — the chips
+and the chevron — becomes a real `<button aria-expanded>`.
+
+The name says WHICH customer and is built from the row's own data
+(`"Lucía García, +34 612345678, 20 visits"`), per v17.15.6: thirty rows sharing
+one static name is one name repeated, and in the source that is indistinguishable
+from thirty names. The chips inside are presentational, which is correct — their
+meaning is in that name. The delete control is NOT inside the button: it lives in
+the `Reveal` below, a sibling, so this stays a leaf rather than the
+container-of-controls defect `tests/a11y.test.js` exists for.
+
+Cost, stated rather than buried: the click target is now the right-hand control
+instead of the whole row. That is the same trade `VoucherRow` made in session 8,
+and consistency between the two panels is worth more than the larger hit area.
+
+**Verified live.** The row is a `BUTTON`, focusable, announcing "Lucía García,
++34 612345678, 20 visits"; `aria-expanded` flips false → true on activation; the
+phone line computes `user-select: text`; the row button contains **0** nested
+buttons; and "Delete customer & all data" is a real, tabbable button that
+`row.contains()` reports as **outside** it. Four new pins, all **proved by
+sabotage**.
+
+Gate: `129.24 kB` gz · 1409 tests · 0 lint errors (88 warnings) · style OK.

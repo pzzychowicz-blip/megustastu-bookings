@@ -65,6 +65,7 @@ const Connection = read("components/ConnectionStatus.jsx");
 const Reminder = read("components/ReminderEditor.jsx");
 const Admin = read("components/AdminSettings.jsx");
 const Vouchers = read("components/VouchersSettings.jsx");
+const Customers = read("components/CustomersSettings.jsx");
 const ViewSwitcher = read("components/ViewSwitcher.jsx");
 // v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
 // is where it can fail invisibly (hidden in a way that also makes it
@@ -1353,6 +1354,40 @@ describe("the active view is not colour alone (WCAG 1.4.1, 4.1.2) — v18.0.0 se
     // sayable name with a paraphrase. `title` stays as a description.
     expect(/aria-label/.test(tag), "the visible text is the name").toBe(false);
     expect(/title=\{gesturesOn/.test(ViewSwitcher), "the title is untouched").toBe(true);
+  });
+});
+
+describe("a customer row is reachable, and named (WCAG 2.1.1, 4.1.2) — v18.0.0 session 9", () => {
+  // Measured before the fix: each row was a bare div — role null, aria-label
+  // null, tabIndex -1 — carrying the click that opens the customer's detail and
+  // the only route to "Delete customer & all data". Mouse-only, announcing as
+  // nothing, on a path that erases personal data irreversibly.
+  it("the disclosure is a real button with aria-expanded", () => {
+    expect(/aria-expanded=\{open\}/.test(Customers)).toBe(true);
+  });
+
+  it("its name says WHICH customer (v17.15.6)", () => {
+    // Dynamic, not a literal: thirty rows sharing one static name is one name
+    // repeated, and in the source that looks identical to thirty names.
+    expect(/aria-label=\{\(c\.name \|\| "\(no name\)"\)/.test(Customers)).toBe(true);
+  });
+
+  it("the phone stays selectable — the row is NOT wrapped in the button", () => {
+    // VoucherRow's rule one file over: a control subscribes to src/index.css's
+    // `user-select: none`, and staff select this number to ring the party. The
+    // identity text must sit OUTSIDE the button, carrying userSelect: "text".
+    expect(/color: S\.muted, userSelect: "text", cursor: "text"/.test(Customers)).toBe(true);
+  });
+
+  it("the delete control is NOT inside that button", () => {
+    // A button's children are presentational, so a delete inside it disappears
+    // from assistive tech — the container-of-controls defect. It lives in the
+    // Reveal below, a sibling: the button's own tag must close before it.
+    const btnStart = Customers.indexOf("aria-expanded={open}");
+    const btnEnd = Customers.indexOf("</button>", btnStart);
+    const del = Customers.indexOf("Delete customer & all data");
+    expect(btnStart).toBeGreaterThan(-1);
+    expect(del).toBeGreaterThan(btnEnd);
   });
 });
 

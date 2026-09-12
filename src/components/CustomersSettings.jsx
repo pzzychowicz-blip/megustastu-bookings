@@ -19,7 +19,7 @@
 //                           waitlist entries and reports the outcome
 
 import { useState, useEffect, useMemo } from "react";
-import { S, BTN, R, T, FW, IC } from "../lib/constants";
+import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
 import { Section, OutlineChip, Reveal, mkInp, mkBtn, SBadge } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
@@ -103,17 +103,43 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
       // No child paints edge-to-edge, so the rounded corners don't need
       // clipping; Reveal does its own clipping while the history animates.
       <div key={c.key} style={{ borderRadius: R.card, border: "1px solid var(--border-soft)", background: "var(--bg-soft)", marginBottom: 8 }}>
-        <div
+        {/* v18.0.0 session 9: this header was a bare `div` — `role: null`,
+            `aria-label: null`, `tabIndex: -1` — carrying the click that opens a
+            customer's detail and, with it, the only route to "Delete customer &
+            all data". The whole list, an irreversible erasure included, was
+            mouse-only and announced as nothing.
+
+            It takes `VoucherRow`'s shape one file over, and for that file's own
+            reason: the identity text stays OUT of the control and only the REST
+            becomes a real <button>. Wrapping the whole row would subscribe it to
+            `src/index.css`'s `user-select: none` control rule and make the PHONE
+            NUMBER unselectable — and staff select it to ring the party. That is
+            precisely the defect session 8 fixed for voucher numbers, and
+            re-introducing it here while fixing the keyboard is not a trade worth
+            making.
+
+            The chips inside the button are presentational, which is correct:
+            their meaning is carried in the NAME, and that name says WHICH
+            customer — v17.15.6's dynamic-label rule, since thirty identical
+            "expand" buttons is one name repeated rather than thirty names. The
+            delete control is NOT inside it; that lives in the `Reveal` below, a
+            sibling, so this stays a leaf rather than the container-of-controls
+            defect `tests/a11y.test.js` exists for. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate || "\u2014")}</div></div><button
+          type="button"
+          aria-expanded={open}
+          aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + c.visits + " visit" + (c.visits !== 1 ? "s" : "") + (c.noShowCount > 0 ? ", " + c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") : "") + (wlCount > 0 ? ", " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}
+          // Making an element focusable makes the browser scroll it into view on
+          // MOUSEDOWN, so it moves out from under the finger between press and
+          // release and the click is lost. preventDefault suppresses only focus.
+          onMouseDown={function (e) { e.preventDefault(); }}
           className="mgt-hover-scale"
           onClick={function () { setOpenKey(open ? null : c.key); setArmedKey(null); }}
-          // v17.8.0 fix: borderRadius is REQUIRED on any .mgt-hover-scale
-          // element. Since v17.7.0 the hover rule no longer supplies one, but it
-          // still paints an opaque --bg-hover-card — so a radius-less element
-          // renders that fill as a hard-edged rectangle and this row visibly
-          // squared off inside its own rounded card on hover. R.card matches the
-          // parent exactly. (ConnectionStatus's dot button was the first case in
-          // the app; this is the second. Check any new one.)
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", cursor: "pointer", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted }}>{(c.phone ? formatPhone(c.phone) : "No phone · linked guest") + "  ·  last " + (c.latestDate || "—")}</div></div><div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>{c.visits > 0 ? <OutlineChip tone="success">{c.visits + " visit" + (c.visits !== 1 ? "s" : "")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></div></div>
+          // borderRadius is REQUIRED on any .mgt-hover-scale element: since
+          // v17.7.0 the hover rule no longer supplies one but still paints an
+          // opaque --bg-hover-card, so a radius-less element would render that
+          // fill as a hard-edged rectangle inside its own rounded card.
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{c.visits + " visit" + (c.visits !== 1 ? "s" : "")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
