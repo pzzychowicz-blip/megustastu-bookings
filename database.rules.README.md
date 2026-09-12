@@ -17,8 +17,9 @@ its detail lives rather than repeating it.
 2. **Then the rules, once.** Publish `database.rules.json` to PROD by the console
    or `npm run rules:deploy -- mgt-prod` (*Applying the rules — two routes*). This
    one publish carries every rules change in the release — the new
-   `/vouchers/$code`, `/roles/$uid`, `/invites/$inviteId`, `settings/admin` +
-   `adminRev` and `settings/voucherDefaults` + `voucherDefaultsRev`, none of which
+   `/vouchers/$code`, `/activity/$eid`, `/roles/$uid`, `/invites/$inviteId`,
+   `settings/admin` + `adminRev` and `settings/voucherDefaults` +
+   `voucherDefaultsRev`, none of which
    exist in `main`'s rules, plus the role gates added to the existing ones. Read
    the alias back before pressing enter.
 3. **Create the bootstrap admin by hand** at `/roles/<your uid>` (*The one manual
@@ -309,9 +310,10 @@ Which levels grant each rule-enforced capability is written in
 rules cannot read a JS constant. Neither file can see the other, so the suite
 asserts they agree *behaviourally*: it drives the real rules with each level in
 turn and compares the outcome against `can()`. Change one and that test fails.
-There are **six** such capabilities driven that way after the v18.0.0 split
+There are **seven** such capabilities driven that way after the v18.0.0 split
 (`settingsWrite`, `bookingDelete`, `hoursEdit`, `layoutEdit`, `reminderManage`,
-`recurringManage`) plus `settingsAdmin`, which is checked separately because the
+`recurringManage` and — session 8 — `customerDelete`, the activity log's
+redaction) plus `settingsAdmin`, which is checked separately because the
 enforcement flag does not relax it.
 
 The same forced-duplication problem produced the copies of the gate — one per
@@ -462,6 +464,89 @@ Rolling-safe in the usual direction: a pre-v18 client never writes `/vouchers`
 at all, so the new rules constrain nothing it does. Publishing rules **before**
 the app is also harmless here for the same reason. Do DEV first and exercise the
 node, then PROD.
+
+---
+
+## v18.0.0 — `/activity`, create-only, and the first node with no CAS to waive
+
+The activity log. One node, `/activity/{pushId}`, and the only one in this
+database whose protection is not a compare-and-swap — which is the **exemption
+test passing rather than being waived**: a CAS proves a write was based on the
+version it overwrites, and here nothing may be overwritten at all. Create, and
+prune after a year. There is no third operation.
+
+**261 → 286 tests.**
+
+### Three clauses, three different lies refused
+
+```jsonc
+".write": "auth != null && ((!data.exists() && newData.exists()
+            && newData.child('uid').val()   === auth.uid
+            && newData.child('email').val() === auth.token.email
+            && newData.child('at').val()    === now) || …prune…)"
+```
+
+`uid` and `email` stop an account writing the log **as somebody else**. `at ===
+now` stops it writing history **at a time of its choosing** — an entry filed
+before the thing it describes happened is worse than no entry.
+
+### `at === now` forces the client to send the sentinel, and that is measured
+
+A client-supplied `Date.now()` is never equal to the server's `now` at
+evaluation, so the rule refuses it; only `{".sv": "timestamp"}` — resolved by
+the server *before* the rules run — satisfies it. That ordering is the sort of
+claim this repo has been wrong about before, so it is pinned both ways: an entry
+carrying the sentinel is accepted and reads back as a number, and the same entry
+carrying `Date.now()` is refused.
+
+### The clause is in `.write` and NOT in `.validate`, or erasure breaks
+
+`.validate` re-runs over the **merged** node when a redaction rewrites
+`subject/name`, and `at` is deliberately unchanged by that write. The same
+predicate in `.validate` would therefore make every entry permanently
+un-redactable — the guard would eat the erasure path. `.write` is evaluated per
+write and `$eid`'s create branch is already false once the entry exists, so the
+redaction is granted lower down, at `subject/name`, and cascades no further.
+
+### `subject/name` is the only personal data here, and the only writable field
+
+Names are **not stored**: at log time each touched booking's name becomes a
+`{b:<id>}` token that the viewer resolves against the live bookings list, so an
+anonymised booking reads "Data removed" with no pass over the log at all. A
+DELETED booking has no live row to resolve against, so it alone carries
+`subject` — and "Delete customer & all data" has to be able to reach it, which
+is what the `customerDelete` gate is for, flag-scoped like every other. It is
+admin-only (`ROLE_GRANTS` grants `customerDelete` at the admin level alone), so
+the rule deliberately does **not** copy `bookingDelete`'s manager-inclusive
+shape; a manager is refused, and that is pinned.
+
+`.indexOn: ["at", "guestKey"]` — the first for the feed's date range, the second
+because erasure finds a deleted guest's entries by query rather than by scan.
+
+### It makes `customerDelete` the EIGHTH enforced capability, and both halves are forced
+
+`tests/rules/database-rules.test.js` scans this file for every
+`extras').child('<cap>')` and asserts that set equals `RULE_ENFORCED` exactly —
+**bidirectionally**. So a rule naming a capability the app has not flagged fails,
+and a flag with no rule behind it fails too: the two cannot ship apart. Adding
+the gate here is what moved `customerDelete` to `enforced: true` in
+`src/lib/roles.js`, and `tests/roles.test.js`'s hand-typed roster had to be
+edited deliberately to match.
+
+Worth stating plainly, because the panel's chip is binary: `customerDelete` is
+the one **partly** enforced capability. The log redaction is refused
+server-side; the booking anonymisation behind the same tick is a loop of
+ordinary booking writes and is not. It over-claims slightly rather than
+under-claiming, which is the safer direction for a screen whose whole subject is
+what the database will refuse.
+
+### Deployment — app first, rules second
+
+Rolling-safe, and in both directions: `main`'s app never writes `/activity`, so
+publishing these rules early constrains nothing, and a v18 client whose rules
+have not landed yet simply has its log writes refused — which the sink swallows
+by design, since a refused log entry must never disturb the write it describes.
+Do DEV first and exercise the node, then PROD.
 
 ---
 

@@ -40,13 +40,17 @@
 // and a stored deny does nothing until the flag goes on. Off means off.
 //
 // ── WHAT THE RULES ENFORCE, AND WHAT THEY DO NOT ────────────────────────────
-// Seven capabilities are enforced server-side, because for those the predicate
+// Eight capabilities are enforced server-side, because for those the predicate
 // is clean: `settingsAdmin` (the `/roles`, `/invites` and `settings/admin`
 // nodes), `settingsWrite` / `hoursEdit` / `layoutEdit` (the `settings/*` nodes,
 // split four ways), `reminderManage` and `recurringManage` (their own
-// collections) and `bookingDelete`
+// collections), `bookingDelete`
 // (a delete on `bookings/$bid` — which works only because `.write` IS evaluated
-// for a delete, the v17.16.7 finding). `RULE_ENFORCED` below names them, and
+// for a delete, the v17.16.7 finding) and — v18.0.0 session 8 —
+// `customerDelete` (the activity log's `subject/name`, the one place a DELETED
+// booking's guest name survives, so erasure has to be able to reach it; it is
+// the one PARTLY enforced capability, see its entry below).
+// `RULE_ENFORCED` below names them, and
 // `tests/rules/database-rules.test.js` asserts the rules and this file agree
 // rather than trusting that they do.
 //
@@ -98,7 +102,17 @@ export const CAPABILITIES = [
 
   // ── Data and access — what cannot be taken back ───────────────────────────
   { id: "bookingDelete",  group: "data",    label: "Delete bookings",      blurb: "Remove a booking and its record entirely.", enforced: true },
-  { id: "customerDelete", group: "data",    label: "Delete customer data", blurb: "Erase a guest's personal details." },
+  // v18.0.0 session 8: `enforced` because the activity log's `subject/name` —
+  // the one place a DELETED booking's guest name survives — is writable only by
+  // a holder of this. It is the one PARTLY enforced capability in the list: the
+  // log redaction is refused server-side, while the booking anonymisation behind
+  // the same tick is a loop of ordinary booking writes and is not. The chip is
+  // binary, so it over-claims slightly rather than under-claiming, which is the
+  // safer direction for a screen whose subject is what the database will refuse.
+  // The flag and the rule are forced to move together: the rules suite asserts
+  // the capabilities NAMED in database.rules.json are exactly the ones flagged
+  // here, so neither half can ship alone.
+  { id: "customerDelete", group: "data",    label: "Delete customer data", blurb: "Erase a guest's personal details.", enforced: true },
   // The one capability in this group with NO rule behind it, and the list says
   // so rather than implying otherwise: the backup is built client-side out of
   // reads, and `.read` is `auth != null` at the root. Gating it server-side

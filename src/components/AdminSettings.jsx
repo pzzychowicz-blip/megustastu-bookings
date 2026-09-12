@@ -283,7 +283,8 @@ function IntegrationsSection() {
 // The list the panel prints AND the number it opens with — one fact, because
 // this is the one panel whose stated purpose is being honest about what is
 // enforced, and it shipped saying "Three" over a list of seven. The count moved
-// from three to seven in the commit that split `settingsWrite`, and a
+// from three to seven in the commit that split `settingsWrite`, and again to
+// eight when v18.0.0 session 8 gave `customerDelete` a rule of its own — and a
 // hand-typed number beside a derived list is how that goes unnoticed.
 const ENFORCED_CAPS = CAPABILITIES.filter(function (c) { return RULE_ENFORCED[c.id]; });
 

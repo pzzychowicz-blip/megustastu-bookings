@@ -66,11 +66,17 @@ describe("the capability list", () => {
     // fact. The assertion is on the DERIVATION, so adding one needs only the
     // flag on the capability — which is how the v18.0.0 split went from three
     // to seven without touching this line's first half.
+    //
+    // The ROSTER below is hand-typed ON PURPOSE, and it is the half that moves:
+    // claiming the database refuses something is a promise printed on screen, so
+    // it should cost a deliberate edit here rather than riding along with a flag
+    // somebody set while doing something else. v18.0.0 session 8 made it eight,
+    // adding `customerDelete` with the activity log's redaction gate.
     const flagged = CAPABILITIES.filter((c) => c.enforced).map((c) => c.id);
     expect(Object.keys(RULE_ENFORCED).slice().sort()).toEqual(flagged.slice().sort());
     expect(flagged).toEqual([
       "reminderManage", "recurringManage", "hoursEdit", "layoutEdit",
-      "settingsWrite", "bookingDelete", "settingsAdmin",
+      "settingsWrite", "bookingDelete", "customerDelete", "settingsAdmin",
     ]);
     // `dataExport` is the one gated capability with NO rule behind it, and the
     // list is where that is stated: the backup is built client-side out of

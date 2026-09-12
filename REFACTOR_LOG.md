@@ -23702,3 +23702,89 @@ Gate: `126.43 kB` gz · **1337 tests** · 0 lint errors (88 warnings) · style O
 The twelve new tests are the six registered pairings × two themes.
 
 *(The `/activity` work planned as commits 92–96 shifts to 93–97.)*
+
+### Commit 93 (session 8, item 1) — `/activity`'s rules, and the first node with no CAS to waive
+
+Patryk's first item is a general history, admin-only. This commit is its server
+half and nothing else: the node, its rules, and 25 emulator tests. No client
+code writes to it yet.
+
+**Create-only, which is STRONGER than a CAS rather than an exemption from one.**
+Every other persisted node in this app carries either a per-child
+`updatedAt`/`baseUpdatedAt` compare-and-swap or a `<name>Rev` pair, and the Rule
+of law says a new one must. A CAS proves a write was based on the version it
+overwrites; here nothing may be overwritten at all. An entry can be created,
+and pruned once it is a year old. There is no third operation, and the tests
+pin that: a rewrite by the entry's own author is refused, a field-level edit of
+its text is refused, and a delete is refused even from an admin while the entry
+is recent.
+
+**Three clauses, three different lies refused.** `uid === auth.uid` and
+`email === auth.token.email` stop an account writing the log AS SOMEBODY ELSE;
+`at === now` stops it writing history AT A TIME OF ITS CHOOSING. The last one is
+the one worth having: an entry filed before the thing it describes happened is
+worse than no entry.
+
+**`at === now` forces the server sentinel, and that was measured rather than
+reasoned.** A client-supplied `Date.now()` can never equal the server's `now` at
+evaluation, so only `{".sv": "timestamp"}` — resolved before the rules run —
+satisfies it. That is an ORDERING claim, which is the exact shape this repo has
+been wrong about repeatedly, so it is pinned from both sides: the sentinel is
+accepted and reads back as a number, and the identical entry carrying
+`Date.now()` is refused. I did not know the answer before running it.
+
+**The clause is in `.write` and NOT in `.validate`, or erasure breaks.**
+`.validate` re-runs over the MERGED node when a redaction rewrites
+`subject/name`, where `at` is deliberately unchanged — so the same predicate
+sitting in `.validate` would make every entry permanently un-redactable. The
+guard would have eaten the erasure path, silently, and only for deleted-booking
+entries: the rarest rows and the only ones holding a name.
+
+**Names are not stored, so there is almost nothing to erase.** Each touched
+booking's name becomes a `{b:<id>}` token resolved against the live list, which
+is why an anonymised booking already reads "Data removed" with no pass over the
+log. Only a DELETED booking has no row to resolve against, so it alone carries
+`subject`, and that single field is the one thing `customerDelete` must be able
+to reach. The gate is **admin-only** — `ROLE_GRANTS` grants `customerDelete` at
+the admin level alone — so the rule deliberately does not copy `bookingDelete`'s
+manager-inclusive shape, and a manager being refused is its own test.
+
+**It makes `customerDelete` the EIGHTH enforced capability, and the two halves
+could not ship apart.** `tests/rules/database-rules.test.js` scans the rules for
+every `extras').child('<cap>')` and asserts that set equals `RULE_ENFORCED`
+*bidirectionally* — so the rule without the flag fails, and the flag without the
+rule fails. That guard already existed and it decided this, which is better than
+my having reasoned it out; what it also means is that the capability's spelling
+in the rule is load-bearing, since a differently-phrased predicate would be
+invisible to the scan.
+
+**Stated plainly because the panel's chip is binary:** `customerDelete` is the
+one PARTLY enforced capability. The log redaction is refused server-side; the
+booking anonymisation behind the same tick is a loop of ordinary booking writes
+and is not. It over-claims slightly rather than under-claiming, which is the
+safer direction for a screen whose entire subject is what the database will
+refuse — but it is a judgement, and reversing it is one word.
+
+**Five hand-typed statements of "seven" had to move**, which is this repo's
+most-repeated defect arriving inside the change that trips it: `roles.js`'s
+header, `useRoles.js`'s, `AdminSettings.jsx`'s comment on its own derived count,
+the runbook's list of rule-enforced capabilities, and — created by THIS commit —
+the runbook's "six such capabilities driven that way", since `customerDelete`
+joined the `ROLE_GRANTS` agreement sweep. `tests/roles.test.js`'s roster is the
+sixth and the only one a gate catches: its first assertion DERIVES the set and
+its second checks a hand-typed list, and the second is hand-typed on purpose —
+claiming the database refuses something is a promise printed on screen, so it
+should cost a deliberate edit rather than riding along with a flag set while
+doing something else. It failed exactly as designed.
+
+Two mechanical notes for whoever extends the suite: the sweep entry references
+`entry` and `ME` through arrows because those helpers are declared at the FOOT
+of the file while `CASES` is built at collection time — naming them directly is
+a TDZ ReferenceError, the trap CLAUDE.md records for `activeView`. And
+`customerDelete` is deliberately NOT in the *deny* sweep: that loop's premise is
+"a manager holds it, then is denied it", and a manager never holds this one, so
+the denied-admin case is tested in `/activity`'s own block with the right actor.
+
+Gate: `126.42 kB` gz · **1337 tests** · 0 lint errors (88 warnings) · style OK —
+the JS count is unchanged because the roster was an edited assertion, not a new
+one. Rules: **261 → 286 tests**, measured either side.

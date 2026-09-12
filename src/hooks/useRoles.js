@@ -19,10 +19,12 @@
 // one answer.
 //
 // ── WHAT THE SERVER ENFORCES, AND WHAT THIS ONLY HIDES ──────────────────────
-// SEVEN capabilities are refused by the rules as well (`RULE_ENFORCED` in
-// lib/roles.js): `settingsAdmin`, `settingsWrite`, `bookingDelete`, and the
+// EIGHT capabilities are refused by the rules as well (`RULE_ENFORCED` in
+// lib/roles.js): `settingsAdmin`, `settingsWrite`, `bookingDelete`, the
 // four v18.0.0 phase 3 added — `reminderManage`, `recurringManage`,
-// `hoursEdit`, `layoutEdit`. Every other gate in this app is a UI gate — it covers the real threat, which is a
+// `hoursEdit`, `layoutEdit` — and `customerDelete`, which session 8 added with
+// the activity log (it gates the redaction of a deleted booking's stored name).
+// Every other gate in this app is a UI gate — it covers the real threat, which is a
 // member of staff tapping the wrong thing, and it is not a security boundary.
 // The Admin tab prints that distinction on screen rather than implying a
 // guarantee it does not have.

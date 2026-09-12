@@ -1770,17 +1770,37 @@ describe("the rules and ROLE_GRANTS agree (v18.0.0)", () => {
     { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
     { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
     { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
+    // v18.0.0 session 8 — the activity log's redaction, the eighth enforced
+    // capability. It needs two things the six above do not: a row to redact
+    // (`pre`, seeded with rules disabled) and an actor carrying an email claim
+    // (`as`), because every other case writes a node with no author in it.
+    //
+    // Both are referenced through arrows on purpose: `entry` and `ME` are
+    // declared at the FOOT of this file and `CASES` is built at collection
+    // time, so naming either directly here is a TDZ ReferenceError — the trap
+    // CLAUDE.md records for `activeView`, one file over.
+    {
+      cap: "customerDelete",
+      as: () => ME(),
+      pre: (db) => db.ref("activity/e1").set(Object.assign(entry(), {
+        at: Date.now(),
+        subject: { name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4 },
+      })),
+      run: (db) => db.ref("activity/e1/subject/name").set("Data removed"),
+    },
   ];
 
-  for (const { cap, run } of CASES) {
+  for (const { cap, run, pre, as } of CASES) {
     for (const role of ROLES) {
       const expected = can({ role, extras: {} }, cap, true);
       it(`${cap}: a ${role} is ${expected ? "allowed" : "refused"}, as can() says`, async () => {
         await seedEnforce(true);
         await seedRole("staff-a", { role });
         await seed((db) => db.ref("bookings/b1").set(booking()));
-        if (expected) await assertSucceeds(run(staff()));
-        else await assertFails(run(staff()));
+        if (pre) await seed(pre);
+        const actor = as ? as() : staff();
+        if (expected) await assertSucceeds(run(actor));
+        else await assertFails(run(actor));
       });
     }
   }
@@ -1941,5 +1961,209 @@ describe("a deny is refused by the rules, not only hidden", () => {
     await seedAdmin("staff-a");
     await assertFails(staff().ref("roles/" + OTHER).set(
       roleRow(OTHER, { role: "staff", denies: { bookingEdit: false } })));
+  });
+});
+
+// ── /activity — create-only, and that is STRONGER than a CAS ─────────────────
+//
+// The activity log is the first node in this app whose protection is not a
+// compare-and-swap, and the exemption test passes rather than being waived: a
+// CAS proves a write was based on what it overwrites, and here nothing may be
+// overwritten at all. An entry can be created and — once it is a year old —
+// pruned, and there is no third operation.
+//
+// Three clauses carry it, and each is a different kind of lie being refused:
+// `uid === auth.uid` and `email === auth.token.email` stop an account writing
+// the log as somebody else, and `at === now` stops it writing history at a time
+// of its choosing. That last one is the reason the client MUST send the server
+// sentinel: a client-supplied `Date.now()` is never equal to the server's `now`
+// at evaluation, so the rule refuses it — which is the behaviour we want and is
+// measured below rather than assumed, because "the sentinel resolves before the
+// rules run" is exactly the kind of ordering claim this repo keeps being wrong
+// about.
+//
+// `at === now` lives in `.write` and NOT in `.validate`, and that is load
+// bearing: `.validate` re-runs over the merged node when a redaction rewrites
+// `subject/name`, where `at` is deliberately unchanged — so the same clause in
+// `.validate` would make the log un-redactable, i.e. it would break erasure.
+const SENTINEL = { ".sv": "timestamp" };
+const YEAR_MS = 31536000000;
+
+const entry = (o = {}) => Object.assign({
+  at: SENTINEL, uid: "staff-a", email: "staff-a@mgt.test",
+  kind: "booking", text: "status → seated",
+}, o);
+
+// The app writes one entry per push key; `logActivity` uses push(), and a fixed
+// key here is the same write with a name the assertions can read back.
+const logAs = (db, id, value) => db.ref("activity/" + id).set(value);
+const ME = () => staffAs("staff-a", "staff-a@mgt.test");
+
+describe("/activity — a create names its own author, at the server's clock", () => {
+  it("accepts an entry carrying the server sentinel and the author's own identity", async () => {
+    await assertSucceeds(logAs(ME(), "e1", entry()));
+    expect(typeof (await seedRead("activity/e1/at"))).toBe("number");
+  });
+
+  it("REFUSES a client-supplied timestamp, however plausible", async () => {
+    // The whole point of `at === now`. A device choosing its own `at` can file
+    // an action under any time it likes, including before it happened.
+    await assertFails(logAs(ME(), "e1", entry({ at: Date.now() })));
+    await assertFails(logAs(ME(), "e1", entry({ at: 0 })));
+  });
+
+  it("refuses an entry attributed to another account", async () => {
+    await assertFails(logAs(ME(), "e1", entry({ uid: OTHER })));
+    await assertFails(logAs(ME(), "e1", entry({ email: "someone@else.test" })));
+  });
+
+  it("refuses an anonymous write, and an author with no email claim", async () => {
+    await assertFails(logAs(anon(), "e1", entry()));
+    // `staff()` carries no email token, so `auth.token.email` is null.
+    await assertFails(logAs(staff(), "e1", entry()));
+  });
+
+  it("refuses an entry missing the fields that make it readable", async () => {
+    for (const k of ["at", "uid", "email", "kind", "text"]) {
+      const e = entry(); delete e[k];
+      await assertFails(logAs(ME(), "e1", e));
+    }
+  });
+
+  it("refuses a kind the viewer has no row for, and a malformed flag", async () => {
+    await assertFails(logAs(ME(), "e1", entry({ kind: "whatever" })));
+    await assertFails(logAs(ME(), "e1", entry({ auto: false })));
+    await assertFails(logAs(ME(), "e1", entry({ bookings: { b1: "yes" } })));
+  });
+
+  it("accepts the optional halves an entry may carry", async () => {
+    await assertSucceeds(logAs(ME(), "e1", entry({
+      auto: true, bookings: { b1: true, b2: true },
+      guestKey: "+34600111222",
+      subject: { name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4 },
+    })));
+  });
+});
+
+describe("/activity — an entry cannot be edited or deleted", () => {
+  beforeEach(async () => {
+    await seed((db) => db.ref("activity/e1").set(
+      Object.assign(entry(), { at: Date.now(), text: "status → seated" })));
+  });
+
+  it("refuses a rewrite of an existing entry, by its own author", async () => {
+    await assertFails(logAs(ME(), "e1", entry({ text: "nothing happened" })));
+    expect(await seedRead("activity/e1/text")).toBe("status → seated");
+  });
+
+  it("refuses a field-level edit of the text", async () => {
+    await assertFails(ME().ref("activity/e1/text").set("nothing happened"));
+    expect(await seedRead("activity/e1/text")).toBe("status → seated");
+  });
+
+  it("refuses a delete of a RECENT entry — even from an admin", async () => {
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity/e1").remove());
+    expect(await seedRead("activity/e1")).not.toBeNull();
+  });
+
+  it("refuses a wipe of the whole node", async () => {
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity").remove());
+    expect(await seedRead("activity/e1")).not.toBeNull();
+  });
+});
+
+describe("/activity — the 12-month prune, admin only", () => {
+  const OLD = () => Object.assign(entry(), { at: Date.now() - YEAR_MS - 86400000 });
+
+  beforeEach(async () => { await seed((db) => db.ref("activity/old1").set(OLD())); });
+
+  it("an admin may delete an entry older than a year", async () => {
+    await seedAdmin("staff-a");
+    await assertSucceeds(ME().ref("activity/old1").remove());
+    expect(await seedRead("activity/old1")).toBeNull();
+  });
+
+  it("a staff account may not, however old the entry is", async () => {
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(ME().ref("activity/old1").remove());
+  });
+
+  it("an admin denied settingsAdmin may not either", async () => {
+    await seedRole("staff-a", { role: "admin", denies: { settingsAdmin: true } });
+    await assertFails(ME().ref("activity/old1").remove());
+  });
+
+  it("the boundary is the year, not the admin — one day inside it is refused", async () => {
+    await seedAdmin("staff-a");
+    await seed((db) => db.ref("activity/e2").set(
+      Object.assign(entry(), { at: Date.now() - YEAR_MS + 86400000 })));
+    await assertFails(ME().ref("activity/e2").remove());
+  });
+});
+
+describe("/activity — erasure redacts a deleted booking's name", () => {
+  // The one field in the log that is personal data, and the only one that has
+  // to stay writable: a deleted booking has no live row to resolve a {b:<id>}
+  // token against, so it carries `subject`, and "Delete customer & all data"
+  // must be able to reach it. Flag-scoped like every other capability gate.
+  beforeEach(async () => {
+    await seed((db) => db.ref("activity/e1").set(Object.assign(entry(), {
+      at: Date.now(), kind: "booking", text: "deleted {b:b1}",
+      guestKey: "+34600111222",
+      subject: { name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4 },
+    })));
+  });
+
+  const redact = (db) => db.ref("activity/e1/subject/name").set("Data removed");
+
+  it("with enforcement OFF, anyone signed in may redact — today's behaviour", async () => {
+    await assertSucceeds(redact(ME()));
+    expect(await seedRead("activity/e1/subject/name")).toBe("Data removed");
+  });
+
+  it("with enforcement ON, an admin may redact", async () => {
+    await seedEnforce(true);
+    await seedAdmin("staff-a");
+    await assertSucceeds(redact(ME()));
+  });
+
+  it("with enforcement ON, a staff account is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(redact(ME()));
+    expect(await seedRead("activity/e1/subject/name")).toBe("Pau Estévez");
+  });
+
+  it("with enforcement ON, a MANAGER is refused — this one is admin-only", async () => {
+    // customerDelete is granted by the admin level alone (ROLE_GRANTS), so the
+    // rule must not copy bookingDelete's manager-inclusive shape.
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "manager" });
+    await assertFails(redact(ME()));
+  });
+
+  it("a staff account GRANTED the extra may redact", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { customerDelete: true } });
+    await assertSucceeds(redact(ME()));
+  });
+
+  it("an admin DENIED it is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "admin", denies: { customerDelete: true } });
+    await assertFails(redact(ME()));
+  });
+
+  it("the redaction reaches the name and nothing else", async () => {
+    // `.write` at subject/name must not cascade into a licence to rewrite the
+    // entry around it — the date and time are what make a redacted row still
+    // mean something.
+    await seedEnforce(true);
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity/e1/subject/date").set("2020-01-01"));
+    await assertFails(ME().ref("activity/e1/text").set("nothing happened"));
+    await assertFails(ME().ref("activity/e1/subject").set({ name: "x" }));
   });
 });
