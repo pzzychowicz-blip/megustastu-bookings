@@ -24103,3 +24103,63 @@ like one that was never there.
 
 Gate: `128.85 → 129.13 kB` gz · **1398 → 1401 tests** (39 files) · 0 lint errors
 (88 warnings) · style OK.
+
+### Commit 98 (session 8) — the docs sweep
+
+`/activity` enters the three places this repo keeps its architecture, and two
+counts that had gone stale are RE-MEASURED rather than extended.
+
+**CLAUDE.md — *Persisted collections*** gains `activity` as the **11th**, with
+the property that makes it unlike the other ten: create-only, so there is no CAS
+because none is needed. **The *Rule of law* paragraph gains it as a THIRD
+entry, and the entry says it is not an exemption at all** — a CAS proves a write
+was based on the version it overwrites, and an entry that cannot be overwritten
+is holding the STRONGER property rather than being excused from the weaker one.
+It also carries its own `.write` grant, so the rule's second clause is satisfied
+rather than excepted, and v17.16.8's test ("can a rule actually bind every writer
+of this node") passes here too: the only writer is the browser, bound on three
+separate clauses. The list of shapes that may skip a CAS is now exactly three —
+ephemeral per-connection (`presence`), principal writer is the Admin SDK and
+therefore unbindable (`conversations`/`messages`), and append-only by rule
+(`activity`). Nothing else.
+
+**Three Gotchas rows**, each earned by a defect this session actually produced
+rather than one imagined for the table:
+
+1. **Chaining `.then()` onto an already-`.catch`-handled promise runs on
+   failure too.** It nearly shipped a log that recorded every refused write as
+   though it had landed.
+2. **Re-stating an identity rule instead of importing it.** `guestKeyOf`
+   diverged from `identityKey` on two axes at once, and a missed erasure is
+   indistinguishable from a successful one.
+3. **`undefined` as a property value on the way to Firebase throws** — and a
+   swallowing boundary plus a throwing payload are individually reasonable and
+   jointly invisible.
+
+**The counts were re-measured, which is the rule that line already states about
+itself.** `37 files, 1245 tests` → **39 files, 1401 tests**; the rules suite's
+`38th file … 257 tests` → **40th … 286**. Both had been carried from session 7.
+The file list gains `activity` and `rev-guard`, and note `activity` sorts BEFORE
+`a11y`'s neighbours only because ASCII puts digits ahead of letters — it is
+`a11y · activity · auto-height`.
+
+Per-directory notes: `ActivityLogModal.jsx` (components), `useActivityLog.js`
+(hooks), `activity.js` + `activitySink.js` (lib).
+
+**ROADMAP needed nothing, and that was checked rather than assumed** — the log
+was plan work and never had an entry there. The two that remain are both
+genuinely pending: the contrast harness measuring the wrong worst case in dark
+(found in commit 92), and the v18.0.0 production deploy.
+
+Two small method notes, because both cost time this session. Every anchor was
+verified with `grep -cF` BEFORE editing, since CLAUDE.md quotes its own rules in
+prose constantly and its own table warns that "prose that names the thing a
+regex hunts for is indistinguishable from the thing" — a mis-anchored edit that
+lands somewhere is quieter than one that fails. And one of those probes ERRORED
+rather than returning zero (a `grep -F` pattern beginning with `-` was parsed as
+options); an errored probe is not a negative result, and reading it as one would
+have had me "fix" an anchor that was never broken.
+
+Gate: `129.13 kB` gz · **1401 tests** (39 files) · 0 lint errors (88 warnings) ·
+style OK — unchanged, as a docs-only commit should be, and measured rather than
+assumed.
