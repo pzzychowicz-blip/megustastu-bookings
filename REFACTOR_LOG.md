@@ -24329,3 +24329,40 @@ tests** (39 files, one new `it`) · 0 lint errors (88 warnings) · style OK. The
 button's fill/ink pair needs no new contrast entry: `--btn-nav` /
 `--text-on-accent` is already registered at the 3:1 button bar, and an icon is a
 graphical object held to the same 3:1.
+
+### Commit 101 — the Copy controls were a column by eye and not by geometry
+
+`src/components/VouchersSettings.jsx`. Patryk, opening session 9: in Vouchers the
+Copy buttons must line up as if they were in one column. They nearly did, which
+is why Commit 100 shipped without anyone catching it.
+
+**Measured in the running app before changing anything**, six rows: the button
+sits 8px after a text block that sizes to its own content, and that content's
+width is driven by the amount's digit count — 189 · 190 · 192 · 194 · 190 · 195.
+So the six buttons landed at x = **477.3 · 475.3 · 472.1 · 477.6 · 472.6 ·
+472.9**, a ragged **5.5px** spread down the list.
+
+**The anchor had to be the row's LEFT edge, and that was measured rather than
+assumed.** The obvious alternative — give the text block `flex: 1` so the button
+pins to the right of the pair's wrapper — is *worse*: the disclosure control is
+`flexShrink: 0` and its width varies with its chip count and its money figure
+(142–200px measured), so the wrapper it leaves behind is 266–324px and the six
+buttons would have spread over **58px**. Anchoring from the right looked like the
+tidier fix and would have made the defect ten times larger.
+
+So the text block takes a fixed basis, `CODE_COL = 204`. The number clears the
+widest line the screen can currently produce (a four-figure amount with a full
+expiry date measures ~201px rendered). It is `flex: 0 1 204px` and never `0 0`:
+the block may still shrink, and content wider than the basis WRAPS rather than
+being clipped — a voucher number nobody can read is the one thing this panel
+must not ship.
+
+**Verified live at both sizes.** Desktop: all six at **x = 487, spread 0.00px**,
+row heights unchanged at 54px, the disclosure controls unmoved. At 375px the
+change is a **measured no-op** — identical button positions and identical row
+heights with the basis applied and with it neutralised — because the block is
+already shrunk below 204 there; the staggering that remains on a phone is the
+row's own `flexWrap` around a three-chip disclosure and predates this.
+
+Gate: `129.22 kB` gz (unchanged) · 1402 tests · 0 lint errors (88 warnings) ·
+style OK.

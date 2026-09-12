@@ -43,6 +43,25 @@ import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons"
 const STATE_TONE = { open: "success", spent: "neutral", expired: "warn", void: "danger" };
 const STATE_LABEL = { open: "open", spent: "spent", expired: "expired", void: "void" };
 
+// v18.0.0 session 9: the Copy controls form a COLUMN, and the only stable anchor
+// for one is the row's LEFT edge. Measured in the running app at Commit 100, six
+// rows: the text block sizes to its own content (189–195px, driven by the
+// amount's digit count) and the Copy button sits 8px after it, so the six landed
+// at x = 477.3 · 475.3 · 472.1 · 477.6 · 472.6 · 472.9 — a ragged 5.5px spread.
+//
+// Anchoring from the RIGHT instead is worse, not better, and that was measured
+// too: the disclosure control's width varies with its chip count and its money
+// figure (142–200px), so the `flex: 1` wrapper is 266–324px wide and pinning the
+// button to its right edge would have spread the six over 58px.
+//
+// So the text block takes a fixed BASIS. 204px clears the widest line the screen
+// can currently produce — a four-figure amount with a full expiry date measures
+// ~201px rendered — and it is `0 1 <basis>`, never `0 0`: the block may still
+// shrink on a phone, where the row wraps anyway, and content wider than the
+// basis WRAPS rather than being clipped, because a voucher number nobody can
+// read is the one thing this panel must not ship.
+const CODE_COL = 204;
+
 function dateLabel(ms) {
   if (!ms) return "—";
   const d = new Date(ms);
@@ -142,10 +161,12 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
         {/* v18.0.0 session 8: the copy control sits WITH the number it copies —
             after the number and the expiry line — rather than floated to the far
             edge of the row. The `flex: 1` moved OUT to a wrapper holding the
-            pair, so the number still takes the slack and the disclosure control
-            still owns the right edge: nothing else in the row moved. */}
+            pair, and the disclosure control still owns the right edge: nothing
+            else in the row moved. Session 9 then took the slack back OFF the
+            number and gave it a fixed `CODE_COL` basis, which is what makes the
+            Copy controls line up as a column — see that constant. */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: "0 1 " + CODE_COL + "px" }}>
             <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums", userSelect: "text", cursor: "text" }}>{formatCode(v.code)}</div>
             <div style={{ fontSize: T.body, color: S.muted }}>
               {money(valueOf(v), currency) + " issued  ·  " + (v.expiresAt ? "expires " + dateLabel(v.expiresAt) : "no expiry")}
