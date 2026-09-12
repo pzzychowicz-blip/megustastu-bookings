@@ -23788,3 +23788,92 @@ the denied-admin case is tested in `/activity`'s own block with the right actor.
 Gate: `126.42 kB` gz · **1337 tests** · 0 lint errors (88 warnings) · style OK —
 the JS count is unchanged because the roster was an edited assertion, not a new
 one. Rules: **261 → 286 tests**, measured either side.
+
+### Commit 94 (session 8, item 1) — what the log SAYS, as a pure module
+
+`lib/activity.js`, `lib/activitySink.js` and 45 tests. **No wiring**: nothing in
+the app calls either of them yet, which is why the bundle is byte-for-byte
+unchanged at `126.42 kB` gz — measured rather than assumed, and the property
+that makes this commit safe to land on its own.
+
+**The plan had this as one commit with the writers, and it is two.** Reading the
+hook points is what changed it: `revGuard.writeWithRev(path, value, revRef,
+onReject)` does not receive `prev`, and it has **eighteen** call sites. Every one
+of them is shaped `const computed = next(ref.current); ref.current = computed;`
+— so the previous value is capturable, but only ABOVE the mirror assignment, and
+capturing it one line late yields `prev === next`, i.e. an entry reporting that
+nothing changed. That is a one-line ordering invariant repeated eighteen times
+whose failure mode is silent, which is its own commit with its own guard, not a
+passenger on the commit that introduces the module.
+
+**Names are never stored, and that is the whole design rather than a detail.**
+At log time each touched booking's name becomes a `{b:<id>}` token that the
+viewer resolves against the live bookings list. Three things follow, and the
+third is why it is built this way: an anonymised booking reads "Data removed"
+with no pass over the log, because the log never held the name; a renamed
+booking reads correctly in its own history; and **erasure becomes a property of
+the shape**. The only entries carrying a name are the ones whose booking is
+DELETED and therefore has no row to resolve against — those carry `subject` plus
+an indexed `guestKey`, which is one field to find them by and one field to
+redact.
+
+`tokenizeNames` uses plain string splitting and **never a RegExp**: a guest name
+is free text, and building a pattern out of `A(x)+.*` is how a log entry throws
+while recording a booking that saved perfectly well. It tokenises the LONGEST
+name first, or "Ana" and "Ana María" on one write leave a stranded " María"
+beside a token. Both are pinned.
+
+**A reshuffle is one entry, not five.** A table change with no history entry
+behind it is the optimiser, the reconciler or a drag that did not record itself;
+those are counted and summarised as a single Automatic row per write, because
+five rows would bury the thing a person actually did. A move that DOES carry a
+history entry is not counted again — otherwise one drag is reported twice, once
+named and once anonymously. And the per-minute overstay extension is skipped BY
+CONSTRUCTION rather than by a special case: a duration-only change touches
+neither `history` nor `tables`, and those two are the only things this module
+reads.
+
+**The sink is `lib/dbError.js`'s shape on purpose.** A prop threaded through six
+hooks cannot reach `writeWithRev`, which is a plain module function with no
+props at all — so a module-level hand-off is the only shape that reaches every
+writer, and it makes coverage greppable rather than a prop that can be present
+and silently unused. It never lets anything reach its caller: the callers are
+inside promise handlers on the booking write path, and a log entry is worth
+strictly less than the write it describes.
+
+**Two facts are stated in two files and both are asserted.** The `kind` list and
+the 365-day prune window live here AND in `database.rules.json`, and neither can
+read the other — the forced duplication this repo already records for
+`ROLE_GRANTS`. The tests read the rules file and compare, so a kind added here
+without being added there fails the build instead of producing a write the
+server refuses.
+
+**Two defects found by RUNNING it, and one test that was simply wrong.** Worth
+recording separately because they are different kinds of thing:
+
+1. **`auto: undefined` is not an absent key.** Firebase's `set`/`push` THROWS on
+   a property holding `undefined`, so every human-originated entry — every entry
+   with no `auto` flag — would have thrown inside the writer, been swallowed by
+   `emitActivity`'s try/catch exactly as that catch is designed to do, and
+   vanished. **The safety net would have hidden the bug rather than surfacing
+   it**, which is the worst possible pairing, and it would have looked like a
+   feature that simply never logged anything. Every entry is built through
+   `clean()` now, which also matches the rule, since `auto` validates `=== true`
+   and RTDB has no key for an absent one.
+2. **`isPrunable(null)` returned TRUE** — it voted to delete. `entry &&
+   Number(entry.at)` short-circuits to `null`, `Number(null)` is `0` so
+   `isFinite` says yes, and `null < now − a year` coerces to `0 < …`. That is
+   precisely the trap `lib/clamp.js` documents — "`null` and `""` are NOT
+   absent" — landing in the one function whose job is deciding what to erase.
+   Caught by a test that named the case rather than the happy path.
+3. The third was my test, not the code: `guestKey` comes back ABSENT rather than
+   `""` for a booking with no identity, and absent is right. It is an `.indexOn`
+   field, so an empty string would file every identity-less entry under one key
+   where a query could sweep them up together. The assertion was written against
+   the behaviour before `clean()` and was corrected to match the better one.
+
+Gate: `126.42 kB` gz (**unchanged** — nothing imports it yet) · **1337 → 1382
+tests** · 0 lint errors (88 warnings) · style OK.
+
+*(The remaining `/activity` work is now: 95 the writer hook points · 96 the
+Admin-tab UI · 97 erasure and the prune · 98 the docs sweep.)*
