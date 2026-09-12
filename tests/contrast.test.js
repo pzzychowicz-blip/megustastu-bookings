@@ -190,6 +190,32 @@ const FILLS = [
   { fill: "--bg-card-dim", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked, dim card)" },
 
+  // v18.0.0 session 8 — the SECTION PANEL as a text-bearing surface, registered
+  // for the reason the card fills above were: something finally painted
+  // semantic ink straight onto it, and neither guard in this repo could see it.
+  // `check:style` sees literals and the coverage check below enumerates the
+  // --block/--btn/--tbl/--tl/--wa prefixes, so `--bg-soft` matches neither.
+  //
+  // What was actually wrong: the vouchers list's disclosure control carried
+  // `--btn-nav`, which is declared once and is therefore theme-invariant dark
+  // slate, while its contents are OutlineChips and a chevron in inks that flip.
+  // Measured in the running app in LIGHT theme — --success-text 2.37:1,
+  // --text-secondary 2.51:1, --text-muted 1.99:1 — against 6.83 / 7.21 / 5.74
+  // once the fill flips with them. Dark was fine, which is why it was reported
+  // as a light-mode bug and why nothing here caught it: --btn-nav's only
+  // registered ink is white, at exactly the 3:1 button bar.
+  //
+  // All four chip tones are reachable on this surface (STATE_TONE maps open →
+  // success, expired → warn, void → danger, spent → neutral), so all four are
+  // named rather than only the one in the screenshot — the half-a-family
+  // omission this file has already been caught by twice.
+  { fill: "--bg-soft", alpha: null, ink: "--text-secondary", role: "label", what: "panel chip, neutral (voucher row: balance left / manual)" },
+  { fill: "--bg-soft", alpha: null, ink: "--success-text", role: "label", what: "panel chip, success (voucher row: open)" },
+  { fill: "--bg-soft", alpha: null, ink: "--warn-text", role: "label", what: "panel chip, warn (voucher row: expired)" },
+  { fill: "--bg-soft", alpha: null, ink: "--danger-text", role: "label", what: "panel chip, danger (voucher row: void)" },
+  { fill: "--bg-soft", alpha: null, ink: "--text-muted", role: "label", what: "panel secondary text + the voucher row's disclosure chevron" },
+  { fill: "--bg-soft", alpha: null, ink: "--text-primary", role: "label", what: "panel body text (redemption rows, customer history)" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },

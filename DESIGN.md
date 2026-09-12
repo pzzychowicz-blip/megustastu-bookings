@@ -534,6 +534,19 @@ explaining why is usually the one to read.
   (6.73–9.69:1 across both themes): **a card is a text-bearing surface the
   moment a fill comes off a label on it**, and neither `check:style` nor the
   registry's coverage guard can see that pairing arrive on its own.
+  **v18.0.0 session 8 is that rule's mirror image, and it is the easier one to
+  ship**: an outline chip is a SHEET treatment — its ink and its derived border
+  both flip — so putting one on a theme-INVARIANT fill breaks it in exactly one
+  theme. Settings → Vouchers wrapped its disclosure control in `BTN.nav`, which
+  is declared once and never overridden, and the row's two chips plus its
+  chevron then measured **2.37:1 · 2.51:1 · 1.99:1** in LIGHT (the fill
+  composites to `rgb(147,149,152)`) against 6.83 / 7.21 / 5.74 once it sits on
+  `--bg-soft`. Dark was fine throughout, which is why it was reported as a
+  light-mode bug and why nothing in the repo caught it: `--btn-nav`'s only
+  registered ink is white, at exactly the 3:1 button bar, so the fill was
+  audited for the one thing it was no longer carrying. **A `BTN.*` fill takes
+  `--text-on-accent` and nothing else** — if a control's contents are chips,
+  muted glyphs or any other sheet ink, the control belongs on a sheet surface.
   **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
   beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
   50%, transparent)`. The border and the text are the same statement at two

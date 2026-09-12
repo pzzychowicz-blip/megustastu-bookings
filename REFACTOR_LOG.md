@@ -23646,3 +23646,59 @@ booking that already holds a voucher, the spent and voided dead ends, the
 one-live-booking rule, and the source booking never being its own target.
 
 Gate: `126.42 kB` gz · **1325 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 92 (session 8) — the voucher row's chips, in light mode
+
+Reported by Patryk with a screenshot, and explicitly *"only in the light mode"*
+— which is most of the diagnosis, because it says the fault is a pairing rather
+than a colour.
+
+Settings → Vouchers wrapped its disclosure control in `mkBtn({background:
+BTN.nav})`. **`--btn-nav` is declared once in `src/index.css` and never
+overridden, so it is theme-INVARIANT dark slate** — while everything inside that
+control is painted in inks that FLIP: two or three `OutlineChip`s and the
+chevron. In dark they are pale on dark and read perfectly; in light they are
+dark on dark. Measured in the running app against the browser's own resolved
+tokens, LIGHT theme, the fill compositing to `rgb(147,149,152)`:
+
+| ink | what it is | before | after |
+|---|---|---|---|
+| `--success-text` | the "open" chip | **2.37:1** | 6.82:1 |
+| `--text-secondary` | "50 € left" · "manual" | **2.51:1** | 7.20:1 |
+| `--text-muted` | the disclosure chevron | **1.99:1** | 5.73:1 |
+
+The fix is one property: the control sits on `--bg-soft`, a surface that flips
+with its contents, and takes the row's own `--border-soft` because
+`--border-glass` is a white rim FOR a saturated fill and is invisible on this
+one. **The shape was already in the repo** — `CustomersSettings`' row header is
+this same header, same chips, same chevron, with no solid fill at all — so this
+was one copy of a working pattern with a fill pasted onto it.
+
+**Why nothing caught it.** `--btn-nav`'s only registered ink is
+`--text-on-accent`, at exactly the 3:1 button bar: the fill was audited for the
+one thing it was no longer carrying. `check:style` sees literals, and the
+contrast registry's coverage guard enumerates the `--block/--btn/--tbl/--tl/--wa`
+prefixes, so `--bg-soft` matched neither. Six entries are registered now — all
+FOUR chip tones, not just the one in the screenshot (`STATE_TONE` maps open →
+success, expired → warn, void → danger, spent → neutral), plus the muted ink and
+the panel's body text. Half a family is how this file has been caught twice
+before.
+
+**A measurement I am recording rather than acting on.** The registry's dark base
+is `#24252a`, described there as "the worst case for washout in each theme".
+That is true for a dark ink on a light fill and BACKWARDS for a pale ink on a
+dark one, where the worst case is the LIGHTEST base. Measured on the shipped
+fix: the chevron registers 5.47:1 against that floor and paints at **4.11:1** on
+the real `rgb(57,57,59)`. It clears its own bar either way — a chevron is a
+graphical object at 3:1, not text — so nothing here is below spec, and the app's
+every other dark pale-ink pairing is measured the same optimistic way. It is in
+`ROADMAP.md` as its own piece of work, because tightening a harness that guards
+the whole palette does not belong inside a UI fix.
+
+Verified live in both themes on all five rows in the DEV list, including the
+`spent` + `manual` row, which is the only one exercising the neutral tone twice.
+
+Gate: `126.43 kB` gz · **1337 tests** · 0 lint errors (88 warnings) · style OK.
+The twelve new tests are the six registered pairings × two themes.
+
+*(The `/activity` work planned as commits 92–96 shifts to 93–97.)*

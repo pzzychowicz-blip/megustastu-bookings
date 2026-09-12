@@ -152,7 +152,29 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
           // v17.7.0 the hover rule no longer supplies one but still paints an
           // opaque --bg-hover-card, so a radius-less element renders that fill
           // as a hard-edged rectangle inside its own rounded card.
-          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: BTN.nav, borderRadius: R.card })}>
+          //
+          // v18.0.0 session 8: the surface is `--bg-soft`, and it may NOT go
+          // back to `BTN.nav`. That token is declared once in src/index.css and
+          // is therefore theme-INVARIANT dark slate, while everything this
+          // control contains — two or three OutlineChips and the chevron — is
+          // painted in inks that FLIP. In dark they are pale on dark and read
+          // fine; in light they are dark on dark. Measured in the running app,
+          // light theme, against the browser's own resolved tokens: the fill
+          // composites to rgb(147,149,152) and carries --success-text at
+          // 2.37:1, --text-secondary at 2.51:1 and --text-muted at 1.99:1,
+          // where the same three on --bg-soft are 6.83, 7.21 and 5.74. The one
+          // ink the registry ever paired with --btn-nav is --text-on-accent, at
+          // exactly the 3:1 button bar — i.e. that fill is tuned for white and
+          // nothing else, which is what `CopyBtn` beside this correctly uses.
+          //
+          // This is CLAUDE.md's rule ("a colour token may only sit on a surface
+          // that flips with it") and the shape is the Customers row two files
+          // over: an identical header whose chips and chevron sit on the panel
+          // surface with no solid fill at all. The border comes with the fill —
+          // --border-glass is a white rim FOR a saturated fill and is invisible
+          // on this one, so the control takes the row's own --border-soft and
+          // reads as an outlined secondary rather than as nothing.
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>
           <OutlineChip tone={STATE_TONE[state]}>{STATE_LABEL[state]}</OutlineChip>
           <OutlineChip tone="neutral">{money(remainingOf(v), currency) + " left"}</OutlineChip>
           {v.origin === "manual" ? <OutlineChip tone="neutral">manual</OutlineChip> : null}
