@@ -663,11 +663,24 @@
   --bg-card: rgba(44, 44, 46, 0.55);
   --border-card: rgba(255, 255, 255, 0.10);
   --text-primary: #f2f2f7;
-  --text-muted: #9a9aa0;
+  /* v18.0.0 session 8: +12 per channel, and the reason is a defect in what
+     measured it rather than in the value. It was solved against a dark base of
+     #24252a — the DARKEST plausible sheet, which is the worst case for a dark
+     ink on a light fill and the BEST case for a pale ink on a dark one, so
+     every pale ink in this theme was measured optimistically. Against the
+     lightest painted panel (rgb(50,50,52), measured in the running app) the old
+     value put panel secondary text — the voucher row's redemption lines, the
+     customer history — at 3.92:1. Now 4.52:1. See tests/contrast.test.js's
+     BASE note for how the surface was measured. */
+  --text-muted: #a6a6ac;
   /* v17.14.0: see --btn-disabled-ink in :root. Lighter than --text-muted
      because the disabled fill composites DARK here, and dimmer than white
-     so the pill still reads as inactive. 4.70:1 on the composite. */
-  --btn-disabled-ink: #dcdce0;
+     so the pill still reads as inactive.
+     v18.0.0 session 8: +8 per channel. The "4.70:1 on the composite" this
+     comment used to claim was true of a base of #24252a and of nothing on
+     screen — measured against the lightest painted panel it was 4.17:1. Now
+     4.53:1, and the pill still reads as inactive beside a live primary. */
+  --btn-disabled-ink: #e4e4e8;
   --accent: #0a84ff;
   --focus-ring: #ffffff;
   /* Status chip text -> light variants for dark surfaces. */
@@ -687,9 +700,21 @@
      visible as a shape). Everything not listed here composites to the
      same side of the line in both themes and is correctly inherited.
      Numbers are solved, not eyeballed — see tests/contrast.test.js. */
-  --tbl-out-rgb: 41, 151, 171;
+  /* v18.0.0 session 8: 98% of the value it was solved to, because the base it
+     was solved against was too dark. A table badge does NOT only sit on the
+     timeline grid — TBL.out is also painted in BlockModal, PrefPickerModal and
+     TableGrid, i.e. on a panel inside a modal sheet, which is the lightest
+     surface in the theme. White on the old value measured 4.41:1 there. */
+  --tbl-out-rgb: 40, 148, 168;
   --tbl-ind-rgb: 175, 82, 222;
-  --block-seated: rgba(32, 152, 76, 0.85);
+  /* v18.0.0 session 8: 99%, for --tbl-out-rgb's reason. This one is measured on
+     a surface it cannot actually reach — a block only ever paints on the
+     timeline grid (rgb(33,35,39)), where it was already at 4.56:1 — and it is
+     nudged anyway rather than excepted, because one base per theme is what the
+     registry asserts and a per-entry surface is a bigger change than this
+     commit. A 1% shift no eye can see is a cheaper price than a second way of
+     measuring. */
+  --block-seated: rgba(32, 150, 75, 0.85);
   --block-cancelled: rgba(200, 80, 80, 0.8);
   /* ── v14.2.2: atoms / modal dark overrides ── */
   --bg-sheet: rgba(44, 44, 46, 0.85);

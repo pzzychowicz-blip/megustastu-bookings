@@ -19,21 +19,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **`tests/contrast.test.js` measures the wrong worst case in DARK.** Its two
-  bases are `{light: white, dark: #24252a}`, described in the file as "the
-  LIGHTEST (light) and DARKEST (dark) plausible base, i.e. the worst case for
-  washout in each theme". That is right for a dark ink on a light fill and
-  BACKWARDS for a pale ink on a dark one: a pale ink loses contrast as the
-  surface behind it gets LIGHTER, so the dark half of every pairing is measured
-  optimistically. Found while registering `--bg-soft` in v18.0.0 session 8 and
-  measured on the shipped fix — `--text-muted` there registers **5.47:1**
-  against the floor and paints at **4.11:1** on the real `rgb(57,57,59)`, a
-  difference of 1.4 points. Nothing known is below spec (that one is a chevron,
-  a graphical object at 3:1), but the guard's dark numbers are a ceiling rather
-  than a floor across the whole palette, so the work is: give the dark base the
-  lightest plausible surface, re-measure every entry, and record what moves.
-  Scoped as its own change because it re-measures the entire registry.
-
 - **The v18.0.0 production deploy.** Pending from the moment the release merges,
   and ordered: the six steps, and where each one's detail lives, are
   `database.rules.README.md` § *v18.0.0 — the production deploy, in order*.

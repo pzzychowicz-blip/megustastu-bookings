@@ -108,14 +108,50 @@ function ratio(a, b) {
 }
 
 // The surface a fill sits on. Both are the app's real sheet/panel colour with
-// its own alpha already resolved — and both are the LIGHTEST (light) and
-// DARKEST (dark) plausible base, i.e. the worst case for washout in each theme.
+// its own alpha already resolved, and both are now the LIGHTEST plausible base.
 // Measured in the running app, not assumed: a table badge and a View button
 // both composite against pure WHITE, because the card they sit in is itself
 // translucent all the way down to the sheet. An earlier version of this file
 // guessed --bg-soft (248,250,253) and every solved value came out ~0.06 short
-// of the bar — right maths, wrong backdrop. Take the extreme of each theme.
-const BASE = { light: { r: 255, g: 255, b: 255, a: 1 }, dark: { r: 36, g: 37, b: 42, a: 1 } };
+// of the bar — right maths, wrong backdrop.
+//
+// ── v18.0.0 session 8: the DARK base was the wrong extreme ──────────────────
+// It was #24252a, and this comment described the pair as "the LIGHTEST (light)
+// and DARKEST (dark) plausible base, i.e. the worst case for washout in each
+// theme". The second half was false, and false in the direction that hides
+// failures. Washout is a pale ink losing its surface, so a pale ink gets WORSE
+// as the surface behind it gets LIGHTER — and in dark theme essentially every
+// ink is pale. Taking the darkest sheet therefore measured the entire dark half
+// of this registry OPTIMISTICALLY: it is the worst case for a dark ink on a
+// light fill, which is the LIGHT theme's problem, and the best case for the one
+// dark actually has. One sentence, applied to both themes, correct for one.
+//
+// The new value is measured rather than reasoned. A sweep in the running app
+// (dark, Settings open) walked every element with a TRANSLUCENT background that
+// carries text, composited its whole ancestor chain to an opaque colour, and
+// took the lightest: **rgb(50,50,52)** — a Section panel over the modal sheet
+// over --bg-app. That sweep also reproduces the figure this change was reported
+// against: the voucher row's disclosure control paints rgb(57,57,59), exactly
+// as ROADMAP.md recorded it.
+//
+// What it cost, and it is the point of doing it: FOUR pairs were below their
+// bar the moment the base was honest, having read as passing for versions —
+// --text-muted on --bg-soft at 3.92:1 (genuine secondary TEXT, not the chevron
+// the ROADMAP entry assumed), --btn-disabled at 4.17, --tbl-out-rgb at 4.41 and
+// --block-seated at 4.44. All four tokens were nudged by 1–5% in the dark block
+// of src/index.css, which is invisible on screen and is what makes this half of
+// the registry a floor instead of a ceiling.
+//
+// ONE limitation is left, deliberately, and it is named here rather than
+// discovered later. A single base per theme measures every fill on the lightest
+// surface in the app, including a fill that can never reach it: --block-seated
+// only ever paints on the timeline grid (rgb(33,35,39)), where it was already at
+// 4.56:1. It was nudged anyway — a 1% shift is cheaper than a second way of
+// measuring, and --tbl-out-rgb proves the instinct to except such a fill is not
+// safe, since TBL.out turned out to be painted in BlockModal, PrefPickerModal
+// and TableGrid as well as on the grid. If that ever costs a colour worth
+// keeping, the answer is a per-entry `on:` surface, not a second base.
+const BASE = { light: { r: 255, g: 255, b: 255, a: 1 }, dark: { r: 50, g: 50, b: 52, a: 1 } };
 
 // ── The registry ─────────────────────────────────────────────────────────────
 // alpha  — what constants.js actually composes the token at (null = the token
@@ -269,13 +305,20 @@ const FILLS = [
   // mirror image: 1.30:1 light, 6.42:1 dark.
   //
   // The light ink is a step darker than --text-muted, and the reason is a limit
-  // of THIS FILE worth stating: BASE is the theme extreme, which is the worst
-  // case for WHITE ink and the BEST case for dark ink. The real modal sheet is
-  // translucent over a tinted app background, so the fill composites to
+  // of THIS FILE worth stating: in LIGHT, BASE is the lightest surface, which is
+  // the worst case for WHITE ink and the BEST case for dark ink. The real modal
+  // sheet is translucent over a tinted app background, so the fill composites to
   // rgb(211,211,217) on screen against rgb(225,225,229) here — a dark ink
   // measures LOWER in the app than in this file. --text-muted read 4.59 here and
-  // 4.02 live. The shipped pair measures 5.14 light / 4.60 dark in the running
-  // app, and is a `label` entry held to 4.5 rather than an exemption.
+  // 4.02 live. The shipped light pair measures 5.14 in the running app, and is a
+  // `label` entry held to 4.5 rather than an exemption.
+  //
+  // v18.0.0 session 8: that limit is exactly what the DARK base got wrong, and
+  // this entry is where it bit hardest — a pale ink on a fill that composites
+  // toward the base. Against #24252a the dark pair read 4.70 and this comment
+  // said so; against the lightest painted panel it was 4.17, i.e. the number
+  // quoted here as reassurance was the one number the file could not see. The
+  // ink is now #e4e4e8 and measures 4.53. See BASE's note above.
   { fill: "--btn-disabled", alpha: null, ink: "--btn-disabled-ink", role: "label", what: "disabled primary button" },
 
   // The two PRIMARY header buttons. Named --app-* rather than --btn-*, which is
@@ -696,9 +739,13 @@ const RING_FLOOR = {
     "--block-confirmed": 1.83, "--block-pending": 1.39, "--block-seated": 2.48,
     "--block-completed": 1.58, "--block-cancelled": 2.48
   },
+  // v18.0.0 session 8: the dark five are re-recorded against the corrected
+  // BASE (see its note above). Every one moves DOWN — a lighter base lifts the
+  // block under a fixed white rule, so the rim's own contrast falls — and each
+  // is the value measured at the shipped 0.55, not a rounded-down cushion.
   dark: {
-    "--block-confirmed": 2.09, "--block-pending": 1.55, "--block-seated": 2.46,
-    "--block-completed": 2.74, "--block-cancelled": 2.86
+    "--block-confirmed": 2.07, "--block-pending": 1.54, "--block-seated": 2.46,
+    "--block-completed": 2.64, "--block-cancelled": 2.79
   }
 };
 
@@ -903,7 +950,9 @@ function ghostOpacity() {
 // ghost. Recording the stricter of the two is the point of choosing an extreme.
 const GHOST_FLOOR = {
   light: { plain: { name: 1.39, chip: 2.22, ring: 1.2 }, resh: { name: 1.27, chip: 1.74, ring: 1.14 } },
-  dark:  { plain: { name: 1.82, chip: 3.12, ring: 1.39 }, resh: { name: 1.63, chip: 2.41, ring: 1.3 } },
+  // v18.0.0 session 8: re-recorded against the corrected dark BASE, same as
+  // RING_FLOOR above. The ghost is --block-pending dimmed, so it moves with it.
+  dark:  { plain: { name: 1.79, chip: 3.05, ring: 1.38 }, resh: { name: 1.6, chip: 2.37, ring: 1.29 } },
 };
 
 describe("waitlist ghost — the dimmed block, as rendered", () => {

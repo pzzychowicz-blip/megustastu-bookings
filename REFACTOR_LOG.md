@@ -24163,3 +24163,94 @@ have had me "fix" an anchor that was never broken.
 Gate: `129.13 kB` gz · **1401 tests** (39 files) · 0 lint errors (88 warnings) ·
 style OK — unchanged, as a docs-only commit should be, and measured rather than
 assumed.
+
+### Commit 99 (session 8) — the contrast harness measured the wrong extreme in DARK
+
+The ROADMAP entry opened in commit 92, executed here. `tests/contrast.test.js`
+took its two bases as `{light: white, dark: #24252a}` and described the pair, in
+the file, as "the LIGHTEST (light) and DARKEST (dark) plausible base, i.e. the
+worst case for washout in each theme". **The second half was false, and false in
+the direction that hides failures.** Washout is a pale ink losing its surface, so
+a pale ink gets worse as the surface behind it gets LIGHTER — and in dark theme
+essentially every ink is pale. The darkest sheet is the worst case for a dark ink
+on a light fill, which is the LIGHT theme's problem; for dark it is the best case
+available. One sentence, applied to both themes, correct for one.
+
+**The new base is measured, not reasoned.** A sweep in the running app (dark,
+Settings open) walked every element carrying text on a TRANSLUCENT background,
+composited its whole ancestor chain down to an opaque colour, and took the
+lightest: **rgb(50,50,52)** — a Section panel over the modal sheet over
+`--bg-app`. The same sweep independently reproduced the figure commit 92 reported
+this against: the voucher row's disclosure control paints **rgb(57,57,59)**,
+exactly as the ROADMAP said.
+
+**Four pairs were below their bar the moment the base was honest**, having read
+as passing for versions. Patryk's call, from three options offered with the
+numbers attached (nudge the tokens · record them as exemptions · move to a
+per-entry surface): nudge, because every delta is 1–5% and invisible on screen,
+and it is what makes this half of the registry a floor rather than a ceiling.
+
+| pair | was | now | change |
+|---|---|---|---|
+| `--bg-soft` / `--text-muted` | 3.92 | **4.52** | `#9a9aa0` → `#a6a6ac` |
+| `--btn-disabled` / `--btn-disabled-ink` | 4.17 | **4.53** | `#dcdce0` → `#e4e4e8` |
+| `--tbl-out-rgb` @0.8 / white | 4.41 | **4.52** | `41,151,171` → `40,148,168` |
+| `--block-seated` / white | 4.44 | **4.51** | `rgba(32,152,76,.85)` → `rgba(32,150,75,.85)` |
+
+Two of those are worth naming individually. **`--text-muted` is genuine
+secondary TEXT**, not the chevron the ROADMAP entry assumed it was — the voucher
+row's redemption lines and the customer history paint `S.muted` directly on
+`--bg-soft` (`VouchersSettings.jsx`), so 3.92:1 was a real AA failure rather than
+a graphical object sitting comfortably at 3:1. And **`--tbl-out-rgb` is the one
+that kills the instinct to except a fill for living somewhere safe**: a table
+badge looks like a timeline-grid thing, and `TBL.out` turns out to be painted in
+`BlockModal`, `PrefPickerModal` and `TableGrid` too — i.e. on a panel inside a
+modal sheet, which is the lightest surface in the theme. That was checked before
+the question was put, and it is the reason the question did not include "except
+the grid-only fills".
+
+**The base feeds SIX describe blocks, not just the registry**, so every dependent
+number was re-derived before anything was edited — a hard-bar break would have
+been a new decision rather than a red suite:
+
+- **Start-time chip** (hard 4.5): dark **5.13–6.03**. Holds.
+- **Clash-band casing** (hard 3): dark **3.37–8.62**, and it IMPROVES — a lighter
+  base lifts the block under a near-black rim, so the boundary gains contrast.
+- **Registry exemptions**: confirmed **3.53**, pending **2.17**, completed
+  **4.84** against floors 2.8 / 1.75 / 2.1. `EXEMPT_FLOOR` needed no edit.
+- **`RING_FLOOR.dark`** re-recorded: 2.09→**2.07**, 1.55→**1.54**, 2.46→**2.46**,
+  2.74→**2.64**, 2.86→**2.79**.
+- **`GHOST_FLOOR.dark`** re-recorded: plain 1.82/3.12/1.39 → **1.79/3.05/1.38**,
+  resh 1.63/2.41/1.30 → **1.60/2.37/1.29**.
+
+Every re-recorded floor is the value MEASURED at the shipped opacity, not a
+rounded-down cushion — the house rule that an accepted contrast is not a licence
+to keep going only works if the floor is tight.
+
+**Proved by sabotage rather than by a green run.** With `--text-muted` alone put
+back to `#9a9aa0`, the suite fails on exactly one test — "panel secondary text +
+the voucher row's disclosure chevron in dark: 3.92:1, needs 4.5:1" — and the
+reported number matches the offline computation to the decimal. A green suite
+alone would look identical if the new base were not being read at all.
+
+**One limitation is left deliberately, and named at the site.** A single base per
+theme measures every fill on the lightest surface in the app, including one that
+can never reach it: `--block-seated` only ever paints on the timeline grid
+(rgb(33,35,39)), where it already measured 4.56:1. It was nudged anyway — a 1%
+shift is a cheaper price than a second way of measuring, and `--tbl-out-rgb`
+shows the "it only lives on the grid" instinct is not safe. If that ever costs a
+colour worth keeping, the answer is a per-entry `on:` surface, not a second base.
+`BASE`'s own comment says so.
+
+The light half is untouched by construction: the light base was already the
+lightest surface, and all four token changes are in the dark block, so no light
+floor moved and none was re-recorded.
+
+ROADMAP's entry is deleted, per that file's rule that a shipped item goes in the
+same commit.
+
+Gate: `129.13 kB` gz (unchanged) · **1401 tests** (39 files) · 0 lint errors
+(88 warnings) · style OK. `tests/stylesheet.test.js` parses `src/index.css` and
+accepted the four new comment blocks, which was a real risk worth checking
+rather than assuming: that guard exists because a stylesheet has no syntax
+errors, only rules that silently do not exist.
