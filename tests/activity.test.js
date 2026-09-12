@@ -20,6 +20,11 @@ import {
 import {
   setActivitySink, emitActivity, resetActivitySink,
 } from "../src/lib/activitySink.js";
+// The identity rule `guestKeyOf` delegates to. Imported so the agreement test
+// below compares against the REAL function rather than against a restatement of
+// it — which is the entire property being tested, and which the first version
+// of this file failed to do, by not importing it at all.
+import { identityKey } from "../src/lib/customers.js";
 // The hook-point sweep below reads JS source, so it strips comments first — and
 // this file is a good example of why the rule exists: several of those hooks now
 // carry paragraphs explaining which writes are deliberately NOT logged, and a
@@ -166,6 +171,30 @@ describe("bookingWriteEntries", () => {
       name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4,
     });
     expect(out[0].guestKey).toBe("+34600111222");
+  });
+
+  it("files guestKey under the NORMALISED phone, not the typed one", () => {
+    // The key erasure searches by is `normalizePhone(...)`. Storing the typed
+    // string means a punctuated number never matches, and a missed erasure is
+    // indistinguishable from a successful one.
+    const out = bookingWriteEntries([bk({ phone: "+34 600 111 222" })], []);
+    expect(out[0].guestKey).toBe("+34600111222");
+  });
+
+  it("agrees with identityKey for every shape, because it IS identityKey", () => {
+    // Pinned as an AGREEMENT rather than as a value: the two must not be able
+    // to drift, and the first version of guestKeyOf drifted on two axes at once
+    // (normalisation, and a six-digit floor against hasRealPhone's three).
+    [
+      bk({ phone: "+34600111222" }),
+      bk({ phone: "(+34) 600 123 456" }),
+      bk({ phone: "12345", guestId: "gb1" }),
+      bk({ phone: "", guestId: "gb2" }),
+      bk({ phone: "+34", guestId: "gb3" }),
+    ].forEach(function (b) {
+      const got = bookingWriteEntries([b], [])[0].guestKey;
+      expect(got === undefined ? "" : got).toBe(identityKey(b) || "");
+    });
   });
 
   it("falls back to guestId when a deleted booking had no real phone", () => {
@@ -463,6 +492,24 @@ describe("the writer hook points", () => {
       .filter(([, src]) => !/emitActivity\s*\(/.test(src))
       .map(([f]) => f);
     expect(offenders).toEqual([]);
+  });
+
+  it("deleting a customer still erases the log's copy of their name", () => {
+    // Erasure is the one thing here that leaves NO trace when it stops
+    // happening: the booking anonymisation is visible on screen, and a log
+    // entry nobody redacted looks exactly like one that was never there. So the
+    // call is pinned rather than trusted to survive a later refactor.
+    const app = stripComments(
+      readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")
+    ).join("\n");
+    const at = app.indexOf("function deleteCustomer");
+    expect(at, "deleteCustomer was renamed or removed").toBeGreaterThan(-1);
+    const end = app.indexOf("\n  function ", at + 1);
+    const body = end < 0 ? app.slice(at) : app.slice(at, end);
+    expect(body).toMatch(/redactGuest\s*\(/);
+    // …and with the PLURAL guest ids, not just the phone: matchesIdentity spans
+    // every absorbed guest group, so a single-key erasure leaves some behind.
+    expect(body).toMatch(/guestIds/);
   });
 
   it("the writer hook installs the sink, and is the only thing that does", () => {

@@ -41,8 +41,10 @@ import { ref, onValue, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError, describeWriteError } from "../lib/dbError";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
-// v18.0.0 session 8: the activity log. Both modules import nothing themselves,
-// so this adds no dependency to the write path beyond two pure functions.
+// v18.0.0 session 8: the activity log. `activitySink` imports nothing;
+// `activity.js` imports `customers.js` for `identityKey` — deliberately, so the
+// key a deleted booking is filed under cannot drift from the key erasure
+// searches by. Both are pure.
 import { voucherWriteEntries } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
 import {

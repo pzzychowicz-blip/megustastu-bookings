@@ -43,11 +43,13 @@
 // listener in the app whose data nothing else needs.
 import { useState, useEffect } from "react";
 import {
-  ref, push, set, onValue, query, orderByChild, startAt, endAt, limitToLast, serverTimestamp,
+  ref, push, set, get, remove, onValue, query,
+  orderByChild, startAt, endAt, equalTo, limitToLast, serverTimestamp,
 } from "firebase/database";
 import { db, auth } from "../firebase";
 import { dbError } from "../lib/dbError";
 import { setActivitySink } from "../lib/activitySink";
+import { PRUNE_AFTER_MS, isPrunable } from "../lib/activity";
 
 // At most this many rows for one day. A day of ordinary service is a few dozen
 // entries; the cap exists so a pathological day cannot pull the whole node into
@@ -73,6 +75,84 @@ function logActivity(entries) {
       console.warn("[activity] entry refused by the server", err);
     });
   });
+}
+
+// ── ERASURE ─────────────────────────────────────────────────────────────────
+//
+// "Delete customer & all data" anonymises the guest's BOOKINGS, and the log
+// follows from that for free almost everywhere: its text holds `{b:<id>}`
+// tokens resolved against the live list, so an anonymised booking reads "Data
+// removed" in the log with nothing having been rewritten.
+//
+// The exception is the entry for a DELETED booking, which has no row left to
+// resolve against and therefore carries `subject.name` — the one piece of
+// personal data the log stores. `guestKey` is the indexed field that finds it.
+//
+// **A LIST of keys, not one.** `matchesIdentity` matches a normalised phone AND
+// every `guestIds` entry, because a customer can have absorbed more than one
+// guest group; its own comment says "Delete must reach every id the row is
+// showing, or 'delete all data' leaves some". Erasing under one key would
+// reproduce that defect one collection over — and a missed erasure looks
+// exactly like a successful one, since neither shows anything on screen.
+//
+// One-shot `get()` rather than `onValue`: this is an erasure, not a
+// subscription, and a listener left attached to it would be a listener nobody
+// detaches.
+export function redactGuest(keys) {
+  const list = (Array.isArray(keys) ? keys : [keys]).filter(Boolean);
+  list.forEach(function (k) {
+    const q = query(ref(db, "activity"), orderByChild("guestKey"), equalTo(String(k)));
+    get(q).then(function (snap) {
+      snap.forEach(function (child) {
+        const v = child.val();
+        // Only entries that actually hold a name, so the write is not attempted
+        // on every entry the guest ever touched.
+        if (!v || !v.subject || !v.subject.name) return;
+        set(ref(db, "activity/" + child.key + "/subject/name"), "Data removed")
+          .catch(function (err) {
+            // Loud, because this one matters: a refused redaction means a
+            // guest's name is still in the log after they asked for it to go.
+            console.warn("[activity] could NOT redact entry " + child.key, err);
+          });
+      });
+    }).catch(function (err) {
+      console.warn("[activity] could not search the log for " + k, err);
+    });
+  });
+}
+
+// ── THE 12-MONTH PRUNE ───────────────────────────────────────────────────────
+//
+// Run when an ADMIN opens the log — there is no server-side scheduler on this
+// plan, so the retention promise is kept by the app, and the rules are what stop
+// anyone else keeping it differently: a delete is refused unless the caller is
+// an admin AND the entry is genuinely older than a year.
+//
+// Bounded on purpose. `endAt(cutoff)` asks only for what is prunable rather than
+// reading the node and filtering, and the batch cap means a log left unpruned
+// for years is cleared over several opens instead of in one storm of deletes.
+export const PRUNE_BATCH = 200;
+
+export function pruneActivity() {
+  const cutoff = Date.now() - PRUNE_AFTER_MS;
+  const q = query(
+    ref(db, "activity"), orderByChild("at"), endAt(cutoff), limitToLast(PRUNE_BATCH)
+  );
+  return get(q).then(function (snap) {
+    const olds = [];
+    snap.forEach(function (child) {
+      // The client half of the rule, so the app asks only for what will be
+      // allowed — `isPrunable` and the rule's `at < now - a year` are the same
+      // sentence in two languages.
+      if (isPrunable(child.val(), Date.now())) olds.push(child.key);
+    });
+    return Promise.all(olds.map(function (id) {
+      return remove(ref(db, "activity/" + id)).catch(function () {
+        // Refused (not an admin, or the entry is not old enough after all).
+        // Silent: the prune is housekeeping and must never interrupt anybody.
+      });
+    })).then(function () { return olds.length; });
+  }).catch(function () { return 0; });
 }
 
 /**

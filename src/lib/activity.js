@@ -37,6 +37,11 @@
 // a write the server refuses. The rules file cannot read this constant (the
 // forced duplication this repo records for `ROLE_GRANTS`), so
 // `tests/activity.test.js` asserts the two agree rather than trusting them to.
+// The ONE identity rule in the app, imported rather than restated — see
+// `guestKeyOf` below for what restating it cost. `customers.js` imports only
+// `booking-logic.js`, so this is a one-way edge and no cycle.
+import { identityKey } from "./customers.js";
+
 export const ACTIVITY_KINDS = [
   "booking", "voucher", "table", "waitlist", "reminder", "standing",
   "settings", "people", "session", "data",
@@ -187,16 +192,26 @@ function subjectOf(b) {
   };
 }
 
-// The identity "Delete customer & all data" searches by. Deliberately the same
-// two keys `lib/customers.js` calls an identity — a phone if there is a real
-// one, else the `guestId` — so a deleted booking is found by the same rule that
-// finds a live one. "" when the booking had neither, which is a booking nobody
-// can ask to have erased.
+// The identity "Delete customer & all data" searches by — and it is
+// `identityKey` ITSELF, not a local re-statement of it.
+//
+// The first version WAS a re-statement: it returned `b.phone` verbatim if the
+// string held six or more digits, else the `guestId`. That disagreed with the
+// app's real identity rule in two independent ways, and both make erasure MISS:
+//
+//   • `identityKey` stores the NORMALISED phone. A booking saved as
+//     "+34 600 111 222" was filed under the punctuated string while
+//     `deleteCustomer` searches by `normalizePhone(...)` — no match.
+//   • `hasRealPhone`'s floor is THREE digits, not six. For a 3-to-5 digit
+//     number the two functions disagree about which key even applies: this one
+//     files under `guestId` while the search looks under the phone.
+//
+// A missed erasure is indistinguishable from a successful one — nothing appears
+// on screen either way — so the only safe version is the one that cannot drift
+// from what the search uses. "" when the booking has neither key, which is a
+// booking nobody can ask to have erased.
 function guestKeyOf(b) {
-  const phone = String(b.phone || "");
-  const digits = phone.replace(/[^0-9]/g, "");
-  if (digits.length >= 6) return phone;
-  return b.guestId || "";
+  return identityKey(b) || "";
 }
 
 function keyed(ids) {

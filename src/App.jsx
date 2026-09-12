@@ -316,7 +316,7 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
-import { useActivityLog, useActivityFeed } from "./hooks/useActivityLog";
+import { useActivityLog, useActivityFeed, redactGuest, pruneActivity } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -1368,6 +1368,22 @@ function BookingApp({uid}){
   const activityFrom=new Date(activityDay+"T00:00:00").getTime();
   const activityTo=activityFrom+86400000-1;
   const {rows:activityRows,loading:activityLoading}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen});
+  // The 12-month retention promise, kept by the app because this plan has no
+  // server-side scheduler — and kept HONEST by the rules, which refuse a delete
+  // unless the caller is an admin and the entry really is older than a year. It
+  // runs when an admin OPENS the log, which is the one moment somebody is
+  // already waiting for the node and a few deletes cost nothing.
+  //
+  // Gated on `isAdmin` client-side as well: a staff account's attempt would be
+  // refused anyway, and asking for a refusal on every open is noise in the
+  // console for a promise that was never theirs to keep.
+  const prunedRef=useRef(false);
+  useEffect(function(){
+    if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
+    if(prunedRef.current) return;   // once per opening, not once per render
+    prunedRef.current=true;
+    pruneActivity();
+  },[activityOpen,isAdmin]);
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
   // suppression and `inert` — all three of which it had silently never had.
   const showWaitlist = !!modalOpen.waitlist;
@@ -2136,6 +2152,17 @@ function BookingApp({uid}){
       return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
     });});
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+    // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
+    // of the log erases itself — its text holds {b:<id>} tokens resolved against
+    // the live bookings, so the anonymisation above rewrites what it displays —
+    // but an entry for a DELETED booking has no row left to resolve against and
+    // carries `subject.name`. That is the one field to reach.
+    //
+    // The key list is derived EXACTLY as matchesIdentity derives it, so the keys
+    // erased can never be narrower than the bookings anonymised: a customer can
+    // have absorbed several guest groups, and erasing under one key would leave
+    // the others behind with nothing on screen to say so.
+    redactGuest([key].concat(Array.isArray(o.guestIds)?o.guestIds:(o.guestId?[o.guestId]:[])));
   }
 
   // v17.16.11 (/code-review): the seed is the viewed date only when that is a

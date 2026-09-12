@@ -24033,3 +24033,73 @@ somebody can see.
 
 Gate: `128.20 → 128.85 kB` gz · **1397 → 1398 tests** · 0 lint errors (88
 warnings, back down from the 89 above) · style OK.
+
+### Commit 97 (session 8, item 1) — erasure, and the 12-month prune
+
+The two operations that act ON the log rather than writing to it.
+
+**Erasure is mostly free, and the exception is the whole of the work.** "Delete
+customer & all data" anonymises the guest's BOOKINGS — and because an entry's
+text holds `{b:<id>}` tokens resolved against the live list, the log starts
+reading "Data removed" with nothing in it having been rewritten. The exception is
+an entry for a DELETED booking: there is no row left to resolve against, so it
+carries `subject.name`, the one piece of personal data the log stores.
+`redactGuest` finds those by the indexed `guestKey` and rewrites that one field.
+
+**Reading `deleteCustomer` to wire this up found a defect in commit 94's own
+code.** `guestKeyOf` was a RE-STATEMENT of the app's identity rule rather than
+the rule itself — it returned `b.phone` verbatim when the string held six or more
+digits — and it disagreed with `identityKey` on two independent axes:
+
+| | `identityKey` (what the search uses) | `guestKeyOf` (what was stored) |
+|---|---|---|
+| phone form | `normalizePhone(...)` | the typed string |
+| "real phone" floor | 3 digits (`hasRealPhone`) | 6 digits |
+
+So a booking saved as `"+34 600 111 222"` was filed under the punctuated string
+while erasure searched for the normalised one, and for a 3–5 digit number the two
+functions disagreed about which key even applied. **A missed erasure is
+indistinguishable from a successful one** — neither shows anything on screen —
+which is what makes this worth more than the one line it took to fix:
+`guestKeyOf` now IS `identityKey`, so the two cannot drift again.
+
+**It erases under a LIST of keys, not one.** `matchesIdentity` matches a
+normalised phone AND every entry of `guestIds`, because a customer can have
+absorbed more than one guest group; its own comment says "Delete must reach every
+id the row is showing, or 'delete all data' leaves some". `deleteCustomer` now
+derives the key list with that exact expression, so the keys erased can never be
+narrower than the bookings anonymised.
+
+**The prune keeps a promise the plan has no scheduler for.** It runs when an
+ADMIN opens the log, bounded by `endAt(cutoff)` so it asks only for what is
+prunable, capped per opening so a log left unpruned for years clears over several
+opens rather than in one storm, and fired once per OPENING via a ref rather than
+once per render. Gated on `isAdmin` client-side as well as in the rules: a staff
+account's attempt would be refused anyway, and asking for a refusal on every open
+is console noise for a promise that was never theirs to keep. `isPrunable` and
+the rule's `at < now − a year` are the same sentence in two languages.
+
+Both use a one-shot `get()` rather than `onValue` — these are an erasure and a
+prune, not subscriptions, and a listener left attached to one is a listener
+nobody detaches.
+
+**A test failed for the funniest possible reason.** The new assertion pinning
+that `guestKeyOf` agrees with `identityKey` threw `ReferenceError: identityKey is
+not defined` — a test whose entire point is "import the rule, do not restate it"
+had not imported the rule. Broken test, not broken code: the four other
+`guestKey` assertions passed, so the delegation was working the whole time.
+
+**This commit cannot be verified live, and that is worth stating plainly.** Both
+halves WRITE to `/activity` — the redaction rewrites `subject/name`, the prune
+deletes — and DEV refuses every `/activity` write until the rules are deployed
+there. So its verification is the gate plus commit 93's emulator tests, which
+already drive the redact rule across admin, manager, staff, granted-extra and
+denied-admin. That is genuinely weaker than the read-path proof commit 96 got,
+and it stays weaker until `npm run rules:deploy -- mgt-dev` can run.
+
+The erasure call is pinned by a source scan, because it is the one thing here
+that leaves NO trace when it stops happening: an un-redacted entry looks exactly
+like one that was never there.
+
+Gate: `128.85 → 129.13 kB` gz · **1398 → 1401 tests** (39 files) · 0 lint errors
+(88 warnings) · style OK.
