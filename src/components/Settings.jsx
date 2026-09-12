@@ -1031,6 +1031,9 @@ export function SettingsContent({
   modules, hasModule, onSetModule, moduleWarning,
   onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite,
   onOpenCapabilities,
+  // v18.0.0 session 8: the activity log opens from the Admin tab, above this
+  // overlay — App owns the modal, this only carries the door handle down.
+  onOpenActivity,
   appVersion,
   isDark,
   onToggleDark,
@@ -1169,7 +1172,7 @@ export function SettingsContent({
       modules={modules} onSetModule={onSetModule} moduleWarning={moduleWarning}
       onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
-      onOpenCapabilities={onOpenCapabilities} />;
+      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} />;
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {

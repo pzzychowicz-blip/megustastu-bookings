@@ -63,6 +63,9 @@ function escapeAction(K,id){
     // tab underneath — the safe direction, and it holds no draft of its own
     // (every tick is written as it is made), so there is nothing to guard.
     case "roles":       return function(){K.setRolesFor(null);};
+    // v18.0.0 session 8: Escape closes the activity log and returns you to the
+    // Admin tab you opened it from. There is no decision in a log to lose.
+    case "activity":    return function(){K.setActivityOpen(null);};
     case "settings":    return K.requestCloseSettings;
     case "history":     return function(){K.setShowHistory(false);};
     case "kitchen":     return function(){K.setConfirmKitchen(null);};

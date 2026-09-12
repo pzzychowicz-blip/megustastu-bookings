@@ -23953,3 +23953,83 @@ sign-in after the first.
 Gate: `126.42 → 128.20 kB` gz — **+1.78 kB** for the whole feature so far,
 measured rather than predicted — · **1382 → 1397 tests** · 0 lint errors (88
 warnings) · style OK.
+
+### Commit 96 (session 8, item 1) — the Activity log on screen
+
+`hooks/useActivityLog.js`, `components/ActivityLogModal.jsx`, the Admin-tab
+section that opens it, and the seven wiring sites a modal needs in this app.
+This is the commit where the log stops being plumbing.
+
+**`useActivityFeed` is the app's FIRST Firebase query.** Every other listener in
+the codebase is a plain `onValue(ref(db, path))`; this one is
+`orderByChild("at")` over a day's range with `limitToLast(1000)`, and it is the
+only listener in the app that is not permanent — it attaches when the log opens
+and detaches when it closes, because it is the only one whose data no other
+surface reads.
+
+**It holds ONE state, keyed to the query it answers**, and that is two bugs
+avoided rather than a preference. A separate `loading` boolean has to be SET,
+and the only place to set it is the effect body — a synchronous `setState`
+inside an effect (`react-hooks/set-state-in-effect`, which duly appeared as an
+89th lint warning and is gone again). Worse, two values are free to disagree: on
+a day change or a reopen the stored rows are still the PREVIOUS query's answer,
+so the panel would show yesterday's entries under today's date until the
+snapshot landed. Keying the answer to `from·to` makes `loading` a DERIVATION —
+"what I hold is not an answer to what I am asking" — which cannot disagree with
+the rows, needs no reset on close, and leaves `setState` inside the subscription
+callback, exactly where the warning's own text says it belongs.
+
+**`logActivity` refuses to substitute an author.** App's `getUser()` returns the
+literal `"staff"` when `auth.currentUser` is null, which is right for a booking
+history entry's `by` field and fatal here: the rule requires
+`email === auth.token.email`, so `"staff"` is refused — and `emitActivity`'s
+try/catch would swallow the refusal, leaving the entry gone with nothing on
+screen. With no signed-in account there is no honest author, so nothing is
+written at all.
+
+**Verified live in DEV, end to end, and the interesting part is that it was
+REFUSED.** Tapping Default validity down and back up (6 → 5 → 6, net zero)
+produced exactly two `permission_denied` refusals on `/activity`, each with my
+own `[activity] entry refused by the server` beside it. That single observation
+proves the whole chain: the settings write SUCCEEDED, `onDone` fired only on
+that success, `settingsWriteEntry` returned a non-null entry, the sink was
+installed, and `logActivity` pushed with a real uid, email and server sentinel.
+The server refused it because `/activity` has no grant in DEV's DEPLOYED rules —
+`npm run rules:deploy -- mgt-dev` still needs a `firebase login` I cannot run.
+**And the stepper restored to "6 months" correctly**, which is the property the
+try-wrapping exists for, observed rather than asserted: the log failing did not
+disturb the write it was describing.
+
+The same run printed `FIREBASE WARNING: Using an unspecified index … Consider
+adding ".indexOn": "at" at /activity`, which is the other half of the same fact —
+the read SUCCEEDED (root `.read` cascades, so the feed works without an
+`/activity` rule) and degraded to client-side filtering for want of the index
+that is already in `database.rules.json` and not yet in DEV.
+
+**A scare worth recording, because the next person will see it too.** Mid-session
+the console filled with `change in the order of Hooks` and `Should have a queue`
+from `BookingApp`. Both are HMR artefacts of adding three hooks to a live
+component, not a conditional hook — but build-id comparison could not prove it,
+because the errors carried the same build id as the live module. What settled it
+was a COUNT DELTA: 19 matching errors before a reload and 19 after, with the
+fresh load reporting no boundary and a rendering app. A hook-order error is a
+comparison against a PREVIOUS render and cannot occur on a first mount; the
+count is what turned that from an argument into a measurement.
+
+`check:style` caught two real violations in the new modal — the person `<select>`
+and the search `<input>` without `.mgt-hover-scale` (Rule 10). `DateField` needs
+none because the atom carries the class itself. The select moved to `mkSel` in
+the same fix, for the reason that atom exists: a `<select>` paints its arrow hard
+against padding-right, which on a pill lands it inside the right cap.
+
+The three modal-stack coverage guards all passed, which is what proves the seven
+sites are complete: the bidirectional `MODAL_Z` ↔ `modalOpen.<id>` check, an
+`escapeAction` case per rank, and every `K.*` the keyboard hook reads existing in
+App's ctx — the guard that once caught `K.setShowWaitlist is not a function`.
+
+GLOSSARY gains the activity log and the Automatic entry, in this commit rather
+than the docs sweep, because this is the commit where it becomes a surface
+somebody can see.
+
+Gate: `128.20 → 128.85 kB` gz · **1397 → 1398 tests** · 0 lint errors (88
+warnings, back down from the 89 above) · style OK.

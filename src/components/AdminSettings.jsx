@@ -673,6 +673,9 @@ export function AdminTabContent({
   can, isAdmin, myUid, rows, enforceRoles, onSetEnforceRoles,
   modules, onSetModule, moduleWarning,
   onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite, onOpenCapabilities,
+  // v18.0.0 session 8: opens the activity log, which App owns — this tab holds
+  // the door handle, not the modal.
+  onOpenActivity,
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("staff");
@@ -860,6 +863,31 @@ export function AdminTabContent({
             }}
             style={mkSolidBtn("var(--accent)")}
           >Invite</button>
+        </div>
+      </Section>
+
+      {/* v18.0.0 session 8 (item 1). AFTER People and before the enforcement
+          disclosure, because the reading order of this tab is: the switch, what
+          this restaurant HAS, who may use it — and then what they did. */}
+      <Section>
+        <div style={{ display: "flex", alignItems: "center", gap: SP.wide, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+            <div style={{ fontWeight: FW.bold, fontSize: T.body, color: "var(--text-primary)" }}>
+              Activity log
+            </div>
+            <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2 }}>
+              Every change, deletion and sign-in, with who did it and when. Kept for
+              12 months. Guest names are not stored in it &mdash; they are read back
+              from the bookings themselves, so a guest erased from the app is erased
+              here too.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="mgt-hover-scale"
+            onClick={onOpenActivity}
+            style={mkBtn({ background: "var(--app-btn-grey-strong)", flexShrink: 0 })}
+          >Open the log</button>
         </div>
       </Section>
 

@@ -443,17 +443,39 @@ describe("the writer hook points", () => {
     expect(read("useWhatsApp.js")).not.toContain("activitySink");
   });
 
-  it("every hook that imports the sink actually calls it", () => {
-    // The half-wired shape, which is what `useWaitlist` briefly was during this
-    // commit: a captured `prev`, an import, and no emit — an unused variable
-    // and a silent gap in the log.
+  it("every hook that imports emitActivity actually calls it", () => {
+    // The half-wired shape, which is what `useWaitlist` briefly was: a captured
+    // `prev`, an import, and no emit — an unused variable and a silent gap in
+    // the log.
+    //
+    // **This asks about `emitActivity`, not about the sink module**, and the
+    // narrowing is a correction rather than a retreat. The first version keyed
+    // on "mentions lib/activitySink", which was the same question only while
+    // every consumer was an EMITTER. `useActivityLog` is the second kind —
+    // it imports `setActivitySink` to INSTALL the writer and correctly never
+    // emits — so the broad form failed the one file whose job is the other half
+    // of this module. The teeth are unchanged: the defect it catches is an
+    // `emitActivity` import with no call, which is exactly what is tested here.
     const offenders = readdirSync(HOOKS)
       .filter((f) => /\.jsx?$/.test(f))
       .map((f) => [f, read(f)])
-      .filter(([, src]) => src.includes("lib/activitySink"))
+      .filter(([, src]) => /\bemitActivity\b/.test(src))
       .filter(([, src]) => !/emitActivity\s*\(/.test(src))
       .map(([f]) => f);
     expect(offenders).toEqual([]);
+  });
+
+  it("the writer hook installs the sink, and is the only thing that does", () => {
+    // The companion to the narrowing above, so that excluding `useActivityLog`
+    // from the emitter sweep does not quietly exclude it from coverage
+    // altogether. Exactly one installer: two would race, and the last one
+    // mounted would silently win.
+    const installers = readdirSync(HOOKS)
+      .filter((f) => /\.jsx?$/.test(f))
+      .map((f) => [f, read(f)])
+      .filter(([, src]) => /setActivitySink\s*\(/.test(src))
+      .map(([f]) => f);
+    expect(installers).toEqual(["useActivityLog.js"]);
   });
 
   it("no hook emits without having captured a prev to diff against", () => {

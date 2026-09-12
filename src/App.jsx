@@ -155,6 +155,14 @@ const SettingsContent = lazyChunk(function(){return import("./components/Setting
 // by the time the Admin tab can be reached it is already fetched and the
 // Suspense fallback never paints.
 const RolesModal = lazyChunk(function(){return import("./components/AdminSettings").then(function(m){return {default:m.RolesModal};});},"Capabilities");
+// v18.0.0 session 8: the activity log, lazy for the same reason as the panel
+// above — it is reachable only from the Admin tab, and a static import here
+// would pull it into the startup bundle for a screen almost nobody opens.
+// Mapped to `{default: …}` rather than handed the module namespace: `lazyChunk`
+// wants a default export and a bare namespace throws "Cannot convert object to
+// primitive value" from inside <Lazy>, naming neither the component nor the
+// cause (the v18.0.0 phase 5b trap).
+const ActivityLogModal = lazyChunk(function(){return import("./components/ActivityLogModal").then(function(m){return {default:m.ActivityLogModal};});},"Activity log");
 import { ReminderEditor }          from "./components/ReminderEditor";
 
 // ── Phase B4 (v15-refactor): Timeline + List views ────────────────────────
@@ -305,6 +313,10 @@ import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
 import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
+// v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
+// sink every writer emits into; `useActivityFeed` is the app's first Firebase
+// QUERY, and is attached only while the log is open.
+import { useActivityLog, useActivityFeed } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -991,6 +1003,10 @@ function BookingApp({uid}){
   // stack's falsy-closes semantics are safe here.
   const rolesFor = modalOpen.roles || null;
   const setRolesFor = setModalFns.roles;
+  // v18.0.0 session 8: the activity log. Its payload is just `true` — there is
+  // nothing to carry — and the stack's falsy-closes rule makes `null` the close.
+  const activityOpen = modalOpen.activity || null;
+  const setActivityOpen = setModalFns.activity;
   // Set only while re-entering the completion the modal interrupted, so the
   // gate below asks its question once rather than forever. Cleared in a
   // `finally`, which is what stops a throw in the re-entered action from
@@ -1336,6 +1352,22 @@ function BookingApp({uid}){
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
   const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  // ── v18.0.0 session 8: the activity log ────────────────────────────────────
+  // Installing the sink is the whole of the write side here — every writer in
+  // the app already emits into it, and until this runs `emitActivity` is a
+  // no-op.
+  useActivityLog();
+  // The day the log is showing. It lives HERE and not inside the modal because
+  // the feed lives here too: the listener must detach when the log closes, and
+  // a day held inside the modal would unmount with it and take the range with
+  // it. Seeded to today, which is the day anybody opening this is asking about.
+  const [activityDay,setActivityDay]=useState(todayStr());
+  // Local midnight to local midnight: `at` is a wall-clock stamp and the
+  // restaurant thinks in local days. Both are primitives derived from one
+  // string, so the feed's dep array is stable across renders.
+  const activityFrom=new Date(activityDay+"T00:00:00").getTime();
+  const activityTo=activityFrom+86400000-1;
+  const {rows:activityRows,loading:activityLoading}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen});
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
   // suppression and `inert` — all three of which it had silently never had.
   const showWaitlist = !!modalOpen.waitlist;
@@ -3159,7 +3191,7 @@ function BookingApp({uid}){
     // list — a cycle over the unfiltered one would step onto the Admin tab the
     // render side refuses to show. `setRolesFor` is escapeAction's target for
     // the capability grid.
-    can:can,hasModule:hasModule,setRolesFor:setRolesFor,requestDelete:requestDelete,
+    can:can,hasModule:hasModule,setRolesFor:setRolesFor,setActivityOpen:setActivityOpen,requestDelete:requestDelete,
     // v14 p7: reminder editor state for Esc/Enter handling.
     reminderEditor:reminderEditor,setReminderEditor:setReminderEditor,
     saveReminderFromEditor:saveReminderFromEditor,
@@ -4886,6 +4918,7 @@ function BookingApp({uid}){
             onWithdrawInvite={withdrawInvite}
             onApplyInvite={applyInvite}
             onOpenCapabilities={setRolesFor}
+            onOpenActivity={function(){setActivityOpen(true);}}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
@@ -4970,7 +5003,18 @@ function BookingApp({uid}){
           myUid={uid}
           onSelect={setRolesFor}
           onToggleCap={setCapability}
-          onClose={function(){setRolesFor(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>
+          onClose={function(){setRolesFor(null);}} /></Suspense></div>:null}</ModalPresence><ModalPresence show={!!activityOpen}>{// v18.0.0 session 8: the activity log — opened from the Admin tab, so it
+        // sits above the Settings overlay on the same idiom as the capability
+        // grid beside it: a positioned wrapper makes the stacking context and
+        // `Overlay` is reused untouched.
+        activityOpen?<div style={{position:"relative",zIndex:255}}><Suspense fallback={null}><ActivityLogModal
+          day={activityDay}
+          onSetDay={setActivityDay}
+          rows={activityRows}
+          loading={activityLoading}
+          bookings={bookings}
+          onOpenBooking={function(id){const b=bookings.find(function(x){return x.id===id;});if(!b) return;setActivityOpen(null);closeSettings();openEdit(b);}}
+          onClose={function(){setActivityOpen(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>
   );
 }
 
