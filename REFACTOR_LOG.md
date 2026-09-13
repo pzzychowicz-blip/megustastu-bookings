@@ -25120,3 +25120,32 @@ style.
 click at the painted position clears the field.
 
 Gate: `129.78 kB` gz · **1456 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 120 (session 11) — the same pairing one file over, and a rule so it cannot come back
+
+Commit 119 fixed the instance Patryk reported. Grepping for the SHAPE rather
+than the name — `type="search"` beside `.mgt-hover-scale` — found a second one:
+`VouchersSettings`' voucher search, identical in every respect, full-width
+`mkInp()` and all. It is on the SearchField atom now.
+
+**`check:style` Rule 13** is the guard, and it belongs beside Rule 10 because it
+is that rule's one narrow exception rather than a new idea. Rule 10 says an
+interactive control carries the hover lift; Rule 13 says an
+`<input type="search">` never does, because it is not a leaf — the platform
+paints `::-webkit-search-cancel-button` inside it, and scaling the field scales
+that button out from under the cursor.
+
+**This is the only container-of-controls in the app whose contained control is
+drawn by the BROWSER**, which is the whole reason nothing caught it: in source
+the input looks exactly like a leaf, and both `check:style` Rule 10 and every
+review pass read it as one. `SearchField` then has to satisfy both rules at once
+— no lift for 13, and a stated `@no-lift` reason for 10 — which the tests pin, or
+the atom would itself be a violation and the rule would have to be muted.
+
+No exemption marker, deliberately: the shape that is wanted already exists, and a
+second answer to this question is the thing worth preventing.
+
+Sabotage-proved: restoring the pairing in `VouchersSettings` fails the run and
+names the file, the line and the atom to use.
+
+Gate: `129.79 kB` gz · **1461 tests** · 0 lint errors (88 warnings) · style OK.

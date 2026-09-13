@@ -35,7 +35,7 @@ import {
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
-import { Section, OutlineChip, Reveal, InlineAlert, Fld, mkInp, mkBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
 
 // The four states, and the chip tone each reads as. `open` is the only one that
@@ -492,9 +492,20 @@ export function VouchersTabContent({
           <OutlineChip tone="success">{money(totals.outstanding, currency) + " outstanding"}</OutlineChip>
         </div>
 
-        <input type="search" value={query} onChange={function (e) { setQuery(e.target.value); }}
-          aria-label="Search vouchers by number or note"
-          placeholder="Search by number or note…" className="mgt-hover-scale" style={{ ...mkInp(), marginBottom: 8 }} />
+        {/* v18.0.0 session 11: the SAME defect the Activity log's search had,
+            found by grepping for the shape rather than the name — this input
+            also paired `type="search"` with the hover lift, so the platform's
+            ✕ rode the field's right edge and was unclickable where it was
+            drawn. `SearchField`'s header carries the measurement; `check:style`
+            Rule 13 is what stops the pairing coming back. */}
+        <SearchField
+          value={query}
+          onChange={function (e) { setQuery(e.target.value); }}
+          onClear={function () { setQuery(""); }}
+          ariaLabel="Search vouchers by number or note"
+          placeholder="Search by number or note…"
+          style={{ marginBottom: SP.base }}
+        />
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           <FilterBtn id="all" label="All" active={filter === "all"} onPick={setFilter} />

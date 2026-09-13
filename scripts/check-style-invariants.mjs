@@ -164,6 +164,26 @@
 // one modal in the list that solves the problem another way. What IS decidable
 // is "is the house pattern applied, and if not, has somebody said why".
 //
+// ── Rule 13: a search input never carries the hover lift ───────────────────
+// v18.0.0 session 11, and it is the narrow EXCEPTION to Rule 10 rather than a
+// new idea. An `<input type="search">` is not a leaf control: the platform
+// paints `::-webkit-search-cancel-button` inside it. Scale the field on hover
+// and that button scales with it — measured in the Activity log, a 530px field
+// grew [53, 583] → [31.8, 604.2] and cleared only 21px to the RIGHT of where
+// the glyph was drawn, the two boxes not overlapping at all. The control was
+// never clickable where it was painted.
+//
+// index.css already states the rule this breaks — the hover lift is for
+// CONTROLS, the tint is for CONTAINERS OF CONTROLS — and it was learned on the
+// List card sliding its own Edit and Delete buttons out from under the cursor.
+// Nothing could see it happening again one element down, because a container
+// whose contained control is drawn by the BROWSER looks like a leaf in source.
+//
+// There is no exemption marker. `SearchField` (atoms.jsx) is the shape that is
+// wanted — pill tinted, ✕ lifted — and a second answer to this question is the
+// thing worth preventing. Rule 10 then requires the bare input inside it to say
+// `@no-lift`, so the two rules meet.
+//
 // ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
 // v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
 // icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
@@ -638,6 +658,25 @@ for (const file of walk(SRC)) {
       });
     }
 
+    // ── Rule 13 ─────────────────────────────────────────────────────────────
+    // The inverse of Rule 10, for the one tag that is a container dressed as a
+    // control. Same tag-scoped scan, so a multi-line opening tag is read whole.
+    for (const m of code.matchAll(/<input\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      const tag = code.slice(m.index, end);
+      if (!/type\s*=\s*"search"/.test(tag)) continue;
+      if (!tag.includes("mgt-hover-scale")) continue;
+      const from = code.slice(0, m.index).split("\n").length - 1;
+      problems.push({
+        file: rel, line: from + 1, rule: "search-hover-lift",
+        text: lines[from].trim().slice(0, 90),
+        hint: "an <input type=\"search\"> carries the browser's own clear button, "
+              + "and the hover lift scales that button out from under the cursor "
+              + "— use the SearchField atom, which tints the pill and lifts the \u2715",
+      });
+    }
+
     // ── Rule 12 ─────────────────────────────────────────────────────────────
     for (const m of code.matchAll(/<Overlay\b/g)) {
       const end = tagEnd(code, m.index);
@@ -701,7 +740,7 @@ if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
             + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
             + "scales, marker placement, control hover-lift, modal-title background, "
-            + "modal auto-height)");
+            + "modal auto-height, search-field lift)");
   process.exit(0);
 }
 

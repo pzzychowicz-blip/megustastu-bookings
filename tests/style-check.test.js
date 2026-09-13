@@ -622,3 +622,72 @@ describe("Rule 12 — <Overlay> without <AutoHeight>", () => {
     expect(closed.out).not.toMatch(/\[modal-auto-height\]/);
   });
 });
+
+// ── Rule 13 — a search input never carries the hover lift (v18.0.0 session 11)
+//
+// The narrow exception to Rule 10, and the only one where the CONTAINED control
+// is drawn by the browser rather than written in the file — which is exactly why
+// nothing could see the fault: in source the input looks like a leaf.
+describe("Rule 13 — <input type=\"search\"> with the hover lift", () => {
+  it("catches the pairing", () => {
+    const r = run({ "a.jsx": 'const x = <input type="search" className="mgt-hover-scale" />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/\[search-hover-lift\]/);
+  });
+
+  it("finds it anywhere in a multi-line tag, either order", () => {
+    // Same reason Rule 10 is tag-scoped. Both orderings, because the real
+    // defect had `type` first and a fixture that only tests one ordering is
+    // half a test.
+    const typeFirst = run({ "a.jsx": [
+      "const x = (",
+      '  <input type="search"',
+      "    value={q}",
+      '    className="mgt-hover-scale"',
+      "  />",
+      ");",
+      "",
+    ].join("\n") });
+    expect(typeFirst.out).toMatch(/\[search-hover-lift\]/);
+    const classFirst = run({ "a.jsx": [
+      "const x = (",
+      '  <input className="mgt-hover-scale"',
+      "    value={q}",
+      '    type="search"',
+      "  />",
+      ");",
+      "",
+    ].join("\n") });
+    expect(classFirst.out).toMatch(/\[search-hover-lift\]/);
+  });
+
+  it("is silent on a search input that says @no-lift", () => {
+    // The shape SearchField ships. It must satisfy BOTH rules at once — no
+    // lift for 13, and a stated reason for 10 — or the atom itself would be a
+    // violation and the rule would have to be muted.
+    const r = run({ "a.jsx": [
+      "const x = (",
+      "  <input",
+      "    /* @no-lift the pill around it holds the clear button */",
+      '    type="search"',
+      "    value={q}",
+      "  />",
+      ");",
+      "",
+    ].join("\n") });
+    expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("does not fire on a non-search input that lifts", () => {
+    // SearchPanel's "Find a booking" field is exactly this: a text input with
+    // no clear button inside it, so it is a leaf and the lift is correct.
+    const r = run({ "a.jsx": 'const x = <input className="mgt-hover-scale" value={q} />;\n' });
+    expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+  });
+
+  it("does not fire on prose naming the pairing", () => {
+    const r = run({ "a.jsx": '// never give <input type="search"> the mgt-hover-scale class\nexport const x = 1;\n' });
+    expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+  });
+});
