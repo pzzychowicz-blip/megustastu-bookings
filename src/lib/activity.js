@@ -66,6 +66,8 @@ export const PRUNE_AFTER_MS = 31536000000;
 // Days rather than milliseconds, because a person picks months and a stored
 // `31536000000` is unreadable in the Firebase console.
 export const DEFAULT_RETENTION_DAYS = 365;
+export const RETENTION_MIN_DAYS = 30;
+export const RETENTION_MAX_DAYS = 3650;
 export const RETENTION_CHOICES = [
   { days: 90, label: "3 months" },
   { days: 180, label: "6 months" },
@@ -74,11 +76,38 @@ export const RETENTION_CHOICES = [
   { days: 1825, label: "5 years" },
 ];
 
-/** Days → ms, falling back to the shipped year for anything unusable. */
+/**
+ * A stored value → a usable number of days. ONE normaliser, because the value
+ * drives a DELETE and it was being defaulted in three places that did not agree
+ * (/code-review).
+ *
+ * `sanitizeAdminSettings` reached for `clampStep`, which is the wrong shape for
+ * this: it tests `Number.isFinite` AFTER coercing, and `Number(null)`,
+ * `Number("")` and `Number(0)` are all 0 — finite — so the default branch was
+ * never reached and all three clamped to the 30-day MINIMUM. Measured:
+ * `clampStep(null, 365, 30, 3650, 1) === 30`. A `settings/admin` node holding a
+ * null or empty retention would therefore have pruned ELEVEN MONTHS of the
+ * audit log on the next admin to open it, with no backups to recover from.
+ *
+ * That is exactly the trap `lib/clamp.js` documents in its own header — "`null`
+ * and `""` are not absent because `Number()` makes both 0" — and `retentionMs`
+ * and `isPrunable` were already guarding it correctly, which is what made the
+ * disagreement invisible: two of the three fallbacks were right.
+ *
+ * **Absent means the DEFAULT, never the minimum.** Every unusable input widens
+ * to the shipped year, because the unsafe direction here is silent and
+ * irreversible.
+ */
+export function retentionDaysOf(v) {
+  if (v == null || v === "") return DEFAULT_RETENTION_DAYS;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_RETENTION_DAYS;
+  return Math.min(RETENTION_MAX_DAYS, Math.max(RETENTION_MIN_DAYS, Math.round(n)));
+}
+
+/** Days → ms, through the one normaliser above. */
 export function retentionMs(days) {
-  const n = Number(days);
-  if (!Number.isFinite(n) || n < 1) return PRUNE_AFTER_MS;
-  return Math.round(n) * 86400000;
+  return retentionDaysOf(days) * 86400000;
 }
 
 /** The label for a stored value, so the screen and the log say the same thing. */
@@ -454,7 +483,7 @@ export function isPrunable(entry, now, windowMs) {
   // that passes nothing prunes to the DEFAULT rather than to zero, because
   // "zero" here would mean deleting the whole log.
   const span = Number.isFinite(Number(windowMs)) && Number(windowMs) > 0
-    ? Number(windowMs) : PRUNE_AFTER_MS;
+    ? Number(windowMs) : retentionMs(null);
   return at < now - span;
 }
 
@@ -566,8 +595,16 @@ function csvCell(v) {
 const CSV_HEADER = ["Date", "Time", "Person", "Kind", "What happened", "Automatic"];
 
 function stamp(ms) {
-  const d = new Date(Number(ms) || 0);
-  const p = function (n) { return String(n).padStart(2, "0"); };
+  // /code-review: an unusable `at` exports as EMPTY, not as 1970-01-01.
+  // `new Date(Number(undefined) || 0)` is the epoch, and this file's whole
+  // claim is that it exports "the rows AS SHOWN" — while `timeOf`/`dateOf` in
+  // the modal both render "" for the same row. A spreadsheet sorted by date
+  // also puts those fabricated rows at the top, which is where a reader looks
+  // first. The old test only counted LINES, so it passed over the wrong bytes.
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return { date: "", time: "" };
+  const d = new Date(n);
+  const p = function (x) { return String(x).padStart(2, "0"); };
   return {
     date: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()),
     time: p(d.getHours()) + ":" + p(d.getMinutes()),

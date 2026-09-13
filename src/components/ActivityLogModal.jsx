@@ -155,11 +155,22 @@ export function ActivityLogModal({
 
   const anyKind = Object.keys(kinds).some(function (k) { return kinds[k]; });
 
+  // /code-review: the person filter is DERIVED against the window, not trusted.
+  // `people` holds only the emails present in the current rows, so narrowing the
+  // range after picking somebody left `who` naming an address with no <option>
+  // — the select painted BLANK, indistinguishable from "Everyone", while `shown`
+  // filtered every row out and the panel said "Nothing matches those filters".
+  // A control that looks unset while still filtering is worse than either state.
+  //
+  // The raw pick is kept rather than reset, so stepping back into a window where
+  // that person worked restores the filter instead of silently forgetting it.
+  const whoActive = who && people.indexOf(who) !== -1 ? who : "";
+
   const shown = useMemo(function () {
     const needle = q.trim().toLowerCase();
     return (rows || []).filter(function (r) {
       if (anyKind && !kinds[r.kind]) return false;
-      if (who && r.email !== who) return false;
+      if (whoActive && r.email !== whoActive) return false;
       if (peopleOnly && r.auto) return false;
       if (!needle) return true;
       // Searched against what is ON SCREEN, tokens resolved — otherwise typing
@@ -167,7 +178,7 @@ export function ActivityLogModal({
       const text = renderText(r.text, byId, r.subject && r.subject.name);
       return (text + " " + personOf(r.email)).toLowerCase().includes(needle);
     });
-  }, [rows, kinds, anyKind, who, peopleOnly, q, byId]);
+  }, [rows, kinds, anyKind, whoActive, peopleOnly, q, byId]);
 
   function toggleKind(k) {
     setKinds(function (prev) {
@@ -230,7 +241,7 @@ export function ActivityLogModal({
             `mkInp` for the dropdown: a <select> paints its arrow hard against
             padding-right, which on a pill lands it inside the right cap. */}
         <select
-          value={who}
+          value={whoActive}
           onChange={function (e) { setWho(e.target.value); }}
           aria-label="Filter by person"
           className="mgt-hover-scale"
@@ -439,7 +450,7 @@ export function ActivityLogModal({
                 display: "inline-flex", alignItems: "center", gap: SP.snug,
                 opacity: shown.length ? 1 : 0.5,
               })}
-            ><DownloadIcon size={IC.control} />Download {shown.length ? shown.length : ""} shown</button>
+            ><DownloadIcon size={IC.control} />{shown.length ? "Download " + shown.length + " shown" : "Download"}</button>
             <button
               type="button"
               className="mgt-hover-scale"

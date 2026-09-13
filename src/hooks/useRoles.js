@@ -53,8 +53,7 @@ import {
   applyInviteFields, userRows,
 } from "../lib/roles";
 import { sanitizeModules, withModule, moduleOn, DEFAULT_MODULES } from "../lib/modules";
-import { clampStep } from "../lib/clamp";
-import { DEFAULT_RETENTION_DAYS } from "../lib/activity";
+import { retentionDaysOf, DEFAULT_RETENTION_DAYS } from "../lib/activity";
 
 // The flag's node. `v` is the presence marker every settings node carries —
 // RTDB drops an all-default object, and the scalar keeps the node present once
@@ -95,13 +94,16 @@ export function sanitizeAdminSettings(s) {
     // configurable window would have meant either the app asking for deletes the
     // server refuses, or a number in the rules that no setting could move.
     //
-    // Clamped rather than trusted: this drives a DELETE, and a node that came
-    // back holding 0 (or a string, or nothing) would otherwise prune the entire
-    // log on the next admin who opened it. 30 days is the floor for that reason
-    // and not because anyone wants 30.
-    activityRetentionDays: clampStep(
-      src.activityRetentionDays, DEFAULT_RETENTION_DAYS, 30, 3650, 1
-    ),
+    // Normalised rather than trusted: this drives a DELETE.
+    //
+    // /code-review: this was `clampStep(..., DEFAULT_RETENTION_DAYS, 30, 3650, 1)`
+    // and that is the WRONG SHAPE for the job. `clampStep` coerces first and
+    // tests `Number.isFinite` after, so `null`, `""` and `0` all become a finite
+    // 0, never reach the default branch, and clamp to the 30-day MINIMUM —
+    // measured, `clampStep(null, 365, 30, 3650, 1) === 30`. A stored null would
+    // have pruned eleven months of the log on the next admin who opened it.
+    // `retentionDaysOf` is the one normaliser all three call sites now share.
+    activityRetentionDays: retentionDaysOf(src.activityRetentionDays),
   };
 }
 

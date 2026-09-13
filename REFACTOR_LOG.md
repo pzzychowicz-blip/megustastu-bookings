@@ -25415,3 +25415,76 @@ the row is about the class rather than about the two instances.
 
 Gate: `131.49 kB` gz · **1485 tests** · 0 lint errors (88 warnings) · style OK ·
 `test:rules` **293**.
+
+### Commit 126 (session 11, /code-review) — twelve findings, all fixed
+
+A review of session 11's own seven commits. Every finding was verified before
+being acted on and every fix was checked by running it; two of the twelve were
+found only because the rules are now deployed and the feature could finally be
+exercised end to end.
+
+**The one that would have destroyed data.** `sanitizeAdminSettings` normalised
+the new retention with `clampStep`, which is the wrong SHAPE for the job: it
+coerces first and tests `Number.isFinite` after, so `null`, `""` and `0` are all
+a finite zero, never reach the default branch, and clamp to the 30-day MINIMUM.
+Measured: `clampStep(null, 365, 30, 3650, 1) === 30`. A `settings/admin` node
+holding a null retention would have pruned **eleven months of the audit log** on
+the next admin who opened it, with no backups. It is the exact trap
+`lib/clamp.js` documents in its own header — and `retentionMs` and `isPrunable`
+were both guarding it correctly, which is what made the disagreement invisible:
+two of three fallbacks were right, so nothing on screen or in the tests ever
+disagreed. There is one normaliser now, `retentionDaysOf`, and **absent means the
+DEFAULT, never the minimum**, because the unsafe direction here is silent and
+irreversible.
+
+**The clear could stop early and call it success.** The loop is bounded at
+`MAX_PASSES * CLEAR_BATCH` = 10,000, and hitting the bound returned the same
+shape as reaching the tail. A restaurant logging a couple of hundred entries a
+day passes 10,000 inside a year, so clearing "everything before last summer"
+removed 10,000, said "Cleared 10000 entries." and left the rest — the same
+zero-information outcome the `refused` flag had been added for one commit
+earlier. There is a `truncated` flag now and four sentences for four outcomes.
+
+**A refusal message that named a cause which has since stopped existing.** It
+read "only once the updated database rules are deployed", true of DEV on the day
+it was written and historical now that the rules are deployed and the clear
+works. Any future refusal would have sent an admin to redo a deploy they had
+already done. It names what a refusal means today instead.
+
+**The other nine.** The clear's message outlived its range (measured — "Cleared
+27 entries." still on screen under the all-time list); `SearchField` dropped
+focus to `<body>` when its ✕ unmounted, a regression against the native control
+it replaced, and the first measurement of it was WRONG because a programmatic
+`.click()` never focuses a button — this repo's synthetic-press trap, third
+sighting; `customerSeek` was never reset, so one jump pre-filtered Customers for
+the rest of the session; the person filter could hold an address with no option,
+painting the select blank while still filtering everything out; the CSV exported
+`1970-01-01` where the screen shows an empty cell, and the existing test passed
+because it counted LINES; the download button read "Download  shown" with a
+doubled space; the retention hint sat inside its `<label>`, making a twelve-word
+sentence part of the control's accessible name; the prune still deleted key by
+key while the clear batched, two implementations of one delete on one node in
+one file; and a comment claimed the "cleared" line "cannot be caught by the
+range it is reporting", which is false for any range ending today — two of the
+three quick ranges — so the property is tamper-evident for ONE pass and now says
+so.
+
+**Fixing the focus cost two React-compiler warnings** (88 → 90) for writing
+through a forwarded `inputRef` prop inside a ref callback. That prop had no
+callers, so it went; `DateField` owns its input's ref the same way. Back to 88 —
+caught by diffing the warning sets against a clean checkout of HEAD rather than
+by reading a total.
+
+New pins, both sabotage-proved: `retentionDaysOf` collapsing `null`/`""`/`0` to
+the default rather than the floor (reverting it also reddens two `isPrunable`
+tests, which is the coupling being real), and the CSV exporting an unusable `at`
+as empty.
+
+Verified live against the DEPLOYED rules: a clear of 2026-09-12 removed 27
+entries, wrote "cleared the activity log · 2026-09-12 · 27 entries", and left the
+day empty; the ✕ now returns focus to the input under a real mouse click; the
+person filter collapses to Everyone in a window with no entries from that person
+and is restored when the window widens again.
+
+Gate: `131.66 kB` gz · **1488 tests** · 0 lint errors (88 warnings) · style OK ·
+`test:rules` **293**.

@@ -903,6 +903,12 @@ export function AdminTabContent({
             chooses "6 months", not 184. The prune itself still runs when an
             admin OPENS the log, so changing this takes effect on the next
             open rather than on a schedule this plan does not have. */}
+        {/* /code-review: the hint is OUTSIDE the <label>. A label's subtree is
+            the naming source for the control it wraps, so a twelve-word
+            sentence nested in it is announced as part of the select's NAME on
+            every focus and in every forms list, rather than as the description
+            it plainly is. The label now contains exactly the words the control
+            is called by. */}
         <label style={{ display: "flex", gap: SP.base, alignItems: "center", flexWrap: "wrap", marginTop: SP.base }}>
           <span style={{ fontSize: T.body, color: "var(--text-secondary)" }}>Keep entries for</span>
           <select
@@ -915,10 +921,10 @@ export function AdminTabContent({
               return <option key={c.days} value={c.days}>{c.label}</option>;
             })}
           </select>
-          <span style={{ fontSize: T.micro, color: "var(--text-muted)" }}>
-            Older entries are removed the next time an admin opens the log.
-          </span>
         </label>
+        <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.tight }}>
+          Older entries are removed the next time an admin opens the log.
+        </div>
       </Section>
 
       <Collapsible title="What the server actually enforces" defaultOpen={false}>

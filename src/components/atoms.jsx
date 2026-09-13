@@ -1938,9 +1938,31 @@ export function DateField({ value, onChange, style, inputProps }) {
 // mkInp already produces, so a SearchField and a DateField still line up on one
 // row. Sizing by what a mistake COSTS (the v17.9.0 rule) puts this well under
 // the 44px floor: a mis-tap here costs retyping a word.
-export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, inputRef, style }) {
+export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, style }) {
   const base = mkInp();
   const has = String(value == null ? "" : value).length > 0;
+  // The ✕ unmounts the moment it does its job, so whatever had focus goes with
+  // it (/code-review). Measured with a REAL mouse click — a programmatic
+  // `.click()` reports the opposite, because it never focuses the button, which
+  // is this repo's synthetic-press trap arriving for the third time: the button
+  // takes focus on mousedown, `onClear` empties the value, `has` goes false,
+  // the element is removed and `document.activeElement` becomes `<body>`. A
+  // keyboard user clearing a search lost their place in the dialog entirely.
+  //
+  // The platform control this replaced left focus in the field, so this is a
+  // regression the replacement had to pay back rather than a nicety.
+  //
+  // `.focus()` runs BEFORE React re-renders — a discrete event handler flushes
+  // at its end — so the input is focused while the button still exists, and the
+  // unmount that follows has nothing to take away.
+  // A plain ref, not a forwarding callback. The first version took an optional
+  // `inputRef` prop and merged it — which NO caller used, and which cost two
+  // React-compiler warnings ("This value cannot be modified", "Cannot modify
+  // local variables after render completes") for writing through a prop inside
+  // a ref callback. `DateField` above owns its input's ref the same way; a
+  // caller that ever needs the element can have the prop back then, with a
+  // reason to justify the shape.
+  const ownRef = useRef(null);
   return (
     <div
       className="mgt-ac-row mgt-searchfield"
@@ -1952,7 +1974,7 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
       }, style)}
     >
       <input
-        ref={inputRef}
+        ref={ownRef}
         /* @no-lift the pill holds the clear button — lifting it moves that button; see this atom's header */
         type="search"
         value={value}
@@ -1965,7 +1987,10 @@ export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, 
         <button
           type="button"
           className="mgt-hover-scale"
-          onClick={onClear}
+          onClick={function () {
+            onClear();
+            if (ownRef.current) ownRef.current.focus();
+          }}
           aria-label="Clear search"
           style={{
             flexShrink: 0, display: "grid", placeItems: "center",

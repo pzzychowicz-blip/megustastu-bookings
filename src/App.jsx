@@ -1384,6 +1384,14 @@ function BookingApp({uid}){
   // thing on offer.
   const [activityFromDay,setActivityFromDay]=useState("");
   const [activityToDay,setActivityToDay]=useState("");
+  // /code-review: changing the window clears whatever the last clear SAID.
+  // Measured — cleared 2026-09-12 ("Cleared 27 entries."), emptied both fields
+  // to go back to all time, and the sentence was still on screen under the
+  // all-time list, where it reads as a claim about everything. The modal
+  // already disarms the confirm on the same event; this is the other half of
+  // "the confirm is a promise about a specific window".
+  function setActivityFrom(v){setActivityClearMsg("");setActivityFromDay(v);}
+  function setActivityTo(v){setActivityClearMsg("");setActivityToDay(v);}
   // Local midnight to local midnight: `at` is a wall-clock stamp and the
   // restaurant thinks in local days. `dayRangeMs` gives a whole day, so the FROM
   // field takes that day's first ms and the TO field takes its last — which is
@@ -1456,6 +1464,12 @@ function BookingApp({uid}){
   // was added to reach. Fed to `CustomersTabContent` as both `key` and
   // `seekQuery`, so a new seek remounts that subtree and its `useState`
   // initialiser picks the value up with no effect involved.
+  //
+  // /code-review: it is cleared when Settings CLOSES, or it outlives the jump.
+  // Nothing reset it, so one jump for "Pau Estévez" left every later visit to
+  // Settings → Customers pre-filtered by that name, with a query in the box the
+  // user never typed — and because the tab takes this as its `key`, it also
+  // remounted on the stale value each time.
   const [customerSeek,setCustomerSeek]=useState("");
   function openCustomerByName(name){
     const n=String(name||"").trim();
@@ -1483,11 +1497,26 @@ function BookingApp({uid}){
     setActivityClearMsg("");
     clearActivityAndLog(activityFrom,activityTo,activityFromDay,activityToDay)
       .then(function(res){
-        // Three outcomes and three sentences. "Refused" and "there was nothing"
-        // both remove zero rows, and saying the same thing for both is how a
-        // deploy that has not happened gets mistaken for an empty week.
-        if(res&&res.refused) setActivityClearMsg("The server refused. An admin can clear the log only once the updated database rules are deployed.");
-        else if(res&&res.removed>0) setActivityClearMsg("Cleared "+res.removed+(res.removed===1?" entry.":" entries."));
+        // FOUR outcomes and four sentences. Any two of them sharing a sentence
+        // is how one situation gets mistaken for another — which is the whole
+        // reason `refused` and `truncated` are separate flags rather than a
+        // count of zero and a count that looks complete.
+        const n=res?res.removed:0;
+        const said=n+(n===1?" entry":" entries");
+        if(res&&res.refused){
+          // /code-review: this used to name ONE cause — "only once the updated
+          // database rules are deployed" — which was true of DEV on the day it
+          // was written and is now historical, since the rules are deployed and
+          // the clear works. A refusal today means something else: a capability
+          // taken away, a role changed, a write that failed. Saying the old
+          // sentence would send an admin to redo a deploy they have already
+          // done, which is worse than saying less.
+          setActivityClearMsg(n>0
+            ?"Cleared "+said+", then the server refused the rest — check you still have permission to administer the app."
+            :"The server refused that clear — check you still have permission to administer the app.");
+        }
+        else if(res&&res.truncated) setActivityClearMsg("Cleared "+said+" — there are more in that range. Press again to continue.");
+        else if(n>0) setActivityClearMsg("Cleared "+said+".");
         else setActivityClearMsg("There was nothing to clear in that range.");
       })
       .catch(function(){setActivityClearMsg("Couldn't clear that range.");})
@@ -2463,7 +2492,7 @@ function BookingApp({uid}){
   // keeps its tab reset on BOTH paths — the clean close here and the discard
   // below — because that was part of the close behaviour before the guard, not
   // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");}
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
@@ -5318,8 +5347,8 @@ function BookingApp({uid}){
         activityOpen?<div style={{position:"relative",zIndex:255}}><Suspense fallback={null}><ActivityLogModal
           fromDay={activityFromDay}
           toDay={activityToDay}
-          onSetFromDay={setActivityFromDay}
-          onSetToDay={setActivityToDay}
+          onSetFromDay={setActivityFrom}
+          onSetToDay={setActivityTo}
           badDay={activityBadDay}
           backwards={activityBackwards}
           rows={activityRows}

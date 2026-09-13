@@ -17,6 +17,7 @@ import {
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
   isPrunable, activityWindow, activityCsv, activityCsvName, clearedEntry,
   retentionMs, retentionLabel, RETENTION_CHOICES, DEFAULT_RETENTION_DAYS,
+  retentionDaysOf, RETENTION_MIN_DAYS,
 } from "../src/lib/activity.js";
 import {
   setActivitySink, emitActivity, resetActivitySink,
@@ -795,6 +796,21 @@ describe("activityCsv", () => {
     expect(out.split("\r\n").filter(Boolean)).toHaveLength(2);
   });
 
+  it("exports an unusable `at` as EMPTY, the way the screen renders it", () => {
+    // /code-review. This assertion is why the test above was not enough: it
+    // counted LINES and passed over the bytes. `new Date(Number(undefined)||0)`
+    // is the epoch, so the file said 1970-01-01 00:00 for a row the modal draws
+    // with two blank cells — and a spreadsheet sorted by date puts those
+    // fabricated rows FIRST, where a reader looks. The file claims to export
+    // "the rows as shown"; this is what makes that true.
+    for (const bad of [undefined, null, 0, "", NaN, "nope"]) {
+      const out = activityCsv([row({ at: bad })], {});
+      const cells = out.split("\r\n")[1];
+      expect(cells.startsWith('"","",'), "at=" + String(bad)).toBe(true);
+      expect(cells).not.toContain("1970");
+    }
+  });
+
   it("names the file after the window it exported", () => {
     expect(activityCsvName("2026-09-13", "2026-09-13")).toBe("mgt-activity-2026-09-13.csv");
     expect(activityCsvName("2026-09-01", "2026-09-13")).toBe("mgt-activity-2026-09-01_2026-09-13.csv");
@@ -839,6 +855,29 @@ describe("clearedEntry", () => {
 // because this number drives a DELETE and the unsafe direction is silent.
 describe("retention", () => {
   const YEAR = 365 * 86400000;
+
+  it("normalises an ABSENT value to the default, never to the minimum", () => {
+    // /code-review, and the reason this function exists. `sanitizeAdminSettings`
+    // used `clampStep`, which coerces first and tests `Number.isFinite` after —
+    // so `null`, `""` and `0` are all a finite 0, never reach the default
+    // branch, and clamp to the 30-day MINIMUM. Measured:
+    // `clampStep(null, 365, 30, 3650, 1) === 30`.
+    //
+    // A `settings/admin` node holding a null retention would have pruned ELEVEN
+    // MONTHS of the audit log on the next admin to open it, with no backups.
+    // These four inputs are the whole finding.
+    for (const absent of [null, undefined, "", 0]) {
+      expect(retentionDaysOf(absent), String(absent)).toBe(DEFAULT_RETENTION_DAYS);
+      expect(retentionDaysOf(absent)).not.toBe(RETENTION_MIN_DAYS);
+    }
+  });
+
+  it("clamps a real but out-of-range value, and rounds", () => {
+    expect(retentionDaysOf(5)).toBe(RETENTION_MIN_DAYS);
+    expect(retentionDaysOf(99999)).toBe(3650);
+    expect(retentionDaysOf(90.4)).toBe(90);
+    expect(retentionDaysOf(-3)).toBe(DEFAULT_RETENTION_DAYS);
+  });
 
   it("falls back to the shipped year for anything unusable", () => {
     // The important direction. A node that came back holding 0, "", null or
