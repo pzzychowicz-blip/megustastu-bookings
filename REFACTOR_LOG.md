@@ -25386,3 +25386,32 @@ with the name seeded; and after the gate, 66 of 97 rows lead to a booking and
 none offer a customer this DEV database cannot show.
 
 Gate: `131.49 kB` gz · **1485 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 125 (session 11) — the living docs
+
+`CLAUDE.md`, `src/components/CLAUDE.md`, `src/hooks/CLAUDE.md`, brought up to
+what session 11 actually shipped. Counts re-MEASURED rather than extended by
+arithmetic, which is what this file's own note warns about: **1485 tests**
+(was 1452) and **`test:rules` 293** (was 286).
+
+**One correction matters more than the rest.** The root file described
+`/activity` as **create-only**, with "no delete except an admin's prune of
+anything past 365 days" — and Commit 122 removed that floor. The sentence is
+rewritten rather than quietly patched, because the CAS exemption rests on it:
+what makes the exemption sound is that nothing can be REWRITTEN, ever, by
+anyone — not that nothing can be deleted. Deleting is admin-only, per-entry (the
+node itself carries no `.write`, so it cannot be wiped in one call), and
+tamper-evident for one pass rather than impossible. Leaving the old wording
+would have left the file asserting a guarantee the database had stopped making,
+which is the exact failure mode it warns about whenever one fact lives in two
+places.
+
+New gotchas row: **a container of controls whose contained control is drawn by
+the BROWSER**. The hover-lift rule was already written down; what nothing could
+see is that an `<input type="search">` is a container that looks like a leaf in
+source, because the button inside it exists only at paint. It carries the
+layout twin too — an armed confirm whose warning renders above its button — so
+the row is about the class rather than about the two instances.
+
+Gate: `131.49 kB` gz · **1485 tests** · 0 lint errors (88 warnings) · style OK ·
+`test:rules` **293**.
