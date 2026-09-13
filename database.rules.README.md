@@ -184,7 +184,10 @@ gives.
 
 ### What the suite asserts
 
-257 tests as of 2026-09-11, v18.0.0 (measured — this line read 127 from v17.16.11 until then), run on every PR by the `rules` job in
+286 tests as of 2026-09-13, v18.0.0 session 10 (measured — this line read 127
+from v17.16.11, then 257, which was already stale against this file's OWN
+"261 → 286 tests." three sections down on the day it was written), run on every
+PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
 the rig itself is pointed at a loopback emulator and a `demo-` project — and,
 since v17.16.7, that the root carries **no** `.write` key, which is asserted as

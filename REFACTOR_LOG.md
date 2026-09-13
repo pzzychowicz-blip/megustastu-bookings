@@ -24889,3 +24889,42 @@ same minute it tested.
 
 Gate: `129.62 kB` gz · **1448 tests** · 0 lint errors (88 warnings) · style OK.
 
+### Commit 113 (session 10, /code-review) — the two numbers this version moved, and three gotchas
+
+**Two test counts were stale in files this version had already edited**, which
+is the drift `CLAUDE.md`'s own line-count note warns about, one file over:
+
+| | said | measured |
+|---|---|---|
+| `CLAUDE.md` — the Vitest suite | 39 files, **1401** tests | 39 files, **1448** |
+| `database.rules.README.md` — the emulator suite | **257** tests | **286** |
+
+The second was stale **against the same file**: `database.rules.README.md` §
+*"the `/activity` node"* already read "261 → 286 tests." three sections below the
+headline that said 257, on the day both were written. A number beside a derived
+list, again.
+
+**Three gotchas**, two of them clauses on rows that already state the rule and
+one genuinely new:
+
+- *A booking's stored `date` becoming `viewDate`* gains the LOUD half. v17.16.11
+  established the quiet one (an unreadable date in an event handler is a silent
+  no-op); an unreadable date reaching an EFFECT throws, and the boundary answers
+  by unmounting the app. And `isReadableDate` is not sufficient for
+  `+ "T00:00:00"` arithmetic — it is defined as "can the app STEP this", so
+  three shapes pass it and produce NaN anyway. `dayRangeMs` is the helper, and
+  it returns **null** rather than a window holding NaN.
+- *An effect that dispatches a NEW array on every run* gains a clause: the rule
+  is about a PREDICATE that does not match the thing it guards, wherever it
+  lives, and this diff had two more of them that were not effects — the pinned
+  clash gate and the last-start refusal. **When a guard names a number in its
+  own message, test that number.**
+- A NEW row: *a write dispatched in the same handler as the code that has to SEE
+  it*. The mirror makes the next WRITE correct and every synchronous READ stale,
+  no closure refreshes, and the give-away is a comment that explains why the
+  write is safe and says nothing about the reads.
+
+Gate: `129.62 kB` gz · 1448 tests · 0 lint errors (88 warnings) · style OK ·
+`test:rules` **286 tests** (re-run here because the count was being written
+down, not because the rules moved — nothing in session 10 touched them).
+
