@@ -27,6 +27,7 @@ import {
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
+  optimizerActiveFor,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
@@ -2289,6 +2290,95 @@ describe("trialFits displacement check (C5)", () => {
     twoTables();
     const day = [mk({ id: "x", time: "13:00", duration: 90, size: 2, tables: ["A"] })];
     expect(trialFits(day, D, "13:00", 4, "auto", 90, [], "x", null, false)).toEqual(["A", "B"]);
+  });
+});
+
+// ── v18.0.0 session 10 — the ROADMAP entry, replayed ───────────────────────
+// "The form's table preview cannot see the optimiser's own pass."
+//
+// `keepsWindowTables` (doSaveEdit) and `unpinMoves` (BookingFormModal) both ask
+// `tablesFreeFor`, and that question decides the outcome ONLY on the
+// optimiser-OFF path. Everywhere else `bookingsAfterAction` runs `applyOpt`
+// over the whole date and overrides it — including on every future date, since
+// `optimizerActiveFor` is unconditionally true off today. These pin both
+// halves: that the cheap predictor is wrong here, and that `trialFits` — which
+// the form's `availScan` already runs post-paint — gives the save's own answer.
+describe("what a save really does with a revived booking's tables", () => {
+  // Session 9's measurement, on the seeded MGT layout: a cancelled 19:00
+  // booking on 5A, revived with nothing else touched, on a date that is not
+  // today. `cancelled()` is the day the FORM sees; the save sees it confirmed.
+  const cancelled = () => mk({ id: "x", status: "cancelled", tables: ["5A"], time: "19:00", size: 2 });
+  const revive = (day) => day.map((b) => (b.id === "x" ? Object.assign({}, b, { status: "confirmed" }) : b));
+  const s = toMins("19:00");
+
+  it("optimizerActiveFor is what decides which predictor applies", () => {
+    expect(optimizerActiveFor(D, false)).toBe(true);          // not today → on regardless of the toggle
+    expect(optimizerActiveFor(D, true)).toBe(true);
+    expect(optimizerActiveFor(today, false)).toBe(false);     // today, after the cutoff → the OFF path
+    expect(optimizerActiveFor(today, true)).toBe(true);
+  });
+
+  it("the old table IS still free — the cheap predictor is not wrong about its own question", () => {
+    expect(tablesFreeFor([cancelled()], D, "x", ["5A"], s, s + 90, [])).toBe(true);
+  });
+
+  it("…and the save moves the booking off it anyway", () => {
+    const saved = bookingsAfterAction(revive([cancelled()]), D, [], "x", false, true);
+    expect(saved.find((b) => b.id === "x").tables).toEqual(["1A"]);
+  });
+
+  it("trialFits — what the form already computes — gives exactly that", () => {
+    expect(trialFits([cancelled()], D, "19:00", 2, "auto", 90, [], "x", [], false)).toEqual(["1A"]);
+  });
+
+  it("the two still agree on a day with other bookings on it", () => {
+    const day = [
+      cancelled(),
+      mk({ id: "y", time: "19:00", size: 4, tables: ["7"] }),
+      mk({ id: "z", time: "19:00", size: 2, tables: ["1A"] }),
+    ];
+    const preview = trialFits(day, D, "19:00", 2, "auto", 90, [], "x", [], false);
+    const saved = bookingsAfterAction(revive(day), D, [], "x", false, true);
+    expect(preview).toEqual(saved.find((b) => b.id === "x").tables);
+    // The same pass moves somebody the form never mentions — that is the
+    // "Tables re-optimised." toast's job, and stays out of this row.
+    expect(saved.find((b) => b.id === "z").tables).not.toEqual(["1A"]);
+  });
+
+  it("and agree that a booking the optimiser is content with does not move", () => {
+    // Already sitting where the greedy would put it → no move to announce, so
+    // the preview must stay silent rather than gain an "(auto) · was:" pair.
+    const day = [mk({ id: "x", status: "cancelled", tables: ["1A"], time: "19:00", size: 2 })];
+    const preview = trialFits(day, D, "19:00", 2, "auto", 90, [], "x", [], false);
+    expect(preview).toEqual(["1A"]);
+    expect(bookingsAfterAction(revive(day), D, [], "x", false, true).find((b) => b.id === "x").tables).toEqual(["1A"]);
+  });
+});
+
+// The pure facts above are only worth having if the FORM reads them, and the
+// form is a component this suite does not mount — so the wiring is pinned the
+// way `voucherCode`'s three call sites are, by reading the source.
+describe("the preview row is wired to the optimiser's answer (v18.0.0 session 10)", () => {
+  const FORM = stripComments(
+    readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("optOwns is gated on optimizerActiveFor and on isLocked", () => {
+    expect(/const optOwns=[\s\S]{0,200}?isLocked\(/.test(FORM)).toBe(true);
+    expect(/const optOwns=[\s\S]{0,200}?optimizerActiveFor\(form\.date,autoOptimizer\)/.test(FORM)).toBe(true);
+  });
+
+  it("optMoves compares the scan's answer against the tables on screen", () => {
+    expect(/const optMoves=optOwns&&!!previewTbls&&!!curTbl&&tblKey\(previewTbls\)!==tblKey\(curTbl\)/.test(FORM)).toBe(true);
+  });
+
+  it("`changed` and `hardChanged` both carry it", () => {
+    const lines = FORM.split("\n").filter((l) => /^\s*const (hard)?[cC]hanged=cur&&/.test(l));
+    expect(lines.length).toBe(2);
+    expect(lines.every((l) => /\|\|optMoves\)/.test(l))).toBe(true);
+  });
+
+  it("the \"was:\" line is suppressed when the answer is the same tables", () => {
+    expect(/if\(\(changed\|\|cleared\)[^\n]*?!\(previewTbls&&tblKey\(previewTbls\)===tblKey\(curTbl\)\)\)/.test(FORM)).toBe(true);
   });
 });
 

@@ -42,6 +42,10 @@ import {
   trialFits, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
   optimizerActiveFor, seatingClosed,
+  // v18.0.0 session 10: the predicate `applyOpt` itself branches on, so the
+  // preview asks "will the optimiser choose these tables?" with the optimiser's
+  // own helper rather than a second spelling of it.
+  isLocked,
   // v18.0.0 session 8 (item 3): what the form previews must agree with.
   tablesPinned,
   // v18.0.0 session 9: …and the other half of agreeing with it — `doSaveEdit`
@@ -465,11 +469,20 @@ export function BookingFormModal({
       onClick={function(){onOpenPrefPicker();}}><StarIcon size={IC.inline} />{hasPref?prefs.join("+"):"Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
-      const curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
-      const formPrefStr=Array.isArray(form.preferredTables)?form.preferredTables.slice().sort().join(","):"";
-      const prefTblChanged=curPrefStr!==formPrefStr;
+      // Two table lists are the same arrangement when they hold the same ids:
+      // the optimiser builds a combo in its own order, so a compare has to sort.
+      // This was written out twice for the preferred-tables compare already.
+      function tblKey(t){return (Array.isArray(t)?t.slice().sort():[]).join(",");}
+      const prefTblChanged=tblKey(cur&&cur.preferredTables)!==tblKey(form.preferredTables);
       const cleared=!!form._clearManual;
       const curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
+      const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
+      // v18.0.0 session 8 (item 3): a draft saved as seated or finished carries
+      // its tables through, so the preview shows THOSE — not the optimiser's
+      // proposal for a booking it is never going to be asked about.
+      // v18.0.0 session 10: both moved up from below `changed`, which now has to
+      // know whether the optimiser owns this booking before it can say so.
+      const pinnedTbl=cur&&tablesPinned(form.status,!!mt,cleared)?curTbl:null;
       // v18.0.0 session 9: a STATUS that walks the booking out of a pinned state
       // — revived from cancelled/completed, or un-seated — re-places it at Save
       // just as a time or size change does, and the preview did not know.
@@ -500,20 +513,53 @@ export function BookingFormModal({
       const winDur=form.customDur||(cur?(cur.duration||90):90);
       const unpinMoves=unpinning&&!!curTbl
         &&!tablesFreeFor(bookings,form.date,editId,curTbl,winStart,winStart+winDur,tableBlocks);
-      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged||unpinMoves);
-      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged||unpinMoves);
-      const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
-      // v18.0.0 session 8 (item 3): a draft saved as seated or finished carries
-      // its tables through, so the preview shows THOSE — not the optimiser's
-      // proposal for a booking it is never going to be asked about.
-      const pinnedTbl=cur&&tablesPinned(form.status,!!mt,cleared)?curTbl:null;
+      // ── v18.0.0 session 10: the optimiser's own pass ─────────────────────
+      // `unpinMoves` asks whether the SAVE will re-choose the tables — and on
+      // an optimising day the save does not get to decide. `buildNext` hands the
+      // day to `bookingsAfterAction`, which runs `applyOpt` over the whole date
+      // regardless of `forceReassign`, so `keepsWindowTables` (the half the line
+      // above was taught to agree with) has teeth ONLY on the optimiser-OFF
+      // path — today, after the cutoff. On every other date the greedy re-run
+      // overrides both of them, and `optimizerActiveFor` is true for all of it.
+      //
+      // Measured session 9, replayed as a test: a cancelled 19:00 booking on 5A,
+      // revived with nothing else touched. `tablesFreeFor` says 5A is still free
+      // so the form promised 5A, and `applyOpt` writes 1A — a revived booking
+      // re-enters the day's greedy, and the greedy does not know where it used
+      // to sit. Both halves were right about their own question.
+      //
+      // The predictor for the real one is not a new one and costs nothing:
+      // `availScan` ALREADY runs `trialFits` → `applyOpt` on exactly these deps,
+      // post-paint, and `previewTbls` IS that pass's answer for this booking.
+      // The ROADMAP entry read the v16.3.0 perf rule as forbidding the fix — the
+      // pass was already running; what was missing was reading it.
+      //
+      // Two properties keep it quiet, and both are load-bearing. It is asked
+      // only where the optimiser will actually choose — `isLocked`, against the
+      // flags the save will write, is the predicate `applyOpt` itself branches
+      // on — and only where the answer DIFFERS from the tables on screen. So an
+      // ordinary edit of a booking the optimiser is content with reads exactly
+      // as it does today, and "(auto) · was:" appears when, and only when, Save
+      // is going to move it.
+      const optOwns=!!cur&&!mt&&!pinnedTbl
+        &&!isLocked({_locked:cleared?false:cur._locked,status:form.status})
+        &&optimizerActiveFor(form.date,autoOptimizer);
+      const optMoves=optOwns&&!!previewTbls&&!!curTbl&&tblKey(previewTbls)!==tblKey(curTbl);
+      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged||unpinMoves||optMoves);
+      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged||unpinMoves||optMoves);
       const showTbl=mt||pinnedTbl||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
         <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
-      if((changed||cleared)&&!mt&&!pinnedTbl&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
+      // v18.0.0 session 10: "was:" only when the tables really are about to
+      // change. With the optimiser's answer now driving this row, an edit it is
+      // content with would otherwise read "5A (auto) · was: 5A" — a move
+      // announced over a booking that is staying exactly where it is. The
+      // pre-existing shape had the same wart on any changed edit the optimiser
+      // answered with the same tables; one test, one fix.
+      if((changed||cleared)&&!mt&&!pinnedTbl&&curTbl&&!(previewTbls&&tblKey(previewTbls)===tblKey(curTbl))) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
       if(mt) leftEls.push(<button
         key="clrmt"
         className="mgt-hover-scale mgt-press"

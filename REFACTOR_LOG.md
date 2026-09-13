@@ -24627,3 +24627,77 @@ bad blames the amount, so a reorder is a deliberate act) and three in
 `tests/a11y.test.js`, proved by sabotage.
 
 Gate: `129.43 kB` gz · 1420 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 108 (session 10) — the preview reads the optimiser's own pass
+
+The `ROADMAP.md` entry, closed: *"The form's table preview cannot see the
+optimiser's own pass."*
+
+**The entry's premise was wrong, and that is the finding.** It said closing this
+"means running a full optimiser pass in the preview, which is exactly what the
+v16.3.0 perf work forbids". The pass was **already running**: `availScan`
+(`BookingFormModal.jsx`) has called `trialFits` → `applyOpt` since v16.3.0,
+post-paint through `useDeferredCompute`, on deps that already include
+`form.status`. `previewTbls` IS that pass's answer for this booking. Nothing had
+to be added — what was missing was reading it.
+
+**What the preview was reading instead.** `unpinMoves` (Commit 105) asks
+`tablesFreeFor`: are the tables this booking holds still free for its window?
+That is the question `doSaveEdit`'s `keepsWindowTables` asks, so the two agreed —
+and **both are overridden on every optimising day.** `buildNext` hands the day to
+`bookingsAfterAction`, which runs `applyOpt` over the whole date *regardless of*
+`forceReassign`; `keepsWindowTables` therefore has teeth only on the
+optimiser-OFF path (today, after the cutoff), and `optimizerActiveFor` is
+unconditionally true for every other date.
+
+Measured in session 9 and now replayed as a test on the seeded MGT layout: a
+cancelled 19:00 booking on 5A, revived with nothing else touched.
+`tablesFreeFor` says 5A is still free — true — so the form promised 5A, and
+`applyOpt` wrote 1A. A revived booking re-enters the day's greedy, and the greedy
+does not know where it used to sit. Both halves were right about their own
+question; neither was asked the one that decides.
+
+**The fix.** `optOwns` — will the optimiser choose this booking's tables? — is
+`optimizerActiveFor(form.date, autoOptimizer)` and `!isLocked(…)` against the
+flags the save will write. `isLocked` is the predicate `applyOpt` itself branches
+on, not a second spelling of it. `optMoves` is `optOwns` plus *the answer differs
+from the tables on screen*, and joins `changed`/`hardChanged` beside
+`unpinMoves`, which stays — it is still exactly right on the OFF path, where
+keep-if-free really does decide.
+
+**Two properties keep it quiet, and both were verified live rather than argued.**
+It fires only where the optimiser will actually choose, and only where the answer
+differs — so an ordinary edit reads as it always has. The same commit suppresses
+the `"was:"` line when the scan's answer equals the current tables: with the
+optimiser's answer now driving the row, an edit it is content with would have
+read `"5A (auto) · was: 5A"`, a move announced over a booking staying exactly
+where it is. That wart pre-dated this commit on any changed edit the optimiser
+answered with the same tables; one test covers both.
+
+**Live, in the DEV app on 27.09.2026** — two bookings at 19:00 (1A, 1B), the 1B
+one cancelled, the 1A one deleted, so the cancelled booking holds a table that is
+free and is not the greedy's choice:
+
+| step | before this commit | now |
+|---|---|---|
+| cancelled booking, form open | `Tables 1B` | `Tables 1B` (pinned — unchanged) |
+| `>Confirmed` in the Status row | `Tables 1B` | **`Tables 1A (auto) was: 1B`** |
+| Save | writes **1A** | writes **1A** |
+| reopen it, touch nothing | `Tables 1A` | `Tables 1A` — no `(auto)`, no `was:` |
+| reopen it, 90 → 105 min | `1A (auto) was: 1A` | `1A (auto)` |
+
+Ten pins in `tests/booking-logic.test.js`: six on the pure facts (that
+`tablesFreeFor` is right about its own question, that the save moves the booking
+anyway, that `trialFits` gives the save's answer both alone and on a populated
+day, that a booking the optimiser is content with does not move, and
+`optimizerActiveFor`'s four corners — it had no test at all), and four source
+pins on the wiring, since the form is a component this suite does not mount. All
+ten proved by sabotage: dropping `optMoves` from `changed`, dropping the `"was:"`
+guard, dropping either half of `optOwns`, and making `bookingsAfterAction` honour
+`forceReassign` on the ON path each turn the suite red, and only the intended
+tests.
+
+`tblKey` replaces the third hand-written `.slice().sort().join(",")` in the file
+and now backs the preferred-tables compare too.
+
+Gate: `129.48 kB` gz · 1430 tests · 0 lint errors (88 warnings) · style OK.
