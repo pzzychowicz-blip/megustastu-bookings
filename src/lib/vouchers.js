@@ -408,9 +408,15 @@ export function voucherIndex(vouchers) {
 // difference. The duplicate check here is the fast, specific message; the
 // create-only rule is the guarantee, and a second device can still win the race
 // between them.
+// v18.0.0 session 9: each refusal also names the FIELD it is about, so the panel
+// can mark that input `aria-invalid` and point its `aria-describedby` at the
+// message. Derived here rather than re-derived by matching the message text at
+// the call site — the text is copy, copy gets edited, and a matcher that
+// silently stops matching leaves a field reporting VALID underneath a visible
+// error, which is the exact defect `Fld`'s own comment warns about.
 export function validateIssue({ code, value, taken }) {
   const amount = clampMoney(value);
-  if (amount <= 0) return { ok: false, error: "Enter an amount above zero." };
+  if (amount <= 0) return { ok: false, field: "value", error: "Enter an amount above zero." };
   const set = taken instanceof Set ? taken : codeSet(taken);
 
   const typed = normalizeCode(code);
@@ -418,10 +424,11 @@ export function validateIssue({ code, value, taken }) {
     if (!isValidCode(typed)) {
       return {
         ok: false,
+        field: "code",
         error: "A voucher number needs " + MANUAL_CODE_MIN + "–" + MANUAL_CODE_MAX + " letters or digits.",
       };
     }
-    if (set.has(typed)) return { ok: false, error: "That number is already in use." };
+    if (set.has(typed)) return { ok: false, field: "code", error: "That number is already in use." };
     return { ok: true, code: typed, origin: "manual", value: amount };
   }
 

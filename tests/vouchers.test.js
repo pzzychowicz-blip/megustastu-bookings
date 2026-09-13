@@ -404,6 +404,38 @@ describe("sanitizeVouchers / voucherIndex", () => {
 // that decides something the restaurant acts on does not live in a hook. This
 // is money, so it is tested rather than trusted.
 
+describe("validateIssue names the field it is refusing — v18.0.0 session 9", () => {
+  // The panel marks that input `aria-invalid` and points its `aria-describedby`
+  // at the message. It is carried here rather than re-derived by matching the
+  // message TEXT at the call site: the text is copy, copy gets edited, and a
+  // matcher that quietly stops matching leaves a field reporting VALID beneath a
+  // visible error — the defect `Fld`'s own comment exists to warn about.
+  it("a non-positive amount is the amount's fault", () => {
+    expect(validateIssue({ code: "", value: 0, taken: [] }).field).toBe("value");
+    expect(validateIssue({ code: "", value: -5, taken: [] }).field).toBe("value");
+  });
+
+  it("an unusable number is the number's fault", () => {
+    expect(validateIssue({ code: "AB", value: 50, taken: [] }).field).toBe("code");
+  });
+
+  it("a number already in use is the number's fault", () => {
+    expect(validateIssue({ code: "LOT1001", value: 50, taken: ["lot-1001"] }).field).toBe("code");
+  });
+
+  it("the amount is checked BEFORE the number, so a doubly-bad form blames the amount", () => {
+    // Both are wrong; only one field can hold the description, and the order the
+    // validator already had decides it. Pinned so a reorder is a deliberate act.
+    const r = validateIssue({ code: "AB", value: 0, taken: [] });
+    expect(r.ok).toBe(false);
+    expect(r.field).toBe("value");
+  });
+
+  it("a success carries no field", () => {
+    expect(validateIssue({ code: "", value: 50, taken: [] }).field).toBeUndefined();
+  });
+});
+
 describe("validateIssue", () => {
   it("blank code generates; a typed one is used as given", () => {
     const gen = validateIssue({ code: "", value: 50, taken: [] });

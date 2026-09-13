@@ -1419,6 +1419,29 @@ describe("a refused control says why it is refused — v18.0.0 session 9 (A4)", 
   });
 });
 
+describe("the voucher panel's refusal is announced, not just shown — v18.0.0 session 9", () => {
+  // Measured before the fix: "Enter an amount above zero" rendered as a bare
+  // <span> — no role, no aria-live, no live-region ancestor — inside a `Reveal`
+  // that mounts only when there is something to say, and neither input carried
+  // aria-invalid or aria-describedby. Visible-only feedback, on a primary button
+  // that reports disabled:false at full opacity so nothing predicts the refusal.
+  it("the alert wrapper is permanently mounted, with only its child conditional", () => {
+    // A live region announces a CHANGE to its content, so one that arrives
+    // already holding its message says nothing. The booking form's shape.
+    expect(/<div role="alert"><Reveal show=\{!!issueErr\}>/.test(Vouchers)).toBe(true);
+    expect(/\{issueErr \? <InlineAlert id=\{ISSUE_ERROR_ID\}/.test(Vouchers)).toBe(true);
+  });
+
+  it("both inputs take invalid + describedBy, each for its OWN failure", () => {
+    expect(/invalid=\{issueErrField === "value"\} describedBy=\{ISSUE_ERROR_ID\}/.test(Vouchers)).toBe(true);
+    expect(/invalid=\{issueErrField === "code"\} describedBy=\{ISSUE_ERROR_ID\}/.test(Vouchers)).toBe(true);
+  });
+
+  it("the field is taken from the validator, never matched out of the message", () => {
+    expect(/setIssueErrField\(\(r && r\.field\) \|\| ""\)/.test(Vouchers)).toBe(true);
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST

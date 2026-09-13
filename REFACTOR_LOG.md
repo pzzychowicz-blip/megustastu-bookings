@@ -24582,3 +24582,48 @@ Three pins in `tests/a11y.test.js`, proved by sabotage: changing the copy or
 replacing the merged describedby with a plain assignment each turns one red.
 
 Gate: `129.41 kB` gz · 1412 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 107 — the voucher panel's refusal is announced, not just shown
+
+`src/lib/vouchers.js` · `src/components/VouchersSettings.jsx` ·
+`tests/vouchers.test.js` · `tests/a11y.test.js`. Session 9's Job 1 finding 4 —
+new, found while driving the QA rig, and in code this branch added.
+
+**Measured.** Press "Issue voucher" with a blank amount and the refusal renders
+as a bare `<span>`: no `role`, no `aria-live`, **no live-region ancestor**, and
+neither input carrying `aria-invalid` or `aria-describedby`. Purely visual
+feedback — and the primary button reports `disabled:false` at full opacity with a
+pointer cursor, so nothing predicts the refusal either. Two separate faults, and
+the mount was the subtler: the alert lived inside a `Reveal` that mounts only
+when there is something to say, and **a live region that arrives already holding
+its message announces nothing**.
+
+The wrapper is now permanently mounted with only its CHILD conditional and
+`Reveal` inside it — the booking form's exact shape, for the booking form's
+reason, with the animation unchanged.
+
+**`validateIssue` now names the field it is refusing** (`field: "value"` /
+`"code"`), and the panel marks that input. Derived in the validator rather than
+re-derived by matching the message TEXT at the call site: the text is copy, copy
+gets edited, and a matcher that quietly stops matching leaves a field reporting
+VALID underneath a visible error — the defect `Fld`'s own comment exists to warn
+about. `Fld`'s `invalid` + `describedBy` channel then does the wiring, which is
+what it was built for.
+
+**Verified live, all three refusals.** Blank amount → the alert reads "Enter an
+amount above zero.", Amount carries `aria-invalid="true"` and
+`aria-describedby="mgt-voucher-issue-error"`, Number is untouched. Too-short
+number → "A voucher number needs 3–32 letters or digits." on the Number field
+only. Duplicate → "That number is already in use." on the Number field only. The
+alert region was confirmed **mounted and empty before any error**, which is the
+half that makes it speak.
+
+Worth recording: `@@` is NOT a refusal — `normalizeCode` strips it to nothing, so
+the form generates a number instead. The first attempt to test the code path used
+it and measured a success; the pinned cases use a too-short code and a duplicate.
+
+Five pins in `tests/vouchers.test.js` (including the precedence one: both fields
+bad blames the amount, so a reorder is a deliberate act) and three in
+`tests/a11y.test.js`, proved by sabotage.
+
+Gate: `129.43 kB` gz · 1420 tests · 0 lint errors (88 warnings) · style OK.

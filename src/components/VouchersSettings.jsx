@@ -323,6 +323,18 @@ export function VouchersTabContent({
   const [manualCode, setManualCode] = useState("");
   const [notes, setNotes] = useState("");
   const [issueErr, setIssueErr] = useState("");
+  // v18.0.0 session 9: WHICH field the refusal is about, taken from
+  // `validateIssue` rather than re-derived by matching its message text here.
+  const [issueErrField, setIssueErrField] = useState("");
+  // The refusal was a plain styled div with no role, inside a `Reveal` that
+  // mounts only when it has something to say — so it announced NOTHING (a live
+  // region must already be in the tree when its content changes), and neither
+  // input carried `aria-invalid` or `aria-describedby`. Measured live: the
+  // message was a bare <span>, no role, no aria-live, no live-region ancestor,
+  // and the Amount input reported neither attribute. Visible-only feedback on a
+  // primary action that reports `disabled:false` and full opacity, so nothing
+  // predicts the refusal either.
+  const ISSUE_ERROR_ID = "mgt-voucher-issue-error";
   const [issued, setIssued] = useState("");
 
   // Read ONCE per mount, not per render. Two reasons and both matter: a
@@ -365,6 +377,7 @@ export function VouchersTabContent({
 
   function doIssue() {
     setIssueErr("");
+    setIssueErrField("");
     setIssued("");
     const months = voucherDefaults ? voucherDefaults.expiryMonths : 12;
     const r = onIssue({
@@ -373,7 +386,7 @@ export function VouchersTabContent({
       notes: notes,
       expiresAt: expiryFrom(Date.now(), months),
     });
-    if (!r || !r.ok) { setIssueErr((r && r.error) || "Couldn't issue the voucher."); return; }
+    if (!r || !r.ok) { setIssueErr((r && r.error) || "Couldn't issue the voucher."); setIssueErrField((r && r.field) || ""); return; }
     setIssued(r.code);
     setAmount("");
     setManualCode("");
@@ -392,15 +405,15 @@ export function VouchersTabContent({
             every input a real `useId` association. */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 120px", minWidth: 0 }}>
-            <Fld label={"Amount (" + currency + ")"}>{function (fid) {
-              return <input id={fid} type="number" min={0} step={5} inputMode="decimal" value={amount}
+            <Fld label={"Amount (" + currency + ")"} invalid={issueErrField === "value"} describedBy={ISSUE_ERROR_ID}>{function (fid, attrs) {
+              return <input id={fid} {...attrs} type="number" min={0} step={5} inputMode="decimal" value={amount}
                 onChange={function (e) { setAmount(e.target.value); }}
                 placeholder="50" className="mgt-hover-scale" style={mkInp()} />;
             }}</Fld>
           </div>
           <div style={{ flex: "2 1 200px", minWidth: 0 }}>
-            <Fld label="Number (leave blank to generate)">{function (fid) {
-              return <input id={fid} type="text" value={manualCode}
+            <Fld label="Number (leave blank to generate)" invalid={issueErrField === "code"} describedBy={ISSUE_ERROR_ID}>{function (fid, attrs) {
+              return <input id={fid} {...attrs} type="text" value={manualCode}
                 onChange={function (e) { setManualCode(e.target.value); }}
                 placeholder="from a printed book" autoCapitalize="characters" className="mgt-hover-scale" style={mkInp()} />;
             }}</Fld>
@@ -421,9 +434,14 @@ export function VouchersTabContent({
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: 40, background: "var(--accent)" })}>Issue voucher</button>
 
-        <Reveal show={!!issueErr}>
-          <InlineAlert style={{ marginTop: 8 }}>{issueErr}</InlineAlert>
-        </Reveal>
+        {/* The `role="alert"` wrapper is permanently mounted and only its CHILD
+            is conditional — the booking form's shape, for the booking form's
+            reason: an alert is announced when its CONTENT changes, so a region
+            that arrives already holding its message says nothing. `Reveal`
+            stays INSIDE it so the animation is unchanged. */}
+        <div role="alert"><Reveal show={!!issueErr}>
+          {issueErr ? <InlineAlert id={ISSUE_ERROR_ID} style={{ marginTop: 8 }}>{issueErr}</InlineAlert> : null}
+        </Reveal></div>
         {/* v18.0.0 session 8 (item 2a): the number you have just issued is the
             one most likely to be copied — it is about to be typed into a card
             or a message. CopyBtn sits BESIDE the announcement rather than
