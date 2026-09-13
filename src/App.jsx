@@ -2399,7 +2399,13 @@ function BookingApp({uid}){
   // v17.10.0: the guest-identity back-stamp is `stampGuestSeed` in
   // lib/customers.js — pure, tested, and called inside buildNext/applyBase so
   // the source booking and the new one ride ONE saveBookings call.
-  function doSaveEdit(f,v){
+  // v18.0.0 session 10 (/code-review): `bookings` and `liveBookings` arrive as
+  // PARAMETERS, shadowing the two closure reads of the same names. Every
+  // caller passes `withClearedSeats(...)` of them, which is identity-equal to
+  // the closure value on every save except one: the seat resumed from
+  // "Complete them & seat", where the completion has been dispatched but this
+  // render has not happened yet. See `withClearedSeats` for what that cost.
+  function doSaveEdit(f,v,bookings,liveBookings){
     const size=v.size,cleanPhone=v.cleanPhone,mt=v.mt;
         const orig=bookings.find(function(b){return b.id===editId;});
         const origPt=(orig&&Array.isArray(orig.preferredTables))?orig.preferredTables.slice().sort().join(","):"";
@@ -2856,7 +2862,13 @@ function BookingApp({uid}){
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
-      if(mt.length&&!swapAffected){let ex=liveBookings.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
+      // v18.0.0 session 10 (/code-review): the two views this save reasons
+      // over, with a just-cleared party already completed in them. Identity-
+      // equal to the state on every save that did not come through the
+      // seat-clash prompt — see `withClearedSeats`.
+      const saveBks=withClearedSeats(bookings);
+      const saveLive=withClearedSeats(liveBookings);
+      if(mt.length&&!swapAffected){let ex=saveLive.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
       // v18.0.0: the second hook point. AFTER validation and immediately before
       // the dispatch, so a form that is about to be refused for a missing name
       // never asks a money question first. Both entries to `doSave` pass
@@ -2879,13 +2891,13 @@ function BookingApp({uid}){
       // the dispatch, so a save about to be refused for a missing name never
       // asks about somebody else's table first.
       if(editId&&!seatAskedRef.current&&f.status==="seated"){
-        const seatOrig=bookings.find(function(x){return x.id===editId;});
+        const seatOrig=saveBks.find(function(x){return x.id===editId;});
         if(seatOrig&&seatOrig.status!=="seated"){
-          const parties=seatClashParties(mt.length?mt:(seatOrig.tables||[]),f.date,editId,bookings);
+          const parties=seatClashParties(mt.length?mt:(seatOrig.tables||[]),f.date,editId,saveBks);
           if(parties.length){setSeatClash({id:editId,status:"seated",from:"form",others:seatClashSnap(parties)});return;}
         }
       }
-      if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
+      if(editId) doSaveEdit(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt},saveBks,saveLive);
       else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
     }catch(err){setError("Error: "+err.message);}
   }
@@ -3439,7 +3451,37 @@ function BookingApp({uid}){
   }
   function withSeatAsked(fn){
     seatAskedRef.current=true;
-    try{ return fn(); } finally { seatAskedRef.current=false; }
+    try{ return fn(); } finally { seatAskedRef.current=false; clearedSeatsRef.current=null; }
+  }
+  // ── v18.0.0 session 10 (/code-review): the parties just cleared ──────────
+  // `seatAfterClearing` dispatches the completion and re-enters the seat in
+  // the SAME handler, so React has not re-rendered: `saveBookings` computes
+  // from its own mirror and the WRITE is therefore correct, while every
+  // SYNCHRONOUS read below it — `bookings`, `liveBookings` — is still this
+  // render's snapshot, in which the cleared party is still seated on the
+  // table being taken.
+  //
+  // Measured live in DEV with a control: seating a 21:00 booking from the
+  // form after "Complete them & seat" stored 21:00, while an identical save
+  // on a free table one minute later stored 10:23 — `applySeatedShift`
+  // declines when a live booking shares the table, so the party's arrival
+  // time was simply not recorded on the one path that exists for "the table
+  // has just been freed". The same stale list feeds the manual-table guard
+  // and the pinned locked-clash refusal, which would refuse the seat by
+  // naming a party the user has just completed.
+  //
+  // So the completion is applied to the READS as well, from one place. It is
+  // the same `completedSeatedPatch` the write uses, so the two cannot
+  // disagree, and it is identity-preserving when there is nothing to apply —
+  // which is every save that did not come through that prompt.
+  const clearedSeatsRef=useRef(null);
+  function withClearedSeats(list){
+    const c=clearedSeatsRef.current;
+    if(!c||!c.ids.length) return list;
+    return list.map(function(b){
+      if(c.ids.indexOf(b.id)<0||b.status!=="seated") return b;
+      return Object.assign({},b,completedSeatedPatch(b,c.today,c.nowM));
+    });
   }
   // `doSave` returns nothing, so "did the save land" is read off `saveGuardRef`
   // — the v18.0.0 /code-review finding, and the same reading `settleVoucher`
@@ -3484,6 +3526,12 @@ function BookingApp({uid}){
           {history:(b.history||[]).concat([histEntry("status → completed (table cleared to seat another party)",user)])});
       });
     });
+    // v18.0.0 session 10 (/code-review): and the same completion, applied to
+    // the SYNCHRONOUS reads the seat is about to make. The write above is
+    // correct without this — `saveBookings` computes from its own mirror —
+    // but `doSave` reads this render's state, and React has not re-rendered
+    // inside this handler. See `withClearedSeats` for what was measured.
+    clearedSeatsRef.current={ids:ids,today:today,nowM:nowM};
     resumeSeat(ask);
   }
   function updateStatus(id,status){if(refused("bookingStatus"))return;

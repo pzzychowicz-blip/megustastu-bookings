@@ -24802,3 +24802,52 @@ the source pin red.
 
 Gate: `129.53 kB` gz · **1439 tests** · 0 lint errors (88 warnings) · style OK.
 
+### Commit 111 (session 10, /code-review) — "Complete them & seat" seated against the table it had just cleared
+
+**The finding.** `seatAfterClearing` dispatches the completion of the parties
+leaving and then re-enters the seat, in the same event handler. Its own comment
+is right about the WRITE — `saveBookings` computes from the `bookingsRef` mirror
+it updates as it dispatches, so the second write sees the first — and that is
+the only half it covers. Every **synchronous read** in `doSave` / `doSaveEdit`
+is this render's `bookings` and `liveBookings`, and React has not re-rendered
+inside the handler, so the cleared party is still SEATED on the table being
+taken.
+
+Measured live in DEV, with a control, one minute apart:
+
+| save | result |
+|---|---|
+| seat a 21:00 booking via "Complete them & seat" | stored **21:00**–22:30 |
+| seat an identical 21:00 booking on a FREE table | stored **10:23**–22:30 |
+
+`applySeatedShift` declines while a live booking shares the table, so on the one
+path that exists for "the table has just been freed" the party's arrival time
+was not recorded at all. The same stale list feeds the manual-table availability
+guard and the pinned locked-clash refusal, which would refuse the seat by naming
+a party the user has just completed.
+
+**The fix applies the completion to the READS as well, from one place.**
+`clearedSeatsRef` carries `{ids, today, nowM}` from `seatAfterClearing` to the
+save it resumes, and `withClearedSeats(list)` maps those ids through the same
+`completedSeatedPatch` the write uses — so the two cannot disagree about how
+long the cleared visit lasted. It is identity-preserving when there is nothing
+to apply, which is every save that did not come through that prompt.
+`withSeatAsked` clears the ref in its `finally`, beside the flag it already
+resets there, so no later save can inherit it.
+
+`doSaveEdit` takes `bookings` and `liveBookings` as **parameters**, shadowing the
+two closure reads of the same names — which is how ten reads inside it move
+together without ten edits. `doSave` computes `saveBks` / `saveLive` once and
+uses them for its own manual-table guard and its seat-clash gate as well.
+
+Verified live after the fix: the same flow seats at **10:40**–22:30.
+
+Six pins in `tests/booking-logic.test.js`: two on the pure mechanism
+(`applySeatedShift` declines against the seated holder and lands against the
+`completedSeatedPatch`-ed one) and four source pins on the wiring — the ref set
+before the resume, cleared in the `finally`, the two parameters, and the two
+guards reading the patched pair. Passing the unpatched closure values instead
+turns one red.
+
+Gate: `129.62 kB` gz · **1445 tests** · 0 lint errors (88 warnings) · style OK.
+

@@ -2696,3 +2696,63 @@ describe("doSaveEdit calls replacePinnedClashes on `recheck` (v18.0.0 session 10
     expect(/const recheck=needsR\|\|planChanged\|\|revived\|\|!!unseat;/.test(APP)).toBe(true);
   });
 });
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// "Complete them & seat" dispatches the completion and re-enters the seat in the
+// SAME handler. `saveBookings` computes from its own mirror, so the WRITE is
+// right; every synchronous read in `doSave` is this render's state, in which the
+// cleared party is still seated on the table being taken.
+//
+// Measured live in DEV with a control: the seat stored its BOOKED 21:00, while
+// an identical save on a free table a minute later stored 10:23. This is the
+// mechanism underneath that — `applySeatedShift` declines while a live booking
+// shares the table, and stops declining once the party is completed.
+describe("a cleared party must be COMPLETED in what the seat reads (v18.0.0 session 10)", () => {
+  const T = todayStr();
+  const at = 20 * 60 + 30;                       // 20:30
+  const holder = () => mk({ id: "H", date: T, time: "19:00", duration: 180, status: "seated", tables: ["4"] });
+  const arriving = () => mk({ id: "N", date: T, time: "21:00", duration: 90, status: "confirmed", tables: ["4"] });
+
+  it("the shift is DECLINED while the cleared party still reads as seated", () => {
+    expect(applySeatedShift(arriving(), at, [holder(), arriving()], T),
+      "this is the bug: the arrival time is simply not recorded").toBe(null);
+  });
+
+  it("and lands once completedSeatedPatch has been applied to that same list", () => {
+    const done = Object.assign({}, holder(), completedSeatedPatch(holder(), T, at));
+    expect(done.status).toBe("completed");
+    const shift = applySeatedShift(arriving(), at, [done, arriving()], T);
+    expect(shift, "the seat now records when the party actually sat down").not.toBe(null);
+    expect(shift.newTime).toBe("20:30");
+  });
+});
+
+// The wiring, by source, for the reason the gate above is pinned that way.
+describe("doSave hands the seat a list with the cleared party completed (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("seatAfterClearing records the cleared ids BEFORE it resumes the seat", () => {
+    const i = APP.indexOf("clearedSeatsRef.current={ids:ids");
+    const j = APP.indexOf("resumeSeat(ask);", i);
+    expect(i, "the ref is set").toBeGreaterThan(-1);
+    expect(j, "and the resume comes after it").toBeGreaterThan(i);
+  });
+
+  it("withSeatAsked clears it again, so no later save inherits it", () => {
+    expect(/finally *\{ *seatAskedRef\.current=false; *clearedSeatsRef\.current=null; *\}/.test(APP)).toBe(true);
+  });
+
+  it("doSaveEdit takes both views as parameters and doSave passes the patched pair", () => {
+    expect(/function doSaveEdit\(f,v,bookings,liveBookings\)/.test(APP)).toBe(true);
+    expect(/const saveBks=withClearedSeats\(bookings\);/.test(APP)).toBe(true);
+    expect(/const saveLive=withClearedSeats\(liveBookings\);/.test(APP)).toBe(true);
+    expect(/doSaveEdit\(f,\{[^}]*\},saveBks,saveLive\)/.test(APP)).toBe(true);
+  });
+
+  it("the manual-table guard and the seat-clash gate read the patched list too", () => {
+    expect(/if\(mt\.length&&!swapAffected\)\{let ex=saveLive\.filter\(/.test(APP)).toBe(true);
+    expect(/seatClashParties\(mt\.length\?mt:\(seatOrig\.tables\|\|\[\]\),f\.date,editId,saveBks\)/.test(APP)).toBe(true);
+  });
+});
+
