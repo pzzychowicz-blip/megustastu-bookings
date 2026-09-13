@@ -2167,3 +2167,60 @@ describe("/activity — erasure redacts a deleted booking's name", () => {
     await assertFails(ME().ref("activity/e1/subject").set({ name: "x" }));
   });
 });
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+//
+// `subject/name` is the ONE child of `$eid` carrying its own `.write`, and write
+// permission CASCADES DOWN — so at that path the parent's create-only grant does
+// not apply, and the grant there is the whole of the permission. The review
+// asked whether that lets a write to `activity/<new key>/subject/name` MINT an
+// entry: one that never passes `uid === auth.uid`, `email === auth.token.email`
+// or `at === now`, is invisible to both queries the app makes (no `at`, no
+// `guestKey`), and can never be pruned, because the prune rule tests
+// `data.child('at').val() < now - a year` and a null `at` makes that false.
+//
+// It does not, and the reason is one the rules do not state: an ancestor's
+// `.validate` IS evaluated for a deep write, so `$eid`'s
+// `hasChildren(['at','uid','email','kind','text'])` refuses the ghost. Measured
+// against the emulator, `permission_denied`.
+//
+// Pinned here because that is a load-bearing interaction that nothing named. The
+// create-only property reads as though it comes from the `.write` alone; it does
+// not, and relaxing `$eid`'s `.validate` — to allow a partial entry, say — would
+// open the ghost-create silently, with every other test in this file still green.
+describe("/activity — a deep write cannot MINT an entry around the create rule", () => {
+  it("refuses subject/name on a key that does not exist", async () => {
+    await assertFails(ME().ref("activity/ghost/subject/name").set("Injected"));
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+
+  it("refuses it for an admin too — this is validity, not permission", async () => {
+    await seedEnforce(true);
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity/ghost/subject/name").set("Injected"));
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+
+  it("refuses every other deep path on a key that does not exist", async () => {
+    // The same question for the children that have no `.write` of their own:
+    // they are refused by the parent grant as well, so this is the control that
+    // says the test above is about `subject/name` and not about deep writes.
+    await assertFails(ME().ref("activity/ghost/text").set("nothing happened"));
+    await assertFails(ME().ref("activity/ghost/kind").set("booking"));
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+
+  it("and a partial entry is refused whole, for the same reason", async () => {
+    // `$eid`'s `.validate` is what does the refusing above. Stated directly, so
+    // a change to that line fails a test that NAMES it rather than only the
+    // deep-path ones that depend on it.
+    for (const partial of [
+      { subject: { name: "Injected" } },
+      { kind: "booking", text: "deleted {b:x}" },
+      { at: { ".sv": "timestamp" }, uid: "staff-a", email: "staff-a@mgt.test" },
+    ]) {
+      await assertFails(logAs(ME(), "ghost", partial));
+    }
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+});

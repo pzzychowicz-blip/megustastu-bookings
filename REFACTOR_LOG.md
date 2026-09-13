@@ -24992,3 +24992,37 @@ Comment only; no behaviour, no test.
 
 Gate: `129.61 kB` gz · 1452 tests · 0 lint errors (88 warnings) · style OK.
 
+### Commit 117 (session 10, /code-review) — the ghost-create the rules refuse, and nothing said so
+
+A refuted finding whose MEASUREMENT was the deliverable. The review asked whether
+`/activity`'s `subject/name` grant lets a deep write **mint** an entry around the
+create rule, and the emulator said `permission_denied`. That answer lived in a
+transcript and in nothing else.
+
+**Why the question was a real one.** `subject/name` is the only child of `$eid`
+carrying its own `.write`, and write permission CASCADES DOWN — so at that path
+the parent's create-only grant does not apply and the child grant is the whole of
+the permission. An entry minted that way would pass none of `uid === auth.uid`,
+`email === auth.token.email` or `at === now`; it would be invisible to both
+queries the app makes (no `at`, no `guestKey`); and it could never be pruned,
+because the prune rule tests `data.child('at').val() < now - a year` and a null
+`at` makes that false. A permanent, unreachable, unattributed row.
+
+**Why it is refused, and the part the rules do not state:** an ancestor's
+`.validate` IS evaluated for a deep write, so `$eid`'s
+`hasChildren(['at','uid','email','kind','text'])` catches it. The create-only
+property reads as though it comes from the `.write` alone. It does not.
+
+Four assertions, and **proved by sabotage the only way this one could be**:
+relaxing `$eid`'s `.validate` to `true` turns three of them red — plus the
+pre-existing "refuses an entry missing the fields that make it readable" — while
+every other test in the file stays green. The fourth ("refuses every other deep
+path") stays green under the sabotage too, deliberately: those children have no
+`.write` of their own and are refused by the parent grant, so it is the control
+that says the first two are about `subject/name` rather than about deep writes.
+
+No rules change. `database.rules.json` is byte-identical.
+
+Gate: `129.61 kB` gz · 1452 tests · 0 lint errors (88 warnings) · style OK ·
+`test:rules` **290 tests** (286 → 290).
+
