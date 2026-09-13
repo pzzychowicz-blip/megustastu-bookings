@@ -40,6 +40,7 @@
 // The ONE identity rule in the app, imported rather than restated — see
 // `guestKeyOf` below for what restating it cost. `customers.js` imports only
 // `booking-logic.js`, so this is a one-way edge and no cycle.
+import { dayRangeMs } from "./day";
 import { identityKey } from "./customers.js";
 
 export const ACTIVITY_KINDS = [
@@ -416,4 +417,45 @@ export function isPrunable(entry, now) {
   const at = Number(entry.at);
   if (!Number.isFinite(at) || at <= 0) return false;
   return at < now - PRUNE_AFTER_MS;
+}
+
+
+// ── The feed's WINDOW (v18.0.0 session 11) ───────────────────────────────────
+//
+// Two date strings in, the query's bounds out. It lives here rather than inline
+// in App for the reason at the top of this file: it decides WHAT THE APP ASKS
+// the database, and a thing that lands `startAt(NaN)` on the one Firebase query
+// in the codebase should not also be the only place it can be tested.
+//
+// The whole design is in the return shape:
+//
+//   from / to   ms bounds, or NULL for "no bound this side". Null is the
+//               resting state of both fields and means the whole log — it is
+//               NOT an error, which is the distinction `useActivityFeed` then
+//               has to keep, since `Number.isFinite(null)` is false and a
+//               finiteness check alone would withhold the default view.
+//   badDay      something was typed that is not a date. `isReadableDate`
+//               accepts "2026-8-3" and "Sep 13 2026", both of which are NaN
+//               once "T00:00:00" is appended — which is the whole reason
+//               `dayRangeMs` exists rather than the arithmetic being inline.
+//   backwards   a range that ends before it starts. Not a crash: the query
+//               would simply return nothing, and that is the point — nothing
+//               looks exactly like a quiet week, so the caller is given the
+//               difference to say out loud.
+//   ok          whether to run the query at all. `badDay` is the half that
+//               MUST withhold it (NaN bounds throw inside an effect, and the
+//               boundary answers a throw by unmounting the app); `backwards`
+//               is withheld because there is nothing to ask.
+//
+// A ONE-DAY window is simply the two fields holding the same date — the FROM
+// field contributing that day's first ms and the TO field its last — so "one
+// day" is a position of this control rather than a mode beside it.
+export function activityWindow(fromDay, toDay) {
+  const a = fromDay ? dayRangeMs(fromDay) : null;
+  const b = toDay ? dayRangeMs(toDay) : null;
+  const badDay = (!!fromDay && !a) || (!!toDay && !b);
+  const from = a ? a.from : null;
+  const to = b ? b.to : null;
+  const backwards = from != null && to != null && from > to;
+  return { from: from, to: to, badDay: badDay, backwards: backwards, ok: !badDay && !backwards };
 }

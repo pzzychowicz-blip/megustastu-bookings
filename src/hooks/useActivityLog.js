@@ -41,6 +41,11 @@
 // `database.rules.json`, or the server sorts client-side and says so in a
 // warning; and it is mounted ONLY while the log is open, because it is the one
 // listener in the app whose data nothing else needs.
+//
+// v18.0.0 session 11: the window is a RANGE and either end may be ABSENT, so
+// the default question is "everything, newest first" rather than "one day".
+// Patryk: *"Search box must search globally (as Find a booking does) not by
+// date only. Filtering by date should be one of options."*
 import { useState, useEffect } from "react";
 import {
   ref, push, set, get, remove, onValue, query,
@@ -51,10 +56,26 @@ import { dbError } from "../lib/dbError";
 import { setActivitySink } from "../lib/activitySink";
 import { PRUNE_AFTER_MS, isPrunable } from "../lib/activity";
 
-// At most this many rows for one day. A day of ordinary service is a few dozen
-// entries; the cap exists so a pathological day cannot pull the whole node into
-// a modal. `limitToLast` keeps the NEWEST, which is the half anybody wants.
-export const FEED_LIMIT = 1000;
+// ── PAGING: one GROWING query, not a cursor ─────────────────────────────────
+//
+// A page of rows. `loadOlder` raises the limit and the SAME listener re-answers;
+// it does not fetch a second page and stitch it on. That costs re-reading the
+// rows already in hand, and buys three things worth more than the bytes at this
+// size:
+//
+//   • No cursor arithmetic. RTDB's `endAt(value, key)` paging has to dedupe its
+//     boundary row, and `at` is a serverTimestamp — two entries written in the
+//     same millisecond are not hypothetical, since `bookingWriteEntries` emits
+//     several per save.
+//   • The whole list stays LIVE. A stitched page is a frozen snapshot the
+//     listener no longer maintains, so an entry arriving while the log is open
+//     would show up in the newest page and nowhere else.
+//   • The rows stay a pure function of (window, limit) — which is the property
+//     the `win`/`limit` compare below rests on, and what lets a limit bump keep
+//     the current rows on screen instead of blanking the panel.
+//
+// `limitToLast` keeps the NEWEST, which is the half anybody wants.
+export const FEED_PAGE = 500;
 
 // One entry per push key. Written with `set` on a pushed ref rather than
 // `push(ref, value)` so the two steps are separable and the key is in hand —
@@ -167,7 +188,8 @@ export function useActivityLog() {
 }
 
 /**
- * One day (or any [from, to] ms range) of entries, newest first.
+ * Entries newest first over an OPEN range: `from` and `to` are ms and either
+ * may be null for "no bound this side" — both null is the whole log.
  * `enabled` is false whenever the log is closed, and the listener is not
  * attached at all then — this is the only listener in the app that is not
  * permanent, because it is the only one whose data no other surface reads.
@@ -191,7 +213,15 @@ export function useActivityFeed({ from, to, enabled }) {
   // which cannot disagree with the rows, needs no reset when the log closes,
   // and leaves `setState` where the warning itself says it belongs: inside the
   // subscription callback.
-  const [state, setState] = useState({ key: null, rows: EMPTY_ROWS });
+  //
+  // v18.0.0 session 11 splits that key in TWO — the WINDOW and the LIMIT —
+  // because they are different kinds of change and one key could not tell them
+  // apart. A new window is a new QUESTION: the stored rows are another range's
+  // answer and must not be shown. A bigger limit is the SAME question asked
+  // wider: the stored rows are a valid PREFIX of the answer coming, so blanking
+  // them would flash the panel empty on every "Load older" — which is the thing
+  // the keyed state exists to prevent, arriving by the other door.
+  const [state, setState] = useState({ win: null, limit: 0, rows: EMPTY_ROWS });
   // v18.0.0 session 10 (/code-review): `enabled` is not the whole
   // precondition. A non-finite bound is a THROW from `startAt`, not an empty
   // result — and a throw here is a throw inside an effect, which the error
@@ -203,15 +233,46 @@ export function useActivityFeed({ from, to, enabled }) {
   // ONE derivation rather than a second guard inside the effect: `key` has to
   // agree with it, or a withheld query leaves the stored answer permanently
   // mismatched and `loading` true for ever.
-  const ready = !!enabled && Number.isFinite(from) && Number.isFinite(to);
-  const key = ready ? from + "" + to : null;
+  //
+  // An ABSENT bound is null, and that is not the same as a BROKEN one. null
+  // means "no bound this side" and is the resting state of both fields;
+  // NaN is a date the caller could not parse. Only the second withholds the
+  // query — and `Number.isFinite(null)` is false, so the two have to be told
+  // apart here or the unbounded feed, which is now the DEFAULT, would never
+  // run at all.
+  const okFrom = from == null || Number.isFinite(from);
+  const okTo = to == null || Number.isFinite(to);
+  const ready = !!enabled && okFrom && okTo;
+  const win = ready ? String(from) + "" + String(to) : null;
+
+  // The limit is keyed to its window for the SAME reason as the rows, and it is
+  // worth spelling out because the obvious alternative is a bug this file
+  // already argues against. A plain `useState(FEED_PAGE)` has to be RESET when
+  // the window changes, the only place to reset it is an effect, and a
+  // synchronous setState in an effect is `react-hooks/set-state-in-effect` —
+  // the warning the paragraph above exists to avoid. Keying it makes the reset
+  // a DERIVATION: a stored limit belonging to another window is not a limit for
+  // this one, so this one starts at a page. No effect, and the two cannot
+  // disagree.
+  //
+  // It is declared HERE, below `win`, and not up with the other state: `const`
+  // does not hoist, and reading `win` above its declaration is a TDZ
+  // ReferenceError that build and lint both pass (CLAUDE.md's blank-screen
+  // gotcha — hit twice in v17.11.0, the second time while fixing the first).
+  const [page, setPage] = useState({ win: null, limit: FEED_PAGE });
+  const limit = page.win === win ? page.limit : FEED_PAGE;
 
   useEffect(function () {
     if (!ready) return undefined;
-    const q = query(
-      ref(db, "activity"),
-      orderByChild("at"), startAt(from), endAt(to), limitToLast(FEED_LIMIT)
-    );
+    // Built as a LIST because either bound may be absent. `query()` is
+    // variadic, so an unbounded side simply contributes no constraint —
+    // which is what makes "all time" the same code path as "one day"
+    // rather than a second one beside it.
+    const parts = [orderByChild("at")];
+    if (from != null) parts.push(startAt(from));
+    if (to != null) parts.push(endAt(to));
+    parts.push(limitToLast(limit));
+    const q = query.apply(null, [ref(db, "activity")].concat(parts));
     // The third argument is not optional in this codebase: without it a
     // cancelled read fires nothing at all and the panel spins forever.
     const unsub = onValue(q, function (snap) {
@@ -224,14 +285,24 @@ export function useActivityFeed({ from, to, enabled }) {
         if (v) out.push(Object.assign({ id: child.key }, v));
       });
       out.reverse();
-      setState({ key: key, rows: out });
+      setState({ win: win, limit: limit, rows: out });
     }, dbError("activity"));
     return unsub;
-  }, [from, to, ready, key]);
+  }, [from, to, ready, win, limit]);
 
-  const fresh = state.key === key;
+  // Same window = the rows in hand are a prefix of the answer being fetched, so
+  // they stay on screen and only the "Load older" button reports the wait.
+  const sameWin = state.win === win;
+  const fresh = sameWin && state.limit === limit;
   return {
-    rows: fresh ? state.rows : EMPTY_ROWS,
-    loading: ready && !fresh,
+    rows: sameWin ? state.rows : EMPTY_ROWS,
+    loading: ready && !sameWin,
+    loadingMore: ready && sameWin && !fresh,
+    // A FULL page is the only evidence there may be more. It over-reports by one
+    // press when the log holds exactly a multiple of the page — which costs one
+    // query and then tells the truth, where under-reporting would hide entries
+    // behind a button that had quietly stopped offering them.
+    hasMore: fresh && state.rows.length >= limit,
+    loadOlder: function () { setPage({ win: win, limit: limit + FEED_PAGE }); },
   };
 }

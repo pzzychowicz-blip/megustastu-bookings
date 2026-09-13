@@ -25149,3 +25149,73 @@ Sabotage-proved: restoring the pairing in `VouchersSettings` fails the run and
 names the file, the line and the atom to use.
 
 Gate: `129.79 kB` gz · **1461 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 121 (session 11) — the log searches everything, and a day is a filter
+
+Patryk: *"Search box must search globally (as Find a booking does) not by date
+only. Filtering by date should be one of options."*
+
+The log could only ever be asked about ONE day, so its search box searched that
+day and found nothing anywhere else — which reads as a broken search rather than
+as a scoped one, because nothing on screen said the scope was a day.
+
+**The window is now a FROM–TO range whose ends are independently optional, and
+both start empty**, so the resting question is the whole log, newest first. One
+control and not two: the delete arriving in a later commit acts on the same
+range, so what you are looking at is exactly what you would remove. A one-day
+window is the two fields holding the same date — a position of this control
+rather than a mode beside it.
+
+`activityWindow` (`lib/activity.js`) turns the two strings into the query's
+bounds. It is pure and in `lib/` for the reason session 10 moved `dayRangeMs`
+out of App: the one call site that must not get it wrong should not also be the
+only place it can be tested. **The distinction it exists to keep is `null` vs
+`NaN`** — an ABSENT bound and a BROKEN one. `Number.isFinite(null)` is false, so
+the obvious single finiteness check calls the DEFAULT view invalid and withholds
+it; and a NaN reaching `startAt` throws inside an effect, which the boundary
+answers by unmounting the app. Seven tests, and the sabotage is the whole point:
+restoring the pre-session-11 "both bounds must be finite" rule turns the first
+two red.
+
+**Paging is one GROWING query, not a cursor** (`FEED_PAGE` = 500, `loadOlder`
+raises the limit and the same listener re-answers). It costs re-reading rows
+already in hand and buys three things worth more at this size: no
+`endAt(value, key)` boundary-row dedupe — `at` is a serverTimestamp and
+`bookingWriteEntries` emits several entries per save, so same-millisecond ties
+are routine, not hypothetical; the whole list stays LIVE, where a stitched page
+is a frozen snapshot the listener no longer maintains; and the rows stay a pure
+function of (window, limit).
+
+That last property is what lets the stored answer's key SPLIT in two. A new
+window is a new QUESTION and the held rows must not be shown; a bigger limit is
+the same question asked wider and the held rows are a valid PREFIX, so they stay
+on screen and only the button reports the wait. Collapsing the two would flash
+the panel empty on every press — the exact thing session 8's keyed state exists
+to prevent, arriving by the other door.
+
+**Two things the first cut got wrong, both caught by running it.** The limit
+started as a plain `useState` reset by an effect — a synchronous setState inside
+an effect, which is the warning this file's own header argues against; it is
+keyed to its window now, so the reset is a derivation and there is no effect at
+all. Moving that declaration then put a `const` ABOVE `win`, which is the TDZ
+blank-screen gotcha, and build and lint both passed on it.
+
+Also here: a **People only** chip (entries already carried `auto` and the rows
+already showed it, but nothing could filter on it, and "what did a PERSON do" is
+the question an audit log is opened for), a **count line**, a **date column** on
+any multi-day window, and named empty states — "nothing matches those filters"
+and "nothing was recorded" are different sentences, and a backwards range says
+so rather than returning an empty list that looks like a quiet week.
+
+`badDay`'s message is **not reachable** through a `<input type="date">` and the
+comment says so, per CLAUDE.md's rule that a qualifier on an impossible state
+tells the next reader it is possible. The GUARD stays — withholding the query is
+what keeps NaN away from Firebase — and these are plain strings some later
+caller could set the way `SearchPanel`'s onPick sets `viewDate`.
+
+Verified live on DEV: 95 entries across 12.09 and 13.09 with the date column;
+searching "voucher" gave "10 of 95 shown" spanning both days; **Today** set both
+fields and dropped the date column (68 entries); **People only** gave "58 of 68
+shown" with no Automatic chips left; a backwards range said so.
+
+Gate: `130.13 kB` gz · **1468 tests** · 0 lint errors (88 warnings) · style OK.

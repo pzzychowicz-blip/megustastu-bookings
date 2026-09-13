@@ -12,20 +12,39 @@
 // their current name. Only a DELETED booking has no row to resolve against, and
 // those entries carry their own `subject.name` as the fallback.
 //
-// ── ONE DAY AT A TIME ───────────────────────────────────────────────────────
-// The feed is a range query and the range is a day, because "what happened on
-// Saturday" is the question this screen exists to answer. The listener is
-// mounted only while this modal is open (`useActivityFeed`'s `enabled`), which
-// is why the day lives in state up in App rather than here: closing the modal
-// must detach the listener, and a day held here would go with it.
+// ── A RANGE, AND BY DEFAULT NO RANGE AT ALL ─────────────────────────────────
+// v18.0.0 session 11. The feed was a day, because "what happened on Saturday"
+// is one question this screen exists to answer — but it was the ONLY question
+// it could be asked, so the search box searched a single day and found nothing
+// anywhere else. Patryk: *"Search box must search globally (as Find a booking
+// does) not by date only. Filtering by date should be one of options."*
+//
+// So the window is a FROM–TO range whose ends are independently optional, and
+// both start empty: the resting question is the whole log, newest first, and a
+// day is what you narrow to. One control, because the delete below acts on the
+// same range — what you are looking at is exactly what you would remove, and
+// two date controls on one panel is where they drift apart.
+//
+// The listener is mounted only while this modal is open (`useActivityFeed`'s
+// `enabled`), which is why the range lives in state up in App rather than here:
+// closing the modal must detach the listener, and a range held here would go
+// with it.
 import { useMemo, useState } from "react";
-import { S, T, FW, SP, R } from "../lib/constants";
+import { S, T, FW, SP, R, H, IC } from "../lib/constants";
 import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, AutoHeight } from "./atoms";
 import { renderText } from "../lib/activity";
-// v18.0.0 session 10 (/code-review): the same readability predicate App gates
-// the query on, imported rather than restated — the panel must not report an
-// unasked question as an answer.
-import { isReadableDate } from "../lib/day";
+// v18.0.0 session 11: `isReadableDate` is no longer imported here. Session 10
+// had this panel re-ask whether the day was readable so it would not report an
+// unasked question as an answer — but with two independently optional dates the
+// condition is no longer one predicate over one string, and App is the only
+// place that knows whether the QUERY ran. It passes `badDay`/`backwards`
+// instead. Restating the test here would have been a second answer to a
+// question that now has more than one input.
+//
+// `addDays` rather than hand-rolled date arithmetic for the quick ranges,
+// because `setDate(getDate() - 6)` returns the SAME date on the spring-forward
+// day (v17.16.2).
+import { todayStr, addDays } from "../lib/day";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -46,6 +65,16 @@ function timeOf(ms) {
   return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 
+// v18.0.0 session 11: the day, for a list that can now span them. `dd.mm`
+// rather than a locale month name — it is the shape the date fields above it
+// already show, it sorts visually, and it stays two fixed-width columns so a
+// list of a hundred rows lines up.
+function dateOf(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0");
+}
+
 // The author, as a person would say it: the local part of the email, which is
 // what staff call each other. The full address is the `title`, because two
 // people can share a first name and the log has to be able to settle that.
@@ -55,11 +84,28 @@ function personOf(email) {
 }
 
 export function ActivityLogModal({
-  day, onSetDay, rows, loading, bookings, onOpenBooking, onClose,
+  fromDay, toDay, onSetFromDay, onSetToDay, badDay, backwards,
+  rows, loading, loadingMore, hasMore, onLoadOlder,
+  bookings, onOpenBooking, onClose,
 }) {
   const [kinds, setKinds] = useState({});     // {} = everything
   const [who, setWho] = useState("");
   const [q, setQ] = useState("");
+  // v18.0.0 session 11. Entries already carried `auto` and the rows already
+  // showed it as a chip, but nothing could filter on it — and "what did a
+  // PERSON do" is the question an audit log is opened for. On a busy day the
+  // answer was buried under the auto-optimiser's own reshuffles.
+  const [peopleOnly, setPeopleOnly] = useState(false);
+
+  // The quick ranges. `addDays(todayStr(), -6)` is six days back INCLUSIVE of
+  // today, which is what "last 7 days" means to a person counting shifts.
+  function setRange(a, b) { onSetFromDay(a); onSetToDay(b); }
+  const today = todayStr();
+  const oneDay = !!fromDay && fromDay === toDay;
+  const allTime = !fromDay && !toDay;
+  // Rows only need a date column when the window can hold more than one day —
+  // on a single day it would be the same eight characters on every row.
+  const showDate = !oneDay;
 
   // Resolving a token needs a map, and the bookings list is an array. Built
   // once per render of a list that only changes when a booking does.
@@ -82,13 +128,14 @@ export function ActivityLogModal({
     return (rows || []).filter(function (r) {
       if (anyKind && !kinds[r.kind]) return false;
       if (who && r.email !== who) return false;
+      if (peopleOnly && r.auto) return false;
       if (!needle) return true;
       // Searched against what is ON SCREEN, tokens resolved — otherwise typing
       // a guest's name finds nothing, which is the first thing anybody tries.
       const text = renderText(r.text, byId, r.subject && r.subject.name);
       return (text + " " + personOf(r.email)).toLowerCase().includes(needle);
     });
-  }, [rows, kinds, anyKind, who, q, byId]);
+  }, [rows, kinds, anyKind, who, peopleOnly, q, byId]);
 
   function toggleKind(k) {
     setKinds(function (prev) {
@@ -109,13 +156,41 @@ export function ActivityLogModal({
           rule, and the same one the Settings overlay this opens from wears. */}
       <ModalTitle background="var(--app-btn-grey-strong)">Activity log</ModalTitle>
 
+      {/* v18.0.0 session 11: FROM and TO, each independently clearable. The
+          quick chips below are not a third mode — they write the same two
+          fields, so there is exactly one place the window is stated and the
+          chips are shortcuts to it rather than a parallel control that can
+          disagree with what the fields say. */}
       <div style={{ display: "flex", gap: SP.base, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
         <DateField
-          value={day}
-          onChange={function (e) { onSetDay(e.target.value); }}
+          value={fromDay}
+          onChange={function (e) { onSetFromDay(e.target.value); }}
           style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
-          inputProps={{ "aria-label": "Day to show" }}
+          inputProps={{ "aria-label": "From day (leave empty for no start)" }}
         />
+        <span aria-hidden="true" style={{ fontSize: T.body, color: S.muted }}>→</span>
+        <DateField
+          value={toDay}
+          onChange={function (e) { onSetToDay(e.target.value); }}
+          style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
+          inputProps={{ "aria-label": "To day (leave empty for no end)" }}
+        />
+      </div>
+
+      <div role="group" aria-label="Quick ranges"
+        style={{ display: "flex", gap: SP.tight, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
+        <OutlineChip as="button" tone={oneDay && fromDay === today ? "success" : "neutral"}
+          aria-pressed={oneDay && fromDay === today}
+          onClick={function () { setRange(today, today); }}>Today</OutlineChip>
+        <OutlineChip as="button" tone={fromDay === addDays(today, -6) && toDay === today ? "success" : "neutral"}
+          aria-pressed={fromDay === addDays(today, -6) && toDay === today}
+          onClick={function () { setRange(addDays(today, -6), today); }}>Last 7 days</OutlineChip>
+        <OutlineChip as="button" tone={allTime ? "success" : "neutral"}
+          aria-pressed={allTime}
+          onClick={function () { setRange("", ""); }}>All time</OutlineChip>
+      </div>
+
+      <div style={{ display: "flex", gap: SP.base, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
         {/* `.mgt-hover-scale` here, like every other control in the app —
             `check:style`'s Rule 10 catches an interactive element without it,
             and it caught this one. `DateField` above needs none because the
@@ -161,23 +236,51 @@ export function ActivityLogModal({
             >{KIND_LABEL[k]}</OutlineChip>
           );
         })}
+        {/* Not a kind, so it is separated by a gap rather than sitting in the
+            run: every chip to its left narrows WHAT happened, this one narrows
+            WHO did it — the same axis as the person dropdown above. */}
+        <span aria-hidden="true" style={{ width: SP.wide }} />
+        <OutlineChip as="button" tone={peopleOnly ? "success" : "neutral"}
+          aria-pressed={peopleOnly}
+          onClick={function () { setPeopleOnly(function (v) { return !v; }); }}
+        >People only</OutlineChip>
       </div>
 
-      <AutoHeight watch={day + "·" + shown.length + "·" + loading}>
+      {/* The count, because the list is no longer bounded by a day and "how
+          much am I looking at" stops being obvious. It also states when the
+          filters are hiding rows — otherwise a narrowed list and a quiet week
+          look identical, which is the same confusion the empty states below
+          exist to settle. */}
+      <div style={{ fontSize: T.micro, color: S.muted, marginBottom: SP.tight }}>
+        {loading ? "" : shown.length === rows.length
+          ? shown.length + (shown.length === 1 ? " entry" : " entries")
+          : shown.length + " of " + rows.length + " shown"}
+      </div>
+
+      <AutoHeight watch={fromDay + "·" + toDay + "·" + shown.length + "·" + loading}>
         <div>
-          {loading ? (
+          {badDay || backwards ? (
+            <div style={{ fontSize: T.body, color: S.muted, padding: SP.wide + "px 0" }}>
+              {/* v18.0.0 session 10 (/code-review): a date input CAN be emptied,
+                  and App withholds the query until what is typed is readable
+                  again, so this must not report an unasked question as an
+                  answer. Session 11: empty is now legal — it means "no bound
+                  this side" — so only a half-typed date and a backwards range
+                  reach here, and they are named separately because an empty
+                  list would otherwise look exactly like a quiet week. */}
+              {backwards ? "That range ends before it starts." : "Finish typing the date."}
+            </div>
+          ) : loading ? (
             <div style={{ fontSize: T.body, color: S.muted, padding: SP.wide + "px 0" }}>Loading…</div>
           ) : shown.length === 0 ? (
             <div style={{ fontSize: T.body, color: S.muted, padding: SP.wide + "px 0" }}>
-              {/* v18.0.0 session 10 (/code-review): the day can be EMPTY — a
-                  date input clears — and App withholds the query until it is
-                  readable again, so this must not report an unasked question
-                  as an answer. */}
-              {!isReadableDate(day)
-                ? "Pick a day to show."
-                : rows && rows.length
-                  ? "Nothing matches those filters."
-                  : "Nothing was recorded on this day."}
+              {rows && rows.length
+                ? "Nothing matches those filters."
+                : allTime
+                  ? "Nothing has been recorded yet."
+                  : oneDay
+                    ? "Nothing was recorded on this day."
+                    : "Nothing was recorded in that range."}
             </div>
           ) : shown.map(function (r) {
             const text = renderText(r.text, byId, r.subject && r.subject.name);
@@ -191,6 +294,11 @@ export function ActivityLogModal({
                 padding: "6px 8px", borderRadius: R.inset,
                 borderBottom: "1px solid var(--border-soft)",
               }}>
+                {showDate ? (
+                  <span style={{ fontSize: T.micro, color: S.muted, minWidth: 40, fontVariantNumeric: "tabular-nums" }}>
+                    {dateOf(r.at)}
+                  </span>
+                ) : null}
                 <span style={{ fontSize: T.micro, color: S.muted, minWidth: 44, fontVariantNumeric: "tabular-nums" }}>
                   {timeOf(r.at)}
                 </span>
@@ -215,6 +323,26 @@ export function ActivityLogModal({
               </div>
             );
           })}
+          {/* v18.0.0 session 11. Offered only when the feed came back FULL, so
+              the button's presence is evidence rather than decoration — see
+              `hasMore` in useActivityFeed for why it over-reports by one press
+              rather than under-reporting by any.
+
+              It is inside the list and not in the footer on purpose: it acts on
+              the END of what you are reading, and a control in the pinned
+              footer would sit beside Done, where it reads as a second way to
+              leave. */}
+          {hasMore || loadingMore ? (
+            <div style={{ display: "flex", justifyContent: "center", paddingTop: SP.base }}>
+              <button
+                type="button"
+                className="mgt-hover-scale"
+                onClick={onLoadOlder}
+                disabled={loadingMore}
+                style={mkBtn({ background: "var(--app-btn-slate)", minHeight: H.compact, fontSize: T.body })}
+              >{loadingMore ? "Loading…" : "Load older"}</button>
+            </div>
+          ) : null}
         </div>
       </AutoHeight>
 

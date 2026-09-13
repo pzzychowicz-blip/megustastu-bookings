@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import {
   ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText,
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
-  isPrunable,
+  isPrunable, activityWindow,
 } from "../src/lib/activity.js";
 import {
   setActivitySink, emitActivity, resetActivitySink,
@@ -584,5 +584,90 @@ describe("the activity sink", () => {
     setActivitySink(null);
     emitActivity([{ kind: "booking", text: "x" }]);
     expect(sink).not.toHaveBeenCalled();
+  });
+});
+
+
+// ── The feed's window (v18.0.0 session 11) ──────────────────────────────────
+//
+// `activityWindow` decides what the app ASKS the one Firebase query in the
+// codebase, and the failure it guards is not a wrong list — it is
+// `startAt(NaN)` throwing inside an effect, which the error boundary answers by
+// unmounting the whole app. That is why it is a pure function in lib/ rather
+// than four lines in App.
+describe("activityWindow", () => {
+  const DAY = 86400000;
+
+  it("is UNBOUNDED when both fields are empty, and that is not an error", () => {
+    // The most important case in this block. Empty is the resting state of both
+    // date fields, so this is what the log shows every time it opens — and the
+    // obvious implementation, a `Number.isFinite` check on both bounds, calls
+    // it invalid and withholds the default view. null and NaN are different
+    // answers and everything downstream has to keep them apart.
+    expect(activityWindow("", "")).toEqual({
+      from: null, to: null, badDay: false, backwards: false, ok: true,
+    });
+  });
+
+  it("bounds only the side that was filled in", () => {
+    const onlyFrom = activityWindow("2026-09-13", "");
+    expect(onlyFrom.from).toBe(new Date("2026-09-13T00:00:00").getTime());
+    expect(onlyFrom.to).toBe(null);
+    expect(onlyFrom.ok).toBe(true);
+
+    const onlyTo = activityWindow("", "2026-09-13");
+    expect(onlyTo.from).toBe(null);
+    expect(onlyTo.to).toBe(new Date("2026-09-13T00:00:00").getTime() + DAY - 1);
+    expect(onlyTo.ok).toBe(true);
+  });
+
+  it("makes ONE DAY the two fields holding the same date", () => {
+    // Not a mode of its own — which is the property that lets the delete act on
+    // exactly the window you are reading, whatever shape it has.
+    const w = activityWindow("2026-09-13", "2026-09-13");
+    const midnight = new Date("2026-09-13T00:00:00").getTime();
+    expect(w.from).toBe(midnight);
+    expect(w.to).toBe(midnight + DAY - 1);
+    expect(w.to - w.from).toBe(DAY - 1);
+    expect(w.ok).toBe(true);
+  });
+
+  it("refuses the shapes isReadableDate lets through", () => {
+    // These all pass `isReadableDate` and are all NaN once "T00:00:00" is
+    // appended, which is the entire reason `dayRangeMs` exists. A window that
+    // merely trusted the readability predicate would hand NaN to `startAt`.
+    for (const bad of ["2026-8-3", "2026/09/13", "Sep 13 2026", "nonsense"]) {
+      const w = activityWindow(bad, "");
+      expect(w.badDay).toBe(true);
+      expect(w.ok).toBe(false);
+      expect(Number.isNaN(w.from)).toBe(false);   // null, never NaN
+    }
+  });
+
+  it("never returns NaN on either bound, whatever it is given", () => {
+    // The property that actually protects the app, stated directly rather than
+    // inferred from the cases above: `ok` decides whether to ask, but a NaN
+    // leaking through would throw even from a caller that ignored `ok`.
+    for (const a of ["", "2026-09-13", "2026-8-3", "x"]) {
+      for (const b of ["", "2026-09-14", "nope"]) {
+        const w = activityWindow(a, b);
+        expect(w.from === null || Number.isFinite(w.from)).toBe(true);
+        expect(w.to === null || Number.isFinite(w.to)).toBe(true);
+      }
+    }
+  });
+
+  it("reports a backwards range rather than quietly asking for nothing", () => {
+    const w = activityWindow("2026-09-20", "2026-09-13");
+    expect(w.backwards).toBe(true);
+    expect(w.badDay).toBe(false);
+    expect(w.ok).toBe(false);
+  });
+
+  it("does NOT call one day backwards", () => {
+    // `from` is that day's first ms and `to` its last, so from < to. Had the
+    // comparison been written on the date STRINGS it would be `>=` on equal
+    // values and every single-day window would report itself backwards.
+    expect(activityWindow("2026-09-13", "2026-09-13").backwards).toBe(false);
   });
 });

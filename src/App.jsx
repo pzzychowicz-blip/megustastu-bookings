@@ -338,7 +338,10 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
-import { todayStr, stepDate, WEEKDAY_LONG, dayRangeMs } from "./lib/day";
+import { todayStr, stepDate, WEEKDAY_LONG } from "./lib/day";
+// v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
+// stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
+import { activityWindow } from "./lib/activity";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1366,33 +1369,68 @@ function BookingApp({uid}){
   // the app already emits into it, and until this runs `emitActivity` is a
   // no-op.
   useActivityLog();
-  // The day the log is showing. It lives HERE and not inside the modal because
-  // the feed lives here too: the listener must detach when the log closes, and
-  // a day held inside the modal would unmount with it and take the range with
-  // it. Seeded to today, which is the day anybody opening this is asking about.
-  const [activityDay,setActivityDay]=useState(todayStr());
+  // The RANGE the log is showing. It lives HERE and not inside the modal because
+  // the feed lives here too: the listener must detach when the log closes, and a
+  // range held inside the modal would unmount with it and take the window with
+  // it.
+  //
+  // v18.0.0 session 11: two dates, and BOTH START EMPTY. The log used to open on
+  // today and could only ever be asked about one day, so a search was a search of
+  // that day — Patryk: *"Search box must search globally (as Find a booking
+  // does) not by date only. Filtering by date should be one of options."* Empty
+  // means "no bound this side", so the resting question is the whole log, newest
+  // first, and narrowing to a day is a filter you apply rather than the only
+  // thing on offer.
+  const [activityFromDay,setActivityFromDay]=useState("");
+  const [activityToDay,setActivityToDay]=useState("");
   // Local midnight to local midnight: `at` is a wall-clock stamp and the
-  // restaurant thinks in local days. Both are primitives derived from one
-  // string, so the feed's dep array is stable across renders.
+  // restaurant thinks in local days. `dayRangeMs` gives a whole day, so the FROM
+  // field takes that day's first ms and the TO field takes its last — which is
+  // what makes a one-day range the two fields holding the same date rather than
+  // a mode of its own.
   //
-  // v18.0.0 session 10 (/code-review): a date input can be EMPTIED, and the
-  // query is the one place in the app where a `viewDate`-shaped string reaches
-  // Firebase instead of `lib/day.js`. `new Date("T00:00:00")` is Invalid Date,
-  // `.getTime()` is NaN, and `startAt(NaN)` THROWS rather than returning
-  // nothing — inside an effect, which the boundary catches by replacing the
-  // whole app. Measured live: clearing "Day to show" gave `startAt failed:
-  // value argument contains NaN in property 'activity'` and the error screen,
-  // from one keystroke on a shipped surface.
+  // v18.0.0 session 10 (/code-review), and it applies to both fields now: a date
+  // input can be EMPTIED, and this query is the one place in the app where a
+  // `viewDate`-shaped string reaches Firebase instead of `lib/day.js`.
+  // `new Date("T00:00:00")` is Invalid Date, `.getTime()` is NaN, and
+  // `startAt(NaN)` THROWS rather than returning nothing — inside an effect,
+  // which the boundary catches by replacing the whole app. Measured live:
+  // clearing "Day to show" gave `startAt failed: value argument contains NaN in
+  // property 'activity'` and the error screen, from one keystroke on a shipped
+  // surface.
   //
-  // The day is kept exactly as typed, so the field stays editable while it is
-  // being retyped; it is the QUERY that is withheld until the day is readable.
-  // The arithmetic itself is `dayRangeMs` (lib/day.js) rather than inline here,
-  // so the one call site that must not get it wrong is not also the only place
-  // it can be tested.
-  const activityRange=dayRangeMs(activityDay);
-  const activityFrom=activityRange?activityRange.from:0;
-  const activityTo=activityRange?activityRange.to:0;
-  const {rows:activityRows,loading:activityLoading}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen&&!!activityRange});
+  // What changed in session 11 is that EMPTY is now legal and only UNREADABLE is
+  // withheld. The two were the same condition while the field was required; they
+  // are not the same condition now, and conflating them would withhold the
+  // default view. A date is kept exactly as typed so the field stays editable
+  // while it is being retyped; it is the QUERY that waits.
+  //
+  // The arithmetic is `activityWindow` (lib/activity.js), not inline here, for
+  // the reason session 10 moved `dayRangeMs` out of this file: the one call
+  // site that must not get it wrong should not also be the only place it can
+  // be tested.
+  const activityWin=activityWindow(activityFromDay,activityToDay);
+  const activityFrom=activityWin.from;
+  const activityTo=activityWin.to;
+  // A typed-but-unreadable date, or a range that ends before it starts.
+  //
+  // The two are reachable to different degrees and it is worth saying which,
+  // because CLAUDE.md's own rule is that a qualifier on a state that cannot
+  // occur tells the next reader it CAN. `backwards` is ordinary use: two date
+  // pickers, nothing stopping you. `badDay` is NOT reachable through this
+  // surface — a `<input type="date">` holds either "" or a valid `yyyy-mm-dd`,
+  // and the quick-range chips go through `todayStr`/`addDays` — so its message
+  // is defence rather than a state anybody will see today. It is kept because
+  // these are plain STRINGS that some later caller could set the way
+  // `SearchPanel`'s onPick sets `viewDate`, and because `dayRangeMs` returning
+  // null is the one thing standing between `isReadableDate`'s looser shapes
+  // ("2026-8-3", "Sep 13 2026") and `startAt(NaN)`, which THROWS inside an
+  // effect and takes the whole app down. Withholding the query is the guard;
+  // the message only decides what is said while it is withheld.
+  const activityBadDay=activityWin.badDay;
+  const activityBackwards=activityWin.backwards;
+  const activityRangeOk=activityWin.ok;
+  const {rows:activityRows,loading:activityLoading,loadingMore:activityLoadingMore,hasMore:activityHasMore,loadOlder:activityLoadOlder}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen&&activityRangeOk});
   // The 12-month retention promise, kept by the app because this plan has no
   // server-side scheduler — and kept HONEST by the rules, which refuse a delete
   // unless the caller is an admin and the entry really is older than a year. It
@@ -5206,10 +5244,17 @@ function BookingApp({uid}){
         // grid beside it: a positioned wrapper makes the stacking context and
         // `Overlay` is reused untouched.
         activityOpen?<div style={{position:"relative",zIndex:255}}><Suspense fallback={null}><ActivityLogModal
-          day={activityDay}
-          onSetDay={setActivityDay}
+          fromDay={activityFromDay}
+          toDay={activityToDay}
+          onSetFromDay={setActivityFromDay}
+          onSetToDay={setActivityToDay}
+          badDay={activityBadDay}
+          backwards={activityBackwards}
           rows={activityRows}
           loading={activityLoading}
+          loadingMore={activityLoadingMore}
+          hasMore={activityHasMore}
+          onLoadOlder={activityLoadOlder}
           bookings={bookings}
           onOpenBooking={function(id){const b=bookings.find(function(x){return x.id===id;});if(!b) return;setActivityOpen(null);closeSettings();openEdit(b);}}
           onClose={function(){setActivityOpen(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>
