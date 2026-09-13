@@ -22,6 +22,10 @@ import { useMemo, useState } from "react";
 import { S, T, FW, SP, R } from "../lib/constants";
 import { Overlay, ModalTitle, OutlineChip, DateField, mkInp, mkSel, mkBtn, AutoHeight } from "./atoms";
 import { renderText } from "../lib/activity";
+// v18.0.0 session 10 (/code-review): the same readability predicate App gates
+// the query on, imported rather than restated — the panel must not report an
+// unasked question as an answer.
+import { isReadableDate } from "../lib/day";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -159,9 +163,15 @@ export function ActivityLogModal({
             <div style={{ fontSize: T.body, color: S.muted, padding: SP.wide + "px 0" }}>Loading…</div>
           ) : shown.length === 0 ? (
             <div style={{ fontSize: T.body, color: S.muted, padding: SP.wide + "px 0" }}>
-              {rows && rows.length
-                ? "Nothing matches those filters."
-                : "Nothing was recorded on this day."}
+              {/* v18.0.0 session 10 (/code-review): the day can be EMPTY — a
+                  date input clears — and App withholds the query until it is
+                  readable again, so this must not report an unasked question
+                  as an answer. */}
+              {!isReadableDate(day)
+                ? "Pick a day to show."
+                : rows && rows.length
+                  ? "Nothing matches those filters."
+                  : "Nothing was recorded on this day."}
             </div>
           ) : shown.map(function (r) {
             const text = renderText(r.text, byId, r.subject && r.subject.name);

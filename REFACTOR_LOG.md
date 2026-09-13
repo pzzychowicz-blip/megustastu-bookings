@@ -24701,3 +24701,60 @@ tests.
 and now backs the preferred-tables compare too.
 
 Gate: `129.48 kB` gz · 1430 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 109 (session 10, /code-review) — a cleared date field took the app down
+
+**The finding.** The activity log's day lives in `App` and its range is built
+inline: `new Date(activityDay + "T00:00:00").getTime()`. A date input can be
+EMPTIED — that is what the clear affordance and a Backspace both do — and
+`new Date("T00:00:00")` is Invalid Date, so both bounds became `NaN`.
+`startAt(NaN)` does not return nothing; it **throws**, and it throws inside the
+feed's `useEffect`, which is the one place a throw is caught by the error
+boundary rather than swallowed.
+
+Measured live in DEV, from one keystroke on a shipped surface:
+
+```
+Error: startAt failed: value argument contains NaN in property 'activity'
+The above error occurred in the <BookingApp> component …
+[MGT] render error caught by the boundary
+```
+
+The whole app was replaced by the "MGT Bookings hit an error" screen. This is
+the mirror image of v17.16.11's finding, which established that the quiet
+failure mode is a date operation in an EVENT HANDLER (no boundary, silent
+no-op) and the loud one is a date operation during RENDER. An effect is the
+loud one.
+
+**The fix is a helper, not a guard at the call site.** `dayRangeMs(dateStr)`
+(`lib/day.js`) returns `{from, to}` or **null**, and App withholds the query —
+`enabled: activityOpen && !!activityRange` — rather than asking it with numbers
+it cannot use. The day itself is kept exactly as typed, so the field stays
+editable while somebody is retyping it; only the QUESTION is withheld.
+
+`isReadableDate` alone is **not** sufficient, and that is the part worth
+carrying: it is defined as "can the app step this date", so it deliberately
+accepts `"2026-8-3"`, `"2026/09/13"` and `"Sep 13 2026"` — and all three are
+`NaN` the moment `"T00:00:00"` is appended, because that suffix only means
+anything on an ISO date (measured, node 24). So `dayRangeMs` is defined by its
+OUTPUT, the way `stepUTC` already is, and re-checks the number it produced.
+Removing that second line turns two of the new tests red.
+
+Two more layers, because this is the app's only Firebase QUERY and the failure
+mode is an unmounted app rather than a missing row:
+
+- `useActivityFeed` derives `ready` (`enabled` **and** both bounds finite) and
+  keys its effect, its dep array and its `loading` on that. One derivation
+  rather than a second guard inside the effect: `key` has to agree, or a
+  withheld query leaves the stored answer permanently mismatched and `loading`
+  true for ever.
+- `ActivityLogModal` reads the same predicate and says **"Pick a day to show."**
+  instead of "Nothing was recorded on this day." — a withheld question must not
+  be reported as an answer.
+
+Verified live after the fix: clearing the field shows the new line and the app
+stays up; retyping a day brings the feed back with the session's own entries in
+it.
+
+Gate: `129.53 kB` gz · **1433 tests** · 0 lint errors (88 warnings) · style OK.
+

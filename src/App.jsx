@@ -338,7 +338,7 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
-import { todayStr, stepDate, WEEKDAY_LONG } from "./lib/day";
+import { todayStr, stepDate, WEEKDAY_LONG, dayRangeMs } from "./lib/day";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1374,9 +1374,25 @@ function BookingApp({uid}){
   // Local midnight to local midnight: `at` is a wall-clock stamp and the
   // restaurant thinks in local days. Both are primitives derived from one
   // string, so the feed's dep array is stable across renders.
-  const activityFrom=new Date(activityDay+"T00:00:00").getTime();
-  const activityTo=activityFrom+86400000-1;
-  const {rows:activityRows,loading:activityLoading}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen});
+  //
+  // v18.0.0 session 10 (/code-review): a date input can be EMPTIED, and the
+  // query is the one place in the app where a `viewDate`-shaped string reaches
+  // Firebase instead of `lib/day.js`. `new Date("T00:00:00")` is Invalid Date,
+  // `.getTime()` is NaN, and `startAt(NaN)` THROWS rather than returning
+  // nothing — inside an effect, which the boundary catches by replacing the
+  // whole app. Measured live: clearing "Day to show" gave `startAt failed:
+  // value argument contains NaN in property 'activity'` and the error screen,
+  // from one keystroke on a shipped surface.
+  //
+  // The day is kept exactly as typed, so the field stays editable while it is
+  // being retyped; it is the QUERY that is withheld until the day is readable.
+  // The arithmetic itself is `dayRangeMs` (lib/day.js) rather than inline here,
+  // so the one call site that must not get it wrong is not also the only place
+  // it can be tested.
+  const activityRange=dayRangeMs(activityDay);
+  const activityFrom=activityRange?activityRange.from:0;
+  const activityTo=activityRange?activityRange.to:0;
+  const {rows:activityRows,loading:activityLoading}=useActivityFeed({from:activityFrom,to:activityTo,enabled:!!activityOpen&&!!activityRange});
   // The 12-month retention promise, kept by the app because this plan has no
   // server-side scheduler — and kept HONEST by the rules, which refuse a delete
   // unless the caller is an admin and the entry really is older than a year. It

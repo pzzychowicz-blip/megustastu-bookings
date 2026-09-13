@@ -145,6 +145,30 @@ export function isReadableDate(v) {
   return stepUTC(v, 0) !== null;
 }
 
+// ── v18.0.0 session 10 (/code-review): one LOCAL day, as milliseconds ────────
+// Local midnight to local midnight — the range the activity log's feed queries,
+// because `at` is a wall-clock stamp and the restaurant thinks in local days.
+//
+// It lives here, with a NULL for a day it cannot express, because the call site
+// is the app's only Firebase QUERY and `startAt(NaN)` THROWS rather than
+// returning nothing — from inside an effect, where the error boundary answers
+// by unmounting the app. Measured live: clearing the log's "Day to show" field
+// gave `startAt failed: value argument contains NaN in property 'activity'` and
+// the error screen, from one keystroke.
+//
+// `isReadableDate` is NOT sufficient on its own and the second guard is not
+// ceremony: that predicate deliberately accepts anything `new Date` can step,
+// so `"2026-8-3"`, `"2026/09/13"` and `"Sep 13 2026"` all pass it — and all
+// three become NaN the moment `"T00:00:00"` is appended, because that suffix
+// only makes sense on an ISO date (measured, node 24). Defined by its OUTPUT,
+// the way `stepUTC` is, rather than by a format it hopes covers the inputs.
+export function dayRangeMs(dateStr) {
+  if (!isReadableDate(dateStr)) return null;
+  const from = new Date(dateStr + "T00:00:00").getTime();
+  if (!Number.isFinite(from)) return null;
+  return { from: from, to: from + 86400000 - 1 };
+}
+
 // v17.16.11: `addDays` for the four sites that step the VIEWED date, anchoring
 // to today when the date they were handed cannot be stepped.
 //

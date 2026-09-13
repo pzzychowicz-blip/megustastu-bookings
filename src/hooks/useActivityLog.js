@@ -192,10 +192,22 @@ export function useActivityFeed({ from, to, enabled }) {
   // and leaves `setState` where the warning itself says it belongs: inside the
   // subscription callback.
   const [state, setState] = useState({ key: null, rows: EMPTY_ROWS });
-  const key = enabled ? from + "" + to : null;
+  // v18.0.0 session 10 (/code-review): `enabled` is not the whole
+  // precondition. A non-finite bound is a THROW from `startAt`, not an empty
+  // result — and a throw here is a throw inside an effect, which the error
+  // boundary answers by unmounting the app. The caller guards its own day as
+  // well; this is the module-level half, because this is the only Firebase
+  // QUERY in the app and the failure mode is a blank screen rather than a
+  // missing row.
+  //
+  // ONE derivation rather than a second guard inside the effect: `key` has to
+  // agree with it, or a withheld query leaves the stored answer permanently
+  // mismatched and `loading` true for ever.
+  const ready = !!enabled && Number.isFinite(from) && Number.isFinite(to);
+  const key = ready ? from + "" + to : null;
 
   useEffect(function () {
-    if (!enabled) return undefined;
+    if (!ready) return undefined;
     const q = query(
       ref(db, "activity"),
       orderByChild("at"), startAt(from), endAt(to), limitToLast(FEED_LIMIT)
@@ -215,11 +227,11 @@ export function useActivityFeed({ from, to, enabled }) {
       setState({ key: key, rows: out });
     }, dbError("activity"));
     return unsub;
-  }, [from, to, enabled, key]);
+  }, [from, to, ready, key]);
 
   const fresh = state.key === key;
   return {
     rows: fresh ? state.rows : EMPTY_ROWS,
-    loading: !!enabled && !fresh,
+    loading: ready && !fresh,
   };
 }

@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import process from "node:process";
-import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate, weekdayShort } from "../src/lib/day.js";
+import { todayStr, dayDiff, nowOn, addDays, stepDate, isReadableDate, dayRangeMs, weekdayShort } from "../src/lib/day.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const REAL_TZ = process.env.TZ;
@@ -377,6 +377,45 @@ describe("weekdayShort — the weekday a date field shows (v18.0.0 session 7)", 
   it("is blank for exactly what a native date input refuses to show", () => {
     for (const v of ["", "2026-8-3", "2026-02-30", "11/09/2026", "not-a-date", null, undefined, 20260911]) {
       expect(weekdayShort(v), String(v)).toBe("");
+    }
+  });
+});
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// The activity log's feed is the app's only Firebase QUERY, and `startAt(NaN)`
+// THROWS rather than returning nothing — from inside an effect, so the error
+// boundary answers by unmounting the app. Measured live before the fix:
+// clearing the log's "Day to show" field gave `startAt failed: value argument
+// contains NaN in property 'activity'` and the error screen.
+//
+// So the contract asserted here is not "is this a date" but "can this produce a
+// finite range" — a NULL is the only other answer allowed out of this function.
+describe("dayRangeMs — a finite window, or nothing at all", () => {
+  it("spans local midnight to one millisecond before the next", () => {
+    const r = dayRangeMs("2026-09-13");
+    expect(r).not.toBeNull();
+    expect(r.to - r.from).toBe(86400000 - 1);
+    expect(new Date(r.from).getHours()).toBe(0);
+    expect(new Date(r.from).getMinutes()).toBe(0);
+  });
+
+  it("returns null for EVERY input that cannot produce a finite range", () => {
+    // The first of these is the one that was measured: a date input clears to "".
+    // The three after `null`/`undefined` are the reason `isReadableDate` alone is
+    // not enough — it accepts anything `new Date` can STEP, and all three become
+    // NaN the moment "T00:00:00" is appended, which only an ISO date accepts.
+    for (const v of ["", "   ", null, undefined, 20260913, "2026-13-45",
+                     "2026-8-3", "2026/09/13", "Sep 13 2026"]) {
+      expect(dayRangeMs(v), String(v)).toBeNull();
+    }
+  });
+
+  it("never returns a range holding NaN — the whole point of the null", () => {
+    for (const v of ["", "2026-8-3", "2026/09/13", "Sep 13 2026", "2026-09-13"]) {
+      const r = dayRangeMs(v);
+      if (r === null) continue;
+      expect(Number.isFinite(r.from), String(v)).toBe(true);
+      expect(Number.isFinite(r.to), String(v)).toBe(true);
     }
   });
 });
