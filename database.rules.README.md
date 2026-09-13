@@ -184,9 +184,10 @@ gives.
 
 ### What the suite asserts
 
-286 tests as of 2026-09-13, v18.0.0 session 10 (measured — this line read 127
+293 tests as of 2026-09-13, v18.0.0 session 11 (measured — this line read 127
 from v17.16.11, then 257, which was already stale against this file's OWN
-"261 → 286 tests." three sections down on the day it was written), run on every
+"261 → 286 tests." three sections down on the day it was written, then 286),
+run on every
 PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
 the rig itself is pointed at a loopback emulator and a `demo-` project — and,
@@ -478,7 +479,11 @@ test passing rather than being waived**: a CAS proves a write was based on the
 version it overwrites, and here nothing may be overwritten at all. Create, and
 prune after a year. There is no third operation.
 
-**261 → 286 tests.**
+**261 → 286 tests**, and **286 → 293** in session 11 (below).
+
+> **Session 11 changed this node's delete rule, and it is the one change in
+> this file that makes a guarantee WEAKER.** Read
+> "Clearing a range" at the end of this section before deploying.
 
 ### Three clauses, three different lies refused
 
@@ -1114,3 +1119,70 @@ as an object, so it never loops. Booking ids (`genId()` = base-36, `[0-9a-z]`) a
 path-safe child keys. Until the keyed shape echoes, per-child writes are **held**
 (`arrayShapeRef`) so a string key is never mixed into the integer array. No booking field
 changes shape — only a numeric `updatedAt` is added (carried through `sanitize`).
+
+
+---
+
+## v18.0.0 session 11 — `/activity`: clearing a range, and the floor that moved out of the rules
+
+**This is a deliberate weakening, recorded as one.** Everything else in this
+file tightens a guarantee; this loosens the strongest one the activity log had.
+
+Patryk asked for the log to offer *"remove by date or a range of dates"*. Until
+now the delete arm of `/activity/$eid`'s `.write` carried a twelve-month floor:
+
+```jsonc
+(!newData.exists() && data.exists()
+  && data.child('at').val() < now - 31536000000      // ← gone in session 11
+  && …settingsAdmin…)
+```
+
+That floor is what made the log **tamper-evident by construction** — not even an
+admin could quietly remove last night. It cannot coexist with the feature,
+because the rule cannot tell a retention prune from a deliberate clear: they are
+**the same operation on the same node**, and a rule sees the operation, not the
+button that started it.
+
+So the floor moved from the rules into the app (`ACTIVITY_RETENTION_DAYS`), and
+a compensating record took its place: a clear writes a log line naming the range
+and the count (`clearedEntry`, `lib/activity.js`), written **after** the deletes
+so its own server `at` falls outside the range it reports. Be exact about what
+that buys — **tamper-evident for one pass, not tamper-proof**: the line is
+itself deletable by the next clear. The screen says as much rather than implying
+more, and so does this paragraph.
+
+### What did NOT change, and is now asserted rather than implied
+
+- A **staff account still cannot delete anything**, however old.
+- An **admin denied `settingsAdmin`** cannot either.
+- The **whole node still cannot be wiped in one call**: `activity` carries no
+  `.write` of its own — only `$eid` does — and permission cascades DOWN, never
+  UP. This is CT-2A-06 still holding, and it is what makes a clear something the
+  app can count, report and log rather than one irreversible call.
+
+### A multi-path delete is allowed, and that was measured
+
+`clearActivityRange` sends **one `update()` of nulls per batch** rather than N
+`remove()` calls. Whether the rules permit that is not obvious — the grant is on
+`$eid` and the update is addressed to `activity` — so the suite asks the
+emulator directly, and gets **yes for an admin, no for a staff account**. Both
+halves are asserted: without the second, "the batch works" would be a statement
+about convenience rather than about permission. CT-2A-06 exists in this repo
+because someone once reasoned about where RTDB evaluates a rule instead of
+running it.
+
+### Deployment — rules FIRST this time, and that is the exception
+
+Every other change in this file is app-first/rules-second, because the app's new
+writes are refused harmlessly by the old rules until they land. **This one is
+the other way round.** The app ships a *Clear this range* button that the old
+rules refuse, so between the two deploys an admin sees a control that does not
+work.
+
+Measured on DEV before this was written: the clear was denied
+(`update at /activity failed: permission_denied`), the app correctly claimed
+nothing and wrote no "cleared N entries" line — and showed the user nothing
+either, which read as a dead button. The refusal is now reported on screen
+("The server refused. An admin can clear the log only once the updated database
+rules are deployed."), so the intermediate state is legible rather than
+mysterious. Deploying the rules first avoids it entirely.

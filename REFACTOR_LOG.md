@@ -25219,3 +25219,68 @@ fields and dropped the date column (68 entries); **People only** gave "58 of 68
 shown" with no Automatic chips left; a backwards range said so.
 
 Gate: `130.13 kB` gz · **1468 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 122 (session 11) — clearing a range, and the 12-month floor leaves the rules
+
+Patryk: *"There must be an option to remove the data. Options should be: remove
+by date or a range of dates."*
+
+**This is the one change in v18.0.0 that makes a guarantee weaker, and it is
+recorded as one.** The delete arm of `/activity/$eid` carried a twelve-month
+floor, which made the log tamper-evident by construction — not even an admin
+could quietly remove last night. It cannot coexist with the feature, because a
+rule sees the OPERATION and not the button that started it: a retention prune
+and a deliberate clear are the same delete on the same node.
+
+So the floor moved into the app and a compensating record took its place.
+`clearedEntry` writes a line naming the range and the count, AFTER the deletes,
+so its own server `at` falls outside the range it reports. **Tamper-evident for
+one pass, not tamper-proof** — that line is itself deletable by the next clear —
+and the screen says so rather than implying more: the footnote now reads "Kept
+for 12 months, and an admin can clear a range sooner — a clear is itself
+recorded."
+
+What did NOT change is asserted rather than left implied: staff still cannot
+delete anything, a denied admin cannot either, and the whole node still cannot
+be wiped in one call, because `activity` carries no `.write` and permission
+cascades DOWN. That last one is CT-2A-06 still holding, and it is what makes a
+clear something the app can count, report and log.
+
+**The batch is one multi-path `update()` of nulls, and that was asked rather
+than reasoned.** The grant is on `$eid` while the update is addressed to
+`activity`, so the suite asks the emulator: yes for an admin, no for staff. Both
+halves, because without the second "the batch works" would be a claim about
+convenience rather than about permission. `test:rules` 286 → 293.
+
+**Two things found by running it, both worth more than the feature.**
+
+*The confirm button moved when you armed it.* The warning paragraph rendered
+ABOVE the button, so the first tap pushed the button 50px down the page and the
+second tap landed on the paragraph that had just appeared — measured,
+`topBefore 1083.5 → topAfter 1133.5`. That is Commit 119's defect, reintroduced
+by a LAYOUT rather than a transform, by the person who had just fixed it, on a
+DESTRUCTIVE control where the failure is not "nothing happened" but "something
+else did". The button is the stable anchor now and the warning sits under it
+(`movedBy: 0`), tied to it with `aria-describedby` — emitted only while armed,
+because a describedby pointing at an absent id is worse than none.
+
+*A refusal looked exactly like success.* DEV still runs the rules deployed on
+2026-09-12, so the clear came back `PERMISSION_DENIED`. The app got that half
+right by construction — the count is a count of DELETES, so it claimed nothing
+and `clearedEntry(…, 0)` returned null, leaving no line claiming otherwise — and
+got the other half wrong by saying nothing at all, which reads as a dead button.
+`clearActivityRange` now resolves `{removed, refused}`, because
+zero-because-nothing-matched and zero-because-the-server-said-no are different
+facts and only one of them is a deploy that has not happened.
+
+**Deploy order is REVERSED for this one**, and `database.rules.README.md` says
+so: every other change here is app-first because the old rules refuse the new
+writes harmlessly, but this ships a button the old rules refuse. Rules first.
+
+Also: the range change DISARMS the confirm, so a second tap cannot land on a
+window nobody agreed to; and an UNBOUNDED clear is refused in both the modal and
+the handler, because this screen opens on "all time" and a clear that accepted
+it would put "delete the entire log" one tap from the resting state.
+
+Gate: `130.65 kB` gz · **1470 tests** · 0 lint errors (88 warnings) · style OK ·
+`test:rules` **293**.

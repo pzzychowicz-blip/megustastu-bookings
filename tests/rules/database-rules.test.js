@@ -2061,8 +2061,13 @@ describe("/activity — an entry cannot be edited or deleted", () => {
     expect(await seedRead("activity/e1/text")).toBe("status → seated");
   });
 
-  it("refuses a delete of a RECENT entry — even from an admin", async () => {
-    await seedAdmin("staff-a");
+  it("refuses a delete by a STAFF account, however recent or old", async () => {
+    // v18.0.0 session 11 INVERTED the admin half of this test with the rules —
+    // an admin may now clear a range on purpose (see the block below) — and
+    // that is exactly why this half is worth stating on its own: the thing an
+    // ordinary account can do to the log is unchanged, which is the property
+    // the relaxation must not have cost.
+    await seedRole("staff-a", { role: "staff" });
     await assertFails(ME().ref("activity/e1").remove());
     expect(await seedRead("activity/e1")).not.toBeNull();
   });
@@ -2074,8 +2079,31 @@ describe("/activity — an entry cannot be edited or deleted", () => {
   });
 });
 
-describe("/activity — the 12-month prune, admin only", () => {
+// ── Deleting entries: ADMIN ONLY, and no longer age-gated ───────────────────
+//
+// v18.0.0 session 11, and this is a deliberate WEAKENING recorded as such.
+//
+// Until now the rule carried a 12-month floor: an admin could delete an entry
+// only if it really was older than a year, so the log was tamper-EVIDENT by
+// construction — nobody could quietly remove last night. Patryk asked for
+// "remove by date or a range of dates", which cannot coexist with that floor:
+// the rule cannot tell the retention prune from a deliberate clear, because
+// both are the same operation on the same node.
+//
+// So the floor moved from the rules into the app (`ACTIVITY_RETENTION_DAYS`),
+// and what stands in its place is a compensating ENTRY: a clear writes a log
+// line naming the range and the count, so a gap is visible rather than
+// invisible. That is tamper-evident for one pass and not tamper-proof — the
+// line is itself deletable — and saying so plainly is the point of this block.
+//
+// What did NOT change is the boundary that matters most, and the tests below
+// state it rather than leaving it implied: an ordinary account still cannot
+// delete anything, a denied admin cannot either, and the whole node still
+// cannot be wiped in one call (there is no `.write` on `activity` itself — only
+// on `$eid` — and permission does not cascade UP).
+describe("/activity — deleting, admin only and no longer age-gated", () => {
   const OLD = () => Object.assign(entry(), { at: Date.now() - YEAR_MS - 86400000 });
+  const NEW = () => Object.assign(entry(), { at: Date.now() });
 
   beforeEach(async () => { await seed((db) => db.ref("activity/old1").set(OLD())); });
 
@@ -2083,6 +2111,17 @@ describe("/activity — the 12-month prune, admin only", () => {
     await seedAdmin("staff-a");
     await assertSucceeds(ME().ref("activity/old1").remove());
     expect(await seedRead("activity/old1")).toBeNull();
+  });
+
+  it("an admin may now delete a RECENT entry — the age gate is gone", async () => {
+    // The inversion. This assertion read `assertFails` until session 11, and
+    // flipping it WITH the rule is the convention this suite turns on: a
+    // permission that changed should fail its old test loudly rather than
+    // quietly stop being covered.
+    await seedAdmin("staff-a");
+    await seed((db) => db.ref("activity/e9").set(NEW()));
+    await assertSucceeds(ME().ref("activity/e9").remove());
+    expect(await seedRead("activity/e9")).toBeNull();
   });
 
   it("a staff account may not, however old the entry is", async () => {
@@ -2095,11 +2134,36 @@ describe("/activity — the 12-month prune, admin only", () => {
     await assertFails(ME().ref("activity/old1").remove());
   });
 
-  it("the boundary is the year, not the admin — one day inside it is refused", async () => {
+  it("an admin STILL cannot wipe the node in one call", async () => {
+    // The relaxation is per-entry and must stay per-entry. `activity` carries
+    // no `.write` of its own and permission cascades DOWN, never UP, so the
+    // only way to empty the log is one key at a time — which is what makes a
+    // clear something the app can count, report and log.
     await seedAdmin("staff-a");
-    await seed((db) => db.ref("activity/e2").set(
-      Object.assign(entry(), { at: Date.now() - YEAR_MS + 86400000 })));
-    await assertFails(ME().ref("activity/e2").remove());
+    await assertFails(ME().ref("activity").remove());
+    expect(await seedRead("activity/old1")).not.toBeNull();
+  });
+
+  it("a MULTI-PATH delete of several keys is allowed for an admin", async () => {
+    // Asked rather than assumed, because the answer decides how the app clears
+    // a range: one atomic `update()` of nulls, or N separate `remove()` calls.
+    // CT-2A-06 is in this repo precisely because someone reasoned about where
+    // RTDB evaluates a rule instead of running it.
+    await seedAdmin("staff-a");
+    await seed((db) => db.ref("activity/m1").set(NEW()));
+    await seed((db) => db.ref("activity/m2").set(NEW()));
+    await assertSucceeds(ME().ref("activity").update({ m1: null, m2: null }));
+    expect(await seedRead("activity/m1")).toBeNull();
+    expect(await seedRead("activity/m2")).toBeNull();
+  });
+
+  it("and that multi-path delete is refused for a staff account", async () => {
+    // The other half — without it, "the batch works" would be a statement
+    // about convenience rather than about permission.
+    await seedRole("staff-a", { role: "staff" });
+    await seed((db) => db.ref("activity/m3").set(NEW()));
+    await assertFails(ME().ref("activity").update({ m3: null }));
+    expect(await seedRead("activity/m3")).not.toBeNull();
   });
 });
 

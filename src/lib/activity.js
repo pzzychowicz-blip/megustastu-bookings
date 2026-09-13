@@ -459,3 +459,39 @@ export function activityWindow(fromDay, toDay) {
   const backwards = from != null && to != null && from > to;
   return { from: from, to: to, badDay: badDay, backwards: backwards, ok: !badDay && !backwards };
 }
+
+
+// ── Clearing the log records that it was cleared ─────────────────────────────
+//
+// v18.0.0 session 11. The rules used to refuse a delete of anything under a
+// year old, which made the log tamper-EVIDENT by construction. "Remove by date
+// or a range of dates" cannot coexist with that floor — the rule cannot tell a
+// retention prune from a deliberate clear, because they are the same operation
+// on the same node — so the floor moved into the app and THIS took its place.
+//
+// A clear writes a line naming the range and the count, so a gap in the log is
+// visible rather than invisible. Be exact about what that buys: the line is
+// itself deletable by the next clear, so this is tamper-evident for ONE pass
+// and not tamper-proof. It is the honest half of the trade, and the screen says
+// so too rather than implying more.
+//
+// The entry is written AFTER the deletes, so its own `at` is later than every
+// entry it describes — which is what keeps it out of the range it is reporting
+// even when that range ends today.
+//
+// `kind: "data"` because it is the same category as exporting a backup: an
+// action on the RECORD rather than on the restaurant.
+export function clearedEntry(fromDay, toDay, count) {
+  const n = Number(count);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const span = fromDay && toDay
+    ? (fromDay === toDay ? fromDay : fromDay + " to " + toDay)
+    : fromDay ? "from " + fromDay
+      : toDay ? "up to " + toDay
+        : "all dates";
+  return {
+    kind: "data",
+    text: "cleared the activity log · " + span + " · "
+      + n + (n === 1 ? " entry" : " entries"),
+  };
+}

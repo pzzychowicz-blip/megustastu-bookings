@@ -29,9 +29,9 @@
 // `enabled`), which is why the range lives in state up in App rather than here:
 // closing the modal must detach the listener, and a range held here would go
 // with it.
-import { useMemo, useState } from "react";
-import { S, T, FW, SP, R, H, IC } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, AutoHeight } from "./atoms";
+import { useId, useMemo, useState } from "react";
+import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkSolidBtn, AutoHeight } from "./atoms";
 import { renderText } from "../lib/activity";
 // v18.0.0 session 11: `isReadableDate` is no longer imported here. Session 10
 // had this panel re-ask whether the day was readable so it would not report an
@@ -86,8 +86,11 @@ function personOf(email) {
 export function ActivityLogModal({
   fromDay, toDay, onSetFromDay, onSetToDay, badDay, backwards,
   rows, loading, loadingMore, hasMore, onLoadOlder,
+  canClear, clearBusy, clearMsg, onClearRange,
   bookings, onOpenBooking, onClose,
 }) {
+  const [armed, setArmed] = useState(false);
+  const warnId = useId();
   const [kinds, setKinds] = useState({});     // {} = everything
   const [who, setWho] = useState("");
   const [q, setQ] = useState("");
@@ -99,7 +102,10 @@ export function ActivityLogModal({
 
   // The quick ranges. `addDays(todayStr(), -6)` is six days back INCLUSIVE of
   // today, which is what "last 7 days" means to a person counting shifts.
-  function setRange(a, b) { onSetFromDay(a); onSetToDay(b); }
+  // Changing the range DISARMS. The confirm is a promise about a specific
+  // window, and leaving it armed across a change would let a second tap delete
+  // a range nobody agreed to — the arming pattern's one real failure mode.
+  function setRange(a, b) { setArmed(false); onSetFromDay(a); onSetToDay(b); }
   const today = todayStr();
   const oneDay = !!fromDay && fromDay === toDay;
   const allTime = !fromDay && !toDay;
@@ -164,14 +170,14 @@ export function ActivityLogModal({
       <div style={{ display: "flex", gap: SP.base, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
         <DateField
           value={fromDay}
-          onChange={function (e) { onSetFromDay(e.target.value); }}
+          onChange={function (e) { setArmed(false); onSetFromDay(e.target.value); }}
           style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
           inputProps={{ "aria-label": "From day (leave empty for no start)" }}
         />
         <span aria-hidden="true" style={{ fontSize: T.body, color: S.muted }}>→</span>
         <DateField
           value={toDay}
-          onChange={function (e) { onSetToDay(e.target.value); }}
+          onChange={function (e) { setArmed(false); onSetToDay(e.target.value); }}
           style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
           inputProps={{ "aria-label": "To day (leave empty for no end)" }}
         />
@@ -346,13 +352,83 @@ export function ActivityLogModal({
         </div>
       </AutoHeight>
 
+      {/* ── Clearing a range (v18.0.0 session 11) ───────────────────────────
+          Patryk: "There must be an option to remove the data. Options should be:
+          remove by date or a range of dates."
+
+          It acts on the RANGE and NOT on the filters, and the armed sentence
+          says so outright — somebody who has narrowed to Vouchers and presses
+          this would otherwise reasonably expect only vouchers to go. It also
+          says the clear can reach entries not loaded on screen, because the
+          list is capped at a page and the delete is not.
+
+          Requiring a bound is the load-bearing part: this modal OPENS on "all
+          time", so a clear that accepted an unbounded range would put "delete
+          the entire log" one tap from the resting state of the screen. */}
+      {canClear ? (
+        <div style={{ marginTop: SP.base, paddingTop: SP.base, borderTop: "1px solid var(--border-soft)" }}>
+          {/* The button comes FIRST and the warning appears UNDER it, so arming
+              cannot move the thing you are about to press a second time.
+
+              Measured before this order was chosen: with the warning above, the
+              first tap pushed the confirm button 50px DOWN the page and the
+              second tap landed on the paragraph that had just appeared. That is
+              Commit 119's defect — a control sliding out from under the cursor
+              between aiming and clicking — reintroduced by a layout rather than
+              by a transform, and on a DESTRUCTIVE control, where the failure is
+              not "nothing happened" but "something else did".
+
+              The warning is tied to the button with `aria-describedby` rather
+              than announced as a live region: a live region created already
+              holding its message announces nothing, and the id is emitted only
+              while the element it names exists — a describedby pointing at an
+              absent id is worse than none (`Fld`'s rule). */}
+          <div style={{ display: "flex", gap: SP.base, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="mgt-hover-scale"
+              disabled={allTime || clearBusy || !!badDay || !!backwards}
+              aria-describedby={armed ? warnId : undefined}
+              onClick={function () {
+                if (armed) { setArmed(false); onClearRange(); } else setArmed(true);
+              }}
+              style={mkSolidBtn(BTN.del, {
+                fontSize: T.body, minHeight: H.compact, padding: SP.base + "px " + SP.pane + "px",
+                opacity: allTime || clearBusy || badDay || backwards ? 0.5 : 1,
+              })}
+            >{clearBusy ? "Clearing…" : armed ? "Confirm — delete this range" : "Clear this range"}</button>
+            {allTime ? (
+              <span style={{ fontSize: T.micro, color: S.muted }}>
+                Pick a day or a range above to clear.
+              </span>
+            ) : null}
+          </div>
+          {clearMsg && !armed ? (
+            <div style={{ fontSize: T.body, color: S.muted, marginTop: SP.base }}>{clearMsg}</div>
+          ) : null}
+          {armed ? (
+            <div id={warnId} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: SP.base }}>
+              Permanently deletes every entry from {fromDay || "the beginning"} to {toDay || "now"} — including any
+              not loaded here, and whatever the filters above are showing. There are no backups.
+              The log will record that this happened. Tap again to confirm.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div style={{ fontSize: T.micro, color: S.muted, marginTop: SP.base }}>
         {/* Said on screen rather than implied, because the database cannot
             enforce it: `.read` is `auth != null` at the root and cascades, so
             every signed-in account can read this node. Hiding the screen is
-            what this app can honestly promise, and it says so. */}
-        Kept for 12 months. Any signed-in account can read this log —
-        it is hidden from the app, not from the database.
+            what this app can honestly promise, and it says so.
+
+            v18.0.0 session 11: and the second sentence is the honest half of
+            the rules having given up their 12-month delete floor. An admin can
+            now remove a range on purpose, so "kept for 12 months" is a policy
+            the app keeps rather than a guarantee the database enforces. */}
+        Kept for 12 months, and an admin can clear a range sooner — a clear is
+        itself recorded. Any signed-in account can read this log — it is hidden
+        from the app, not from the database.
       </div>
     </Overlay>
   );

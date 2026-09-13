@@ -77,7 +77,7 @@
     "activity": {
       ".indexOn": ["at", "guestKey"],
       "$eid": {
-        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('uid').val() === auth.uid && newData.child('email').val() === auth.token.email && newData.child('at').val() === now) || (!newData.exists() && data.exists() && data.child('at').val() < now - 31536000000 && ((root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true) && root.child('roles').child(auth.uid).child('denies').child('settingsAdmin').val() !== true)))",
+        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('uid').val() === auth.uid && newData.child('email').val() === auth.token.email && newData.child('at').val() === now) || (!newData.exists() && data.exists() && ((root.child('roles').child(auth.uid).child('role').val() === 'admin' || root.child('roles').child(auth.uid).child('extras').child('settingsAdmin').val() === true) && root.child('roles').child(auth.uid).child('denies').child('settingsAdmin').val() !== true)))",
         ".validate": "!newData.exists() || newData.hasChildren(['at', 'uid', 'email', 'kind', 'text'])",
         "at":       { ".validate": "newData.isNumber()" },
         "uid":      { ".validate": "newData.isString()" },

@@ -35,6 +35,16 @@ const RULES = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "database.rules.json"), "utf8"
 );
 
+// The `.write` on `/activity/$eid`, as a string. Pulled out rather than grepped
+// over the whole file, so an assertion about "no age gate here" cannot be
+// satisfied or broken by an unrelated `now - …` somewhere else in the rules.
+function activityWriteRule() {
+  const parsed = JSON.parse(RULES);
+  const w = parsed.rules.activity.$eid[".write"];
+  expect(typeof w, "/activity/$eid lost its .write").toBe("string");
+  return w;
+}
+
 const bk = (o = {}) => Object.assign({
   id: "b1", name: "Pau Estévez", phone: "+34600111222",
   date: "2026-09-01", time: "20:00", scheduledTime: "20:00", size: 4,
@@ -56,8 +66,32 @@ describe("the rules and this module agree", () => {
     expect(inRules.slice().sort()).toEqual(ACTIVITY_KINDS.slice().sort());
   });
 
-  it("the prune window matches the one the rules enforce", () => {
-    expect(RULES).toContain("now - " + PRUNE_AFTER_MS);
+  it("the rules NO LONGER age-gate a delete — the floor is the app's alone", () => {
+    // This assertion read `expect(RULES).toContain("now - " + PRUNE_AFTER_MS)`
+    // until v18.0.0 session 11, and inverting it deliberately is the point.
+    //
+    // The rule used to refuse a delete of anything under a year old, which made
+    // the log tamper-EVIDENT by construction. "Remove by date or a range of
+    // dates" cannot coexist with that: the rule cannot tell a retention prune
+    // from a deliberate clear, because they are the same operation on the same
+    // node. So the floor moved into the client and `clearedEntry` took its
+    // place — a clear now writes a line saying it happened.
+    //
+    // Asserting the ABSENCE is what keeps that a decision rather than a drift:
+    // if somebody restores the age gate, the prune still works and the CLEAR
+    // silently stops working for recent entries, which is a bug with no visible
+    // symptom beyond "nothing happened".
+    const write = activityWriteRule();
+    expect(write).not.toMatch(/now - \d+/);
+  });
+
+  it("a delete is still gated on the settingsAdmin capability", () => {
+    // What the relaxation must NOT have cost. The emulator suite proves the
+    // behaviour against a real server; this proves the rule still mentions the
+    // gate at all, which is the half that would go missing in a careless edit.
+    const write = activityWriteRule();
+    expect(write).toContain("!newData.exists()");
+    expect(write).toContain("settingsAdmin");
   });
 
   it("is 365 days, stated as arithmetic so the number can be checked by eye", () => {
@@ -525,6 +559,20 @@ describe("the writer hook points", () => {
     expect(installers).toEqual(["useActivityLog.js"]);
   });
 
+  // ── Entries that are EVENTS, not diffs ────────────────────────────────────
+  //
+  // The sweep below assumes an emit in a hook reports a CHANGE, so it must have
+  // captured the before-state. That held for every hook in the app — measured,
+  // all fifteen were exactly 1:1 — until v18.0.0 session 11 added one entry
+  // that is not a diff of anything: clearing a range of the log is an event,
+  // and there is no prior version of a deletion to compare against.
+  //
+  // A BUDGET and not a blanket exemption, deliberately. `useActivityLog.js` is
+  // the file that owns the sink, so excusing it wholesale would retire the
+  // guard exactly where an unnoticed emit is most likely; excusing ONE emit
+  // means a second one has to come back here and say what it is.
+  const EVENT_EMITS = { "useActivityLog.js": 1 };   // clearActivityAndLog
+
   it("no hook emits without having captured a prev to diff against", () => {
     // `prev` read one line late is the same object as `next`, so the diff says
     // nothing changed and the entry is silently empty rather than visibly
@@ -537,9 +585,26 @@ describe("the writer hook points", () => {
       .forEach(([f, src]) => {
         const emits = (src.match(/emitActivity\s*\(/g) || []).length;
         const prevs = (src.match(/const prev\s*=/g) || []).length;
-        expect(prevs, f + " emits " + emits + " entries with " + prevs + " prev captures")
-          .toBeGreaterThanOrEqual(emits);
+        const allowed = EVENT_EMITS[f] || 0;
+        expect(prevs, f + " emits " + emits + " entries (" + allowed
+          + " allowed as events) with " + prevs + " prev captures")
+          .toBeGreaterThanOrEqual(emits - allowed);
       });
+  });
+
+  it("the event-emit budget is SPENT — an unused allowance is a stale excuse", () => {
+    // Without this, deleting `clearActivityAndLog` would leave a standing
+    // permission for one unexplained emit in the file that owns the sink, and
+    // nothing would ever say so. The same reason v17.16.10 deleted a ROADMAP
+    // pointer to work that had already shipped: the half nobody looks at is the
+    // half that goes stale.
+    Object.keys(EVENT_EMITS).forEach((f) => {
+      const src = read(f);
+      const emits = (src.match(/emitActivity\s*\(/g) || []).length;
+      const prevs = (src.match(/const prev\s*=/g) || []).length;
+      expect(emits - prevs, f + " no longer needs its event-emit allowance")
+        .toBe(EVENT_EMITS[f]);
+    });
   });
 });
 

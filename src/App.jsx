@@ -316,7 +316,7 @@ import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
-import { useActivityLog, useActivityFeed, redactGuest, pruneActivity } from "./hooks/useActivityLog";
+import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActivityAndLog } from "./hooks/useActivityLog";
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
@@ -1440,6 +1440,43 @@ function BookingApp({uid}){
   // Gated on `isAdmin` client-side as well: a staff account's attempt would be
   // refused anyway, and asking for a refusal on every open is noise in the
   // console for a promise that was never theirs to keep.
+  // v18.0.0 session 11: clearing a range. Admin-only on the client because it is
+  // admin-only in the rules — asking for a refusal a staff account was never
+  // going to get is noise in the console for a control they cannot use.
+  //
+  // The busy flag is a ref MIRROR plus state, the `saveBookings` shape: the
+  // guard has to be read synchronously in the handler (two taps arriving faster
+  // than a render would otherwise start two clears over the same range), and
+  // the state is what the button paints with.
+  const [activityClearing,setActivityClearing]=useState(false);
+  // What the last clear did, so a REFUSAL is visible. Without it the button
+  // simply returns to rest and the list is unchanged, which reads as a dead
+  // control — measured on DEV, where the clear is denied because the database
+  // is still running the rules deployed before this change.
+  const [activityClearMsg,setActivityClearMsg]=useState("");
+  const activityClearingRef=useRef(false);
+  function doClearActivity(){
+    if(activityClearingRef.current) return;
+    if(!isAdmin) return;
+    // Refuses an UNBOUNDED clear here as well as in the modal, because the modal
+    // only disables a button and this is the function that does the deleting.
+    if(activityFrom==null&&activityTo==null) return;
+    if(!activityRangeOk) return;
+    activityClearingRef.current=true;
+    setActivityClearing(true);
+    setActivityClearMsg("");
+    clearActivityAndLog(activityFrom,activityTo,activityFromDay,activityToDay)
+      .then(function(res){
+        // Three outcomes and three sentences. "Refused" and "there was nothing"
+        // both remove zero rows, and saying the same thing for both is how a
+        // deploy that has not happened gets mistaken for an empty week.
+        if(res&&res.refused) setActivityClearMsg("The server refused. An admin can clear the log only once the updated database rules are deployed.");
+        else if(res&&res.removed>0) setActivityClearMsg("Cleared "+res.removed+(res.removed===1?" entry.":" entries."));
+        else setActivityClearMsg("There was nothing to clear in that range.");
+      })
+      .catch(function(){setActivityClearMsg("Couldn't clear that range.");})
+      .then(function(){activityClearingRef.current=false;setActivityClearing(false);});
+  }
   const prunedRef=useRef(false);
   useEffect(function(){
     if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
@@ -5255,6 +5292,10 @@ function BookingApp({uid}){
           loadingMore={activityLoadingMore}
           hasMore={activityHasMore}
           onLoadOlder={activityLoadOlder}
+          canClear={isAdmin}
+          clearBusy={activityClearing}
+          clearMsg={activityClearMsg}
+          onClearRange={doClearActivity}
           bookings={bookings}
           onOpenBooking={function(id){const b=bookings.find(function(x){return x.id===id;});if(!b) return;setActivityOpen(null);closeSettings();openEdit(b);}}
           onClose={function(){setActivityOpen(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>

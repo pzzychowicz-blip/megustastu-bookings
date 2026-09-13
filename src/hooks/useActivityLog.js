@@ -48,13 +48,13 @@
 // date only. Filtering by date should be one of options."*
 import { useState, useEffect } from "react";
 import {
-  ref, push, set, get, remove, onValue, query,
+  ref, push, set, get, remove, update, onValue, query,
   orderByChild, startAt, endAt, equalTo, limitToLast, serverTimestamp,
 } from "firebase/database";
 import { db, auth } from "../firebase";
 import { dbError } from "../lib/dbError";
-import { setActivitySink } from "../lib/activitySink";
-import { PRUNE_AFTER_MS, isPrunable } from "../lib/activity";
+import { setActivitySink, emitActivity } from "../lib/activitySink";
+import { PRUNE_AFTER_MS, isPrunable, clearedEntry } from "../lib/activity";
 
 // ── PAGING: one GROWING query, not a cursor ─────────────────────────────────
 //
@@ -174,6 +174,99 @@ export function pruneActivity() {
       });
     })).then(function () { return olds.length; });
   }).catch(function () { return 0; });
+}
+
+// ── CLEARING A RANGE (v18.0.0 session 11) ───────────────────────────────────
+//
+// Patryk's third item: "There must be an option to remove the data. Options
+// should be: remove by date or a range of dates."
+//
+// It is ONE multi-path `update()` of nulls per batch, not N `remove()` calls,
+// and that is measured rather than reasoned: `tests/rules/database-rules.test.js`
+// asks the emulator directly and gets a yes for an admin and a no for a staff
+// account. `activity` itself carries no `.write` — only `$eid` does — so the
+// batch is permitted per KEY, which is also why the whole node still cannot be
+// wiped in one call. CT-2A-06 is in this repo because someone once reasoned
+// about where RTDB evaluates a rule instead of running it.
+//
+// Batched and LOOPED because a range can hold more than one query's worth. The
+// loop is bounded by `MAX_PASSES` rather than by "until empty": a pass that
+// deletes nothing — every key refused, because the account is not an admin —
+// would otherwise spin forever against the same rows. It stops on a pass that
+// removes nothing, which is the same condition read the safe way round.
+export const CLEAR_BATCH = 400;
+const MAX_PASSES = 25;
+
+/**
+ * Delete every entry in [from, to] (ms; either may be null for unbounded).
+ *
+ * Resolves with `{ removed, refused }`. `removed` is a count of DELETES and
+ * never of matches — a refused batch must not be announced as a success, which
+ * is also what keeps `clearedEntry` from writing "cleared 27 entries" over a
+ * log that still holds 27.
+ *
+ * `refused` exists because those two are not the same failure and the screen
+ * has to tell them apart: zero-because-there-was-nothing is a quiet week, and
+ * zero-because-the-server-said-no is a deploy that has not happened. Measured
+ * on DEV before it was added — the clear was denied, the app correctly claimed
+ * nothing, and showed the user nothing either, which reads as a dead button.
+ */
+export function clearActivityRange(from, to) {
+  let total = 0;
+  let refused = false;
+  function done() { return { removed: total, refused: refused }; }
+  function pass(n) {
+    if (n <= 0) return Promise.resolve(done());
+    const parts = [orderByChild("at")];
+    if (from != null) parts.push(startAt(from));
+    if (to != null) parts.push(endAt(to));
+    parts.push(limitToLast(CLEAR_BATCH));
+    const q = query.apply(null, [ref(db, "activity")].concat(parts));
+    return get(q).then(function (snap) {
+      const patch = {};
+      let found = 0;
+      snap.forEach(function (child) { patch[child.key] = null; found += 1; });
+      if (!found) return done();
+      return update(ref(db, "activity"), patch).then(function () {
+        total += found;
+        // A full batch means there may be more; a short one means that was the
+        // tail. Same evidence the feed's `hasMore` uses, and over-reporting
+        // costs one empty query where under-reporting would leave rows behind
+        // after a clear that said it was done.
+        return found < CLEAR_BATCH ? done() : pass(n - 1);
+      }).catch(function (err) {
+        // Refused. Reported and NOT rethrown into a rejection the caller has to
+        // special-case: `removed` is already the truth about what went, and
+        // `refused` is what stops that truth reading as "nothing to do".
+        refused = true;
+        console.warn("[activity] could not clear a batch", err);
+        return done();
+      });
+    }).catch(function (err) {
+      refused = true;
+      console.warn("[activity] could not read the range to clear", err);
+      return done();
+    });
+  }
+  return pass(MAX_PASSES);
+}
+
+/**
+ * Clear a range and then say so IN the log. Split from the delete above so the
+ * deleting is testable without a sink, and joined here so no call site can do
+ * one without the other — which is the whole compensation for the rules having
+ * given up their 12-month floor.
+ */
+export function clearActivityAndLog(from, to, fromDay, toDay) {
+  return clearActivityRange(from, to).then(function (res) {
+    const e = clearedEntry(fromDay, toDay, res.removed);
+    // Written AFTER the deletes, so its own server `at` is later than anything
+    // it describes and it cannot be caught by the range it is reporting. It is
+    // also gated on something having actually gone: `clearedEntry` returns null
+    // for a count of zero, so a refused clear leaves no line claiming otherwise.
+    if (e) emitActivity([e]);
+    return res;
+  });
 }
 
 /**
