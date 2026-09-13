@@ -24962,3 +24962,12 @@ a regex hunts for is indistinguishable from the thing", one file over.
 
 Gate: `129.61 kB` gz · **1452 tests** · 0 lint errors (88 warnings) · style OK.
 
+### Commit 115 (session 10) — the count the review had itself moved
+
+Commit 113 corrected `CLAUDE.md` to **1448** and Commit 114 then added four
+tests, so the line was stale again by the time the run ended — which is the
+whole point of the row it sits in. **1452**, measured, and it is the last change
+this session makes to the suite.
+
+Gate: `129.61 kB` gz · 1452 tests · 0 lint errors (88 warnings) · style OK.
+
