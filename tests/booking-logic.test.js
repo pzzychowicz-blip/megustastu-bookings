@@ -2117,6 +2117,34 @@ describe("lastStartMins", () => {
     expect(lastStartMins(24)).toBe(23 * 60 + 45);
     expect(lastStartMins(25)).toBe(23 * 60 + 45);
   });
+
+  // v18.0.0 session 10 (/code-review): `doSave` refused `sm >= close*60` while
+  // the message it printed, the Time field's `max` and `findTimes` all named
+  // close − 15. Two of those numbers are the same on no day at all, and on a
+  // late-closing day the guard was arithmetically DEAD: `sm` comes from a
+  // readable `HH:MM` so it cannot exceed 1439, and the test was `>= 1440`.
+  it("is the number `doSave` can actually test against, on every legal close", () => {
+    for (const close of [13, 22, 23, 24, 25]) {
+      const last = lastStartMins(close);
+      expect(last, "a start must be expressible as HH:MM on its own date").toBeLessThan(24 * 60);
+      // The old test, for the two closes where it could never fire.
+      if (close >= 24) expect(close * 60).toBeGreaterThan(23 * 60 + 59);
+    }
+  });
+});
+
+describe("doSave refuses a start after the last start (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("tests sm against lastStartMins, never against close*60", () => {
+    expect(/if\(sm>lastStartMins\(fh\.close\)\)\{/.test(APP)).toBe(true);
+    expect(/if\(sm>=fh\.close\*60\)\{/.test(APP)).toBe(false);
+  });
+
+  it("and prints the same minute it just tested", () => {
+    expect(/if\(sm>lastStartMins\(fh\.close\)\)[\s\S]{0,220}?toTime\(lastStartMins\(fh\.close\)\)/.test(APP)).toBe(true);
+  });
 });
 
 // ── v18.0.0 session 8 (C8) — the toast claims only what the action did ──────

@@ -2854,7 +2854,21 @@ function BookingApp({uid}){
       // it to completed on the next 15s tick, so it reads as a visit that
       // already happened. The message names the last start rather than the
       // close, because that is the number somebody needs to type.
-      if(sm>=fh.close*60){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
+      //
+      // v18.0.0 session 10 (/code-review): the test is `> lastStartMins`, not
+      // `>= close*60`. The message, the Time field's `max` and `findTimes`
+      // all name the same minute — close − 15 — and the guard named a
+      // different one, which is two rules wearing one sentence.
+      //
+      // The half that was simply DEAD: `lastStartMins` caps at midnight
+      // because no booking may START after it, so on a day closing at 24 or
+      // 25 the old test was `sm >= 1440` (or 1500) against an `sm` that a
+      // readable `HH:MM` cannot push past 1439. A restaurant closing at
+      // 01:00 had no last-start bound at all, and a 23:59 start passed —
+      // which is precisely the rule `lastStartMins`'s own note says the app
+      // keeps. Now it refuses, and the message it prints is the one the
+      // field was already offering.
+      if(sm>lastStartMins(fh.close)){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
       const cleanPhone=cleanPhoneOf(f.phone);

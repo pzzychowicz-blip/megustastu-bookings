@@ -24851,3 +24851,41 @@ turns one red.
 
 Gate: `129.62 kB` gz · **1445 tests** · 0 lint errors (88 warnings) · style OK.
 
+### Commit 112 (session 10, /code-review) — the last-start refusal now enforces the number it prints
+
+**The finding.** Commit 86 (session 8, C7) added `lastStartMins` and pointed
+three things at it — the refusal's message, the Time field's `max`, and
+`findTimes`, which had stopped at close − 15 since v14. The **test** it added
+was `sm >= fh.close*60`, which is a different minute. So the form refused a
+21:50 start with "The last start on Sundays is 21:45." nowhere, and accepted it
+everywhere, under a field whose `max` already said 21:45.
+
+The larger half was **dead code**. `lastStartMins` caps at midnight because no
+booking may START after it (a close of 24 or 25 is an extend window, not a
+booking window). `sm` comes from a readable `HH:MM` on the booking's own date,
+so it cannot exceed 1439 — and on a day closing at 00:00 or 01:00 the test was
+`sm >= 1440` or `>= 1500`. **A restaurant closing at 01:00 had no last-start
+bound at all**, and a 23:59 start passed, which is exactly the rule that
+function's own note says the app keeps.
+
+**The fix is `sm > lastStartMins(fh.close)`** — the guard now tests the minute
+it prints, and the same one the field offers and the suggestions stop at.
+
+Worth stating plainly, because it narrows what a save will accept: on a day
+closing before midnight the refusal moves up to 14 minutes earlier, so a start
+hand-typed between close − 14 and close − 1 is now refused where it was taken.
+`findTimes` has never offered such a slot and the Time field has said 21:45
+since Commit 86, so nothing the app OFFERS moves; what moves is what it accepts
+when the number is typed over. An existing booking in that window must have its
+time moved before the form will save it again — the property the shipped
+`>= close` guard already had at the boundary, 15 minutes wider.
+
+Verified live in DEV on a 13:00–22:00 day: 21:50 is refused with "The last start
+on Sundays is 21:45." over a field whose `max` reads 21:45, and 21:45 saves.
+
+Three pins in `tests/booking-logic.test.js` — one on the arithmetic that made
+the old test unreachable, two source pins on the guard and on it printing the
+same minute it tested.
+
+Gate: `129.62 kB` gz · **1448 tests** · 0 lint errors (88 warnings) · style OK.
+
