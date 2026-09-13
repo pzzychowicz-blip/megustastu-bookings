@@ -25061,3 +25061,62 @@ drives `showClearManual`, where `_manual` is exactly right, and only the
 
 Gate: `129.61 kB` gz · **1456 tests** · 0 lint errors (88 warnings) · style OK.
 
+
+### Commit 119 (session 11) — the clear button that was never clickable where it was drawn
+
+Patryk: *"The `x` in search box is not reachable to click probably due to
+`input.mgt-hover-scale`. You can reuse the `x` icon from `Icons.jsx`."*
+
+Both halves of that are right, and the mechanism is worth recording because the
+rule it breaks is already written down in this repo — it just arrived by a new
+route.
+
+**Measured, live, in the Activity log.** The search box is an
+`<input type="search">`, so the platform paints
+`::-webkit-search-cancel-button` at its right edge. The input also carried
+`.mgt-hover-scale`, so hovering scales the whole field about its CENTRE: the box
+grows from `[53, 583]` to `[31.8, 604.2]` (`transform: matrix(1.08, …)`
+confirmed), taking the ✕ 21.2px with it. Sweeping clicks across the row, the
+field cleared only at frame `x ≥ 727` and did nothing at 712–720 — where the
+glyph is painted at rest. **The painted button and the live hit box do not
+overlap at all; the gap is wider than the button.** You aim at the ✕, the field
+grows as your cursor crosses into it, and the click lands on the text.
+
+That is `index.css`'s own rule:
+
+> THE HOVER LIFT (`.mgt-hover-scale`) IS FOR CONTROLS. THIS IS FOR CONTAINERS
+> OF CONTROLS. … `scale(1.08)` is a PROPORTION: 3px on a 40px button, but ~30px
+> on an 820px List card — which slid that card's own Edit and Delete buttons out
+> from under the cursor between aiming and clicking.
+
+A 530px input holding a clear button is that fault at a smaller size, which is
+the point of stating the rule as a proportion rather than as a pixel count.
+
+**`SearchField` (`atoms.jsx`) is the fix**, on `DateField`'s shape: the pill
+takes the TINT (`.mgt-ac-row`) and the ✕ — a real `<button>` wearing the app's
+own `CloseIcon` — takes the LIFT. Three details are load-bearing. The resting
+fill arrives as `--row-bg` and never as `background`, because an inline
+`background` beats a stylesheet `background-color` outright and a pill keeping
+mkInp's fill would show no tint at all, silently. The mark is `CloseIcon` and
+not the OS glyph, which is `Icons.jsx`'s whole argument — a platform mark is a
+different shape on the iPads, the Android tablet and the Chrome tab, follows no
+`currentColor`, and in Firefox is **not drawn at all**, i.e. a clear button that
+does not exist. And it has a NAME: the native one announces as nothing.
+
+Geometry: `H.chip` (28) with the vertical padding dropped to `SP.snug`, so
+`6 + 28 + 6 + 2 = 42px` — the height `mkInp` already produces, so a `SearchField`
+and a `DateField` still line up on one row (verified: pill 42px, button 28×28).
+Well under the 44px floor on purpose, per v17.9.0's "size by what a MISTAKE
+costs": a mis-tap here costs retyping a word.
+
+The native button is suppressed in `src/index.css`. That rule is deliberately
+NOT in `CRITICAL_SELECTORS` — without it you get two ✕s side by side, which is
+visible rather than silent, and visible-when-missing is the criterion that list
+turns on. It cannot live in the component either: a pseudo-element has no inline
+style.
+
+**Verified after the fix, same rig:** with the pill hovered the button's rect is
+`[538.5, 566.5]` — identical to its resting rect, so it no longer moves — and a
+click at the painted position clears the field.
+
+Gate: `129.78 kB` gz · **1456 tests** · 0 lint errors (88 warnings) · style OK.

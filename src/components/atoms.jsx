@@ -15,7 +15,7 @@ import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, u
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
-import { AlertIcon, ChevronRightIcon, StatusIcon } from "./Icons";
+import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
@@ -1892,6 +1892,90 @@ export function DateField({ value, onChange, style, inputProps }) {
         {...inputProps}
         style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
       />
+    </div>
+  );
+}
+
+// ── SearchField (v18.0.0 session 11) ─────────────────────────────────────────
+// A search pill that owns its clear button, instead of borrowing the
+// platform's.
+//
+// ── The bug it exists to fix ────────────────────────────────────────────────
+// An `<input type="search">` paints `::-webkit-search-cancel-button` at its
+// right edge. Give that input `.mgt-hover-scale` and the hover lift scales the
+// whole field about its CENTRE — so the ✕ moves outward as the cursor arrives.
+// Measured live in the Activity log on a 530px field: the box grows from
+// [53, 583] to [31.8, 604.2] on hover, and clicking cleared the field only
+// 21px to the RIGHT of where the glyph is drawn at rest. The painted button and
+// the live hit box do not overlap AT ALL — the gap is wider than the button —
+// so it is never clickable where you can see it. You aim at the ✕, the field
+// grows as you cross into it, and the click lands on the text instead.
+//
+// That is `index.css`'s own rule arriving by a new route:
+//
+//   THE HOVER LIFT IS FOR CONTROLS. THE TINT IS FOR CONTAINERS OF CONTROLS.
+//
+// It was written for the List card sliding its own Edit and Delete buttons out
+// from under the cursor (measured there: −24px and +31px). A 530px input
+// holding a clear button is the same fault at a smaller size — which is the
+// point of writing the rule as a PROPORTION rather than as a pixel count.
+//
+// So the pill takes the tint (`.mgt-ac-row`) and the ✕ takes the lift. Three
+// things follow from that split and each is load-bearing:
+//
+//   • The resting fill arrives as `--row-bg`, never as `background`. An inline
+//     `background` beats a stylesheet `background-color` outright, so a pill
+//     keeping mkInp's own fill would show no tint at all — silently.
+//   • The ✕ is `CloseIcon`, not the OS glyph. `Icons.jsx`'s whole argument: a
+//     platform mark is a different shape on the iPads, the Android tablet and
+//     the Chrome tab, follows no `currentColor`, and — in Firefox — is not
+//     drawn at all, which is a clear button that does not exist.
+//   • It has a NAME. The native one announces as nothing; this is a real
+//     <button> with an `aria-label`.
+//
+// `H.chip` is the documented size for a tiny inline control, and the vertical
+// padding drops to `SP.snug` to absorb it — 6 + 28 + 6 + 2 = 42px, the height
+// mkInp already produces, so a SearchField and a DateField still line up on one
+// row. Sizing by what a mistake COSTS (the v17.9.0 rule) puts this well under
+// the 44px floor: a mis-tap here costs retyping a word.
+export function SearchField({ value, onChange, onClear, placeholder, ariaLabel, inputRef, style }) {
+  const base = mkInp();
+  const has = String(value == null ? "" : value).length > 0;
+  return (
+    <div
+      className="mgt-ac-row mgt-searchfield"
+      style={Object.assign({}, base, {
+        background: undefined,
+        "--row-bg": base.background,
+        display: "flex", alignItems: "center", gap: SP.tight,
+        padding: SP.snug + "px " + SP.base + "px " + SP.snug + "px " + SP.wide + "px",
+      }, style)}
+    >
+      <input
+        ref={inputRef}
+        /* @no-lift the pill holds the clear button — lifting it moves that button; see this atom's header */
+        type="search"
+        value={value}
+        onChange={onChange}
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", color: "inherit", font: "inherit", padding: SP.none, margin: SP.none, boxShadow: "none" }}
+      />
+      {has ? (
+        <button
+          type="button"
+          className="mgt-hover-scale"
+          onClick={onClear}
+          aria-label="Clear search"
+          style={{
+            flexShrink: 0, display: "grid", placeItems: "center",
+            width: H.chip, height: H.chip, padding: SP.none,
+            border: "none", background: "transparent", color: S.muted,
+            /* borderRadius is REQUIRED on a .mgt-hover-scale element — see index.css. */
+            borderRadius: R.pill, boxShadow: "none", cursor: "pointer",
+          }}
+        ><CloseIcon size={IC.control} /></button>
+      ) : null}
     </div>
   );
 }

@@ -1401,11 +1401,26 @@ main:focus { outline: none; }
    browser without :has() dropped the wrapper's rule as an invalid selector and
    still applied the hide. There the input now keeps the global ring above. */
 @supports selector(:has(*)) {
-  .mgt-datefield input:focus-visible { outline: none; }
-  .mgt-datefield:has(input:focus-visible) {
+  .mgt-datefield input:focus-visible,
+  .mgt-searchfield input:focus-visible { outline: none; }
+  .mgt-datefield:has(input:focus-visible),
+  .mgt-searchfield:has(input:focus-visible) {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
   }
+}
+
+/* v18.0.0 session 11: the platform's own search clear button, suppressed.
+   SearchField draws its own with CloseIcon, so without this there are two of
+   them side by side. That failure is VISIBLE rather than silent, which is why
+   this is not in the stylesheet test's critical list; the entry criterion
+   there is a rule whose absence nothing on screen reveals.
+   It is also the half of the fix that cannot live in the component: a
+   pseudo-element has no inline style, so the only way to reach it is a
+   stylesheet rule. See the atom's header for what the native one did wrong. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 /* v17.12.0: visually hidden, but PRESENT to assistive technology — the

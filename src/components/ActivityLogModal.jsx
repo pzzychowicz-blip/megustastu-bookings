@@ -20,7 +20,7 @@
 // must detach the listener, and a day held here would go with it.
 import { useMemo, useState } from "react";
 import { S, T, FW, SP, R } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, mkInp, mkSel, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, AutoHeight } from "./atoms";
 import { renderText } from "../lib/activity";
 // v18.0.0 session 10 (/code-review): the same readability predicate App gates
 // the query on, imported rather than restated — the panel must not report an
@@ -116,9 +116,9 @@ export function ActivityLogModal({
           style={{ ...mkInp(), width: "auto", flex: "0 1 190px" }}
           inputProps={{ "aria-label": "Day to show" }}
         />
-        {/* `.mgt-hover-scale` on both, like every other control in the app —
+        {/* `.mgt-hover-scale` here, like every other control in the app —
             `check:style`'s Rule 10 catches an interactive element without it,
-            and it caught these two. `DateField` above needs none because the
+            and it caught this one. `DateField` above needs none because the
             atom carries the class on its own wrapper. `mkSel` rather than
             `mkInp` for the dropdown: a <select> paints its arrow hard against
             padding-right, which on a pill lands it inside the right cap. */}
@@ -134,12 +134,18 @@ export function ActivityLogModal({
             return <option key={p} value={p}>{personOf(p)}</option>;
           })}
         </select>
-        <input
-          type="search" value={q} onChange={function (e) { setQ(e.target.value); }}
-          aria-label="Search the activity log"
+        {/* v18.0.0 session 11: the search box WAS the third `.mgt-hover-scale`
+            control on this row, and that is exactly what made its clear button
+            unclickable — measured, the ✕ responded 21px to the right of where
+            it was painted. `SearchField` is that fix; its header carries the
+            measurement and the rule it broke. */}
+        <SearchField
+          value={q}
+          onChange={function (e) { setQ(e.target.value); }}
+          onClear={function () { setQ(""); }}
+          ariaLabel="Search the activity log"
           placeholder="Search…"
-          className="mgt-hover-scale"
-          style={{ ...mkInp(), flex: "1 1 140px" }}
+          style={{ flex: "1 1 140px" }}
         />
       </div>
 
