@@ -2552,6 +2552,20 @@ function BookingApp({uid}){
         // So: re-CHECK on a window change of any kind; re-CHOOSE only when the
         // tables it has no longer work for that window. A check-only save that
         // is still free keeps exactly the tables it had.
+        //
+        // v18.0.0 session 10 (/code-review): and that last sentence is true on
+        // the optimiser-OFF path ONLY, which is the caveat this comment was
+        // missing and Commit 108 established while fixing the preview.
+        // `bookingsAfterAction` takes its `applyOpt` branch whenever
+        // `optimizerActiveFor(date, state)` is true — BEFORE it looks at
+        // `forceReassign` at all — and that predicate is true for every date
+        // except today with the toggle off. So `keepsWindowTables` decides the
+        // outcome today after the cutoff and nowhere else; everywhere else the
+        // greedy re-run overrides it, and a booking whose tables are still
+        // free can still come out somewhere else. Two predicates agreeing with
+        // each other is not either of them agreeing with the pass that
+        // overrides both. The preview says the same thing in `optOwns`
+        // (BookingFormModal) and now this side says it too.
         const revived=!!orig&&(orig.status==="cancelled"||orig.status==="completed")&&f.status!=="cancelled"&&f.status!=="completed";
         const recheck=needsR||planChanged||revived||!!unseat;
         const winStart=toMins(saveTime);

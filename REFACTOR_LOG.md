@@ -24971,3 +24971,24 @@ this session makes to the suite.
 
 Gate: `129.61 kB` gz · 1452 tests · 0 lint errors (88 warnings) · style OK.
 
+### Commit 116 (session 10, /code-review) — the save path's comment now says what Commit 108 established
+
+The session-9 hand-off asked it as a question: *"is `keepsWindowTables`
+load-bearing anywhere the optimiser is ON? If the honest answer is no, its
+comment in `App.jsx` currently implies otherwise."*
+
+**The answer is no**, read straight off `computeAfterAction`: it takes its
+`applyOpt` branch whenever `optimizerActiveFor(date, state)` is true, BEFORE it
+looks at `forceReassign` at all — and that predicate is false only for today
+with the toggle off. So `keepsWindowTables` decides the outcome today after the
+cutoff and nowhere else; on every other date the greedy re-run overrides it, and
+a booking whose tables are still free can still come out somewhere else.
+
+Commit 108 established this and said it in the PREVIEW (`optOwns`,
+`BookingFormModal`). The save path's own comment still ended "a check-only save
+that is still free keeps exactly the tables it had", with no caveat — a sentence
+that is true on one branch out of two, in the file where the branch is chosen.
+Comment only; no behaviour, no test.
+
+Gate: `129.61 kB` gz · 1452 tests · 0 lint errors (88 warnings) · style OK.
+
