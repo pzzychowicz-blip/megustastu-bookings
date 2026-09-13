@@ -45,6 +45,20 @@ import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 // reports scrollHeight 42 against clientHeight 42.
 //
 // `mkArea` puts it back to auto: a textarea is sized by its rows.
+//
+// ── The one coupling this buys, written down because nothing checks it ──────
+// A pin is a CAP as well as a floor, which `mkBtn`'s `minHeight: H.control` is
+// deliberately not. At 44 the content box is exactly 44 - 20 - 2 = 22px, and
+// the tallest thing any caller puts in it — DateField's bare inner date input —
+// measures exactly 22 at `T.title`. Zero slack, and it was measured rather than
+// reasoned: 21.5 under Roboto, Segoe UI, Arial and Noto Sans, 22 under the app
+// stack, and **23.5 at 18px**. So `H.touch` here is pinned to `T.title` staying
+// at 17, the same hand-synced pair as `M.dur` against `--t-*`. Raise the type
+// scale and this height follows, or the date text starts eating its own
+// padding. It does NOT get clipped — the pill is `overflow: visible` and has
+// 10px to give — which is exactly why it would ship unnoticed.
+// The one caller that overrides the size (`InboxPanel`, `T.body`) goes DOWN,
+// which only adds slack.
 export function mkInp() {
   return {
     width: "100%",
