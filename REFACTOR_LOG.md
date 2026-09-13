@@ -24928,3 +24928,37 @@ Gate: `129.62 kB` gz · 1448 tests · 0 lint errors (88 warnings) · style OK ·
 `test:rules` **286 tests** (re-run here because the count was being written
 down, not because the rules moved — nothing in session 10 touched them).
 
+### Commit 114 (session 10, /code-review) — "Move it" could put one voucher on two live bookings
+
+**The finding.** `doVoucherCarry`'s updater guards one half of a race and its
+comment says so: the prompt can sit on screen while another device attaches
+something to the TARGET booking, so it re-checks `normalizeCode(b.voucherCode)`
+before writing. The other half is unguarded — another device attaching the SAME
+code to a DIFFERENT live booking.
+
+`carryTarget` asks `attachedElsewhere` when the offer is made, and "Move it" is
+the only door in the app that puts a voucher on a booking without going through
+the picker. So without the re-check it is the one path that can produce exactly
+the state that predicate exists to prevent: one voucher, two live bookings.
+
+**The fix is the same question, against `prev`** — the list the write actually
+lands on, which is fresh where the render-time `vouchersByCode` behind the prompt
+is not. One line beside the guard whose comment already explains why such a
+re-check is not ceremony. The completed SOURCE visit is correctly invisible to
+it: `attachedElsewhere` skips cancelled and completed bookings, because a
+finished visit's link is a record rather than a live claim.
+
+Four pins in `tests/vouchers.test.js` — two on the predicate (it sees a live
+booking, it does not see the source) and two source pins on the two halves.
+Removing the new line turns one red.
+
+**And the suite caught the review's own mistake**, which is worth recording: the
+source pins first read `App.jsx` RAW, and `tests/test-hygiene.test.js` failed
+with `expected [ 'vouchers.test.js' ] to deeply equal []` — every test that
+greps JS source must `stripComments` first. It is not a formality here: this
+commit's own comment in `App.jsx` names `attachedElsewhere` in a sentence, so
+the raw regex would have matched prose. CLAUDE.md's "prose that names the thing
+a regex hunts for is indistinguishable from the thing", one file over.
+
+Gate: `129.61 kB` gz · **1452 tests** · 0 lint errors (88 warnings) · style OK.
+

@@ -10,6 +10,11 @@
 // out days it did not mean to.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+// A regex over source must not be able to match PROSE — this file's own comment
+// in App.jsx names `attachedElsewhere` in a sentence. tests/test-hygiene.test.js
+// enforces it; it caught this one.
+import { stripComments } from "../scripts/strip-comments.mjs";
 import {
   CODE_ALPHABET, CODE_LENGTH, MANUAL_CODE_MIN, MANUAL_CODE_MAX,
   normalizeCode, isValidCode, formatCode, generateCode, codeSet,
@@ -782,3 +787,40 @@ describe("searchVouchers", () => {
     expect(searchVouchers(list, "zzzz")).toEqual([]);
   });
 });
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// `carryTarget` asks `attachedElsewhere` when the offer is MADE. "Move it" is
+// the only door in the app that attaches a voucher to a booking without going
+// through the picker, so the same question has to be asked again against the
+// list the write lands on — otherwise a second device attaching the code while
+// the prompt sits open leaves one voucher on two LIVE bookings, which is the
+// one state that predicate exists to prevent.
+describe("the carry write re-asks attachedElsewhere (v18.0.0 session 10)", () => {
+  const CODE = "ABCD1234";
+  const mkB = (o) => Object.assign({ id: "x", date: "2026-09-20", time: "20:00", status: "confirmed", voucherCode: "" }, o);
+
+  it("sees a code another device put on a live booking a moment ago", () => {
+    const prev = [mkB({ id: "target" }), mkB({ id: "someoneElse", voucherCode: CODE })];
+    expect(attachedElsewhere(prev, CODE, "target")).not.toBeNull();
+  });
+
+  it("and does NOT see the completed SOURCE visit the carry came from", () => {
+    const prev = [mkB({ id: "target" }), mkB({ id: "source", voucherCode: CODE, status: "completed" })];
+    expect(attachedElsewhere(prev, CODE, "target"),
+      "a finished visit's link is a record, not a live claim").toBeNull();
+  });
+});
+
+describe("doVoucherCarry guards both halves of that race (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("the updater bails on a voucher taken elsewhere, against `prev`", () => {
+    expect(/if\(attachedElsewhere\(prev,c\.code,c\.to\)\) return prev;/.test(APP)).toBe(true);
+  });
+
+  it("and still bails on a target that has acquired a code of its own", () => {
+    expect(/if\(b\.id!==c\.to\|\|normalizeCode\(b\.voucherCode\)\) return b;/.test(APP)).toBe(true);
+  });
+});
+

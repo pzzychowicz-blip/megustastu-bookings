@@ -320,7 +320,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity } from "./h
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, carryTarget } from "./lib/vouchers";
+import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -3741,6 +3741,17 @@ function BookingApp({uid}){
     const user=getUser();
     const fromLabel=/^\d{4}-\d{2}-\d{2}$/.test(c.from||"")?c.from.slice(8,10)+"/"+c.from.slice(5,7):(c.from||"");
     const ok=saveBookings(function(prev){
+      // v18.0.0 session 10 (/code-review): the OTHER half of the same race.
+      // The line below guards the target booking against having acquired a
+      // voucher of its own; this guards the VOUCHER against having been
+      // attached to somebody else while the prompt sat open. `carryTarget`
+      // asks `attachedElsewhere` when the offer is MADE, and this path is
+      // the one way an attachment reaches a booking without going through
+      // the picker — so without it, "Move it" is the only door in the app
+      // that can put one voucher on two live bookings, which is precisely
+      // the state that predicate exists to prevent. Asked against `prev`,
+      // which is the list the write actually lands on.
+      if(attachedElsewhere(prev,c.code,c.to)) return prev;
       return prev.map(function(b){
         if(b.id!==c.to||normalizeCode(b.voucherCode)) return b;
         return Object.assign({},b,{
