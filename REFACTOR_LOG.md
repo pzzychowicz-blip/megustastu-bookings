@@ -25284,3 +25284,46 @@ it would put "delete the entire log" one tap from the resting state.
 
 Gate: `130.65 kB` gz · **1470 tests** · 0 lint errors (88 warnings) · style OK ·
 `test:rules` **293**.
+
+### Commit 123 (session 11) — download what you are about to delete
+
+The other half of Commit 122. On the free plan there are no backups, so a clear
+is a one-way door; **Download** sits to the LEFT of **Clear this range** so the
+control that takes a copy is the one your eye reaches first.
+
+The two act on deliberately different things and the labels say which:
+**Download exports what is SHOWN** — filters, search, person, People-only, all
+of it — while **Clear acts on the RANGE and ignores the filters**. Either
+default would be wrong for the other button.
+
+`activityCsv` is pure, so the escaping is tested rather than eyeballed — which
+matters more here than usual, because every field can hold a GUEST'S NAME and
+names carry commas, quotes and accents as a matter of course. Three decisions,
+each a bug if skipped:
+
+- **Every field quoted, internal quotes doubled** (RFC 4180). `O"Brien`, or any
+  text holding a comma, otherwise splits into two columns — silently, and only
+  on the rows that have one.
+- **A BOM.** Excel reads a UTF-8 CSV as the local codepage without one, so
+  "Estévez" arrives as "EstÃ©vez" on the machines this restaurant actually uses.
+- **A leading `=`, `+`, `-` or `@` gets an apostrophe.** Those four make Excel
+  and Sheets treat a cell as a FORMULA, and this text is partly guest-controlled
+  through resolved names. Far-fetched against a restaurant's own export, and a
+  one-line mitigation — which is the ratio that decides it.
+
+**It exports the rows RESOLVED**, through the same `byId` map the panel renders
+with, so the file inherits the erasure property: an anonymised booking reads
+"Data removed" in the CSV exactly as it does on screen. A dump of the raw node
+would quietly undo "Delete customer & all data", which is the whole reason the
+log stores tokens instead of names.
+
+Gated on `dataExport` and NOT on `isAdmin`: it is the same act as "Download
+backup" — the restaurant's data leaving the building — and one capability should
+mean one thing wherever it appears.
+
+**A measurement that was of the tooling.** Reading the produced blob back with
+`Blob.text()` said the BOM was missing; `Blob.text()` strips a BOM by spec.
+Reading the raw bytes gives `EF BB BF`. Verified live: "Download 95 shown"
+produced 96 lines with the right header and well-formed rows.
+
+Gate: `131.15 kB` gz · **1480 tests** · 0 lint errors (88 warnings) · style OK.

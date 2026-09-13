@@ -1477,6 +1477,22 @@ function BookingApp({uid}){
       .catch(function(){setActivityClearMsg("Couldn't clear that range.");})
       .then(function(){activityClearingRef.current=false;setActivityClearing(false);});
   }
+  // v18.0.0 session 11: the CSV. Gated on `dataExport` and NOT on `isAdmin`,
+  // because it is the same act as "Download backup" — a file of the
+  // restaurant's data leaving the building — and one capability should mean one
+  // thing wherever it appears. The BUILDING of the file is pure and lives in
+  // lib/activity.js; this is only the part that needs a DOM.
+  function doDownloadActivity(text,filename){
+    if(refused("dataExport")) return;
+    try{
+      const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url;a.download=filename;
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    }catch{setWriteWarning("Couldn't create the file on this device.");}
+  }
   const prunedRef=useRef(false);
   useEffect(function(){
     if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
@@ -5296,6 +5312,7 @@ function BookingApp({uid}){
           clearBusy={activityClearing}
           clearMsg={activityClearMsg}
           onClearRange={doClearActivity}
+          onDownload={doDownloadActivity}
           bookings={bookings}
           onOpenBooking={function(id){const b=bookings.find(function(x){return x.id===id;});if(!b) return;setActivityOpen(null);closeSettings();openEdit(b);}}
           onClose={function(){setActivityOpen(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>

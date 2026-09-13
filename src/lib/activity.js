@@ -495,3 +495,74 @@ export function clearedEntry(fromDay, toDay, count) {
       + n + (n === 1 ? " entry" : " entries"),
   };
 }
+
+
+// ── CSV (v18.0.0 session 11) ─────────────────────────────────────────────────
+//
+// The export half of "remove the data": on the free plan there are no backups,
+// so a clear without a way to take a copy first is a one-way door. Pure, so the
+// escaping below can be tested rather than eyeballed — which matters more here
+// than usual, because every field can contain a GUEST'S NAME and names contain
+// commas, quotes and apostrophes as a matter of course.
+//
+// Three escaping decisions, each of which is a bug if skipped:
+//
+//   1. Every field is quoted and internal quotes are doubled. RFC 4180. A name
+//      like `O"Brien` or any text holding a comma splits into two columns
+//      otherwise, silently and only for some rows.
+//   2. A BOM. Excel reads a UTF-8 CSV as the local 8-bit codepage without one,
+//      so "Estévez" arrives as "EstÃ©vez" — on the machines this restaurant
+//      actually uses, which is the only test that counts.
+//   3. A leading `=`, `+`, `-` or `@` is prefixed with an apostrophe. Those
+//      four make Excel and Sheets treat the cell as a FORMULA, and the text
+//      here is partly guest-controlled through resolved names. It is a
+//      far-fetched attack on a restaurant's own export and a one-line
+//      mitigation, which is the ratio that decides it.
+function csvCell(v) {
+  let t = v == null ? "" : String(v);
+  if (/^[=+\-@]/.test(t)) t = "'" + t;
+  return '"' + t.replace(/"/g, '""') + '"';
+}
+
+const CSV_HEADER = ["Date", "Time", "Person", "Kind", "What happened", "Automatic"];
+
+function stamp(ms) {
+  const d = new Date(Number(ms) || 0);
+  const p = function (n) { return String(n).padStart(2, "0"); };
+  return {
+    date: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()),
+    time: p(d.getHours()) + ":" + p(d.getMinutes()),
+  };
+}
+
+/**
+ * The rows AS SHOWN, resolved. `byId` is the same booking map the panel renders
+ * through, so a `{b:<id>}` token becomes the guest's CURRENT name and an
+ * anonymised booking exports as "Data removed" — the file inherits the erasure
+ * property rather than quietly undoing it, which a dump of the raw node would.
+ */
+export function activityCsv(rows, byId) {
+  const lines = [CSV_HEADER.map(csvCell).join(",")];
+  (rows || []).forEach(function (r) {
+    if (!r) return;
+    const at = stamp(r.at);
+    lines.push([
+      at.date, at.time, r.email || "",
+      r.kind || "",
+      renderText(r.text, byId || {}, r.subject && r.subject.name),
+      r.auto ? "yes" : "",
+    ].map(csvCell).join(","));
+  });
+  // CRLF, which is what RFC 4180 says and what Excel is happiest with.
+  return "\ufeff" + lines.join("\r\n") + "\r\n";
+}
+
+/** `activity-2026-09-13.csv`, or `activity-2026-09-01_2026-09-13.csv`. */
+export function activityCsvName(fromDay, toDay) {
+  const span = fromDay && toDay
+    ? (fromDay === toDay ? fromDay : fromDay + "_" + toDay)
+    : fromDay ? "from-" + fromDay
+      : toDay ? "to-" + toDay
+        : "all";
+  return "mgt-activity-" + span + ".csv";
+}

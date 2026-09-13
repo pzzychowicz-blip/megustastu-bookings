@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import {
   ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText,
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
-  isPrunable, activityWindow,
+  isPrunable, activityWindow, activityCsv, activityCsvName, clearedEntry,
 } from "../src/lib/activity.js";
 import {
   setActivitySink, emitActivity, resetActivitySink,
@@ -734,5 +734,96 @@ describe("activityWindow", () => {
     // comparison been written on the date STRINGS it would be `>=` on equal
     // values and every single-day window would report itself backwards.
     expect(activityWindow("2026-09-13", "2026-09-13").backwards).toBe(false);
+  });
+});
+
+
+// ── The CSV export (v18.0.0 session 11) ─────────────────────────────────────
+//
+// The export half of "remove the data" — on the free plan there are no backups,
+// so a clear without a copy first is a one-way door. Every field can hold a
+// GUEST'S NAME, and names contain commas, quotes and accents as a matter of
+// course, so the escaping is the part worth testing rather than the columns.
+describe("activityCsv", () => {
+  const row = (o) => Object.assign({
+    at: new Date("2026-09-13T20:05:00").getTime(),
+    email: "pau@app.com", kind: "booking", text: "status → seated",
+  }, o);
+
+  it("quotes every field and doubles internal quotes", () => {
+    // A name holding a comma splits into two columns otherwise — silently, and
+    // only on the rows that have one, which is the worst way for it to happen.
+    const out = activityCsv([row({ text: 'cancelled O"Brien, party of 4' })], {});
+    expect(out).toContain('"cancelled O""Brien, party of 4"');
+  });
+
+  it("starts with a BOM, or Excel mangles every accented name", () => {
+    // "Estévez" arrives as "EstÃ©vez" without it, on the machines this
+    // restaurant actually uses.
+    expect(activityCsv([], {})[0]).toBe("\ufeff");
+  });
+
+  it("defuses a cell Excel would run as a FORMULA", () => {
+    // =, +, - and @ all start a formula. The text is partly guest-controlled
+    // through resolved names, so the leading apostrophe is cheap insurance on
+    // a file somebody will open in a spreadsheet.
+    for (const bad of ["=1+1", "+x", "-x", "@x"]) {
+      expect(activityCsv([row({ text: bad })], {})).toContain('"\'' + bad + '"');
+    }
+  });
+
+  it("RESOLVES tokens, so the file inherits the erasure property", () => {
+    // A raw dump of the node would quietly undo "Delete customer & all data":
+    // entries hold `{b:<id>}` tokens, and an anonymised booking must read
+    // "Data removed" in the export exactly as it does on screen.
+    const byId = { b1: { id: "b1", name: "Data removed", anonymized: true } };
+    const out = activityCsv([row({ text: "cancelled " + bookingToken("b1") })], byId);
+    expect(out).toContain("Data removed");
+    expect(out).not.toContain("{b:b1}");
+  });
+
+  it("writes a header and one line per row, CRLF", () => {
+    const out = activityCsv([row(), row()], {});
+    const lines = out.split("\r\n").filter(Boolean);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain("What happened");
+  });
+
+  it("survives a null row and a missing at", () => {
+    const out = activityCsv([null, row({ at: undefined })], {});
+    expect(out.split("\r\n").filter(Boolean)).toHaveLength(2);
+  });
+
+  it("names the file after the window it exported", () => {
+    expect(activityCsvName("2026-09-13", "2026-09-13")).toBe("mgt-activity-2026-09-13.csv");
+    expect(activityCsvName("2026-09-01", "2026-09-13")).toBe("mgt-activity-2026-09-01_2026-09-13.csv");
+    expect(activityCsvName("", "")).toBe("mgt-activity-all.csv");
+  });
+});
+
+// ── clearedEntry (v18.0.0 session 11) ───────────────────────────────────────
+
+describe("clearedEntry", () => {
+  it("returns null for a count of zero, so a REFUSED clear leaves no line", () => {
+    // The property that stopped the app lying on DEV, where the clear came back
+    // PERMISSION_DENIED: the count is a count of DELETES, and a line saying
+    // "cleared 27 entries" over a log that still holds 27 would be worse than
+    // no line at all.
+    expect(clearedEntry("2026-09-12", "2026-09-12", 0)).toBe(null);
+    expect(clearedEntry("2026-09-12", "2026-09-12", undefined)).toBe(null);
+  });
+
+  it("names the range and the count", () => {
+    expect(clearedEntry("2026-09-12", "2026-09-12", 27).text)
+      .toBe("cleared the activity log · 2026-09-12 · 27 entries");
+    expect(clearedEntry("2026-09-01", "2026-09-12", 1).text)
+      .toBe("cleared the activity log · 2026-09-01 to 2026-09-12 · 1 entry");
+  });
+
+  it("is kind `data` — an action on the RECORD, not on the restaurant", () => {
+    expect(clearedEntry("2026-09-12", "2026-09-12", 3).kind).toBe("data");
+    // And that kind must be one the rules accept, or the line the clear depends
+    // on for its honesty is itself refused.
+    expect(ACTIVITY_KINDS).toContain("data");
   });
 });

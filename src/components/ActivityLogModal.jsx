@@ -32,7 +32,7 @@
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
 import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkSolidBtn, AutoHeight } from "./atoms";
-import { renderText } from "../lib/activity";
+import { renderText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: `isReadableDate` is no longer imported here. Session 10
 // had this panel re-ask whether the day was readable so it would not report an
 // unasked question as an answer — but with two independently optional dates the
@@ -45,6 +45,7 @@ import { renderText } from "../lib/activity";
 // because `setDate(getDate() - 6)` returns the SAME date on the spring-forward
 // day (v17.16.2).
 import { todayStr, addDays } from "../lib/day";
+import { DownloadIcon } from "./Icons";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -86,7 +87,7 @@ function personOf(email) {
 export function ActivityLogModal({
   fromDay, toDay, onSetFromDay, onSetToDay, badDay, backwards,
   rows, loading, loadingMore, hasMore, onLoadOlder,
-  canClear, clearBusy, clearMsg, onClearRange,
+  canClear, clearBusy, clearMsg, onClearRange, onDownload,
   bookings, onOpenBooking, onClose,
 }) {
   const [armed, setArmed] = useState(false);
@@ -384,6 +385,23 @@ export function ActivityLogModal({
               while the element it names exists — a describedby pointing at an
               absent id is worse than none (`Fld`'s rule). */}
           <div style={{ display: "flex", gap: SP.base, alignItems: "center", flexWrap: "wrap" }}>
+            {/* Download sits BEFORE Clear, and not only for reading order: on
+                the free plan there are no backups, so a clear is a one-way door
+                and the way to take a copy first should be the control your eye
+                reaches first. It exports what is SHOWN — filters, search and
+                all — which is the opposite of what Clear does, and the labels
+                say which is which. */}
+            <button
+              type="button"
+              className="mgt-hover-scale"
+              disabled={!shown.length}
+              onClick={function () { onDownload(activityCsv(shown, byId), activityCsvName(fromDay, toDay)); }}
+              style={mkBtn({
+                background: BTN.nav, fontSize: T.body, minHeight: H.compact,
+                display: "inline-flex", alignItems: "center", gap: SP.snug,
+                opacity: shown.length ? 1 : 0.5,
+              })}
+            ><DownloadIcon size={IC.control} />Download {shown.length ? shown.length : ""} shown</button>
             <button
               type="button"
               className="mgt-hover-scale"
