@@ -930,6 +930,15 @@ function BookingApp({uid}){
   const confirmCancel = modalOpen.cancel || null;
   const setConfirmCancel = setModalFns.cancel;
   const [reshuffled, setReshuffled] = useState(false);
+  // v18.0.0 session 9: the toast's WORDS, captured when the toast is raised.
+  // They used to be derived live from `reshuffled` — which is also the 3s
+  // visibility timer — so clearing it at +3000ms rewrote the text of a toast
+  // that was still on screen for its exit. See `flash`.
+  const [reshuffledMsg, setReshuffledMsg] = useState("");
+  // The undo pill's note, handed from `flash` to `armUndo` and consumed once.
+  // It cannot be read live from `reshuffled` for the same reason the toast's
+  // words cannot: the pill outlives that flag by `undoSecs` (10s default).
+  const flashNoteRef = useRef("");
   // v15.6.1: transient banner shown when the post-sync reconciliation resolves
   // a same-table overlap that arrived via an offline multi-device merge.
   const [syncFix, setSyncFix] = useState(false);
@@ -1898,7 +1907,34 @@ function BookingApp({uid}){
   // v18.0.0 session 8 (C8): `kind` is what the ACTION did, for the toast to
   // read. `"saved"` means this action suppressed the optimiser, so it must not
   // claim a reshuffle; every other caller passes nothing and is unchanged.
-  function flash(kind){setReshuffled(kind||true);setTimeout(function(){setReshuffled(false);},3000);}
+  //
+  // v18.0.0 session 9: the message is COMPUTED HERE and stored, rather than
+  // derived at render time from `reshuffled`. One state cannot be both the
+  // visibility timer and the text selector: `savedToast` returns "Booking
+  // saved." only for the exact kind `"saved"` and falls through to "Tables
+  // re-optimised." for everything else — `false` included — so the +3000ms
+  // clear FLIPPED THE WORDING while the node was still painting its exit.
+  // Measured on a future-date seat with a timestamped MutationObserver:
+  // "Booking saved." at t=21209, "Tables re-optimised." at t=24190, gone at
+  // t=24453 — 263ms of the wrong message, every time, on every date where
+  // `optimizerActiveFor` is true.
+  //
+  // Capturing it here also makes it more truthful, not merely stable: the toast
+  // describes what the ACTION did, so it must be fixed at the moment of the
+  // action rather than recomputed against a `viewDate` the user may since have
+  // navigated away from. Same shape as v17.16.9's carried label.
+  function flash(kind){
+    const k=kind||true;
+    const active=optimizerActiveFor(viewDate,autoOptimizer);
+    setReshuffledMsg(savedToast(k,active));
+    // Offered to the next `armUndo`, which runs synchronously after every
+    // `flash` that arms one. Cleared with the flag so a flash that arms NO undo
+    // cannot leave the note lying about for a later pill to pick up — the same
+    // 3s bound the old live derivation had, now without the truncation.
+    flashNoteRef.current=(k!=="saved"&&active)?"tables re-optimised":"";
+    setReshuffled(k);
+    setTimeout(function(){setReshuffled(false);flashNoteRef.current="";},3000);
+  }
   function flashSyncFix(){setSyncFix(true);setTimeout(function(){setSyncFix(false);},4000);}
 
   // v15.6.1 — Post-sync conflict reconciliation.
@@ -3718,7 +3754,17 @@ function BookingApp({uid}){
   function armUndo(snapshots,primaryId,kind,noShow){
     if(!snapshots||!snapshots.length) return;
     if(undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow});
+    // v18.0.0 session 9: the note belongs to THIS pill, so it is taken once and
+    // cleared. Measured before the fix, on a future-date delete: the pill read
+    // "Booking deleted · tables re-optimised · Undo" for ~4s and then
+    // "Booking deleted · Undo" for the remaining ~8s, because the note was read
+    // live from `reshuffled` — a 3s timer — while the pill runs for `undoSecs`.
+    // The edit path is why this is consume-once rather than a shared value: its
+    // `flash` is conditional and its `armUndo` is not, so an edit that arms an
+    // undo WITHOUT flashing must show no note rather than the previous one's.
+    const note=flashNoteRef.current;
+    flashNoteRef.current="";
+    setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:note});
     undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
   }
   function undoLastAction(){
@@ -4756,11 +4802,11 @@ function BookingApp({uid}){
                 waitAddedShown={waitAddedShown}
                 undoInfo={undoInfo}
                 onUndo={undoLastAction}
-                undoNote={reshuffled&&reshuffled!=="saved"&&optimizerActiveFor(viewDate,autoOptimizer)?"tables re-optimised":""}
+                undoNote={undoInfo&&undoInfo.note?undoInfo.note:""}
                 permMsg={permMsg}
                 dragMsg={dragMsg}
                 reshuffled={reshuffled}
-                reshuffledMsg={savedToast(reshuffled,optimizerActiveFor(viewDate,autoOptimizer))}
+                reshuffledMsg={reshuffledMsg}
                 loadShown={loadBannerShown}
                 loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
                 /* v17.12.0 (review fix): the view — the actual "page behind the

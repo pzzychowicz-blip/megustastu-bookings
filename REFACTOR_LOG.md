@@ -24442,3 +24442,56 @@ buttons; and "Delete customer & all data" is a real, tabbable button that
 sabotage**.
 
 Gate: `129.24 kB` gz · 1409 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 104 — one state cannot be both the timer and the words (C8)
+
+`src/App.jsx`. Session 9's Job 1 finding 1, and the answer to the question
+session 8 left open. It is **not** the second `flash()` that was hunted for, and
+it is deterministic rather than the once-seen fluke it looked like.
+
+`flash()` set `reshuffled` and cleared it 3s later, while the toast's text was
+derived at RENDER time from that same value —
+`savedToast(reshuffled, optimizerActiveFor(viewDate, autoOptimizer))`. But
+`savedToast` returns "Booking saved." only for the exact kind `"saved"` and falls
+through to "Tables re-optimised." for everything else, **`false` included**. So
+the +3000ms clear did not just hide the toast: it **rewrote its words**, and the
+node was still on screen for its 240ms exit. Measured with a timestamped
+MutationObserver on a future-date seat:
+
+```
+t=21209  "Booking saved."
+t=24190  "Tables re-optimised."   ← the clear
+t=24453  gone                     ← 263ms of the wrong message
+```
+
+It fired on every save where `optimizerActiveFor` is true — i.e. **every future
+date, every time**. The plan's §D says a seat toasts "Booking saved.", never
+"Tables re-optimised."; this is that spec, failing in the last quarter-second.
+
+**The same defect had a second, larger face nobody had looked at.** `undoNote`
+was derived from `reshuffled` too, and the undo pill runs for `undoSecs` —
+**10s by default**. Measured on a future-date delete, sampled every 900ms: the
+pill read "Booking deleted · tables re-optimised · Undo" for ~4s and then
+"Booking deleted · Undo" for the remaining ~8s. The note did not expire with its
+subject; it expired with an unrelated timer.
+
+Both are now captured when the toast is raised. The message goes into its own
+state; the note is handed to `armUndo` through a ref and **consumed once**, which
+the edit path makes necessary rather than tidy: its `flash` is conditional
+(`needsR||swapAffected||completed||seatingNow`) while its `armUndo` is not, so an
+edit that arms an undo without flashing must show NO note rather than the
+previous action's. The ref is cleared alongside the flag, so a flash that arms no
+undo cannot leave a note for a later pill — the same 3s bound the live derivation
+had, without the truncation.
+
+Capturing is also more truthful than deriving: the toast describes what the
+ACTION did, so `viewDate` and `autoOptimizer` should be read at the moment of the
+action, not three seconds later from a day the user may have navigated away from.
+Same shape as v17.16.9's carried label.
+
+**Verified live, both halves.** Re-run of the same future-date seat: "Booking
+saved." from t=1143 to t=5475 and then gone, with no second string anywhere in
+the log. Re-run of the future-date delete: the note held for the full 13.3s
+sampled, to the end of the pill.
+
+Gate: `129.28 kB` gz · 1409 tests · 0 lint errors (88 warnings) · style OK.
