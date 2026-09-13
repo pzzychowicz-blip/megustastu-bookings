@@ -476,6 +476,27 @@ export function BookingFormModal({
       const prefTblChanged=tblKey(cur&&cur.preferredTables)!==tblKey(form.preferredTables);
       const cleared=!!form._clearManual;
       const curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
+      // v18.0.0 session 10 (/code-review): this asks `_manual||_locked` while
+      // `optOwns` below asks `isLocked` — the predicate `applyOpt` itself
+      // branches on — and the two are NOT the same question. On a booking
+      // that was `_manual:true, _locked:false` the optimiser would move it
+      // while this said its tables were settled, and the rescue is partial:
+      // `optMoves` feeds `hardChanged`, which defeats the branch below, but
+      // only once `previewTbls` has arrived and differs. Until then this
+      // wins.
+      //
+      // It does not bite because that shape is UNREACHABLE, and the reason
+      // is narrow enough to be worth naming: `manualAssign`'s `locked`
+      // argument writes `_locked: locked===true`, and ManualModal's two
+      // `onSave` call sites both pass the literal `true` — they have since
+      // the initial commit (`git log -S`). So `_manual` implies `_locked`
+      // throughout, and the two predicates coincide.
+      //
+      // `tests/booking-logic.test.js` pins that, because it is the thing an
+      // "assign without locking" affordance would quietly remove. If one is
+      // ever added, the split to make is by QUESTION: this name also drives
+      // `showClearManual`, where `_manual` is exactly right, and only the
+      // `showTbl` branch wants "will the optimiser leave it alone".
       const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
       // v18.0.0 session 8 (item 3): a draft saved as seated or finished carries
       // its tables through, so the preview shows THOSE — not the optimiser's

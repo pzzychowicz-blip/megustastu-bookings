@@ -25026,3 +25026,38 @@ No rules change. `database.rules.json` is byte-identical.
 Gate: `129.61 kB` gz · 1452 tests · 0 lint errors (88 warnings) · style OK ·
 `test:rules` **290 tests** (286 → 290).
 
+### Commit 118 (session 10, /code-review) — `_manual` implies `_locked`, and now something says so
+
+The session-9 hand-off's other carry-in: *"Commit 108's `optOwns` uses `isLocked`
+where the preview's older `isManual` uses `cur._manual||cur._locked`. Those agree
+today; if a booking can ever be `_manual:true, _locked:false`, they stop agreeing
+and `isManual` is the one that would be wrong."*
+
+**Both halves check out, and the second is why this is a pin rather than a
+change.** `isManual` really is the wrong predicate for the question `showTbl`
+asks — the optimiser branches on `isLocked`, so it would move a
+`_manual:true, _locked:false` booking while `isManual` said its tables were
+settled. And the rescue is only partial: `optMoves` feeds `hardChanged`, which
+defeats that branch, but not until `previewTbls` has arrived and differs.
+
+**The shape is unreachable, and the reason is narrow enough to be worth naming.**
+`manualAssign` writes `_locked: locked===true`, and the only component that calls
+it — `ManualModal` — passes the literal `true` at both of its `onSave` sites, and
+has since the initial commit (`git log -S 'onSave(selected, false'` returns
+nothing but that commit). So `_manual` implies `_locked` throughout and the two
+predicates coincide on every shape the app can write.
+
+Four pins, and the sabotage is the point: flipping ONE of ManualModal's two calls
+to `false` turns the suite red and the failure prints both call sites. That is
+exactly what an "assign without locking" affordance would do, and it is the one
+change that would make the divergence real.
+
+**Not aligned, deliberately.** Making `isManual` ask `isLocked` would change
+nothing reachable today and would touch the preview row Commits 105 and 108 just
+tuned against live measurements. The comment at `isManual` records what the split
+should be if the affordance ever arrives — by QUESTION, since that name also
+drives `showClearManual`, where `_manual` is exactly right, and only the
+`showTbl` branch wants "will the optimiser leave it alone".
+
+Gate: `129.61 kB` gz · **1456 tests** · 0 lint errors (88 warnings) · style OK.
+

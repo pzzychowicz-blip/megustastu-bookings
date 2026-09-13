@@ -2784,3 +2784,50 @@ describe("doSave hands the seat a list with the cleared party completed (v18.0.0
   });
 });
 
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// The preview holds two predicates for "will the optimiser leave this booking
+// alone": `isManual` (`_manual||_locked`) and `optOwns` (`isLocked`, which is
+// what `applyOpt` itself branches on). They are not the same question — on a
+// `_manual:true, _locked:false` booking the optimiser moves it while `isManual`
+// says its tables are settled — and `optMoves` rescues that only once
+// `previewTbls` has arrived and differs, so until then the wrong one wins.
+//
+// It does not bite because the shape is UNREACHABLE, and these pin the narrow
+// reason: `manualAssign` derives `_locked` from its `locked` argument, and the
+// only component that calls it passes the literal `true` every time. An "assign
+// without locking" affordance is exactly what would remove that quietly, so it
+// is what turns these red.
+describe("`_manual` implies `_locked`, which is what keeps the two previews agreeing", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const MANUAL = stripComments(
+    readFileSync(new URL("../src/components/ManualModal.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("manualAssign writes _locked from its argument and nothing else", () => {
+    expect(/_manual:true,_locked:locked===true/.test(APP)).toBe(true);
+  });
+
+  it("every ManualModal onSave call passes the literal true", () => {
+    const calls = MANUAL.match(/onSave\([^)]*\)/g) || [];
+    expect(calls.length, "both the Enter handler and the button").toBe(2);
+    expect(calls.every((c) => /^onSave\(selected, true,/.test(c)), calls.join(" | ")).toBe(true);
+  });
+
+  it("and App's only call site is that component's onSave", () => {
+    const sites = APP.split("\n").filter((l) => /[^a-zA-Z]manualAssign\(/.test(l) && !/function manualAssign/.test(l));
+    expect(sites.length, sites.join(" | ")).toBe(1);
+  });
+
+  it("the optimiser's own predicate agrees on every shape that IS reachable", () => {
+    // isLocked is what applyOpt branches on. With `_manual` implying `_locked`,
+    // "manual" and "locked" answer the same for every booking the app writes.
+    for (const b of [
+      { _manual: true, _locked: true, status: "confirmed" },
+      { _manual: false, _locked: false, status: "seated" },
+      { _manual: false, _locked: false, status: "confirmed" },
+    ]) {
+      expect(!!(b._manual || b._locked) || b.status === "seated", JSON.stringify(b)).toBe(isLocked(b));
+    }
+  });
+});
+
