@@ -44,6 +44,10 @@ import {
   optimizerActiveFor, seatingClosed,
   // v18.0.0 session 8 (item 3): what the form previews must agree with.
   tablesPinned,
+  // v18.0.0 session 9: …and the other half of agreeing with it — `doSaveEdit`
+  // keeps the tables it has when they are still free for the new window, so the
+  // preview has to ask the SAME question with the SAME helper.
+  tablesFreeFor,
   // v18.0.0 session 8 (C7): the Time field's max is the last START, not close.
   lastStartMins
 } from "../lib/booking-logic";
@@ -449,10 +453,40 @@ export function BookingFormModal({
       const curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
       const formPrefStr=Array.isArray(form.preferredTables)?form.preferredTables.slice().sort().join(","):"";
       const prefTblChanged=curPrefStr!==formPrefStr;
-      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged);
-      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged);
       const cleared=!!form._clearManual;
       const curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
+      // v18.0.0 session 9: a STATUS that walks the booking out of a pinned state
+      // — revived from cancelled/completed, or un-seated — re-places it at Save
+      // just as a time or size change does, and the preview did not know.
+      //
+      // Measured: revive a cancelled booking whose table has since been taken,
+      // change nothing else, and the form read "Tables | 6" with no "was:" line
+      // — polled every 700ms for 8.4s, it never moved — while Save wrote table
+      // 2. The user was told 6 and got 2. The cause was that `changed` below
+      // listed time, size, date, preference, duration and preferred tables, and
+      // not status, so `showTbl` fell back to the booking's CURRENT tables and
+      // `previewTbls` was never reached. `doSaveEdit`'s own predicate
+      // (`recheck = needsR||planChanged||revived||!!unseat`) always included it.
+      // The preview's compare was NARROWER than the pass it gates — v17.10.2's
+      // shape, one component over.
+      //
+      // `tablesPinned` is the discriminator rather than a second spelling of
+      // "revived": pinned-to-unpinned is exactly `revived || unseat`, and where
+      // the draft is still pinned (cancelled → seated) `pinnedTbl` below already
+      // wins and the save does not re-place either, so the two agree by
+      // construction. Two predicates that merely agree today are two predicates.
+      const unpinning=!!cur&&tablesPinned(cur.status,false,false)&&!tablesPinned(form.status,!!mt,cleared);
+      // …and re-placing is not a foregone conclusion when it does: the save
+      // keeps the tables it has if they are STILL FREE for the window
+      // (`keepsWindowTables`). Asking the same question with the same helper is
+      // what stops this fix creating the opposite disagreement — a preview
+      // promising a move the save will not make.
+      const winStart=form.time?toMins(form.time):0;
+      const winDur=form.customDur||(cur?(cur.duration||90):90);
+      const unpinMoves=unpinning&&!!curTbl
+        &&!tablesFreeFor(bookings,form.date,editId,curTbl,winStart,winStart+winDur,tableBlocks);
+      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged||unpinMoves);
+      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged||unpinMoves);
       const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
       // v18.0.0 session 8 (item 3): a draft saved as seated or finished carries
       // its tables through, so the preview shows THOSE — not the optimiser's

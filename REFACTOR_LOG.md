@@ -24495,3 +24495,51 @@ the log. Re-run of the future-date delete: the note held for the full 13.3s
 sampled, to the end of the pill.
 
 Gate: `129.28 kB` gz · 1409 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 105 — the preview's compare was narrower than the save's (R4)
+
+`src/components/BookingFormModal.jsx` · `ROADMAP.md`. Session 9's Job 1 finding
+2. The plan promised "the re-placement now happens **before** Save and **shows in
+the form's preview**". Half of that shipped: the save was right and the form
+never said so.
+
+**Measured.** Revive a cancelled booking whose table has since been given away,
+changing nothing else: the form read **"Tables | 6"**, with no "was:" line,
+**polled every 700ms for 8.4s without moving**, and Save wrote **table 2**. The
+user is told 6 and gets 2.
+
+Cause: `changed` listed time, size, date, preference, `customDur` and preferred
+tables — and **not status**. With it false, `pinnedTbl` null and `isManual`
+false, `showTbl` fell back to the booking's CURRENT tables and `previewTbls` was
+never reached; the "was:" line is gated on the same flag. `doSaveEdit`'s own
+predicate always included it: `recheck = needsR||planChanged||revived||!!unseat`.
+**The preview's compare was narrower than the pass it gates** — v17.10.2's shape,
+one component over, and the second time this version that a conditional was
+written against a smaller set of cases than the code it guards.
+
+The discriminator is `tablesPinned`, not a second spelling of "revived":
+pinned-to-unpinned **is** `revived || unseat`, and in the one case they diverge
+(cancelled → seated) the draft is still pinned, so `pinnedTbl` already wins and
+the save does not re-place either — the two agree by construction rather than by
+coincidence. Two predicates that merely agree today are two predicates.
+
+**And re-placing is not a foregone conclusion.** The save keeps the tables it has
+when they are still free for the window (`keepsWindowTables`), so the preview asks
+the same question with the same helper, `tablesFreeFor`. Without that, this fix
+would have created the opposite disagreement — a preview promising a move the
+save would not make.
+
+**Verified live, both directions.** Table taken: the preview shows
+**"1A · (auto) · was: 6"** within 800ms and holds; Save writes 1A, the squatter
+keeps 6 — preview and save agree. Table still free: the preview correctly shows
+no move.
+
+**One thing this does NOT fix, and it is recorded in `ROADMAP.md` rather than
+quietly patched.** In that second case the save still moved the booking 5A → 1A,
+because on any date that is not today `optimizerActiveFor` is true and the save
+re-optimises the whole day. That is broader than R4 and it is **pre-existing**:
+verified by reverting this file to HEAD and re-running the identical scenario,
+which gives the identical 5A → 1A. Closing it means a full optimiser pass in the
+preview, which the v16.3.0 perf work forbids.
+
+Gate: `129.35 kB` gz · 1409 tests · 0 lint errors (88 warnings) · style OK.

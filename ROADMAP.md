@@ -24,6 +24,20 @@ session and keeping it in sync.
   `database.rules.README.md` § *v18.0.0 — the production deploy, in order*.
   Delete this entry when the last of them — `enforceRoles` on — is done.
 
+- **The form's table preview cannot see the optimiser's own pass.** On any date
+  that is not today `optimizerActiveFor` is true, so every save re-optimises the
+  whole day and a booking can move even when the form promised its current
+  table. Measured v18.0.0 session 9: revive a cancelled booking whose table is
+  still FREE — the preview correctly shows no move (the save's own
+  `keepsWindowTables` agrees), and the optimiser then relocates it 5A → 1A
+  anyway. **Verified PRE-EXISTING**, not introduced by session 9's preview fix:
+  the identical run against the reverted file gives the identical 5A → 1A.
+  Closing it honestly means running a full optimiser pass in the preview, which
+  is exactly what the v16.3.0 perf work forbids (`trialFits`/`optimise` are the
+  app's heaviest calls and the form already defers them). So this is a decision
+  to take, not a bug to patch: either accept it and say so in the UI, or find a
+  cheaper predictor.
+
 ## Designed, not implemented
 
 _(nothing pending)_
