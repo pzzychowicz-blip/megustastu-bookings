@@ -26,7 +26,38 @@
 //     can't generate (each {ids, cap}). Appended to the auto combos in order.
 // buildLayout(DEFAULT_LAYOUT) reproduces the pre-Phase-4 VALID_COMBOS (40, ordered)
 // + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
-import { todayStr } from "./day";
+// WA sandbox: explicit ".js" — this file is in the Node ESM chain reached from
+// src/lib/whatsapp.js via booking-logic.js (api/_lib + the :3999 harness import it).
+// Node ESM does not resolve extensionless specifiers; Vite does not care either way.
+import { todayStr } from "./day.js";
+
+// ── The app's own name (v18.0.0 phase 2) ─────────────────────────────────────
+// The APP is "MGT Bookings"; the RESTAURANT is whatever `settings/general.
+// restaurantName` says (seeded from the selected tenant's `profile.name` —
+// src/tenants/, src/firebase.js). v17.15.2 fixed a real bug from confusing the
+// two: DaySheet's printed footer built the app's own name out of a restaurant
+// setting, so the app was called something different at every tenant.
+//
+// It is a constant here because it was FOUR hand-typed copies, and one of them
+// had already drifted: `Settings.jsx`'s footer said "MGT Booking System" —
+// singular, with a word the other three dropped. Nothing in the repo could see
+// it. `check:style` looks for literals of colour and geometry; three copies of
+// one string that happen to disagree are invisible to every gate we have. The
+// constant is what makes a fifth copy impossible rather than merely absent.
+//
+// SEVEN COPIES REMAIN, AND ARE ALLOWED, in the three files that cannot import:
+// `index.html` (the <title>, the apple-mobile-web-app-title, and the boot
+// watchdog's heading), `public/manifest.webmanifest` (name + short_name) and
+// `public/sw.js` (its header comment, and the offline page's <title> and body
+// copy). They must agree with this value; `tests/stylesheet.test.js` pins each
+// one AND asserts how many there are, so a rename here fails the build until
+// every one follows, and a NEW copy fails it too.
+//
+// The count is asserted rather than described because the first version of that
+// guard described it: the comment said "two copies remain" and the test pinned
+// four, leaving the boot watchdog and the offline page — the two screens a user
+// sees when the app is broken — free to keep an old name silently.
+export const APP_NAME = "MGT Bookings";
 
 export var DEFAULT_LAYOUT={
   tables:[
@@ -759,7 +790,7 @@ export var REVEAL_EXIT_MS = exitHold("reveal");
 // `formRef` / `formBaseline` initializers all keep taking a plain string — and
 // because a default that is silently wrong is a trap for the next call site
 // added, which will not know it has to set the field.
-export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
+export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",voucherCode:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here

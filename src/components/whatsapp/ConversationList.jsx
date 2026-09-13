@@ -1,0 +1,161 @@
+// src/components/whatsapp/ConversationList.jsx
+// Left pane: filters conversations by the active tab (inbox vs archived) and
+// sorts them — archived by archivedAt desc, inbox by lastMessageAt desc.
+
+import { useRef, useEffect } from "react";
+import { sortConversations, conversationOrder } from "../../lib/whatsapp";
+import { useFlip, Reveal } from "../atoms";
+import { useRevealRows } from "../../hooks/useRevealRows";
+import { ConversationRow } from "./ConversationRow";
+import { T } from "../../lib/constants";
+
+// Per-row collapse speed (17.15.0-wa-sandbox). This was a hand-tuned `ms={365}`
+// plus a `ROW_PRUNE_MS` derived from it — 365 being the then-house 280ms Reveal
+// plus 30%, after Patryk found the "Needs action" toggle read as a snap in the
+// Inbox tab, where it removes many rows at once.
+//
+// v17.15.0 made `Reveal` take a NAME from the `M` scale instead of a number,
+// precisely so a caller cannot set a duration without the matching unmount hold.
+// `shift` is 385ms — 20ms off the tuned value, so the fold is unchanged to the
+// eye — and it is also the honest reading: a Reveal changes GEOMETRY, which is
+// what --t-shift is for. `move` (240ms) would have been FASTER than the 280 that
+// was rejected in the first place, which is how a semantic argument quietly
+// undoes a measurement.
+const ROW_SPEED = "shift";
+
+export function ConversationList({ conversations, activeKey, onSelect, bookings, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
+  // Shared with InboxPanel's keyboard-nav so the rendered order and the ↑/↓
+  // order are guaranteed identical (see lib/whatsapp.js → sortConversations).
+  const sorted = sortConversations(conversations, archivedView);
+
+  // ── Rows ease out instead of disappearing ───────────────────────────────────
+  // Toggling "Needs action" (or typing in the search box, or archiving a thread)
+  // used to drop rows from the DOM instantly: the survivors slid up via FLIP,
+  // but the removed rows just blinked out, which read as a jump whenever more
+  // than one or two went at once. Now every row lives in a <Reveal>, so a
+  // departing row collapses its own height and the rows below follow it up —
+  // the "stack of cards" fold, identical in both tabs because it is one code
+  // path with no per-tab branch.
+  //
+  // ASYMMETRIC on purpose (`opts.instantIn`): only the way OUT folds. A returning row
+  // appears at full height straight away and the rows below slide down to it via
+  // the FLIP below. Easing it open as well meant two motions stacked on one row —
+  // the row growing AND the rows under it travelling — which read as too much
+  // movement for what is just a filter toggle.
+  // No `resetKey`: this list is EDITED (a thread arrives, a filter drops some
+  // rows), never REPLACED wholesale the way the notification strip's is on a
+  // date change. The prune window comes from ROW_SPEED, so it cannot drift from
+  // the Reveal below it.
+  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), undefined, { speed: ROW_SPEED, instantIn: true });
+  // A departing row is no longer in `conversations`, so its object has to come
+  // from somewhere: cache every conversation we have rendered, keyed by
+  // phoneKey. Bounded by the number of conversations that have been on screen.
+  //
+  // Filled in a dep-less EFFECT, not during render — the house pattern, per
+  // CLAUDE.md on useKeyboardShortcuts: "the hook refreshes a ref from it in a
+  // dep-less effect (lint-clean vs the old in-render write)". It still holds
+  // what is needed when it is needed: a row only falls back to the cache on the
+  // render where it has just LEFT `sorted`, and the previous COMMITTED render's
+  // effect already stored it.
+  const cache = useRef({});
+  useEffect(() => { sorted.forEach((c) => { cache.current[c.phoneKey] = c; }); });
+  // Live data wins over the cache for anything still visible, so a row on
+  // screen can never paint from a stale copy.
+  const live = {};
+  sorted.forEach((c) => { live[c.phoneKey] = c; });
+  // Sort the UNION (visible + still-collapsing) with the shared comparator, NOT
+  // sortConversations: its tab filter would drop a row that departed *because*
+  // it was archived, and that row would vanish instead of easing out — the very
+  // case this is here to animate.
+  const rows = renderIds
+    .map((id) => live[id] || cache.current[id])
+    .filter(Boolean)
+    .sort(conversationOrder(archivedView));
+
+  // FLIP: when a new message bumps a conversation to the top, the rows ease to
+  // their new spots instead of jumping. Keyed on the rendered order signature so
+  // it fires only on a reorder/add/remove — not on every unrelated re-render.
+  // It composes with the collapse rather than fighting it, and the two directions
+  // divide the work cleanly: on the way OUT the shrinking heights carry the rows
+  // below and FLIP stays silent; on the way IN the row is there at full height
+  // immediately, so FLIP is the ONLY thing that animates — the rows below slide
+  // down into their new spots.
+  //
+  // The quiet predicate is what keeps the OUT direction silent, and it is not
+  // optional. FLIP's stored tops last refreshed before the collapse began; the
+  // rows then eased upward under a CSS height transition, which React never
+  // re-rendered through. So at the prune — the next commit that changes the order
+  // signature — FLIP would measure the entire collapse as one unseen jump and
+  // replay it: a second slide starting ~90ms after the fold visibly finished,
+  // repeating its last stage. Going quiet whenever a row is, or has just been,
+  // collapsing resyncs the tops instead.
+  //
+  // `wasCollapsing` is written in a plain effect, so during the PRUNE commit's
+  // layout effect it still holds the previous render's answer (true) — which is
+  // exactly the question being asked. A genuine reorder landing inside that window
+  // loses its FLIP for one pass; a new message arriving during a ~385ms fold is
+  // rare enough to accept.
+  const collapsing = renderIds.some((id) => !live[id]);
+  const wasCollapsing = useRef(false);
+  useEffect(() => { wasCollapsing.current = collapsing; });
+  const orderSig = rows.map((c) => c.phoneKey).join("|");
+  const flipRef = useFlip([orderSig], () => collapsing || wasCollapsing.current);
+  if (!rows.length) {
+    return (
+      <div style={{ padding: "32px 18px", textAlign: "center", color: "var(--text-muted)", fontSize: T.lead }}>
+        {emptyLabel || (archivedView ? "No archived conversations." : "No conversations yet.")}
+      </div>
+    );
+  }
+  // ── the roving tab stop (17.15.0-wa-sandbox) ──────────────────────────────
+  // One stop for the whole list, resolved against the LIVE rows rather than the
+  // rendered ones: `rows` also holds the departing rows that are mid-collapse,
+  // and a tab stop on a row on its way out is a stop that disappears under the
+  // keyboard. Anchored on `activeKey` — which is what the panel's ↑/↓ moves —
+  // and falling back to the first row, so the list is always reachable from the
+  // keyboard even before anything is selected. This is prod's ListView `rovingId`
+  // with `activeKey` in `selectedId`'s place.
+  const rovingKey = (activeKey && sorted.some((c) => c.phoneKey === activeKey))
+    ? activeKey
+    : (sorted[0] ? sorted[0].phoneKey : null);
+  return (
+    <div
+      ref={flipRef}
+      /* A real list, so a screen reader is told how many conversations there
+         are and where in them it is. The label distinguishes the two tabs,
+         which render through this same component. */
+      role="list"
+      aria-label={archivedView ? "Archived conversations" : "Conversations"}
+      style={{ padding: "10px 10px 18px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+      {/* A collapsing row stays mounted for the whole prune window, so it is
+          made inert: without this you can click a row on its way out and select
+          a conversation no longer in this tab, which the leaves-the-tab effect
+          then immediately clears — the click reads as the app ignoring it. */}
+      {rows.map((c) => (
+        <Reveal
+          key={c.phoneKey}
+          show={openIds.has(c.phoneKey)}
+          speed={ROW_SPEED}
+          /* Reveal's two wrappers sit between `role="list"` and each
+             `role="listitem"`, and a list must OWN its items — measured here
+             at three levels of separation, which loses the count and position
+             the role exists to provide. */
+          presentational
+          style={openIds.has(c.phoneKey) ? undefined : { pointerEvents: "none" }}
+        >
+          <ConversationRow
+            flipId={c.phoneKey}
+            conv={c}
+            roving={c.phoneKey === rovingKey}
+            departing={!live[c.phoneKey]}
+            active={c.phoneKey === activeKey}
+            onClick={() => (selectMode ? onToggleSelect(c.phoneKey) : onSelect(c.phoneKey))}
+            bookings={bookings}
+            selectMode={selectMode}
+            checked={!!(selected && selected.has(c.phoneKey))}
+          />
+        </Reveal>
+      ))}
+    </div>
+  );
+}

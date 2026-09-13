@@ -10,7 +10,7 @@
 // Dates use a fixed FUTURE day so optimizerActiveFor(date, …) is always true and
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
@@ -23,10 +23,16 @@ import {
   stayedMins, bookEnd, padEnd, dayBookingsSig, describeBooking, clashRowId, mergeSpans,
   sanitizeBlock, sanitizeBlocks,
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
+  plannedDuration, seatNoteFor,
+  tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
+  unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
+  tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
+  optimizerActiveFor,
 } from "../src/lib/booking-logic.js";
 import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } from "../src/lib/constants.js";
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -460,7 +466,7 @@ describe("canAssign / getBusy / getBlockSlots", () => {
       "src/components/WalkinForm.jsx", "src/App.jsx"];
     const offenders = [];
     files.forEach((f) => {
-      const src = readFileSync(new URL("../" + f, import.meta.url), "utf8");
+      const src = stripComments(readFileSync(new URL("../" + f, import.meta.url), "utf8")).join("\n");
       // Does this file hand a block's own from/to to toMins itself, rather than
       // going through getBlockSlots? If so it must know about the predicate.
       const computes = /toMins\(\s*b[a-z]*\.(from|to)\s*\)/.test(src);
@@ -1302,7 +1308,7 @@ describe("clashRowId", () => {
     // A literal 0x1F in source is invisible in every editor, grep and diff — the
     // same class of trap as the HTML entity that hid from v17.9.0's glyph sweep.
     // Asserted over the whole module, so it also covers undoKey's four keys.
-    const src = readFileSync(new URL("../src/lib/booking-logic.js", import.meta.url), "utf8");
+    const src = stripComments(readFileSync(new URL("../src/lib/booking-logic.js", import.meta.url), "utf8")).join("\n");
     expect(src).toMatch(/\\u001f/);
     expect(src.includes("\u001f")).toBe(false);
   });
@@ -1838,3 +1844,990 @@ describe("v17.16.2 /code-review — regressions of the axis fix", () => {
     });
   });
 });
+
+// ── v18.0.0 — voucherCode joins the THREE lists a booking field must join ────
+//
+// The plan calls `UNDO_FIELDS` "the silent one", and it is right: nothing fails
+// and no test goes red when a field is missing from it. The defect only appears
+// when somebody attaches a voucher and then presses undo. So these tests exist
+// specifically to make the silent case loud — each one fails if `voucherCode` is
+// removed from its list, and nothing else would.
+
+describe("voucherCode is in all three booking-field lists (v18.0.0)", () => {
+  const vb = (o = {}) => Object.assign({
+    id: "v1", name: "Pau", phone: "", date: "2026-09-01", time: "20:00",
+    size: 2, duration: 90, status: "confirmed", tables: ["3"],
+  }, o);
+
+  it("sanitize KEEPS it, and normalises it through the one normaliser", () => {
+    // Without the whitelist entry the field does not survive a read at all.
+    expect(sanitize({ voucherCode: "abcd-2345" }).voucherCode).toBe("ABCD2345");
+    expect(sanitize({ voucherCode: "ABCD2345" }).voucherCode).toBe("ABCD2345");
+    // Two spellings of one code must never resolve to two vouchers.
+    expect(sanitize({ voucherCode: "abcd 2345" }).voucherCode)
+      .toBe(sanitize({ voucherCode: "ABCD-2345" }).voucherCode);
+    expect(sanitize({}).voucherCode).toBe("");
+    expect(sanitize({ voucherCode: null }).voucherCode).toBe("");
+  });
+
+  it("UNDO_FIELDS notices it — attach a voucher, press undo, get the link back", () => {
+    // THE silent one. A field absent from UNDO_FIELDS reads as "nothing
+    // changed", so undoSnapshots takes NO snapshot and the action is quietly
+    // un-undoable. This test is the only thing that would say so.
+    const before = sanitize(vb({ voucherCode: "" }));
+    const after = sanitize(vb({ voucherCode: "ABCD2345" }));
+    const snap = undoSnapshots([before], [after]);
+    expect(snap.map((x) => x.id)).toEqual(["v1"]);
+    // And the undo actually restores the previous link.
+    expect(applyUndo([after], snap).find((b) => b.id === "v1").voucherCode).toBe("");
+  });
+
+  it("UNDO_FIELDS notices a voucher being SWAPPED, not only added or cleared", () => {
+    const a = sanitize(vb({ voucherCode: "ABCD2345" }));
+    const b = sanitize(vb({ voucherCode: "QRST6789" }));
+    expect(undoSnapshots([a], [b]).map((x) => x.id)).toEqual(["v1"]);
+    // A code that only differs in SPELLING is the same voucher and is not a change.
+    const c = sanitize(vb({ voucherCode: "abcd-2345" }));
+    expect(undoSnapshots([a], [c])).toEqual([]);
+  });
+
+  it("dayBookingsSig sees it too — it shares UNDO_FIELDS' field set", () => {
+    const a = sanitize(vb({ voucherCode: "" }));
+    const b = sanitize(vb({ voucherCode: "ABCD2345" }));
+    expect(dayBookingsSig([a], a.date)).not.toBe(dayBookingsSig([b], b.date));
+  });
+
+  it("diffBooking says what happened, instead of 'saved (no field changes)'", () => {
+    const orig = sanitize(vb({ voucherCode: "" }));
+    expect(diffBooking(orig, { ...orig, voucherCode: "ABCD2345" }, 2))
+      .toMatch(/voucher none→ABCD-2345/);
+    expect(diffBooking(sanitize(vb({ voucherCode: "ABCD2345" })),
+      { ...vb(), voucherCode: "" }, 2)).toMatch(/voucher ABCD-2345→none/);
+    // A re-spelling is not a change and must not appear in the history entry.
+    const same = sanitize(vb({ voucherCode: "ABCD2345" }));
+    expect(diffBooking(same, { ...same, voucherCode: "abcd-2345" }, 2))
+      .toBe("saved (no field changes)");
+  });
+});
+
+// ── The FIVE places a booking field has to appear, not three ────────────────
+//
+// v18.0.0, and this one was found by RUNNING the app, not by reading it. The
+// three lists above (`sanitize`, `UNDO_FIELDS`, `diffBooking`) are what makes a
+// field survive a read, an undo and a history entry — and none of them makes it
+// get WRITTEN. `doSaveNew` and `doSaveEdit` build the booking object field by
+// field, and `openEdit` builds the form draft the same way, so a field missing
+// from those three never reaches storage at all.
+//
+// Live symptom: the voucher attached in the form, the booking saved, and the
+// completion produced no redeem prompt — because the stored booking had no
+// `voucherCode`. The `openEdit` one is worse and would have shipped silently:
+// without it, opening and re-saving any booking WIPES its voucher, which is the
+// `UNDO_FIELDS` failure mode one layer up.
+//
+// `deposit` is in all five, which is what makes them findable — so this scans
+// App.jsx for `deposit` and requires `voucherCode` in the same expression. A
+// grep, like the `isReadableBlock` consumer sweep, because nothing else in the
+// repo can see this class: there are no component tests, and every unit test
+// above passes with all three sites missing.
+describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
+  const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+
+  // Each entry is a fragment unique to one site, so a failure names WHICH.
+  const SITES = [
+    ["openEdit — seeds the form draft", /deposit:b\.deposit\?String\(b\.deposit\):""[^\n]*?voucherCode:/],
+    ["doSaveEdit — writes the edit", /Object\.assign\(\{\},b,\{name:f\.name[\s\S]{0,400}?voucherCode:/],
+    ["doSaveNew — writes the create", /const nb=\{id:newId[\s\S]{0,400}?voucherCode:/],
+  ];
+
+  SITES.forEach(([name, re]) => {
+    it(name + " carries voucherCode", () => {
+      expect(re.test(APP)).toBe(true);
+    });
+  });
+
+  it("every `deposit:` in a booking-shaped literal has a voucherCode beside it", () => {
+    // The general form of the rule, so the NEXT field added is caught too.
+    // A booking literal is one that sets `deposit:` and `status:` together.
+    const lines = APP.split("\n");
+    const offenders = lines
+      .map((l, i) => ({ l, n: i + 1 }))
+      .filter(({ l }) => /deposit:/.test(l) && /status:/.test(l) && !/voucherCode:/.test(l))
+      .map(({ n }) => n);
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("plannedDuration — the length a booking was BOOKED for (v18.0.0 session 7)", () => {
+  // Book Again's source. The seated shift is driven for REAL below rather than
+  // hand-copied into a fixture, so these fail if the shift ever stops pinning
+  // the scheduled end — the one property the recovery depends on — and not
+  // only when the helper itself changes.
+  it("a booking never seated keeps its stored length", () => {
+    expect(plannedDuration(mk({ time: "20:30", scheduledTime: "20:30", duration: 150, originalDuration: 150 }))).toBe(150);
+  });
+
+  it("seated EARLY through the real applySeatedShift: the plan comes back, not the shifted length", () => {
+    const b = mk({ time: "20:30", scheduledTime: "20:30", duration: 150, originalDuration: 150 });
+    const shift = applySeatedShift(b, toMins("20:15"), [b], D);
+    expect(shift).toMatchObject({ newTime: "20:15", newDuration: 165 });
+    const seated = Object.assign({}, b, { status: "seated", time: shift.newTime, duration: shift.newDuration, originalDuration: shift.newDuration });
+    expect(plannedDuration(seated)).toBe(150);
+  });
+
+  it("seated LATE through the real shift: the same recovery the other way", () => {
+    const b = mk({ time: "20:30", scheduledTime: "20:30", duration: 150, originalDuration: 150 });
+    const shift = applySeatedShift(b, toMins("20:50"), [b], D);
+    expect(shift).toMatchObject({ newTime: "20:50", newDuration: 130 });
+    const seated = Object.assign({}, b, { status: "seated", time: shift.newTime, duration: shift.newDuration, originalDuration: shift.newDuration });
+    expect(plannedDuration(seated)).toBe(150);
+  });
+
+  it("completion and an overstay rewrite `duration`, never the plan", () => {
+    // Completed after an early seat: `duration` truncated to the 130-minute stay.
+    expect(plannedDuration(mk({ status: "completed", time: "20:15", scheduledTime: "20:30", duration: 130, customDur: 130, stayedMin: 130, originalDuration: 165 }))).toBe(150);
+    // Still seated and overstaying: `duration` grown live by syncLiveDurations.
+    expect(plannedDuration(mk({ status: "seated", time: "20:30", scheduledTime: "20:30", duration: 200, customDur: 200, originalDuration: 150 }))).toBe(150);
+  });
+
+  it("a legacy row with no originalDuration or scheduledTime falls back to what it has", () => {
+    expect(plannedDuration({ time: "13:00", duration: 120 })).toBe(120);
+  });
+
+  it("never invents a length — an unreadable time, or an end not after the start, keeps the stored one", () => {
+    expect(plannedDuration({ time: "8 in the evening", scheduledTime: "20:30", duration: 90, originalDuration: 90 })).toBe(90);
+    expect(plannedDuration({ time: "13:00", scheduledTime: "20:30", duration: 60, originalDuration: 60 })).toBe(60);
+  });
+
+  it("is null only when there is no length at all", () => {
+    expect(plannedDuration(null)).toBe(null);
+    expect(plannedDuration({ time: "13:00" })).toBe(null);
+    expect(plannedDuration({ time: "13:00", duration: 0, originalDuration: 0 })).toBe(null);
+  });
+});
+
+describe("seatNoteFor — what the seat note shows (v18.0.0 session 7)", () => {
+  // One predicate for both doors a booking is seated through, so this is where
+  // "when does the popover open" is decided — and the only place it can be pinned.
+  it("a move INTO seated with a note returns a snapshot of the booking as it will stand", () => {
+    const b = mk({ id: "s1", name: "Maria López", size: 4, time: "20:15", scheduledTime: "20:30", tables: ["5A"], notes: "  Birthday — cake with dessert.\nNut allergy.  " });
+    expect(seatNoteFor("confirmed", "seated", b)).toEqual({
+      id: "s1", name: "Maria López", size: 4, time: "20:30", tables: ["5A"],
+      notes: "Birthday — cake with dessert.\nNut allergy.",
+    });
+  });
+
+  it("the time is the BOOKED time — the seated shift has just moved `time` to now", () => {
+    expect(seatNoteFor("confirmed", "seated", mk({ time: "20:15", scheduledTime: "20:30", notes: "x" })).time).toBe("20:30");
+    // A legacy row with no scheduledTime still names a time.
+    expect(seatNoteFor("confirmed", "seated", { id: "l", time: "13:00", size: 2, notes: "x" }).time).toBe("13:00");
+  });
+
+  it("is null for anything that is not a seat", () => {
+    const b = mk({ notes: "Nut allergy" });
+    expect(seatNoteFor("seated", "seated", b), "re-saving a party already seated").toBe(null);
+    expect(seatNoteFor("confirmed", "completed", b)).toBe(null);
+    expect(seatNoteFor("seated", "confirmed", b)).toBe(null);
+    expect(seatNoteFor("confirmed", "cancelled", b)).toBe(null);
+  });
+
+  it("is null when there is nothing to read", () => {
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: "" }))).toBe(null);
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: "   \n " }))).toBe(null);
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: undefined }))).toBe(null);
+    expect(seatNoteFor("confirmed", "seated", null), "a booking gone from the list").toBe(null);
+  });
+
+  it("the snapshot is a copy — mutating the booking afterwards cannot change what is on screen", () => {
+    const b = mk({ tables: ["1A", "1B"], notes: "Wheelchair" });
+    const snap = seatNoteFor("confirmed", "seated", b);
+    b.tables.push("2");
+    expect(snap.tables).toEqual(["1A", "1B"]);
+  });
+});
+
+// ── v18.0.0 session 8 (item 3) — a booking SAVED as seated keeps its tables ──
+describe("tablesPinned", () => {
+  it("pins the three statuses whose tables are a fact, not a proposal", () => {
+    expect(tablesPinned("seated", false, false), "the party is at them").toBe(true);
+    expect(tablesPinned("completed", false, false), "v17.15.5 — a record").toBe(true);
+    expect(tablesPinned("cancelled", false, false)).toBe(true);
+    expect(tablesPinned("confirmed", false, false)).toBe(false);
+    expect(tablesPinned("pending", false, false)).toBe(false);
+  });
+
+  it("an explicit manual assignment or an explicit clear still wins", () => {
+    expect(tablesPinned("seated", true, false), "somebody chose tables").toBe(false);
+    expect(tablesPinned("seated", false, true), "somebody cleared them").toBe(false);
+    expect(tablesPinned("completed", true, false)).toBe(false);
+  });
+});
+
+describe("seatedFitRefusal", () => {
+  it("refuses a party that no longer fits the table it is sitting at", () => {
+    // Table 3 is one of the eight outdoor 2-tops in the MGT seed.
+    expect(seatedFitRefusal(5, ["3"])).toContain("Party of 5 doesn't fit table 3 (seats 2)");
+    expect(seatedFitRefusal(5, ["3"])).toContain("Assign tables that seat 5.");
+  });
+
+  it("says nothing when the party fits", () => {
+    expect(seatedFitRefusal(2, ["3"])).toBe(null);
+    expect(seatedFitRefusal(1, ["3"])).toBe(null);
+  });
+
+  it("pluralises the tables it names", () => {
+    expect(seatedFitRefusal(99, ["1A", "1B"])).toContain("tables 1A+1B");
+    expect(seatedFitRefusal(99, ["3"])).toContain("table 3");
+  });
+
+  it("is silent with no tables at all — that is a different refusal", () => {
+    expect(seatedFitRefusal(4, [])).toBe(null);
+    expect(seatedFitRefusal(4, null)).toBe(null);
+    expect(seatedFitRefusal(4, undefined)).toBe(null);
+  });
+});
+
+describe("seatRefusal", () => {
+  it("refuses to seat a booking that has no table", () => {
+    expect(seatRefusal(mk({ tables: [] }))).toBe("Assign a table before seating this booking.");
+    expect(seatRefusal(mk({ tables: undefined }))).toBe("Assign a table before seating this booking.");
+  });
+
+  it("says nothing when there is a table to sit at", () => {
+    expect(seatRefusal(mk({ tables: ["3"] }))).toBe(null);
+    expect(seatRefusal(mk({ tables: ["1A", "1B"] }))).toBe(null);
+  });
+
+  it("survives a booking gone from the list", () => {
+    expect(seatRefusal(null)).toBe(null);
+    expect(seatRefusal(undefined)).toBe(null);
+  });
+});
+
+// ── v18.0.0 session 8 (C7) — the last start is before closing ───────────────
+describe("lastStartMins", () => {
+  it("is a quarter of an hour before close", () => {
+    expect(lastStartMins(22)).toBe(21 * 60 + 45);
+    expect(lastStartMins(23)).toBe(22 * 60 + 45);
+    expect(lastStartMins(13)).toBe(12 * 60 + 45);
+  });
+
+  it("never lets a booking start after midnight, whatever the close", () => {
+    // 24 and 25 are legal closes — an EXTEND window, not a booking window.
+    expect(lastStartMins(24)).toBe(23 * 60 + 45);
+    expect(lastStartMins(25)).toBe(23 * 60 + 45);
+  });
+
+  // v18.0.0 session 10 (/code-review): `doSave` refused `sm >= close*60` while
+  // the message it printed, the Time field's `max` and `findTimes` all named
+  // close − 15. Two of those numbers are the same on no day at all, and on a
+  // late-closing day the guard was arithmetically DEAD: `sm` comes from a
+  // readable `HH:MM` so it cannot exceed 1439, and the test was `>= 1440`.
+  it("is the number `doSave` can actually test against, on every legal close", () => {
+    for (const close of [13, 22, 23, 24, 25]) {
+      const last = lastStartMins(close);
+      expect(last, "a start must be expressible as HH:MM on its own date").toBeLessThan(24 * 60);
+      // The old test, for the two closes where it could never fire.
+      if (close >= 24) expect(close * 60).toBeGreaterThan(23 * 60 + 59);
+    }
+  });
+});
+
+describe("doSave refuses a start after the last start (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("tests sm against lastStartMins, never against close*60", () => {
+    expect(/if\(sm>lastStartMins\(fh\.close\)\)\{/.test(APP)).toBe(true);
+    expect(/if\(sm>=fh\.close\*60\)\{/.test(APP)).toBe(false);
+  });
+
+  it("and prints the same minute it just tested", () => {
+    expect(/if\(sm>lastStartMins\(fh\.close\)\)[\s\S]{0,220}?toTime\(lastStartMins\(fh\.close\)\)/.test(APP)).toBe(true);
+  });
+});
+
+// ── v18.0.0 session 8 (C8) — the toast claims only what the action did ──────
+describe("savedToast", () => {
+  it("never claims a reshuffle for an action that suppressed the optimiser", () => {
+    expect(savedToast("saved", true), "a seat, on a day with the optimiser on").toBe("Booking saved.");
+    expect(savedToast("saved", false)).toBe("Booking saved.");
+  });
+
+  it("keeps the old derivation for every other action", () => {
+    expect(savedToast(true, true)).toBe("Tables re-optimised.");
+    expect(savedToast(true, false)).toBe("Booking saved.");
+  });
+});
+
+// ── v18.0.0 session 8 (R6) — the kitchen asks about kitchen things ──────────
+describe("kitchenRelevant", () => {
+  const orig = mk({ time: "20:00", date: D, size: 2, duration: 90, originalDuration: 90 });
+  const same = { date: D, time: "20:00", customDur: null, status: "confirmed" };
+
+  it("always asks about a new booking", () => {
+    expect(kitchenRelevant(null, same, 2)).toBe(true);
+  });
+
+  it("does NOT ask when nothing the kitchen sees has moved", () => {
+    expect(kitchenRelevant(orig, same, 2), "a notes-only edit").toBe(false);
+    expect(kitchenRelevant(orig, { ...same, status: "seated" }, 2), "seating adds no start").toBe(false);
+  });
+
+  it("asks about when, for how many, and for how long", () => {
+    expect(kitchenRelevant(orig, { ...same, time: "20:15" }, 2)).toBe(true);
+    expect(kitchenRelevant(orig, { ...same, date: "2099-06-16" }, 2)).toBe(true);
+    expect(kitchenRelevant(orig, same, 4), "a bigger party").toBe(true);
+    expect(kitchenRelevant(orig, { ...same, customDur: 120 }, 2), "a longer sitting").toBe(true);
+  });
+
+  it("asks again when a booking comes back from cancelled or completed", () => {
+    const off = mk({ ...orig, status: "cancelled" });
+    const done = mk({ ...orig, status: "completed" });
+    expect(kitchenRelevant(off, same, 2)).toBe(true);
+    expect(kitchenRelevant(done, same, 2)).toBe(true);
+  });
+
+  it("does not ask when a booking is LEAVING the count", () => {
+    expect(kitchenRelevant(orig, { ...same, status: "cancelled" }, 2)).toBe(false);
+    expect(kitchenRelevant(orig, { ...same, status: "completed" }, 2)).toBe(false);
+  });
+
+  it("a size change that re-derives the default length still asks once", () => {
+    // size 5 moves the default length 90 → 120; both terms fire, and the answer
+    // is one prompt either way.
+    expect(kitchenRelevant(orig, same, 5)).toBe(true);
+  });
+});
+
+// ── v18.0.0 session 8 (R5) — history stops recording a phone nobody typed ───
+describe("enteredPhone", () => {
+  it("treats empty, a bare + and the untouched prefix as no phone", () => {
+    expect(enteredPhone("", "+34")).toBe("");
+    expect(enteredPhone("+", "+34")).toBe("");
+    expect(enteredPhone("+34", "+34"), "the seed, untouched").toBe("");
+    expect(enteredPhone("  +34  ", "+34")).toBe("");
+    expect(enteredPhone(null, "+34")).toBe("");
+    expect(enteredPhone(undefined, "+34")).toBe("");
+  });
+
+  it("keeps a number somebody actually typed", () => {
+    expect(enteredPhone("+34600111222", "+34")).toBe("+34600111222");
+    expect(enteredPhone(" 600111222 ", "+34")).toBe("600111222");
+    expect(enteredPhone("+345", "+34"), "a prefix plus one digit is a number").toBe("+345");
+  });
+});
+
+describe("diffBooking and the phone that never changed (R5)", () => {
+  // The form as `openEdit` builds it for a booking with no phone: the prefix is
+  // seeded into the field, and nothing else is touched.
+  function untouchedForm(orig, phone) {
+    return {
+      name: orig.name, size: orig.size, time: orig.time, date: orig.date,
+      preference: orig.preference, phone: phone, customDur: null,
+      status: orig.status, notes: "", deposit: "", voucherCode: "",
+      manualTables: [], preferredTables: [],
+    };
+  }
+
+  it("records nothing when the only 'change' is the seeded prefix", () => {
+    const orig = mk({ phone: "" });
+    expect(diffBooking(orig, untouchedForm(orig, "+34"), orig.size, "+34"))
+      .toBe("saved (no field changes)");
+  });
+
+  it("records nothing for a bare + either", () => {
+    const orig = mk({ phone: "" });
+    expect(diffBooking(orig, untouchedForm(orig, "+"), orig.size, "+34"))
+      .toBe("saved (no field changes)");
+  });
+
+  it("still records a phone that really was added", () => {
+    const orig = mk({ phone: "" });
+    expect(diffBooking(orig, untouchedForm(orig, "+34600111222"), orig.size, "+34"))
+      .toContain("phone none→+34600111222");
+  });
+
+  it("still records one that was removed", () => {
+    const orig = mk({ phone: "+34600111222" });
+    expect(diffBooking(orig, untouchedForm(orig, "+34"), orig.size, "+34"))
+      .toContain("phone +34600111222→none");
+  });
+});
+
+// ── v18.0.0 session 8 (C) — a window change re-checks the placement ─────────
+describe("tablesFreeFor", () => {
+  const busy = mk({ id: "sitting", time: "13:00", duration: 90, tables: ["3"] });
+  const from = 13 * 60, to = 13 * 60 + 90;
+
+  it("says no when another booking holds the table in that window", () => {
+    expect(tablesFreeFor([busy], D, "other", ["3"], from, to, [])).toBe(false);
+  });
+
+  it("excludes the booking being saved from its own busy set", () => {
+    expect(tablesFreeFor([busy], D, "sitting", ["3"], from, to, [])).toBe(true);
+  });
+
+  it("says yes outside that booking's window", () => {
+    expect(tablesFreeFor([busy], D, "other", ["3"], 15 * 60, 15 * 60 + 90, [])).toBe(true);
+  });
+
+  it("a finished visit frees the table — the same rule every other busy-set uses", () => {
+    const done = mk({ id: "done", time: "13:00", duration: 90, tables: ["3"], status: "completed" });
+    const gone = mk({ id: "gone", time: "13:00", duration: 90, tables: ["3"], status: "cancelled" });
+    expect(tablesFreeFor([done], D, "other", ["3"], from, to, [])).toBe(true);
+    expect(tablesFreeFor([gone], D, "other", ["3"], from, to, [])).toBe(true);
+  });
+
+  it("another day does not stand in the way", () => {
+    expect(tablesFreeFor([busy], "2099-06-16", "other", ["3"], from, to, [])).toBe(true);
+  });
+
+  it("no tables is not free", () => {
+    expect(tablesFreeFor([busy], D, "other", [], from, to, [])).toBe(false);
+    expect(tablesFreeFor([busy], D, "other", null, from, to, [])).toBe(false);
+  });
+});
+
+describe("trialFits displacement check (C5)", () => {
+  // Two tables that join into one 4-top, so a party of 4 can only be seated by
+  // taking BOTH — which is the smallest arrangement where "it fits" and "it
+  // fits without throwing somebody out" are different answers.
+  afterEach(() => setLayout(DEFAULT_LAYOUT));
+  function twoTables() {
+    setLayout(Object.assign({}, DEFAULT_LAYOUT, {
+      tables: [{ id: "A", capacity: 2, zone: "outdoor" }, { id: "B", capacity: 2, zone: "outdoor" }],
+      joinGroups: [["A", "B"]],
+      comboCaps: {},
+      megaCombos: [],
+      priorities: { v: 1 },      // present-but-empty → the generic capacity path
+    }));
+  }
+
+  it("refuses an EDIT that would leave another booking with no table", () => {
+    twoTables();
+    const day = [
+      mk({ id: "x", time: "13:00", duration: 90, size: 2, tables: ["A"] }),
+      mk({ id: "y", time: "13:00", duration: 90, size: 2, tables: ["B"] }),
+    ];
+    // Growing x to 4 needs A+B, which leaves y with nowhere to go.
+    expect(trialFits(day, D, "13:00", 4, "auto", 90, [], "x", null, false)).toBe(null);
+  });
+
+  it("still fits the same edit when there is nobody to displace", () => {
+    twoTables();
+    const day = [mk({ id: "x", time: "13:00", duration: 90, size: 2, tables: ["A"] })];
+    expect(trialFits(day, D, "13:00", 4, "auto", 90, [], "x", null, false)).toEqual(["A", "B"]);
+  });
+});
+
+// ── v18.0.0 session 10 — the ROADMAP entry, replayed ───────────────────────
+// "The form's table preview cannot see the optimiser's own pass."
+//
+// `keepsWindowTables` (doSaveEdit) and `unpinMoves` (BookingFormModal) both ask
+// `tablesFreeFor`, and that question decides the outcome ONLY on the
+// optimiser-OFF path. Everywhere else `bookingsAfterAction` runs `applyOpt`
+// over the whole date and overrides it — including on every future date, since
+// `optimizerActiveFor` is unconditionally true off today. These pin both
+// halves: that the cheap predictor is wrong here, and that `trialFits` — which
+// the form's `availScan` already runs post-paint — gives the save's own answer.
+describe("what a save really does with a revived booking's tables", () => {
+  // Session 9's measurement, on the seeded MGT layout: a cancelled 19:00
+  // booking on 5A, revived with nothing else touched, on a date that is not
+  // today. `cancelled()` is the day the FORM sees; the save sees it confirmed.
+  const cancelled = () => mk({ id: "x", status: "cancelled", tables: ["5A"], time: "19:00", size: 2 });
+  const revive = (day) => day.map((b) => (b.id === "x" ? Object.assign({}, b, { status: "confirmed" }) : b));
+  const s = toMins("19:00");
+
+  it("optimizerActiveFor is what decides which predictor applies", () => {
+    expect(optimizerActiveFor(D, false)).toBe(true);          // not today → on regardless of the toggle
+    expect(optimizerActiveFor(D, true)).toBe(true);
+    expect(optimizerActiveFor(today, false)).toBe(false);     // today, after the cutoff → the OFF path
+    expect(optimizerActiveFor(today, true)).toBe(true);
+  });
+
+  it("the old table IS still free — the cheap predictor is not wrong about its own question", () => {
+    expect(tablesFreeFor([cancelled()], D, "x", ["5A"], s, s + 90, [])).toBe(true);
+  });
+
+  it("…and the save moves the booking off it anyway", () => {
+    const saved = bookingsAfterAction(revive([cancelled()]), D, [], "x", false, true);
+    expect(saved.find((b) => b.id === "x").tables).toEqual(["1A"]);
+  });
+
+  it("trialFits — what the form already computes — gives exactly that", () => {
+    expect(trialFits([cancelled()], D, "19:00", 2, "auto", 90, [], "x", [], false)).toEqual(["1A"]);
+  });
+
+  it("the two still agree on a day with other bookings on it", () => {
+    const day = [
+      cancelled(),
+      mk({ id: "y", time: "19:00", size: 4, tables: ["7"] }),
+      mk({ id: "z", time: "19:00", size: 2, tables: ["1A"] }),
+    ];
+    const preview = trialFits(day, D, "19:00", 2, "auto", 90, [], "x", [], false);
+    const saved = bookingsAfterAction(revive(day), D, [], "x", false, true);
+    expect(preview).toEqual(saved.find((b) => b.id === "x").tables);
+    // The same pass moves somebody the form never mentions — that is the
+    // "Tables re-optimised." toast's job, and stays out of this row.
+    expect(saved.find((b) => b.id === "z").tables).not.toEqual(["1A"]);
+  });
+
+  it("and agree that a booking the optimiser is content with does not move", () => {
+    // Already sitting where the greedy would put it → no move to announce, so
+    // the preview must stay silent rather than gain an "(auto) · was:" pair.
+    const day = [mk({ id: "x", status: "cancelled", tables: ["1A"], time: "19:00", size: 2 })];
+    const preview = trialFits(day, D, "19:00", 2, "auto", 90, [], "x", [], false);
+    expect(preview).toEqual(["1A"]);
+    expect(bookingsAfterAction(revive(day), D, [], "x", false, true).find((b) => b.id === "x").tables).toEqual(["1A"]);
+  });
+});
+
+// The pure facts above are only worth having if the FORM reads them, and the
+// form is a component this suite does not mount — so the wiring is pinned the
+// way `voucherCode`'s three call sites are, by reading the source.
+describe("the preview row is wired to the optimiser's answer (v18.0.0 session 10)", () => {
+  const FORM = stripComments(
+    readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("optOwns is gated on optimizerActiveFor and on isLocked", () => {
+    expect(/const optOwns=[\s\S]{0,200}?isLocked\(/.test(FORM)).toBe(true);
+    expect(/const optOwns=[\s\S]{0,200}?optimizerActiveFor\(form\.date,autoOptimizer\)/.test(FORM)).toBe(true);
+  });
+
+  it("optMoves compares the scan's answer against the tables on screen", () => {
+    expect(/const optMoves=optOwns&&!!previewTbls&&!!curTbl&&tblKey\(previewTbls\)!==tblKey\(curTbl\)/.test(FORM)).toBe(true);
+  });
+
+  it("`changed` and `hardChanged` both carry it", () => {
+    const lines = FORM.split("\n").filter((l) => /^\s*const (hard)?[cC]hanged=cur&&/.test(l));
+    expect(lines.length).toBe(2);
+    expect(lines.every((l) => /\|\|optMoves\)/.test(l))).toBe(true);
+  });
+
+  it("the \"was:\" line is suppressed when the answer is the same tables", () => {
+    expect(/if\(\(changed\|\|cleared\)[^\n]*?!\(previewTbls&&tblKey\(previewTbls\)===tblKey\(curTbl\)\)\)/.test(FORM)).toBe(true);
+  });
+});
+
+// ── v18.0.0 session 8 (item 5b) — the ROADMAP entry, replayed ───────────────
+describe("seatedShiftFor", () => {
+  // R2's own numbers, measured live 2026-09-11: a 16:15 booking for 90, one
+  // save setting Seated AND 120 minutes, at 15:56.
+  const r2 = () => mk({ date: today, time: "16:15", duration: 90, originalDuration: 90, tables: ["2"] });
+  const at = 15 * 60 + 56;
+
+  it("pins the end from the length being SAVED, not the one stored", () => {
+    const b = r2();
+    const fixed = seatedShiftFor(b, at, [b], today, 120);
+    expect(fixed.newDuration, "15:56 → an 18:15 end").toBe(139);
+    expect(fixed.newTime).toBe("15:56");
+    expect(fixed.direction).toBe("early");
+  });
+
+  it("reproduces the defect when the length is NOT being changed", () => {
+    const b = r2();
+    // 0 means "no new length" — the stored 90 pins a 17:45 end, which is the
+    // 109 that was actually written to the database.
+    expect(seatedShiftFor(b, at, [b], today, 0).newDuration).toBe(109);
+    expect(seatedShiftFor(b, at, [b], today).newDuration, "and with no argument at all").toBe(109);
+  });
+
+  it("agrees with applySeatedShift whenever the length has not moved", () => {
+    const b = r2();
+    expect(seatedShiftFor(b, at, [b], today, 90)).toEqual(applySeatedShift(b, at, [b], today));
+  });
+
+  it("ignores a length that is not a length", () => {
+    const b = r2();
+    const stored = applySeatedShift(b, at, [b], today);
+    expect(seatedShiftFor(b, at, [b], today, "many")).toEqual(stored);
+    expect(seatedShiftFor(b, at, [b], today, -30)).toEqual(stored);
+    expect(seatedShiftFor(b, at, [b], today, null)).toEqual(stored);
+  });
+
+  it("keeps every refusal applySeatedShift makes", () => {
+    const b = r2();
+    expect(seatedShiftFor(null, at, [b], today, 120)).toBe(null);
+    expect(seatedShiftFor(b, 20 * 60, [b], today, 120), "seated past its own end").toBe(null);
+  });
+});
+
+describe("seatClashParties", () => {
+  const room = [
+    mk({ id: "sitting", name: "López", status: "seated", time: "19:02", tables: ["3"] }),
+    mk({ id: "later", name: "Pau", time: "21:00", tables: ["3"] }),
+    mk({ id: "elsewhere", name: "Rita", status: "seated", time: "19:30", tables: ["4"] }),
+  ];
+
+  it("names the party still at the table", () => {
+    const out = seatClashParties(["3"], D, "arriving", room);
+    expect(out.length).toBe(1);
+    expect(out[0].booking.name).toBe("López");
+    expect(out[0].tables).toEqual(["3"]);
+  });
+
+  it("ignores a booking that is not SEATED — that is the optimiser's problem", () => {
+    const out = seatClashParties(["3"], D, "arriving", room);
+    expect(out.map((e) => e.booking.id)).not.toContain("later");
+  });
+
+  it("ignores a seated party at a different table, date, or the booking itself", () => {
+    expect(seatClashParties(["4"], D, "elsewhere", room), "itself").toEqual([]);
+    expect(seatClashParties(["5A"], D, "arriving", room), "another table").toEqual([]);
+    expect(seatClashParties(["3"], "2099-06-16", "arriving", room), "another day").toEqual([]);
+  });
+
+  it("reports only the tables actually shared", () => {
+    const out = seatClashParties(["3", "4"], D, "arriving", room);
+    expect(out.map((e) => e.booking.name).sort()).toEqual(["López", "Rita"]);
+    expect(out.find((e) => e.booking.name === "Rita").tables).toEqual(["4"]);
+  });
+
+  it("has nothing to say with no tables", () => {
+    expect(seatClashParties([], D, "arriving", room)).toEqual([]);
+    expect(seatClashParties(null, D, "arriving", room)).toEqual([]);
+    expect(seatClashParties(["3"], D, "arriving", null)).toEqual([]);
+  });
+});
+
+describe("completedSeatedPatch", () => {
+  it("is the seated→completed arithmetic, from one place", () => {
+    const b = mk({ date: today, time: "13:00", status: "seated", duration: 90 });
+    const patch = completedSeatedPatch(b, today, 13 * 60 + 47);
+    expect(patch).toEqual({ status: "completed", duration: 47, customDur: 47, stayedMin: 47 });
+  });
+
+  it("keeps the 15-minute floor a party that just sat down would otherwise break", () => {
+    const b = mk({ date: today, time: "13:00", status: "seated", duration: 90 });
+    expect(completedSeatedPatch(b, today, 13 * 60 + 2).duration).toBe(15);
+  });
+});
+
+describe("pinnedClashParties / pinnedClashRefusal", () => {
+  // One seated party pinned to table 3; a confirmed booking that can be moved
+  // off it, and a walk-in that cannot.
+  function day() {
+    return [
+      mk({ id: "seat", name: "Ana", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "move", name: "Pau", time: "13:30", tables: ["3"] }),
+      mk({ id: "lock", name: "López", time: "14:00", tables: ["3"], _locked: true }),
+    ];
+  }
+
+  it("splits the clashing parties by whether they can be moved", () => {
+    const out = pinnedClashParties(day(), D, "seat");
+    expect(out.movable.map((e) => e.booking.id)).toEqual(["move"]);
+    expect(out.locked.map((e) => e.booking.id)).toEqual(["lock"]);
+    expect(out.movable[0].tables, "the shared table, for the wording").toEqual(["3"]);
+  });
+
+  it("ignores a clash the pinned booking is not part of", () => {
+    const out = pinnedClashParties(day(), D, "move");
+    expect(out.locked.map((e) => e.booking.id).sort()).toEqual(["lock", "seat"]);
+    expect(out.movable).toEqual([]);
+  });
+
+  it("is empty when nothing overlaps", () => {
+    const clean = [
+      mk({ id: "seat", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "other", time: "13:30", tables: ["4"] }),
+    ];
+    const out = pinnedClashParties(clean, D, "seat");
+    expect(out.locked).toEqual([]);
+    expect(out.movable).toEqual([]);
+  });
+
+  it("names the table, the party and why it cannot be asked to move", () => {
+    const out = pinnedClashParties(day(), D, "seat");
+    const msg = pinnedClashRefusal(out.locked[0]);
+    expect(msg).toContain("Table 3 is also held by López at 14:00");
+    expect(msg).toContain("locked to it");
+    expect(pinnedClashRefusal({ booking: mk({ name: "Ana", status: "seated", time: "13:00" }), tables: ["3"] }))
+      .toContain("who is seated");
+  });
+
+  it("does not write a sentence with no table in it", () => {
+    // findClashes returns an EMPTY intersection when two bookings need the same
+    // physical join without sharing an id — reachable in a custom layout.
+    const msg = pinnedClashRefusal({ booking: mk({ name: "Pau", time: "13:30" }), tables: [] });
+    expect(msg).toContain("Those tables are also held by Pau");
+    expect(msg).not.toContain("Table  is");
+  });
+
+  it("survives a booking that is no longer in the list", () => {
+    expect(pinnedClashRefusal(null)).toBe(null);
+    expect(pinnedClashRefusal({ tables: ["3"] })).toBe(null);
+  });
+});
+
+describe("replacePinnedClashes", () => {
+  it("moves the other booking and leaves the seated party where it is sitting", () => {
+    const list = [
+      mk({ id: "seat", name: "Ana", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "move", name: "Pau", time: "13:30", tables: ["3"] }),
+    ];
+    const out = replacePinnedClashes(list, D, "seat", [], true);
+    expect(out.find((b) => b.id === "seat").tables, "the party did not move").toEqual(["3"]);
+    const moved = out.find((b) => b.id === "move").tables;
+    expect(moved.length).toBeGreaterThan(0);
+    expect(moved).not.toEqual(["3"]);
+    expect(findConflicts(out, D), "and the day is clean").toEqual([]);
+  });
+
+  it("does the same with the optimiser OFF, which is where the clash used to survive", () => {
+    // Today + autoOptimizer false is the only combination that takes the
+    // optimiser-OFF branch, which keeps EVERY booking's tables — so before this
+    // the clash was saved and the reconciler moved somebody afterwards.
+    const list = [
+      mk({ id: "seat", date: today, name: "Ana", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "move", date: today, name: "Pau", time: "13:30", tables: ["3"] }),
+    ];
+    const out = replacePinnedClashes(list, today, "seat", [], false);
+    expect(out.find((b) => b.id === "seat").tables).toEqual(["3"]);
+    expect(out.find((b) => b.id === "move").tables).not.toEqual(["3"]);
+  });
+
+  it("returns its INPUT when there is nothing to move (the identity contract)", () => {
+    const clean = [
+      mk({ id: "seat", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "other", time: "13:30", tables: ["4"] }),
+    ];
+    expect(replacePinnedClashes(clean, D, "seat", [], true)).toBe(clean);
+  });
+
+  it("gives up rather than looping when the only clash is with a locked party", () => {
+    const stuck = [
+      mk({ id: "seat", status: "seated", time: "13:00", tables: ["3"] }),
+      mk({ id: "lock", time: "13:30", tables: ["3"], _locked: true }),
+    ];
+    const out = replacePinnedClashes(stuck, D, "seat", [], false);
+    expect(out.find((b) => b.id === "lock").tables, "left for the refusal to name").toEqual(["3"]);
+  });
+});
+
+// ── v18.0.0 session 8 (C1) — leaving seated puts the booked plan back ────────
+describe("unseatRestore", () => {
+  it("undoes the seated shift exactly — the booked start and the booked length", () => {
+    // 20:30 for 150 min, seated at 20:15: applySeatedShift pinned the 23:00 end
+    // and stored 20:15 for 165.
+    const b = mk({ scheduledTime: "20:30", time: "20:15", duration: 165, originalDuration: 165 });
+    expect(unseatRestore(b, 2)).toEqual({ time: "20:30", duration: 150, originalDuration: 150, customDur: 150 });
+  });
+
+  it("follows openEdit's rule for customDur — a default length is not a custom one", () => {
+    // Restores to 90, which IS the size-2 default.
+    const b = mk({ scheduledTime: "20:30", time: "20:15", duration: 105, originalDuration: 105 });
+    expect(unseatRestore(b, 2).customDur, "90 is getDur(2)").toBe(null);
+    expect(unseatRestore(b, 2).duration).toBe(90);
+  });
+
+  it("reads the size the save is writing, not the size that was stored", () => {
+    // Restores to 120 — custom for a party of 2, the default for a party of 5.
+    const b = mk({ size: 2, scheduledTime: "20:30", time: "20:00", duration: 150, originalDuration: 150 });
+    expect(unseatRestore(b, 2).customDur).toBe(120);
+    expect(unseatRestore(b, 5).customDur, "120 is getDur(5)").toBe(null);
+  });
+
+  it("is null when there is nothing to put back", () => {
+    expect(unseatRestore(mk({ scheduledTime: "20:30", time: "20:30", duration: 90, originalDuration: 90 })),
+      "never shifted").toBe(null);
+    expect(unseatRestore(mk({ scheduledTime: "", time: "20:15", duration: 165 })),
+      "pre-v14, no scheduledTime").toBe(null);
+    expect(unseatRestore(mk({ scheduledTime: "20:30", time: "8 in the evening", duration: 165 })),
+      "an unreadable time is not arithmetic").toBe(null);
+    expect(unseatRestore(mk({ scheduledTime: "20:30", time: "20:15", duration: 0, originalDuration: 0 })),
+      "no recoverable length").toBe(null);
+    expect(unseatRestore(null)).toBe(null);
+  });
+
+  it("restores an EARLY seat too, where the shift made the booking longer", () => {
+    // 20:30 for 90, seated at 20:00 → stored 20:00 for 120.
+    const b = mk({ scheduledTime: "20:30", time: "20:00", duration: 120, originalDuration: 120 });
+    const r = unseatRestore(b, 2);
+    expect(r.time).toBe("20:30");
+    expect(r.duration).toBe(90);
+  });
+});
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// `replacePinnedClashes` is what stops a pinned save writing an overlap the OFF
+// path will not resolve. It was gated on `needsR`, which asks whether the
+// placement INPUTS moved — and the WINDOW moves by two more routes the same
+// save already knows about: a length change (`planChanged`) and a revival
+// (`revived`). `recheck` is the union, and it is the gate now.
+//
+// TODAY, with the toggle off, is the only way to reach the OFF path
+// (`optimizerActiveFor` is true for every other date whatever the toggle says),
+// so the clock is PINNED: `bookingsAfterAction` reads `new Date()` for
+// `syncLiveDurations`, which extends a live seated booking's duration to the
+// elapsed time and would make these fixtures mean different things at different
+// hours of the CI day.
+describe("a pinned save's window can move without needsR (v18.0.0 session 10)", () => {
+  const T = todayStr();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(T + "T19:30:00"));
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  // A seated party on table 2 at 19:00 for 90, and a confirmed booking on the
+  // SAME table at 20:45. Clean to begin with.
+  const seatedOn2 = () => mk({ id: "A", name: "Seated", date: T, time: "19:00", duration: 90, status: "seated", tables: ["2"] });
+  const laterOn2 = () => mk({ id: "B", name: "Later", date: T, time: "20:45", duration: 90, status: "confirmed", tables: ["2"], updatedAt: 5 });
+
+  it("the save that only LENGTHENS a seated booking is still a pinned save", () => {
+    expect(tablesPinned("seated", false, false)).toBe(true);
+  });
+
+  it("with the optimiser off, the extension writes a clash that nothing re-places", () => {
+    const list = [seatedOn2(), laterOn2()];
+    expect(findClashes(list, T), "clean before the save").toHaveLength(0);
+    // 90 → 150 minutes: `pinned` keeps the tables and `forceReassign` is false.
+    const upd = list.map((b) => (b.id === "A" ? { ...b, duration: 150, originalDuration: 150, customDur: 150 } : b));
+    const out = bookingsAfterAction(upd, T, [], "A", false, false);
+    expect(findClashes(out, T).length, "the defect this gate exists to prevent").toBeGreaterThan(0);
+    // …and the locked refusal cannot catch it: the partner is MOVABLE.
+    expect(pinnedClashParties(out, T, "A").locked).toHaveLength(0);
+    expect(pinnedClashParties(out, T, "A").movable.length).toBeGreaterThan(0);
+  });
+
+  it("replacePinnedClashes on that same output clears it", () => {
+    const list = [seatedOn2(), laterOn2()];
+    const upd = list.map((b) => (b.id === "A" ? { ...b, duration: 150, originalDuration: 150, customDur: 150 } : b));
+    const out = bookingsAfterAction(upd, T, [], "A", false, false);
+    const fixed = replacePinnedClashes(out, T, "A", [], false);
+    expect(findClashes(fixed, T)).toHaveLength(0);
+    expect(fixed.find((b) => b.id === "A").tables, "the seated party never moves").toEqual(["2"]);
+    expect(fixed.find((b) => b.id === "B").tables).not.toEqual(["2"]);
+  });
+
+  it("it is free where the gate was already right — no movable clash returns the INPUT", () => {
+    const clean = [seatedOn2(), mk({ id: "C", date: T, time: "20:45", status: "confirmed", tables: ["3"] })];
+    expect(replacePinnedClashes(clean, T, "A", [], false)).toBe(clean);
+  });
+});
+
+// The pure facts above are only worth having if `doSaveEdit` calls it on the
+// right condition, and that is a closure this suite does not run — so the gate
+// is pinned by reading the source, the way the preview row's wiring is.
+describe("doSaveEdit calls replacePinnedClashes on `recheck` (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("the gate is recheck, never needsR", () => {
+    expect(/if\(pinned&&recheck\) out=replacePinnedClashes\(/.test(APP)).toBe(true);
+    expect(/if\(pinned&&needsR\) out=replacePinnedClashes\(/.test(APP)).toBe(false);
+  });
+
+  it("and `recheck` is still the union that makes that gate wider than needsR", () => {
+    expect(/const recheck=needsR\|\|planChanged\|\|revived\|\|!!unseat;/.test(APP)).toBe(true);
+  });
+});
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// "Complete them & seat" dispatches the completion and re-enters the seat in the
+// SAME handler. `saveBookings` computes from its own mirror, so the WRITE is
+// right; every synchronous read in `doSave` is this render's state, in which the
+// cleared party is still seated on the table being taken.
+//
+// Measured live in DEV with a control: the seat stored its BOOKED 21:00, while
+// an identical save on a free table a minute later stored 10:23. This is the
+// mechanism underneath that — `applySeatedShift` declines while a live booking
+// shares the table, and stops declining once the party is completed.
+describe("a cleared party must be COMPLETED in what the seat reads (v18.0.0 session 10)", () => {
+  const T = todayStr();
+  const at = 20 * 60 + 30;                       // 20:30
+  const holder = () => mk({ id: "H", date: T, time: "19:00", duration: 180, status: "seated", tables: ["4"] });
+  const arriving = () => mk({ id: "N", date: T, time: "21:00", duration: 90, status: "confirmed", tables: ["4"] });
+
+  it("the shift is DECLINED while the cleared party still reads as seated", () => {
+    expect(applySeatedShift(arriving(), at, [holder(), arriving()], T),
+      "this is the bug: the arrival time is simply not recorded").toBe(null);
+  });
+
+  it("and lands once completedSeatedPatch has been applied to that same list", () => {
+    const done = Object.assign({}, holder(), completedSeatedPatch(holder(), T, at));
+    expect(done.status).toBe("completed");
+    const shift = applySeatedShift(arriving(), at, [done, arriving()], T);
+    expect(shift, "the seat now records when the party actually sat down").not.toBe(null);
+    expect(shift.newTime).toBe("20:30");
+  });
+});
+
+// The wiring, by source, for the reason the gate above is pinned that way.
+describe("doSave hands the seat a list with the cleared party completed (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("seatAfterClearing records the cleared ids BEFORE it resumes the seat", () => {
+    const i = APP.indexOf("clearedSeatsRef.current={ids:ids");
+    const j = APP.indexOf("resumeSeat(ask);", i);
+    expect(i, "the ref is set").toBeGreaterThan(-1);
+    expect(j, "and the resume comes after it").toBeGreaterThan(i);
+  });
+
+  it("withSeatAsked clears it again, so no later save inherits it", () => {
+    expect(/finally *\{ *seatAskedRef\.current=false; *clearedSeatsRef\.current=null; *\}/.test(APP)).toBe(true);
+  });
+
+  it("doSaveEdit takes both views as parameters and doSave passes the patched pair", () => {
+    expect(/function doSaveEdit\(f,v,bookings,liveBookings\)/.test(APP)).toBe(true);
+    expect(/const saveBks=withClearedSeats\(bookings\);/.test(APP)).toBe(true);
+    expect(/const saveLive=withClearedSeats\(liveBookings\);/.test(APP)).toBe(true);
+    expect(/doSaveEdit\(f,\{[^}]*\},saveBks,saveLive\)/.test(APP)).toBe(true);
+  });
+
+  it("the manual-table guard and the seat-clash gate read the patched list too", () => {
+    expect(/if\(mt\.length&&!swapAffected\)\{let ex=saveLive\.filter\(/.test(APP)).toBe(true);
+    expect(/seatClashParties\(mt\.length\?mt:\(seatOrig\.tables\|\|\[\]\),f\.date,editId,saveBks\)/.test(APP)).toBe(true);
+  });
+});
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// The preview holds two predicates for "will the optimiser leave this booking
+// alone": `isManual` (`_manual||_locked`) and `optOwns` (`isLocked`, which is
+// what `applyOpt` itself branches on). They are not the same question — on a
+// `_manual:true, _locked:false` booking the optimiser moves it while `isManual`
+// says its tables are settled — and `optMoves` rescues that only once
+// `previewTbls` has arrived and differs, so until then the wrong one wins.
+//
+// It does not bite because the shape is UNREACHABLE, and these pin the narrow
+// reason: `manualAssign` derives `_locked` from its `locked` argument, and the
+// only component that calls it passes the literal `true` every time. An "assign
+// without locking" affordance is exactly what would remove that quietly, so it
+// is what turns these red.
+describe("`_manual` implies `_locked`, which is what keeps the two previews agreeing", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const MANUAL = stripComments(
+    readFileSync(new URL("../src/components/ManualModal.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("manualAssign writes _locked from its argument and nothing else", () => {
+    expect(/_manual:true,_locked:locked===true/.test(APP)).toBe(true);
+  });
+
+  it("every ManualModal onSave call passes the literal true", () => {
+    const calls = MANUAL.match(/onSave\([^)]*\)/g) || [];
+    expect(calls.length, "both the Enter handler and the button").toBe(2);
+    expect(calls.every((c) => /^onSave\(selected, true,/.test(c)), calls.join(" | ")).toBe(true);
+  });
+
+  it("and App's only call site is that component's onSave", () => {
+    const sites = APP.split("\n").filter((l) => /[^a-zA-Z]manualAssign\(/.test(l) && !/function manualAssign/.test(l));
+    expect(sites.length, sites.join(" | ")).toBe(1);
+  });
+
+  it("the optimiser's own predicate agrees on every shape that IS reachable", () => {
+    // isLocked is what applyOpt branches on. With `_manual` implying `_locked`,
+    // "manual" and "locked" answer the same for every booking the app writes.
+    for (const b of [
+      { _manual: true, _locked: true, status: "confirmed" },
+      { _manual: false, _locked: false, status: "seated" },
+      { _manual: false, _locked: false, status: "confirmed" },
+    ]) {
+      expect(!!(b._manual || b._locked) || b.status === "seated", JSON.stringify(b)).toBe(isLocked(b));
+    }
+  });
+});
+

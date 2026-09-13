@@ -29,17 +29,23 @@ import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
+import { VouchersTabContent } from "./VouchersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
-import { BTN, R, M, T, FW, H, IC } from "../lib/constants";
+import { BTN, R, M, T, FW, H, IC, APP_NAME } from "../lib/constants";
+// v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
+import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 
-// v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay order).
-const RULE_WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// v16.3.0: weekday labels for the Standing-bookings rule rows (UTC getUTCDay
+// order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
+// which this line used to copy byte for byte.
+import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
 // can import them WITHOUT pulling this whole (now lazy-loaded) module into the
 // startup chunk. Re-exported here for back-compat; still exactly ONE list.
-import { SETTINGS_TABS } from "./SettingsChrome";
+import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
+import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
 import { CloseIcon, DownloadIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
@@ -168,7 +174,7 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   return (
     <div>
       <label htmlFor={fid} style={{ display: "block", fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
-      <input
+      <input /* @no-lift pre-existing, not reviewed for v18.0.0 */
         id={fid}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -283,7 +289,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -303,14 +309,30 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
         Settings follow your account on every device, except where noted.
       </div>
       <Section style={{ marginBottom: 18 }}>
+        {/* v18.0.0 session 7: Automatic dark mode — follow this device's light/dark
+            setting — as its own switch ABOVE Dark mode, with Dark mode LOCKED
+            while it is on (Patryk's choice over "a tap takes over" and over one
+            three-way control). An account that never chose reads as Automatic,
+            which is exactly what it got before this switch existed. */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Dark mode</div>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Automatic dark mode</div>
             <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
-              Defaults to your system setting.
+              Follows this device&rsquo;s light/dark setting.
             </div>
           </div>
-          <Toggle label="Dark mode" on={isDark} onClick={onToggleDark} />
+          <Toggle label="Automatic dark mode" on={autoTheme} onClick={onToggleAutoTheme} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: autoTheme ? "var(--text-faint)" : "var(--text-primary)", transition: "color " + M.move }}>Dark mode</div>
+            <Reveal show={autoTheme}>
+              <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+                Controlled by Automatic dark mode.
+              </div>
+            </Reveal>
+          </div>
+          <Toggle label="Dark mode" on={isDark} onClick={onToggleDark} disabled={autoTheme} />
         </div>
         {/* v17.0.0 correction: per-device max app width. The 1.08 hover lift
             overflowed the viewport when the fixed 1600 exceeded the screen —
@@ -436,10 +458,18 @@ export function AppTabContent({ isDark, onToggleDark, appWidth = 1600, onSetAppW
   );
 }
 
-export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
+export function GeneralTabContent({ can = function () { return true; }, appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
+  // v18.0.0 phase 3: this tab holds controls belonging to FOUR capabilities —
+  // the opening hours, standing bookings, the backup, and everything else,
+  // which is `settingsWrite`. `visibleTabs` opens the door for any of them and
+  // each section decides for itself, so a person holding only `hoursEdit` gets
+  // a General tab containing exactly the hours. `can` defaults to permissive:
+  // this component is also rendered by callers with no roles context, and an
+  // empty tab is the worse failure.
+  const sw = can("settingsWrite");
   const wr = weekRange && typeof weekRange === "object" ? weekRange : { minOpen: 13, maxClose: 22 };
   const wrMin = wr.minOpen, wrMax = wr.maxClose;
   const wh = weekHours && typeof weekHours === "object" ? weekHours : {};
@@ -464,11 +494,16 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
     ? bookingDefaults
     : { tiers: [{ max: 1, dur: 90 }, { max: 4, dur: 90 }], restDur: 120, lateEnabled: true, lateWarnMin: 15, lateNoShowMin: 20, freeSoonEnabled: true, turnaroundEnabled: false, turnaroundMin: 15 };
   const tiers = Array.isArray(bd.tiers) ? bd.tiers : [];
-  // v17.0.0: general settings (settings/general). Defensive fallback mirrors
-  // the hook's DEFAULT_GENERAL_SETTINGS seed.
+  // v17.0.0: general settings (settings/general). Defensive fallback IS the
+  // hook's seed — v18.0.0 phase 2's /code-review replaced a hand-typed copy of
+  // it. That copy had ten fields, phase 2 updated one of them to read from the
+  // tenant profile and left nine literals behind, and its own comment said it
+  // "mirrors" the seed while nothing enforced the mirroring. Reached only when
+  // `generalSettings` is not an object, so a drift here would never surface in
+  // normal use or in any test — only in the degraded state it exists for.
   const gs = generalSettings && typeof generalSettings === "object"
     ? generalSettings
-    : { restaurantName: "Me Gustas Tú", currency: "€", phonePrefix: "+", regularMin: 2, lateCollapseMax: 2, waitMatchWin: 90, undoSecs: 10, defaultBookingSize: 2, defaultWalkinSize: 2 };
+    : DEFAULT_GENERAL_SETTINGS;
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
   const minsLabel = (n) => n + " min";
   const guestsLabel = (n) => "≤ " + n;
@@ -546,6 +581,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           fields commit on BLUR (or Enter) so every keystroke isn't a CAS
           write; the hook's sanitizer trims/caps and restores a default on
           an emptied field. */}
+      {sw ? (
       <Collapsible
         title="Restaurant"
         subtitle="Name, currency and phone prefix."
@@ -565,10 +601,12 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         </div>
       </Collapsible>
+      ) : null}
       {/* v14.4.0 / v15.0.0: Per-weekday opening-hours editor — Firebase-shared
           (settings/operatingHours). Each day sets its own booking window + timeline
           range, or is marked Closed. "copy → all" pushes one day's config to all 7.
           Displayed Mon→Sun; stored by JS weekday index (0=Sun). */}
+      {can("hoursEdit") ? (<>
       <Collapsible
         title="Opening hours"
         subtitle="Per day of the week. Sets the booking window and the timeline range."
@@ -608,10 +646,12 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         ) : null}</Reveal>
       </Section>
+      </>) : null}
       {/* v15.0.0: Auto-optimizer — the master auto-switch + the editable daily
           cutoff hour. Firebase-shared (settings/optimizer). When the switch is
           off the optimizer is fully manual (no cutoff auto-off, no overnight
           auto-on); it then only changes via the timeline toggle or the "o" key. */}
+      {sw ? (<>
       <Section style={{ marginBottom: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ textAlign: "left" }}>
@@ -809,10 +849,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           </div>
         ) : null}</AutoHeight>
       </Section>
+      </>) : null}
       {/* v16.3.0: Standing bookings — the recurring-rule manager. Rules are
           CREATED from the booking form ("Repeat weekly"); here staff pause /
           delete them and set the generation horizon. */}
-      {recurring ? (
+      {recurring && can("recurringManage") ? (
         <Section style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div style={{ textAlign: "left", flex: "1 1 200px" }}>
@@ -867,6 +908,7 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
       ) : null}
       {/* v17.0.0: Preferences — the remaining ex-hard-coded knobs from the
           configurability pass. Firebase-shared (settings/general). */}
+      {sw ? (
       <Collapsible
         title="Preferences"
         subtitle="Regulars threshold, banner collapse, waitlist match window, undo timing."
@@ -903,10 +945,11 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
             onInc={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize + 1 })} />
         </div>
       </Collapsible>
+      ) : null}
       {/* v16.3.0 correction: Backup lives at the BOTTOM of the General tab —
           download a JSON snapshot of every collection + all settings to this
           device (the Firebase free plan has no auto-backups). */}
-      {onBackup ? (
+      {onBackup && can("dataExport") ? (
         <Section style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ textAlign: "left", flex: "1 1 200px" }}>
@@ -927,9 +970,49 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
           version {appVersion}
         </div>
         <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", letterSpacing: "0.02em", marginTop: 8 }}>
-          © 2026 Patryk Zychowicz — MGT Booking System
+          {"© 2026 Patryk Zychowicz — " + APP_NAME}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── WhatsApp tab body (WA sandbox) ──────────────────────────────────────────
+// The module's own settings. Uses Collapsible for its titled section, matching
+// every other settings section — NOT Section, which takes only {style, children}
+// and silently swallows a `title` prop.
+// Backed by settings/whatsapp (useWaSettings) — restaurant-wide, not per-device.
+function WhatsAppTabContent({ waSettings, onSaveWaSettings }) {
+  const s = waSettings || {};
+  // Default-ON tri-state read, resolved ONCE: the toggle's state and the value
+  // it writes are then obviously each other's inverse.
+  const autoArchive = s.autoArchiveOnComplete !== false;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Collapsible
+        title="Inbox"
+        subtitle="How conversations leave the inbox. Shared across all devices."
+        summary={autoArchive ? "Auto-archive on" : "Auto-archive off"}
+        defaultOpen
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, paddingTop: 4 }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Archive when the booking is completed</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+              A conversation whose linked booking reaches <strong>Completed</strong> moves itself to Archived — the visit is over, so it drops out of the inbox. Restoring one by hand sticks; it won&rsquo;t re-archive itself. Only bookings completed from now on are affected.
+            </div>
+          </div>
+          {/* v17.15.4's rule, reaching the module at the 17.16.12 sync: a control
+              with no text content has NO name. The label is the visible heading
+              verbatim — a paraphrase would replace a name a voice-control user
+              can say with one that matches nothing on screen. The STATE is
+              aria-checked's job and must never be in the name. */}
+          <Toggle
+            label="Archive when the booking is completed"
+            on={autoArchive}
+            onClick={function () { onSaveWaSettings({ autoArchiveOnComplete: !autoArchive }); }} />
+        </div>
+      </Collapsible>
     </div>
   );
 }
@@ -940,9 +1023,25 @@ export function GeneralTabContent({ appVersion, weekHours, onSaveDayHours = () =
 // state and handlers are also threaded from BookingApp.
 export function SettingsContent({
   tab, setTab,
+  // v18.0.0 phase 3 — the Admin tab. `can` is what filters the tab list, and
+  // it is the SAME function useKeyboardShortcuts filters the ←/→ cycle with.
+  can, isAdmin, myUid, roleRows, enforceRoles, onSetEnforceRoles,
+  // v18.0.0 phase 4 — the module registry. `moduleWarning(id)` is App's, not
+  // the registry's: only App can count what a module holds.
+  modules, hasModule, onSetModule, moduleWarning,
+  onSetRole, onRemoveUser, onInvite, onWithdrawInvite, onApplyInvite,
+  onOpenCapabilities,
+  // v18.0.0 session 8: the activity log opens from the Admin tab, above this
+  // overlay — App owns the modal, this only carries the door handle down.
+  onOpenActivity,
+  customerSeek,
+  activityRetentionDays,
+  onSetActivityRetention,
   appVersion,
   isDark,
   onToggleDark,
+  autoTheme,
+  onToggleAutoTheme,
   appWidth,
   onSetAppWidth,
   reduceMotion,
@@ -982,12 +1081,20 @@ export function SettingsContent({
   bookings,
   waitlist,
   onDeleteCustomer,
+  vouchers,
+  voucherDefaults,
+  onIssueVoucher,
+  onVoidVoucher,
+  onSaveVoucherDefaults,
   reminders,
   onAddReminder,
   onEditReminder,
   onDeleteReminder,
   onToggleReminder,
-  onDirty
+  onDirty,
+  // WA sandbox (settings/whatsapp — useWaSettings)
+  waSettings,
+  onSaveWaSettings
 }) {
   // v17.8.0 unsaved-changes guard. Settings holds drafts that commit on BLUR
   // (GsTextField) or on an explicit Add/Rename (LayoutTabContent), so closing
@@ -1044,17 +1151,53 @@ export function SettingsContent({
     setTab(t);
   }
 
+  // ── v18.0.0 phase 3: a tab that DISAPPEARS must not strand the reader ──────
+  // The Admin tab is capability-gated, so the active tab can stop existing
+  // while it is open — an admin demoted from another device, or enforcement
+  // switched on. Two halves, and both are needed: `cur` is derived so the body
+  // never renders empty for even one frame, and the effect corrects the STATE
+  // so the ←/→ cycle (which reads `settingsTab` in App) does not keep pointing
+  // at a tab that is gone.
+  const tabs = visibleTabs(can, hasModule);
+  // The fallback is the first VISIBLE tab, not a hard-coded "general" — v18.0.0
+  // gated `general` itself on `settingsWrite`, so a literal there would have
+  // reset a staff account onto a tab that is not in its own tab bar. The list
+  // is never empty: `shortcuts` and `app` carry no capability at all.
+  const fallback = tabs.length ? tabs[0].id : "shortcuts";
+  const cur = tabs.some(function (t) { return t.id === tab; }) ? tab : fallback;
+  useEffect(function () { if (cur !== tab) setTab(cur); }, [cur, tab, setTab]);
+
   let content;
-  if (tab === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
-  } else if (tab === "general") {
-    content = <GeneralTabContent appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
-  } else if (tab === "layout") {
+  if (cur === "admin") {
+    content = <AdminTabContent
+      can={can} isAdmin={isAdmin} myUid={myUid} rows={roleRows}
+      enforceRoles={enforceRoles} onSetEnforceRoles={onSetEnforceRoles}
+      modules={modules} onSetModule={onSetModule} moduleWarning={moduleWarning}
+      onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
+      onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
+      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention} />;
+  } else if (cur === "app") {
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
+  } else if (cur === "general") {
+    content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
+  } else if (cur === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
-  } else if (tab === "customers") {
+  } else if (cur === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
-    content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
-  } else if (tab === "reminders") {
+    content = <CustomersTabContent key={customerSeek || ""} seekQuery={customerSeek || ""} bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
+  } else if (cur === "vouchers") {
+    // v18.0.0: gift vouchers — the records AND their configuration, because a
+    // voucher setting is edited where vouchers are.
+    content = <VouchersTabContent vouchers={vouchers} bookings={bookings} currency={generalSettings ? generalSettings.currency : "€"} voucherDefaults={voucherDefaults} onIssue={onIssueVoucher} onVoid={onVoidVoucher} onSaveDefaults={onSaveVoucherDefaults} />;
+  } else if (cur === "whatsapp") {
+    // v18.0.0 phase 5: `cur`, not `tab`. The sandbox tested the RAW requested
+    // tab, which was safe there only because SETTINGS_TABS spliced this id out
+    // of existence in a non-sandbox build. Under the module gate the id is real
+    // and merely hidden, so `tab` would render the WhatsApp settings for a
+    // restaurant whose module is off. `cur` is the id validated against
+    // `visibleTabs`; it is the gate, and every other branch here uses it.
+    content = <WhatsAppTabContent waSettings={waSettings} onSaveWaSettings={onSaveWaSettings} />;
+  } else if (cur === "reminders") {
     content = (
       <RemindersTabContent
         reminders={reminders}
@@ -1070,8 +1213,8 @@ export function SettingsContent({
   return (
     <div>
       <TabBar
-        tabs={SETTINGS_TABS}
-        current={tab}
+        tabs={tabs}
+        current={cur}
         onSelect={selectTab}
       />
       {/* v15.8.0: tab body eases its height (AutoHeight) + crossfades on switch
@@ -1080,8 +1223,8 @@ export function SettingsContent({
           ResizeObserver that normally drives AutoHeight fires one frame too late
           for that, so the new tab painted at full height and the panel then
           snapped shut and re-grew. See AutoHeight. */}
-      <AutoHeight watch={tab}>
-        <div key={tab} className="mgt-fade-in">{content}</div>
+      <AutoHeight watch={cur}>
+        <div key={cur} className="mgt-fade-in">{content}</div>
       </AutoHeight>
     </div>
   );

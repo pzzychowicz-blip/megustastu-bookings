@@ -26,6 +26,9 @@ import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 // v16.3.0 correction: standing bookings default OFF — the feature (and the
 // booking-form "Repeat weekly" toggle) stays hidden until staff enable it in
@@ -80,11 +83,17 @@ export function useRecurring({ setWriteWarning }) {
       if (!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
       return false;
     }
-    const computed = sanitizeRecurring(typeof next === "function" ? next(recurringRef.current) : next);
+    // Captured ABOVE the mirror assignment below — one line later and `prev`
+    // and `computed` are the same object.
+    const prev = recurringRef.current;
+    const computed = sanitizeRecurring(typeof next === "function" ? next(prev) : next);
     recurringRef.current = computed;
     setRecurring(computed);
     writeWithRev("recurring", computed, revRef, function () {
       if (!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
+    }, function () {
+      const entry = settingsWriteEntry("recurring", prev, computed, { auto: isSilent === true });
+      if (entry) emitActivity([entry]);
     });
     return true;
   }

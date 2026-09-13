@@ -461,3 +461,233 @@ describe("weight scale — the ratchet (v17.13.0)", () => {
     ).toEqual([]);
   });
 });
+
+// ── Rule 10: the control hover-lift (v18.0.0 phase 3) ───────────────────────
+//
+// `.mgt-hover-scale` is opt-in per element, so the only thing between a new
+// control and the app's shared hover identity was somebody remembering a class
+// name — and it was missed again in the Admin tab, at 1 of 11 controls. These
+// fixtures are what make the rule worth having: a rule that reads correctly and
+// matches nothing is the v17.9.0 near-miss this whole file exists for.
+//
+// These assert on the BRACKETED `[hover-lift]` violation label rather than on
+// the bare words, because the checker's success line now ends "…, control
+// hover-lift)" — so a plain /hover-lift/ matched a PASSING run and every
+// negative case here failed on its first outing. The repo's own
+// prose-names-the-thing trap, in the test written to guard against it.
+describe("check:style — the control hover-lift (v18.0.0)", () => {
+  it.each(["button", "input", "select", "textarea"])(
+    "catches a bare <%s>", (tag) => {
+      const r = run({ "a.jsx": `const x = <${tag} onClick={f} style={{ color: "var(--x)" }} />;\n` });
+      expect(r.code).toBe(1);
+      expect(r.out).toMatch(/\[hover-lift\]/);
+    });
+
+  it("is silent when the class is present", () => {
+    const r = run({ "a.jsx": 'const x = <button className="mgt-hover-scale" onClick={f} />;\n' });
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("finds the class ANYWHERE in a multi-line tag", () => {
+    // The reason this rule is tag-scoped rather than line-scoped: an opening tag
+    // in this codebase routinely spans five lines and the class sits on any of
+    // them. A line-scoped version would report every control in the app.
+    const r = run({ "a.jsx": [
+      "const x = (",
+      "  <button",
+      "    onClick={f}",
+      '    className="mgt-hover-scale"',
+      "    style={{ color: \"var(--x)\" }}",
+      "  />",
+      ");",
+    ].join("\n") + "\n" });
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("is not fooled by a `>` inside an expression or a string", () => {
+    // `tagEnd` is brace- and quote-aware. If it stopped at the first `>` it
+    // would end the tag before reaching the class and report a false positive.
+    const r = run({ "a.jsx": [
+      "const x = (",
+      "  <button",
+      "    onClick={() => { if (a > b) f(); }}",
+      '    title="a > b"',
+      '    className="mgt-hover-scale"',
+      "  />",
+      ");",
+    ].join("\n") + "\n" });
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("accepts the @no-lift marker, anywhere in the tag", () => {
+    const r = run({ "a.jsx": 'const x = <button /* @no-lift full-width row */ onClick={f} />;\n' });
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("does NOT see a control named in PROSE", () => {
+    // The trap this repo keeps hitting — tests/csp.test.js's regex started
+    // inside a comment that mentioned a script tag, and src/index.css's own
+    // header closed itself early. A comment describing a <button> is not one.
+    const r = run({ "a.jsx": "// this component renders a <button> without a lift\n/* and a <select> too */\nconst x = 1;\n" });
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("does not fire on a CAPITALISED component that merely starts with the name", () => {
+    // <Button/> and <InputRow/> are components, not controls; the rule is
+    // anchored on a lowercase tag name plus a word boundary.
+    const r = run({ "a.jsx": "const x = <Button onClick={f} />;\nconst y = <InputRow />;\n" });
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+});
+
+// ── Rule 11: ModalTitle's required background (v18.0.0 phase 3) ─────────────
+//
+// The atom takes `background` with no default on purpose — "a default would be
+// a silent eighth answer to that question" — and hard-codes its ink to
+// `--text-on-accent`. So an omitted prop is not a missing colour, it is white
+// text on a transparent pill: an invisible heading that throws nothing and
+// renders at full size. Shipped once, on the Capabilities modal, and caught on
+// a screenshot rather than in review.
+describe("check:style — ModalTitle background (v18.0.0)", () => {
+  it("catches a ModalTitle with no background", () => {
+    const r = run({ "a.jsx": "const x = <ModalTitle>Capabilities</ModalTitle>;\n" });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/\[modal-title-background\]/);
+  });
+
+  it("catches it across a multi-line tag", () => {
+    const r = run({ "a.jsx": "const x = (\n  <ModalTitle\n    marginBottom={16}\n  >\n    Hi\n  </ModalTitle>\n);\n" });
+    expect(r.out).toMatch(/\[modal-title-background\]/);
+  });
+
+  it("is silent when background is present, on either line", () => {
+    const one = run({ "a.jsx": 'const x = <ModalTitle background="var(--accent)">Hi</ModalTitle>;\n' });
+    expect(one.out).not.toMatch(/\[modal-title-background\]/);
+    const many = run({ "a.jsx": 'const x = (\n  <ModalTitle\n    marginBottom={16}\n    background={cond ? "var(--a)" : "var(--b)"}\n  >Hi</ModalTitle>\n);\n' });
+    expect(many.out).not.toMatch(/\[modal-title-background\]/);
+  });
+
+  it("does not fire on the atom's own definition or on prose", () => {
+    // `function ModalTitle({ background, … })` is a declaration, not a JSX tag,
+    // and a comment mentioning <ModalTitle> is not one either.
+    const r = run({ "a.jsx": "// <ModalTitle> takes a background\nexport function ModalTitle({ background }) { return background; }\n" });
+    expect(r.out).not.toMatch(/\[modal-title-background\]/);
+  });
+});
+
+// ── Rule 12: a modal eases its own height ───────────────────────────────────
+// Ten of eleven Overlay bodies in the app were already wrapped; the eleventh
+// resized its card by 23px in a single frame. A missing wrapper is an ABSENCE,
+// which is why review kept walking past it and why the fixtures below matter
+// more than usual — they assert on the BRACKETED `[modal-auto-height]` label,
+// because the checker's own success line now contains the words "modal
+// auto-height" and a bare match would pass on a PASSING run.
+describe("Rule 12 — <Overlay> without <AutoHeight>", () => {
+  it("catches a bare Overlay", () => {
+    const r = run({ "a.jsx": "const x = <Overlay onClose={f}><div>hi</div></Overlay>;\n" });
+    expect(r.out).toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("catches it across a multi-line opening tag", () => {
+    const r = run({ "a.jsx": "const x = (\n  <Overlay\n    onClose={f}\n    footer={<button/>}\n  >\n    <div>hi</div>\n  </Overlay>\n);\n" });
+    expect(r.out).toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("is silent when the body is wrapped", () => {
+    const r = run({ "a.jsx": "const x = <Overlay onClose={f}><AutoHeight watch={k}><div>hi</div></AutoHeight></Overlay>;\n" });
+    expect(r.out).not.toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("is silent when the exception is marked, and the marker must be on the TAG", () => {
+    const ok = run({ "a.jsx": "const x = <Overlay /* @static-height one fixed sentence */ onClose={f}><div>hi</div></Overlay>;\n" });
+    expect(ok.out).not.toMatch(/\[modal-auto-height\]/);
+    // A marker sitting somewhere else in the file does not exempt anything —
+    // otherwise one comment would silence every modal in a file.
+    const far = run({ "a.jsx": "// @static-height\n\n\nconst x = <Overlay onClose={f}><div>hi</div></Overlay>;\n" });
+    expect(far.out).toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("reads the MATCHING close, not the first one", () => {
+    // Nothing nests an Overlay today. Without the depth walk the inner body
+    // would end the outer one early, and an outer AutoHeight sitting after the
+    // inner modal would be invisible — the rule would fire on a compliant file.
+    const r = run({ "a.jsx": "const x = <Overlay onClose={f}><Overlay /* @static-height inner */ onClose={g}><i/></Overlay><AutoHeight><div/></AutoHeight></Overlay>;\n" });
+    expect(r.out).not.toMatch(/\[modal-auto-height\]/);
+  });
+
+  it("does not fire on prose or on a self-closing tag", () => {
+    const prose = run({ "a.jsx": "// every <Overlay> should wrap its body\nexport const x = 1;\n" });
+    expect(prose.out).not.toMatch(/\[modal-auto-height\]/);
+    const closed = run({ "a.jsx": "const x = <Overlay onClose={f} />;\n" });
+    expect(closed.out).not.toMatch(/\[modal-auto-height\]/);
+  });
+});
+
+// ── Rule 13 — a search input never carries the hover lift (v18.0.0 session 11)
+//
+// The narrow exception to Rule 10, and the only one where the CONTAINED control
+// is drawn by the browser rather than written in the file — which is exactly why
+// nothing could see the fault: in source the input looks like a leaf.
+describe("Rule 13 — <input type=\"search\"> with the hover lift", () => {
+  it("catches the pairing", () => {
+    const r = run({ "a.jsx": 'const x = <input type="search" className="mgt-hover-scale" />;\n' });
+    expect(r.code).toBe(1);
+    expect(r.out).toMatch(/\[search-hover-lift\]/);
+  });
+
+  it("finds it anywhere in a multi-line tag, either order", () => {
+    // Same reason Rule 10 is tag-scoped. Both orderings, because the real
+    // defect had `type` first and a fixture that only tests one ordering is
+    // half a test.
+    const typeFirst = run({ "a.jsx": [
+      "const x = (",
+      '  <input type="search"',
+      "    value={q}",
+      '    className="mgt-hover-scale"',
+      "  />",
+      ");",
+      "",
+    ].join("\n") });
+    expect(typeFirst.out).toMatch(/\[search-hover-lift\]/);
+    const classFirst = run({ "a.jsx": [
+      "const x = (",
+      '  <input className="mgt-hover-scale"',
+      "    value={q}",
+      '    type="search"',
+      "  />",
+      ");",
+      "",
+    ].join("\n") });
+    expect(classFirst.out).toMatch(/\[search-hover-lift\]/);
+  });
+
+  it("is silent on a search input that says @no-lift", () => {
+    // The shape SearchField ships. It must satisfy BOTH rules at once — no
+    // lift for 13, and a stated reason for 10 — or the atom itself would be a
+    // violation and the rule would have to be muted.
+    const r = run({ "a.jsx": [
+      "const x = (",
+      "  <input",
+      "    /* @no-lift the pill around it holds the clear button */",
+      '    type="search"',
+      "    value={q}",
+      "  />",
+      ");",
+      "",
+    ].join("\n") });
+    expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+    expect(r.out).not.toMatch(/\[hover-lift\]/);
+  });
+
+  it("does not fire on a non-search input that lifts", () => {
+    // SearchPanel's "Find a booking" field is exactly this: a text input with
+    // no clear button inside it, so it is a leaf and the lift is correct.
+    const r = run({ "a.jsx": 'const x = <input className="mgt-hover-scale" value={q} />;\n' });
+    expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+  });
+
+  it("does not fire on prose naming the pairing", () => {
+    const r = run({ "a.jsx": '// never give <input type="search"> the mgt-hover-scale class\nexport const x = 1;\n' });
+    expect(r.out).not.toMatch(/\[search-hover-lift\]/);
+  });
+});

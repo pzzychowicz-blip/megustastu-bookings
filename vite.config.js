@@ -1,5 +1,163 @@
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import process from 'node:process'
 import { defineConfig, configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+
+// ── v18.0.0 phase 5b/2: the simulator is not DEPLOYED, not merely unreachable ─
+//
+// Phase 5b got the simulator out of the ENTRY chunk, which is what stops it
+// running. It did not stop it SHIPPING: Rollup emits a chunk for a dynamic
+// `import()` even inside a branch it has folded to dead code, so
+// `WaSimulator-*.js`, `wa-sim-*.js` and `wa-sim-scenarios-*.js` were still
+// written to `dist/` and served from the restaurant's CDN. Inert, and still
+// developer tooling on a production deployment (Patryk's call, session 5).
+//
+// This strips them at the source: in a production build the four simulator
+// modules resolve to ONE virtual stub, so the chunks contain no simulator code
+// to begin with. It is not an optimisation and not defence in depth — it is the
+// difference between "cannot be run" and "is not there".
+//
+// **The condition mirrors `WA_SANDBOX` exactly** (`src/lib/waSandbox.js`:
+// `import.meta.env.VITE_FB_TARGET === "dev" || import.meta.env.DEV`), because
+// two conditions that merely agree today are two conditions:
+//   · `serve` (the dev server)        → keep. WA_SANDBOX is true there.
+//   · `build` with VITE_FB_TARGET=dev → keep. That is the sandbox deployment.
+//   · `build` otherwise              → STRIP. That is production.
+//
+// The stub's functions THROW rather than no-op. They are unreachable — the
+// caller sits behind the same `WA_SANDBOX` that chose this stub — so the choice
+// only decides what happens if that ever stops being true, and a silent no-op
+// simulator is the worse of the two failures.
+const SIM_MODULES = [
+  "src/components/whatsapp/WaSimulator.jsx",
+  "src/lib/wa-sim.js",
+  "src/lib/wa-sim-scenarios.js",
+  "src/lib/wa-backend-sim.js",
+];
+// The filename half of each path, extension stripped — the fragment every
+// specifier for that module must contain, however it is spelled relatively.
+const SIM_BASENAMES = SIM_MODULES.map((m) => m.split("/").pop().replace(/\.[jt]sx?$/, ""));
+const SIM_STUB_ID = "\0mgt:wa-sim-stub";
+// One stub for all four, so the export lists cannot drift apart per module.
+// Every name any importer destructures has to appear here or Rollup's import
+// analysis fails the build — which is the right failure: it is a compile-time
+// signal that a new simulator export reached production code.
+const SIM_STUB = [
+  "const gone = (name) => () => {",
+  "  throw new Error('[wa-sim] ' + name + ' is not available in this build. The',",
+  "    'simulator is stripped from production by vite.config.js; reaching this',",
+  "    'means a WhatsApp surface lost its sandbox gate.');",
+  "};",
+  "export const SCENARIOS_BY_ID = {};",
+  "export const SCENARIOS = [];",
+  "export const WaSimulator = gone('WaSimulator');",
+  "export const simulateInbound = gone('simulateInbound');",
+  "export const seedSampleBookings = gone('seedSampleBookings');",
+  "export const clearWaSimBookings = gone('clearWaSimBookings');",
+  "export const simulateBurst = gone('simulateBurst');",
+  "export const backendInbound = gone('backendInbound');",
+  "export const postFakeWebhook = gone('postFakeWebhook');",
+  "export const postSimInbound = gone('postSimInbound');",
+  "export const suggestCustomerReply = gone('suggestCustomerReply');",
+  "export const generateScenario = gone('generateScenario');",
+].join("\n");
+
+function stripSimulator(isSandbox) {
+  return {
+    name: "mgt-strip-wa-simulator",
+    apply: "build",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (isSandbox) return null;
+      if (source === SIM_STUB_ID) return SIM_STUB_ID;
+      // Cheap reject FIRST. Without it this hook awaited a full `this.resolve`
+      // for every specifier in the graph — node_modules included — to compare
+      // against four fixed paths: a second resolution pass over the whole build
+      // for four possible hits.
+      //
+      // DERIVED from SIM_MODULES, not hand-written. The hand-written version was
+      // `/wa-sim|WaSimulator/`, which silently stopped stubbing
+      // `wa-backend-sim.js` — that name does not contain the substring "wa-sim"
+      // ("wa-backend-sim" breaks as "…d-sim"). A filter listing the same set as
+      // the thing it filters is the two-lists defect this repo names everywhere;
+      // adding a module to SIM_MODULES now updates this automatically.
+      if (!SIM_BASENAMES.some((b) => source.includes(b))) return null;
+      // Then resolve through Vite, so a relative specifier from any importer
+      // lands on the same absolute path this list is matched against.
+      return this.resolve(source, importer, { skipSelf: true }).then((r) => {
+        if (!r) return null;
+        const id = r.id.split("?")[0].replace(/\\/g, "/");
+        return SIM_MODULES.some((m) => id.endsWith("/" + m)) ? SIM_STUB_ID : null;
+      });
+    },
+    load(id) {
+      return id === SIM_STUB_ID ? SIM_STUB : null;
+    },
+  };
+}
+
+
+// ── v18.0.0 phase 6: the install card names the RIGHT restaurant ─────────────
+//
+// `public/manifest.webmanifest` is the PWA install card and the home-screen add
+// sheet. Its `name`/`short_name` are the APP's name and are pinned to `APP_NAME`
+// by `tests/stylesheet.test.js`; its `description` was the last place in the
+// repo where a RESTAURANT's name was authored into a static file — and a static
+// file imports nothing, so a per-tenant value there is a build step rather than
+// a constant. That is what this is.
+//
+// The source file is now tenant-NEUTRAL ("Staff booking management"), so it is
+// correct standing alone and names nobody. This appends the restaurant from
+// `src/tenants/<slug>.js` → `profile.name`, the same module `firebase.js`
+// selects with `VITE_TENANT` and the same one the WhatsApp prompts take their
+// context from.
+//
+// It runs in BOTH dev and build, from ONE loader, because two paths that merely
+// agree today are two paths: a middleware serves the generated file on the dev
+// server, and `closeBundle` writes it into `outDir`. `closeBundle` and not
+// `generateBundle` — Vite copies `public/` AFTER the bundle is emitted, so an
+// emitted asset of the same name is overwritten by the source file; writing last
+// is what makes the generated one win.
+function tenantManifest() {
+  let outDir = "dist";
+  async function build() {
+    const slug = process.env.VITE_TENANT || "mgt";
+    // An ABSOLUTE file URL, and it has to be. Vite bundles this config into
+    // `node_modules/.vite-temp/` before running it, so a relative specifier
+    // resolves against THAT directory and the import fails with a
+    // `.vite-temp/src/tenants/mgt.js` that has never existed. `process.cwd()` is
+    // the project root during both `serve` and `build`, which is also what makes
+    // the readFileSync below correct.
+    const root = process.cwd();
+    const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+    const src = JSON.parse(readFileSync(join(root, "public", "manifest.webmanifest"), "utf8"));
+    // Appended, never replaced: the neutral sentence is the one thing this
+    // cannot get wrong, and a tenant with no `name` still gets a usable card.
+    const name = profile && profile.name ? String(profile.name).trim() : "";
+    return JSON.stringify(
+      Object.assign({}, src, { description: name ? src.description + " for " + name : src.description }),
+      null, 2,
+    ) + "\n";
+  }
+  return {
+    name: "mgt-tenant-manifest",
+    configResolved(cfg) { outDir = cfg.build.outDir || "dist"; },
+    configureServer(server) {
+      server.middlewares.use(function (req, res, next) {
+        if ((req.url || "").split("?")[0] !== "/manifest.webmanifest") return next();
+        build().then(function (body) {
+          res.setHeader("Content-Type", "application/manifest+json");
+          res.end(body);
+        }, next);
+      });
+    },
+    async closeBundle() {
+      writeFileSync(join(outDir, "manifest.webmanifest"), await build());
+    },
+  };
+}
 
 // /code-review: hoisted out of the manualChunks callback. A regex literal is
 // re-evaluated every time control reaches it, so inline these allocated two
@@ -13,8 +171,11 @@ const VENDOR_REACT = /[\\/]node_modules[\\/](react-dom|react|scheduler)[\\/]/;
 const VENDOR_FIREBASE = /[\\/]node_modules[\\/](@firebase|firebase)[\\/]/;
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(function ({ command }) {
+  // Exactly `WA_SANDBOX`'s two truthy cases; see the note above the plugin.
+  const isSandbox = command === "serve" || process.env.VITE_FB_TARGET === "dev";
+  return {
+  plugins: [react(), stripSimulator(isSandbox), tenantManifest()],
 
   // ── The rules suite runs somewhere else, on purpose ──────────────────────
   // `tests/rules/**` drives a LOCAL Firebase RTDB emulator against the real
@@ -58,4 +219,5 @@ export default defineConfig({
       },
     },
   },
+  };
 })

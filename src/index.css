@@ -410,6 +410,13 @@
      pane directly above it, which inverts the hierarchy — a suggestion
      must never shout over a warning. Tuned to --app-overlap-bg's weight. */
   --suggest-bg-soft: rgba(240, 253, 244, 0.6);
+  /* The PANE-scale danger tint, added for the WA sandbox's intent banner
+     (17.8.0 sweep). Same reasoning as --suggest-bg-soft one line up:
+     --danger-bg is a CHIP fill, and at banner size it shouted over the
+     amber pane idiom the rest of the app uses. Tuned to
+     --app-overlap-bg's weight so a cancellation request and a running-late
+     warning read as the same KIND of surface, differing only in hue. */
+  --danger-bg-soft: rgba(255, 241, 241, 0.6);
   /* Date input (header) */
   --app-date-bg: rgba(255, 255, 255, 0.45); --app-date-border: rgba(255, 255, 255, 0.4);
   /* Neutral grey button fills (header Log out / dialog Back-Cancel / Settings title) */
@@ -485,6 +492,64 @@
      (a translucent fill reads washy on the glass cards). Shared contract
      with Scheduling — keep this value identical across both apps. */
   --bg-hover-card: #ffffff;
+  /* ── WhatsApp module (sandbox) — green brand + module surfaces/banners.
+     The soft surfaces/banners below flip with the theme (see the dark
+     block); the saturated, TEXT-BEARING fills are OPAQUE, which is what
+     makes them genuinely theme-invariant rather than merely asserted to
+     be. They used to be `rgba(hue, 0.78–0.85)` under a comment claiming
+     exactly that — the same sentence, almost word for word, that v17.8.0
+     disproved for the --block, --btn and --tbl families one module over.
+     An alpha fill composites toward what is BEHIND it, so it lands
+     somewhere different per theme: measured with white ink, --wa-green
+     was 2.90:1 in light and 4.79 in dark, --wa-btn-open 2.98 / 5.42, and
+     the outgoing chat BUBBLE — the module's most-read text — 3.15 / 5.13.
+     Dark passed every time; light, the one running on a terrace tablet in
+     Canary daylight, failed every time.
+     Dropping the alpha fixes both themes with ONE value, because an
+     opaque fill composites against nothing: three of them needed no other
+     change, and green / bubble-out / sim-accent took a small darkening on
+     top. Registered in tests/contrast.test.js, which now fails on an
+     unregistered --wa-* fill. */
+  --wa-green: rgb(18, 134, 98);
+  --wa-green-dark: rgb(15, 120, 88);
+  --wa-panel-bg: rgba(248, 250, 253, 0.96);    /* inbox panel card */
+  --wa-header-bg: rgba(255, 255, 255, 0.55);   /* panel/conversation header strips */
+  --wa-list-bg: rgba(248, 250, 253, 0.55);     /* conversation-list pane */
+  --wa-row-bg: rgba(255, 255, 255, 0.55);
+  --wa-row-bg-hover: rgba(213, 224, 242, 0.96);   /* clearly-visible cool tint (white-on-white was too faint) */
+  --wa-row-active-bg: rgba(0, 122, 255, 0.12);
+  --wa-row-active-border: rgba(0, 122, 255, 0.5);
+  --wa-divider: rgba(200, 210, 225, 0.7);
+  --wa-bubble-in: rgba(255, 255, 255, 0.85);   --wa-bubble-in-border: rgba(200, 210, 225, 0.7);
+  --wa-bubble-out: rgb(0, 114, 238);           --wa-bubble-out-border: rgba(0, 90, 190, 0.55);
+  /* v17.8.0-wa-sandbox: the draft card joined the notification-pane idiom
+     (soft tint, 1px --border-card, hue carried by the mark and the text),
+     so this fill drops from a 0.8-alpha CHIP wash to a PANE wash at
+     --app-overlap-bg's weight. Same move the suggest green made when it
+     gained a soft variant — a pane must never be as loud as a chip.
+     (And never write "--token" followed by a colon in here. The regex in
+     tests/contrast.test.js reads a declaration as name-colon-value-semi
+     over the RAW block, comments included, so a sentence in that shape
+     eats the real declaration that follows it. It caught this one.)
+     --wa-draft-border survives only as the shimmer bar's fill in the
+     "Reading the message…" card, where it is decoration, not a rim.
+     The --wa-accept and --wa-teal families are GONE. The accepted-booking
+     notice, the linked-booking card and the past-bookings disclosure all
+     follow the WAITLIST palette now (--suggest-bg-soft, --suggest-border,
+     --success-text), so no token named "teal" is left holding a green
+     value — the two-names-for-one-concept trap CLAUDE.md names, and the
+     reason a green surface could sit outside the green family's audit. */
+  --wa-draft-bg: rgba(254, 252, 232, 0.6);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
+  --wa-btn-open: rgb(0, 122, 255);
+  --wa-btn-cancel: rgb(220, 38, 38);
+  --wa-btn-handled: rgb(13, 148, 136);
+  --wa-unread-dot: #dc2626;
+  /* Two rings that were hard-coded COPIES of the two values above —
+     the failure mode CLAUDE.md names: retune the token and the copy
+     silently keeps the old hue. Grep the value, not the name. */
+  --wa-unread-ring: 0 0 0 1px rgba(220, 38, 38, 0.25);
+  --wa-row-active-glow: 0 2px 8px rgba(0, 122, 255, 0.12);
+  --wa-sim-accent: rgb(155, 79, 228);          /* dev-only simulator chrome */
   /* v17.9.1: the floor-plan table's hover halo (.mgt-glyph). Theme-SPLIT
      for the same reason --shadow-* is: a halo has to be readable against
      the surface behind it, and that surface flips. */
@@ -598,11 +663,24 @@
   --bg-card: rgba(44, 44, 46, 0.55);
   --border-card: rgba(255, 255, 255, 0.10);
   --text-primary: #f2f2f7;
-  --text-muted: #9a9aa0;
+  /* v18.0.0 session 8: +12 per channel, and the reason is a defect in what
+     measured it rather than in the value. It was solved against a dark base of
+     #24252a — the DARKEST plausible sheet, which is the worst case for a dark
+     ink on a light fill and the BEST case for a pale ink on a dark one, so
+     every pale ink in this theme was measured optimistically. Against the
+     lightest painted panel (rgb(50,50,52), measured in the running app) the old
+     value put panel secondary text — the voucher row's redemption lines, the
+     customer history — at 3.92:1. Now 4.52:1. See tests/contrast.test.js's
+     BASE note for how the surface was measured. */
+  --text-muted: #a6a6ac;
   /* v17.14.0: see --btn-disabled-ink in :root. Lighter than --text-muted
      because the disabled fill composites DARK here, and dimmer than white
-     so the pill still reads as inactive. 4.70:1 on the composite. */
-  --btn-disabled-ink: #dcdce0;
+     so the pill still reads as inactive.
+     v18.0.0 session 8: +8 per channel. The "4.70:1 on the composite" this
+     comment used to claim was true of a base of #24252a and of nothing on
+     screen — measured against the lightest painted panel it was 4.17:1. Now
+     4.53:1, and the pill still reads as inactive beside a live primary. */
+  --btn-disabled-ink: #e4e4e8;
   --accent: #0a84ff;
   --focus-ring: #ffffff;
   /* Status chip text -> light variants for dark surfaces. */
@@ -622,9 +700,21 @@
      visible as a shape). Everything not listed here composites to the
      same side of the line in both themes and is correctly inherited.
      Numbers are solved, not eyeballed — see tests/contrast.test.js. */
-  --tbl-out-rgb: 41, 151, 171;
+  /* v18.0.0 session 8: 98% of the value it was solved to, because the base it
+     was solved against was too dark. A table badge does NOT only sit on the
+     timeline grid — TBL.out is also painted in BlockModal, PrefPickerModal and
+     TableGrid, i.e. on a panel inside a modal sheet, which is the lightest
+     surface in the theme. White on the old value measured 4.41:1 there. */
+  --tbl-out-rgb: 40, 148, 168;
   --tbl-ind-rgb: 175, 82, 222;
-  --block-seated: rgba(32, 152, 76, 0.85);
+  /* v18.0.0 session 8: 99%, for --tbl-out-rgb's reason. This one is measured on
+     a surface it cannot actually reach — a block only ever paints on the
+     timeline grid (rgb(33,35,39)), where it was already at 4.56:1 — and it is
+     nudged anyway rather than excepted, because one base per theme is what the
+     registry asserts and a per-entry surface is a bigger change than this
+     commit. A 1% shift no eye can see is a cheaper price than a second way of
+     measuring. */
+  --block-seated: rgba(32, 150, 75, 0.85);
   --block-cancelled: rgba(200, 80, 80, 0.8);
   /* ── v14.2.2: atoms / modal dark overrides ── */
   --bg-sheet: rgba(44, 44, 46, 0.85);
@@ -725,6 +815,7 @@
      mode while its light counterpart was a clear green. 24 degrees of hue
      drift between themes was the largest in the palette. */
   --suggest-bg-soft: rgba(22, 80, 29, 0.3);
+  --danger-bg-soft: rgba(80, 25, 25, 0.3);
   --app-date-bg: rgba(118, 118, 128, 0.24);  --app-date-border: rgba(255, 255, 255, 0.12);
   --app-btn-grey: rgba(110, 118, 135, 0.5);  --app-btn-grey-strong: rgba(110, 118, 135, 0.6);
   --app-btn-slate: rgba(100, 116, 139, 0.7);
@@ -732,6 +823,18 @@
   /* walkin / new / danger / warn solids are saturated — read on both; kept from :root */
   /* v14.3.0: hover-lift card — opaque dark surface (matches Scheduling) */
   --bg-hover-card: rgb(50, 50, 53);
+  /* ── WhatsApp module (sandbox) dark overrides — soft surfaces/banners
+     flip; green / action-button / bubble-out solids kept from :root. */
+  --wa-panel-bg: rgba(36, 36, 38, 0.97);
+  --wa-header-bg: rgba(255, 255, 255, 0.06);
+  --wa-list-bg: rgba(255, 255, 255, 0.03);
+  --wa-row-bg: rgba(255, 255, 255, 0.05);
+  --wa-row-bg-hover: rgba(255, 255, 255, 0.09);
+  --wa-row-active-bg: rgba(10, 132, 255, 0.22);
+  --wa-row-active-border: rgba(10, 132, 255, 0.6);
+  --wa-divider: rgba(255, 255, 255, 0.1);
+  --wa-bubble-in: rgba(255, 255, 255, 0.1);   --wa-bubble-in-border: rgba(255, 255, 255, 0.14);
+  --wa-draft-bg: rgba(72, 60, 15, 0.3);  --wa-draft-border: rgba(253, 224, 71, 0.4);  --wa-draft-text: #fde68a;  --wa-draft-text-dim: #fcd34d;
   /* v17.9.1: light halo on the dark plan (see :root for the reasoning) */
   --glyph-halo: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
 }
@@ -1285,6 +1388,41 @@ main:focus { outline: none; }
 /* The ring is the only focus signal; never let a UA default double it. */
 :focus:not(:focus-visible) { outline: none; }
 
+/* v18.0.0 session 7: DateField (atoms.jsx) puts a native date input INSIDE a
+   pill, so the weekday can sit beside the date. The pill is the control, so
+   the ring belongs on it: the input's own ring is hidden, and the rule above's
+   ring is drawn on the wrapper while the input inside it is focus-visible —
+   pill-shaped and offset, not a rectangle inside the pill. Both halves or
+   neither: hiding the input's ring without drawing the wrapper's would leave a
+   keyboard user no focus signal at all, which is why the second selector is in
+   the stylesheet test's critical list.
+   /code-review: and both sit inside @supports selector(:has(*)), because that
+   is what makes "both halves or neither" true rather than hoped. Outside it, a
+   browser without :has() dropped the wrapper's rule as an invalid selector and
+   still applied the hide. There the input now keeps the global ring above. */
+@supports selector(:has(*)) {
+  .mgt-datefield input:focus-visible,
+  .mgt-searchfield input:focus-visible { outline: none; }
+  .mgt-datefield:has(input:focus-visible),
+  .mgt-searchfield:has(input:focus-visible) {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* v18.0.0 session 11: the platform's own search clear button, suppressed.
+   SearchField draws its own with CloseIcon, so without this there are two of
+   them side by side. That failure is VISIBLE rather than silent, which is why
+   this is not in the stylesheet test's critical list; the entry criterion
+   there is a rule whose absence nothing on screen reveals.
+   It is also the half of the fix that cannot live in the component: a
+   pseudo-element has no inline style, so the only way to reach it is a
+   stylesheet rule. See the atom's header for what the native one did wrong. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* v17.12.0: visually hidden, but PRESENT to assistive technology — the
    carrier for live-region text that has no on-screen equivalent. It is
    not `display:none` and not `visibility:hidden`: both remove the node
@@ -1397,6 +1535,42 @@ main:focus { outline: none; }
 @keyframes mgt-ghost-out { to { opacity: 0; } }
 .mgt-fade-in { animation: mgt-fade-in var(--t-shift) var(--ease-out) both; }
 .mgt-appear  { animation: mgt-appear  var(--t-move) var(--ease-out); }
+/* (.mgt-fade-in-slow is GONE — 17.8.0 sweep.) It existed only to run 50%
+   longer than a 180ms .mgt-fade-in, so that the Inbox⇄Archived swap — the
+   whole list pane, not a tab body — had time to read. v17.8.0 moved
+   .mgt-fade-in itself to --t-shift (385ms), which is longer than the
+   "slow" class ever was, so the class had inverted into the faster of the
+   two. A duration defined RELATIVE to another one does not survive the
+   other one being retuned; the Inbox tabs use .mgt-fade-in now. */
+
+/* WhatsApp module (animation parity, post-port): a new chat bubble eases
+   in (fade + small rise). Applied to the NEWEST bubble only — see
+   MessageBubble.jsx — so opening a thread doesn't cascade-animate history.
+   A bubble ARRIVES, so --ease-out at --t-move (this used to be Material's
+   .4,0,.2,1 at 200ms — one of the five curves v17.8.0 collapsed). */
+@keyframes mgt-bubble-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.mgt-bubble-in { animation: mgt-bubble-in var(--t-move) var(--ease-out) both; }
+/* Parsing/typing indicator (WA inbox): a sweeping highlight across a muted
+   track while the inbound message is being parsed (Gemini round-trip). The
+   reduced-motion guard below stops the sweep.
+   Keeps ease-in-out, and the duration stays a literal: this is a LOOP, so
+   nothing arrives and nothing leaves and neither direction curve describes
+   it — the same documented exception as .mgt-dot-pulse. Same for mgt-spin
+   below, which is linear for the same reason. */
+@keyframes mgt-shimmer { from { background-position: -160px 0; } to { background-position: 160px 0; } }
+.mgt-shimmer {
+  background-image: linear-gradient(90deg, transparent 0%, var(--wa-shimmer, rgba(0,122,255,0.18)) 50%, transparent 100%);
+  background-size: 160px 100%;
+  background-repeat: no-repeat;
+  animation: mgt-shimmer 1100ms ease-in-out infinite;
+}
+
+/* Manual re-check (WA inbox): the ⟳✓ button's icon spins while the LLM
+   round-trip is in flight. Same reduced-motion guard as the shimmer —
+   the button is also disabled + dimmed, so the state stays legible with
+   the spin stopped. */
+@keyframes mgt-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
 .mgt-ghost-out { animation: mgt-ghost-out var(--t-move) var(--ease-out) forwards; }
 
 /* Accessibility + weak-hardware opt-out: collapse every animation/transition

@@ -399,17 +399,17 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             return (
               <span key={id} style={GCHIP}>
                 {ranked ? (
-                  <button onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
+                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, -1)); }} disabled={idx === 0}
                     title="Move up in rank" aria-label={"Move " + id + " up in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronUpIcon size={IC.inline} /></button>
                 ) : null}
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
                 {ranked ? (
-                  <button onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
+                  <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(moveInList(list, idx, 1)); }} disabled={idx === last}
                     title="Move down in rank" aria-label={"Move " + id + " down in " + label + rowIn}
                     style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
                 ) : null}
-                <button onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }}
+                <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }}
                   title="Remove" aria-label={"Remove " + id + " from " + label + rowIn}
                   style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={IC.inline} /></button>
               </span>
@@ -459,7 +459,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div key={t.id} style={{ padding: "8px 0", borderTop: "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {editing ? (
-                  <input value={editVal} autoFocus aria-label={"Rename table " + t.id} style={{ ...TXT_INP }}
+                  <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={editVal} autoFocus aria-label={"Rename table " + t.id} style={{ ...TXT_INP }}
                     onChange={function (e) { setEditVal(e.target.value); }}
                     onKeyDown={function (e) { if (e.key === "Enter" && editValid) commitEdit(t.id); if (e.key === "Escape") cancelEdit(); }} />
                 ) : (
@@ -574,7 +574,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         {/* Add a table */}
         {adding ? (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <input value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
+            <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
             <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
@@ -632,14 +632,14 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                           no group id is needed: `sanitizeLayout` enforces
                           single-group membership, so a table appears in exactly
                           one group. */}
-                      <button onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, -1); }} disabled={idx === 0}
                         title="Move left" aria-label={"Move " + id + " left in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? "default" : "pointer" }}><ChevronLeftIcon size={IC.inline} /></button>
                       <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", padding: "0 2px" }}>{id}</span>
-                      <button onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { moveInGroup(gi, idx, 1); }} disabled={idx === last}
                         title="Move right" aria-label={"Move " + id + " right in its joined group"}
                         style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronRightIcon size={IC.inline} /></button>
-                      <button onClick={function () { removeFromGroup(gi, id); }} title="Remove from group"
+                      <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { removeFromGroup(gi, id); }} title="Remove from group"
                         aria-label={"Remove " + id + " from its joined group"}
                         style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={IC.inline} /></button>
                     </span>
@@ -879,7 +879,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             const known = declared.some(function (d) { return d.key === r.key; });
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
-                <select value={r.key} aria-label={"Combo for rule " + (i + 1)} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
+                <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.key} aria-label={"Combo for rule " + (i + 1)} onChange={function (e) { setRule(i, { key: e.target.value }); }} style={SEL_INP}>
                   {known ? null : <option value={r.key}>{String(r.key).split("|").join(" + ")}</option>}
                   {declared.map(function (d) { return <option key={d.key} value={d.key}>{d.label}</option>; })}
                 </select>
@@ -953,7 +953,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)", marginTop: 6 }}>
                 <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>Free</span>
-                <select value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
+                <select /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={r.table} aria-label={"Table to free, swap rule " + (i + 1)} onChange={function (e) { setSwap(i, { table: e.target.value }); }} style={SEL_INP}>
                   {tableIds.indexOf(r.table) >= 0 ? null : <option value={r.table}>{r.table}</option>}
                   {tableIds.map(function (id) { return <option key={id} value={id}>{id}</option>; })}
                 </select>

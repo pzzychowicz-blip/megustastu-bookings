@@ -26,8 +26,16 @@ import {
   PRIORITIES,
   DUR_TIERS,
   TURN_BUFFER
-} from "./constants";
-import { todayStr, nowOn } from "./day";
+} from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
+import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
+// v18.0.0: one voucher-code normaliser, the `normalizePhone` precedent — the
+// issue field, every redemption lookup and `sanitize` must agree on what a code
+// IS, or two spellings resolve to two vouchers. `vouchers.js` imports nothing,
+// so this edge cannot close a cycle.
+// v18.0.0 phase 5: ".js" for the same reason as the two above — this file is now
+// reachable from the serverless functions (api/* → whatsapp.js → customers.js →
+// here), and Node's ESM resolver does not add the extension the way Vite does.
+import { normalizeCode, formatCode } from "./vouchers.js";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -315,6 +323,14 @@ export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=is
   // Clamped ≥0 (/code-review): the form's min={0} only blocks the stepper —
   // a typed "-50" would otherwise pass Number() straight through.
   deposit:Math.max(0,Number(b.deposit)||0),
+  // v18.0.0: the gift voucher attached to this booking, "" for none. Per-booking,
+  // so the existing per-$id CAS covers it — no new node and no rules change for
+  // THIS half of the feature. Normalised on read through the same function the
+  // issue field and every redemption lookup use, so a stored "abcd-2345" and a
+  // stored "ABCD2345" can never resolve to two different vouchers. A row that
+  // needs correcting self-heals on the next save, the way `sanitize` fills every
+  // other gap.
+  voucherCode:normalizeCode(b.voucherCode),
   // v16.3.0: recurring-occurrence stamps (null for a one-off). recurringId links
   // to the settings/recurring rule; recurringDate is the occurrence's date. The
   // generator dedupes on these; doDelete adds recurringDate to the rule's
@@ -343,7 +359,62 @@ export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=is
   // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
   updatedAt:Number(b.updatedAt)||0};}
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
-export function diffBooking(orig,f,size){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=orig.phone||"";var formPhone=f.phone&&f.phone.trim()!=="+"?f.phone.trim():"";if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
+// ── v18.0.0 session 8 (C8): what the save toast is allowed to claim ─────────
+// "Tables re-optimised." was chosen from `optimizerActiveFor(viewDate, …)` —
+// the state of the TOGGLE on the day you happen to be looking at — rather than
+// from what the action did. A seat passes `autoOptimizerState: false` into
+// `bookingsAfterAction` precisely so that nobody else moves when a party sits
+// down, so on any day with the optimiser on, seating a booking announced a
+// reshuffle that had been explicitly suppressed.
+//
+// An action that suppressed the optimiser says `"saved"`; everything else keeps
+// the old derivation. A toast is presentation, but the sentence it prints is a
+// factual claim about what the app just did, and that part is testable.
+export function savedToast(kind,optimiserActive){
+  if(kind==="saved") return "Booking saved.";
+  return optimiserActive?"Tables re-optimised.":"Booking saved.";
+}
+// ── v18.0.0 session 8 (R6): does this save change what the KITCHEN sees? ────
+// "Kitchen may be busy" counts the STARTS in a slot — how many parties the pass
+// has to cook for at once. `save()` raised it on any save whose slot was busy,
+// including one that changed nothing the kitchen could possibly care about.
+// Measured live 2026-09-11: editing only the NOTES of a booking in a busy slot
+// raised the confirm, so the person correcting a typo was asked to approve a
+// kitchen load their edit did not add to — and the dialog they must dismiss is
+// the same one that means something real on the save after it.
+//
+// What the kitchen sees is a start: when, for how many, for how long. A new
+// booking is a new start; so is a booking coming back from cancelled or
+// completed, which is a start the count had stopped including. A seat, a phone,
+// a note, a deposit, a voucher and a table move are not.
+export function kitchenRelevant(orig,f,size){
+  if(!orig) return true;
+  if(f.date!==orig.date||f.time!==orig.time) return true;
+  if(size!==orig.size) return true;
+  var formDur=f.customDur||getDur(size);
+  var origDur=orig.originalDuration||orig.duration||90;
+  if(formDur!==origDur) return true;
+  var wasOff=orig.status==="cancelled"||orig.status==="completed";
+  var backOn=f.status!=="cancelled"&&f.status!=="completed";
+  return wasOff&&backOn;
+}
+// ── v18.0.0 session 8 (R5): what counts as a phone somebody ENTERED ─────────
+// Empty, a bare "+", or exactly the untouched prefix seed all mean "no phone" —
+// the prefix is a typing convenience the form puts in the field, not data.
+// App's `cleanPhoneOf` has applied that rule on the SAVE path since v17.0.0.
+// `diffBooking` applied HALF of it to one side ("+" only) and NONE of it to the
+// other, so a booking with no stored phone, opened in a form that seeds "+34"
+// into the field, differed from itself on every save: history recorded "phone
+// none→+34" and the Undo pill was armed for a change that never happened, while
+// the stored phone stayed "". Measured live 2026-09-11: 4 of 4 ordinary edits.
+//
+// One rule, one place, both callers — and `phonePrefix` has to be passed in
+// because it is a restaurant SETTING and this module reads no settings.
+export function enteredPhone(p,prefix){
+  var t=p==null?"":String(p).trim();
+  return (t===""||t==="+"||t===prefix)?"":t;
+}
+export function diffBooking(orig,f,size,phonePrefix){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=enteredPhone(orig.phone,phonePrefix);var formPhone=enteredPhone(f.phone,phonePrefix);if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var origVou=normalizeCode(orig.voucherCode);var formVou=normalizeCode(f.voucherCode);if(origVou!==formVou) ch.push("voucher "+(origVou?formatCode(origVou):"none")+"→"+(formVou?formatCode(formVou):"none"));var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 // v17.16.13: the keyed-object arm walks ENTRIES, not values, so each row can be
 // told the key it was stored under. `.map(sanitize)` was also passing the array
 // INDEX as sanitize's second argument all along — harmless while sanitize took
@@ -732,13 +803,19 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
   var result=applyOpt(base,date,blocks);
   var assigned=result.find(function(b){return b.id===trialId;});
   if(!assigned||!assigned.tables||!assigned.tables.length) return null;
-  // Displacement check only for new bookings (not edits)
-  if(!editId){
-    var prevAssigned=bookings.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0;});
-    var displaced=result.filter(function(b){return b.id!==trialId&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-    var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
-    if(kicked.length>0) return null;
-  }
+  // v18.0.0 session 8 (C5): the displacement check runs for an EDIT too. It was
+  // gated on `!editId`, so the form's availability preview answered a different
+  // question from the one Save asks — `doSaveEdit` has always refused a save
+  // that would kick an existing booking, while this said the tables were
+  // available and even drew them. A preview that disagrees with the save is
+  // worse than no preview.
+  //
+  // The edited booking cannot be its own casualty: `displaced` excludes
+  // `trialId`, so its presence in `prevAssigned` is harmless.
+  var prevAssigned=bookings.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0;});
+  var displaced=result.filter(function(b){return b.id!==trialId&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
+  var kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
+  if(kicked.length>0) return null;
   return assigned.tables;
 }
 // v16.3.0 perf rewrite — same output, a fraction of the work. The old shape ran
@@ -756,6 +833,20 @@ export function trialFits(bookings,date,time,size,pref,dur,blocks,editId,prefTab
 //   2. OUTWARD EARLY-STOP: scan from `around` outwards and stop after 10 valid
 //      slots per side — exactly what formatSugg would keep. Result is returned
 //      ascending, so formatSugg's slice sees the identical list.
+// ── v18.0.0 session 8 (C7): the last minute a booking may START ─────────────
+// `findTimes` has encoded this as `close*60 - 15` since v14 and never offered a
+// later slot; `doSave` did not know it, and its range test was `sm > close*60`
+// — so a start exactly AT closing passed. A 22:00 booking on a day that closes
+// at 22:00 is a party arriving as the door is locked, and worse than useless:
+// the close-time auto-complete in `usePersistence` flips it to completed on the
+// next 15s tick, so it reads as a visit that already happened.
+//
+// The cap at midnight is the app's own rule that no booking may START after it
+// (constants.js allows a close of 24 or 25 as an EXTEND window only), so a
+// restaurant closing at 01:00 still takes its last booking at 23:45.
+export function lastStartMins(close){
+  return Math.min(Number(close)||0,24)*60-15;
+}
 export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noReshuffle){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return []; // closed day → no valid times
@@ -776,7 +867,7 @@ export function findTimes(date,size,pref,existing,dur,around,blocks,editId,noRes
     if(Date.now()-t0>BUDGET_MS) return false; // budget spent — skip the expensive trial
     return !!trialFits(existing,date,toTime(m),size,pref,dur,blocks,editId,null,noReshuffle);
   }
-  var first=h.open*60,last=h.close*60-15;
+  var first=h.open*60,last=lastStartMins(h.close);
   var CAP=10; // formatSugg keeps 10 per side — scanning further is wasted work
   // Stay on the quarter-hour grid even when `around` isn't grid-aligned (the old
   // fixed-grid scan only ever produced grid slots): step outwards from the
@@ -1047,6 +1138,258 @@ export function applySeatedShift(booking,nowM,allBookings,today){
   if(!Number.isFinite(newDuration)||newDuration<=0||newDuration>1440) return null;
   return {newTime:toTime(nm),newDuration:newDuration,oldTime:booking.time,direction:nm<scheduledStart?"early":"late"};
 }
+// ── v18.0.0 session 8 (item 5b — ROADMAP) ───────────────────────────────────
+// The shift must be computed from the booking AS IT IS BEING SAVED, not as it
+// is stored.
+//
+// `applySeatedShift` pins the scheduled END from `booking.duration`. In
+// `doSaveEdit` it ran BEFORE `formPlan` was computed, and its `newDuration`
+// then overwrote `saveDur`, `saveCustDur` AND `saveOrigDurFinal` — so a length
+// typed on the stepper, or re-derived by a party-size change, in the same save
+// that SEATS the party was silently discarded. `plannedDuration` then carried
+// the old length onward into Book Again. Pre-existing since v14.
+//
+// Measured live 2026-09-11 (R2): a 16:15 booking for 90 minutes, one save
+// setting Seated **and** 120 minutes at 15:56, stored **109 / 109 / 109** — the
+// 17:45 end pinned from the stored 90 — while the booking's own history entry
+// read "duration 90→120min". The right answer is **139**, an 18:15 end.
+//
+// A separate function rather than an argument to `applySeatedShift`, because
+// the quick-status door has no form and no such length: there, the stored
+// duration IS the one being saved, and a parameter it must remember to pass
+// would be a second way to get this wrong.
+export function seatedShiftFor(b,nowM,list,today,savedDuration){
+  if(!b) return null;
+  var dur=Number(savedDuration);
+  var base=(Number.isFinite(dur)&&dur>0&&dur!==b.duration)?Object.assign({},b,{duration:dur}):b;
+  return applySeatedShift(base,nowM,list,today);
+}
+// ── v18.0.0 session 7: the length a booking was BOOKED for ───────────────────
+// Book Again carries this over (Patryk, 2026-09-11): the plan, not the stay.
+// It cannot be read off one field, because two writes rewrite them after the
+// booking is made:
+//   • the seated shift (applySeatedShift, above) moves `time` to the moment of
+//     seating and rewrites `duration` AND `originalDuration` so the scheduled
+//     END stays pinned — 20:30 for 150, seated at 20:15, stores 165;
+//   • completion truncates `duration` (never `originalDuration`) to the real
+//     stay, and an overstay grows it live (syncLiveDurations).
+// `scheduledTime` is the one value neither touches, and the shift keeps
+// `time + originalDuration` equal to the scheduled end — so the plan is that
+// end minus the scheduled start. Where it cannot be computed (an unreadable
+// time, or a recovered end that is not after the start) the stored length
+// stands rather than an invented one; null only when there is no length at all.
+export function plannedDuration(b){
+  if(!b) return null;
+  const stored=Number(b.originalDuration)||Number(b.duration);
+  if(!Number.isFinite(stored)||stored<=0) return null;
+  const sched=isReadableTime(b.scheduledTime)?b.scheduledTime:b.time;
+  if(!isReadableTime(b.time)||!isReadableTime(sched)) return stored;
+  const len=toMins(b.time)+stored-toMins(sched);
+  return len>0?len:stored;
+}
+// ── v18.0.0 session 7: what the seat note shows ──────────────────────────────
+// A booking's notes are where "nut allergy" and "birthday cake with dessert"
+// live, and the moment they matter is when the party sits down. Patryk: seating a
+// booking that has notes raises a popover with the note and one button.
+//
+// ONE predicate for the two doors a booking is seated through — `updateStatus`
+// (the quick-status popup, the List card, the S key) and `doSaveEdit` (the form's
+// Save) — so they cannot disagree about when it opens. Only a move INTO seated
+// (re-saving a party already seated is not a seat), only a note with something in
+// it. `b` is the booking as it will stand — the form path passes the EDITED one,
+// so a note typed in the same save is the note shown.
+//
+// Returns a SNAPSHOT, not an id: the popover renders what was true at the seat,
+// which is what makes its height static and keeps a booking deleted on another
+// device in those seconds from blanking it. `time` is the booked time — the
+// seated shift has just moved `time` to now, and staff know a party by its
+// booking ("the 20:30 López party"), the reasoning Book Again already uses.
+export function seatNoteFor(prevStatus,nextStatus,b){
+  if(!b||nextStatus!=="seated"||prevStatus==="seated") return null;
+  const notes=typeof b.notes==="string"?b.notes.trim():"";
+  if(!notes) return null;
+  return {id:b.id,name:b.name||"",size:Number(b.size)||0,time:b.scheduledTime||b.time||"",tables:Array.isArray(b.tables)?b.tables.slice():[],notes:notes};
+}
+// ── v18.0.0 session 8 (C1): leaving seated puts the booked plan back ─────────
+// `applySeatedShift` moves `time` to the moment the party sat down and rewrites
+// `duration` AND `originalDuration` so the scheduled END stays pinned — a 20:30
+// booking for 150 minutes, seated at 20:15, is stored as 20:15 for 165. Nothing
+// undid that. Walking the booking back to Confirmed left it at 20:15 for 165,
+// which is a reservation nobody made, and every later read — the timeline block,
+// Book Again, the day sheet — showed the arrival time as the booked time.
+//
+// `scheduledTime` is the one field the shift never touches, so the plan is
+// recoverable exactly: the booked start IS `scheduledTime`, and the booked
+// length is `plannedDuration`. `customDur` follows `openEdit`'s rule — a length
+// is custom only when it differs from the size default — so an ordinary booking
+// walked back does not acquire a custom length equal to the default.
+//
+// Null when there is nothing to put back, so neither door writes a history
+// entry for a restore that restores nothing: no readable `scheduledTime` (a
+// pre-v14 booking), no recoverable length, or a booking that was never shifted.
+export function unseatRestore(b,size){
+  if(!b) return null;
+  var sched=isReadableTime(b.scheduledTime)?b.scheduledTime:null;
+  if(!sched||!isReadableTime(b.time)) return null;
+  var planned=plannedDuration(b);
+  if(!planned) return null;
+  var stored=Number(b.originalDuration)||Number(b.duration)||0;
+  if(b.time===sched&&planned===stored) return null;
+  var n=Number(size)||Number(b.size)||2;
+  return {time:sched,duration:planned,originalDuration:planned,customDur:planned===getDur(n)?null:planned};
+}
+// ── v18.0.0 session 8 (item 3): a booking SAVED as seated keeps its tables ───
+// v17.15.5 established this rule for a FINISHED booking — while it is being
+// saved as completed or cancelled its tables are a RECORD, so they are carried
+// through verbatim and it is never handed to the optimiser. A SEATED booking is
+// the same rule for a different reason: the party is physically at those tables.
+//
+// The optimiser itself was never wrong about this. `isLocked` has covered
+// `status === "seated"` since the beginning and `applyOpt` copies a locked
+// booking's tables straight through. What moved a seated party was
+// `unlockForOpt` in `doSaveEdit`, which rewrites the status to "confirmed"
+// BEFORE the optimiser runs, precisely so it WILL consider a booking it would
+// otherwise skip — the same mechanism that produced v17.15.5's two bugs, one
+// status along. Measured live 2026-09-11: a seated party on table 3, its time
+// edited 15:45 → 16:00, saved onto **1A** and stamped `_locked` + `_manual`,
+// with the form having previewed "(auto) · was: 3" first.
+//
+// ONE predicate, read by every site that has to agree — the flag written twice
+// is how two copies of a condition stop agreeing, which is why v17.15.5 hoisted
+// `unlockForOpt` out of `buildNext` in the first place. An explicit manual
+// assignment or an explicit clear still wins: those are a person saying so,
+// which is different from the optimiser deciding on its own.
+export function tablesPinned(status,hasManual,cleared){
+  if(hasManual||cleared) return false;
+  return status==="seated"||status==="completed"||status==="cancelled";
+}
+// C3: seating never asked whether the table still had somebody at it. The two
+// parties then hold the same table with both bookings `isLocked`, which is the
+// one clash `applyOpt` cannot separate and the reconciler deliberately leaves
+// alone — so nothing moves, and until v17.11.0's ClashBanner nothing said so
+// either. `applySeatedShift` looks at the same overlap but only to decline to
+// SHIFT the time; it seats the party regardless.
+//
+// Only a party that is actually SEATED counts. A confirmed booking later in the
+// evening is the optimiser's problem and it has one (the displacement guard);
+// somebody physically at the table is a question only a person can answer.
+export function seatClashParties(tables,date,id,list){
+  var ids=Array.isArray(tables)?tables:[];
+  if(!ids.length) return [];
+  var out=[];
+  (list||[]).forEach(function(o){
+    if(!o||o.id===id||o.date!==date||o.status!=="seated") return;
+    var shared=(o.tables||[]).filter(function(t){return ids.indexOf(t)>=0;});
+    if(shared.length) out.push({booking:o,tables:shared});
+  });
+  return out;
+}
+// The fields a seated→completed transition writes, as one place rather than
+// two. `updateStatus` has computed these inline since v16.2.0 and the seat-clash
+// prompt's "Complete them & seat" needs exactly the same arithmetic — a second
+// copy of the truncation rule is how the two would stop agreeing about what a
+// finished visit lasted.
+export function completedSeatedPatch(b,today,nowM){
+  var actual=Math.max(15,seatedElapsed(b,today,nowM));
+  return {status:"completed",duration:actual,customDur:actual,stayedMin:actual};
+}
+// ── v18.0.0 session 8 (C): are these tables still usable for this window? ────
+// The question a save has to ask when it changes a booking's WINDOW without
+// changing anything `needsR` looks at — a length edit, a revival from
+// cancelled/completed, the un-seat restore. Same slot construction as
+// `findFreeSlot` (completed excluded, blocks included, turnaround padding via
+// bookEnd/padEnd), so "free" means the same thing to both.
+export function tablesFreeFor(list,date,id,tables,s,e,blocks){
+  var ids=Array.isArray(tables)?tables:[];
+  if(!ids.length) return false;
+  var slots=(list||[]).filter(function(b){
+    return b&&b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==id&&(b.tables||[]).length>0;
+  }).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
+  if(blocks) slots=slots.concat(getBlockSlots(blocks,date));
+  return canAssign(ids,slots,s,padEnd(e));
+}
+// C2: a booking with no table could be seated, from every door — and once
+// seated it is `isLocked`, which `applyOpt` reads as "copy its tables through",
+// so a locked booking holding `[]` is never placed again by anything. The party
+// is at a table nobody recorded, the floor plan shows the room emptier than it
+// is, and no later pass corrects it. Refused at the door instead, with the
+// thing to do rather than a silent no-op.
+//
+// Only the TRANSITION is refused, never a later save of a booking already in
+// that state: the app declines to create the anomaly, and declines to hold
+// somebody's notes edit hostage to one that already exists.
+export function seatRefusal(b){
+  if(!b) return null;
+  if(!(b.tables||[]).length) return "Assign a table before seating this booking.";
+  return null;
+}
+// The refusal when a pinned party no longer fits the tables it is sitting at
+// (Patryk chose refuse over warn: the guests are already there, so the app
+// cannot quietly decide the arithmetic is close enough). `comboCapBest` is the
+// capacity rule the manual picker already uses, so the form's own Assign button
+// is the way through. Null when it fits — and null when there are no tables at
+// all, which is a different sentence and a different refusal.
+export function seatedFitRefusal(size,tables){
+  var ids=Array.isArray(tables)?tables:[];
+  if(!ids.length) return null;
+  var cap=comboCapBest(ids);
+  if(cap>=size) return null;
+  return "Party of "+size+" doesn't fit "+(ids.length>1?"tables ":"table ")+ids.join("+")+" (seats "+cap+"). Assign tables that seat "+size+".";
+}
+// Who does a pinned booking now clash with, and can they be moved? Split,
+// because the two answers are different sentences: an unlocked booking is
+// re-placed AROUND the party that is already sitting down, and a locked or
+// seated one is refused by name — there is nowhere to put a second party that
+// is also already at its table.
+export function pinnedClashParties(list,date,pinnedId){
+  var out={locked:[],movable:[]};
+  findClashes(list,date).forEach(function(c){
+    if(c.a!==pinnedId&&c.b!==pinnedId) return;
+    var otherId=c.a===pinnedId?c.b:c.a;
+    var other=(list||[]).find(function(b){return b.id===otherId;});
+    if(!other) return;
+    (isLocked(other)?out.locked:out.movable).push({booking:other,tables:c.tables});
+  });
+  return out;
+}
+// `tables` can legitimately be EMPTY — see findClashes: two bookings can need
+// the same physical join without sharing a table id. "Table  is also held by"
+// is a sentence with no table in it, so the wording branches rather than
+// interpolating whatever came back.
+export function pinnedClashRefusal(entry){
+  if(!entry||!entry.booking) return null;
+  var b=entry.booking;
+  var t=(entry.tables||[]).join("+");
+  return (t?("Table "+t+" is"):"Those tables are")+" also held by "+(b.name||"another booking")
+    +(b.time?(" at "+b.time):"")+", who is "+(b.status==="seated"?"seated":"locked to it")
+    +". Assign different tables.";
+}
+// Re-place whatever a pinned save displaces, newest first — `reconcile`'s own
+// tie-break, so the manual and the automatic path choose the same booking to
+// move and a second device reconciling the same data agrees.
+//
+// With the optimiser ON this is already done by the time it runs (`applyOpt`
+// treats a seated booking as locked and places everyone else around it), so
+// this is what makes the OFF path give the same answer instead of saving the
+// clash and leaving the reconciler to move somebody 400ms later under a toast
+// that says "after syncing". A booking it cannot place comes back with no
+// tables, which is the existing displacement refusal's input.
+//
+// Returns its INPUT array when nothing moved (the v17.14.0 identity contract).
+export function replacePinnedClashes(list,date,pinnedId,blocks,autoOptimizerState){
+  var next=list;
+  var guard=0;
+  while(guard++<8){
+    var movable=pinnedClashParties(next,date,pinnedId).movable;
+    if(!movable.length) break;
+    var pick=movable.map(function(e){return e.booking;})
+      .sort(function(a,b){return (b.updatedAt||0)-(a.updatedAt||0)||(a.id<b.id?1:-1);})[0];
+    var after=bookingsAfterAction(next,date,blocks,pick.id,true,autoOptimizerState);
+    if(after===next) break; // it cannot be moved; the refusal below names it
+    next=after;
+  }
+  return next;
+}
 export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,prefTables){
   // v16.0.0 follow-up: completed excluded — a completed visit's table is free.
   var slots=bookings.filter(function(b){return b.date===date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:bookEnd(b)};});
@@ -1138,7 +1481,7 @@ function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptim
 // are per-write metadata (a server echo must not read as a change), and
 // `history` grows on every write so comparing it would mark everything changed.
 var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
-  "originalDuration","customDur","preference","notes","deposit","status","noShow",
+  "originalDuration","customDur","preference","notes","deposit","voucherCode","status","noShow",
   "tables","_manual","_locked","_conflict","preferredTables","returnOf",
   "recurringId","recurringDate","anonymized"];
 // v17.10.2 (/code-review): the separators are ASCII control characters, not "|"

@@ -328,6 +328,67 @@ export function ClashIcon(props) {
   );
 }
 
+// Copy the voucher number (v18.0.0 session 8) — Patryk supplied the mark: two
+// overlapping sheets inside a ring.
+//
+// ── THE RING IS LOAD-BEARING, NOT DECORATION ────────────────────────────────
+// Two overlapping squares on their own ARE `ClashIcon` directly above, and that
+// icon is an IDENTITY in the notification strip's collapsed tally rather than a
+// decoration — its own note explains that two sections wearing one mark would
+// render "⧉2 ⧉1" and say nothing. `VouchersSettings.jsx` had declined an icon
+// here for precisely that reason and shipped the word "Copy" instead. The
+// enclosure is what makes the two marks separable: a ring reads as an action you
+// can take, where ClashIcon sits bare in a tally row. Drop the circle and this
+// becomes the collision the set spent a version avoiding.
+//
+// ── THE FRONT SHEET IS FILLED ───────────────────────────────────────────────
+// The second deliberate exception to the set's no-fill rule after `StarIcon`,
+// and for StarIcon's reason: three nested outlines inside a 24-unit ring close
+// up into a blob at the sizes this ships at. The fill is also what carries the
+// "one sheet in front of another" read — with both sheets outlined, the overlap
+// is ambiguous about which is on top.
+//
+// ── THE BACK SHEET IS AN L, AND THAT IS THE LOAD-BEARING PART ───────────────
+// It is an L rather than a whole square because that is what is VISIBLE of it:
+// the front sheet covers its lower-left corner. The first version of this
+// comment stopped there and called it "fewer strokes for the same silhouette",
+// which was true and was not the reason.
+//
+// **Judged rasterised at 18px and magnified, against four candidates** — the
+// DepositIcon lesson, and it rejected the first drawing that shipped in this
+// commit rather than confirming it. What the magnification showed:
+//
+//   • The first attempt put the ring at r=10 (inner edge r=9) with the L's
+//     corner 7.78 from centre — barely one device pixel of clearance at 18px —
+//     so the L FUSED with the ring and the mark read as one filled square in a
+//     circle. At 14px the L vanished outright.
+//   • Pulling the sheets inward as a full RECT (two candidates, corners 6.0 and
+//     6.6 from centre) came out WORSE, not better: the back rect's strokes sit
+//     directly behind the filled front and the pair merged into a single tall
+//     notched blob. So clearance alone was never the fix.
+//   • The L pulled in wins because it does both things at once — it clears the
+//     ring, AND it is missing precisely the two strokes that would otherwise
+//     collide with the front sheet's fill.
+//
+// Every interior corner now sits within ~6.2 of centre, i.e. about 2.8 units
+// clear of the ring's inner edge. Checked side by side against ClashIcon at the
+// same size: ring plus filled front against two bare outlines, distinguishable
+// at a glance, which is the whole point of the enclosure.
+//
+// Ships at `IC.chrome` (18) in an icon-only button — HistoryIcon's precedent one
+// note down, and for the same measured reason rather than by copying it. At 14px
+// every candidate degraded, so it is NOT a candidate for a block flag or a List
+// row tag, where the set's marks render at `IC.control`.
+export function CopyIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.2 6.8h5.9v5.9" />
+      <rect x="7.2" y="10.4" width="6.8" height="6.8" rx="1.1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 // Working offline — a struck-through cloud. The slash is the load-bearing part
 // (a cloud alone reads as "syncing"), and it runs corner to corner so it stays
 // legible at 14px where the cloud's own outline is nearly closed.
@@ -357,6 +418,35 @@ export function AlertIcon(props) {
 // permission problem) and not a calendar (which is what every DATE control in
 // the app already is); a struck circle is the one mark that says "not today"
 // without competing with either.
+// v18.0.0 session 8 (item 6) — the per-booking history, as a mark. Patryk chose
+// a clock with a counter-clockwise arrow over the other candidates: the button
+// was the words "History (4)" and took the width of three controls in a footer
+// that already holds Book Again and Delete.
+//
+// Three shapes, and the arc is what carries the meaning. A plain clock face is
+// "time", not "what happened to this"; the anticlockwise sweep is the "back
+// through time" convention every restore/undo-history control uses. The gap in
+// the arc sits at the top-LEFT so the corner arrowhead reads as returning, and
+// the hands point to 7:30 rather than 3:00 — a horizontal hand at this size
+// merges with the arrowhead's own horizontal stroke.
+//
+// **Judged rasterised, magnified 10×, beside ClosedIcon and WaitIcon** — the
+// DepositIcon lesson, and it decided the size rather than confirming it. At
+// **14px** (`IC.control`) the hands merge into the arc's lower-left and the
+// mark reads as a filled disc with a notch out of it; at **18px**
+// (`IC.chrome`) all three shapes stay distinct. So it ships at `IC.chrome`, in
+// an icon-only button — which is the size such a button wants anyway — and it
+// is NOT a candidate for a timeline block flag or a List row tag, where the
+// set's marks render at `IC.control`.
+export function HistoryIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M3.2 12a8.8 8.8 0 1 0 2.8-6.5" />
+      <path d="M3 3.6v4.8h4.8" />
+      <path d="M12 7.4V12l3.4 2" />
+    </Svg>
+  );
+}
 export function ClosedIcon(props) {
   return (
     <Svg {...props}>
@@ -456,6 +546,41 @@ export function DepositIcon(props) {
     <Svg {...props}>
       <rect x="2" y="5.5" width="20" height="13" rx="2.5" />
       <circle cx="12" cy="12" r="3.4" />
+    </Svg>
+  );
+}
+
+// v18.0.0 — the gift voucher: a gift CARD with a ribbon and a tie. Redrawn
+// from a reference Patryk supplied, replacing a price tag (/code-review).
+//
+// **The bow is a V, not two loops, and that is a measurement rather than a
+// simplification made for convenience.** Seven candidates were rasterised at
+// the 14px this ships at and magnified 8×, which is the method `DepositIcon`
+// records. Two of them drew the reference's actual bow — one as a pair of
+// closed loops on the card, one as two circles inside it — and **both closed
+// into a solid dark blob**: an interior shape needs ~3× the stroke to stay
+// open, and at 14px a bow loop is under it. That is the same wall `LockIcon`'s
+// missing keyhole and `DepositIcon`'s own two redraws hit. A V is open
+// geometry, so it survives at any size, and it reads as the tie the bow sits
+// in.
+//
+// **The V is also what keeps this distinct from `DepositIcon`**, which was the
+// whole argument for the tag it replaces. Both are landscape rounded rects at
+// almost the same ratio (this is 20×13, the reference's own 1.56:1), so as
+// closed outlines they would be confusable — and they sit in the SAME flag rail
+// on the SAME card. The V rises ABOVE the card's outline, so the two differ in
+// silhouette before any interior detail resolves, which is a stronger
+// separation than the tag's point gave: a tag is still one closed shape.
+//
+// A horizontal ribbon was tried too (candidate C, closest to the reference,
+// which has a divider across the card). At 14px the four quadrants read busy
+// and the extra line competes with the card's own edges. Dropped.
+export function VoucherIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="7.5" width="20" height="13" rx="2.5" />
+      <path d="M12 7.5v13" />
+      <path d="M8 3.5 12 7.5 16 3.5" />
     </Svg>
   );
 }

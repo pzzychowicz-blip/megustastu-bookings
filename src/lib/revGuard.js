@@ -63,14 +63,39 @@ export function attachRev(path, revRef){
 // path, which is a restructure with its own hazards (see ROADMAP). Until then:
 // the app's write path is safe because it goes through here, and the rules are
 // not what makes it so.
-// Returns the update() promise (already .catch-handled via onReject).
-export function writeWithRev(path, value, revRef, onReject){
+// `onDone` (v18.0.0 session 8) fires ONLY when the server accepted the write —
+// the activity log's hook point, and the reason it is a callback rather than
+// something a caller chains onto the return value.
+//
+// **The returned promise cannot be used to detect success, and the comment here
+// used to invite exactly that.** It said "returns the update() promise (already
+// .catch-handled via onReject)", which is true and leads straight into a trap: a
+// `.catch()` whose handler returns normally produces a FULFILLED promise, so
+// `writeWithRev(...).then(log)` runs on a REJECTED write too. Measured on plain
+// promises rather than reasoned about — the `.then` ran with `value: undefined`
+// after the catch handler had already reported the failure. Logging every
+// refused write as though it landed is the precise inverse of what the log is
+// for, so the success path is handed out explicitly instead.
+//
+// `onDone` is wrapped: it runs INSIDE the promise chain, so a throw in it would
+// otherwise be caught by the `.catch` below and reported as a failed write —
+// turning a broken log entry into a false write-error banner over a write that
+// succeeded. The same "a log entry is worth less than the write" rule
+// `lib/activitySink.js` is built on, enforced one layer out as well because
+// this is where the two paths meet.
+//
+// Returns the promise for the write. Its FULFILMENT says nothing about success.
+export function writeWithRev(path, value, revRef, onReject, onDone){
   const nextRev = (revRef.current || 0) + 1;
   revRef.current = nextRev; // optimistic — see header
   const patch = {};
   patch[path] = value;
   patch[path + "Rev"] = nextRev;
-  return update(ref(db), patch).catch(function(err){
+  return update(ref(db), patch).then(function(){
+    if(!onDone) return;
+    try{ onDone(); }
+    catch(e){ console.warn("[activity] "+path+" log entry threw — the write itself landed.",e); }
+  }).catch(function(err){
     // v17.16.13: `err` was in hand here and the message threw it away, naming
     // "stale revision" for what is equally often a failed .validate or an
     // undeployed rule. The rollback claim stays — that one IS measured: the SDK

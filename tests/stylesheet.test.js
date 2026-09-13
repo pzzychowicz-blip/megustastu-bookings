@@ -31,9 +31,11 @@
 // where a selector should be) is visible without full spec compliance.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { APP_NAME } from "../src/lib/constants.js";
+import { stripComments as stripJs } from "../scripts/strip-comments.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HTML = readFileSync(join(ROOT, "index.html"), "utf8");
@@ -53,6 +55,7 @@ const CRITICAL_SELECTORS = [
   ".mgt-press:active",                // the press dim — the v17.8.0 casualty
   "button:active",                    // the universal press-scale
   ":focus-visible",                   // the keyboard ring
+  ".mgt-datefield:has(input:focus-visible)", // the date pill's ring — DateField hides its input's own
   ".mgt-notif",                       // the strip's section hairlines
   ".mgt-card-in",                     // modal/popover entrance
   ".mgt-card-out",                    // modal/popover exit
@@ -151,7 +154,8 @@ describe("the app stylesheet (src/index.css)", () => {
   // Inline in index.html the CSS could not fail to load. That property is what
   // was traded away for the caching win, and this is what buys it back.
   it("is actually imported by the entry module", () => {
-    const main = readFileSync(join(ROOT, "src", "main.jsx"), "utf8");
+    // v18.0.0 phase 4: JS source, so comments off (test-hygiene.test.js).
+    const main = stripJs(readFileSync(join(ROOT, "src", "main.jsx"), "utf8")).join("\n");
     expect(main, "src/main.jsx must import ./index.css or the app ships unstyled")
       .toMatch(/^\s*import\s+["']\.\/index\.css["']/m);
   });
@@ -284,5 +288,156 @@ describe("the app stylesheet (src/index.css)", () => {
     expect(offenders,
       "a [role=\"button\"] rule applies a transform without excluding .mgt-glyph — " +
       "this teleports every floor-plan table to the plan origin").toEqual([]);
+  });
+});
+
+// ── The app's own name, in the static files that cannot import it ───────────
+//
+// v18.0.0 phase 2. `APP_NAME` (src/lib/constants.js) made the app's name one
+// value for every file that can `import` — which was the fix for four
+// hand-typed copies, one of which had silently drifted to a third spelling
+// ("MGT Booking System") that no gate in the repo could see.
+//
+// Copies survive where a file CANNOT import: `index.html`,
+// `public/manifest.webmanifest` and `public/sw.js`. They are the same defect
+// the constant was created to remove, so they get the only guard that can reach
+// them — this one. A rename of APP_NAME fails the build until every one of them
+// follows.
+//
+// /code-review fix, and it is this section's own lesson landing on itself: the
+// first version pinned FOUR sites and its comment said "TWO COPIES REMAIN",
+// while a repo-wide grep finds SEVEN. The three it missed are the ones a user
+// sees when the app is BROKEN — `index.html`'s boot-watchdog heading, and the
+// service worker's offline `<title>` and body copy. So the promise "a rename
+// here fails the build until they follow" was false for exactly the screens
+// that would have gone out carrying the old name. Adding a copy is easy;
+// noticing one is not, which is why the count is asserted below rather than
+// described in a comment that cannot be run.
+//
+// Every extraction goes through `once()`, which fails unless the pattern
+// matches EXACTLY ONE time. The first version used a bare `.match()`, taking
+// the first hit anywhere in the file — the v17.15.1 csp.test.js failure, which
+// this comment cited while repeating its shape: an HTML comment mentioning a
+// literal `<title>` (the head already carries multi-line comments) or an inline
+// SVG `<title>` would have shadowed the real one silently.
+//
+// The manifest's `description` is a different question from a drifted copy of
+// the app's name, and it is answered elsewhere in this file: v18.0.0 phase 6
+// made the SOURCE file tenant-neutral and generates the restaurant half at build
+// from `src/tenants/<slug>.js`. See "the install card" below.
+describe("the app's own name (APP_NAME)", () => {
+  const MANIFEST_SRC = readFileSync(
+    join(ROOT, "public", "manifest.webmanifest"), "utf8"
+  );
+  const MANIFEST = JSON.parse(MANIFEST_SRC);
+  // v18.0.0 phase 4: RAW, deliberately, and it was measured. This assertion
+  // counts how often the app's name appears in the file's TEXT — header comment
+  // included, as the line below says — so stripping comments is not a
+  // refinement here, it is a different question: the count went 3 → 2 and the
+  // suite went red. `tests/test-hygiene.test.js` is what forced the choice to be
+  // made rather than defaulted.
+  const SW = readFileSync(join(ROOT, "public", "sw.js"), "utf8");
+
+  // Exactly one match, or the guard is measuring bytes nobody chose.
+  function once(text, re, label) {
+    const all = [...text.matchAll(new RegExp(re.source, re.flags + "g"))];
+    expect(all.length, label + ": expected exactly one match, got " + all.length)
+      .toBe(1);
+    return all[0][1];
+  }
+
+  it("is what index.html's <title> says", () => {
+    expect(once(HTML, /<title>([^<]*)<\/title>/, "index.html <title>").trim())
+      .toBe(APP_NAME);
+  });
+
+  it("is what index.html's apple-mobile-web-app-title says", () => {
+    expect(once(
+      HTML,
+      /<meta\s+name="apple-mobile-web-app-title"\s+content="([^"]*)"/,
+      "index.html apple-mobile-web-app-title"
+    )).toBe(APP_NAME);
+  });
+
+  // The boot watchdog — the screen shown when the bundle never mounts, so it is
+  // one of the two places the name is read at the app's worst moment. Inside
+  // the CSP-hashed inline script: this reads it, and must never rewrite it.
+  it("is what index.html's boot-watchdog heading says", () => {
+    const heading = once(
+      HTML, /h\.textContent = "([^"]*)"/, "index.html boot-watchdog heading"
+    );
+    expect(heading.startsWith(APP_NAME),
+      "the boot watchdog heading must start with APP_NAME, got: " + heading
+    ).toBe(true);
+  });
+
+  it("is what the web manifest's name and short_name say", () => {
+    expect(MANIFEST.name).toBe(APP_NAME);
+    expect(MANIFEST.short_name).toBe(APP_NAME);
+  });
+
+  // The offline page the service worker serves for a navigation it cannot
+  // fetch. The other worst-moment screen.
+  it("is what the service worker's offline page says", () => {
+    const title = once(SW, /<title>([^<]*)<\/title>/, "sw.js offline <title>");
+    expect(title.endsWith(APP_NAME),
+      "the offline page title must end with APP_NAME, got: " + title).toBe(true);
+
+    const body = once(
+      SW, /<p>([^<]*?) can't load right now/, "sw.js offline body copy"
+    );
+    expect(body).toBe(APP_NAME);
+  });
+
+  // The count itself. Everything above pins a site somebody thought to pin; a
+  // NEW copy is invisible to all of it, and an invisible copy is the whole
+  // defect. Static files import nothing, so the only defence is knowing how
+  // many there are — raise this deliberately, or delete the copy instead.
+  it("appears in the static files exactly as often as it is pinned", () => {
+    const count = (t) => t.split(APP_NAME).length - 1;
+    // index.html: <title>, apple-mobile-web-app-title, watchdog heading.
+    expect(count(HTML), "index.html").toBe(3);
+    // manifest: name, short_name. (`description` names the RESTAURANT.)
+    expect(count(MANIFEST_SRC), "manifest.webmanifest").toBe(2);
+    // sw.js: the file header comment, the offline <title>, the offline body.
+    expect(count(SW), "sw.js").toBe(3);
+  });
+});
+
+// ── The install card (v18.0.0 phase 6) ──────────────────────────────────────
+// `public/manifest.webmanifest` was the last place in the repo where a
+// RESTAURANT's name was authored into a static file. A static file imports
+// nothing, so a per-tenant value there is a build step rather than a constant —
+// `vite.config.js`'s `tenantManifest()` plugin, which serves the generated file
+// on the dev server and writes it into `outDir` on a build, from ONE loader.
+describe("the install card names the tenant, and the source names nobody", () => {
+  const SRC = readFileSync(join(ROOT, "public", "manifest.webmanifest"), "utf8");
+  const TENANT = readFileSync(join(ROOT, "src", "tenants", "mgt.js"), "utf8");
+  const restaurant = (TENANT.match(/name:\s*"([^"]+)"/) || [])[1];
+
+  it("the tenant module is where the restaurant's name lives", () => {
+    expect(restaurant).toBeTruthy();
+  });
+  it("the SOURCE manifest names no restaurant, and stands alone without one", () => {
+    expect(SRC).not.toContain(restaurant);
+    expect(JSON.parse(SRC).description).toBe("Staff booking management");
+  });
+  it("the plugin is actually wired into the build", () => {
+    const cfg = readFileSync(join(ROOT, "vite.config.js"), "utf8");
+    expect(cfg).toMatch(/function tenantManifest\(/);
+    expect(cfg).toMatch(/plugins:\s*\[[^\]]*tenantManifest\(\)/);
+    // Both halves, from one loader — a build-only version would leave the dev
+    // server serving different text from production.
+    expect(cfg).toMatch(/configureServer/);
+    expect(cfg).toMatch(/closeBundle/);
+  });
+  // `dist/` only exists after a build, like tests/csp.test.js's built-html check.
+  const DIST = join(ROOT, "dist", "manifest.webmanifest");
+  it.runIf(existsSync(DIST))("the BUILT manifest names the tenant's restaurant", () => {
+    const built = JSON.parse(readFileSync(DIST, "utf8"));
+    expect(built.description).toBe("Staff booking management for " + restaurant);
+    // The app's own name is untouched by the generation.
+    expect(built.name).toBe(JSON.parse(SRC).name);
+    expect(built.short_name).toBe(JSON.parse(SRC).short_name);
   });
 });

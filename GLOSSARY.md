@@ -18,10 +18,14 @@ both of them warn about.
 user-visible surface adds its row here, in the same PR. A glossary that lags is
 worse than none, because it is quoted with confidence.
 
-Sections 1–9 and 11 are **the shipped app**. Section 10 is the **WhatsApp
-sandbox**, which is not on `main` and not in the restaurant's app — it is marked
-as such at its own heading, and the distinction matters more than any other in
-this file.
+Sections 1–11 are all **the shipped app** as of v18.0.0 phase 5. Section 10 was
+the **WhatsApp sandbox** for eight versions, and the distinction it carried —
+"real code you can read, none of it in the app the restaurant runs" — mattered
+more than any other in this file. It is gone: the module is merged, and what
+replaces it is a weaker but still real line. WhatsApp is **shipped and switched
+off**, so its surfaces exist in the build and are absent from a restaurant whose
+admin has not enabled the module. The one thing still not shipped is the
+**simulator** (§10, `WaSimulator.jsx`), which is DEV-only by construction.
 
 ---
 
@@ -36,8 +40,9 @@ this file.
 | Two views at once, with a draggable divider | **split view** (`SplitLayout.jsx`, `split` state) | Tablet/desktop only (≥600px). The same view can never fill both panes. |
 | The two-step popup that sets a split up | **split menu** (`SplitMenu.jsx`) | Direction, then which second view. |
 | Corner brackets around one pane | **focused pane** | Which half the keyboard acts on. |
-| ‹ date › row under the header | **date-nav row** (`<nav aria-label="Date">`) | Previous day · viewed date · next day. |
+| ‹ date › row under the header | **date-nav row** (`<nav aria-label="Date">`) | Previous day · viewed date · next day. The viewed date is a **date field**, so it names its weekday. |
 | The date currently on screen | **viewed date** (`viewDate`) | Distinct from **today** — most notifications are today-only, clashes are not. |
+| "Fri 11/09/2026" — a date pill that names its weekday | **date field** (`DateField`, `atoms.jsx`) | A native date input with its weekday inside the same pill (v18.0.0 session 7): the header's viewed date and the booking form's Date field. No date, no weekday. Its focus ring is drawn on the pill, not on the input inside it. |
 | Pinned header and nav that don't scroll away | **fixed shell** (`shellFixed`) | One layout mode behind both "Lock navigation" and split view. |
 | A pill that appears at the top-left on Tab | **skip link** (`.mgt-skip`) | Jumps keyboard focus past the header to the bookings. |
 
@@ -164,12 +169,15 @@ The distinction is load-bearing: a **modal** is a dialog (scrim, focus trap,
 | A saturated button that commits or destroys — Save booking, Seat, Block, Delete, Discard, No show | **solid button** (`mkSolidBtn`, v17.15.0) | `mkBtn`'s counterpart for an action with consequences. `background` is required, so nobody answers the colour question by accident. Twelve hand-written copies before it, which had already produced one live disagreement: "No show" wore two different oranges. |
 | Which surface Escape closes | **modal stack** (`useModalStack.js`, `MODAL_Z`) | One ordered stack replacing eighteen visibility booleans. `MODAL_Z` **is** the z-order as data; `topModal()` is what Escape acts on. Read state as `modalOpen.<id>`, write via `setModalFns.<id>` — both generated from `MODAL_Z`, so a surface without a rank has no setter and no Escape action, and `tests/modal-stack.test.js` fails the build. |
 | Small popup over a block or table | **quick-status popup** (`QuickStatusPopup.jsx`) | Right-click / press-and-hold. Status changes during service. Paints `--tl-popup-scrim`, not `--scrim`. |
+| "Note — Maria López" over a party just seated | **seat note** (`SeatNoteModal.jsx`, modal id `seatnote`) | A booking's notes, put in front of whoever seats the party (v18.0.0 session 7). Raised by every seat — the quick-status popup, the List card, the S key and the form's Save — never by a walk-in. One button, Done. |
 | The booking form | **booking form** (`BookingFormModal.jsx`) | New and edit. Controlled — state lives in `BookingApp`. |
 | The walk-in form | **walk-in form** (`WalkinForm.jsx`) | |
 | Table picker with Swap busy | **manual assign** (`ManualModal.jsx`) | Pin a booking to chosen tables. |
 | From/To over a table | **table block editor** (`BlockModal.jsx`) | Makes a table unavailable for a window. |
 | Search over all dates | **find a booking** (`SearchPanel.jsx`) | `/` shortcut. Jumps to the day and focuses the card. |
 | Week / Month popover | **More** (`WeekView.jsx`) | `M`. Opened from Summary's More button. |
+| "That table is still occupied" before a party is seated | **seat-clash confirm** (`SeatClashModal.jsx`, modal id `seatclash`) | Asked when the table you are seating a party onto still has a seated party at it (v18.0.0 session 8). Three answers — *Complete them & seat* · *Seat anyway* · *Back* — because refusing outright is wrong (most evenings the previous party has left and nobody tapped Complete) and seating silently is the bug. Escape and the backdrop mean Back. Raised from both seating doors through `seatClashParties` |
+| The clock-with-a-backwards-arrow button in the booking form's footer | **History icon button** (`HistoryIcon`, `Icons.jsx`) | Opens the history popup (v18.0.0 session 8). Icon-only since session 8 — it was the words "History (4)" and took the width of three controls in a footer that also holds Book again and Delete. The COUNT moved into the accessible name ("History, 4 entries") and the tooltip, so nothing was lost by dropping the text |
 | Per-booking audit trail | **history popup** (`HistoryPopup.jsx`) | |
 | Dot + popover in the header | **connection status** (`ConnectionStatus.jsx`) | Green/amber/red. Lists connected devices and the signed-in email; holds Log out and Reconnect now. |
 | Floating message, bottom centre | **status toast** (`StatusToasts.jsx`) | **One slot** — the highest-priority live toast only, crossfading in place. `role="status"`. |
@@ -219,6 +227,9 @@ for the same reason the connection popover carries `aria-haspopup` but not
 
 ---
 
+| "How much of it did this bill use?" | **redeem prompt** (`VoucherRedeemModal.jsx`) | Raised BY a completion, the way the kitchen confirm is raised by a save. Three exits: redeem, complete without using it, or Escape (which completes nothing). |
+| The "Gift voucher" field in the booking form | **voucher picker** (`VoucherPicker.jsx`) | Attaches a voucher to a booking. **Attaching is not redeeming** — it writes `booking.voucherCode` and moves no money. |
+
 ## 8. Domain concepts
 
 Where the real ambiguity lives.
@@ -248,36 +259,77 @@ Where the real ambiguity lives.
 | "Data removed" | **anonymised booking** (`anonymized`) | Deleting a customer keeps the stats and wipes the identity. |
 | The green dot / amber dot / red dot | **connection state** | Green connected · amber **connecting** (never handshaked) · red lost. The three are distinct on purpose. |
 | Other devices in the popover | **presence** (`usePresence.js`) | Ephemeral, per-connection. A device is "connected" only inside a 150s staleness window. |
+| "MGT Bookings" vs "Me Gustas Tú" | **app name** (`APP_NAME`) vs **restaurant name** (`settings/general.restaurantName`) | Two different things, and confusing them has shipped a bug (v17.15.2: the printed day-sheet footer built the app's name out of a restaurant setting). `APP_NAME` is one constant in `lib/constants.js`; the restaurant name is configurable and seeds from the tenant profile. A fallback from one to the other is fine; a **composition** of the two is not. |
+| Which restaurant this build is for | **tenant** (`VITE_TENANT`, `src/tenants/<slug>.js`, `profile`) | One module per restaurant, exporting `{ firebaseConfig, profile }` — the profile carries `slug`, `name`, `locale`, `waContext`. Selects the PRODUCTION project only: `import.meta.env.DEV` still forces the one shared DEV sandbox, whatever the tenant. Shown in the boot banner beside the DEV/PROD badge. |
 
 ---
 
+| Settings → Admin → **Open the log**: every change, who made it, and when | **activity log** (`/activity`, `ActivityLogModal.jsx`, modal id `activity`; `lib/activity.js` decides what each entry SAYS, `hooks/useActivityLog.js` writes and reads it) | One entry per thing that happened — a booking's own history entries, deletions, voucher movements, settings changes, sign-ins (v18.0.0 session 8). Create-only: an entry cannot be edited or deleted, and is pruned by an admin after 12 months. **Guest names are not stored in it** — the text holds `{b:<id>}` tokens resolved against the live bookings list, so an anonymised booking reads "Data removed" with no pass over the log, and only a DELETED booking's entry carries a name (plus an indexed `guestKey`, which is how erasure finds it). Readable by any signed-in account, because root `.read` cascades — the panel says so rather than implying otherwise |
+| A log row the app made rather than a person | **Automatic entry** (`auto: true`) | The optimiser re-placing tables, the close-time auto-complete, a silent write. A reshuffle is ONE row ("2 bookings re-placed"), not one per booking, and the per-minute overstay extension is not recorded at all — a duration-only change touches neither a booking's history nor its tables, which are the only two things the log reads |
+| "Move the rest of this voucher?" after a visit is completed | **carry prompt** (`VoucherCarryModal.jsx`, modal id `vouchercarry`; `carryTarget`, `lib/vouchers.js`) | Offers a voucher's leftover balance to the same guest's next live booking (v18.0.0 session 8). Raised after the redeem prompt is answered and its write dispatched — on BOTH answers, since "Complete without using it" leaves the whole balance behind. It prefers the booking made by Book Again from this visit, else the guest's earliest later one, and never a booking that already carries a voucher. *Move it* attaches the number (attaching is not redeeming); *Not now*, Escape and the backdrop leave it open and attachable by hand. This is the answer to "what about Book Again from a seated booking" — the code cannot be copied while the visit still holds it |
+| The "Copy" button beside a voucher number | **Copy** (`CopyBtn`, `VouchersSettings.jsx`) | Puts the formatted number on the clipboard, in Settings → Vouchers and on the "Issued …" confirmation (v18.0.0 session 8). A TEXT button, not an icon: the usual copy glyph is two overlapping sheets, which is `ClashIcon`'s silhouette, and that mark is an identity in the notification strip's tally. The word and the name change together ("Copy" → "Copied"), which keeps Label-in-Name true in both states |
+| A gift voucher's number | **voucher code** (`normalizeCode`, `lib/vouchers.js`) | The child key of `/vouchers/{CODE}`, so uniqueness is a property of the storage. Generated codes avoid `0/O` and `1/I/L`; a manual code is stored exactly as typed. |
+| A voucher that has been taken out of use | **voided** (`status: "void"`) | Not deleted — deleting would free the number for re-issue. **A voucher is never deleted anywhere in the app.** |
+| A completed booking whose voucher was never recorded | **unsettled** (`isUnsettled`, `UnsettledBanner.jsx`) | Reached by the close-time auto-complete (nobody is there to answer) or by "Complete without using it". Surfaces as a strip section that clears itself when recorded. |
+| What a voucher has left | **remaining** (`remainingOf`) | DERIVED as `value − redeemedTotal(ledger)`, never decremented — which is what makes a replayed redemption idempotent. |
+| A voucher used on a visit | **redemption** (`v.redemptions[bookingId]`; `applyRedemption` / `removeRedemption`, `lib/vouchers.js`) | One ledger entry per booking, keyed by the booking's id — so a retried or replayed redemption rewrites the same entry instead of adding a second, and a walk-back removes exactly that one. **Remaining** is derived from these. |
+
 ## 9. Settings and admin
 
-Six tabs, split by **audience**: what the restaurant *is*, then what it *holds*,
-then how *you* look at it, then reference.
+Nine tabs, split by **audience**: what the restaurant *is*, then what it
+*holds*, then how *you* look at it, then reference — and, since v18.0.0, who may
+do what. **A tab can be conditional on two different questions, asked in this
+order** by `visibleTabs`: a **module** gate hides it from everybody, admin
+included, when the restaurant does not have the feature — Vouchers, WhatsApp
+(*does this restaurant have it*); a **capability** gate shows it only to an
+account holding one of its capabilities — General, Layout, Reminders, WhatsApp,
+Admin (*may you*). Customers, App and Shortcuts are always there.
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| General · Layout · Customers · Reminders · App · Shortcuts | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. |
+| General · Layout · Customers · Vouchers · Reminders · WhatsApp · App · Shortcuts · Admin | **settings tabs** (`SETTINGS_TABS`, `SettingsChrome.jsx`) | **One list, never duplicated** — the tab bar renders it and the ←/→ nav derives its cycle from it. Since v18.0.0 both read it through **`visibleTabs(can, hasModule)`**, so a gated tab is filtered out of the render *and* the cycle. The module is checked FIRST: off hides the tab from everybody, an admin included. **WhatsApp (v18.0.0 phase 5) is the first tab carrying BOTH gates** — `module: "whatsapp"` and `caps: ["settingsWrite"]` — which is the pair `visibleTabs` was written for. |
+| Settings › App › **Automatic dark mode**, above **Dark mode** | **automatic theme** (`theme: "auto"`, `useUserPrefs.js`) | Follows this device's light/dark setting, live. Dark mode is locked while it is on. Saved per account like the theme itself; an account that never chose reads as Automatic. |
+| The Vouchers tab body | **vouchers settings** (`VouchersSettings.jsx`) | Issue · search · filter · void, plus the default validity period. Records and their configuration in one place. There is **no delete** — see `CLAUDE.md`. |
+| "Default validity", in months | **voucher expiry period** (`settings/voucherDefaults.expiryMonths`) | Seeds `expiresAt` on a newly issued voucher. `0` means never. |
 | Opening hours, shifts, durations, late thresholds | **General** | The restaurant's operating rules. Restaurant-wide. |
 | Tables, combos, priorities, floor plan | **Layout** (`LayoutSettings.jsx`) | The physical room. |
 | Theme, app width, reduce animations, zoom steppers | **App** | Read once by whoever is *holding* the device. Five of eight follow the account. |
 | Drag-and-drop room editor | **floor plan editor** (`FloorPlanEditor.jsx`) | Snap-10 canvas, walls, doors, per-side chairs. |
 | "Shared across all devices" | **restaurant-wide setting** | The six `settings/*` nodes. |
 | "This device only" | **per-device setting** | App width, the four zoom values, the saved split layout — properties of the screen. |
-| A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view. Tri-state: `null` means never chosen. |
+| A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view. Tri-state: `null` means never chosen — and `theme` takes a third value, `"auto"` (the **automatic theme**). |
+| The Admin tab body | **Admin** (`AdminSettings.jsx`) | People, their levels, invitations, and the enforcement switch. Admin-only at both layers — the tab is filtered out, and the rules refuse the writes regardless. |
+| Staff · Manager · Admin | **level** (`role`, `/roles/{uid}`) | The three named tiers. `staff` runs a service; `manager` owns money and configuration; `admin` also administers the app. An absent level reads as **staff**. The names on screen ARE the code's values — `staff` · `manager` · `admin` — unlike **optimiser** / `optimizer`, this file's one deliberate UI-vs-code split, so there is no second spelling to look for. |
+| A single ticked cell on someone's row | **extra** (`/roles/{uid}/extras/{cap}`) | One capability granted to one person **on top of** their level. The map that ADDS; its opposite is a **deny**, so a level is always a floor. |
+| A cell switched **off** on someone's row (red ✕) | **deny** (`/roles/{uid}/denies/{cap}`) | One capability taken away from one person, below what their level grants — v18.0.0 phase 3, Patryk's call, because a level that cannot be reduced is a minimum rather than a default. A tick and a deny can never both be set for one capability: `setCapability` clears both maps and picks one from the level, so the screen only asks "should this person have this?". A deny is a present `true`, never `false` — the rules test `.val() !== true`. An admin may not deny their own `settingsAdmin`; that is the last-admin invariant. |
+| "Export the data" | **`dataExport`** | The one gated capability with **no rule behind it**, and `CAPABILITIES` says so rather than letting the enforced chip imply otherwise: the backup file is built client-side out of reads, and `.read` is `auth != null` at the root, so gating it server-side would mean restructuring every read in the app. Hiding the button covers the real threat and no more. |
+| "Take bookings", "Delete bookings", "Change settings" … | **capability** (`CAPABILITIES`, `src/lib/roles.js`) | The eighteen things the app gates on, in four groups (`CAP_GROUPS`) — Service, Money, Configuration, Data and access. Eighteen because v18.0.0 phase 3 split `settingsWrite` into five: reminders, standing bookings, the opening hours, the floor plan, and what was left. Each split capability kept `manager` as its floor, so the split changed nobody's access on the day it shipped. The UI always asks `can("bookingDelete")`, **never** `role === "admin"`. |
+| The "enforced by the server" chip | **rule-enforced capability** (`RULE_ENFORCED`) | **Seven** the database refuses too — `settingsAdmin`, `settingsWrite`, `bookingDelete`, `reminderManage`, `recurringManage`, `hoursEdit`, `layoutEdit`. The other eleven are UI gates and the panel says so. |
+| The Capabilities pop-up | **capability grid** (`RolesModal`, `AdminSettings.jsx`) | Pick a person, read their capabilities against all three levels side by side. Only their own column takes a tick. |
+| The Modules section | **module registry** (`settings/admin.modules`, `src/lib/modules.js`) | Whole features this restaurant has, or does not: **Gift vouchers** (ships on) and **WhatsApp inbox** (ships off). Off hides every surface of the module from everybody, admin included — the tab, the booking-form picker, the list chips, the redeem modal, the unsettled banner and the printed column — and deletes nothing, so switching it back on restores what was there. Under project-per-restaurant this is the whole of "restaurant B has no WhatsApp". |
+| A module switch (`Toggle`) | **module switch** (`moduleOn`, `setModuleEnabled`) | A **module** answers *does this restaurant have it*; a **capability** answers *may this person do it*. They are different questions and compose one way only — `moduleOn` is asked first, so a capability grant can never re-open a switched-off feature. |
+| "1 voucher is still open, worth 75 €…" | **hide warning** (`hideWarning`, `src/lib/modules.js`) | Shown before the vouchers switch moves, because an open voucher is money the restaurant owes and hiding it makes a liability invisible. It **refuses nothing** — an admin who has read the number may still switch off — and the toggle does not move until they answer. No open vouchers, no question. |
+| The Integrations section | **integrations panel** (`AdminSettings.jsx`) | Names the server-side keys (Meta, Gemini, the service account) and where they live: **the deployment's environment variables, never this database**. `.read` is `auth != null` at the root and read permission cascades down, so a key stored here would be readable by every member of staff. **Since v18.0.0 phase 5 it also says WHETHER each is set**, from `/api/wa-config` — a boolean per key, never a value. **THREE states, and the third is the point**: `· set`, `· not set`, and a bare key name meaning *we could not ask*, which is what a local dev server produces since it runs no serverless functions. A panel about secrets must never render "not set" for a key it never enquired about. |
+| "Enforce roles" | **role enforcement** (`settings/admin.enforceRoles`) | Ships **off**, so the app behaves exactly as before until it is switched on. Off is also what makes the rules deploy rolling-safe. |
+| A person who has been invited but never signed in | **pending invitation** (`/invites/{id}`) | Waits on the People list. It grants nothing by itself — an admin applies it in one tap once that person signs in. |
 | Printable sheet | **day sheet** (`DaySheet.jsx`) | Print-only DOM, hard-coded light. |
 
 ---
 
 ## 10. The WhatsApp module
 
-> **Not in this branch.** The WhatsApp Inbox is a **sandbox** built on top of the
-> production app, living on the long-lived `wa-sandbox` branch and deployed to
-> its own Vercel project against **DEV Firebase**. Its version marker is
-> `<prod-version>-wa-sandbox`. It is **never merged to `main`** until Patryk says
-> *"give me the deployment version"* — so every term below is real code you can
-> read, and none of it is in the app the restaurant runs today.
+> **Merged in v18.0.0 phase 5, and shipped OFF.** For eight versions this note
+> said the opposite, and the change is the whole of that phase: the module now
+> lives on `main`, and every surface below is gated on
+> `settings/admin.modules.whatsapp.enabled` — off by default, so a restaurant
+> sees none of it until an admin switches it on in Settings → Admin → Modules.
+> The `wa-sandbox` branch survives as the development history and as the home of
+> the simulator's own Vercel project against **DEV Firebase**.
+>
+> **What is still not shipped is the simulator** (`WaSimulator.jsx`, the `X` key
+> and the three `api/wa-sim-*` endpoints), which stays behind the build-time
+> `WA_SANDBOX` constant. That is the one term in this section that a restaurant
+> can never reach.
 >
 > Verified against the **live `wa-sandbox` branch at `17.15.0-wa-sandbox`**
 > (worktree `wa-sync-17-15-0`), not just the snapshot — every `src/` and `api/`
@@ -288,7 +340,7 @@ then how *you* look at it, then reference.
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| The **WhatsApp** toolbar button, or `I` | **inbox** (`InboxPanel.jsx`) | Opens the module. Two-pane above `INBOX_TWO_PANE_BREAKPOINT`, stacked below. **As of 17.15.0-wa-sandbox it is an `Overlay` in `panel` mode** — see below. |
+| The **WhatsApp** toolbar button, or `I` | **inbox** (`InboxPanel.jsx`) | Opens the module. Two-pane above `INBOX_TWO_PANE_BREAKPOINT`, stacked below; an `Overlay` in `panel` mode. **Both the button and the `I` key are gated on the whatsapp module** (v18.0.0 phase 5) — a shortcut is a second door to the same surface, so gating one and not the other is gating neither. No capability gate: reading and replying is service work, like taking a booking. |
 | "Needs action · Conversations · Archived" | **inbox tabs** (`ConversationList.jsx`) | Needs action is the triage view; archived sorts by `archivedAt`, the others by `lastMessageAt`. |
 | One line per customer | **conversation row** (`ConversationRow.jsx`) | Name-or-number, snippet, relative time, plus the state marks below. |
 | The thread itself | **conversation view** (`ConversationView.jsx`) | Messages, the cards below, Archive / Delete / Restore. |
@@ -297,7 +349,8 @@ then how *you* look at it, then reference.
 | "Draft booking — parsed from message" | **draft card** (`DraftCard.jsx`) | What the model extracted. Accept · Accept & open · Dismiss. |
 | "Customer is requesting changes / to cancel" | **intent banner** (`IntentBanner.jsx`) | A change or cancel request. Apply changes · Mark as handled. |
 | "Linked booking" | **linked booking card** (`LinkedBookingCard.jsx`) | The booking this thread is attached to. Open booking · Cancel booking. |
-| EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. |
+| EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. Edited from INSIDE the inbox, not from the settings tab. |
+| Settings › **WhatsApp** | **WhatsApp settings tab** (`WhatsAppTabContent`, `Settings.jsx`) | The module's one restaurant-wide setting: **Archive when the booking is completed**. Needs `settingsWrite` on top of the module, unlike the inbox — changing what the whole restaurant's inbox does is configuration, whereas answering a guest is service. |
 | 🧪 icon in the inbox header, or `X` | **simulator** (`WaSimulator.jsx`) | Sandbox-only. Fake inbound messages to drive the pipeline. |
 
 ### Conversation state
@@ -326,7 +379,7 @@ then how *you* look at it, then reference.
 | The automatic "got it" reply | **auto-ack** (`AUTO_ACK_TEXT`) | Sent on inbound so the customer isn't left waiting. |
 | "Checking…" / the ↻ button | **re-check** (`api/wa-recheck.js`, `parseThread`) | A **real staff feature, not sim tooling.** Re-reads the last `WA_RECHECK_HISTORY` (12) messages *both directions* and asks what the customer wants **now**, then applies it through the same `applyParse` the webhook uses. |
 | `conversations/{phoneKey}` | **phone key** (`phoneKey`) | The normalised phone, used as the RTDB child key. Writes are keyed, never whole-array. |
-| — | **`settings/whatsapp`** (`useWaSettings.js`) | `{v, autoArchiveOnComplete}` + revGuard CAS on `whatsappRev`. **Needs its rules pair when the module ships** — DEV is permissive, so it works untouched there. |
+| — | **`settings/whatsapp`** (`useWaSettings.js`) | `{v, autoArchiveOnComplete}` + revGuard CAS on `whatsappRev`. Its rules pair ships with the module (v18.0.0 phase 5); DEV is permissive, so it worked untouched there beforehand. |
 
 ### Simulator-only terms
 
@@ -403,7 +456,7 @@ The tempting name, and why it's the wrong one.
 | status (for no-show) | **flag** | No-show is a flag on a cancelled booking. |
 | optimizer (in UI copy) | **optimiser** | And the reverse in code. See §8. |
 | dialog (for the quick-status popup) | **popup** | It has no focus trap and must not claim one. |
-| "the WhatsApp integration" | **the WA sandbox** | It is not shipped and not on `main`. Calling it an integration implies the restaurant has it. |
+| "the WhatsApp integration" | **the WhatsApp module** | Shipped since v18.0.0 but **off by default**, so "the restaurant has WhatsApp" is a question about `settings/admin.modules`, not about the build. "Integration" also overstates it — what the restaurant switches on is a module, in the same sense as Gift vouchers. |
 | chat / thread | **conversation** | `conversations/{phoneKey}` is the node; every identifier says conversation. |
 | status (in the WA module) | say **send status** or **draft status** | Two unrelated lifecycles: `sending/delivered/failed` on a message, `parsed/accepted/dismissed` on a draft. |
 | re-check (as sim tooling) | **re-check**, a staff feature | It ships with the module. Only the simulator around it doesn't. |

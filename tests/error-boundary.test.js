@@ -16,9 +16,15 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import ErrorBoundary from "../src/components/ErrorBoundary.jsx";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const src = (rel) => readFileSync(resolve(HERE, "../src/", rel), "utf8");
+// v18.0.0 phase 4: COMMENTS OFF before matching (`a11y.test.js` /
+// `style-check.test.js` convention). Prose that names the thing a matcher
+// hunts for is indistinguishable from the thing — measured in this repo three
+// times, most recently a comment quoting `visibleTabs(can)` that made a raw
+// read report the wrong arguments for the call below it.
+const src = (rel) => stripComments(readFileSync(resolve(HERE, "../src/", rel), "utf8")).join("\n");
 
 // Walk a returned element tree. React elements are plain objects, so this needs
 // no renderer — which is the whole reason these assertions are possible here.

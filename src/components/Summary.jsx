@@ -91,7 +91,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           <button>. (The More button lived here until v17.9.0 — see the note at
           its new home in the expanded body.) */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", flexWrap: "wrap" }}>
-        <button
+        <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
           onClick={onToggle}
           aria-expanded={open}
           style={{
@@ -148,7 +148,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
               It is therefore only visible while the summary is expanded, which
               Patryk chose knowingly: the `M` shortcut still opens the popover
               from anywhere, and that is the path staff use. */}
-          <button
+          <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
             onClick={onToggle}
             aria-label={open ? "Collapse summary" : "Expand summary"}
             style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: T.small, color: "var(--text-muted)", fontWeight: FW.bold, flexShrink: 0,

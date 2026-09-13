@@ -24,6 +24,9 @@ import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 
 // Clamp the cutoff to the full day and coerce `autoSwitch` to a boolean (default
 // true). v15.0.0 (cutoff range): the cutoff is a single GLOBAL switch-off hour and
@@ -69,9 +72,13 @@ export function useOptimizerSettings(){
       console.warn("[SAFE] Refused to write optimizer settings — initial read has not completed yet.");
       return;
     }
-    const next = sanitizeOptimizer({ ...optimizerSettings, ...(partial || {}) });
+    const prev = optimizerSettings;
+    const next = sanitizeOptimizer({ ...prev, ...(partial || {}) });
     setOS(next);
-    writeWithRev("settings/optimizer", next, revRef);
+    writeWithRev("settings/optimizer", next, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/optimizer", prev, next);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { optimizerSettings, saveOptimizerSettings };

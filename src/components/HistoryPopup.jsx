@@ -33,7 +33,7 @@ export function HistoryPopup({ booking, onClose }) {
   const reversed = hist.slice().reverse();
 
   return (
-    <Overlay onClose={onClose}>
+    <Overlay /* @static-height the entry list is built once per open — the booking cannot change under it */ onClose={onClose}>
       <h2 style={{ fontSize: T.title, fontWeight: FW.bold, margin: 0, marginBottom: 12, color: S.text }}>
         Booking history
       </h2>

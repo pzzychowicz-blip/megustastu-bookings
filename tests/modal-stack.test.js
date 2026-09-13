@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { applyModal, topModal, modalMap, MODAL_Z } from "../src/hooks/useModalStack.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 const open = (stack, id, v) => applyModal(stack, id, v === undefined ? true : v);
 
@@ -127,7 +128,7 @@ describe("MODAL_Z covers every surface App can open", () => {
     // are generated FROM MODAL_Z; generated setters make that direction
     // tautological, so the check that still bites is the READ side:
     // `modalOpen.<id>` with no rank yields no setter and no Escape action.
-    const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
     const ids = new Set([
       ...[...app.matchAll(/\bmodalOpen\.([A-Za-z0-9_$]+)/g)].map((m) => m[1]),
       ...[...app.matchAll(/\bsetModalFns\.([A-Za-z0-9_$]+)/g)].map((m) => m[1]),
@@ -147,8 +148,8 @@ describe("MODAL_Z covers every surface App can open", () => {
     // and it is checkable: every property the hook reads off `K` must appear as
     // a key of the object App passes in. Nothing else in the app cross-checks
     // those two lists, which is why one of them was short.
-    const kb = readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8");
-    const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const kb = stripComments(readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8")).join("\n");
+    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
     const used = [...new Set([...kb.matchAll(/\bK\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
     expect(used.length, "the K.* pattern still matches").toBeGreaterThan(20);
 
@@ -163,7 +164,7 @@ describe("MODAL_Z covers every surface App can open", () => {
   });
 
   it("every id in MODAL_Z has an Escape action", () => {
-    const kb = readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8");
+    const kb = stripComments(readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8")).join("\n");
     const body = kb.slice(kb.indexOf("function escapeAction"), kb.indexOf("const MODAL_ENTER_ORDER"));
     expect(body.length).toBeGreaterThan(200);     // the anchor still resolves
     MODAL_Z.forEach((id) => {

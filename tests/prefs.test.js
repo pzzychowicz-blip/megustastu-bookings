@@ -8,8 +8,10 @@
 // would silently invert it for every device that had never touched it.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { PREF_SPEC, PREF_NAMES, readPrefValue, prefLocalValue, DEFAULT_USER_PREFS,
          sanitizeUserPrefs } from "../src/hooks/useUserPrefs.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 describe("readPrefValue - an absent key is the default", () => {
   it("whenOn defaults OFF (navLocked, reduceMotion)", () => {
@@ -64,7 +66,7 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
     // hand-written setItem was invisible to it. That is the exact drift this
     // commit found in `readSplit` (a second hand-written read of
     // "mgt-split-enabled"), so the guard has to see both directions.
-    const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
     const offenders = [];
     PREF_NAMES.forEach((name) => {
       const key = PREF_SPEC[name].ls;
@@ -88,7 +90,7 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
   it("splitEnabled clears the SAME key App stores the split layout under", () => {
     // Two literals for one key. Turning Split View off must forget the saved
     // layout, or it returns the moment the feature is re-enabled.
-    const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+    const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
     const m = app.match(/const SPLIT_KEY="([^"]+)"/);
     expect(m).toBeTruthy();
     expect(PREF_SPEC.splitEnabled.clears).toBe(m[1]);
@@ -100,5 +102,50 @@ describe("PREF_SPEC agrees with everything that depends on it", () => {
     const s = sanitizeUserPrefs({});
     PREF_NAMES.forEach((name) => { expect(s[name], name).toBe(null); });
     expect(s.theme).toBe(null);
+  });
+
+  it("keeps theme \"auto\" — Automatic is a choice, stored as one (v18.0.0 session 7)", () => {
+    // null cannot carry it: null means "never chosen", and App's seeding effect
+    // fills a never-chosen account from the next device to sign in with an
+    // explicit value — which would overwrite Automatic chosen somewhere else.
+    expect(sanitizeUserPrefs({ theme: "auto" }).theme).toBe("auto");
+    expect(sanitizeUserPrefs({ theme: "dark" }).theme).toBe("dark");
+    expect(sanitizeUserPrefs({ theme: "light" }).theme).toBe("light");
+    for (const v of ["AUTO", "system", true, 1, {}]) {
+      expect(sanitizeUserPrefs({ theme: v }).theme, String(v)).toBe(null);
+    }
+  });
+});
+
+describe("the no-flash script needs nothing new for \"auto\" (v18.0.0 session 7)", () => {
+  // Automatic is stored as localStorage["mgt-theme"] = "auto", and the boot
+  // script — pinned in the CSP by hash, so every edit to it costs a regenerated
+  // pin — already follows the OS for any value that is not "dark" or "light".
+  // That property is why the feature shipped without touching the script, so it
+  // is run against the REAL bytes rather than read: a later edit to the script
+  // that stops treating an unknown value as "follow the OS" fails here.
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  function paint(stored, osDark) {
+    const dataset = {};
+    const store = { "mgt-theme": stored };
+    runInNewContext(blocks[0], {
+      location: { hostname: "megustastu-bookings.vercel.app", search: "" },
+      localStorage: { getItem: (k) => (k in store ? store[k] : null) },
+      window: { matchMedia: () => ({ matches: osDark }) },
+      document: { documentElement: { dataset }, addEventListener() {} },
+    });
+    return dataset.theme;
+  }
+
+  it("follows the OS for \"auto\", in both directions", () => {
+    expect(blocks.length).toBe(1);
+    expect(paint("auto", true)).toBe("dark");
+    expect(paint("auto", false)).toBe("light");
+  });
+
+  it("an explicit choice still wins over the OS", () => {
+    expect(paint("dark", false)).toBe("dark");
+    expect(paint("light", true)).toBe("light");
   });
 });

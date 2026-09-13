@@ -106,6 +106,84 @@
 // structural — a quoted `prop: value;` list, which a JSX style VALUE never is,
 // because inline style values hold no semicolons.
 
+// ── Rule 10: an interactive control carries the hover lift ──────────────────
+// v18.0.0 phase 3. `.mgt-hover-scale` is opt-in per element, which means the
+// only thing standing between a new control and the app's shared hover identity
+// is somebody remembering a class name. Measured when this rule was written:
+// 224 of 242 controls carried it, and the Admin tab shipped with 1 of 11 — the
+// convention was universal enough that its absence read as intentional and was
+// invisible in review.
+//
+// Unlike every other rule here this one is TAG-scoped rather than line-scoped,
+// because a JSX opening tag routinely spans five lines and the class may sit on
+// any of them. The extent is found by brace/quote-aware scanning of the
+// COMMENT-STRIPPED source — prose naming a `<button>` is not a button, which is
+// the trap tests/csp.test.js and the v17.15.1 stylesheet header both hit.
+//
+// The exemption marker is `@no-lift`, and it is deliberately unlike the other
+// four: those sit inside a style object, this one sits anywhere in the tag,
+// because there is no style property it attaches to. Real exemptions exist and
+// this repo already documents two of them — a full-width row cannot lift inside
+// an `overflow:hidden` card (Collapsible's header comment), and a control
+// nested in something that already lifts as a group would double-scale
+// (TimelineView's assign handle).
+//
+// ── Rule 11: <ModalTitle> must name its background ──────────────────────────
+// v18.0.0 phase 3. The atom takes `background` with NO DEFAULT, deliberately —
+// "a default would be a silent eighth answer to that question" — and its ink is
+// a hard-coded `--text-on-accent`. So omitting the prop is not a missing colour,
+// it is WHITE TEXT ON A TRANSPARENT PILL: an invisible heading that throws no
+// error, fails no type check and renders at full size in the DOM.
+//
+// Shipped exactly once, on the Capabilities modal, and spotted on a screenshot
+// rather than in review. The rule that was already written down could not
+// enforce itself, so now it can.
+//
+// ── Rule 12: a modal eases its own height ──────────────────────────────────
+// v18.0.0 phase 3. Ten of eleven `<Overlay>` bodies in this app are wrapped in
+// `<AutoHeight>`; the Capabilities modal was the one that was not, and picking
+// a different person there resized the card by 23px in a single frame under the
+// finger that had just clicked the list. Nobody spotted it in review because a
+// missing wrapper is an ABSENCE, and the nine that legitimately have none look
+// exactly the same in a diff.
+//
+// So the rule is stated the way the codebase already behaves — a modal wraps
+// its body — and the exceptions say why, one line each:
+//
+//     <Overlay /* @static-height <reason> */ onClose={…}>
+//
+// The nine are real and each claim was checked rather than assumed: seven
+// confirm dialogs in App.jsx whose body is one fixed sentence, the Settings
+// overlay (which delegates to `SettingsContent`'s own `AutoHeight watch={cur}`),
+// `HistoryPopup` (a list built once per open), and `VoucherRedeemModal`, whose
+// only variable content is a `Reveal` — and a Reveal eases its own height, so
+// the card follows it smoothly with nothing above to do it.
+//
+// That last one is why this rule cannot be "does the body change height": it
+// is not statically decidable, and a rule that tried would be wrong about the
+// one modal in the list that solves the problem another way. What IS decidable
+// is "is the house pattern applied, and if not, has somebody said why".
+//
+// ── Rule 13: a search input never carries the hover lift ───────────────────
+// v18.0.0 session 11, and it is the narrow EXCEPTION to Rule 10 rather than a
+// new idea. An `<input type="search">` is not a leaf control: the platform
+// paints `::-webkit-search-cancel-button` inside it. Scale the field on hover
+// and that button scales with it — measured in the Activity log, a 530px field
+// grew [53, 583] → [31.8, 604.2] and cleared only 21px to the RIGHT of where
+// the glyph was drawn, the two boxes not overlapping at all. The control was
+// never clickable where it was painted.
+//
+// index.css already states the rule this breaks — the hover lift is for
+// CONTROLS, the tint is for CONTAINERS OF CONTROLS — and it was learned on the
+// List card sliding its own Edit and Delete buttons out from under the cursor.
+// Nothing could see it happening again one element down, because a container
+// whose contained control is drawn by the BROWSER looks like a leaf in source.
+//
+// There is no exemption marker. `SearchField` (atoms.jsx) is the shape that is
+// wanted — pill tinted, ✕ lifted — and a second answer to this question is the
+// thing worth preventing. Rule 10 then requires the bare input inside it to say
+// `@no-lift`, so the two rules meet.
+//
 // ── Rules 8 & 9: the icon scale and the motion scale ────────────────────────
 // v17.13.0. CLAUDE.md states both as rules — "No new numeric `size={n}` on an
 // icon", and `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back
@@ -177,6 +255,20 @@ const SHADOW_VALUE = /(?:["'`]|inset\s+|,\s*)(?:0|-?[\d.]+px)\s+(?:0|-?[\d.]+px)
 const SPACING_STEPS = new Set([0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32]);
 const HEIGHT_STEPS = new Set([28, 32, 36, 40, 44]);
 
+// The WA module's saturated, TEXT-BEARING fills. Declared in `:root` ONLY, with
+// no dark override, deliberately: the 17.8.0-wa-sandbox contrast pass made them
+// OPAQUE precisely so one value works in both themes, which is what
+// "theme-invariant" has to mean in order to be true. Everything else under
+// --wa-* (panes, rows, banners, rims) DOES flip.
+//
+// One list, two regexes built from it — the fixed set and its complement. The
+// classification is checked below as `!fixed || flips`, so BOTH have to agree:
+// a name matched by both lists still counts as flipping. The first attempt put
+// the bare `--wa-` prefix in THEME_FILL under a comment asserting the whole
+// family flipped, which would have failed a CORRECT white inset over
+// --wa-green citing a dark override that has never existed.
+const WA_OPAQUE = "green|green-dark|btn-open|btn-cancel|btn-handled|bubble-out|sim-accent|unread-dot";
+
 // Fills that do NOT flip with the theme: saturated solids, block colours, and
 // raw colour literals. A white inset is correct over any of these.
 const FIXED_FILL = [
@@ -184,11 +276,20 @@ const FIXED_FILL = [
   /BLOCK_BG\b/, /\bBTN\./, /S\.accent/, /TBL\./,
   /var\(--app-[a-z-]*(solid|walkin|new|btn-[a-z-]+)\)/,
   /var\(--accent\)/, /var\(--btn-[a-z-]+\)/, /var\(--tag-flag\)/,
+  new RegExp("var\\(--wa-(?:" + WA_OPAQUE + ")\\)"),
 ];
 // Fills that DO flip. Anything matching here under a white inset is the bug.
 const THEME_FILL = [
   /var\(--bg-[a-z-]+\)/, /var\(--(warn|danger|suggest)-bg[a-z-]*\)/,
   /var\(--border-[a-z-]+\)/, /var\(--text-[a-z-]+\)/,
+  // The REST of the --wa-* family (WA sandbox) — soft surfaces, rows, panes,
+  // banners and rims, every one of which has a dark override. A white inset
+  // over these is the bug this rule exists for; without this the checker walked
+  // past the module entirely (the --app-btn-grey prefix-blindness again).
+  // The lookahead is the complement of WA_OPAQUE, and it needs the closing
+  // paren inside it: --wa-bubble-out is opaque, --wa-bubble-out-border flips,
+  // and only the `)` tells them apart.
+  new RegExp("var\\(--wa-(?!(?:" + WA_OPAQUE + ")\\))[a-z-]+\\)"),
 ];
 
 // Read a style value: everything after `key:` up to the first TOP-LEVEL comma.
@@ -281,6 +382,25 @@ function walk(dir, out = []) {
     else if (/\.(js|jsx)$/.test(p)) out.push(p);
   }
   return out;
+}
+
+// Index of the `>` closing the JSX opening tag that starts at `i`, ignoring
+// anything inside an expression container or a string — `style={{a:">"}}` is
+// not the end of the tag.
+function tagEnd(src, i) {
+  let depth = 0, j = i, quote = null;
+  while (j < src.length) {
+    const c = src[j];
+    if (quote) {
+      if (c === "\\") { j += 2; continue; }
+      if (c === quote) quote = null;
+    } else if (c === '"' || c === "'" || c === "`") quote = c;
+    else if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if (c === ">" && depth === 0) return j;
+    j++;
+  }
+  return -1;
 }
 
 const problems = [];
@@ -515,12 +635,112 @@ for (const file of walk(SRC)) {
       });
     }
   });
+
+  // ── Rule 10 ───────────────────────────────────────────────────────────────
+  // Tag-scoped, so it runs once per file rather than inside the line loop.
+  if (file.endsWith(".jsx")) {
+    const code = codeLines.join("\n");
+    for (const m of code.matchAll(/<(button|input|select|textarea)\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      if (code.slice(m.index, end).includes("mgt-hover-scale")) continue;
+      // The marker is read off the RAW lines the tag spans — markers live in
+      // comments, which `codeLines` has removed by design.
+      const from = code.slice(0, m.index).split("\n").length - 1;
+      const to = code.slice(0, end).split("\n").length - 1;
+      if (lines.slice(from, to + 1).some((l) => /@no-lift/.test(l))) continue;
+      problems.push({
+        file: rel, line: from + 1, rule: "hover-lift",
+        text: lines[from].trim().slice(0, 90),
+        hint: "interactive control without .mgt-hover-scale — add "
+              + 'className="mgt-hover-scale" (it must set its own border-radius; '
+              + "see index.css), or mark the exception /* @no-lift <reason> */",
+      });
+    }
+
+    // ── Rule 13 ─────────────────────────────────────────────────────────────
+    // The inverse of Rule 10, for the one tag that is a container dressed as a
+    // control. Same tag-scoped scan, so a multi-line opening tag is read whole.
+    for (const m of code.matchAll(/<input\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      const tag = code.slice(m.index, end);
+      if (!/type\s*=\s*"search"/.test(tag)) continue;
+      if (!tag.includes("mgt-hover-scale")) continue;
+      const from = code.slice(0, m.index).split("\n").length - 1;
+      problems.push({
+        file: rel, line: from + 1, rule: "search-hover-lift",
+        text: lines[from].trim().slice(0, 90),
+        hint: "an <input type=\"search\"> carries the browser's own clear button, "
+              + "and the hover lift scales that button out from under the cursor "
+              + "— use the SearchField atom, which tints the pill and lifts the \u2715",
+      });
+    }
+
+    // ── Rule 12 ─────────────────────────────────────────────────────────────
+    for (const m of code.matchAll(/<Overlay\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      if (code[end - 1] === "/") continue;              // self-closing: no body
+      // Walk to the MATCHING close. Nothing nests an Overlay today; without
+      // this the first `</Overlay>` would end the body early and the rule would
+      // silently read the wrong span.
+      // The depth scan matches `<Overlay` the SAME way the outer loop does —
+      // with a word boundary. A bare `indexOf("<Overlay")` also matches
+      // `<OverlayScrollContext` (which atoms.jsx renders), so a file holding
+      // both would count the context provider as a nested modal, run past the
+      // real close, and report a compliant file as a violation.
+      const nest = /<Overlay\b/g;
+      let depth = 1, k = end + 1;
+      while (k < code.length && depth > 0) {
+        nest.lastIndex = k;
+        const m2 = nest.exec(code);
+        const open = m2 ? m2.index : -1;
+        const close = code.indexOf("</Overlay>", k);
+        if (close < 0) break;
+        if (open >= 0 && open < close) { depth++; k = open + 8; }
+        else { depth--; k = close + 10; }
+      }
+      const body = code.slice(end, depth === 0 ? k - 10 : code.length);
+      if (/<AutoHeight\b/.test(body)) continue;
+      // The marker is read off the RAW lines the opening tag spans — markers
+      // live in comments, which `codeLines` has removed by design.
+      const from = code.slice(0, m.index).split("\n").length - 1;
+      const to = code.slice(0, end).split("\n").length - 1;
+      if (lines.slice(from, to + 1).some((l) => /@static-height/.test(l))) continue;
+      problems.push({
+        file: rel, line: from + 1, rule: "modal-auto-height",
+        text: lines[from].trim().slice(0, 90),
+        hint: "an <Overlay> body that is not wrapped in <AutoHeight> resizes the "
+              + "card in one frame when its contents change — wrap it, passing "
+              + "`watch` if the body is SWAPPED rather than grown, or mark the "
+              + "exception /* @static-height <reason> */",
+      });
+    }
+
+    // ── Rule 11 ─────────────────────────────────────────────────────────────
+    for (const m of code.matchAll(/<ModalTitle\b/g)) {
+      const end = tagEnd(code, m.index);
+      if (end < 0) continue;
+      if (/\bbackground\s*=/.test(code.slice(m.index, end))) continue;
+      const at = code.slice(0, m.index).split("\n").length;
+      problems.push({
+        file: rel, line: at, rule: "modal-title-background",
+        text: lines[at - 1].trim().slice(0, 90),
+        hint: "<ModalTitle> without `background` renders --text-on-accent (white) "
+              + "on a TRANSPARENT pill — an invisible heading. A create/act surface "
+              + "takes its action's own colour; a configure/read one takes "
+              + "var(--app-btn-grey-strong)",
+      });
+    }
+  }
 }
 
 if (problems.length === 0) {
   console.log("style invariants: OK (radius + type + spacing + height scales, "
             + "white-inset-over-fixed-fill, shadow + colour literals, icon + motion "
-            + "scales, marker placement)");
+            + "scales, marker placement, control hover-lift, modal-title background, "
+            + "modal auto-height, search-field lift)");
   process.exit(0);
 }
 

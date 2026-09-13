@@ -28,6 +28,9 @@ import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { DEFAULT_WEEK_HOURS, setWeekHours, setActiveDayHours } from "../lib/constants";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
 import { todayStr } from "../lib/day";
 
 // Clamp ONE day. Bounds mirror the v14.5.0 single-pair editor: open 6–22,
@@ -100,7 +103,15 @@ export function useOperatingHours(viewDate){
     setWeekHours(next);
     setWH(next);
     setActiveDayHours(viewDate || todayStr());
-    writeWithRev("settings/operatingHours", { days: next }, revRef);
+    // `prev` is wrapped to match the SHAPE that is written (`{ days }`), not the
+    // state it comes from. Diffing `weekHours` against `{ days: next }` would
+    // report every one of the seven day keys as changed on every edit, which is
+    // a log entry that is technically produced and tells you nothing.
+    const prev = { days: weekHours };
+    writeWithRev("settings/operatingHours", { days: next }, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/operatingHours", prev, { days: next });
+      if (entry) emitActivity([entry]);
+    });
   }
 
   // "Copy to all days" — set every weekday to one day's full config.
@@ -112,10 +123,14 @@ export function useOperatingHours(viewDate){
     const clean = sanitizeDay(dayConfig);
     const next = {};
     for(let i = 0; i < 7; i++) next[i] = { ...clean };
+    const prev = { days: weekHours };
     setWeekHours(next);
     setWH(next);
     setActiveDayHours(viewDate || todayStr());
-    writeWithRev("settings/operatingHours", { days: next }, revRef);
+    writeWithRev("settings/operatingHours", { days: next }, revRef, undefined, function () {
+      const entry = settingsWriteEntry("settings/operatingHours", prev, { days: next });
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { weekHours, saveDayHours, saveAllDays };

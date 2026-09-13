@@ -7,7 +7,8 @@
 // `ReminderListItem` renders one card: text, times-and-recurrence summary,
 // active toggle, Edit / Delete buttons. Fades to 55% opacity when inactive.
 //
-// `DAY_SHORT_LABELS` is module-local (used only by the recurrence summary).
+// The recurrence summary's weekday names are `WEEKDAY_SHORT` from lib/day.js —
+// /code-review, v18.0.0 session 7: this file held a byte-identical copy.
 // Note: ReminderEditor uses a different `DAY_LABELS` array (longer-form,
 // Mon-first ordering) — they're kept separate by design, since one drives a
 // summary string and the other drives a clickable day picker.
@@ -15,15 +16,12 @@
 // Phase B3 (v15-refactor): extracted from App.jsx and converted RC() → JSX.
 // Behaviour, output markup, and all inline styles are byte-identical to the
 // original. `var DAY_SHORT_LABELS` (previously a top-level App.jsx constant)
-// is co-located here as a module-level `const`.
+// was co-located here as a module-level `const` (lib/day.js's WEEKDAY_SHORT
+// since v18.0.0 session 7's /code-review).
 
 import { BTN, R, T, FW } from "../lib/constants";
 import { Toggle, mkBtn } from "./atoms";
-
-// ── Day-of-week labels for recurrence summary ────────────────────────────────
-// Sun-first, matching JavaScript Date.getDay() ordering. This is the array
-// used to format "Weekly: Mon, Wed, Fri" — sort-by-getDay-index then map.
-const DAY_SHORT_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+import { WEEKDAY_SHORT } from "../lib/day";
 
 // ── One reminder card ────────────────────────────────────────────────────────
 export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
@@ -33,7 +31,7 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
   if (rec.type === "once") {
     recText = "Once on " + rec.date;
   } else if (rec.type === "weekly") {
-    const ds = (rec.days || []).slice().sort((a, b) => a - b).map((i) => DAY_SHORT_LABELS[i]);
+    const ds = (rec.days || []).slice().sort((a, b) => a - b).map((i) => WEEKDAY_SHORT[i]);
     recText = "Weekly: " + ds.join(", ");
   }
   const timesText = (r.times || []).join(", ");

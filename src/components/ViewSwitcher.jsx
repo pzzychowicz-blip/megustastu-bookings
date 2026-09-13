@@ -128,6 +128,32 @@ export function ViewSwitcher({
           onPointerDown={(e) => startPress(v, e)}
           onPointerUp={clearPress}
           onPointerCancel={clearPress}
+          // v18.0.0 session 9: the active view was signalled by FILL ALONE —
+          // `S.accent` against `--app-btn-grey`, measured in the running app as
+          // rgb(10,132,255) vs rgba(110,118,135,.5) — on the app's PRIMARY
+          // navigation. That is CLAUDE.md's "state is colour alone" rule broken
+          // in the one place every session starts.
+          //
+          // The predicate is not a new decision: `isActive` already decides
+          // which buttons paint as active, so `aria-pressed` is wired to THAT
+          // and cannot drift from what the eye sees. In a split both panes' views
+          // are active and both read pressed — a view plainly on screen must not
+          // announce as off.
+          //
+          // `aria-current` carries the second, finer state the fill cannot: which
+          // of the two active buttons the keyboard is pointed at. It is the same
+          // `isFocusedPaneView` that draws the inset underline, so that mark stops
+          // being shape-alone too. Undefined when there is no split, because with
+          // one view there is no "which of them".
+          //
+          // Deliberately NO `aria-label`. These buttons have visible text, so
+          // Chrome computes the name from their contents and a label here would
+          // REPLACE a working name with a paraphrase — v17.15.4's Label-in-Name
+          // defect, which v17.16.3 then nearly re-introduced after an automation
+          // tree reported all three as named by this `title`. `title` is a
+          // description of last resort and loses to contents; it stays as it is.
+          aria-pressed={isActive(v)}
+          aria-current={isFocusedPaneView(v) ? "true" : undefined}
           title={gesturesOn ? "Right-click or hold to add to a split view" : undefined}
           style={Object.assign(
             mkBtn({ background: isActive(v) ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize", minHeight: 40 }),

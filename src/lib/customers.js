@@ -24,7 +24,11 @@
 // v17.4.0: findPhoneOverlaps (bottom of file) needs the interval + duration
 // primitives. customers.js has no other imports and booking-logic imports only
 // from constants, so this direction stays acyclic.
-import { overlaps, toMins, getDur } from "./booking-logic";
+// WA sandbox: the explicit ".js" extension is LOAD-BEARING — customers.js is
+// pulled into the Node backend chain (whatsapp.js re-exports its phone
+// primitives, and api/_lib/inbound-core.js imports whatsapp.js), and Node ESM
+// does not resolve extensionless specifiers. Vite is indifferent to it.
+import { overlaps, toMins, getDur } from "./booking-logic.js";
 
 export function normalizePhone(p) {
   if (!p) return "";
@@ -298,6 +302,26 @@ export function matchCustomerFor(ident, bookings, excludeBookingId) {
     noShowCount: noShows.length,
     noShowBookings: noShows,
   };
+}
+
+// DEFAULT_REGULAR_MIN — completed visits a customer needs before the chip calls
+// them a Regular. Lives HERE, in the customer-identity layer, because that is
+// what it describes; settings/general's seed imports it rather than restating 2
+// (useGeneralSettings.js), as does the booking form's prop default. Keep it in
+// this file and not in the hook: customers.js is also imported by the Node API
+// side via whatsapp.js, which must never pull in firebase.
+export const DEFAULT_REGULAR_MIN = 2;
+
+// regularChipLabel — the text of the green/teal "Regular · N past visits" chip.
+// ONE implementation because the chip renders in two places: the booking form
+// (BookingFormModal) and the WA conversation header (ConversationView). They had
+// drifted — the WA copy printed "Regular · " at ANY count, ignoring the
+// settings/general `regularMin` threshold the form respects — so the same
+// customer could read differently in the two panes. Callers add their own ▸/▾.
+export function regularChipLabel(count, regularMin) {
+  const n = count || 0;
+  const plural = n === 1 ? " past visit" : " past visits";
+  return (n >= (regularMin || DEFAULT_REGULAR_MIN) ? "Regular · " : "") + n + plural;
 }
 
 // customerIndex — build the full identity→customer map from the bookings list.

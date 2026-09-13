@@ -145,6 +145,30 @@ export function isReadableDate(v) {
   return stepUTC(v, 0) !== null;
 }
 
+// ── v18.0.0 session 10 (/code-review): one LOCAL day, as milliseconds ────────
+// Local midnight to local midnight — the range the activity log's feed queries,
+// because `at` is a wall-clock stamp and the restaurant thinks in local days.
+//
+// It lives here, with a NULL for a day it cannot express, because the call site
+// is the app's only Firebase QUERY and `startAt(NaN)` THROWS rather than
+// returning nothing — from inside an effect, where the error boundary answers
+// by unmounting the app. Measured live: clearing the log's "Day to show" field
+// gave `startAt failed: value argument contains NaN in property 'activity'` and
+// the error screen, from one keystroke.
+//
+// `isReadableDate` is NOT sufficient on its own and the second guard is not
+// ceremony: that predicate deliberately accepts anything `new Date` can step,
+// so `"2026-8-3"`, `"2026/09/13"` and `"Sep 13 2026"` all pass it — and all
+// three become NaN the moment `"T00:00:00"` is appended, because that suffix
+// only makes sense on an ISO date (measured, node 24). Defined by its OUTPUT,
+// the way `stepUTC` is, rather than by a format it hopes covers the inputs.
+export function dayRangeMs(dateStr) {
+  if (!isReadableDate(dateStr)) return null;
+  const from = new Date(dateStr + "T00:00:00").getTime();
+  if (!Number.isFinite(from)) return null;
+  return { from: from, to: from + 86400000 - 1 };
+}
+
 // v17.16.11: `addDays` for the four sites that step the VIEWED date, anchoring
 // to today when the date they were handed cannot be stepped.
 //
@@ -164,6 +188,44 @@ export function isReadableDate(v) {
 export function stepDate(dateStr, n) {
   const out = stepUTC(dateStr, n);
   return out !== null ? out : addDays(todayStr(), n);
+}
+
+// v18.0.0 session 7: the weekday, abbreviated, for the date fields that show it
+// inside the pill — "Fri 11/09/2026" (`DateField`, atoms.jsx). A native
+// <input type="date"> cannot show one, and staff check which day they are on by
+// its weekday.
+//
+// "" for anything that is not a CANONICAL date, which is exactly the set the
+// native input refuses to display: a field showing no date must show no weekday.
+// Canonical is `stepUTC(v, 0) === v` — the same test `openNew` relies on via
+// `stepDate(d, 0) === d` — so "2026-8-3" (which navigates, see isReadableDate)
+// and "2026-02-30" (which rolls over) both read "", because the input beside
+// them is blank. All-UTC like everything else in this file.
+//
+// Exported (/code-review): the Reminders summary and the standing-booking rows
+// read it rather than keeping their own byte-identical copies.
+export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// v18.0.0 session 8: the LONG list, for the same reason and two versions later.
+// Session 7 consolidated the short one; the long one was in FOUR places —
+// `DaySheet`'s `WD`, `BookingFormModal`'s `WEEKDAY_NAMES`, an inline copy in
+// that SAME file's closed-day banner, and another inline copy in `doSave`. A
+// named constant and an inline copy of it in one file is the shape this repo
+// keeps finding: the copy that drifts is the one nobody is looking at.
+//
+// The LIST only, deliberately — not a `weekdayLong()` to match `weekdayShort()`.
+// Its callers disagree about what an unreadable date should do (`weekdayShort`
+// returns "" for anything non-canonical, `DaySheet` prints "" only for an
+// unparseable one, and `doSave` falls back to "that day"), and those are
+// three considered answers rather than three copies of one. Sharing the DATA
+// removes the duplication; sharing the lookup would change behaviour in a print
+// sheet under cover of a tidy-up.
+export const WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export function weekdayShort(dateStr) {
+  // The typeof is NOT redundant with stepUTC's own: stepUTC(null) returns null,
+  // which is `===` the input, and `new Date(null)` is the epoch — a Thursday. The
+  // test caught exactly that.
+  if (typeof dateStr !== "string" || stepUTC(dateStr, 0) !== dateStr) return "";
+  return WEEKDAY_SHORT[new Date(dateStr).getUTCDay()];
 }
 
 // NOW, expressed in minutes since midnight of `dateStr` — the one axis on which

@@ -11,17 +11,18 @@
 //
 // Content for `date`: header (restaurant, date + weekday, covers + shift totals
 // via daySummary), a time-sorted table of the day's NON-cancelled bookings
-// (Time · Name · Pax · Tables · Phone · Deposit · Notes), any table blocks, and
+// (Time · Name · Pax · Tables · Phone · Deposit/voucher · Notes), any table blocks, and
 // the day's waitlist entries.
 //
 // Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
 
 import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
-import { T, FW } from "../lib/constants";
+import { T, FW, APP_NAME } from "../lib/constants";
 import { daySummary } from "../lib/booking-logic";
-
-const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+import { normalizeCode, formatCode } from "../lib/vouchers";
+// v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
+import { WEEKDAY_LONG } from "../lib/day";
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
 // it returns the day NUMBER (0–6). Two functions, one name, incompatible return
 // types, one of them on the shared module. That is worse than a duplicate: it is
@@ -29,7 +30,7 @@ const WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "S
 // silently prints a number in the print sheet's header instead of "Wednesday".
 function weekdayName(dateStr) {
   const d = new Date(dateStr);
-  return isNaN(d) ? "" : WD[d.getUTCDay()] || "";
+  return isNaN(d) ? "" : WEEKDAY_LONG[d.getUTCDay()] || "";
 }
 // Inline light-only styles (no tokens — print stays light).
 const cell = { border: "1px solid #999", /* @fixed-fill */ padding: "4px 6px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
@@ -37,7 +38,7 @@ const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" /* 
 
 // v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
 // re-render on every BookingApp render; props are state objects + primitives.
-export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency }) {
+export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency, vouchersOn = true }) {
   // /code-review: the sheet is PERMANENTLY mounted (display:none) and BookingApp
   // re-renders every 15s tick — memoise the filter/sort/summary passes so they
   // run only when the underlying data (not the clock) changes. This is the
@@ -63,7 +64,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
   return createPortal(
     <div className="mgt-print-sheet" style={{ color: "#000", /* @fixed-fill */ background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", /* @fixed-fill */ paddingBottom: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || "Me Gustas Tú") + " — Day sheet"}</div>
+        <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || APP_NAME) + " — Day sheet"}</div>
         <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + date}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
           {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
@@ -80,7 +81,12 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
               <th style={th}>Pax</th>
               <th style={th}>Tables</th>
               <th style={th}>Phone</th>
-              <th style={th}>Deposit</th>
+              {/* v18.0.0 phase 4: the column is SHARED, so with the vouchers
+                  module off it does not disappear — it narrows to what is left.
+                  A header naming a feature the restaurant does not have is the
+                  same defect on paper as on screen, and this sheet is read at
+                  the table by people who never open Settings. */}
+              <th style={th}>{vouchersOn ? "Deposit / voucher" : "Deposit"}</th>
               <th style={th}>Notes</th>
             </tr>
           </thead>
@@ -93,7 +99,14 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
                   <td style={cell}>{b.phone || "—"}</td>
-                  <td style={cell}>{(Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : "—"}</td>
+                  {/* v18.0.0: deposit and voucher share one money column. A
+                      separate column would widen a sheet that is printed on
+                      A4 and read at the table, and the two are the same
+                      question — has this guest already paid something. */}
+                  <td style={cell}>{[
+                    (Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : null,
+                    vouchersOn && normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
+                  ].filter(Boolean).join("  ·  ") || "—"}</td>
                   <td style={cell}>{b.notes || ""}</td>
                 </tr>
               );
@@ -126,7 +139,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
           the deposit flag had when it printed the configured currency symbol.
           The heading above already carries the restaurant name, so this line
           was also saying it twice. */}
-      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>MGT Bookings</div>
+      <div style={{ marginTop: 18, fontSize: T.micro, color: "#666" /* @fixed-fill */ }}>{APP_NAME}</div>
     </div>,
     document.body
   );

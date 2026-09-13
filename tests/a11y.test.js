@@ -63,6 +63,10 @@ const BookingForm = read("components/BookingFormModal.jsx");
 const Walkin = read("components/WalkinForm.jsx");
 const Connection = read("components/ConnectionStatus.jsx");
 const Reminder = read("components/ReminderEditor.jsx");
+const Admin = read("components/AdminSettings.jsx");
+const Vouchers = read("components/VouchersSettings.jsx");
+const Customers = read("components/CustomersSettings.jsx");
+const ViewSwitcher = read("components/ViewSwitcher.jsx");
 // v17.14.0: the skip link is half markup and half stylesheet, and the CSS half
 // is where it can fail invisibly (hidden in a way that also makes it
 // unfocusable). Read RAW — stripComments is for JS/JSX, and the point here is
@@ -265,13 +269,70 @@ describe("live regions (WCAG 4.1.3)", () => {
       "duplicating it — decide which one speaks, do not ship both");
   });
 
-  it("both forms keep a permanently-mounted role=alert wrapper", () => {
-    for (const [name, src] of Object.entries({ BookingForm, Walkin })) {
+  it("every refusal surface keeps a permanently-mounted role=alert wrapper", () => {
+    // v18.0.0 phase 3 adds the Admin panel, and it is here because it SHIPPED
+    // the defect for one commit: the last-admin refusal ("ask another admin")
+    // rendered perfectly on screen while `querySelectorAll('[role=alert]')`
+    // returned 0, so the one message in that panel which STOPS you doing
+    // something reached sighted users only. Measured in the live page, not
+    // caught in review — which is the whole reason this list is a list.
+    for (const [name, src] of Object.entries({ BookingForm, Walkin, Reminder, Admin })) {
       has(src, `${name} role=alert`, /role="alert"/,
         "clicking Save on an empty form rendered good, specific copy that was " +
         "announced by nothing; the wrapper is always rendered and only its " +
         "CHILD is conditional, or it announces nothing on the first error");
     }
+  });
+
+  // v18.0.0 session 8 (item 6). The History button lost its visible text, so the
+  // count reaches a screen reader through the NAME or not at all.
+  it("the icon-only History button keeps its count in the name", () => {
+    has(BookingForm, "History name", /aria-label=\{"History, "/,
+      "the button is an icon now; a bare \"History\" would drop the one fact " +
+      "that says whether it is worth opening");
+    has(BookingForm, "History count is pluralised", /"entry":"entries"/,
+      "\"History, 1 entries\" is the kind of thing only a screen-reader user " +
+      "ever hears, which is exactly why it gets pinned");
+    hasnt(BookingForm, "History visible text", /\{"History \("\+cur\.history\.length/,
+      "if the words come back the icon and this pin are both stale — and the " +
+      "name would then be a Label-in-Name violation rather than the only name");
+  });
+
+  // v18.0.0 session 8 (item 2a). The voucher number sat inside the row's
+  // `role="button"`, which is BOTH why it computed `user-select: none`
+  // (measured live) and why a Copy button could not go beside it — a button's
+  // children are presentational.
+  it("the voucher number is outside the control, and copyable", () => {
+    hasnt(Vouchers, "row role=button", /role="button"/,
+      "the number could not be selected by any means while it was in there, " +
+      "and a role=button holding a Copy button hides that button from AT");
+    has(Vouchers, "selectable number", /userSelect: "text"/,
+      "stated rather than inherited: this is the one string on the screen " +
+      "somebody is there to copy");
+    has(Vouchers, "Copy names its voucher", /"Copy voucher "/,
+      "twenty rows and one word — the name has to say WHICH (v17.15.6)");
+    has(Vouchers, "Copy names the copied state too", /"Copied voucher "/,
+      "the MARK changes on success, so a name that stayed put would describe " +
+      "the wrong icon. This why-line used to read \"the visible word becomes " +
+      "Copied\", which stopped being true the moment the text left the button — " +
+      "a pin whose reason is stale is a pin nobody can act on");
+  });
+
+  // v18.0.0 session 8 (item 4): the Copy control lost its visible text, which is
+  // the exact shape CLAUDE.md's table records as how twenty Toggles once shipped
+  // with NO accessible name — an element is named by its content and this one has
+  // none. The two literals above are that name now, so these pins are what keep
+  // them load-bearing instead of decorative.
+  it("the icon-only Copy button is a named mark, not a bare glyph", () => {
+    has(Vouchers, "Copy renders the mark", /<CopyIcon size=\{IC\.chrome\}/,
+      "IC.chrome (18), not IC.control (14): two sheets inside a ring close up " +
+      "at 14px — HistoryIcon's measured finding, one note over in Icons.jsx");
+    has(Vouchers, "Copy confirms with a check", /<CheckIcon size=\{IC\.chrome\}/,
+      "the confirmation is a mark swap because the button is 32px with no room " +
+      "for a word — and a colour change on its own is not a state");
+    hasnt(Vouchers, "Copy visible text", /\{done \? "Copied" : "Copy"\}/,
+      "if the words come back then both name pins above are stale, AND the " +
+      "names become a Label-in-Name violation rather than the only name");
   });
 });
 
@@ -1265,6 +1326,119 @@ describe("a status painted as a FILL is never colour alone (WCAG 1.4.1)", () => 
     // every check above passes by looking at nothing.
     expect(painting.length, "if this drops the guard has stopped looking")
       .toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("the active view is not colour alone (WCAG 1.4.1, 4.1.2) — v18.0.0 session 9", () => {
+  // Measured before the fix: the three primary-navigation buttons carried no
+  // aria-pressed / aria-current / aria-selected and were not disabled, so the
+  // active view was signalled by FILL ALONE — rgb(10,132,255) against
+  // rgba(110,118,135,.5). CLAUDE.md's own "state is colour alone" rule, broken
+  // on the control every session starts from.
+  const tag = openingTagsOf(ViewSwitcher, "button")[0] || "";
+
+  it("the view buttons carry aria-pressed", () => {
+    expect(/aria-pressed=\{isActive\(v\)\}/.test(ViewSwitcher),
+      "wired to isActive, the SAME predicate that paints the fill, so the two cannot drift").toBe(true);
+  });
+
+  it("the split's focused pane is exposed too, and only in a split", () => {
+    expect(/aria-current=\{isFocusedPaneView\(v\) \? "true" : undefined\}/.test(ViewSwitcher),
+      "the inset underline is shape-alone without it; undefined when there is no split").toBe(true);
+  });
+
+  it("they are NOT given an aria-label", () => {
+    // v17.15.4's Label-in-Name defect, which v17.16.3 nearly re-introduced after
+    // an automation tree reported all three as named by their `title`. Chrome
+    // computes the name from CONTENTS; a label here would replace a working,
+    // sayable name with a paraphrase. `title` stays as a description.
+    expect(/aria-label/.test(tag), "the visible text is the name").toBe(false);
+    expect(/title=\{gesturesOn/.test(ViewSwitcher), "the title is untouched").toBe(true);
+  });
+});
+
+describe("a customer row is reachable, and named (WCAG 2.1.1, 4.1.2) — v18.0.0 session 9", () => {
+  // Measured before the fix: each row was a bare div — role null, aria-label
+  // null, tabIndex -1 — carrying the click that opens the customer's detail and
+  // the only route to "Delete customer & all data". Mouse-only, announcing as
+  // nothing, on a path that erases personal data irreversibly.
+  it("the disclosure is a real button with aria-expanded", () => {
+    expect(/aria-expanded=\{open\}/.test(Customers)).toBe(true);
+  });
+
+  it("its name says WHICH customer (v17.15.6)", () => {
+    // Dynamic, not a literal: thirty rows sharing one static name is one name
+    // repeated, and in the source that looks identical to thirty names.
+    expect(/aria-label=\{\(c\.name \|\| "\(no name\)"\)/.test(Customers)).toBe(true);
+  });
+
+  it("the phone stays selectable — the row is NOT wrapped in the button", () => {
+    // VoucherRow's rule one file over: a control subscribes to src/index.css's
+    // `user-select: none`, and staff select this number to ring the party. The
+    // identity text must sit OUTSIDE the button, carrying userSelect: "text".
+    expect(/color: S\.muted, userSelect: "text", cursor: "text"/.test(Customers)).toBe(true);
+  });
+
+  it("the delete control is NOT inside that button", () => {
+    // A button's children are presentational, so a delete inside it disappears
+    // from assistive tech — the container-of-controls defect. It lives in the
+    // Reveal below, a sibling: the button's own tag must close before it.
+    const btnStart = Customers.indexOf("aria-expanded={open}");
+    const btnEnd = Customers.indexOf("</button>", btnStart);
+    const del = Customers.indexOf("Delete customer & all data");
+    expect(btnStart).toBeGreaterThan(-1);
+    expect(del).toBeGreaterThan(btnEnd);
+  });
+});
+
+describe("a refused control says why it is refused — v18.0.0 session 9 (A4)", () => {
+  // The mechanism shipped in session 8 and the words did not: the Date field
+  // was `readOnly` + `aria-readonly` while a draft is seated, and
+  // `grep "to change the date" src/` returned nothing. The only sentence the app
+  // had fires on SAVE, which readOnly makes unreachable. A control that refuses
+  // input silently is CLAUDE.md's "present and useless in ways nothing shows
+  // you"; that is why the copy is pinned here and not merely present.
+  it("the locked Date field carries a visible hint", () => {
+    expect(/Change the status to change the date/.test(BookingForm)).toBe(true);
+  });
+
+  it("the hint is wired to the input, and does not overwrite the error id", () => {
+    // Fld's own describedBy is emitted only alongside aria-invalid, so a
+    // PERMANENT hint has to be wired at the call site — and merged, because a
+    // locked date can also be the field a save error names. A plain assignment
+    // would drop the error's id and leave a field described by the wrong thing.
+    expect(/DATE_LOCK_ID/.test(BookingForm)).toBe(true);
+    expect(/\[attrs&&attrs\["aria-describedby"\],DATE_LOCK_ID\]\.filter\(Boolean\)\.join\(" "\)/.test(BookingForm),
+      "merged, not replaced").toBe(true);
+  });
+
+  it("it is a description, never a label", () => {
+    // An aria-label here would REPLACE the field's own name ("Date") with a
+    // paraphrase — v17.15.4's Label-in-Name defect.
+    expect(/aria-label=\{[^}]*Change the status/.test(BookingForm)).toBe(false);
+  });
+});
+
+describe("the voucher panel's refusal is announced, not just shown — v18.0.0 session 9", () => {
+  // Measured before the fix: "Enter an amount above zero" rendered as a bare
+  // <span> — no role, no aria-live, no live-region ancestor — inside a `Reveal`
+  // that mounts only when there is something to say, and neither input carried
+  // aria-invalid or aria-describedby. Visible-only feedback, on a primary button
+  // that reports disabled:false at full opacity so nothing predicts the refusal.
+  it("the alert wrapper is permanently mounted, with only its child conditional", () => {
+    // A live region announces a CHANGE to its content, so one that arrives
+    // already holding its message says nothing. The booking form's shape.
+    expect(/<div role="alert"><Reveal show=\{!!issueErr\}>/.test(Vouchers)).toBe(true);
+    expect(/\{issueErr \? <InlineAlert id=\{ISSUE_ERROR_ID\}/.test(Vouchers)).toBe(true);
+  });
+
+  it("both inputs take invalid + describedBy, each for its OWN failure", () => {
+    expect(/invalid=\{issueErrField === "value"\} describedBy=\{ISSUE_ERROR_ID\}/.test(Vouchers)).toBe(true);
+    expect(/invalid=\{issueErrField === "code"\} describedBy=\{ISSUE_ERROR_ID\}/.test(Vouchers)).toBe(true);
+  });
+
+  it("the field is taken from the validator, never matched out of the message", () => {
+    expect(/setIssueErrField\(\(r && r\.field\) \|\| ""\)/.test(Vouchers)).toBe(true);
   });
 });
 

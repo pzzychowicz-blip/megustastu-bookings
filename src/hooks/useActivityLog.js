@@ -1,0 +1,453 @@
+// src/hooks/useActivityLog.js — v18.0.0 session 8 (item 1)
+//
+// The two halves of the activity log that need Firebase: WRITING an entry, and
+// READING a day of them. Everything that decides what an entry SAYS is pure and
+// lives in `lib/activity.js`; this file only carries it to the database and
+// back.
+//
+// ── WRITING ─────────────────────────────────────────────────────────────────
+// `useActivityLog()` installs `logActivity` as the module-level sink that every
+// writer in the app emits into (see `lib/activitySink.js` for why it is a sink
+// rather than a prop). Until this hook mounts there IS no sink and `emitActivity`
+// is a no-op — which is the normal state for every write before the app is
+// ready, and is why the sink stays silent about it.
+//
+// **Three fields are added HERE and nowhere else**, because only this file has
+// the auth context and the server's clock:
+//
+//   at     serverTimestamp()  — the rules require `at === now`, and only the
+//                              SENTINEL satisfies that. A client `Date.now()`
+//                              is refused (measured against the emulator), and
+//                              deliberately so: an entry filed before the thing
+//                              it describes happened is worse than no entry.
+//   uid    auth.currentUser.uid
+//   email  auth.currentUser.email
+//
+// The rules require the last two to equal `auth.uid` and `auth.token.email`
+// exactly, which is what stops an account writing the log as somebody else.
+//
+// **The `getUser()` fallback must NOT be used here.** App's `getUser()` returns
+// the literal "staff" when `auth.currentUser` is null, which is right for a
+// history entry's `by` field and fatal here: "staff" is not the signed-in
+// account's email, the rule refuses the write, and `emitActivity`'s try/catch
+// swallows the refusal — so the entry would vanish with nothing on screen and
+// nothing in the console. With no signed-in user there is no honest author, so
+// nothing is written at all.
+//
+// ── READING ─────────────────────────────────────────────────────────────────
+// `useActivityFeed` is the app's FIRST Firebase query — every other listener in
+// the codebase is a plain `onValue(ref(db, path))`. Two consequences worth
+// knowing: it needs the `.indexOn: ["at", "guestKey"]` that ships in
+// `database.rules.json`, or the server sorts client-side and says so in a
+// warning; and it is mounted ONLY while the log is open, because it is the one
+// listener in the app whose data nothing else needs.
+//
+// v18.0.0 session 11: the window is a RANGE and either end may be ABSENT, so
+// the default question is "everything, newest first" rather than "one day".
+// Patryk: *"Search box must search globally (as Find a booking does) not by
+// date only. Filtering by date should be one of options."*
+import { useState, useEffect } from "react";
+import {
+  ref, push, set, get, update, onValue, query,
+  orderByChild, startAt, endAt, equalTo, limitToLast, serverTimestamp,
+} from "firebase/database";
+import { db, auth } from "../firebase";
+import { dbError } from "../lib/dbError";
+import { setActivitySink, emitActivity } from "../lib/activitySink";
+import { PRUNE_AFTER_MS, isPrunable, clearedEntry } from "../lib/activity";
+
+// ── PAGING: one GROWING query, not a cursor ─────────────────────────────────
+//
+// A page of rows. `loadOlder` raises the limit and the SAME listener re-answers;
+// it does not fetch a second page and stitch it on. That costs re-reading the
+// rows already in hand, and buys three things worth more than the bytes at this
+// size:
+//
+//   • No cursor arithmetic. RTDB's `endAt(value, key)` paging has to dedupe its
+//     boundary row, and `at` is a serverTimestamp — two entries written in the
+//     same millisecond are not hypothetical, since `bookingWriteEntries` emits
+//     several per save.
+//   • The whole list stays LIVE. A stitched page is a frozen snapshot the
+//     listener no longer maintains, so an entry arriving while the log is open
+//     would show up in the newest page and nowhere else.
+//   • The rows stay a pure function of (window, limit) — which is the property
+//     the `win`/`limit` compare below rests on, and what lets a limit bump keep
+//     the current rows on screen instead of blanking the panel.
+//
+// `limitToLast` keeps the NEWEST, which is the half anybody wants.
+export const FEED_PAGE = 500;
+
+// One entry per push key. Written with `set` on a pushed ref rather than
+// `push(ref, value)` so the two steps are separable and the key is in hand —
+// the same shape `usePresence` uses for its own per-connection child.
+function logActivity(entries) {
+  const u = auth.currentUser;
+  // No signed-in account = no honest author. See the header: substituting
+  // anything here produces a write the rules refuse and the sink swallows.
+  if (!u || !u.uid || !u.email) return;
+  (Array.isArray(entries) ? entries : []).forEach(function (e) {
+    if (!e || !e.kind || !e.text) return;
+    const row = push(ref(db, "activity"));
+    set(row, Object.assign({}, e, {
+      at: serverTimestamp(), uid: u.uid, email: u.email,
+    })).catch(function (err) {
+      // Reported and never rethrown. A refused log entry must not disturb the
+      // write it describes — which has already landed by the time we are here.
+      console.warn("[activity] entry refused by the server", err);
+    });
+  });
+}
+
+// ── ERASURE ─────────────────────────────────────────────────────────────────
+//
+// "Delete customer & all data" anonymises the guest's BOOKINGS, and the log
+// follows from that for free almost everywhere: its text holds `{b:<id>}`
+// tokens resolved against the live list, so an anonymised booking reads "Data
+// removed" in the log with nothing having been rewritten.
+//
+// The exception is the entry for a DELETED booking, which has no row left to
+// resolve against and therefore carries `subject.name` — the one piece of
+// personal data the log stores. `guestKey` is the indexed field that finds it.
+//
+// **A LIST of keys, not one.** `matchesIdentity` matches a normalised phone AND
+// every `guestIds` entry, because a customer can have absorbed more than one
+// guest group; its own comment says "Delete must reach every id the row is
+// showing, or 'delete all data' leaves some". Erasing under one key would
+// reproduce that defect one collection over — and a missed erasure looks
+// exactly like a successful one, since neither shows anything on screen.
+//
+// One-shot `get()` rather than `onValue`: this is an erasure, not a
+// subscription, and a listener left attached to it would be a listener nobody
+// detaches.
+export function redactGuest(keys) {
+  const list = (Array.isArray(keys) ? keys : [keys]).filter(Boolean);
+  list.forEach(function (k) {
+    const q = query(ref(db, "activity"), orderByChild("guestKey"), equalTo(String(k)));
+    get(q).then(function (snap) {
+      snap.forEach(function (child) {
+        const v = child.val();
+        // Only entries that actually hold a name, so the write is not attempted
+        // on every entry the guest ever touched.
+        if (!v || !v.subject || !v.subject.name) return;
+        set(ref(db, "activity/" + child.key + "/subject/name"), "Data removed")
+          .catch(function (err) {
+            // Loud, because this one matters: a refused redaction means a
+            // guest's name is still in the log after they asked for it to go.
+            console.warn("[activity] could NOT redact entry " + child.key, err);
+          });
+      });
+    }).catch(function (err) {
+      console.warn("[activity] could not search the log for " + k, err);
+    });
+  });
+}
+
+// ── THE 12-MONTH PRUNE ───────────────────────────────────────────────────────
+//
+// Run when an ADMIN opens the log — there is no server-side scheduler on this
+// plan, so the retention promise is kept by the app, and the rules are what stop
+// anyone else keeping it differently: a delete is refused unless the caller is
+// an admin AND the entry is genuinely older than a year.
+//
+// Bounded on purpose. `endAt(cutoff)` asks only for what is prunable rather than
+// reading the node and filtering, and the batch cap means a log left unpruned
+// for years is cleared over several opens instead of in one storm of deletes.
+export const PRUNE_BATCH = 200;
+
+export function pruneActivity(windowMs) {
+  // v18.0.0 session 11: the window is an ARGUMENT now (settings/admin
+  // `activityRetentionDays`), defaulting to the shipped year when the caller has
+  // nothing — which is the state on the very first render, before the node has
+  // loaded. Pruning to a default that is WIDER than the setting is the safe
+  // direction: it deletes less than asked, and the next open corrects it.
+  const span = Number.isFinite(Number(windowMs)) && Number(windowMs) > 0
+    ? Number(windowMs) : PRUNE_AFTER_MS;
+  const cutoff = Date.now() - span;
+  const q = query(
+    ref(db, "activity"), orderByChild("at"), endAt(cutoff), limitToLast(PRUNE_BATCH)
+  );
+  return get(q).then(function (snap) {
+    const olds = [];
+    snap.forEach(function (child) {
+      // The client half of the rule, so the app asks only for what will be
+      // allowed — `isPrunable` and the rule's `at < now - a year` are the same
+      // sentence in two languages.
+      if (isPrunable(child.val(), Date.now(), span)) olds.push(child.key);
+    });
+    // /code-review: ONE multi-path write, the same shape the clear uses. This
+    // was `PRUNE_BATCH` separate `remove()` calls — up to 200 round trips for
+    // an operation the emulator has since proved an admin may do in one patch.
+    // Two implementations of one delete, on one node, under one rule, in one
+    // file is the condition that produces the next disagreement.
+    //
+    // It keeps `isPrunable` rather than folding into `clearActivityRange`
+    // outright, and that is deliberate: `orderByChild("at")` sorts a child with
+    // a NULL `at` BEFORE every number, so `endAt(cutoff)` would sweep up a
+    // malformed row that this guard refuses. The rules make such a row
+    // unreachable today; the guard costs nothing and says so.
+    return deleteEntries(olds).then(function (n) { return n; });
+  }).catch(function () { return 0; });
+}
+
+/**
+ * Delete a list of entry keys in ONE multi-path update. Resolves with the count
+ * actually removed — 0 on a refusal, never the length of what was asked for.
+ */
+function deleteEntries(keys) {
+  if (!keys.length) return Promise.resolve(0);
+  const patch = {};
+  keys.forEach(function (k) { patch[k] = null; });
+  return update(ref(db, "activity"), patch).then(function () {
+    return keys.length;
+  }).catch(function (err) {
+    console.warn("[activity] could not delete a batch", err);
+    return 0;
+  });
+}
+
+// ── CLEARING A RANGE (v18.0.0 session 11) ───────────────────────────────────
+//
+// Patryk's third item: "There must be an option to remove the data. Options
+// should be: remove by date or a range of dates."
+//
+// It is ONE multi-path `update()` of nulls per batch, not N `remove()` calls,
+// and that is measured rather than reasoned: `tests/rules/database-rules.test.js`
+// asks the emulator directly and gets a yes for an admin and a no for a staff
+// account. `activity` itself carries no `.write` — only `$eid` does — so the
+// batch is permitted per KEY, which is also why the whole node still cannot be
+// wiped in one call. CT-2A-06 is in this repo because someone once reasoned
+// about where RTDB evaluates a rule instead of running it.
+//
+// Batched and LOOPED because a range can hold more than one query's worth. The
+// loop is bounded by `MAX_PASSES` rather than by "until empty": a pass that
+// deletes nothing — every key refused, because the account is not an admin —
+// would otherwise spin forever against the same rows. It stops on a pass that
+// removes nothing, which is the same condition read the safe way round.
+export const CLEAR_BATCH = 400;
+const MAX_PASSES = 25;
+
+/**
+ * Delete every entry in [from, to] (ms; either may be null for unbounded).
+ *
+ * Resolves with `{ removed, refused, truncated }`. `removed` is a count of DELETES and
+ * never of matches — a refused batch must not be announced as a success, which
+ * is also what keeps `clearedEntry` from writing "cleared 27 entries" over a
+ * log that still holds 27.
+ *
+ * `refused` exists because those two are not the same failure and the screen
+ * has to tell them apart: zero-because-there-was-nothing is a quiet week, and
+ * zero-because-the-server-said-no is a deploy that has not happened. Measured
+ * on DEV before it was added — the clear was denied, the app correctly claimed
+ * nothing, and showed the user nothing either, which reads as a dead button.
+ *
+ * `truncated` is the same argument one step further (/code-review). The loop is
+ * bounded at `MAX_PASSES * CLEAR_BATCH` = 10,000 entries, and the bound was
+ * reported exactly like success: a restaurant logging a couple of hundred
+ * entries a day passes 10,000 inside a year, so clearing "everything before
+ * last summer" removed 10,000, said "Cleared 10000 entries." and left the rest
+ * in place with nothing saying so. Three outcomes, three sentences — the same
+ * rule `refused` was added for.
+ */
+export function clearActivityRange(from, to) {
+  let total = 0;
+  let refused = false;
+  let truncated = false;
+  function done() { return { removed: total, refused: refused, truncated: truncated }; }
+  function pass(n) {
+    // Out of passes with a full batch behind us: there is more in this range
+    // and we are stopping anyway. Saying so is the whole point — see the
+    // doc comment.
+    if (n <= 0) { truncated = true; return Promise.resolve(done()); }
+    const parts = [orderByChild("at")];
+    if (from != null) parts.push(startAt(from));
+    if (to != null) parts.push(endAt(to));
+    parts.push(limitToLast(CLEAR_BATCH));
+    const q = query.apply(null, [ref(db, "activity")].concat(parts));
+    return get(q).then(function (snap) {
+      const keys = [];
+      snap.forEach(function (child) { keys.push(child.key); });
+      const found = keys.length;
+      if (!found) return done();
+      return deleteEntries(keys).then(function (gone) {
+        if (!gone) {
+          // Refused. NOT rethrown into a rejection the caller has to
+          // special-case: `removed` is already the truth about what went, and
+          // `refused` is what stops that truth reading as "nothing to do".
+          refused = true;
+          return done();
+        }
+        total += gone;
+        // A full batch means there may be more; a short one means that was the
+        // tail. Same evidence the feed's `hasMore` uses, and over-reporting
+        // costs one empty query where under-reporting would leave rows behind
+        // after a clear that said it was done.
+        return found < CLEAR_BATCH ? done() : pass(n - 1);
+      });
+    }).catch(function (err) {
+      refused = true;
+      console.warn("[activity] could not read the range to clear", err);
+      return done();
+    });
+  }
+  return pass(MAX_PASSES);
+}
+
+/**
+ * Clear a range and then say so IN the log. Split from the delete above so the
+ * deleting is testable without a sink, and joined here so no call site can do
+ * one without the other — which is the whole compensation for the rules having
+ * given up their 12-month floor.
+ */
+export function clearActivityAndLog(from, to, fromDay, toDay) {
+  return clearActivityRange(from, to).then(function (res) {
+    const e = clearedEntry(fromDay, toDay, res.removed);
+    // Written AFTER the deletes, so no clear can delete its own record.
+    //
+    // /code-review corrected what this used to claim — that the line "cannot be
+    // caught by the range it is reporting". That is FALSE for any range ending
+    // today, which is two of the three quick ranges: `to` is today at
+    // 23:59:59.999 and the entry's server `at` is now, so it lands INSIDE the
+    // window it describes. One clear cannot eat its own record, because the
+    // deletes are already done when it is written — but clearing the SAME range
+    // twice removes the evidence of the first clear, and since this line is the
+    // entire compensation for the rules giving up their 12-month floor, the
+    // property is "tamper-evident for one pass" rather than the stronger thing
+    // the old wording implied.
+    //
+    // Gated on something having actually gone: `clearedEntry` returns null for
+    // a count of zero, so a refused clear leaves no line claiming otherwise.
+    if (e) emitActivity([e]);
+    return res;
+  });
+}
+
+/**
+ * Install the writer for as long as the app is mounted. Passing null on unmount
+ * is what stops a stale closure outliving its React tree.
+ */
+export function useActivityLog() {
+  useEffect(function () {
+    setActivitySink(logActivity);
+    return function () { setActivitySink(null); };
+  }, []);
+}
+
+/**
+ * Entries newest first over an OPEN range: `from` and `to` are ms and either
+ * may be null for "no bound this side" — both null is the whole log.
+ * `enabled` is false whenever the log is closed, and the listener is not
+ * attached at all then — this is the only listener in the app that is not
+ * permanent, because it is the only one whose data no other surface reads.
+ */
+const EMPTY_ROWS = [];
+
+export function useActivityFeed({ from, to, enabled }) {
+  // ── ONE state, KEYED to the query it answers ────────────────────────────────
+  // Not `rows` plus a `loading` boolean, and the difference is two bugs rather
+  // than a preference.
+  //
+  // A separate boolean has to be SET, and the only place to set it is the
+  // effect body — which is a synchronous setState inside an effect
+  // (`react-hooks/set-state-in-effect`, and it can cascade renders). Worse, it
+  // leaves the two values free to disagree: on a day change or a reopen the
+  // stored rows are still the PREVIOUS query's answer, so the panel shows
+  // yesterday's entries under today's date for as long as the snapshot takes.
+  //
+  // Keying the stored answer to the query that produced it makes `loading` a
+  // DERIVATION — "what I am holding is not an answer to what I am asking" —
+  // which cannot disagree with the rows, needs no reset when the log closes,
+  // and leaves `setState` where the warning itself says it belongs: inside the
+  // subscription callback.
+  //
+  // v18.0.0 session 11 splits that key in TWO — the WINDOW and the LIMIT —
+  // because they are different kinds of change and one key could not tell them
+  // apart. A new window is a new QUESTION: the stored rows are another range's
+  // answer and must not be shown. A bigger limit is the SAME question asked
+  // wider: the stored rows are a valid PREFIX of the answer coming, so blanking
+  // them would flash the panel empty on every "Load older" — which is the thing
+  // the keyed state exists to prevent, arriving by the other door.
+  const [state, setState] = useState({ win: null, limit: 0, rows: EMPTY_ROWS });
+  // v18.0.0 session 10 (/code-review): `enabled` is not the whole
+  // precondition. A non-finite bound is a THROW from `startAt`, not an empty
+  // result — and a throw here is a throw inside an effect, which the error
+  // boundary answers by unmounting the app. The caller guards its own day as
+  // well; this is the module-level half, because this is the only Firebase
+  // QUERY in the app and the failure mode is a blank screen rather than a
+  // missing row.
+  //
+  // ONE derivation rather than a second guard inside the effect: `key` has to
+  // agree with it, or a withheld query leaves the stored answer permanently
+  // mismatched and `loading` true for ever.
+  //
+  // An ABSENT bound is null, and that is not the same as a BROKEN one. null
+  // means "no bound this side" and is the resting state of both fields;
+  // NaN is a date the caller could not parse. Only the second withholds the
+  // query — and `Number.isFinite(null)` is false, so the two have to be told
+  // apart here or the unbounded feed, which is now the DEFAULT, would never
+  // run at all.
+  const okFrom = from == null || Number.isFinite(from);
+  const okTo = to == null || Number.isFinite(to);
+  const ready = !!enabled && okFrom && okTo;
+  const win = ready ? String(from) + "" + String(to) : null;
+
+  // The limit is keyed to its window for the SAME reason as the rows, and it is
+  // worth spelling out because the obvious alternative is a bug this file
+  // already argues against. A plain `useState(FEED_PAGE)` has to be RESET when
+  // the window changes, the only place to reset it is an effect, and a
+  // synchronous setState in an effect is `react-hooks/set-state-in-effect` —
+  // the warning the paragraph above exists to avoid. Keying it makes the reset
+  // a DERIVATION: a stored limit belonging to another window is not a limit for
+  // this one, so this one starts at a page. No effect, and the two cannot
+  // disagree.
+  //
+  // It is declared HERE, below `win`, and not up with the other state: `const`
+  // does not hoist, and reading `win` above its declaration is a TDZ
+  // ReferenceError that build and lint both pass (CLAUDE.md's blank-screen
+  // gotcha — hit twice in v17.11.0, the second time while fixing the first).
+  const [page, setPage] = useState({ win: null, limit: FEED_PAGE });
+  const limit = page.win === win ? page.limit : FEED_PAGE;
+
+  useEffect(function () {
+    if (!ready) return undefined;
+    // Built as a LIST because either bound may be absent. `query()` is
+    // variadic, so an unbounded side simply contributes no constraint —
+    // which is what makes "all time" the same code path as "one day"
+    // rather than a second one beside it.
+    const parts = [orderByChild("at")];
+    if (from != null) parts.push(startAt(from));
+    if (to != null) parts.push(endAt(to));
+    parts.push(limitToLast(limit));
+    const q = query.apply(null, [ref(db, "activity")].concat(parts));
+    // The third argument is not optional in this codebase: without it a
+    // cancelled read fires nothing at all and the panel spins forever.
+    const unsub = onValue(q, function (snap) {
+      const out = [];
+      // `snap.forEach` walks a query's children in QUERY order (ascending `at`),
+      // which is not the order of `snap.val()`'s object keys — so the rows are
+      // collected here and reversed, rather than sorted afterwards.
+      snap.forEach(function (child) {
+        const v = child.val();
+        if (v) out.push(Object.assign({ id: child.key }, v));
+      });
+      out.reverse();
+      setState({ win: win, limit: limit, rows: out });
+    }, dbError("activity"));
+    return unsub;
+  }, [from, to, ready, win, limit]);
+
+  // Same window = the rows in hand are a prefix of the answer being fetched, so
+  // they stay on screen and only the "Load older" button reports the wait.
+  const sameWin = state.win === win;
+  const fresh = sameWin && state.limit === limit;
+  return {
+    rows: sameWin ? state.rows : EMPTY_ROWS,
+    loading: ready && !sameWin,
+    loadingMore: ready && sameWin && !fresh,
+    // A FULL page is the only evidence there may be more. It over-reports by one
+    // press when the log holds exactly a multiple of the page — which costs one
+    // query and then tells the truth, where under-reporting would hide entries
+    // behind a button that had quietly stopped offering them.
+    hasMore: fresh && state.rows.length >= limit,
+    loadOlder: function () { setPage({ win: win, limit: limit + FEED_PAGE }); },
+  };
+}

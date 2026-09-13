@@ -32,17 +32,27 @@
 
 import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
-import { db } from "../firebase";
+import { db, profile } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clampStep } from "../lib/clamp";
 import { dbError } from "../lib/dbError";
+// v18.0.0 session 8: the activity log.
+import { settingsWriteEntry } from "../lib/activity";
+import { emitActivity } from "../lib/activitySink";
+// The "Regular" threshold is owned by the customer-identity layer — the chip
+// helper there falls back to it too, so both agree by construction.
+import { DEFAULT_REGULAR_MIN } from "../lib/customers";
 
 export const DEFAULT_GENERAL_SETTINGS = {
   v: 1,
-  restaurantName: "Me Gustas Tú",
+  // v18.0.0 phase 2: the seed is the SELECTED TENANT's name, not a literal.
+  // It was MGT's name in code that every tenant would run — and a stored value
+  // always wins, so this is only ever read before the first snapshot lands and
+  // by the pre-auth login cache below. See src/tenants/mgt.js.
+  restaurantName: profile.name,
   currency: "€",
   phonePrefix: "+",
-  regularMin: 2,
+  regularMin: DEFAULT_REGULAR_MIN,
   lateCollapseMax: 2,
   waitMatchWin: 90,
   undoSecs: 10,
@@ -158,9 +168,21 @@ export function useGeneralSettings(){
       console.warn("[SAFE] Refused to write general settings — initial read has not completed yet.");
       return;
     }
-    const next = sanitizeGeneral({ ...generalSettings, ...(partial || {}) });
+    // v18.0.0 session 8: `prev` is captured BEFORE anything is overwritten, and
+    // that ordering is the whole of the correctness here — read a line later and
+    // it is the same object as `next`, so the diff reports that nothing changed
+    // and the entry is silently empty rather than visibly wrong. Every hook
+    // wired to the activity log captures it on the line the new value is built
+    // from, for that reason.
+    const prev = generalSettings;
+    const next = sanitizeGeneral({ ...prev, ...(partial || {}) });
     setGS(next);
-    writeWithRev("settings/general", next, revRef);
+    writeWithRev("settings/general", next, revRef, undefined, function () {
+      // Null when nothing actually differs — a save is not a change, and this
+      // runs on every press of a settings control whether or not one moved.
+      const entry = settingsWriteEntry("settings/general", prev, next);
+      if (entry) emitActivity([entry]);
+    });
   }
 
   return { generalSettings, saveGeneralSettings };

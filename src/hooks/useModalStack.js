@@ -38,17 +38,59 @@ export const MODAL_Z=[
   "form",        // the booking form — the bottom of every stack it takes part in
   "week",        // the More popover
   "waitlist",    // the waitlist panel
+  // ── WA sandbox (17.15.0-wa-sandbox) ────────────────────────────────────────
+  // The module's four surfaces, ranked rather than OR'd by hand into `anyModal`
+  // — which is exactly what `showWaitlist` above was doing when it turned out to
+  // be missing from four of the five lists. The inbox is a BASE surface: things
+  // open over it, and it closes itself when the booking form takes over (see
+  // `returnToInboxKey` in App), so it never stacks with the form. The simulator
+  // and the two confirms are raised FROM the inbox, so they rank above it; the
+  // confirms outrank the simulator because a decision must be reachable over a
+  // tool. These ranks are unconditional while the WA UI is `WA_SANDBOX`-gated:
+  // a rank that never opens costs one map entry, and tests/modal-stack.test.js
+  // requires every `setModalFor` id in App to have one whether or not the build
+  // renders it.
+  "inbox",       // the WhatsApp inbox panel
   "walkin",
   "manual",      // manual table assign — opens over the form
   "block",
   "search",
   "prefpicker",
+  "sim",         // WA sandbox: the message simulator, opened from the inbox header
   "del",
+  "waarchive",   // WA sandbox: archive-conversation confirm
+  "wadelete",    // WA sandbox: delete-conversation confirm
   "cancel",
   "reshuffle",
   "kitchen",     // the kitchen-load confirm, raised BY a save
+  "voucher",     // the redeem prompt, raised BY a completion — same shape
+  // v18.0.0 phase 6: the INVERSE prompt, raised by a completed booking being
+  // walked back. Same rank as its twin because only one of the two can ever be
+  // open — a status change is either into `completed` or out of it.
+  "voucherback",
+  // v18.0.0 session 8 (item 7): the carry offer, raised AFTER a redeem prompt
+  // has been answered and its write dispatched — so it ranks above both, and
+  // the two money questions are never on screen together.
+  "vouchercarry",
+  // v18.0.0 session 8 (C3): the seat-clash confirm — "table 3 still has López
+  // seated". Raised BEFORE the seat lands, so it ranks below the seat note,
+  // which is raised AFTER one does. The two can never be open together: this
+  // one closes when it is answered and the note opens on the far side of it.
+  "seatclash",
+  // v18.0.0 session 7: the seat note, raised BY a seat. It opens only after a
+  // voucher walk-back prompt has been answered — never beside one — and above
+  // the booking form, which a form-path seat has just closed.
+  "seatnote",
   "history",
   "settings",
+  // v18.0.0 phase 3: the capability grid opens from INSIDE the Settings
+  // overlay, so it must rank above it — and its `escapeAction` case ships in
+  // the same commit, which tests/modal-stack.test.js enforces.
+  "roles",
+  // v18.0.0 session 8: the activity log, beside `roles` for the same reason —
+  // it is opened from the Admin tab and so must sit above the Settings overlay
+  // it was opened from. The two never stack with each other.
+  "activity",
   "reminderdel", // renders above Settings in DOM order…
   "reminder",    // …and the editor is checked before it (v14 p7 order, kept)
   "discard",     // z=260 — raised by the surface below it, so it must be near the top

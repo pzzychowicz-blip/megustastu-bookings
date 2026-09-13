@@ -36,6 +36,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 // v17.15.1: the token blocks moved out of index.html into src/index.css (the
 // service worker can cache a hashed asset; it re-sent the inline block on every
@@ -107,14 +108,50 @@ function ratio(a, b) {
 }
 
 // The surface a fill sits on. Both are the app's real sheet/panel colour with
-// its own alpha already resolved — and both are the LIGHTEST (light) and
-// DARKEST (dark) plausible base, i.e. the worst case for washout in each theme.
+// its own alpha already resolved, and both are now the LIGHTEST plausible base.
 // Measured in the running app, not assumed: a table badge and a View button
 // both composite against pure WHITE, because the card they sit in is itself
 // translucent all the way down to the sheet. An earlier version of this file
 // guessed --bg-soft (248,250,253) and every solved value came out ~0.06 short
-// of the bar — right maths, wrong backdrop. Take the extreme of each theme.
-const BASE = { light: { r: 255, g: 255, b: 255, a: 1 }, dark: { r: 36, g: 37, b: 42, a: 1 } };
+// of the bar — right maths, wrong backdrop.
+//
+// ── v18.0.0 session 8: the DARK base was the wrong extreme ──────────────────
+// It was #24252a, and this comment described the pair as "the LIGHTEST (light)
+// and DARKEST (dark) plausible base, i.e. the worst case for washout in each
+// theme". The second half was false, and false in the direction that hides
+// failures. Washout is a pale ink losing its surface, so a pale ink gets WORSE
+// as the surface behind it gets LIGHTER — and in dark theme essentially every
+// ink is pale. Taking the darkest sheet therefore measured the entire dark half
+// of this registry OPTIMISTICALLY: it is the worst case for a dark ink on a
+// light fill, which is the LIGHT theme's problem, and the best case for the one
+// dark actually has. One sentence, applied to both themes, correct for one.
+//
+// The new value is measured rather than reasoned. A sweep in the running app
+// (dark, Settings open) walked every element with a TRANSLUCENT background that
+// carries text, composited its whole ancestor chain to an opaque colour, and
+// took the lightest: **rgb(50,50,52)** — a Section panel over the modal sheet
+// over --bg-app. That sweep also reproduces the figure this change was reported
+// against: the voucher row's disclosure control paints rgb(57,57,59), exactly
+// as ROADMAP.md recorded it.
+//
+// What it cost, and it is the point of doing it: FOUR pairs were below their
+// bar the moment the base was honest, having read as passing for versions —
+// --text-muted on --bg-soft at 3.92:1 (genuine secondary TEXT, not the chevron
+// the ROADMAP entry assumed), --btn-disabled at 4.17, --tbl-out-rgb at 4.41 and
+// --block-seated at 4.44. All four tokens were nudged by 1–5% in the dark block
+// of src/index.css, which is invisible on screen and is what makes this half of
+// the registry a floor instead of a ceiling.
+//
+// ONE limitation is left, deliberately, and it is named here rather than
+// discovered later. A single base per theme measures every fill on the lightest
+// surface in the app, including a fill that can never reach it: --block-seated
+// only ever paints on the timeline grid (rgb(33,35,39)), where it was already at
+// 4.56:1. It was nudged anyway — a 1% shift is cheaper than a second way of
+// measuring, and --tbl-out-rgb proves the instinct to except such a fill is not
+// safe, since TBL.out turned out to be painted in BlockModal, PrefPickerModal
+// and TableGrid as well as on the grid. If that ever costs a colour worth
+// keeping, the answer is a per-entry `on:` surface, not a second base.
+const BASE = { light: { r: 255, g: 255, b: 255, a: 1 }, dark: { r: 50, g: 50, b: 52, a: 1 } };
 
 // ── The registry ─────────────────────────────────────────────────────────────
 // alpha  — what constants.js actually composes the token at (null = the token
@@ -189,6 +226,32 @@ const FILLS = [
   { fill: "--bg-card-dim", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked, dim card)" },
 
+  // v18.0.0 session 8 — the SECTION PANEL as a text-bearing surface, registered
+  // for the reason the card fills above were: something finally painted
+  // semantic ink straight onto it, and neither guard in this repo could see it.
+  // `check:style` sees literals and the coverage check below enumerates the
+  // --block/--btn/--tbl/--tl/--wa prefixes, so `--bg-soft` matches neither.
+  //
+  // What was actually wrong: the vouchers list's disclosure control carried
+  // `--btn-nav`, which is declared once and is therefore theme-invariant dark
+  // slate, while its contents are OutlineChips and a chevron in inks that flip.
+  // Measured in the running app in LIGHT theme — --success-text 2.37:1,
+  // --text-secondary 2.51:1, --text-muted 1.99:1 — against 6.83 / 7.21 / 5.74
+  // once the fill flips with them. Dark was fine, which is why it was reported
+  // as a light-mode bug and why nothing here caught it: --btn-nav's only
+  // registered ink is white, at exactly the 3:1 button bar.
+  //
+  // All four chip tones are reachable on this surface (STATE_TONE maps open →
+  // success, expired → warn, void → danger, spent → neutral), so all four are
+  // named rather than only the one in the screenshot — the half-a-family
+  // omission this file has already been caught by twice.
+  { fill: "--bg-soft", alpha: null, ink: "--text-secondary", role: "label", what: "panel chip, neutral (voucher row: balance left / manual)" },
+  { fill: "--bg-soft", alpha: null, ink: "--success-text", role: "label", what: "panel chip, success (voucher row: open)" },
+  { fill: "--bg-soft", alpha: null, ink: "--warn-text", role: "label", what: "panel chip, warn (voucher row: expired)" },
+  { fill: "--bg-soft", alpha: null, ink: "--danger-text", role: "label", what: "panel chip, danger (voucher row: void)" },
+  { fill: "--bg-soft", alpha: null, ink: "--text-muted", role: "label", what: "panel secondary text + the voucher row's disclosure chevron" },
+  { fill: "--bg-soft", alpha: null, ink: "--text-primary", role: "label", what: "panel body text (redemption rows, customer history)" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },
@@ -242,13 +305,20 @@ const FILLS = [
   // mirror image: 1.30:1 light, 6.42:1 dark.
   //
   // The light ink is a step darker than --text-muted, and the reason is a limit
-  // of THIS FILE worth stating: BASE is the theme extreme, which is the worst
-  // case for WHITE ink and the BEST case for dark ink. The real modal sheet is
-  // translucent over a tinted app background, so the fill composites to
+  // of THIS FILE worth stating: in LIGHT, BASE is the lightest surface, which is
+  // the worst case for WHITE ink and the BEST case for dark ink. The real modal
+  // sheet is translucent over a tinted app background, so the fill composites to
   // rgb(211,211,217) on screen against rgb(225,225,229) here — a dark ink
   // measures LOWER in the app than in this file. --text-muted read 4.59 here and
-  // 4.02 live. The shipped pair measures 5.14 light / 4.60 dark in the running
-  // app, and is a `label` entry held to 4.5 rather than an exemption.
+  // 4.02 live. The shipped light pair measures 5.14 in the running app, and is a
+  // `label` entry held to 4.5 rather than an exemption.
+  //
+  // v18.0.0 session 8: that limit is exactly what the DARK base got wrong, and
+  // this entry is where it bit hardest — a pale ink on a fill that composites
+  // toward the base. Against #24252a the dark pair read 4.70 and this comment
+  // said so; against the lightest painted panel it was 4.17, i.e. the number
+  // quoted here as reassurance was the one number the file could not see. The
+  // ink is now #e4e4e8 and measures 4.53. See BASE's note above.
   { fill: "--btn-disabled", alpha: null, ink: "--btn-disabled-ink", role: "label", what: "disabled primary button" },
 
   // The two PRIMARY header buttons. Named --app-* rather than --btn-*, which is
@@ -266,6 +336,53 @@ const FILLS = [
   { fill: "--tl-hour-pill", alpha: null, ink: "--text-on-accent", role: "label", what: "timeline hour pill / block start time" },
   { fill: "--tl-now-pill", alpha: null, ink: "--text-on-accent", role: "label", what: "timeline now-time pill" },
   { fill: "--tl-blocked-badge", alpha: null, ink: "--text-on-accent", role: "label", what: "blocked table badge" },
+
+  // ── The WhatsApp module (sandbox) ──────────────────────────────────────────
+  // A FOURTH naming family, and it was outside this file entirely — so the
+  // module reproduced the exact defect this file exists to catch, under a
+  // comment in index.html asserting almost word for word that its saturated
+  // fills were "theme-invariant". They were rgba(hue, 0.78-0.85): --wa-green
+  // measured 2.90:1 in light against 4.79 in dark, --wa-btn-open 2.98 / 5.42,
+  // and the outgoing chat bubble — the most-read text in the module — 3.15 /
+  // 5.13. All four are opaque now, which is why each pair below reads the same
+  // number in both themes: an opaque fill composites against nothing.
+  //
+  // --wa-green is held to the LABEL bar even though it is mostly a button,
+  // because its strictest use is the needs-action count chip at 10px bold.
+  // Register a fill by its hardest job, not its most common one.
+  { fill: "--wa-green", alpha: null, ink: "--text-on-accent", role: "label", what: "WA brand / needs-action count" },
+  { fill: "--wa-green-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "Send" },
+  { fill: "--wa-btn-open", alpha: null, ink: "--text-on-accent", role: "button", what: "Accept & open / Apply changes" },
+  { fill: "--wa-btn-cancel", alpha: null, ink: "--text-on-accent", role: "button", what: "Cancel booking / Delete conversation" },
+  { fill: "--wa-btn-handled", alpha: null, ink: "--text-on-accent", role: "button", what: "Mark as handled / Restore" },
+  { fill: "--wa-bubble-out", alpha: null, ink: "--text-on-accent", role: "label", what: "outgoing chat bubble" },
+  { fill: "--wa-unread-dot", alpha: null, ink: "--text-on-accent", role: "label", what: "unread count badge" },
+  { fill: "--wa-sim-accent", alpha: null, ink: "--text-on-accent", role: "label", what: "simulator pill" },
+
+  // The module's SOFT fills. These already flipped correctly — they are here so
+  // that stays true, and because leaving half a family out of a coverage check
+  // is how the other half got missed.
+  { fill: "--wa-bubble-in", alpha: null, ink: "--text-primary", role: "label", what: "incoming chat bubble" },
+  { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text", role: "label", what: "draft card" },
+  { fill: "--wa-draft-bg", alpha: null, ink: "--wa-draft-text-dim", role: "label", what: "draft card (dim ink)" },
+  // --wa-accept-* and --wa-teal-* were deleted when the accepted-booking notice,
+  // the linked-booking card and the past-bookings disclosure moved onto the
+  // waitlist palette — the point of not keeping a second and third green.
+  // What that exposed: the NOTIFICATION-PANE tints were never registered at
+  // all, in prod either. Every in-flow banner in the app puts a semantic ink on
+  // one of these three, and the coverage check could not see them because it
+  // enumerates by the --block/--btn/--tbl/--tl/--wa prefixes and these carry
+  // none of them — the same prefix-blindness that hid --app-btn-grey. Three WA
+  // surfaces now depend on them too, so they are measured here.
+  { fill: "--suggest-bg-soft", alpha: null, ink: "--success-text", role: "label", what: "notification pane, suggest/green" },
+  { fill: "--app-overlap-bg", alpha: null, ink: "--warn-text", role: "label", what: "notification pane, warn/amber" },
+  { fill: "--danger-bg-soft", alpha: null, ink: "--danger-text", role: "label", what: "notification pane, danger/red" },
+  { fill: "--wa-panel-bg", alpha: null, ink: "--text-primary", role: "label", what: "inbox panel" },
+  { fill: "--wa-row-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row" },
+  { fill: "--wa-row-bg-hover", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (hover)" },
+  { fill: "--wa-row-active-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation row (selected)" },
+  { fill: "--wa-list-bg", alpha: null, ink: "--text-primary", role: "label", what: "conversation-list pane" },
+  { fill: "--wa-header-bg", alpha: null, ink: "--text-primary", role: "label", what: "panel header strip" },
 ];
 
 const NEED = { label: 4.5, button: 3 };
@@ -396,23 +513,28 @@ function measure(entry, theme) {
 // that names the thing it is guarding and then does not look at it is the same
 // defect as the v17.8.0 marker check. Now the number the test uses is the number
 // the component renders.
+// v18.0.0 phase 4: comments stripped before matching. `strip-comments.mjs`
+// was written for exactly this file's hazard — its own header says "half the
+// apparent colour literals are prose about colour literals" — and this was
+// one of two source-scanning tests still reading raw when the new
+// `tests/test-hygiene.test.js` guard first ran.
 const BLOCK_FILLS = ["--block-confirmed", "--block-pending", "--block-seated",
                      "--block-completed", "--block-cancelled"];
 
-const TIMELINE_SRC = readFileSync(
+const TIMELINE_SRC = stripComments(readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TimelineView.jsx"),
   "utf8"
-);
+)).join("\n");
 
 // v17.15.5: `SIZE_RING` moved to atoms.jsx when the List card became its third
 // consumer, so `ringAlpha()` reads THIS file now. Re-anchored rather than
 // deleted, which is what the throw in `ringAlpha()` asks the next person to do
 // — and it is what happened: the move made that guard fail loudly instead of
 // measuring a default, which is the entire reason it throws.
-const ATOMS_SRC = readFileSync(
+const ATOMS_SRC = stripComments(readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "atoms.jsx"),
   "utf8"
-);
+)).join("\n");
 
 // The BLOCK chip's own opacity, as authored.
 //
@@ -518,6 +640,15 @@ describe("registry coverage", () => {
     // Fills that never sit under text. Each is a wash, a rail, or a rim.
     "--btn-nav-quiet": "date-arrow rail, glyph is --text-primary not white",
     "--tl-blocked-badge-border": "rim of the blocked badge, not its fill",
+    // WhatsApp module — rims, rails, scrims and two shadow values.
+    "--wa-bubble-in-border": "rim of the incoming bubble",
+    "--wa-bubble-out-border": "rim of the outgoing bubble",
+    "--wa-draft-border": "shimmer bar fill in the parsing card; no longer a rim",
+    "--wa-row-active-border": "rim of the selected row",
+    "--wa-divider": "hairline between rows / header strips",
+    "--wa-shimmer": "the parsing sweep, a moving gradient stop",
+    "--wa-unread-ring": "a box-shadow, not a fill",
+    "--wa-row-active-glow": "a box-shadow, not a fill",
   };
   // v17.14.0: tokens matching the fill prefixes that are INK, not fill. Listing
   // one here is not an exemption — the assertion below requires it to be some
@@ -540,9 +671,18 @@ describe("registry coverage", () => {
     // shape that actually carries text on this view is a pill or a badge, and
     // that is what the next one will be called too.
     const candidates = Object.keys(LIGHT_VARS).filter((k) =>
-      /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb|tl-.*(pill|badge))/.test(k)
+      /^--(block-|btn-|app-btn-|app-new|app-walkin|tbl-.*-rgb|tl-.*(pill|badge)|wa-)/.test(k)
     );
-    const missing = candidates.filter((k) => !registered.has(k) && !(k in DECORATIVE) && !(k in INKS));
+    // `*-text*` tokens are INKS, not fills — they are checked by the
+    // ink-exists test below and measured as the ink half of a pair above.
+    // Two ways of saying that, both live: prod's explicit INKS map names one
+    // token at a time and makes it prove it is used as an ink, while the
+    // `-text` suffix rule covers the `--wa-*-text` family, which is named by
+    // convention rather than enumerated. A WA ink that ever stops being an ink
+    // is caught by the fill sweep the moment it is put on a surface.
+    const missing = candidates.filter(
+      (k) => !registered.has(k) && !(k in DECORATIVE) && !(k in INKS) && !/-text(-dim)?$/.test(k)
+    );
     expect(
       missing,
       "unregistered text-bearing fill(s): " + missing.join(", ") +
@@ -599,9 +739,13 @@ const RING_FLOOR = {
     "--block-confirmed": 1.83, "--block-pending": 1.39, "--block-seated": 2.48,
     "--block-completed": 1.58, "--block-cancelled": 2.48
   },
+  // v18.0.0 session 8: the dark five are re-recorded against the corrected
+  // BASE (see its note above). Every one moves DOWN — a lighter base lifts the
+  // block under a fixed white rule, so the rim's own contrast falls — and each
+  // is the value measured at the shipped 0.55, not a rounded-down cushion.
   dark: {
-    "--block-confirmed": 2.09, "--block-pending": 1.55, "--block-seated": 2.46,
-    "--block-completed": 2.74, "--block-cancelled": 2.86
+    "--block-confirmed": 2.07, "--block-pending": 1.54, "--block-seated": 2.46,
+    "--block-completed": 2.64, "--block-cancelled": 2.79
   }
 };
 
@@ -806,7 +950,9 @@ function ghostOpacity() {
 // ghost. Recording the stricter of the two is the point of choosing an extreme.
 const GHOST_FLOOR = {
   light: { plain: { name: 1.39, chip: 2.22, ring: 1.2 }, resh: { name: 1.27, chip: 1.74, ring: 1.14 } },
-  dark:  { plain: { name: 1.82, chip: 3.12, ring: 1.39 }, resh: { name: 1.63, chip: 2.41, ring: 1.3 } },
+  // v18.0.0 session 8: re-recorded against the corrected dark BASE, same as
+  // RING_FLOOR above. The ghost is --block-pending dimmed, so it moves with it.
+  dark:  { plain: { name: 1.79, chip: 3.05, ring: 1.38 }, resh: { name: 1.6, chip: 2.37, ring: 1.29 } },
 };
 
 describe("waitlist ghost — the dimmed block, as rendered", () => {

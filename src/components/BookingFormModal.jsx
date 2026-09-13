@@ -36,23 +36,44 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes,
-  optimizerActiveFor, seatingClosed
+  optimizerActiveFor, seatingClosed,
+  // v18.0.0 session 10: the predicate `applyOpt` itself branches on, so the
+  // preview asks "will the optimiser choose these tables?" with the optimiser's
+  // own helper rather than a second spelling of it.
+  isLocked,
+  // v18.0.0 session 8 (item 3): what the form previews must agree with.
+  tablesPinned,
+  // v18.0.0 session 9: …and the other half of agreeing with it — `doSaveEdit`
+  // keeps the tables it has when they are still free for the new window, so the
+  // preview has to ask the SAME question with the SAME helper.
+  tablesFreeFor,
+  // v18.0.0 session 8 (C7): the Time field's max is the last START, not close.
+  lastStartMins
 } from "../lib/booking-logic";
-import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+// v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
+import { WEEKDAY_LONG } from "../lib/day";
+import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
+import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
+import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
+import { VoucherPicker } from "./VoucherPicker";
+// v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
+// two predicates the "carried from" note is derived with.
+import { guestOpenVouchers, normalizeCode, isUnsettled } from "../lib/vouchers";
+import { matchesIdentity } from "../lib/customers";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
-const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+// v18.0.0 session 8: WEEKDAY_NAMES is gone — the list lives in lib/day.js, and
+// this file held BOTH a named copy and an inline one twelve lines apart.
 
 // v17.12.0: the id the error message renders under and the invalid field points
 // at. A module const, not an export — a plain const export from a component
@@ -68,7 +89,9 @@ export function BookingFormModal({
   onSave, onSavePending, onSaveConfirm, onClose, onClearSwap, onBookAgain,
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
-  currency = "€", regularMin = 2, // v17.0.0: settings/general
+  currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
+  vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
+  vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
@@ -92,25 +115,10 @@ export function BookingFormModal({
   // (new bookings only) pre-fills size/preference from the latest booking, the
   // same fields Book Again pre-fills.
   const [phoneFocus,setPhoneFocus]=useState(false);
-  // v17.3.0: tap-vs-scroll disambiguation for the autocomplete rows. Now that the
-  // dropdowns scroll (maxHeight), selecting on `onTouchStart` made a swipe-scroll
-  // immediately pick a row — rows past the fold were unreachable on touch. Instead
-  // we RECORD the touch start, only select on `onTouchEnd` if the finger barely
-  // moved (a tap, not a scroll), and suppress the synthesized mouse event that
-  // follows a touch. `acRowSelect(fn)` returns the shared handler bundle so both
-  // dropdowns reuse it. React makes touch listeners passive, so we never rely on
-  // preventDefault — native scroll is left free.
-  const acTouch=useRef({x:0,y:0,scroll:false,ts:0});
-  function acRowHandlers(select){
-    return {
-      // Desktop: mousedown beats the input's blur (which would unmount the list).
-      // Guard: ignore the synthesized mousedown that follows a touch (within 600ms).
-      onMouseDown:function(e){ if(Date.now()-acTouch.current.ts<600) return; e.preventDefault(); select(); },
-      onTouchStart:function(e){ const t=e.touches&&e.touches[0]; acTouch.current={x:t?t.clientX:0,y:t?t.clientY:0,scroll:false,ts:Date.now()}; },
-      onTouchMove:function(e){ const t=e.touches&&e.touches[0]; if(t&&(Math.abs(t.clientX-acTouch.current.x)+Math.abs(t.clientY-acTouch.current.y))>12) acTouch.current.scroll=true; },
-      onTouchEnd:function(){ acTouch.current.ts=Date.now(); if(!acTouch.current.scroll) select(); },
-    };
-  }
+  // v18.0.0: the tap-vs-scroll disambiguation moved to `hooks/useAcRow.js` when
+  // the voucher field became the THIRD dropdown on this form. Behaviour is
+  // unchanged — the hook holds the v17.3.0 code and its comment verbatim.
+  const acRowHandlers=useAcRow();
   // v16.3.0 perf: memoised — rebuilt only when the bookings list changes, not on
   // every keystroke (the form draft lives in the parent, so EVERY field edit
   // re-renders this component).
@@ -234,10 +242,15 @@ export function BookingFormModal({
   // --suggest/--warn families, text from --success-text/--warn-text. A tone is
   // one decision now. `size="small"` keeps this chip's wider inset and T.small —
   // it sits in a form beside inputs, not in a dense settings row.
+  //
+  // The label itself stays `regularChipLabel` (lib/customers.js), the
+  // sandbox's own /code-review extraction: prod re-inlined the same ternary
+  // here, and the threshold it compares against is a settings value, so an
+  // inline copy is a second place for `regularMin` to be read wrongly.
   const chipMark=function(which){return histWhich===which?<ChevronDownIcon size={IC.inline} />:<ChevronRightIcon size={IC.inline} />;};
   const regularChip=custMatch&&custMatch.regularCount>=1?<OutlineChip
     key="reg" tone="success" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
-    onClick={function(){toggleChipHist("regular");}}><span>{custMatch.regularCount>=(regularMin||2)?"Regular · "+custMatch.regularCount+" past visits":custMatch.regularCount+" past visit"+(custMatch.regularCount!==1?"s":"")}</span>{chipMark("regular")}</OutlineChip>:null;
+    onClick={function(){toggleChipHist("regular");}}><span>{regularChipLabel(custMatch.regularCount,regularMin)}</span>{chipMark("regular")}</OutlineChip>:null;
   const noShowChip=custMatch&&custMatch.noShowCount>=1?(custMatch.noShowCount>=2?<OutlineChip
     key="ns" tone="warn" as="button" size="small" type="button" className="mgt-hover-scale mgt-press"
     onClick={function(){toggleChipHist("noshow");}}><span>{"No-show ×"+custMatch.noShowCount}</span>{chipMark("noshow")}</OutlineChip>:<OutlineChip
@@ -322,12 +335,12 @@ export function BookingFormModal({
   // Dropdown rows use onMouseDown/onTouchStart (fire BEFORE the input's blur)
   // so the tap lands before phoneFocus flips false. Opaque sheet token per the
   // popover rule (a translucent card reads see-through over form content).
-  const phoneDropdown=phoneMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:R.card,boxShadow:"var(--shadow-sheet)",overflowX:"hidden",overflowY:"auto",maxHeight:264}}>{phoneMatches.map(function(c){return (
+  const phoneDropdown=phoneMatches.length?<div style={AC_MENU}>{phoneMatches.map(function(c){return (
     <div
       key={c.phone}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickCustomer(c);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
               border in the matching hue PLUS bold text in a third shade. They are
               the same counts as the Customers tab's chips, so they are now the
               same chip. */}{c.visits>0?<OutlineChip tone="success">{c.visits+" visit"+(c.visits!==1?"s":"")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</OutlineChip>:null}</div></div>
@@ -335,12 +348,12 @@ export function BookingFormModal({
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
   // phone-less guests are visually distinguishable (they are separate rows).
-  const nameDropdown=nameMatches.length?<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,zIndex:30,background:"var(--bg-ac-menu)",border:"1px solid var(--border-sheet)",borderRadius:R.card,boxShadow:"var(--shadow-sheet)",overflowX:"hidden",overflowY:"auto",maxHeight:264}}>{nameMatches.map(function(r){return (
+  const nameDropdown=nameMatches.length?<div style={AC_MENU}>{nameMatches.map(function(r){return (
     <div
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid var(--border-soft)"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -378,14 +391,73 @@ export function BookingFormModal({
     const d=form.customDur||getDur(size);
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     if(mt) return {ok:true,tables:mt,sugg:null};
+    // v18.0.0 session 8 (item 3): a draft saved as seated — or as finished —
+    // carries the tables it already has, so scanning for free ones answers a
+    // question nobody asked. On a full evening it answered "No tables
+    // available" over a save that was going to succeed, which is the same
+    // disagreement between the preview and Save as the "(auto) · was: 3" line.
+    if(editId&&tablesPinned(form.status,false,!!form._clearManual)){
+      const cur=bookings.find(function(b){return b.id===editId;});
+      if(cur&&(cur.tables||[]).length) return {ok:true,tables:cur.tables,sugg:null};
+    }
     const noResh=!optimizerActiveFor(form.date,autoOptimizer);
     const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
     if(tables) return {ok:true,tables:tables,sugg:null};
     const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
-  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
+  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
   const formAvail=availScan.value;
 
+  // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
+  // Read once per mount, like the picker's own and the Vouchers tab's: expiry is
+  // a day-scale concept, and a `Date.now()` in a render body is both impure and
+  // — once it reaches a dep array — fatal to the memo it sits in.
+  const [voucherNow]=useState(function(){return Date.now();});
+  // The identity is the DRAFT's, not a stored booking's, so typing a known
+  // phone into a brand-new booking is enough to be recognised — which is the
+  // moment the suggestion is worth making. `matchesIdentity` is the app's one
+  // identity rule; a second one growing here is the defect this repo keeps
+  // recording, so `lib/vouchers` takes the guest's BOOKINGS and imports nothing.
+  const voucherSuggestions=useMemo(function(){
+    if(!vouchersOn||form.voucherCode) return [];
+    const ident={phone:form.phone,guestId:form.guestId};
+    if(!hasRealPhone(form.phone)&&!form.guestId) return [];
+    const mine=bookings.filter(function(b){return matchesIdentity(b,ident);});
+    if(!mine.length) return [];
+    return guestOpenVouchers(mine,vouchersByCode,bookings,voucherNow,editId);
+  },[vouchersOn,form.voucherCode,form.phone,form.guestId,bookings,vouchersByCode,voucherNow,editId]);
+  // Why a code is already in the field when nobody typed it. Derived from
+  // `returnOf` rather than carried as a draft field: a note about the draft is
+  // not part of it, and a new field would join the unsaved-changes baseline.
+  const voucherCarriedFrom=(function(){
+    if(!form.voucherCode||!form.returnOf) return null;
+    const src=bookings.find(function(b){return b.id===form.returnOf;});
+    if(!src||normalizeCode(src.voucherCode)!==normalizeCode(form.voucherCode)) return null;
+    const d=/^\d{4}-\d{2}-\d{2}$/.test(src.date||"")?src.date.slice(8,10)+"/"+src.date.slice(5,7):src.date;
+    return "Carried from the "+d+" visit"+(isUnsettled(src,vouchersByCode)?" — that visit was never recorded against it.":".");
+  })();
+
+  // v18.0.0 session 8 (item 3): a seated party cannot be moved to another day —
+  // its tables are pinned to the room it is sitting in, and those tables belong
+  // to THIS date's schedule. Keyed on the DRAFT status, so choosing >Confirmed
+  // in the Status row unlocks it in the same open of the form. `doSaveEdit`
+  // refuses it as well: this is the affordance, that is the guarantee.
+  const dateLocked=!!editId&&form.status==="seated";
+  // v18.0.0 session 9 (A4): and the words that say so. The mechanism shipped in
+  // session 8 and the explanation did not — `grep "to change the date" src/`
+  // returned nothing. The only sentence the app had ("A seated booking can't be
+  // moved to another date — change the status first.") fires on SAVE, which
+  // `readOnly` makes unreachable through the UI, so the control simply refused
+  // input with no hint, no `title` and no error: CLAUDE.md's "a hidden control
+  // can be present and useless in ways nothing shows you", one door along.
+  //
+  // It is a described-by hint rather than an `aria-label`, because the field is
+  // already named "Date" and a label would REPLACE that name (Label in Name).
+  // `Fld`'s own `describedBy` could not carry it: that one is deliberately
+  // emitted only alongside `aria-invalid`, so a permanent hint has to be wired
+  // here — and MERGED with the error id rather than overwriting it, since a
+  // locked date can also be the field a save error names.
+  const DATE_LOCK_ID="mgt-date-locked-hint";
   const tablesBtn=(function(){
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     const previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
@@ -397,21 +469,118 @@ export function BookingFormModal({
       onClick={function(){onOpenPrefPicker();}}><StarIcon size={IC.inline} />{hasPref?prefs.join("+"):"Preferred"}</button>;
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
-      const curPrefStr=cur&&Array.isArray(cur.preferredTables)?cur.preferredTables.slice().sort().join(","):"";
-      const formPrefStr=Array.isArray(form.preferredTables)?form.preferredTables.slice().sort().join(","):"";
-      const prefTblChanged=curPrefStr!==formPrefStr;
-      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged);
-      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged);
+      // Two table lists are the same arrangement when they hold the same ids:
+      // the optimiser builds a combo in its own order, so a compare has to sort.
+      // This was written out twice for the preferred-tables compare already.
+      function tblKey(t){return (Array.isArray(t)?t.slice().sort():[]).join(",");}
+      const prefTblChanged=tblKey(cur&&cur.preferredTables)!==tblKey(form.preferredTables);
       const cleared=!!form._clearManual;
       const curTbl=cur&&cur.tables&&cur.tables.length>0?cur.tables:null;
+      // v18.0.0 session 10 (/code-review): this asks `_manual||_locked` while
+      // `optOwns` below asks `isLocked` — the predicate `applyOpt` itself
+      // branches on — and the two are NOT the same question. On a booking
+      // that was `_manual:true, _locked:false` the optimiser would move it
+      // while this said its tables were settled, and the rescue is partial:
+      // `optMoves` feeds `hardChanged`, which defeats the branch below, but
+      // only once `previewTbls` has arrived and differs. Until then this
+      // wins.
+      //
+      // It does not bite because that shape is UNREACHABLE, and the reason
+      // is narrow enough to be worth naming: `manualAssign`'s `locked`
+      // argument writes `_locked: locked===true`, and ManualModal's two
+      // `onSave` call sites both pass the literal `true` — they have since
+      // the initial commit (`git log -S`). So `_manual` implies `_locked`
+      // throughout, and the two predicates coincide.
+      //
+      // `tests/booking-logic.test.js` pins that, because it is the thing an
+      // "assign without locking" affordance would quietly remove. If one is
+      // ever added, the split to make is by QUESTION: this name also drives
+      // `showClearManual`, where `_manual` is exactly right, and only the
+      // `showTbl` branch wants "will the optimiser leave it alone".
       const isManual=cur&&(cur._manual||cur._locked)&&curTbl;
-      const showTbl=mt||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
+      // v18.0.0 session 8 (item 3): a draft saved as seated or finished carries
+      // its tables through, so the preview shows THOSE — not the optimiser's
+      // proposal for a booking it is never going to be asked about.
+      // v18.0.0 session 10: both moved up from below `changed`, which now has to
+      // know whether the optimiser owns this booking before it can say so.
+      const pinnedTbl=cur&&tablesPinned(form.status,!!mt,cleared)?curTbl:null;
+      // v18.0.0 session 9: a STATUS that walks the booking out of a pinned state
+      // — revived from cancelled/completed, or un-seated — re-places it at Save
+      // just as a time or size change does, and the preview did not know.
+      //
+      // Measured: revive a cancelled booking whose table has since been taken,
+      // change nothing else, and the form read "Tables | 6" with no "was:" line
+      // — polled every 700ms for 8.4s, it never moved — while Save wrote table
+      // 2. The user was told 6 and got 2. The cause was that `changed` below
+      // listed time, size, date, preference, duration and preferred tables, and
+      // not status, so `showTbl` fell back to the booking's CURRENT tables and
+      // `previewTbls` was never reached. `doSaveEdit`'s own predicate
+      // (`recheck = needsR||planChanged||revived||!!unseat`) always included it.
+      // The preview's compare was NARROWER than the pass it gates — v17.10.2's
+      // shape, one component over.
+      //
+      // `tablesPinned` is the discriminator rather than a second spelling of
+      // "revived": pinned-to-unpinned is exactly `revived || unseat`, and where
+      // the draft is still pinned (cancelled → seated) `pinnedTbl` below already
+      // wins and the save does not re-place either, so the two agree by
+      // construction. Two predicates that merely agree today are two predicates.
+      const unpinning=!!cur&&tablesPinned(cur.status,false,false)&&!tablesPinned(form.status,!!mt,cleared);
+      // …and re-placing is not a foregone conclusion when it does: the save
+      // keeps the tables it has if they are STILL FREE for the window
+      // (`keepsWindowTables`). Asking the same question with the same helper is
+      // what stops this fix creating the opposite disagreement — a preview
+      // promising a move the save will not make.
+      const winStart=form.time?toMins(form.time):0;
+      const winDur=form.customDur||(cur?(cur.duration||90):90);
+      const unpinMoves=unpinning&&!!curTbl
+        &&!tablesFreeFor(bookings,form.date,editId,curTbl,winStart,winStart+winDur,tableBlocks);
+      // ── v18.0.0 session 10: the optimiser's own pass ─────────────────────
+      // `unpinMoves` asks whether the SAVE will re-choose the tables — and on
+      // an optimising day the save does not get to decide. `buildNext` hands the
+      // day to `bookingsAfterAction`, which runs `applyOpt` over the whole date
+      // regardless of `forceReassign`, so `keepsWindowTables` (the half the line
+      // above was taught to agree with) has teeth ONLY on the optimiser-OFF
+      // path — today, after the cutoff. On every other date the greedy re-run
+      // overrides both of them, and `optimizerActiveFor` is true for all of it.
+      //
+      // Measured session 9, replayed as a test: a cancelled 19:00 booking on 5A,
+      // revived with nothing else touched. `tablesFreeFor` says 5A is still free
+      // so the form promised 5A, and `applyOpt` writes 1A — a revived booking
+      // re-enters the day's greedy, and the greedy does not know where it used
+      // to sit. Both halves were right about their own question.
+      //
+      // The predictor for the real one is not a new one and costs nothing:
+      // `availScan` ALREADY runs `trialFits` → `applyOpt` on exactly these deps,
+      // post-paint, and `previewTbls` IS that pass's answer for this booking.
+      // The ROADMAP entry read the v16.3.0 perf rule as forbidding the fix — the
+      // pass was already running; what was missing was reading it.
+      //
+      // Two properties keep it quiet, and both are load-bearing. It is asked
+      // only where the optimiser will actually choose — `isLocked`, against the
+      // flags the save will write, is the predicate `applyOpt` itself branches
+      // on — and only where the answer DIFFERS from the tables on screen. So an
+      // ordinary edit of a booking the optimiser is content with reads exactly
+      // as it does today, and "(auto) · was:" appears when, and only when, Save
+      // is going to move it.
+      const optOwns=!!cur&&!mt&&!pinnedTbl
+        &&!isLocked({_locked:cleared?false:cur._locked,status:form.status})
+        &&optimizerActiveFor(form.date,autoOptimizer);
+      const optMoves=optOwns&&!!previewTbls&&!!curTbl&&tblKey(previewTbls)!==tblKey(curTbl);
+      const changed=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||(form.customDur&&form.customDur!==cur.duration)||prefTblChanged||unpinMoves||optMoves);
+      const hardChanged=cur&&(form.time!==cur.time||Number(form.size)!==cur.size||form.date!==cur.date||form.preference!==cur.preference||prefTblChanged||unpinMoves||optMoves);
+      const showTbl=mt||pinnedTbl||(isManual&&!hardChanged&&!cleared?curTbl:((changed||cleared)?null:curTbl));
       const showClearManual=isManual&&!mt&&!cleared;
       const leftEls=[
         <span key="lbl" style={{fontSize: T.body,color:"var(--text-secondary)",fontWeight: FW.medium}}>Tables</span>];
       if(showTbl) showTbl.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});
       else if(previewTbls){previewTbls.forEach(function(id){leftEls.push(<TBadge key={id} id={id} />);});leftEls.push(<span key="auto" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>(auto)</span>);}
-      if((changed||cleared)&&!mt&&curTbl) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
+      // v18.0.0 session 10: "was:" only when the tables really are about to
+      // change. With the optimiser's answer now driving this row, an edit it is
+      // content with would otherwise read "5A (auto) · was: 5A" — a move
+      // announced over a booking that is staying exactly where it is. The
+      // pre-existing shape had the same wart on any changed edit the optimiser
+      // answered with the same tables; one test, one fix.
+      if((changed||cleared)&&!mt&&!pinnedTbl&&curTbl&&!(previewTbls&&tblKey(previewTbls)===tblKey(curTbl))) leftEls.push(<span key="prev" style={{fontSize: T.small,color:S.muted,fontStyle:"italic"}}>{"was: "+curTbl.join(", ")}</span>);
       if(mt) leftEls.push(<button
         key="clrmt"
         className="mgt-hover-scale mgt-press"
@@ -467,7 +636,7 @@ export function BookingFormModal({
   // under its mark, and this is one sentence with no rows, which is exactly the
   // one-line shape the strip already has a precedent for.
   const closedBanner=fh.closed?<AlertPanel role="warn" icon={ClosedIcon} style={{marginBottom:12}}
-    title={"Closed on "+["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."} />:null;
+    title={"Closed on "+WEEKDAY_LONG[new Date(form.date).getUTCDay()]+"s — bookings can't be saved for this date. Open that day in Settings, or pick another date."} />:null;
 
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
@@ -592,15 +761,27 @@ export function BookingFormModal({
           onClick={function(){flashStatus(s);if(s==="cancelled"){onRequestCancel(editId);return;}setForm(function(f){return Object.assign({},f,{status:s});});}}><StatusIcon status={s} size={IC.control} />{s}</button>
       );})}</div></Section>:null;
 
+  // v18.0.0 session 8 (item 6): icon-only. It was the words "History (4)" and
+  // took the width of three controls in a footer that also holds Book again and
+  // Delete. The COUNT is not dropped — it moves into the accessible name and the
+  // tooltip, because it is the reason to press the button: "History, 1 entry"
+  // and "History, 12 entries" are different propositions.
+  //
+  // A SQUARE at `H.chrome`, and NOT the `H.control` the plan named: the two
+  // buttons beside it are `minHeight: 36`, which is `H.chrome`, so a 40px square
+  // would stand taller than its own row. Match the row.
   const historyBtn=(function(){
     if(!editId) return null;
     const cur=bookings.find(function(b){return b.id===editId;});
     if(!cur||!cur.history||!cur.history.length) return null;
+    const n=cur.history.length;
     return (
       <button
         onClick={function(){onOpenHistory();}}
         className="mgt-hover-scale"
-        style={mkBtn({fontSize: T.body,background:"var(--app-btn-slate)",padding:"8px 16px",minHeight:36})}>{"History ("+cur.history.length+")"}</button>
+        aria-label={"History, "+n+" "+(n===1?"entry":"entries")}
+        title={"History ("+n+")"}
+        style={mkBtn({background:"var(--app-btn-slate)",padding:SP.none,minHeight:H.chrome,width:H.chrome,display:"inline-flex",alignItems:"center",justifyContent:"center"})}><HistoryIcon size={IC.chrome} /></button>
     );
   })();
   // v14: Book Again button — visible only in Edit Booking modal when status is
@@ -798,21 +979,24 @@ export function BookingFormModal({
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"
-            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
-            id={fid}
-            {...attrs}
-            type="date"
+            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <><DateField
+            /* v18.0.0 session 7: the weekday inside the pill. Fld's id and
+               state attrs name the INPUT, so they ride in inputProps. */
+            inputProps={dateLocked
+              ?Object.assign({id:fid},attrs,{readOnly:true,"aria-readonly":true,"aria-describedby":[attrs&&attrs["aria-describedby"],DATE_LOCK_ID].filter(Boolean).join(" ")})
+              :Object.assign({id:fid},attrs)}
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
-            className="mgt-hover-scale"
-            style={inp()} />;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
+            style={inp()} />{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,marginTop:4}}>Change the status to change the date</div>:null}</>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
             {...attrs}
             type="time"
             value={form.time}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{time:e.target.value});});}}
             min={String(fh.open).padStart(2, "0") + ":00"}
-            max={fh.close >= 24 ? "23:59" : String(fh.close).padStart(2, "0") + ":00"}
+            /* v18.0.0 session 8 (C7): the last start, not the close. `lastStartMins`
+               caps at midnight, so the ">= 24" branch this replaced is inside it. */
+            max={toTime(lastStartMins(fh.close))}
             className="mgt-hover-scale"
             style={inp()} />;}}</Fld><Fld label="Seating preference">{function(fid){return <select
             id={fid}
@@ -849,13 +1033,33 @@ export function BookingFormModal({
           onChange={function(e){setForm(function(f){return Object.assign({},f,{deposit:e.target.value});});}}
           placeholder="0"
           className="mgt-hover-scale"
-          style={inp()} />;}}</Fld></Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+          style={inp()} />;}}</Fld>{/* v18.0.0: the gift voucher attached to this booking. ATTACHED, not
+        redeemed — the ledger entry is written when the booking is completed.
+        It sits INSIDE this Section, beside Notes and Deposit, and is a `Fld`
+        like both of them: the first version gave it its own Section and its own
+        hand-written heading, so one label treatment existed twice on one form.
+        Rendered only once vouchers are actually in use, so an app that has
+        never issued one is unchanged, and v18.0.0 phase 4 adds the module
+        gate FIRST: off hides the field even on a booking that already carries a
+        code, which is the whole meaning of the switch. The code itself stays in
+        the draft and is saved back untouched — hidden is not deleted. */}{vouchersOn&&((vouchers&&vouchers.length)||form.voucherCode)?(
+        <VoucherPicker
+          code={form.voucherCode||""}
+          onChange={function(c){setForm(function(f){return Object.assign({},f,{voucherCode:c});});}}
+          vouchers={vouchers}
+          vouchersByCode={vouchersByCode}
+          bookings={bookings}
+          bookingId={editId}
+          carriedFrom={voucherCarriedFrom}
+          suggestions={voucherSuggestions}
+          currency={currency} />
+      ):null}</Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>
               <div style={{fontSize: T.lead,fontWeight: FW.semi,color:"var(--text-primary)"}}>Repeat weekly</div>
               <div style={{fontSize: T.body,fontWeight: FW.regular,color:"var(--text-faint)",marginTop:2}}>
-                {"Create a standing booking every "+(WEEKDAY_NAMES[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
+                {"Create a standing booking every "+(WEEKDAY_LONG[new Date(form.date).getUTCDay()]||"week")+(form.time?" at "+form.time:"")+". Manage it in Settings → General → Standing bookings."}
               </div>
             </div>
             <Toggle label="Repeat weekly" on={!!form.repeatWeekly} onClick={function(){setForm(function(f){return Object.assign({},f,{repeatWeekly:!f.repeatWeekly});});}} />

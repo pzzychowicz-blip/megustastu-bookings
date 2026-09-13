@@ -1,0 +1,30 @@
+# .vercelignore — what does NOT get uploaded to a Vercel deployment.
+# Same syntax as .gitignore. Vercel always skips node_modules/, .git/ and the
+# build cache on its own; this file is only for things we exclude deliberately.
+#
+# ── The WhatsApp simulator's backend (v18.0.0 phase 5, Patryk's call) ─────────
+# Vercel deploys api/ WHOLESALE — there is no build-time way to keep a handler
+# out of a deployment — so without this line the three simulator endpoints ship
+# to the restaurant's production project. They answer 404 there (simEnabled() is
+# each handler's first statement and fails closed), so nobody could reach them;
+# but the simulator is developer tooling and does not belong on a production
+# deployment at all. "Cannot be run" and "is not there" are different claims,
+# and this is the second one.
+#
+# It matters beyond tidiness: these three import firebase-admin, whose writes
+# BYPASS the security rules entirely, and the Gemini client, which spends money.
+# Deployed, they are one stray environment variable away from live. Not
+# deployed, WA_SIM_ENABLED does nothing at all on production.
+#
+# ── The wa-sandbox branch MUST re-include them ───────────────────────────────
+# The deployed sandbox calls these same-origin (`WA_BACKEND_URL` is "" outside
+# the dev server), so excluding them there breaks its whole backend mode. The
+# sandbox branch APPENDS one line below:
+#
+#     !api/wa-sim-*.js
+#
+# Appending rather than deleting the exclusion is deliberate: a prod-sync merge
+# silently reinstates a deleted line — that is the failure
+# `tests/wa-sandbox-integrity.test.js` exists to catch, after it happened twice —
+# while an appended line survives the merge untouched. Check it after every sync.
+api/wa-sim-*.js

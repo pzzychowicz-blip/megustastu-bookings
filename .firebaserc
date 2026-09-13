@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "mgt-dev": "megustastu-bookings-dev",
+    "mgt-prod": "megustastu-bookings"
+  }
+}

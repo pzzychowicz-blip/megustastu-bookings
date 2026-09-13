@@ -85,6 +85,22 @@ explaining why is usually the one to read.
   (44 is a floor, not a target); `/* @canvas */` exempts genuine layout
   dimensions — the Toggle track, table-picker cells, the timeline hour strip,
   WeekView's calendar cell, alignment indents, safe-area `calc()`.
+  **v18.0.0 makes ONE of those a target rather than a floor: `mkInp` pins
+  `height: H.touch`, so every single-line form control in the app is exactly
+  44.** Before it, `mkInp` set no height at all and each control took the UA's
+  INTRINSIC height for its type — measured in Chromium under `mkInp`'s own
+  style, text/tel/number/email/search 42, a bare date input and a `<select>` 44,
+  `input[type="time"]` 45.84. Whether a row lined up therefore depended on which
+  input TYPES happened to sit in it, which is not a property a caller can see or
+  a reviewer can read; it showed as the booking form's Date and Time sitting
+  1.84px apart at the bottom while sharing a top edge. Native date and time
+  controls are precisely where UA intrinsic heights diverge, so pinning is also
+  what makes a row's alignment the same on the Android tablet, the iPads and a
+  desk browser instead of three different answers. `mkArea` returns `height` to
+  `auto` — a textarea is sized by its `rows` — and that one line is the whole of
+  the exception. The steppers stay at `H.control` (40) beside a 44 field: a
+  round ± button is a different control idiom, not a ragged row, and raising
+  them was offered and declined.
 
 - **`--rim-solid` / `--rim-solid-strong` = the v17.13.0 rim tokens.** The
   hairline white edge on a theme-INVARIANT solid fill — a `BLOCK_BG` block, an
@@ -299,7 +315,17 @@ explaining why is usually the one to read.
   `padding-inline` gutters. **Nothing else in the app may wear a plain outline** —
   `ViewSwitcher`'s split-pane marker was `outline: 2px solid white` and became
   indistinguishable from focus the moment a real ring existed; it is an inset
-  underline now.
+  underline now. **A control whose pill is a WRAPPER takes the ring on the
+  wrapper (v18.0.0 session 7).** `DateField` draws its pill on a `<div>` around a
+  transparent native date input, so the weekday can sit inside the field. Left
+  alone, the input would wear this ring as a rectangle INSIDE the pill; so
+  `.mgt-datefield` hides the input's ring and draws the same one — same token, same
+  2px offset — on the wrapper through `:has(input:focus-visible)`. Both halves or
+  neither: hiding one ring without drawing the other leaves no focus signal at
+  all, which is why the second selector is a stylesheet critical selector.
+  Measured live: input `outline: none`, wrapper `solid 2px` offset `2px`.
+  Both rules sit inside `@supports selector(:has(*))` (/code-review), so a
+  browser without `:has()` keeps the input's own ring instead of losing both.
 
 - **A status button carries its OWN mark, from ONE source (v17.10.0).** Every
   button that moves a booking to another status used to be prefixed with the
@@ -350,6 +376,19 @@ explaining why is usually the one to read.
   assertion in `tests/stylesheet.test.js`, **not** a `CRITICAL_SELECTORS` entry —
   that list matches selectors, and both `button` and `[role="button"]` already
   appear in other preludes, so either entry would have passed with the rule gone.
+
+- **v18.0.0 session 8: `HistoryIcon`, and the size was MEASURED rather than
+  chosen.** A clock face with a counter-clockwise arc and a corner arrowhead at
+  the top-left — the "back through time" convention, where a plain clock face
+  would say "time" rather than "what happened to this". Rasterised at both sizes
+  it could ship at and magnified 10× beside `ClosedIcon` and `WaitIcon` (the
+  `DepositIcon` lesson): at **14px** (`IC.control`) the hands merge into the
+  arc's lower-left and the whole mark reads as a filled disc with a notch taken
+  out of it; at **18px** (`IC.chrome`) all three shapes stay distinct. So it
+  ships at `IC.chrome` in an icon-only button, and it is **not** a candidate for
+  a timeline block flag or a List row tag, where this set's marks render at
+  `IC.control`. The button it replaced was the words "History (4)"; the count
+  moved into the accessible name and the tooltip rather than being lost.
 
 - **v17.9.0: no control wears a typographic mark.** Dismiss, confirm, disclose,
   navigate, rename, print, download, assign, "preferred" and the status
@@ -511,6 +550,19 @@ explaining why is usually the one to read.
   (6.73–9.69:1 across both themes): **a card is a text-bearing surface the
   moment a fill comes off a label on it**, and neither `check:style` nor the
   registry's coverage guard can see that pairing arrive on its own.
+  **v18.0.0 session 8 is that rule's mirror image, and it is the easier one to
+  ship**: an outline chip is a SHEET treatment — its ink and its derived border
+  both flip — so putting one on a theme-INVARIANT fill breaks it in exactly one
+  theme. Settings → Vouchers wrapped its disclosure control in `BTN.nav`, which
+  is declared once and never overridden, and the row's two chips plus its
+  chevron then measured **2.37:1 · 2.51:1 · 1.99:1** in LIGHT (the fill
+  composites to `rgb(147,149,152)`) against 6.83 / 7.21 / 5.74 once it sits on
+  `--bg-soft`. Dark was fine throughout, which is why it was reported as a
+  light-mode bug and why nothing in the repo caught it: `--btn-nav`'s only
+  registered ink is white, at exactly the 3:1 button bar, so the fill was
+  audited for the one thing it was no longer carrying. **A `BTN.*` fill takes
+  `--text-on-accent` and nothing else** — if a control's contents are chips,
+  muted glyphs or any other sheet ink, the control belongs on a sheet surface.
   **v17.15.0: an outline chip's border is DERIVED from its text**, not chosen
   beside it — `--chip-<role>-border` is `color-mix(in srgb, var(--<role>-text)
   50%, transparent)`. The border and the text are the same statement at two
@@ -620,6 +672,15 @@ explaining why is usually the one to read.
   the no-flash boot script is still inline there, pinned in the CSP by hash.
 - Light + dark via CSS custom properties: `:root` (light) + `[data-theme="dark"]` overrides in `src/index.css`; `<html data-theme="…">` set via `document.documentElement.dataset.theme`. A theme flip is **one DOM attribute change — zero React re-render** of the tree.
 - **Hook:** `useThemeMode(explicitPref) → isDark` (`src/hooks/useThemeMode.js`) writes `data-theme` and follows the OS live when pref is `undefined` — the shared Scheduling contract, unchanged. A no-flash inline script in `index.html` paints the theme before React mounts (the hook alone runs too late).
+- **v18.0.0 session 7: the Automatic dark mode switch, and a third stored value.**
+  Settings → App shows **Automatic dark mode** (follow this device's light/dark setting,
+  live) above **Dark mode**, and Dark mode is **locked while Automatic is on** —
+  the `Toggle` atom's new `disabled` prop: native `disabled`, dimmed to 0.4 with
+  the `not-allowed` cursor (the steppers' precedent), and the hover lift and
+  press dip already skip `:disabled`. The row title fades to `--text-faint` and
+  "Controlled by Automatic dark mode." reveals under it, so the dimmed switch says why.
+  The stored value is `"auto"`, which every theme site already read as "follow
+  the OS", so the no-flash script and its CSP pin did not move.
 - **v17.9.0: a DEV-only `?theme=dark` / `?theme=light` override, and it is the
   FOURTH site in the theme-key contract** (`readThemePref`, the Settings toggle,
   the no-flash script, the override — same key, same `"dark"`/`"light"`
@@ -1076,6 +1137,33 @@ its declaration does not.** An ink that inverts the same way the composite does
 (`--text-muted` was the obvious candidate) does not fix that — it swaps which
 theme is broken: 4.59:1 light but 2.30:1 dark, against white's 1.30 / 6.42.
 Measured live at 5.14:1 light and 4.60:1 dark, so it is no longer an exemption.
+
+### External links (v18.0.0 phase 4) — the app's first, and its only one
+
+The Integrations panel points at Vercel. Until then this app contained **no
+external link at all**, and the skip link is the only internal one — so there
+was no answer to "what does a link look like here" and the next one would have
+invented a second.
+
+**It is `color: var(--accent)` + `FW.semi` inside body copy, and nothing else** —
+no underline, no icon, no chip. That is not a new treatment: it is the emphasis
+treatment three surfaces already use for a name inside a sentence
+(`HistoryPopup`'s author, `Settings`' count pill, `LayoutSettings`' add button),
+so a link inherits a shape the app already reads as "this word matters" rather
+than adding a fourth. `--accent` on a card is already registered against both
+themes by those call sites.
+
+**Always `target="_blank"` with `rel="noreferrer noopener"`.** This app is a
+staff tool held open across a whole service on one tablet; a link that navigated
+the tab away would drop the shift out of the app, and re-entry costs a full
+reload and a Firebase re-sync.
+
+**A link is not a button and must not be styled as one.** The distinction this
+app needs is that a button acts on the restaurant's data and a link leaves the
+app entirely, which is exactly the moment a shared appearance would be
+misleading. `check:style` Rule 10 (an interactive control carries
+`.mgt-hover-scale`) governs `<button>` and `[role="button"]`, so a plain anchor
+is outside it by construction — deliberately, not by omission.
 
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip

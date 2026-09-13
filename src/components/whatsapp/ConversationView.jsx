@@ -1,0 +1,306 @@
+// src/components/whatsapp/ConversationView.jsx
+// Right pane: header (name + WA badge + Regular chip + window state + archive/
+// restore/delete), an optional LinkedBookingCard, an optional IntentBanner, the
+// scrolling message thread, the DraftCard, and the ReplyComposer. The composer
+// is disabled when the 24h service window has expired.
+
+import { useState, useRef, useEffect } from "react";
+import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
+import { Reveal, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { AlertPanel, AlertRow } from "../AlertPanel";
+import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
+import { MessageBubble } from "./MessageBubble";
+import { DraftCard } from "./DraftCard";
+import { ReplyComposer } from "./ReplyComposer";
+import { LinkedBookingCard } from "./LinkedBookingCard";
+import { IntentBanner } from "./IntentBanner";
+import { R, T, FW, IC, H } from "../../lib/constants";
+
+export function ConversationView({
+  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
+  onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
+  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
+  onRecheck, regularMin,
+}) {
+  // NO excludeBookingId. This used to pass conv.acceptedBookingId, which made the
+  // header chip disagree with the booking form's for the same customer (Patryk:
+  // the Inbox said 2 past visits where a new booking said 3). That argument exists
+  // for the booking being EDITED — its own row must not count as one of its own
+  // past visits — and a conversation is not a booking: the linked booking is a
+  // separate visit which, once completed, genuinely IS a past one. While it is
+  // pending/confirmed it isn't `completed`, so it never counted anyway — the
+  // argument could only ever subtract a real past visit.
+  const match = matchCustomerByPhone(conv.phoneKey, bookings);
+  const displayName = match ? match.name : (conv.phone || conv.phoneKey);
+  const phoneDisplay = formatPhone(conv.phone || conv.phoneKey);
+  const [histOpen, setHistOpen] = useState(false);
+  const win = formatWindow(conv.windowExpiresAt);
+  const threadRef = useRef(null);
+  const msgsForConv = messages || [];
+  useEffect(() => {
+    if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
+  }, [msgsForConv.length, conv.phoneKey]);
+
+  // Bubble entrance: animate ONLY a genuinely new message that arrives while the
+  // conversation is open — never on a conversation switch/open (the prior
+  // index-based "last bubble always animates" looked wrong when switching).
+  const [animateId, setAnimateId] = useState(null);
+  const prevConvRef = useRef(conv.phoneKey);
+  const lastId = msgsForConv.length ? msgsForConv[msgsForConv.length - 1].id : null;
+  const prevLastIdRef = useRef(lastId);
+  useEffect(() => {
+    if (prevConvRef.current !== conv.phoneKey) {
+      prevConvRef.current = conv.phoneKey;     // switched threads — reset baseline, no animation
+      prevLastIdRef.current = lastId;
+      setAnimateId(null);
+      return;
+    }
+    if (lastId && lastId !== prevLastIdRef.current) {
+      prevLastIdRef.current = lastId;
+      setAnimateId(lastId);                     // a new message landed in the open thread
+    }
+  }, [conv.phoneKey, msgsForConv.length]);
+
+  // ── "Booking confirmed" banner auto-dismiss ─────────────────────────────────
+  // The big accepted banner used to sit in the thread until someone hit its ✕.
+  // It stamps the SAME acceptedBadgeDismissedAt the ✕ does, so the existing
+  // re-show rule is untouched: a new inbound message clears the stamp and the
+  // banner comes back. The header's small "✓ Booking confirmed" chip is
+  // deliberately NOT on this timer — that one is the persistent status, and the
+  // LinkedBookingCard below it keeps showing the booking itself.
+  //
+  // Gated on the banner actually being on screen, and keyed by phoneKey, so
+  // switching threads restarts the clock rather than dismissing the next
+  // conversation's banner early. onDismissAcceptedBadge is deliberately NOT a
+  // dep — useWhatsApp hands back a fresh closure every render, which would
+  // restart the timer on every render and never fire.
+  const acceptedBannerShowing = conv.draftStatus === "accepted" && !conv.acceptedBadgeDismissedAt;
+  useEffect(() => {
+    if (!acceptedBannerShowing) return;
+    const t = setTimeout(() => {
+      if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey);
+    }, WA_ACCEPTED_BANNER_MS);
+    return () => clearTimeout(t);
+  }, [acceptedBannerShowing, conv.phoneKey]);
+
+  // ── Manual re-check state ───────────────────────────────────────────────────
+  // null | "running" | { ok, msg }. The result line is transient (it clears
+  // itself) because the real answer is the draft / intent banner appearing —
+  // this only has to cover the "nothing found" case, which is otherwise
+  // indistinguishable from the button doing nothing at all.
+  const [recheck, setRecheck] = useState(null);
+  // Request token. InboxPanel renders ONE ConversationView and swaps its `conv`
+  // prop, so this component is NOT remounted when you switch threads — an
+  // in-flight re-check would otherwise resolve and paint its result onto
+  // whichever conversation happens to be open when it returns. Every start
+  // takes a token; a resolution whose token is stale is dropped. The switch
+  // effect bumps the token, so switching away also cancels.
+  const recheckReqRef = useRef(0);
+  useEffect(() => { recheckReqRef.current++; setRecheck(null); }, [conv.phoneKey]);
+  useEffect(() => {
+    if (!recheck || recheck === "running") return;
+    const t = setTimeout(() => setRecheck(null), 6000);
+    return () => clearTimeout(t);
+  }, [recheck]);
+  function runRecheck() {
+    if (recheck === "running" || !onRecheck) return;
+    const token = ++recheckReqRef.current;
+    const fresh = () => recheckReqRef.current === token;
+    setRecheck("running");
+    Promise.resolve(onRecheck(conv.phoneKey)).then(
+      (r) => {
+        if (!fresh()) return;
+        const intentFound = r && r.intent;
+        setRecheck(r && r.updated
+          ? { ok: true, msg: intentFound === "cancel" ? "Cancellation request found." : intentFound === "modify" ? "Change request found." : "Booking request found." }
+          : { ok: true, msg: "Nothing outstanding — no changes requested." });
+      },
+      (e) => { if (fresh()) setRecheck({ ok: false, msg: "Re-check failed: " + (e && e.message ? e.message : "unknown error") }); }
+    );
+  }
+
+  const linkedBooking = conv.acceptedBookingId ? bookings.find((b) => b.id === conv.acceptedBookingId) : null;
+  const intent = (conv.draftData && conv.draftData.intent) || null;
+
+  // "Booking confirmed" header chip — non-dismissable (the big DraftCard banner
+  // is the dismissable element instead).
+  const acceptedBadge = conv.draftStatus === "accepted"
+    ? <OutlineChip tone="success" size="small"><CheckIcon size={IC.inline} />Booking confirmed</OutlineChip>
+    : null;
+  // The disclosure lists the customer's OTHER visits. The linked booking is
+  // already rendered in full by LinkedBookingCard a few lines below, and now the
+  // COUNT no longer excludes it (see `match` above) it would otherwise appear
+  // twice on the same screen. Filtered here and not in the count on purpose: the
+  // count is the number that has to agree with the booking form's chip, so it
+  // stays the true total — a list shorter than the count is already normal, the
+  // slice(0, 5) cap does the same thing.
+  const pastList = match ? match.regularBookings.filter((b) => b.id !== conv.acceptedBookingId) : [];
+  // Regular chip — only when the customer has ≥1 completed booking. Same count
+  // AND same label as the booking form's chip: regularChipLabel is the one
+  // implementation, so the settings/general `regularMin` threshold applies here
+  // too (this copy used to print "Regular · " at any count, including 1).
+  // It is only a BUTTON when there is something to disclose: a customer whose
+  // single completed visit is the linked one still earns the chip, but tapping
+  // it would open an empty "Past bookings" box.
+  // display/gap are load-bearing since v17.9.1: the disclosure marker is an SVG
+  // SIBLING now, not a " ▾" tacked onto the label string, so the space between
+  // them has to be real — without it the chevron wraps to its own line.
+  // 17.15.0-wa-sandbox: the shared OutlineChip, `as="button"` for the
+  // disclosure kind — which is the same choice the booking form's copy of this
+  // chip makes, and it is the same chip. `chipStyle` was a third hand-written
+  // copy taking its border from --suggest and its text from --success.
+  const regularChip = match && match.regularCount >= 1
+    ? (pastList.length
+      ? <OutlineChip tone="success" size="small" as="button" className="mgt-hover-scale mgt-press" onClick={() => setHistOpen(!histOpen)}><span>{regularChipLabel(match.regularCount, regularMin)}</span>{histOpen ? <ChevronDownIcon size={IC.inline} /> : <ChevronRightIcon size={IC.inline} />}</OutlineChip>
+      : <OutlineChip tone="success" size="small">{regularChipLabel(match.regularCount, regularMin)}</OutlineChip>)
+    : null;
+  // Body rendered whenever there are other visits to show; Reveal (below) eases
+  // it open/closed off histOpen so the disclosure doesn't snap.
+  const hasRegulars = pastList.length > 0;
+  const pastListBody = hasRegulars ? (
+    // v17.15.3: a titled list is `AlertPanel` + `AlertRow`, which is what this
+    // had been built by hand — pane, heading in the tone, rows separated by
+    // hairlines. Everything it hand-rolled the atom owns: the hairline (and
+    // withholding it from the first row), the row indent to NOTIF_GUTTER so row
+    // text starts under the TITLE rather than under the mark, and the tone/tint
+    // PAIR, which comes from role="success" as one decision instead of two
+    // tokens chosen beside each other. The 1px --border-card goes: v17.15.2's
+    // section shape carries no border at all, the tint carries the semantics.
+    <AlertPanel role="success" icon={CheckIcon} title="Past bookings" style={{ marginBottom: 10 }}>
+      {pastList.slice(0, 5).map((b, i) => (
+        <AlertRow key={b.id} first={i === 0}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</AlertRow>
+      ))}
+    </AlertPanel>
+  ) : null;
+  const windowEl = win
+    ? <OutlineChip tone={win.expired ? "danger" : "success"} size="small">{win.label}</OutlineChip>
+    : null;
+
+  // Manual LLM re-check — leftmost of the header actions in BOTH states (an
+  // archived thread can be re-checked too; that's often exactly why you opened
+  // it). Icon-only to match the panel header's Templates / simulator buttons, and it
+  // spins while the round-trip is in flight.
+  const running = recheck === "running";
+  const recheckBtn = onRecheck ? (
+    <button
+      onClick={runRecheck}
+      disabled={running}
+      title={running ? "Checking…" : "Re-check this conversation for requested changes"}
+      className={running ? undefined : "mgt-hover-scale mgt-press"}
+      style={mkSolidBtn("var(--btn-default)", { width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 })}
+    >
+      {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
+          direction curve describes it and it keeps `linear`. Documented
+          exception, alongside .mgt-shimmer and .mgt-dot-pulse — and marked as
+          one, so `check:style`'s motion rule reads it as a decision rather than
+          as the sweep having missed a file (17.15.0-wa-sandbox). */}
+      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.control} /></span>
+    </button>
+  ) : null;
+
+  let headerActionBtns;
+  if (conv.archived) {
+    headerActionBtns = (
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {recheckBtn}
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-cancel)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)" })} ><TrashIcon size={IC.inline} />Delete</button>
+      </div>
+    );
+  } else {
+    headerActionBtns = (
+      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+        {recheckBtn}
+        <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })} ><ArchiveIcon size={IC.inline} />Archive</button>
+      </div>
+    );
+  }
+  const disabled = !!(win && win.expired);
+
+  // Intent banner gating: hidden once handled, until a newer INBOUND message
+  // arrives (lastInboundAt — a staff reply must not resurrect it). Shared rule
+  // in lib/whatsapp.js, also used by useWhatsApp.autoHandleCancelIntent.
+  const showIntentBanner = intentBannerVisible(conv);
+  // Mirrors DraftCard's "renders something" decision so the Reveal wrapper can
+  // ease the card in (after parsing) and out — DraftCard still owns the actual
+  // content for each state.
+  const draftCardShows = conv.draftStatus === "accepted"
+    ? !conv.acceptedBadgeDismissedAt
+    : conv.draftStatus === "dismissed"
+      ? true
+      : !!(conv.draftData && (conv.draftData.intent || "new_booking") === "new_booking");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, background: "var(--wa-list-bg)" }}>
+      {/* Single-row header (v15.8.2-wa-sandbox): name + phone + status pills + the
+          action buttons all on one level to reclaim vertical space. The pill
+          cluster wraps under the name on narrow widths; the action buttons stay
+          pinned right via marginLeft:auto. The old "WA" badge was removed. */}
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, lineHeight: 1 }} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
+        <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
+        <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
+        {regularChip}
+        {acceptedBadge}
+        {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
+        {windowEl}
+        <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
+      </div>
+      <Reveal show={histOpen && hasRegulars} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>
+      {/* Manual re-check result. Only needed for the "found nothing" / error
+          cases — a positive finding announces itself as a draft card or intent
+          banner. Eased in and self-clearing, so it never becomes chrome. */}
+      <Reveal show={!!(recheck && recheck !== "running")} style={{ padding: "0 14px" }}>
+        <div style={{ paddingTop: 8 }}>
+          {/* v17.15.3: one sentence, so `InlineAlert` — and the tone/tint come
+              from ALERT_TONES by ROLE. The pairing is the thing that goes
+              wrong: a hand-picked ink and fill are two decisions that must
+              agree, and nothing checks that they do. This site had four tokens
+              across two ternaries where there is one question (did the
+              re-check find anything), so it is one lookup now. */}
+          <InlineAlert
+            icon={recheck && recheck.ok ? CheckIcon : RecheckIcon}
+            tone={(recheck && recheck.ok ? ALERT_TONES.success : ALERT_TONES.danger).tone}
+            tint={(recheck && recheck.ok ? ALERT_TONES.success : ALERT_TONES.danger).tint}
+          >{recheck && recheck !== "running" ? recheck.msg : ""}</InlineAlert>
+        </div>
+      </Reveal>
+      {linkedBooking ? (
+        <div style={{ padding: "8px 14px 0" }}>
+          <LinkedBookingCard booking={linkedBooking} phoneKey={conv.phoneKey} defaultCollapsed={!(intent === "cancel" || intent === "modify")} onOpen={() => { if (onOpenLinkedBooking) onOpenLinkedBooking(conv); }} onCancel={() => { if (onCancelLinkedBooking) onCancelLinkedBooking(conv); }} />
+        </div>
+      ) : null}
+      {showIntentBanner ? (
+        <div style={{ padding: "0 14px" }}>
+          {/* key=phoneKey: the fade's `leaving` state must die with the conversation —
+              without it, switching threads mid-fade leaves the next banner invisible */}
+          <IntentBanner key={conv.phoneKey} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
+        </div>
+      ) : null}
+      <div ref={threadRef} style={{ flex: 1, overflowY: "auto", padding: "14px" }}>
+        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} />)}
+      </div>
+      {/* Parsing/typing indicator — eased in while the inbound is being parsed
+          (conv.parsing, set by the sandbox inbound path; cleared when the draft
+          lands). The real DraftCard Reveals in as this Reveals out. */}
+      <Reveal show={isParsing(conv)} style={{ padding: "0 14px" }}>
+        {/* Matches the DraftCard it turns into: same pane, same rim, so the
+            hand-off from "Reading the message…" to the parsed draft is a change
+            of CONTENT, not of surface. --wa-draft-border stays below as the
+            shimmer bar's fill, where it is decoration rather than a rim. */}
+        <div style={{ marginBottom: 12, padding: "12px 14px", borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ color: "var(--wa-draft-text)", display: "inline-flex" }}><DraftIcon size={IC.control} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--wa-draft-text)", marginBottom: 6 }}>Reading the message…</div>
+            <div className="mgt-shimmer" style={{ height: 8, borderRadius: R.pill, background: "var(--wa-draft-border)" }} />
+          </div>
+        </div>
+      </Reveal>
+      <Reveal show={draftCardShows} style={{ padding: "0 14px" }}>
+        <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact} />
+      </Reveal>
+      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} />
+    </div>
+  );
+}

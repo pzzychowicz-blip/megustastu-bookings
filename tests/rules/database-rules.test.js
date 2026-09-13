@@ -46,6 +46,8 @@ import {
 // console; a rule that is too strict is not a failing test, it is staff unable
 // to save a booking, and a fixture cannot find that.
 import { sanitize } from "../../src/lib/booking-logic.js";
+import { sanitizeVoucher } from "../../src/lib/vouchers.js";
+import { can, ROLES, ALWAYS_ENFORCED, RULE_ENFORCED, CAP_IDS } from "../../src/lib/roles.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const RULES_PATH = resolve(HERE, "../../database.rules.json");
@@ -92,6 +94,22 @@ beforeEach(async () => { await testEnv.clearDatabase(); });
 const anon   = () => testEnv.unauthenticatedContext().database();
 const staff  = (uid = "staff-a") => testEnv.authenticatedContext(uid).database();
 const seed   = (fn) => testEnv.withSecurityRulesDisabled((c) => fn(c.database()));
+// v18.0.0 phase 3: self-registration compares the row's email against
+// `auth.token.email`, so those cases need a context that actually carries one.
+const staffAs = (uid, email) => testEnv.authenticatedContext(uid, { email }).database();
+
+// A `/roles/{uid}` row in the shape sanitizeRole produces, plus the two write
+// stamps. `seedRole` writes it with rules DISABLED — the bootstrap step an
+// admin does once in the Firebase console, which is the only way the first
+// admin can ever exist.
+const roleRow = (uid, o = {}) => Object.assign({
+  uid, email: uid + "@mgt.test", name: uid, addedAt: 1, addedBy: "console",
+  updatedAt: 1000, baseUpdatedAt: 0,
+}, o);
+const seedRole = (uid, o) => seed((db) => db.ref("roles/" + uid).set(roleRow(uid, o)));
+const seedAdmin = (uid = "staff-a") => seedRole(uid, { role: "admin" });
+// The flag that makes the rules deploy rolling-safe. Absent === off.
+const seedEnforce = (on) => seed((db) => db.ref("settings/admin").set({ v: 1, enforceRoles: on }));
 
 // Shaped like what `sanitize` in booking-logic.js produces, plus the two write
 // stamps usePersistence's `stampForWrite` adds (`updatedAt` / `baseUpdatedAt`).
@@ -105,6 +123,8 @@ const booking = (o = {}) => Object.assign({
 // The app never writes a booking any other way: a multi-path update under
 // /bookings, one child per changed booking (usePersistence's diff-write).
 const writeBooking = (db, id, value) => db.ref("bookings").update({ [id]: value });
+// A multi-path null — the shape a diff-write uses to delete a child.
+const db_null = (db, code) => db.ref("vouchers").update({ [code]: null });
 
 // And it never writes a whole-node collection any other way either:
 // revGuard.writeWithRev's atomic { node, nodeRev: base+1 } at the ROOT.
@@ -142,7 +162,22 @@ describe("the rig itself", () => {
     // re-added root grant would leave every other test in this file green.
     expect(parsed.rules[".write"]).toBeUndefined();
     expect(parsed.rules.bookings[".write"]).toBeUndefined();
-    expect(parsed.rules.bookings.$bid[".write"]).toBe("auth != null");
+    // v18.0.0 phase 3: no longer the bare "auth != null" — it carries the
+    // bookingDelete gate. Pinned by SHAPE rather than by the whole string,
+    // because the property that matters is the ORDER: `newData.exists()` comes
+    // before any `root.child(...)`, so the two role lookups happen only on a
+    // delete and every ordinary booking write stays exactly as cheap as it was.
+    // A later edit that moved the role read in front of the short-circuit would
+    // still be correct and would put a root read on the app's hottest path.
+    const bw = parsed.rules.bookings.$bid[".write"];
+    expect(bw.startsWith("auth != null && (newData.exists() || ")).toBe(true);
+    expect(bw.indexOf("newData.exists()")).toBeLessThan(bw.indexOf("root.child"));
+    expect(bw).toContain("extras').child('bookingDelete')");
+    // The three v18.0.0 nodes, so a truncated file fails here too.
+    expect(parsed.rules.roles.$uid[".write"]).toContain("auth.token.email");
+    expect(parsed.rules.roles.$uid[".validate"]).toContain("baseUpdatedAt");
+    expect(parsed.rules.invites.$inviteId[".write"]).toContain("settingsAdmin");
+    expect(parsed.rules.settings.admin[".write"]).toContain("settingsAdmin");
     // The rev CAS moved from `.validate` to `.write`, which is what extends it
     // over DELETES: `.validate` is not evaluated when newData does not exist.
     expect(parsed.rules.tableBlocksRev[".validate"]).toBeUndefined();
@@ -398,11 +433,16 @@ describe("every rev pair in the rules is enforced", () => {
 
   for (const path of PAIRS) {
     it(`${path} — accepts rev 1, rejects rev 2 on an empty node`, async () => {
+      // v18.0.0 phase 3: the writer is an ADMIN so that the only thing which
+      // can reject below is the rev CAS. `settings/admin` is admin-only
+      // unconditionally, and a role refusal there would look like a CAS pass.
+      await seedAdmin();
       await assertFails(writeWithRev(staff(), path, { v: 1 }, 2));
       await assertSucceeds(writeWithRev(staff(), path, { v: 1 }, 1));
     });
 
     it(`${path} — rejects a write that does not bump its rev`, async () => {
+      await seedAdmin();
       await seed((db) => db.ref().update({ [path]: { v: 1 }, [path + "Rev"]: 1 }));
       await assertFails(staff().ref(path).set({ v: 2 }));
     });
@@ -562,6 +602,7 @@ describe("whole-node deletion is refused (v17.16.7)", () => {
     const PAIRS = revPairsIn(JSON.parse(readFileSync(RULES_PATH, "utf8")).rules)
       .map((p) => p.replace("$uid", "staff-a"));
     expect(PAIRS.length).toBeGreaterThanOrEqual(12);
+    await seedAdmin();
     for (const path of PAIRS) {
       await seed((db) => db.ref().update({ [path]: { v: 1 }, [path + "Rev"]: 1 }));
       await assertFails(staff().ref(path).remove());
@@ -1006,12 +1047,22 @@ describe("PROBE — how far updatedAt can be pushed", () => {
 });
 
 describe("PROBE — the trust model's edges", () => {
-  it("PROBE: any signed-in user can write ANOTHER user's prefs", async () => {
-    // database.rules.README.md states this outright: "$uid is a wildcard, not a
-    // per-user access rule". Proving the README right, and pinning it so a
-    // future tightening (`".write": "$uid === auth.uid"`) fails here loudly.
-    await assertSucceeds(writeWithRev(
+  it("one user can no longer write ANOTHER user's prefs (v18.0.0)", async () => {
+    // WAS a PROBE, and this is the tightening its own comment predicted: it
+    // said a future `$uid === auth.uid` "fails here loudly", and it did. The
+    // assertion is INVERTED with the rules rather than weakened or deleted,
+    // which is what the PROBE convention exists to force — a probe that starts
+    // passing for a new reason would have hidden the change instead of
+    // recording it.
+    //
+    // Closed as one of the plan's "two one-line fixes", and the reason it was
+    // worth a line: it is the exact predicate the self-registration stub is
+    // careful to get right, and leaving the loose one beside the strict one
+    // invites the next reader to copy the wrong neighbour.
+    await assertFails(writeWithRev(
       staff("staff-a"), "settings/users/staff-b/prefs", { theme: "dark" }, 1));
+    await assertSucceeds(writeWithRev(
+      staff("staff-a"), "settings/users/staff-a/prefs", { theme: "dark" }, 1));
   });
 
   it("arbitrary top-level nodes can no longer be created (v17.16.7)", async () => {
@@ -1039,5 +1090,1201 @@ describe("PROBE — the trust model's edges", () => {
     await assertFails(staff().ref("/").update({
       bookings: { b1: booking({ updatedAt: 9999, baseUpdatedAt: 1 }) },
     }));
+  });
+});
+
+// ── /vouchers/$code — the per-child CAS the PAIRS sweep cannot see ───────────
+//
+// `revPairsIn(RULES)` walks the rules file for every key ending in `Rev` and
+// grows on its own, so `settings/voucherDefaults` needs no test edit. A
+// per-child CAS is not a rev pair, so the walker never sees THIS one — hence
+// these are written by hand, in the style of the `bookings/$bid` cases above.
+//
+// One thing here is deliberately unlike `/bookings`, and it is the point of the
+// whole node: **a voucher cannot be deleted.** A booking's CAS lives in
+// `.validate` and opens with `!newData.exists() ||`, so a delete is
+// unconditional — correct there, since a multi-path null carries no base. A
+// voucher's number must never be released, so its CAS lives in `.write` (which
+// IS evaluated for a delete, CT-2A-06) and REQUIRES `newData.exists()`.
+//
+// The plan's own §1.6 draft had the booking rule's leading `!newData.exists()
+// ||` disjunct copied across, which short-circuits the whole predicate on a
+// delete. That would have permitted freeing a number — the exact failure the
+// "voided, never deleted" rule exists to prevent — and it is the same shape as
+// CT-2A-01, where a `!data.exists()` disjunct short-circuited the CAS.
+
+const voucher = (o = {}) => Object.assign({
+  code: "ABCD2345", value: 50, remaining: 50, notes: "",
+  status: "open", origin: "generated", issuedAt: 1000, issuedBy: "staff@x",
+  updatedAt: 1000, baseUpdatedAt: 0,
+}, o);
+
+// The app writes a voucher exactly one way: a multi-path update under
+// /vouchers, one child per changed voucher (useVouchers' diff-write).
+const writeVoucher = (db, code, value) => db.ref("vouchers").update({ [code]: value });
+
+// ── v18.0.0 session 8 (item 5a): the reversal trail's SHAPE ─────────────────
+// Hand-written, because the `PAIRS` sweep cannot see a nested map — it walks
+// the rev pairs, and this is a child of `/vouchers/$code`.
+//
+// **Honestly not append-only server-side, and the runbook says so.** The whole
+// child is written under its CAS, `.validate` does not run on a deleted child,
+// and `.write` cannot be revoked lower down (CT-2A-06). What these rules buy is
+// that a reversal cannot be stored in a shape nothing can read; the guarantee
+// that one is never removed is the client plus the tests above it.
+describe("vouchers — the reversal trail's shape", () => {
+  const REV = {
+    bookingId: "b1", amount: 20,
+    redeemedAt: 1000, redeemedBy: "her@x",
+    reversedAt: 2000, reversedBy: "him@x",
+  };
+  const withRev = (o) => voucher({ baseUpdatedAt: 0, reversals: { b1_2000: Object.assign({}, REV, o) } });
+
+  it("accepts a well-shaped reversal", async () => {
+    await assertSucceeds(writeVoucher(staff(), "ABCD2345", withRev({})));
+  });
+
+  it("refuses an amount that is not a number", async () => {
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ amount: "twenty" })));
+  });
+
+  it("refuses a negative amount", async () => {
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ amount: -5 })));
+  });
+
+  it("refuses timestamps and emails of the wrong type", async () => {
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ reversedAt: "soon" })));
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ redeemedAt: "then" })));
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ reversedBy: 7 })));
+    await assertFails(writeVoucher(staff(), "ABCD2345", withRev({ bookingId: 7 })));
+  });
+});
+
+describe("vouchers — the per-$code CAS", () => {
+  it("an anonymous client can neither read nor write", async () => {
+    await assertFails(anon().ref("vouchers").once("value"));
+    await assertFails(writeVoucher(anon(), "ABCD2345", voucher()));
+  });
+
+  it("a create needs baseUpdatedAt === 0, exactly like a booking", async () => {
+    await assertSucceeds(writeVoucher(staff(), "ABCD2345", voucher({ baseUpdatedAt: 0 })));
+  });
+
+  it("a create carrying a NON-zero base is refused", async () => {
+    // v17.16.1's CT-2A-01 rule, one collection over: a stale offline write
+    // naming a version that is not there must not create it.
+    await assertFails(writeVoucher(staff(), "ABCD2345", voucher({ baseUpdatedAt: 900 })));
+  });
+
+  it("a create with no stamps at all is refused", async () => {
+    const { updatedAt, baseUpdatedAt, ...bare } = voucher();
+    void updatedAt; void baseUpdatedAt;
+    await assertFails(writeVoucher(staff(), "ABCD2345", bare));
+  });
+
+  describe("against a stored voucher at updatedAt = 5000", () => {
+    beforeEach(async () => {
+      await seed((db) => db.ref("vouchers/ABCD2345").set(voucher({ updatedAt: 5000, baseUpdatedAt: 0 })));
+    });
+
+    it("a write based on 5000 is accepted", async () => {
+      await assertSucceeds(writeVoucher(staff(), "ABCD2345",
+        voucher({ remaining: 30, updatedAt: 6000, baseUpdatedAt: 5000 })));
+    });
+
+    it("a STALE write is refused however far ahead its clock runs", async () => {
+      // Greater-than is last-writer-wins, not staleness protection — the whole
+      // of the 2026-07-05 incident. A device holding the pre-5000 version
+      // stamps with its own wall clock and is refused anyway.
+      await assertFails(writeVoucher(staff(), "ABCD2345",
+        voucher({ remaining: 0, updatedAt: 9_999_999, baseUpdatedAt: 1000 })));
+    });
+
+    it("a correct base with a NON-advancing stamp is refused", async () => {
+      await assertFails(writeVoucher(staff(), "ABCD2345",
+        voucher({ updatedAt: 5000, baseUpdatedAt: 5000 })));
+    });
+
+    it("a DUPLICATE create is refused — two devices issuing one number", async () => {
+      // The uniqueness guarantee. Both devices believe the code is free, both
+      // send a create, and the second's baseUpdatedAt === 0 no longer matches
+      // the stored 5000. The database decides, not the client.
+      await assertFails(writeVoucher(staff("staff-b"), "ABCD2345",
+        voucher({ value: 25, remaining: 25, updatedAt: 7000, baseUpdatedAt: 0 })));
+    });
+
+    // ── A NUMBER IS NEVER RELEASED ─────────────────────────────────────────
+    it("a voucher canNOT be DELETED — not by a null, not by a remove()", async () => {
+      await assertFails(db_null(staff(), "ABCD2345"));
+      await assertFails(staff().ref("vouchers/ABCD2345").remove());
+      await assertFails(staff().ref("vouchers/ABCD2345").set(null));
+      // And it is still there afterwards.
+      expect(await seedRead("vouchers/ABCD2345")).not.toBeNull();
+    });
+
+    it("the WHOLE node canNOT be wiped — CT-2A-04, one collection over", async () => {
+      await assertFails(staff().ref("vouchers").remove());
+      await assertFails(staff().ref("vouchers").set({}));
+      await assertFails(staff().ref("vouchers").set({ OTHER: voucher({ code: "OTHER" }) }));
+    });
+
+    it("voiding is the closest thing to a delete, and keeps the child", async () => {
+      await assertSucceeds(writeVoucher(staff(), "ABCD2345",
+        voucher({ status: "void", updatedAt: 6000, baseUpdatedAt: 5000 })));
+      expect((await seedRead("vouchers/ABCD2345")).status).toBe("void");
+    });
+
+    it("a SUB-PATH write cannot slip past the CAS", async () => {
+      // `.write` cascades down, so the grant at $code also permits a write at
+      // $code/notes — but the $code predicate is then evaluated against an
+      // `updatedAt` the sub-path write never advanced, so it refuses. The plan
+      // flagged this as reasoned-not-measured; this is the measurement.
+      await assertFails(staff().ref("vouchers/ABCD2345/remaining").set(999));
+      await assertFails(staff().ref("vouchers/ABCD2345/notes").set("free money"));
+      await assertFails(staff().ref("vouchers/ABCD2345/redemptions/b1").set({ amount: 50, at: 1, by: "x" }));
+    });
+
+    it("a root-level write cannot bypass the CAS either", async () => {
+      await assertFails(staff().ref("/").update({
+        vouchers: { ABCD2345: voucher({ updatedAt: 9999, baseUpdatedAt: 1 }) },
+      }));
+    });
+  });
+
+  describe("field shapes", () => {
+    it("money must be a non-negative number", async () => {
+      await assertFails(writeVoucher(staff(), "V1", voucher({ value: -1 })));
+      await assertFails(writeVoucher(staff(), "V2", voucher({ remaining: -1 })));
+      await assertFails(writeVoucher(staff(), "V3", voucher({ value: "50" })));
+      await assertSucceeds(writeVoucher(staff(), "V5", voucher({ value: 0, remaining: 0 })));
+    });
+
+    it("`remaining: null` is an ABSENT field, not an invalid one", async () => {
+      // Measured, and it corrected a test written the other way round. RTDB
+      // cannot store null — writing it omits the key — so the child never
+      // exists in newData and its `.validate` never runs. That is the
+      // "if PRESENT, must be the right shape" contract working exactly as
+      // v17.16.1 describes it, and it is why `sanitizeVoucher` seeds an absent
+      // `remaining` from `value` rather than reading it as zero: the row that
+      // reaches the client here is coherent, and treating it as spent would
+      // swallow the balance.
+      await assertSucceeds(writeVoucher(staff(), "V4", voucher({ remaining: null })));
+      expect(await seedRead("vouchers/V4/remaining")).toBeNull();
+      expect((await seedRead("vouchers/V4")).value).toBe(50);
+    });
+
+    it("status and origin are pinned to their known values", async () => {
+      await assertFails(writeVoucher(staff(), "V1", voucher({ status: "spent" })));
+      await assertFails(writeVoucher(staff(), "V2", voucher({ origin: "imported" })));
+      await assertSucceeds(writeVoucher(staff(), "V3", voucher({ status: "void" })));
+      await assertSucceeds(writeVoucher(staff(), "V4", voucher({ origin: "manual" })));
+    });
+
+    it("a stored value CARRIED THROUGH unchanged is always allowed", async () => {
+      // v17.16.11's grandfather clause. A row that already holds a value the
+      // pattern refuses must stay saveable, or the rules make a record the app
+      // cannot repair.
+      await seed((db) => db.ref("vouchers/LEGACY").set(
+        voucher({ code: "LEGACY", status: "weird", origin: "imported", updatedAt: 5000 })));
+      await assertSucceeds(writeVoucher(staff(), "LEGACY", voucher({
+        code: "LEGACY", status: "weird", origin: "imported", notes: "fixed the note",
+        updatedAt: 6000, baseUpdatedAt: 5000,
+      })));
+    });
+
+    it("a ledger entry's amount must be a non-negative number", async () => {
+      await assertFails(writeVoucher(staff(), "V1",
+        voucher({ redemptions: { b1: { amount: -5, at: 1, by: "x" } } })));
+      await assertFails(writeVoucher(staff(), "V2",
+        voucher({ redemptions: { b1: { amount: "20", at: 1, by: "x" } } })));
+      await assertSucceeds(writeVoucher(staff(), "V3",
+        voucher({ redemptions: { b1: { amount: 20, at: 1, by: "x" } } })));
+    });
+
+    it("expiresAt is a number when present, and absent means never", async () => {
+      await assertFails(writeVoucher(staff(), "V1", voucher({ expiresAt: "soon" })));
+      await assertSucceeds(writeVoucher(staff(), "V2", voucher({ expiresAt: 2_000_000_000_000 })));
+      // The base fixture carries no `expiresAt` at all — "never expires".
+      expect(voucher().expiresAt).toBeUndefined();
+      await assertSucceeds(writeVoucher(staff(), "V3", voucher()));
+    });
+  });
+
+  it("accepts the shape useVouchers itself produces", async () => {
+    // A fixture that RESEMBLES the app's output proves nothing about the app.
+    // This one is built by the real sanitiser, then stamped the way
+    // write-path.js stamps a create.
+    const v = sanitizeVoucher({
+      code: "QRST6789", value: 50, remaining: 50, notes: "Birthday",
+      status: "open", origin: "generated", issuedAt: Date.now(), issuedBy: "staff@x",
+      expiresAt: Date.now() + 86400000, redemptions: {},
+    }, "QRST6789");
+    await assertSucceeds(writeVoucher(staff(), "QRST6789",
+      Object.assign({}, v, { updatedAt: Date.now(), baseUpdatedAt: 0 })));
+  });
+});
+
+// ── /roles and /invites — the permission layer (v18.0.0 phase 3) ────────────
+//
+// The riskiest predicates in the app, so what follows tries to break them
+// rather than to demonstrate them. Three properties carry the whole model and
+// each fails SILENTLY: a user may create a ROW but never grant themselves a
+// LEVEL; an admin may not strip their own admin (which is what makes "there is
+// always at least one admin" true without a counter node RTDB cannot maintain);
+// and the enforcement flag relaxes the two paths that carry legacy traffic
+// while never relaxing the three that do not.
+
+const OTHER = "staff-b";
+
+describe("/roles — who may write a role at all", () => {
+  it("refuses a signed-in account with no role row", async () => {
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "admin" })));
+  });
+
+  it("refuses a manager — a level below admin is not an administrator", async () => {
+    await seedRole("staff-a", { role: "manager" });
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" })));
+  });
+
+  it("allows an admin", async () => {
+    await seedAdmin();
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" })));
+  });
+
+  it("allows an admin granted the capability by an EXTRA, not by a level", async () => {
+    // The whole point of extras being honoured server-side: an admin who is a
+    // `manager` plus `extras.settingsAdmin` is an administrator to the rules,
+    // exactly as `can()` says they are to the UI.
+    await seedRole("staff-a", { role: "manager", extras: { settingsAdmin: true } });
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" })));
+  });
+
+  it("refuses an admin whose extra is anything other than exactly true", async () => {
+    await seedRole("staff-a", { role: "manager", extras: { settingsAdmin: "yes" } });
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" })));
+  });
+
+  it("refuses an unauthenticated write and read", async () => {
+    await assertFails(anon().ref("roles/" + OTHER).set(roleRow(OTHER)));
+    await assertFails(anon().ref("roles").once("value"));
+  });
+
+  it("lets any signed-in account READ the roles — the single-restaurant trust model", async () => {
+    // Deliberate, and stated so it is not mistaken for an oversight: the app's
+    // top-level `.read` is `auth != null` and this node holds no secret. The UI
+    // needs every row to render the panel, and a staff device needs its OWN row
+    // to know what to hide.
+    await seedAdmin();
+    await assertSucceeds(staff(OTHER).ref("roles").once("value"));
+  });
+});
+
+describe("/roles — self-registration creates a ROW, never a LEVEL", () => {
+  const ME = "newcomer";
+  const MAIL = "newcomer@mgt.test";
+  const stub = (o = {}) => Object.assign({
+    uid: ME, email: MAIL, name: "", addedAt: 1, addedBy: ME,
+    updatedAt: 1000, baseUpdatedAt: 0,
+  }, o);
+
+  it("accepts a stub naming the signing-in account, with no role and no extras", async () => {
+    await assertSucceeds(staffAs(ME, MAIL).ref("roles/" + ME).set(stub()));
+  });
+
+  it("REFUSES a stub that grants itself a level — the self-service promotion hole", async () => {
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ role: "admin" })));
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ role: "manager" })));
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ role: "staff" })));
+  });
+
+  it("REFUSES a stub that grants itself a capability — the same hole one door over", async () => {
+    // Without the `extras === null` clause this is the promotion path: no
+    // level, and `settingsAdmin` anyway.
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ extras: { settingsAdmin: true } })));
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ extras: { bookingDelete: true } })));
+  });
+
+  it("refuses a stub for somebody ELSE's uid", async () => {
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + OTHER).set(
+      Object.assign(stub(), { uid: OTHER })));
+  });
+
+  it("refuses a stub claiming an email that is not the account's", async () => {
+    // The email is the key the panel pairs an invitation on, so a row may not
+    // name an address its owner does not hold.
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ email: "boss@mgt.test" })));
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ email: "" })));
+  });
+
+  it("refuses a SECOND self-write, so a demotion cannot be shed by re-registering", async () => {
+    await seedRole(ME, { email: MAIL, role: "staff" });
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).set(stub({ updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("refuses deleting your own row, for the same reason", async () => {
+    await seedRole(ME, { email: MAIL, role: "staff" });
+    await assertFails(staffAs(ME, MAIL).ref("roles/" + ME).remove());
+  });
+
+  it("refuses a stub from an account with no email on its token", async () => {
+    await assertFails(staff(ME).ref("roles/" + ME).set(stub()));
+  });
+});
+
+describe("/roles — an admin may not strip their OWN admin", () => {
+  // The last-admin invariant. RTDB rules cannot count children, so this is the
+  // derived form: only a settingsAdmin holder may write /roles, and it cannot
+  // remove its own — so the set shrinks only when one admin demotes ANOTHER,
+  // and the demoter still holds it. Zero is unreachable.
+  const base = { updatedAt: 2000, baseUpdatedAt: 1000 };
+
+  it("refuses demoting yourself", async () => {
+    await seedAdmin();
+    await assertFails(staff().ref("roles/staff-a").set(roleRow("staff-a", Object.assign({ role: "manager" }, base))));
+  });
+
+  it("refuses deleting your own row", async () => {
+    await seedAdmin();
+    await assertFails(staff().ref("roles/staff-a").remove());
+  });
+
+  it("refuses stripping an extras-granted settingsAdmin from yourself", async () => {
+    await seedRole("staff-a", { role: "manager", extras: { settingsAdmin: true } });
+    await assertFails(staff().ref("roles/staff-a").set(roleRow("staff-a", Object.assign({ role: "manager" }, base))));
+  });
+
+  it("ALLOWS an admin demoting another admin — which is what keeps the set ≥ 1", async () => {
+    await seedAdmin();
+    await seedRole(OTHER, { role: "admin" });
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, Object.assign({ role: "staff" }, base))));
+  });
+
+  it("ALLOWS an admin deleting another admin's row", async () => {
+    await seedAdmin();
+    await seedRole(OTHER, { role: "admin" });
+    await assertSucceeds(staff().ref("roles/" + OTHER).remove());
+  });
+
+  it("ALLOWS an admin editing their own row while staying admin", async () => {
+    await seedAdmin();
+    await assertSucceeds(staff().ref("roles/staff-a").set(
+      roleRow("staff-a", Object.assign({ role: "admin", name: "Patryk" }, base))));
+  });
+
+  it("ALLOWS an admin swapping the ROUTE by which they hold it", async () => {
+    // level → extra. They still hold settingsAdmin, so the invariant is intact
+    // and the rule must not refuse it just because `role` changed.
+    await seedAdmin();
+    await assertSucceeds(staff().ref("roles/staff-a").set(roleRow("staff-a",
+      Object.assign({ role: "manager", extras: { settingsAdmin: true } }, base))));
+  });
+});
+
+describe("/roles — the per-$uid CAS and the field shapes", () => {
+  const base = { role: "staff" };
+
+  it("refuses a write whose baseUpdatedAt does not name the stored version", async () => {
+    await seedAdmin();
+    await seedRole(OTHER, base);
+    await assertFails(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "manager", updatedAt: 2000, baseUpdatedAt: 999 })));
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "manager", updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("refuses a create whose baseUpdatedAt is not 0", async () => {
+    await seedAdmin();
+    await assertFails(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "staff", updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("refuses a role outside the three levels", async () => {
+    await seedAdmin();
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "owner" })));
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "ADMIN" })));
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: 1 })));
+  });
+
+  it("refuses an extra that is false — extras ADD, they never revoke", async () => {
+    await seedAdmin();
+    await assertFails(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "staff", extras: { bookingDelete: false } })));
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "staff", extras: { bookingDelete: true } })));
+  });
+});
+
+describe("/invites — admin-only, with the same CAS", () => {
+  const invite = (o = {}) => Object.assign({
+    id: "i1", email: "ana@mgt.test", role: "manager",
+    createdAt: 1, createdBy: "staff-a", updatedAt: 1000, baseUpdatedAt: 0,
+  }, o);
+
+  it("refuses a non-admin", async () => {
+    await assertFails(staff().ref("invites/i1").set(invite()));
+    await seedRole("staff-a", { role: "manager" });
+    await assertFails(staff().ref("invites/i1").set(invite()));
+  });
+
+  it("allows an admin to create, amend and withdraw an invitation", async () => {
+    await seedAdmin();
+    await assertSucceeds(staff().ref("invites/i1").set(invite()));
+    await assertSucceeds(staff().ref("invites/i1").set(
+      invite({ role: "staff", updatedAt: 2000, baseUpdatedAt: 1000 })));
+    await assertSucceeds(staff().ref("invites/i1").remove());
+  });
+
+  it("refuses a stale amendment", async () => {
+    await seedAdmin();
+    await seed((db) => db.ref("invites/i1").set(invite()));
+    await assertFails(staff().ref("invites/i1").set(
+      invite({ role: "admin", updatedAt: 2000, baseUpdatedAt: 42 })));
+  });
+
+  it("refuses a role outside the three levels", async () => {
+    await seedAdmin();
+    await assertFails(staff().ref("invites/i1").set(invite({ role: "owner" })));
+  });
+});
+
+describe("settings/admin — admin-only, flag or no flag", () => {
+  // Unconditional on purpose. The enforcement flag exists so the deploy is
+  // rolling-safe for paths that carry live traffic from accounts with no role
+  // row; this node is new and carries none. And if it were gated on the flag,
+  // anyone could turn enforcement ON — which, with /roles empty, makes everyone
+  // staff and leaves nobody able to turn it off again. That is a brick, and
+  // repairing it needs the Firebase console.
+  it("refuses a non-admin even while enforcement is off", async () => {
+    await assertFails(writeWithRev(staff(), "settings/admin", { v: 1, enforceRoles: true }, 1));
+    await seedRole("staff-a", { role: "manager" });
+    await assertFails(writeWithRev(staff(), "settings/admin", { v: 1, enforceRoles: true }, 1));
+  });
+
+  it("allows an admin", async () => {
+    await seedAdmin();
+    await assertSucceeds(writeWithRev(staff(), "settings/admin", { v: 1, enforceRoles: true }, 1));
+  });
+
+  it("refuses a non-admin bumping the rev alone, which would desync the CAS", async () => {
+    await seedAdmin("admin-x");
+    await assertFails(staff().ref("settings/adminRev").set(1));
+  });
+});
+
+// ── The enforcement flag — what it relaxes, and what it never relaxes ────────
+//
+// `enforceRoles: false` is what makes this rules deploy rolling-safe. Every
+// account in production today has no `/roles` row at all, and a rule that
+// simply REQUIRED one would stop every device the moment it deployed — a
+// v15.5.0-style cutover, at the restaurant, during service. So with the flag
+// off `bookings` and `settings/*` must behave byte-for-byte as they did before
+// v18.0.0, and these tests are the proof of that rather than the intent.
+
+describe("settings/* — the settingsWrite gate", () => {
+  it("with enforcement OFF, an account with no role writes settings — today's behaviour", async () => {
+    await assertSucceeds(writeWithRev(staff(), "settings/general", { v: 1, restaurantName: "X" }, 1));
+  });
+
+  it("with the flag ABSENT entirely, same thing — absent is off", async () => {
+    // The production state on the day this deploys: the node does not exist.
+    // `.val() !== true` is what makes an absent flag read as off, and it is the
+    // difference between a rolling deploy and a service outage.
+    await seed((db) => db.ref("settings/admin").remove());
+    await assertSucceeds(writeWithRev(staff(), "settings/layout", { tables: [] }, 1));
+  });
+
+  it("with enforcement ON, an account with no role is refused", async () => {
+    await seedEnforce(true);
+    await assertFails(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("with enforcement ON, a staff account is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("with enforcement ON, a manager may write", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "manager" });
+    await assertSucceeds(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("with enforcement ON, an admin may write", async () => {
+    await seedEnforce(true);
+    await seedAdmin();
+    await assertSucceeds(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("with enforcement ON, a staff account GRANTED the extra may write", async () => {
+    // The property the whole extras model rests on: a granted extra is honoured
+    // SERVER-side, not merely in the UI. Without this the panel would offer a
+    // capability the database refuses.
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { settingsWrite: true } });
+    await assertSucceeds(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("an unrelated extra does not open the door", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { bookingDelete: true } });
+    await assertFails(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("the gate is on EVERY settings pair, not just the one that was tested", async () => {
+    // The sweep that matters. Sixteen rules carry this predicate because RTDB
+    // rules have no macro facility, and "a set of facts written out N times
+    // will be written out N−1 times by somebody" is this repo's most repeated
+    // lesson. Derived from the rules file so a pair added later is covered
+    // without editing this test.
+    const RULES = JSON.parse(readFileSync(RULES_PATH, "utf8")).rules;
+    const gated = Object.keys(RULES.settings)
+      .filter((k) => !k.startsWith(".") && k !== "users" && k !== "admin" && k !== "adminRev");
+    expect(gated.length).toBeGreaterThanOrEqual(16);
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    for (const k of gated) {
+      const path = "settings/" + (k.endsWith("Rev") ? k.slice(0, -3) : k);
+      await assertFails(writeWithRev(staff(), path, { v: 1 }, 1));
+    }
+  });
+});
+
+describe("bookings/$bid — the bookingDelete gate", () => {
+  beforeEach(async () => { await seed((db) => db.ref("bookings/b1").set(booking())); });
+
+  const del = (db) => db.ref("bookings").update({ b1: null });
+
+  it("with enforcement OFF, anyone signed in may delete — today's behaviour", async () => {
+    await assertSucceeds(del(staff()));
+  });
+
+  it("with enforcement ON, a staff account is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(del(staff()));
+    expect(await seedRead("bookings/b1/name")).toBe("Pau Estévez");
+  });
+
+  it("with enforcement ON, an account with no role at all is refused — absent reads as staff", async () => {
+    await seedEnforce(true);
+    await assertFails(del(staff()));
+  });
+
+  it("with enforcement ON, a manager may delete", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "manager" });
+    await assertSucceeds(del(staff()));
+  });
+
+  it("with enforcement ON, a staff account GRANTED the extra may delete", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { bookingDelete: true } });
+    await assertSucceeds(del(staff()));
+  });
+
+  it("ORDINARY writes are untouched in both states — newData.exists() short-circuits", async () => {
+    // The gate must cost nothing on the hot path. `newData.exists()` is true for
+    // every write that is not a deletion, so the two root reads happen only on a
+    // delete. This is also the only reason the gate works at all: `.write` IS
+    // evaluated for a delete and `.validate` is not (the v17.16.7 finding).
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await assertSucceeds(writeBooking(staff(), "b1",
+      booking({ name: "Renamed", updatedAt: 2000, baseUpdatedAt: 1000 })));
+    await assertSucceeds(writeBooking(staff(), "b2",
+      booking({ id: "b2", updatedAt: 2000, baseUpdatedAt: 0 })));
+  });
+
+  it("a mixed patch is refused as a whole when its deletion is not allowed", async () => {
+    // A multi-path patch evaluates every child, and RTDB applies an update
+    // atomically — so the edit rides on the refusal rather than landing alone.
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await seed((db) => db.ref("bookings/b2").set(booking({ id: "b2" })));
+    await assertFails(staff().ref("bookings").update({
+      b1: null,
+      b2: booking({ id: "b2", name: "Renamed", updatedAt: 2000, baseUpdatedAt: 1000 }),
+    }));
+    expect(await seedRead("bookings/b2/name")).toBe("Pau Estévez");
+  });
+
+  it("a reshuffle-sized patch with a role lookup on every child still passes", async () => {
+    // The plan asked for this to be measured rather than asserted: a reshuffle
+    // writes ~5 children, and each one evaluates the gate. Five is the shape
+    // the optimiser actually produces.
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "manager" });
+    const patch = {};
+    for (let i = 0; i < 5; i++) {
+      patch["r" + i] = booking({ id: "r" + i, updatedAt: 2000, baseUpdatedAt: 0 });
+    }
+    const t0 = Date.now();
+    await assertSucceeds(staff().ref("bookings").update(patch));
+    process.stdout.write("[rules] 5-child patch under the role gate: " + (Date.now() - t0) + "ms\n");
+  });
+});
+
+describe("settings/users/$uid/prefs — a user writes only their OWN (v18.0.0)", () => {
+  // One of the plan's "two one-line fixes". Before this, any signed-in account
+  // could overwrite any other account's theme, gestures and nav lock. Harmless
+  // in itself — and it is the exact predicate the self-registration stub is
+  // careful to get right, so the loose one must not sit next to the strict one.
+  it("allows writing your own", async () => {
+    await assertSucceeds(writeWithRev(staff(), "settings/users/staff-a/prefs", { theme: "dark" }, 1));
+  });
+
+  it("refuses writing somebody else's", async () => {
+    await assertFails(writeWithRev(staff(), "settings/users/" + OTHER + "/prefs", { theme: "dark" }, 1));
+  });
+
+  it("refuses bumping somebody else's rev", async () => {
+    await assertFails(staff().ref("settings/users/" + OTHER + "/prefsRev").set(1));
+  });
+
+  it("is NOT gated by settingsWrite — prefs are per-user, not restaurant config", async () => {
+    // A staff account must always be able to set its own theme, enforcement or
+    // no enforcement. Gating this on `settingsWrite` would have been the
+    // plausible-looking mistake.
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await assertSucceeds(writeWithRev(staff(), "settings/users/staff-a/prefs", { theme: "dark" }, 1));
+  });
+});
+
+describe("the rules and ROLE_GRANTS agree (v18.0.0)", () => {
+  // The one duplication this phase could not remove. RTDB rules cannot read a
+  // JS constant, so which levels grant `settingsWrite` and `bookingDelete` is
+  // written once in `src/lib/roles.js` and again in `database.rules.json`.
+  // Nothing in either file can see the other, so this asserts they agree
+  // BEHAVIOURALLY — by driving the real rules with each level in turn and
+  // comparing the outcome against `can()`.
+  const CASES = [
+    { cap: "settingsWrite",   run: (db) => writeWithRev(db, "settings/general", { v: 1 }, 1) },
+    { cap: "bookingDelete",   run: (db) => db.ref("bookings").update({ b1: null }) },
+    // v18.0.0 phase 3 — the four capabilities split out of `settingsWrite`.
+    // Each is driven against the REAL rules for every level, so "manager keeps
+    // what it had inside settingsWrite" is proven rather than asserted.
+    { cap: "hoursEdit",       run: (db) => writeWithRev(db, "settings/operatingHours", { days: { 0: { open: 13, close: 22 } } }, 1) },
+    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
+    { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
+    { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
+    // v18.0.0 session 8 — the activity log's redaction, the eighth enforced
+    // capability. It needs two things the six above do not: a row to redact
+    // (`pre`, seeded with rules disabled) and an actor carrying an email claim
+    // (`as`), because every other case writes a node with no author in it.
+    //
+    // Both are referenced through arrows on purpose: `entry` and `ME` are
+    // declared at the FOOT of this file and `CASES` is built at collection
+    // time, so naming either directly here is a TDZ ReferenceError — the trap
+    // CLAUDE.md records for `activeView`, one file over.
+    {
+      cap: "customerDelete",
+      as: () => ME(),
+      pre: (db) => db.ref("activity/e1").set(Object.assign(entry(), {
+        at: Date.now(),
+        subject: { name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4 },
+      })),
+      run: (db) => db.ref("activity/e1/subject/name").set("Data removed"),
+    },
+  ];
+
+  for (const { cap, run, pre, as } of CASES) {
+    for (const role of ROLES) {
+      const expected = can({ role, extras: {} }, cap, true);
+      it(`${cap}: a ${role} is ${expected ? "allowed" : "refused"}, as can() says`, async () => {
+        await seedEnforce(true);
+        await seedRole("staff-a", { role });
+        await seed((db) => db.ref("bookings/b1").set(booking()));
+        if (pre) await seed(pre);
+        const actor = as ? as() : staff();
+        if (expected) await assertSucceeds(run(actor));
+        else await assertFails(run(actor));
+      });
+    }
+  }
+
+  it("settingsAdmin: only an admin, and the flag does not relax it", async () => {
+    // ALWAYS_ENFORCED's server half. /roles, /invites and settings/admin are new
+    // in v18.0.0 and carry no legacy traffic, so they are admin-only from the
+    // first deploy — which is why `can()` must not relax settingsAdmin either.
+    expect(ALWAYS_ENFORCED.settingsAdmin).toBe(true);
+    for (const role of ROLES) {
+      await testEnv.clearDatabase();
+      await seedRole("staff-a", { role });
+      const allowed = can({ role, extras: {} }, "settingsAdmin", false);
+      const write = staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" }));
+      if (allowed) await assertSucceeds(write);
+      else await assertFails(write);
+    }
+  });
+});
+
+// ── The split is REAL, not four names for one gate (v18.0.0 phase 3) ─────────
+//
+// The `settings/*` sweep above proves a staff account is refused everywhere,
+// and would go on passing if all sixteen rules still named `settingsWrite` —
+// staff holds none of them either way. So it cannot see the split, and this is
+// the test that can: give an account ONE capability as an extra and check it
+// opens exactly its own door and no other.
+describe("each gated path names its OWN capability", () => {
+  const PATHS = [
+    { path: "settings/operatingHours", cap: "hoursEdit",       value: { days: { 0: { open: 13, close: 22 } } } },
+    { path: "settings/dayShifts",      cap: "hoursEdit",       value: { split: 17, enabled: true } },
+    { path: "settings/layout",         cap: "layoutEdit",      value: { tables: [{ id: "1A", capacity: 2 }] } },
+    { path: "reminders",               cap: "reminderManage",  value: [{ id: "r1", text: "Prep" }] },
+    { path: "recurring",               cap: "recurringManage", value: { v: 1, enabled: true } },
+    { path: "settings/general",        cap: "settingsWrite",   value: { v: 1, restaurantName: "X" } },
+    { path: "settings/optimizer",      cap: "settingsWrite",   value: { cutoff: 15 } },
+  ];
+
+  for (const { path, cap, value } of PATHS) {
+    it(`${path} opens for ${cap} alone`, async () => {
+      await seedEnforce(true);
+      await seedRole("staff-a", { role: "staff", extras: { [cap]: true } });
+      await assertSucceeds(writeWithRev(staff(), path, value, 1));
+    });
+
+    it(`${path} stays shut for a DIFFERENT capability`, async () => {
+      // The half that fails if a re-point is missed: an account carrying every
+      // capability EXCEPT this path's own must still be refused. Without it a
+      // rule left naming `settingsWrite` would pass the test above, because a
+      // manager holds both.
+      const others = {};
+      CAP_IDS.forEach((c) => { if (c !== cap) others[c] = true; });
+      await seedEnforce(true);
+      await seedRole("staff-a", { role: "staff", extras: others });
+      await assertFails(writeWithRev(staff(), path, value, 1));
+    });
+  }
+
+  it("the rules name exactly the capabilities the app calls enforced", async () => {
+    // Derived from BOTH files, so a capability flagged `enforced: true` in
+    // roles.js with no rule behind it — or a rule naming a capability the app
+    // has never heard of — fails here rather than shipping as a badge that
+    // promises a guarantee nothing provides.
+    const text = readFileSync(RULES_PATH, "utf8");
+    const named = new Set([...text.matchAll(/extras'\)\.child\('([A-Za-z]+)'\)/g)].map((m) => m[1]));
+    expect([...named].sort()).toEqual(Object.keys(RULE_ENFORCED).slice().sort());
+    named.forEach((c) => expect(CAP_IDS).toContain(c));
+  });
+});
+
+// ── denies — the revocation half (v18.0.0 phase 3) ──────────────────────────
+//
+// The client half is `can()` returning false; this is the server agreeing. A
+// deny that only hid controls would be the exact disagreement this whole phase
+// exists to prevent: the panel says a manager cannot change the hours while the
+// database goes on accepting their writes.
+describe("a deny is refused by the rules, not only hidden", () => {
+  const CASES = [
+    { cap: "settingsWrite",   run: (db) => writeWithRev(db, "settings/general", { v: 1 }, 1) },
+    { cap: "hoursEdit",       run: (db) => writeWithRev(db, "settings/operatingHours", { days: { 0: { open: 13, close: 22 } } }, 1) },
+    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
+    { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
+    { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
+    { cap: "bookingDelete",   run: (db) => db.ref("bookings").update({ b1: null }) },
+  ];
+
+  for (const { cap, run } of CASES) {
+    it(`${cap}: a manager who is denied it is refused`, async () => {
+      await seedEnforce(true);
+      await seed((db) => db.ref("bookings/b1").set(booking()));
+      // The level still grants it — this is a subtraction, not a demotion.
+      await seedRole("staff-a", { role: "manager" });
+      await assertSucceeds(run(staff()));
+      await testEnv.clearDatabase();
+      await seedEnforce(true);
+      await seed((db) => db.ref("bookings/b1").set(booking()));
+      await seedRole("staff-a", { role: "manager", denies: { [cap]: true } });
+      await assertFails(run(staff()));
+    });
+
+    it(`${cap}: the deny does nothing while enforcement is OFF`, async () => {
+      // Off means off. A deny stored while experimenting must not leak out
+      // through a switch nobody has turned on — which is why the flag
+      // short-circuit sits ABOVE the deny in both `can()` and the rule.
+      await seedEnforce(false);
+      await seed((db) => db.ref("bookings/b1").set(booking()));
+      await seedRole("staff-a", { role: "staff", denies: { [cap]: true } });
+      await assertSucceeds(run(staff()));
+    });
+  }
+
+  it("beats an extra — a row carrying both is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { settingsWrite: true }, denies: { settingsWrite: true } });
+    await assertFails(writeWithRev(staff(), "settings/general", { v: 1 }, 1));
+  });
+
+  it("settingsAdmin: a denied admin can no longer write /roles", async () => {
+    await seedRole("staff-a", { role: "admin", denies: { settingsAdmin: true } });
+    await assertFails(staff().ref("roles/" + OTHER).set(roleRow(OTHER, { role: "staff" })));
+  });
+
+  it("an admin cannot deny their OWN settingsAdmin", async () => {
+    // The last-admin invariant, and the hole a deny would have opened in it:
+    // the row's `role` stays "admin" on both sides, so a clause comparing only
+    // the level and the extras sees no change at all and lets it through.
+    await seedRole("staff-a", { role: "admin" });
+    await assertFails(staff().ref("roles/staff-a").set(
+      roleRow("staff-a", { role: "admin", denies: { settingsAdmin: true }, updatedAt: 2000, baseUpdatedAt: 1000 })));
+    // …and by the extras route either, which is the same fact one door over.
+    await testEnv.clearDatabase();
+    await seedRole("staff-a", { extras: { settingsAdmin: true } });
+    await assertFails(staff().ref("roles/staff-a").set(
+      roleRow("staff-a", { extras: { settingsAdmin: true }, denies: { settingsAdmin: true }, updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("but ANOTHER admin can — that is how the set of admins shrinks", async () => {
+    await seedRole("staff-a", { role: "admin" });
+    await seedRole(OTHER, { role: "admin" });
+    await assertSucceeds(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "admin", denies: { settingsAdmin: true }, updatedAt: 2000, baseUpdatedAt: 1000 })));
+  });
+
+  it("a self-registered stub may not carry one", async () => {
+    // The stub's whole job is to be visible; it carries identity and nothing
+    // else. A stub arriving with either map is the self-promotion hole in one
+    // direction and clutter on the permission node in the other.
+    await assertFails(staff().ref("roles/staff-a").set({
+      uid: "staff-a", email: "staff-a@mgt.test", name: "", role: null,
+      denies: { bookingEdit: true }, addedAt: 1, addedBy: "staff-a",
+      updatedAt: 1000, baseUpdatedAt: 0,
+    }));
+  });
+
+  it("`false` is not how a revocation is spelt — validate refuses it", async () => {
+    // The rules test `.val() !== true`, so a deny must be a PRESENT `true`
+    // rather than something they would have to tell apart from absent.
+    await seedAdmin("staff-a");
+    await assertFails(staff().ref("roles/" + OTHER).set(
+      roleRow(OTHER, { role: "staff", denies: { bookingEdit: false } })));
+  });
+});
+
+// ── /activity — create-only, and that is STRONGER than a CAS ─────────────────
+//
+// The activity log is the first node in this app whose protection is not a
+// compare-and-swap, and the exemption test passes rather than being waived: a
+// CAS proves a write was based on what it overwrites, and here nothing may be
+// overwritten at all. An entry can be created and — once it is a year old —
+// pruned, and there is no third operation.
+//
+// Three clauses carry it, and each is a different kind of lie being refused:
+// `uid === auth.uid` and `email === auth.token.email` stop an account writing
+// the log as somebody else, and `at === now` stops it writing history at a time
+// of its choosing. That last one is the reason the client MUST send the server
+// sentinel: a client-supplied `Date.now()` is never equal to the server's `now`
+// at evaluation, so the rule refuses it — which is the behaviour we want and is
+// measured below rather than assumed, because "the sentinel resolves before the
+// rules run" is exactly the kind of ordering claim this repo keeps being wrong
+// about.
+//
+// `at === now` lives in `.write` and NOT in `.validate`, and that is load
+// bearing: `.validate` re-runs over the merged node when a redaction rewrites
+// `subject/name`, where `at` is deliberately unchanged — so the same clause in
+// `.validate` would make the log un-redactable, i.e. it would break erasure.
+const SENTINEL = { ".sv": "timestamp" };
+const YEAR_MS = 31536000000;
+
+const entry = (o = {}) => Object.assign({
+  at: SENTINEL, uid: "staff-a", email: "staff-a@mgt.test",
+  kind: "booking", text: "status → seated",
+}, o);
+
+// The app writes one entry per push key; `logActivity` uses push(), and a fixed
+// key here is the same write with a name the assertions can read back.
+const logAs = (db, id, value) => db.ref("activity/" + id).set(value);
+const ME = () => staffAs("staff-a", "staff-a@mgt.test");
+
+describe("/activity — a create names its own author, at the server's clock", () => {
+  it("accepts an entry carrying the server sentinel and the author's own identity", async () => {
+    await assertSucceeds(logAs(ME(), "e1", entry()));
+    expect(typeof (await seedRead("activity/e1/at"))).toBe("number");
+  });
+
+  it("REFUSES a client-supplied timestamp, however plausible", async () => {
+    // The whole point of `at === now`. A device choosing its own `at` can file
+    // an action under any time it likes, including before it happened.
+    await assertFails(logAs(ME(), "e1", entry({ at: Date.now() })));
+    await assertFails(logAs(ME(), "e1", entry({ at: 0 })));
+  });
+
+  it("refuses an entry attributed to another account", async () => {
+    await assertFails(logAs(ME(), "e1", entry({ uid: OTHER })));
+    await assertFails(logAs(ME(), "e1", entry({ email: "someone@else.test" })));
+  });
+
+  it("refuses an anonymous write, and an author with no email claim", async () => {
+    await assertFails(logAs(anon(), "e1", entry()));
+    // `staff()` carries no email token, so `auth.token.email` is null.
+    await assertFails(logAs(staff(), "e1", entry()));
+  });
+
+  it("refuses an entry missing the fields that make it readable", async () => {
+    for (const k of ["at", "uid", "email", "kind", "text"]) {
+      const e = entry(); delete e[k];
+      await assertFails(logAs(ME(), "e1", e));
+    }
+  });
+
+  it("refuses a kind the viewer has no row for, and a malformed flag", async () => {
+    await assertFails(logAs(ME(), "e1", entry({ kind: "whatever" })));
+    await assertFails(logAs(ME(), "e1", entry({ auto: false })));
+    await assertFails(logAs(ME(), "e1", entry({ bookings: { b1: "yes" } })));
+  });
+
+  it("accepts the optional halves an entry may carry", async () => {
+    await assertSucceeds(logAs(ME(), "e1", entry({
+      auto: true, bookings: { b1: true, b2: true },
+      guestKey: "+34600111222",
+      subject: { name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4 },
+    })));
+  });
+});
+
+describe("/activity — an entry cannot be edited or deleted", () => {
+  beforeEach(async () => {
+    await seed((db) => db.ref("activity/e1").set(
+      Object.assign(entry(), { at: Date.now(), text: "status → seated" })));
+  });
+
+  it("refuses a rewrite of an existing entry, by its own author", async () => {
+    await assertFails(logAs(ME(), "e1", entry({ text: "nothing happened" })));
+    expect(await seedRead("activity/e1/text")).toBe("status → seated");
+  });
+
+  it("refuses a field-level edit of the text", async () => {
+    await assertFails(ME().ref("activity/e1/text").set("nothing happened"));
+    expect(await seedRead("activity/e1/text")).toBe("status → seated");
+  });
+
+  it("refuses a delete by a STAFF account, however recent or old", async () => {
+    // v18.0.0 session 11 INVERTED the admin half of this test with the rules —
+    // an admin may now clear a range on purpose (see the block below) — and
+    // that is exactly why this half is worth stating on its own: the thing an
+    // ordinary account can do to the log is unchanged, which is the property
+    // the relaxation must not have cost.
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(ME().ref("activity/e1").remove());
+    expect(await seedRead("activity/e1")).not.toBeNull();
+  });
+
+  it("refuses a wipe of the whole node", async () => {
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity").remove());
+    expect(await seedRead("activity/e1")).not.toBeNull();
+  });
+});
+
+// ── Deleting entries: ADMIN ONLY, and no longer age-gated ───────────────────
+//
+// v18.0.0 session 11, and this is a deliberate WEAKENING recorded as such.
+//
+// Until now the rule carried a 12-month floor: an admin could delete an entry
+// only if it really was older than a year, so the log was tamper-EVIDENT by
+// construction — nobody could quietly remove last night. Patryk asked for
+// "remove by date or a range of dates", which cannot coexist with that floor:
+// the rule cannot tell the retention prune from a deliberate clear, because
+// both are the same operation on the same node.
+//
+// So the floor moved from the rules into the app (`ACTIVITY_RETENTION_DAYS`),
+// and what stands in its place is a compensating ENTRY: a clear writes a log
+// line naming the range and the count, so a gap is visible rather than
+// invisible. That is tamper-evident for one pass and not tamper-proof — the
+// line is itself deletable — and saying so plainly is the point of this block.
+//
+// What did NOT change is the boundary that matters most, and the tests below
+// state it rather than leaving it implied: an ordinary account still cannot
+// delete anything, a denied admin cannot either, and the whole node still
+// cannot be wiped in one call (there is no `.write` on `activity` itself — only
+// on `$eid` — and permission does not cascade UP).
+describe("/activity — deleting, admin only and no longer age-gated", () => {
+  const OLD = () => Object.assign(entry(), { at: Date.now() - YEAR_MS - 86400000 });
+  const NEW = () => Object.assign(entry(), { at: Date.now() });
+
+  beforeEach(async () => { await seed((db) => db.ref("activity/old1").set(OLD())); });
+
+  it("an admin may delete an entry older than a year", async () => {
+    await seedAdmin("staff-a");
+    await assertSucceeds(ME().ref("activity/old1").remove());
+    expect(await seedRead("activity/old1")).toBeNull();
+  });
+
+  it("an admin may now delete a RECENT entry — the age gate is gone", async () => {
+    // The inversion. This assertion read `assertFails` until session 11, and
+    // flipping it WITH the rule is the convention this suite turns on: a
+    // permission that changed should fail its old test loudly rather than
+    // quietly stop being covered.
+    await seedAdmin("staff-a");
+    await seed((db) => db.ref("activity/e9").set(NEW()));
+    await assertSucceeds(ME().ref("activity/e9").remove());
+    expect(await seedRead("activity/e9")).toBeNull();
+  });
+
+  it("a staff account may not, however old the entry is", async () => {
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(ME().ref("activity/old1").remove());
+  });
+
+  it("an admin denied settingsAdmin may not either", async () => {
+    await seedRole("staff-a", { role: "admin", denies: { settingsAdmin: true } });
+    await assertFails(ME().ref("activity/old1").remove());
+  });
+
+  it("an admin STILL cannot wipe the node in one call", async () => {
+    // The relaxation is per-entry and must stay per-entry. `activity` carries
+    // no `.write` of its own and permission cascades DOWN, never UP, so the
+    // only way to empty the log is one key at a time — which is what makes a
+    // clear something the app can count, report and log.
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity").remove());
+    expect(await seedRead("activity/old1")).not.toBeNull();
+  });
+
+  it("a MULTI-PATH delete of several keys is allowed for an admin", async () => {
+    // Asked rather than assumed, because the answer decides how the app clears
+    // a range: one atomic `update()` of nulls, or N separate `remove()` calls.
+    // CT-2A-06 is in this repo precisely because someone reasoned about where
+    // RTDB evaluates a rule instead of running it.
+    await seedAdmin("staff-a");
+    await seed((db) => db.ref("activity/m1").set(NEW()));
+    await seed((db) => db.ref("activity/m2").set(NEW()));
+    await assertSucceeds(ME().ref("activity").update({ m1: null, m2: null }));
+    expect(await seedRead("activity/m1")).toBeNull();
+    expect(await seedRead("activity/m2")).toBeNull();
+  });
+
+  it("and that multi-path delete is refused for a staff account", async () => {
+    // The other half — without it, "the batch works" would be a statement
+    // about convenience rather than about permission.
+    await seedRole("staff-a", { role: "staff" });
+    await seed((db) => db.ref("activity/m3").set(NEW()));
+    await assertFails(ME().ref("activity").update({ m3: null }));
+    expect(await seedRead("activity/m3")).not.toBeNull();
+  });
+});
+
+describe("/activity — erasure redacts a deleted booking's name", () => {
+  // The one field in the log that is personal data, and the only one that has
+  // to stay writable: a deleted booking has no live row to resolve a {b:<id>}
+  // token against, so it carries `subject`, and "Delete customer & all data"
+  // must be able to reach it. Flag-scoped like every other capability gate.
+  beforeEach(async () => {
+    await seed((db) => db.ref("activity/e1").set(Object.assign(entry(), {
+      at: Date.now(), kind: "booking", text: "deleted {b:b1}",
+      guestKey: "+34600111222",
+      subject: { name: "Pau Estévez", date: "2026-09-01", time: "20:00", size: 4 },
+    })));
+  });
+
+  const redact = (db) => db.ref("activity/e1/subject/name").set("Data removed");
+
+  it("with enforcement OFF, anyone signed in may redact — today's behaviour", async () => {
+    await assertSucceeds(redact(ME()));
+    expect(await seedRead("activity/e1/subject/name")).toBe("Data removed");
+  });
+
+  it("with enforcement ON, an admin may redact", async () => {
+    await seedEnforce(true);
+    await seedAdmin("staff-a");
+    await assertSucceeds(redact(ME()));
+  });
+
+  it("with enforcement ON, a staff account is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff" });
+    await assertFails(redact(ME()));
+    expect(await seedRead("activity/e1/subject/name")).toBe("Pau Estévez");
+  });
+
+  it("with enforcement ON, a MANAGER is refused — this one is admin-only", async () => {
+    // customerDelete is granted by the admin level alone (ROLE_GRANTS), so the
+    // rule must not copy bookingDelete's manager-inclusive shape.
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "manager" });
+    await assertFails(redact(ME()));
+  });
+
+  it("a staff account GRANTED the extra may redact", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "staff", extras: { customerDelete: true } });
+    await assertSucceeds(redact(ME()));
+  });
+
+  it("an admin DENIED it is refused", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-a", { role: "admin", denies: { customerDelete: true } });
+    await assertFails(redact(ME()));
+  });
+
+  it("the redaction reaches the name and nothing else", async () => {
+    // `.write` at subject/name must not cascade into a licence to rewrite the
+    // entry around it — the date and time are what make a redacted row still
+    // mean something.
+    await seedEnforce(true);
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity/e1/subject/date").set("2020-01-01"));
+    await assertFails(ME().ref("activity/e1/text").set("nothing happened"));
+    await assertFails(ME().ref("activity/e1/subject").set({ name: "x" }));
+  });
+});
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+//
+// `subject/name` is the ONE child of `$eid` carrying its own `.write`, and write
+// permission CASCADES DOWN — so at that path the parent's create-only grant does
+// not apply, and the grant there is the whole of the permission. The review
+// asked whether that lets a write to `activity/<new key>/subject/name` MINT an
+// entry: one that never passes `uid === auth.uid`, `email === auth.token.email`
+// or `at === now`, is invisible to both queries the app makes (no `at`, no
+// `guestKey`), and can never be pruned, because the prune rule tests
+// `data.child('at').val() < now - a year` and a null `at` makes that false.
+//
+// It does not, and the reason is one the rules do not state: an ancestor's
+// `.validate` IS evaluated for a deep write, so `$eid`'s
+// `hasChildren(['at','uid','email','kind','text'])` refuses the ghost. Measured
+// against the emulator, `permission_denied`.
+//
+// Pinned here because that is a load-bearing interaction that nothing named. The
+// create-only property reads as though it comes from the `.write` alone; it does
+// not, and relaxing `$eid`'s `.validate` — to allow a partial entry, say — would
+// open the ghost-create silently, with every other test in this file still green.
+describe("/activity — a deep write cannot MINT an entry around the create rule", () => {
+  it("refuses subject/name on a key that does not exist", async () => {
+    await assertFails(ME().ref("activity/ghost/subject/name").set("Injected"));
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+
+  it("refuses it for an admin too — this is validity, not permission", async () => {
+    await seedEnforce(true);
+    await seedAdmin("staff-a");
+    await assertFails(ME().ref("activity/ghost/subject/name").set("Injected"));
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+
+  it("refuses every other deep path on a key that does not exist", async () => {
+    // The same question for the children that have no `.write` of their own:
+    // they are refused by the parent grant as well, so this is the control that
+    // says the test above is about `subject/name` and not about deep writes.
+    await assertFails(ME().ref("activity/ghost/text").set("nothing happened"));
+    await assertFails(ME().ref("activity/ghost/kind").set("booking"));
+    expect(await seedRead("activity/ghost")).toBeNull();
+  });
+
+  it("and a partial entry is refused whole, for the same reason", async () => {
+    // `$eid`'s `.validate` is what does the refusing above. Stated directly, so
+    // a change to that line fails a test that NAMES it rather than only the
+    // deep-path ones that depend on it.
+    for (const partial of [
+      { subject: { name: "Injected" } },
+      { kind: "booking", text: "deleted {b:x}" },
+      { at: { ".sv": "timestamp" }, uid: "staff-a", email: "staff-a@mgt.test" },
+    ]) {
+      await assertFails(logAs(ME(), "ghost", partial));
+    }
+    expect(await seedRead("activity/ghost")).toBeNull();
   });
 });

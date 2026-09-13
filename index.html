@@ -37,7 +37,8 @@
     <!-- v14.2.0: No-flash theme paint. Runs BEFORE React mounts so a dark-OS
          (or dark-saved) user never sees a light flash. Reads the per-device
          preference in localStorage["mgt-theme"] ("dark"|"light"), else falls
-         back to the OS. MUST stay in sync with readThemePref() in src/App.jsx
+         back to the OS — which is all "auto" (v18.0.0's Automatic dark mode switch) needs,
+         so that value adds no line below and moves no hash. MUST stay in sync with readThemePref() in src/App.jsx
          (same key, same value convention, and since v17.9.0 the same ?theme=
          override — which has to be honoured HERE too, or the DEV override paints
          the stored theme for one frame before React corrects it, i.e. exactly

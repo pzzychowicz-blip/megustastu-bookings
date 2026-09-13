@@ -1,9 +1,89 @@
 # Firebase Realtime Database — Security Rules (source of truth)
 
 `database.rules.json` in this repo is the **version-controlled source of truth** for the
-RTDB Security Rules. The rules are still applied **manually** via the Firebase console
-(Realtime Database → Rules → paste → Publish) — this file is the canonical copy to paste
-from and to diff against.
+RTDB Security Rules. There are now **two routes** to apply them, and every per-version
+"Deployment" section below describes the console one because that is how every release
+up to and including v18.0.0 was published.
+
+## v18.0.0 — the production deploy, in order
+
+**After the release merges — never before.** Every step is one this file already
+describes in its own section below; this is the order, and each step names where
+its detail lives rather than repeating it.
+
+1. **The app first.** Confirm the production boot banner (or
+   `window.__MGT_BUILD__`) reads **18.0.0** before touching the rules — app first,
+   rules second, as every v18.0.0 section below says, for the reasons each gives.
+2. **Then the rules, once.** Publish `database.rules.json` to PROD by the console
+   or `npm run rules:deploy -- mgt-prod` (*Applying the rules — two routes*). This
+   one publish carries every rules change in the release — the new
+   `/vouchers/$code`, `/activity/$eid`, `/roles/$uid`, `/invites/$inviteId`,
+   `settings/admin` + `adminRev` and `settings/voucherDefaults` +
+   `voucherDefaultsRev`, none of which
+   exist in `main`'s rules, plus the role gates added to the existing ones. Read
+   the alias back before pressing enter.
+3. **Create the bootstrap admin by hand** at `/roles/<your uid>` (*The one manual
+   step: bootstrapping the first admin*). Nothing in the app can create it, by
+   design.
+4. **Give every real account a level** in Settings → Admin. **Reload the app on
+   every device first**, or have each account open it once: an account appears in
+   the panel only when its own row exists, and the app writes that row as it
+   loads — a write the old rules refuse, so a device that loaded 18.0.0 before
+   step 2 had it refused silently and does not try again until it reloads
+   (`useRoles`' self-registration). Nothing changes for anyone while
+   `enforceRoles` is off; once it is on, an account with no row reads as
+   **staff** — so this step is what decides who notices step 6.
+5. **Check the last-admin guard refuses** — on your own row, choose a lower
+   level: the panel refuses with "You can't remove your own admin access — ask
+   another admin to do it." and the row stays Admin (the same refusal meets
+   Remove, and your own capability grid's admin cell is locked outright). A
+   direct write is refused by the rules (*The last-admin guarantee, and why it is
+   not a count*).
+6. **Only then turn `settings/admin.enforceRoles` on, outside service hours.** One
+   console value, reversible in one console value (*`enforceRoles` — off, and what
+   that means*).
+
+`ROADMAP.md` carries a one-line pointer to this section until step 6 is done.
+
+## Applying the rules — two routes
+
+**1 · The Firebase console** (Realtime Database → Rules → paste → Publish). Paste from
+`database.rules.json`; this file is also the canonical copy to diff against. Used for
+every release so far, and for v18.0.0's own deploy.
+
+**2 · `npm run rules:deploy -- <alias>`** (v18.0.0 phase 2). Wraps
+`firebase deploy --only database --project <alias>`, with the aliases in `.firebaserc`:
+
+| alias | project |
+|---|---|
+| `mgt-dev` | `megustastu-bookings-dev` |
+| `mgt-prod` | `megustastu-bookings` |
+
+```bash
+npm run rules:deploy -- mgt-dev     # the shared DEV sandbox
+npm run rules:deploy -- mgt-prod    # PRODUCTION — the restaurant's live data
+```
+
+Needs `firebase login` once per machine (the same global `firebase-tools` the emulator
+uses — see Prerequisites).
+
+**This does not remove the console step from v18.0.0** — it makes it repeatable for
+later releases. What it changes is that "the rules that were published" and "the rules
+in this file" become the same bytes by construction rather than by a careful paste.
+
+Three properties worth knowing before using it:
+
+- **`.firebaserc` deliberately declares NO default alias.** Omit the alias and the
+  command fails with `option '-P, --project <alias_or_project_id>' argument missing`
+  before contacting anything — verified. There is nothing for a bare
+  `npm run rules:deploy` to fall back to, which is the point.
+- **An alias that is not in `.firebaserc` is passed through as a literal project id**
+  — also verified: `--project nope` resolves to a project called `nope` rather than
+  erroring. A typo therefore fails at the API rather than at the CLI, and cannot reach
+  the wrong one of these two projects. Read the alias back before pressing enter.
+- **The order is unchanged: app first, rules second** (or rules at any time, where the
+  per-version section below says so). A faster deploy route does not make a deploy
+  safe to do in the other order.
 
 ## Testing the rules — the local emulator (the THIRD environment)
 
@@ -84,23 +164,31 @@ again. No login, no network, nothing cached between runs.
 Neither one leans on the other. The failure this guards against is silent, and
 would matter exactly once.
 
-**There is no `.firebaserc` in this repo, deliberately.** Without a default
-project, `firebase deploy` has no target and errors out instead of publishing
-rules somewhere. Applying the rules stays the manual console step described
-below — the emulator is for *attacking* them, not for shipping them.
+~~**There is no `.firebaserc` in this repo, deliberately.**~~ **Superseded in
+v18.0.0 phase 2**, which added one — and the guarantee this paragraph described
+moved rather than disappeared. It said a bare `firebase deploy` had no target and
+would error instead of publishing. That is still true, because **`.firebaserc`
+declares no default alias**: omitting the alias fails before contacting anything
+(verified — see *Applying the rules — two routes* at the top). What changed is
+that deploying is now a sanctioned route, `npm run rules:deploy -- <alias>`, which
+names its project every time.
 
-**So: never run `firebase deploy` from this repo.** `firebase.json` has to map
-`database.rules` for `emulators:exec` to load them, and that makes
-`firebase deploy --only database` a *working* command here for the first time.
-A single `firebase use <prod-project>` would then publish whatever
-`database.rules.json` currently says — PROBE behaviour and all — into
-production, bypassing the review that the manual console step exists to force.
-The absent `.firebaserc` is the only thing in the way, and it stops being one
-the moment somebody names the project.
+**So: never run a bare `firebase deploy`, and never `firebase use` a project.**
+`firebase.json` maps `database.rules` for `emulators:exec`, which makes
+`firebase deploy --only database` a working command here. A default project set
+with `firebase use <prod-project>` would let it publish whatever
+`database.rules.json` currently says — PROBE behaviour and all — without an alias
+being read back first. The emulator is for *attacking* the rules; shipping them
+goes through the explicit alias, after the app, in the order the top of this file
+gives.
 
 ### What the suite asserts
 
-127 tests as of v17.16.11, run on every PR by the `rules` job in
+293 tests as of 2026-09-13, v18.0.0 session 11 (measured — this line read 127
+from v17.16.11, then 257, which was already stale against this file's OWN
+"261 → 286 tests." three sections down on the day it was written, then 286),
+run on every
+PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
 the rig itself is pointed at a loopback emulator and a `demo-` project — and,
 since v17.16.7, that the root carries **no** `.write` key, which is asserted as
@@ -108,8 +196,8 @@ an ABSENCE because that absence is the whole of the access-control change and a
 re-added root grant would leave every other test in this file green. The next
 groups are what you would expect: the `auth != null` boundary, the per-`$id`
 booking CAS (`updatedAt` strictly greater **and** `baseUpdatedAt` equal to
-stored — the pair that closed the 2026-07-05 overwrite incident), and the twelve
-`<name>Rev` pairs, each swept for repeated / skipped / lower / absent /
+stored — the pair that closed the 2026-07-05 overwrite incident), and the sixteen
+`<name>Rev` pairs (counted 2026-09-11), each swept for repeated / skipped / lower / absent /
 non-numeric revisions, and — v17.16.7 — for a bare `remove()` of the node and of
 its rev.
 
@@ -125,6 +213,350 @@ the rules", which is a claim a hand-written list cannot make. A guard asserts
 the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
+
+## v18.0.0 phase 3 — `/roles`, `/invites`, and the enforcement flag
+
+The permission layer. Two new per-child-CAS nodes, one new rev pair, a gate
+added to eighteen existing rules, and **one manual step that has no substitute**
+— the first admin.
+
+### The one manual step: bootstrapping the first admin
+
+With `/roles` empty nobody holds `settingsAdmin`, and `settingsAdmin` is what
+the rules require to write `/roles`. So the first admin cannot be created by the
+app, by design. In the Firebase console, at `/roles/<your uid>`:
+
+```json
+{
+  "uid":     "<your uid>",
+  "email":   "<your sign-in email>",
+  "name":    "Patryk",
+  "role":    "admin",
+  "addedAt":  0,
+  "addedBy": "console",
+  "updatedAt": 1,
+  "baseUpdatedAt": 0
+}
+```
+
+`updatedAt` may be any number; the app's next write to that row will carry
+`baseUpdatedAt` equal to whatever is stored, so it does not need to be a real
+timestamp. The uid is in the Firebase console under Authentication.
+
+**A "first user becomes admin" rule was considered and rejected.** It is a hole
+the moment the node is ever emptied — and emptying it is exactly what a
+mistake, a migration or a bad console edit looks like.
+
+### `enforceRoles` — off, and what that means
+
+`settings/admin.enforceRoles` ships **`false`**, and every device in production
+today has no `/roles` row at all. A rule that simply *required* one would stop
+every device the moment it deployed — a v15.5.0-style cutover, at the
+restaurant, during service. So the flag is what makes this a **rolling** deploy:
+
+* **off (or absent)** — `bookings` and `settings/*` behave byte-for-byte as they
+  did before v18.0.0. Pinned by tests, including one that removes the node
+  entirely, because *absent* is the state production is actually in on the day
+  this ships.
+* **on** — an absent role reads as **`staff`**. Useful on a first shift,
+  harmless until you say otherwise, and it is the only reading that lets the
+  flag be flipped without stranding an account nobody has got to yet.
+
+**Three paths are admin-only regardless of the flag**: `/roles`, `/invites` and
+`settings/admin`. They are new here and carry no legacy traffic, so gating them
+hard costs nothing — and `settings/admin` in particular *must* be, because a
+flag anyone could turn on would let one staff account make everybody `staff`
+with nobody left able to turn it off. That is a brick, and repairing it needs
+this console.
+
+### The last-admin guarantee, and why it is not a count
+
+The plan asked for a rule that "refuses a write that would leave `/roles` with
+no admin". **RTDB rules cannot count children** — there is no `numChildren()` —
+so the literal version needs a maintained counter node, which is a second piece
+of state that can drift and whose repair needs the console. That is the state
+the guard exists to avoid.
+
+Patryk chose the derived form instead: **an admin may not strip their own
+`settingsAdmin`**, by level or by extra. Only a holder may write `/roles` at
+all, so the set shrinks exclusively when one admin demotes *another* — and the
+demoter still holds it. Zero is unreachable. One clause, no new state, and the
+Admin panel asks the rule's own question (`wouldRemoveOwnAdmin`) instead of
+approximating it: your own capability grid's admin cell is locked, and a lower
+level or Remove on your own row is refused with the reason on screen.
+
+The cost, stated on screen: an admin who wants to step down asks another admin.
+
+### Self-registration creates a ROW, never a LEVEL
+
+An invitation cannot be claimed automatically, and that is a property of RTDB
+rather than a shortcut: a rule would have to look up an invitation **by the
+signing-in user's email**, and rules do no string manipulation, cannot query,
+and an email cannot be a key. So a user creates their own stub —
+
+```
+auth.uid === $uid && !data.exists() && newData.exists()
+  && newData.child('email').val() === auth.token.email
+  && newData.child('role').val() === null
+  && newData.child('extras').val() === null
+```
+
+— the panel pairs it with the open invitation by email, and **an admin applies
+it in one tap**. Every clause above is load-bearing and each has a test that
+breaks it: without `role === null` a user grants themselves a level, and
+without `extras === null` they grant themselves `settingsAdmin` instead, which
+is the same hole one door over.
+
+### The one duplication that could not be removed
+
+Which levels grant each rule-enforced capability is written in
+`src/lib/roles.js` (`ROLE_GRANTS`) **and again** in this rules file, because
+rules cannot read a JS constant. Neither file can see the other, so the suite
+asserts they agree *behaviourally*: it drives the real rules with each level in
+turn and compares the outcome against `can()`. Change one and that test fails.
+There are **seven** such capabilities driven that way after the v18.0.0 split
+(`settingsWrite`, `bookingDelete`, `hoursEdit`, `layoutEdit`, `reminderManage`,
+`recurringManage` and — session 8 — `customerDelete`, the activity log's
+redaction) plus `settingsAdmin`, which is checked separately because the
+enforcement flag does not relax it.
+
+The same forced-duplication problem produced the copies of the gate — one per
+writable node, since rules have no macros. They were applied by script and
+asserted to land exactly once each, and a sweep test derives the list from this
+file so a pair added later is covered without the test being edited.
+
+**The sweep is not enough on its own, and v18.0.0 phase 3 is where that showed.**
+Re-pointing four settings pairs from `settingsWrite` at `hoursEdit` /
+`layoutEdit` broke nothing in it: it drives a *staff* account, which holds
+neither capability, so sixteen rules all still named `settingsWrite` and every
+assertion passed. What can see a split is an account carrying exactly ONE
+capability as an extra — `each gated path names its OWN capability` — and its
+second half matters as much as its first: an account holding every capability
+EXCEPT the path's own must still be refused, or a rule left naming
+`settingsWrite` passes, because a manager holds both. Proven by sabotage:
+restoring `settingsWrite` on `settings/layout` fails three tests.
+
+### The deny clause (v18.0.0 phase 3)
+
+Every capability gate carries a second half: `(<the grant> && denies.<cap> !==
+true)`. Twenty-five gates, applied by script and asserted to land exactly once
+each, plus **two more in the last-admin clause**, and those two are the ones
+worth understanding.
+
+That clause says an admin may not write a version of their OWN row that stops
+being an admin. It compared the level and the extras — and a deny is a third
+route to the same place, one where `role` reads `"admin"` on both sides, so the
+clause would have seen no change at all and let an admin lock the restaurant out
+of its own administration. `isAdminEntry` in `src/lib/roles.js` checks the deny
+FIRST for the same reason and in the same order; the client and the rule ask one
+question, not two that agree today. Proven by sabotage: dropping the deny from
+either side of that clause fails `an admin cannot deny their OWN settingsAdmin`.
+
+The clause order matters elsewhere too. The deny sits INSIDE the
+`enforceRoles !== true ||` disjunct, never beside it, so a deny stored while
+experimenting does nothing until enforcement is switched on — which is the same
+promise the flag makes about everything else, and the same order `can()` uses.
+
+### Measured, not assumed
+
+The plan asked what a role lookup costs on `bookings/$bid`, since a reshuffle
+writes about five children and each evaluates the gate. **A 5-child patch under
+the gate: 8 ms** (printed by the suite on every run). The predicate is ordered
+`newData.exists() || <role check>`, so the two root reads happen **only on a
+delete** — every ordinary booking write does no extra read at all. That gate
+works only because **`.write` is evaluated for a delete and `.validate` is
+not** — the v17.16.7 finding.
+
+### One PROBE closed, one plan instruction disproved
+
+`settings/users/$uid/prefs` gained `auth.uid === $uid`; the PROBE asserting that
+any account could overwrite another's preferences is **inverted**, not deleted —
+its own comment had predicted this tightening would "fail here loudly", and it
+did.
+
+The plan paired that with the same fix for `presence/$key`. **It does not
+apply**, and the rule is correct as it stands: presence keys are **push keys,
+not uids** (`push(ref(db,"presence"))`, `usePresence.js:135`), so
+`auth.uid === $key` could never match — and the v17.8.0 staleness prune
+deliberately deletes *other* devices' dead children (`usePresence.js:204`), so
+any own-child-only restriction would break it. Left alone.
+
+### Deployment — app FIRST, rules SECOND (rolling-safe)
+
+Old rules ignore the new fields, and the new rules with `enforceRoles` off
+behave as the old ones did. Order still matters for the bootstrap: publish the
+rules, **then create the first admin row in the console**, and only then flip
+`enforceRoles` on from the Admin tab.
+
+## v18.0.0 — `/vouchers/$code`, the second per-child CAS, and it refuses deletes
+
+Two additions, both in one console step: a per-child CAS on `/vouchers/$code`,
+and a standard rev pair on `settings/voucherDefaults`.
+
+**The rev pair needs no test edit** — the sweep above derives it. **The per-child
+CAS does**, because the walker cannot see one; `tests/rules/database-rules.test.js`
+gains a hand-written `vouchers — the per-$code CAS` group in the style of the
+existing `bookings/$bid` cases. **127 → 149 tests.**
+
+### It is `/bookings`' rule with one clause inverted, and that clause is the point
+
+```jsonc
+"vouchers": {
+  "$code": {
+    ".write": "auth != null && newData.exists() && newData.hasChild('updatedAt') && …"
+  }
+}
+```
+
+`/bookings/$bid` holds its CAS in **`.validate`**, opening with
+`!newData.exists() ||` — so a delete is unconditional. That is correct there: a
+multi-path null carries no base, and a cancelled booking is genuinely removed.
+
+A voucher's number must **never** be released, because the generator excludes
+every code that has ever existed and a freed number can therefore be re-issued
+to a second customer. So this CAS lives in **`.write`** — which *is* evaluated
+for a delete, and `.validate` is not (CT-2A-06) — and **requires
+`newData.exists()`**, refusing one.
+
+**The plan's own §1.6 draft had the booking rule's disjunct copied across**, and
+`!newData.exists() ||` short-circuits the entire predicate on a delete. Same
+shape as CT-2A-01, where a `!data.exists()` disjunct short-circuited the create
+branch. **Measured rather than reasoned:** restoring the draft rule and
+re-running the suite fails exactly one test — `a voucher canNOT be DELETED` —
+which is both the proof the defect was real and the proof the test bites.
+
+The grant sits at `$code` and **not** at `/vouchers`, so a whole-node wipe is
+denied (CT-2A-04). Pinned: `remove()`, `set({})` and a replacing `set()` on the
+node all fail, and the child survives a refused delete.
+
+### Two things settled by running them rather than reasoning about them
+
+**A sub-path write cannot slip past the CAS.** `.write` cascades down, so the
+grant at `$code` also permits a write at `$code/notes` or
+`$code/redemptions/$bid` — the plan flagged this as *reasoned, not measured*.
+It refuses, because the `$code` predicate is then evaluated against an
+`updatedAt` the sub-path write never advanced. Three such writes are pinned.
+
+**`remaining: null` is an ABSENT field, not an invalid one**, and this corrected
+a test written the other way round. RTDB cannot store null — writing it omits
+the key — so the child never exists in `newData` and its `.validate` never runs.
+That is exactly the "if PRESENT, must be the right shape" contract v17.16.1
+describes, and it is why `sanitizeVoucher` seeds an absent `remaining` from
+`value` rather than reading it as zero: the row that reaches the client is
+coherent, and treating it as spent would swallow a customer's balance.
+
+### Field shapes
+
+`value` and `remaining` are non-negative numbers; `status` is `open|void` and
+`origin` is `manual|generated`, both carrying v17.16.11's
+`|| newData.val() === data.val()` grandfather clause so a stored value carried
+through unchanged is always allowed; `code`/`notes`/`issuedBy` are strings;
+`issuedAt`/`expiresAt` are numbers when present, and an absent `expiresAt` means
+never; a ledger entry's `amount` is a non-negative number.
+
+**Deliberately NOT validated: `remaining <= value`.** It is expressible, and it
+buys nothing — any signed-in client that could inflate a balance could equally
+write a fresh voucher with `value: 999999`, so the predicate does not bound the
+threat it appears to. What it *would* do is refuse a write on a row whose
+`value` is missing, leaving a record the app cannot repair — the hazard
+v17.16.1 records for exactly this class. The client already recomputes
+`remaining` from the ledger, which is where that invariant is actually kept.
+
+### Deployment — app first, rules second
+
+Rolling-safe in the usual direction: a pre-v18 client never writes `/vouchers`
+at all, so the new rules constrain nothing it does. Publishing rules **before**
+the app is also harmless here for the same reason. Do DEV first and exercise the
+node, then PROD.
+
+---
+
+## v18.0.0 — `/activity`, create-only, and the first node with no CAS to waive
+
+The activity log. One node, `/activity/{pushId}`, and the only one in this
+database whose protection is not a compare-and-swap — which is the **exemption
+test passing rather than being waived**: a CAS proves a write was based on the
+version it overwrites, and here nothing may be overwritten at all. Create, and
+prune after a year. There is no third operation.
+
+**261 → 286 tests**, and **286 → 293** in session 11 (below).
+
+> **Session 11 changed this node's delete rule, and it is the one change in
+> this file that makes a guarantee WEAKER.** Read
+> "Clearing a range" at the end of this section before deploying.
+
+### Three clauses, three different lies refused
+
+```jsonc
+".write": "auth != null && ((!data.exists() && newData.exists()
+            && newData.child('uid').val()   === auth.uid
+            && newData.child('email').val() === auth.token.email
+            && newData.child('at').val()    === now) || …prune…)"
+```
+
+`uid` and `email` stop an account writing the log **as somebody else**. `at ===
+now` stops it writing history **at a time of its choosing** — an entry filed
+before the thing it describes happened is worse than no entry.
+
+### `at === now` forces the client to send the sentinel, and that is measured
+
+A client-supplied `Date.now()` is never equal to the server's `now` at
+evaluation, so the rule refuses it; only `{".sv": "timestamp"}` — resolved by
+the server *before* the rules run — satisfies it. That ordering is the sort of
+claim this repo has been wrong about before, so it is pinned both ways: an entry
+carrying the sentinel is accepted and reads back as a number, and the same entry
+carrying `Date.now()` is refused.
+
+### The clause is in `.write` and NOT in `.validate`, or erasure breaks
+
+`.validate` re-runs over the **merged** node when a redaction rewrites
+`subject/name`, and `at` is deliberately unchanged by that write. The same
+predicate in `.validate` would therefore make every entry permanently
+un-redactable — the guard would eat the erasure path. `.write` is evaluated per
+write and `$eid`'s create branch is already false once the entry exists, so the
+redaction is granted lower down, at `subject/name`, and cascades no further.
+
+### `subject/name` is the only personal data here, and the only writable field
+
+Names are **not stored**: at log time each touched booking's name becomes a
+`{b:<id>}` token that the viewer resolves against the live bookings list, so an
+anonymised booking reads "Data removed" with no pass over the log at all. A
+DELETED booking has no live row to resolve against, so it alone carries
+`subject` — and "Delete customer & all data" has to be able to reach it, which
+is what the `customerDelete` gate is for, flag-scoped like every other. It is
+admin-only (`ROLE_GRANTS` grants `customerDelete` at the admin level alone), so
+the rule deliberately does **not** copy `bookingDelete`'s manager-inclusive
+shape; a manager is refused, and that is pinned.
+
+`.indexOn: ["at", "guestKey"]` — the first for the feed's date range, the second
+because erasure finds a deleted guest's entries by query rather than by scan.
+
+### It makes `customerDelete` the EIGHTH enforced capability, and both halves are forced
+
+`tests/rules/database-rules.test.js` scans this file for every
+`extras').child('<cap>')` and asserts that set equals `RULE_ENFORCED` exactly —
+**bidirectionally**. So a rule naming a capability the app has not flagged fails,
+and a flag with no rule behind it fails too: the two cannot ship apart. Adding
+the gate here is what moved `customerDelete` to `enforced: true` in
+`src/lib/roles.js`, and `tests/roles.test.js`'s hand-typed roster had to be
+edited deliberately to match.
+
+Worth stating plainly, because the panel's chip is binary: `customerDelete` is
+the one **partly** enforced capability. The log redaction is refused
+server-side; the booking anonymisation behind the same tick is a loop of
+ordinary booking writes and is not. It over-claims slightly rather than
+under-claiming, which is the safer direction for a screen whose whole subject is
+what the database will refuse.
+
+### Deployment — app first, rules second
+
+Rolling-safe, and in both directions: `main`'s app never writes `/activity`, so
+publishing these rules early constrains nothing, and a v18 client whose rules
+have not landed yet simply has its log writes refused — which the sink swallows
+by design, since a refused log entry must never disturb the write it describes.
+Do DEV first and exercise the node, then PROD.
+
+---
 
 ## v17.16.11 — `date` and `status` get a FORMAT, without a data audit
 
@@ -687,3 +1119,70 @@ as an object, so it never loops. Booking ids (`genId()` = base-36, `[0-9a-z]`) a
 path-safe child keys. Until the keyed shape echoes, per-child writes are **held**
 (`arrayShapeRef`) so a string key is never mixed into the integer array. No booking field
 changes shape — only a numeric `updatedAt` is added (carried through `sanitize`).
+
+
+---
+
+## v18.0.0 session 11 — `/activity`: clearing a range, and the floor that moved out of the rules
+
+**This is a deliberate weakening, recorded as one.** Everything else in this
+file tightens a guarantee; this loosens the strongest one the activity log had.
+
+Patryk asked for the log to offer *"remove by date or a range of dates"*. Until
+now the delete arm of `/activity/$eid`'s `.write` carried a twelve-month floor:
+
+```jsonc
+(!newData.exists() && data.exists()
+  && data.child('at').val() < now - 31536000000      // ← gone in session 11
+  && …settingsAdmin…)
+```
+
+That floor is what made the log **tamper-evident by construction** — not even an
+admin could quietly remove last night. It cannot coexist with the feature,
+because the rule cannot tell a retention prune from a deliberate clear: they are
+**the same operation on the same node**, and a rule sees the operation, not the
+button that started it.
+
+So the floor moved from the rules into the app (`ACTIVITY_RETENTION_DAYS`), and
+a compensating record took its place: a clear writes a log line naming the range
+and the count (`clearedEntry`, `lib/activity.js`), written **after** the deletes
+so its own server `at` falls outside the range it reports. Be exact about what
+that buys — **tamper-evident for one pass, not tamper-proof**: the line is
+itself deletable by the next clear. The screen says as much rather than implying
+more, and so does this paragraph.
+
+### What did NOT change, and is now asserted rather than implied
+
+- A **staff account still cannot delete anything**, however old.
+- An **admin denied `settingsAdmin`** cannot either.
+- The **whole node still cannot be wiped in one call**: `activity` carries no
+  `.write` of its own — only `$eid` does — and permission cascades DOWN, never
+  UP. This is CT-2A-06 still holding, and it is what makes a clear something the
+  app can count, report and log rather than one irreversible call.
+
+### A multi-path delete is allowed, and that was measured
+
+`clearActivityRange` sends **one `update()` of nulls per batch** rather than N
+`remove()` calls. Whether the rules permit that is not obvious — the grant is on
+`$eid` and the update is addressed to `activity` — so the suite asks the
+emulator directly, and gets **yes for an admin, no for a staff account**. Both
+halves are asserted: without the second, "the batch works" would be a statement
+about convenience rather than about permission. CT-2A-06 exists in this repo
+because someone once reasoned about where RTDB evaluates a rule instead of
+running it.
+
+### Deployment — rules FIRST this time, and that is the exception
+
+Every other change in this file is app-first/rules-second, because the app's new
+writes are refused harmlessly by the old rules until they land. **This one is
+the other way round.** The app ships a *Clear this range* button that the old
+rules refuse, so between the two deploys an admin sees a control that does not
+work.
+
+Measured on DEV before this was written: the clear was denied
+(`update at /activity failed: permission_denied`), the app correctly claimed
+nothing and wrote no "cleared N entries" line — and showed the user nothing
+either, which read as a dead button. The refusal is now reported on screen
+("The server refused. An admin can clear the log only once the updated database
+rules are deployed."), so the intermediate state is legible rather than
+mysterious. Deploying the rules first avoids it entirely.

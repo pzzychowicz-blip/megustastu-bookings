@@ -43,6 +43,10 @@
 //                    the only cue that the optimizer moved OTHER bookings.
 //                    App passes it when a reshuffle actually happened.
 //  dragMsg         — v17.0.0 {text, good} | null (timeline drag&drop feedback)
+//  permMsg         — v18.0.0 string | null (a refusal: a capability the account
+//                    lacks, or ⇧D while Automatic dark mode is on). Ranked ABOVE
+//                    dragMsg: it is the answer to something the user just did,
+//                    and it must not be hidden by feedback about something else.
 //  reshuffled      — the post-save flag
 //  reshuffledMsg   — "Tables re-optimised." / "Booking saved." (computed in
 //                    App — it reads optimizerActiveFor(viewDate, autoOptimizer))
@@ -107,7 +111,7 @@ function toast(tone, body, opts) {
   );
 }
 
-export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
+export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,permMsg,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
   // v17.8.0: the "Couldn't load bookings" node USED to live here. It moved to
   // NotificationStrip (see appBannerSections) in the strip audit: it is the one
   // message this layer carried that neither passes on its own nor can be acted
@@ -145,6 +149,8 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
           className="mgt-hover-scale mgt-press"
           style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:BTN.nav})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"6px 10px 6px 14px"})},
+    {key:"permmsg",on:!!permMsg,
+      node:toast("var(--warn-text)",permMsg||"")},
     {key:"dragmsg",on:!!dragMsg,
       node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},
     {key:"reshuffled",on:reshuffled,

@@ -18,9 +18,18 @@ import { isTyping } from "../lib/keyboard";
 import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
-import { SETTINGS_TABS } from "../components/SettingsChrome";
+import { visibleTabs } from "../components/SettingsChrome";
 import { todayStr, stepDate } from "../lib/day";
 import { seatingClosed } from "../lib/booking-logic";
+// WA sandbox: gates the I (inbox) / X (simulator) keys, exactly like the
+// toolbar button — a non-sandbox build must expose no WhatsApp surface.
+//
+// RESTORED at the 17.15.0 sync, having been silently reverted by it. This file
+// conflicted only on the `anyModal` line, and taking prod's copy wholesale threw
+// away the two key handlers with it — the module's only keyboard entry points,
+// both documented in the mount card, neither reachable by any test. See
+// tests/wa-sandbox-integrity.test.js.
+import { WA_SANDBOX } from "../lib/waSandbox";
 
 // v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
 // NB: in List view with a booking focused, S marks it Seated (that check runs
@@ -50,9 +59,32 @@ function escapeAction(K,id){
     case "reminder":    return K.requestCloseReminderEditor;
     case "reminderdel": return function(){K.setConfirmReminderDel(null);};
     // requestCloseSettings owns the tab reset, on both its paths.
+    // v18.0.0 phase 3: closes the capability grid and returns you to the Admin
+    // tab underneath — the safe direction, and it holds no draft of its own
+    // (every tick is written as it is made), so there is nothing to guard.
+    case "roles":       return function(){K.setRolesFor(null);};
+    // v18.0.0 session 8: Escape closes the activity log and returns you to the
+    // Admin tab you opened it from. There is no decision in a log to lose.
+    case "activity":    return function(){K.setActivityOpen(null);};
     case "settings":    return K.requestCloseSettings;
     case "history":     return function(){K.setShowHistory(false);};
     case "kitchen":     return function(){K.setConfirmKitchen(null);};
+    // v18.0.0: Escape means the completion did not happen. It must NOT quietly
+    // complete the booking without the voucher — that is what the modal's own
+    // "Complete without using it" button is for, as a choice somebody made.
+    case "voucher":     return function(){K.setVoucherAsk(null);};
+    // Escape leaves the redemption exactly as it is and abandons the status
+    // change — the same shape as its twin above, and the safe direction for a
+    // prompt about money: dismissing it moves nothing.
+    case "voucherback": return function(){K.setVoucherBack(null);};
+    // v18.0.0 session 8: Escape is "Not now" — the voucher stays where it is,
+    // open and attachable by hand. Nothing about the money moves.
+    case "vouchercarry": return function(){K.setVoucherCarry(null);};
+    // v18.0.0 session 7: Escape is "Done" — there is no decision in a note.
+    case "seatnote":    return function(){K.setSeatNote(null);};
+    // v18.0.0 session 8 (C3): Escape is "Back" — the seat does NOT happen. The
+    // safe direction for a prompt whose other two answers both change a table.
+    case "seatclash":   return function(){K.setSeatClash(null);};
     case "reshuffle":   return function(){K.setConfirmReshuffle(false);};
     case "cancel":      return function(){K.setConfirmCancel(null);};
     case "del":         return function(){K.setConfirmDel(null);};
@@ -64,6 +96,13 @@ function escapeAction(K,id){
     // v17.14.0: new. The waitlist Overlay had no Esc branch, so it was the one
     // modal in the app you could not dismiss from the keyboard.
     case "waitlist":    return function(){K.setShowWaitlist(false);};
+    // WA sandbox. The inbox's own close CLEARS the filter state and the
+    // return-to-inbox key, so Esc must go through it rather than the raw setter
+    // — the same reason `form`/`walkin`/`manual` name a requestClose* here.
+    case "wadelete":    return function(){K.setConfirmDeleteConv(null);};
+    case "waarchive":   return function(){K.setConfirmArchive(null);};
+    case "sim":         return function(){K.setShowSim(false);};
+    case "inbox":       return K.closeInbox;
     case "week":        return function(){K.setShowWeek(false);};
     case "form":        return K.requestCloseForm;
     default:            return null;
@@ -215,7 +254,16 @@ export function useKeyboardShortcuts(ctx){
           // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
           // tab list) so a newly added tab can never be skipped here again. Do
           // NOT inline a literal id list (that's how Customers got skipped).
-          const TABS=SETTINGS_TABS.map(function(t){return t.id;});
+          // v18.0.0 phase 3: through `visibleTabs(can)`, not the raw list. The
+          // Admin tab is capability-gated, and a cycle over the UNfiltered list
+          // would step onto a tab the render side refuses to show — the same
+          // bug as a hand-copied list, reached by filtering in only one of the
+          // two places that read it.
+          // v18.0.0 phase 4: and `hasModule`, the second gate, for the same
+          // reason — the Vouchers tab disappears with its module, and an arrow
+          // cycle that still knew about it would land on a tab that renders
+          // nothing.
+          const TABS=visibleTabs(K.can,K.hasModule).map(function(t){return t.id;});
           let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
           const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
           K.setSettingsTab(TABS[newIdx]);
@@ -324,7 +372,10 @@ export function useKeyboardShortcuts(ctx){
           if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending"&&!seatingClosed(sel.date,K.today,K.nowMins)) K.updateStatus(sel.id,"seated");return;}
           if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
           if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
-          if(k==="d"||k==="D"){e.preventDefault();K.setConfirmDel(sel.id);return;}
+          // v18.0.0 phase 3: through App's `requestDelete`, which carries the
+          // bookingDelete gate. The keyboard is the surface an audit of
+          // components misses — the same reason `seated` is checked here.
+          if(k==="d"||k==="D"){e.preventDefault();K.requestDelete(sel.id);return;}
         }
       }
       // v17.0.0: three views — slide direction follows the view order (T·L·P).
@@ -340,6 +391,13 @@ export function useKeyboardShortcuts(ctx){
       if(k==="d"||k==="D"){e.preventDefault();K.goToDate(todayStr());return;}
       if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
       if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
+      // WhatsApp: I → open the inbox ("w" was taken by Walk-in). v18.0.0 phase 5
+      // gates it on the MODULE, exactly like the toolbar button — a shortcut is
+      // a second door to the same surface, and gating one door is gating none.
+      // `hasModule` is already on the ctx for the Settings tab cycle.
+      if((k==="i"||k==="I")&&K.hasModule&&K.hasModule("whatsapp")){e.preventDefault();K.setShowInbox(true);return;}
+      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
+      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
       // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
       if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
       if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
