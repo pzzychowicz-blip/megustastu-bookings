@@ -21,10 +21,35 @@ import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 // Return inline-style objects. Used wherever an `<input>` or `<button>` needs
 // the standard MGT look. mkBtn accepts an `extra` object that overrides any
 // of the base properties.
+// ── Why this pins a HEIGHT (v18.0.0) ────────────────────────────────────────
+// Without one, a control takes the UA's INTRINSIC height for its type, and
+// those are not the same number. Measured in Chromium under this exact style:
+// text / tel / number / email / search come out 42, a bare date input and a
+// <select> 44, and `input[type="time"]` 45.84. So whether a row lined up
+// depended on which input TYPES happened to sit in it — which is not something
+// a caller can see, and not something any test in this repo could have.
+//
+// It showed as the booking form's Date and Time sharing a top edge and sitting
+// 1.84px apart at the BOTTOM, and as the walk-in form's Time clearing its
+// guests stepper by 5.84px. The report read "misaligned by 11px", and that
+// number is exact but is the delta between DateField's INNER transparent input
+// and the time input, which is its own pill: 11 is the wrapper's own 10 of
+// padding plus its 1px border. The two pills were 0.00 apart at the top, so
+// fixing the 11 would have meant changing nothing anybody can see.
+//
+// `H.touch` is what the two neighbours already measured, and it is DESIGN.md's
+// touch FLOOR — which the 42px text inputs sat under. Pinning also takes the
+// browser out of it: native date and time controls are exactly where UA
+// intrinsic heights diverge, and this app runs on Android Chrome, iPads and
+// iPhones. Nothing is clipped at 44 — the time input, the tallest of them,
+// reports scrollHeight 42 against clientHeight 42.
+//
+// `mkArea` puts it back to auto: a textarea is sized by its rows.
 export function mkInp() {
   return {
     width: "100%",
     boxSizing: "border-box",
+    height: H.touch,
     background: "var(--bg-input)",
     border: "1px solid var(--border-input)",
     borderRadius: R.pill,
@@ -64,7 +89,10 @@ export function mkInp() {
 // for the balance it gives short content — it is now a nicety, not a load-
 // bearing fix, and a browser without it simply renders top-aligned.
 export function mkArea() {
-  return { ...mkInp(), borderRadius: R.inset, resize: "vertical", alignContent: "center" };
+  // `height: "auto"` undoes mkInp's pinned control height — see its header. A
+  // textarea is sized by its `rows`, and 44 would crop every one of them to a
+  // single line while still LOOKING like a deliberate compact field.
+  return { ...mkInp(), height: "auto", borderRadius: R.inset, resize: "vertical", alignContent: "center" };
 }
 
 // v17.8.0 — the dropdown mkInp. A <select> renders its disclosure arrow inside

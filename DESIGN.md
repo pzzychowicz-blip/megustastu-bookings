@@ -85,6 +85,22 @@ explaining why is usually the one to read.
   (44 is a floor, not a target); `/* @canvas */` exempts genuine layout
   dimensions — the Toggle track, table-picker cells, the timeline hour strip,
   WeekView's calendar cell, alignment indents, safe-area `calc()`.
+  **v18.0.0 makes ONE of those a target rather than a floor: `mkInp` pins
+  `height: H.touch`, so every single-line form control in the app is exactly
+  44.** Before it, `mkInp` set no height at all and each control took the UA's
+  INTRINSIC height for its type — measured in Chromium under `mkInp`'s own
+  style, text/tel/number/email/search 42, a bare date input and a `<select>` 44,
+  `input[type="time"]` 45.84. Whether a row lined up therefore depended on which
+  input TYPES happened to sit in it, which is not a property a caller can see or
+  a reviewer can read; it showed as the booking form's Date and Time sitting
+  1.84px apart at the bottom while sharing a top edge. Native date and time
+  controls are precisely where UA intrinsic heights diverge, so pinning is also
+  what makes a row's alignment the same on the Android tablet, the iPads and a
+  desk browser instead of three different answers. `mkArea` returns `height` to
+  `auto` — a textarea is sized by its `rows` — and that one line is the whole of
+  the exception. The steppers stay at `H.control` (40) beside a 44 field: a
+  round ± button is a different control idiom, not a ragged row, and raising
+  them was offered and declined.
 
 - **`--rim-solid` / `--rim-solid-strong` = the v17.13.0 rim tokens.** The
   hairline white edge on a theme-INVARIANT solid fill — a `BLOCK_BG` block, an

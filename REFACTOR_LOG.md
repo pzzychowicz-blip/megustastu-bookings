@@ -25488,3 +25488,61 @@ and is restored when the window widens again.
 
 Gate: `131.66 kB` gz · **1488 tests** · 0 lint errors (88 warnings) · style OK ·
 `test:rules` **293**.
+
+### Commit 127 (session 12) — one control height, and the 11px that was the instrument
+
+`mkInp()` set **no height**, so every control took the UA's INTRINSIC height for
+its type. Probed in Chromium under `mkInp`'s own style: text / tel / number /
+email / search **42**, a bare date input and a `<select>` **44**,
+`input[type="time"]` **45.84**. Whether a row of fields lined up therefore
+depended on which input TYPES happened to sit in it — not a property a caller
+can see in source, and not one any test in this repo could have caught.
+
+**The reported number was the measuring, not the app.** "The Date/Time fields
+are misaligned by 11px" carried over from session 9, and 11.00 is exactly right
+— for `input[type=date]`.top − `input[type=time]`.top. But the date input is
+`DateField`'s transparent INNER control and the time input IS its own pill, so
+11 is the wrapper's own 10px of padding plus its 1px border. Measured on the two
+elements that actually paint a box, the pills were **0.00** apart at the top and
+so were the labels; the visible defect was **1.84px at the BOTTOM**, from the
+missing height. Fixing the 11 would have changed nothing anybody can see.
+
+Same cause, bigger, one form over: the walk-in's Time cleared its guests stepper
+by **5.84px**.
+
+So `mkInp` pins `height: H.touch` — the value the date pill and the `<select>`
+beside it already measured, and `DESIGN.md`'s touch FLOOR, which the 42px text
+inputs sat *under*. `mkArea` returns it to `auto`, because a textarea is sized by
+its `rows` and 44 would crop every one of them to a single line while still
+looking like a deliberate compact field. Two lines of code; the reach is every
+form in the app, which is why it was put to Patryk as a scope question rather
+than decided here.
+
+**Nothing is clipped and that was checked rather than assumed** — at 44 the time
+input, the tallest of the three, reports `scrollHeight` 42 against `clientHeight`
+42. Every `mkInp` consumer was then measured live in DEV, all at 44 with no
+overflow: booking form (name · phone · DateField pill · time · select · number,
+Date/Time delta now **0.00** at both edges) · walk-in (time; textarea still 62) ·
+`ReminderEditor` (time and a BARE date input) · Settings General ×3 · Admin
+(5 selects + email) · Customers · Vouchers · the Activity log (two `DateField`
+pills level at 0.00, its select and its `SearchField` pill sharing a bottom edge
+at 241.05) · `BlockModal`'s From/To · and the WA inbox search, which was the one
+deliberately COMPACT override and is now 44 like everything else (DEV-only —
+`WA_SANDBOX` folds to false in a prod build).
+
+**Offered and declined, so it is recorded here rather than in `ROADMAP.md`:**
+raising the ± steppers from `H.control` (40) to match. It would close the last
+ragged pairs — walk-in's "Time | Number of guests" is 4.00px after this commit,
+down from 5.84 — but a round ± button is a different control idiom from a pill,
+and that is a look, not a bug.
+
+**Rig lesson, which cost a wrong reading before it was caught:** the Browser pane
+reported `visibilityState === "hidden"`, and Chrome throttles CSS animations
+there exactly as it does rAF. The walk-in modal's `mgt-card-in` froze part-way,
+so every rect inside it came back 0.97× — a 40px stepper measured 38.8 — and
+waiting longer does not help, because the animation only advances when something
+forces it. `document.getAnimations().forEach(a => a.finish())`, then assert the
+identity matrix, before believing any measurement taken inside a modal.
+
+Gate: `131.67 kB` gz · **1488 tests** · 0 lint errors (88 warnings) · style OK.
+Rules untouched, so `test:rules` was not re-run.
