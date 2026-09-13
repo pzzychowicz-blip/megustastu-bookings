@@ -439,6 +439,21 @@ export function BookingFormModal({
   // in the Status row unlocks it in the same open of the form. `doSaveEdit`
   // refuses it as well: this is the affordance, that is the guarantee.
   const dateLocked=!!editId&&form.status==="seated";
+  // v18.0.0 session 9 (A4): and the words that say so. The mechanism shipped in
+  // session 8 and the explanation did not — `grep "to change the date" src/`
+  // returned nothing. The only sentence the app had ("A seated booking can't be
+  // moved to another date — change the status first.") fires on SAVE, which
+  // `readOnly` makes unreachable through the UI, so the control simply refused
+  // input with no hint, no `title` and no error: CLAUDE.md's "a hidden control
+  // can be present and useless in ways nothing shows you", one door along.
+  //
+  // It is a described-by hint rather than an `aria-label`, because the field is
+  // already named "Date" and a label would REPLACE that name (Label in Name).
+  // `Fld`'s own `describedBy` could not carry it: that one is deliberately
+  // emitted only alongside `aria-invalid`, so a permanent hint has to be wired
+  // here — and MERGED with the error id rather than overwriting it, since a
+  // locked date can also be the field a save error names.
+  const DATE_LOCK_ID="mgt-date-locked-hint";
   const tablesBtn=(function(){
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
     const previewTbls=mt?null:(formAvail&&formAvail.ok?formAvail.tables:null);
@@ -897,13 +912,15 @@ export function BookingFormModal({
             onBlur={function(){setPhoneFocus(false);}}
             placeholder="+34 600 000 000"
             className="mgt-hover-scale"
-            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <DateField
+            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <><DateField
             /* v18.0.0 session 7: the weekday inside the pill. Fld's id and
                state attrs name the INPUT, so they ride in inputProps. */
-            inputProps={Object.assign({id:fid},attrs,dateLocked?{readOnly:true,"aria-readonly":true}:null)}
+            inputProps={dateLocked
+              ?Object.assign({id:fid},attrs,{readOnly:true,"aria-readonly":true,"aria-describedby":[attrs&&attrs["aria-describedby"],DATE_LOCK_ID].filter(Boolean).join(" ")})
+              :Object.assign({id:fid},attrs)}
             value={form.date}
             onChange={function(e){setForm(function(f){return Object.assign({},f,{date:e.target.value});});}}
-            style={inp()} />;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
+            style={inp()} />{dateLocked?<div id={DATE_LOCK_ID} style={{fontSize: T.small,color:S.muted,marginTop:4}}>Change the status to change the date</div>:null}</>;}}</Fld><Fld label="Time" invalid={invalidField("time")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <input
             id={fid}
             {...attrs}
             type="time"

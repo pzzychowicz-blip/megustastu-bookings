@@ -24543,3 +24543,42 @@ which gives the identical 5A → 1A. Closing it means a full optimiser pass in t
 preview, which the v16.3.0 perf work forbids.
 
 Gate: `129.35 kB` gz · 1409 tests · 0 lint errors (88 warnings) · style OK.
+
+### Commit 106 — the locked date now says why it is locked (A4)
+
+`src/components/BookingFormModal.jsx` · `tests/a11y.test.js`. Session 9's Job 1
+finding 3, carried from session 8 and re-confirmed. The plan's §A.4 specified
+both a mechanism and a hint; session 8 shipped the mechanism.
+
+While a draft is seated the Date field is `readOnly` + `aria-readonly`, and
+`grep "to change the date" src/` returned **nothing**. The app's only explanation
+— "A seated booking can't be moved to another date — change the status first." —
+fires on SAVE, which `readOnly` makes unreachable through the UI. So the control
+refused input with no hint, no `title` and no error: CLAUDE.md's "a hidden
+control can be present and useless in ways nothing shows you", one door along.
+
+The words are now beside the field and wired to the input with
+`aria-describedby`, and two details are load-bearing. It is a DESCRIPTION and
+never an `aria-label`: the field is already named "Date" and a label would
+replace that name with a paraphrase (v17.15.4's Label-in-Name). And the id is
+**merged** with whatever `Fld` already emitted rather than assigned over it —
+`Fld`'s own `describedBy` is deliberately emitted only alongside `aria-invalid`,
+so a permanent hint has to be wired at the call site, and a locked date can also
+be the field a save error names. Overwriting would have left the field described
+by the wrong thing, which is worse than no description.
+
+**Verified live.** Seated draft: `readOnly` true, `aria-readonly` "true",
+`aria-describedby` "mgt-date-locked-hint", the hint rendered and visible reading
+"Change the status to change the date". Confirmed draft: no hint in the document
+and the field writable.
+
+**A measurement that did NOT become a fix.** The Date input sits 11px lower than
+the Time input beside it. That is **pre-existing** — measured at exactly 11px on
+an unlocked draft with no hint in the tree, so the hint does not cause it — and
+it belongs to the date pill's own construction rather than to this change.
+Recorded here rather than folded in silently.
+
+Three pins in `tests/a11y.test.js`, proved by sabotage: changing the copy or
+replacing the merged describedby with a plain assignment each turns one red.
+
+Gate: `129.41 kB` gz · 1412 tests · 0 lint errors (88 warnings) · style OK.

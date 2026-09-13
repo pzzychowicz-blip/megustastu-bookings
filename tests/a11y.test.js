@@ -1391,6 +1391,34 @@ describe("a customer row is reachable, and named (WCAG 2.1.1, 4.1.2) — v18.0.0
   });
 });
 
+describe("a refused control says why it is refused — v18.0.0 session 9 (A4)", () => {
+  // The mechanism shipped in session 8 and the words did not: the Date field
+  // was `readOnly` + `aria-readonly` while a draft is seated, and
+  // `grep "to change the date" src/` returned nothing. The only sentence the app
+  // had fires on SAVE, which readOnly makes unreachable. A control that refuses
+  // input silently is CLAUDE.md's "present and useless in ways nothing shows
+  // you"; that is why the copy is pinned here and not merely present.
+  it("the locked Date field carries a visible hint", () => {
+    expect(/Change the status to change the date/.test(BookingForm)).toBe(true);
+  });
+
+  it("the hint is wired to the input, and does not overwrite the error id", () => {
+    // Fld's own describedBy is emitted only alongside aria-invalid, so a
+    // PERMANENT hint has to be wired at the call site — and merged, because a
+    // locked date can also be the field a save error names. A plain assignment
+    // would drop the error's id and leave a field described by the wrong thing.
+    expect(/DATE_LOCK_ID/.test(BookingForm)).toBe(true);
+    expect(/\[attrs&&attrs\["aria-describedby"\],DATE_LOCK_ID\]\.filter\(Boolean\)\.join\(" "\)/.test(BookingForm),
+      "merged, not replaced").toBe(true);
+  });
+
+  it("it is a description, never a label", () => {
+    // An aria-label here would REPLACE the field's own name ("Date") with a
+    // paraphrase — v17.15.4's Label-in-Name defect.
+    expect(/aria-label=\{[^}]*Change the status/.test(BookingForm)).toBe(false);
+  });
+});
+
 describe("the gate proves itself", () => {
   // tests/style-check.test.js's lesson, applied here: reading a checker does
   // not catch a blind spot. These run the helpers against strings that MUST
