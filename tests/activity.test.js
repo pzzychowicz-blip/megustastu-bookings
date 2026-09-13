@@ -16,6 +16,7 @@ import {
   ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText,
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
   isPrunable, activityWindow, activityCsv, activityCsvName, clearedEntry,
+  retentionMs, retentionLabel, RETENTION_CHOICES, DEFAULT_RETENTION_DAYS,
 } from "../src/lib/activity.js";
 import {
   setActivitySink, emitActivity, resetActivitySink,
@@ -825,5 +826,65 @@ describe("clearedEntry", () => {
     // And that kind must be one the rules accept, or the line the clear depends
     // on for its honesty is itself refused.
     expect(ACTIVITY_KINDS).toContain("data");
+  });
+});
+
+
+// ── Retention as a setting (v18.0.0 session 11) ─────────────────────────────
+//
+// It could only BECOME a setting because session 11 took the year out of the
+// rules — until then the window was stated in two languages that cannot read
+// each other, and a configurable one would have meant the app asking for
+// deletes the server refuses. These tests guard the direction of every fallback,
+// because this number drives a DELETE and the unsafe direction is silent.
+describe("retention", () => {
+  const YEAR = 365 * 86400000;
+
+  it("falls back to the shipped year for anything unusable", () => {
+    // The important direction. A node that came back holding 0, "", null or
+    // nonsense must widen to a year, never narrow to zero — "prune everything
+    // older than 0ms" is the whole log, deleted by whoever next opened it.
+    for (const bad of [0, -5, null, undefined, "", "soon", NaN, {}]) {
+      expect(retentionMs(bad)).toBe(YEAR);
+    }
+  });
+
+  it("converts days to ms for real values", () => {
+    expect(retentionMs(90)).toBe(90 * 86400000);
+    expect(retentionMs(DEFAULT_RETENTION_DAYS)).toBe(YEAR);
+  });
+
+  it("isPrunable defaults the same way, not to zero", () => {
+    // Same guard one layer down, and it has to agree: `pruneActivity` asks the
+    // server for a window and then re-checks each row with this. Two fallbacks
+    // that disagreed would mean asking for rows it then declines to delete —
+    // or, the wrong way round, deleting rows it never asked for.
+    const now = Date.now();
+    const yesterday = { at: now - 86400000 };
+    expect(isPrunable(yesterday, now, 0)).toBe(false);
+    expect(isPrunable(yesterday, now, null)).toBe(false);
+    expect(isPrunable(yesterday, now)).toBe(false);
+    // …and honours a window that really is shorter than the entry's age.
+    expect(isPrunable(yesterday, now, 3600000)).toBe(true);
+  });
+
+  it("every offered choice is inside what sanitizeAdminSettings allows", () => {
+    // The clamp is 30…3650 days. A choice outside it would be offered in the
+    // dropdown, written, and silently read back as something else — a control
+    // that does not do what it says, which is worse than not having it.
+    RETENTION_CHOICES.forEach((c) => {
+      expect(c.days).toBeGreaterThanOrEqual(30);
+      expect(c.days).toBeLessThanOrEqual(3650);
+      expect(Number.isInteger(c.days)).toBe(true);
+    });
+    expect(RETENTION_CHOICES.some((c) => c.days === DEFAULT_RETENTION_DAYS)).toBe(true);
+  });
+
+  it("labels a stored value, including one no longer offered", () => {
+    expect(retentionLabel(365)).toBe("12 months");
+    expect(retentionLabel(90)).toBe("3 months");
+    // A value written by an older build, or by hand in the console, still reads
+    // as something rather than as blank.
+    expect(retentionLabel(400)).toBe("400 days");
   });
 });

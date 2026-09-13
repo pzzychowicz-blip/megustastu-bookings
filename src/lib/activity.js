@@ -54,6 +54,39 @@ export const ACTIVITY_KINDS = [
 // build rather than producing a prune the server refuses.
 export const PRUNE_AFTER_MS = 31536000000;
 
+// ── Retention, as a SETTING (v18.0.0 session 11) ─────────────────────────────
+//
+// `PRUNE_AFTER_MS` stays as the DEFAULT and the shipped promise; this is the
+// knob. It became possible to have a knob at all only when session 11 took the
+// year out of `database.rules.json`: before that the window was stated in two
+// languages that cannot read each other, so a configurable one meant either the
+// app asking for deletes the server refuses, or a number in the rules no
+// setting could move.
+//
+// Days rather than milliseconds, because a person picks months and a stored
+// `31536000000` is unreadable in the Firebase console.
+export const DEFAULT_RETENTION_DAYS = 365;
+export const RETENTION_CHOICES = [
+  { days: 90, label: "3 months" },
+  { days: 180, label: "6 months" },
+  { days: 365, label: "12 months" },
+  { days: 730, label: "2 years" },
+  { days: 1825, label: "5 years" },
+];
+
+/** Days → ms, falling back to the shipped year for anything unusable. */
+export function retentionMs(days) {
+  const n = Number(days);
+  if (!Number.isFinite(n) || n < 1) return PRUNE_AFTER_MS;
+  return Math.round(n) * 86400000;
+}
+
+/** The label for a stored value, so the screen and the log say the same thing. */
+export function retentionLabel(days) {
+  const hit = RETENTION_CHOICES.find(function (c) { return c.days === Number(days); });
+  return hit ? hit.label : (Number(days) || DEFAULT_RETENTION_DAYS) + " days";
+}
+
 // ── Tokens ───────────────────────────────────────────────────────────────────
 
 export function bookingToken(id) { return "{b:" + id + "}"; }
@@ -405,7 +438,7 @@ function same(x, y) {
 // TRUE (a client cannot delete a recent entry however it is asked to), and this
 // is what makes the app ASK only for what will be allowed — a prune that sent a
 // too-young entry would produce a permission error on every open of the log.
-export function isPrunable(entry, now) {
+export function isPrunable(entry, now, windowMs) {
   // `entry && Number(entry.at)` is the version this shipped as for one run, and
   // it votes to DELETE a null entry: the `&&` short-circuits to `null`,
   // `Number(null)` is 0 so `isFinite` says yes, and `null < now - a year`
@@ -416,7 +449,13 @@ export function isPrunable(entry, now) {
   if (!entry || typeof entry !== "object") return false;
   const at = Number(entry.at);
   if (!Number.isFinite(at) || at <= 0) return false;
-  return at < now - PRUNE_AFTER_MS;
+  // v18.0.0 session 11: the window is an argument, defaulting to the shipped
+  // year. Same guard as `pruneActivity`'s and for the same reason — a caller
+  // that passes nothing prunes to the DEFAULT rather than to zero, because
+  // "zero" here would mean deleting the whole log.
+  const span = Number.isFinite(Number(windowMs)) && Number(windowMs) > 0
+    ? Number(windowMs) : PRUNE_AFTER_MS;
+  return at < now - span;
 }
 
 

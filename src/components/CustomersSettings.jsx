@@ -24,8 +24,19 @@ import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKe
 import { Section, OutlineChip, Reveal, mkInp, mkBtn, SBadge } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
 
-export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2 }) {
-  const [query, setQuery] = useState("");
+// v18.0.0 session 11: `seekQuery` seeds the search box. The activity log can
+// send you here for a guest whose booking has been deleted, which is exactly
+// the case where the log holds the only remaining name.
+//
+// It is a plain `useState` INITIALISER and not an effect, because the mount site
+// passes `key={seekQuery}` — so a new seek REMOUNTS this subtree and the
+// initialiser runs again. That is App's own `key={user.uid}` idiom, and it costs
+// nothing here: the state a remount discards is the expanded row and the armed
+// delete, both of which SHOULD be discarded when you jump to a different person.
+// The alternative, an effect that writes `query` when the prop changes, is a
+// synchronous setState in an effect — the lint rule this codebase keeps clean.
+export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "" }) {
+  const [query, setQuery] = useState(seekQuery || "");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
   const [filter, setFilter] = useState("all");    // v16.3.0: all | regulars | noshows

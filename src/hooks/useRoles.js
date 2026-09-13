@@ -53,11 +53,16 @@ import {
   applyInviteFields, userRows,
 } from "../lib/roles";
 import { sanitizeModules, withModule, moduleOn, DEFAULT_MODULES } from "../lib/modules";
+import { clampStep } from "../lib/clamp";
+import { DEFAULT_RETENTION_DAYS } from "../lib/activity";
 
 // The flag's node. `v` is the presence marker every settings node carries —
 // RTDB drops an all-default object, and the scalar keeps the node present once
 // written (the priorities lesson).
-export const DEFAULT_ADMIN_SETTINGS = { v: 1, enforceRoles: false, modules: DEFAULT_MODULES };
+export const DEFAULT_ADMIN_SETTINGS = {
+  v: 1, enforceRoles: false, modules: DEFAULT_MODULES,
+  activityRetentionDays: DEFAULT_RETENTION_DAYS,
+};
 
 export function sanitizeAdminSettings(s) {
   const src = s && typeof s === "object" ? s : {};
@@ -80,6 +85,23 @@ export function sanitizeAdminSettings(s) {
     // entirely — the production state on the day this deploys — is every module
     // at its default, which is the shipped behaviour unchanged.
     modules: sanitizeModules(src.modules),
+    // v18.0.0 session 11: how long the activity log is kept. A new FIELD on an
+    // existing node, so no rules change — `settings/admin` is already admin-only
+    // to write and carries no `.validate`.
+    //
+    // It could only become a setting BECAUSE session 11 took the year out of the
+    // rules. Until then the floor was written in two languages that cannot read
+    // each other — `PRUNE_AFTER_MS` here and `now - 31536000000` there — and a
+    // configurable window would have meant either the app asking for deletes the
+    // server refuses, or a number in the rules that no setting could move.
+    //
+    // Clamped rather than trusted: this drives a DELETE, and a node that came
+    // back holding 0 (or a string, or nothing) would otherwise prune the entire
+    // log on the next admin who opened it. 30 days is the floor for that reason
+    // and not because anyone wants 30.
+    activityRetentionDays: clampStep(
+      src.activityRetentionDays, DEFAULT_RETENTION_DAYS, 30, 3650, 1
+    ),
   };
 }
 
@@ -402,6 +424,12 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
       "Couldn't change role enforcement — you may not have permission, or another device changed it first.");
   }, [writeAdmin]);
 
+  // ── How long the activity log is kept ─────────────────────────────────────
+  const setActivityRetention = useCallback(function (days) {
+    return writeAdmin({ activityRetentionDays: days },
+      "Couldn't change the log's retention — you may not have permission, or another device changed it first.");
+  }, [writeAdmin]);
+
   // ── The module registry ───────────────────────────────────────────────────
   // `withModule` applies one switch to the stored map, so an admin turning
   // WhatsApp on does not restate what vouchers is set to.
@@ -420,6 +448,7 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
 
   return {
     can, isAdmin, myEntry, enforceRoles, setEnforceRoles,
+    activityRetentionDays: adminSettings.activityRetentionDays, setActivityRetention,
     modules, hasModule, setModuleEnabled,
     roles, invites, rows, rolesReady: ready,
     setRole, setCapability, removeUser, inviteUser, withdrawInvite, applyInvite,

@@ -25,6 +25,7 @@ import { R, T, FW, SP, H } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
+import { RETENTION_CHOICES } from "../lib/activity";
 import { auth } from "../firebase";
 
 const LEVEL_LABEL = { staff: "Staff", manager: "Manager", admin: "Admin" };
@@ -676,6 +677,8 @@ export function AdminTabContent({
   // v18.0.0 session 8: opens the activity log, which App owns — this tab holds
   // the door handle, not the modal.
   onOpenActivity,
+  retentionDays,
+  onSetRetention,
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("staff");
@@ -876,10 +879,11 @@ export function AdminTabContent({
               Activity log
             </div>
             <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2 }}>
-              Every change, deletion and sign-in, with who did it and when. Kept for
-              12 months. Guest names are not stored in it &mdash; they are read back
-              from the bookings themselves, so a guest erased from the app is erased
-              here too.
+              Every change, deletion and sign-in, with who did it and when. Guest
+              names are not stored in it &mdash; they are read back from the
+              bookings themselves, so a guest erased from the app is erased here
+              too. An admin can also clear a range from inside the log; a clear is
+              itself recorded.
             </div>
           </div>
           <button
@@ -889,6 +893,32 @@ export function AdminTabContent({
             style={mkBtn({ background: "var(--app-btn-grey-strong)", flexShrink: 0 })}
           >Open the log</button>
         </div>
+        {/* v18.0.0 session 11: the retention window, which was hard-coded in
+            TWO languages until this version — `PRUNE_AFTER_MS` in the app and
+            `now - 31536000000` in the rules. It can only be a setting because
+            the rules gave up their copy; while both existed, a configurable
+            window meant the app asking for deletes the server would refuse.
+
+            A <select> of named spans rather than a day stepper: a person
+            chooses "6 months", not 184. The prune itself still runs when an
+            admin OPENS the log, so changing this takes effect on the next
+            open rather than on a schedule this plan does not have. */}
+        <label style={{ display: "flex", gap: SP.base, alignItems: "center", flexWrap: "wrap", marginTop: SP.base }}>
+          <span style={{ fontSize: T.body, color: "var(--text-secondary)" }}>Keep entries for</span>
+          <select
+            value={retentionDays}
+            onChange={function (e) { onSetRetention(Number(e.target.value)); }}
+            className="mgt-hover-scale"
+            style={{ ...mkSel(), width: "auto" }}
+          >
+            {RETENTION_CHOICES.map(function (c) {
+              return <option key={c.days} value={c.days}>{c.label}</option>;
+            })}
+          </select>
+          <span style={{ fontSize: T.micro, color: "var(--text-muted)" }}>
+            Older entries are removed the next time an admin opens the log.
+          </span>
+        </label>
       </Section>
 
       <Collapsible title="What the server actually enforces" defaultOpen={false}>

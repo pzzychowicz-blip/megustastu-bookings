@@ -341,7 +341,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 import { todayStr, stepDate, WEEKDAY_LONG } from "./lib/day";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
-import { activityWindow } from "./lib/activity";
+import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
 
 // ── WhatsApp Inbox (parallel sandbox, NOT yet a shipped feature) ──────────────
 // `useWhatsApp` owns the DEV-Firebase WA data layer (conversations/messages/
@@ -1183,6 +1183,7 @@ function BookingApp({uid}){
   // ←/→ tab cycle.
   const {
     can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
+    activityRetentionDays, setActivityRetention,
     // v18.0.0 phase 4 — the module registry. `hasModule` is the gate every
     // module-owned surface asks, and it is checked BEFORE `can`: a module that
     // is off is hidden from everybody including an admin.
@@ -1448,6 +1449,21 @@ function BookingApp({uid}){
   // guard has to be read synchronously in the handler (two taps arriving faster
   // than a render would otherwise start two clears over the same range), and
   // the state is what the button paints with.
+  // v18.0.0 session 11: what the Customers tab should be searching for when we
+  // send somebody there. A NAME and not the `guestKey`, because `searchCustomers`
+  // matches on name or phone digits and never on a `guestId` — so seeding it
+  // with the raw key would find nothing for exactly the phone-less guests this
+  // was added to reach. Fed to `CustomersTabContent` as both `key` and
+  // `seekQuery`, so a new seek remounts that subtree and its `useState`
+  // initialiser picks the value up with no effect involved.
+  const [customerSeek,setCustomerSeek]=useState("");
+  function openCustomerByName(name){
+    const n=String(name||"").trim();
+    if(!n) return;
+    setActivityOpen(null);
+    setSettingsTab("customers");
+    setCustomerSeek(n);
+  }
   const [activityClearing,setActivityClearing]=useState(false);
   // What the last clear did, so a REFUSAL is visible. Without it the button
   // simply returns to rest and the list is unchanged, which reads as a dead
@@ -1498,8 +1514,8 @@ function BookingApp({uid}){
     if(!activityOpen||!isAdmin){ if(!activityOpen) prunedRef.current=false; return; }
     if(prunedRef.current) return;   // once per opening, not once per render
     prunedRef.current=true;
-    pruneActivity();
-  },[activityOpen,isAdmin]);
+    pruneActivity(retentionMs(activityRetentionDays));
+  },[activityOpen,isAdmin,activityRetentionDays]);
   // v17.14.0: joins the stack, which is how it gains Esc, the shortcut
   // suppression and `inert` — all three of which it had silently never had.
   const showWaitlist = !!modalOpen.waitlist;
@@ -5208,6 +5224,9 @@ function BookingApp({uid}){
             onApplyInvite={applyInvite}
             onOpenCapabilities={setRolesFor}
             onOpenActivity={function(){setActivityOpen(true);}}
+            customerSeek={customerSeek}
+            activityRetentionDays={activityRetentionDays}
+            onSetActivityRetention={setActivityRetention}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
@@ -5313,6 +5332,8 @@ function BookingApp({uid}){
           clearMsg={activityClearMsg}
           onClearRange={doClearActivity}
           onDownload={doDownloadActivity}
+          onOpenCustomer={openCustomerByName}
+          retentionText={retentionLabel(activityRetentionDays)}
           bookings={bookings}
           onOpenBooking={function(id){const b=bookings.find(function(x){return x.id===id;});if(!b) return;setActivityOpen(null);closeSettings();openEdit(b);}}
           onClose={function(){setActivityOpen(null);}} /></Suspense></div>:null}</ModalPresence>{historyPopup}</div></div>

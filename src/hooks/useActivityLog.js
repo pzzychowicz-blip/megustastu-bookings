@@ -154,8 +154,15 @@ export function redactGuest(keys) {
 // for years is cleared over several opens instead of in one storm of deletes.
 export const PRUNE_BATCH = 200;
 
-export function pruneActivity() {
-  const cutoff = Date.now() - PRUNE_AFTER_MS;
+export function pruneActivity(windowMs) {
+  // v18.0.0 session 11: the window is an ARGUMENT now (settings/admin
+  // `activityRetentionDays`), defaulting to the shipped year when the caller has
+  // nothing — which is the state on the very first render, before the node has
+  // loaded. Pruning to a default that is WIDER than the setting is the safe
+  // direction: it deletes less than asked, and the next open corrects it.
+  const span = Number.isFinite(Number(windowMs)) && Number(windowMs) > 0
+    ? Number(windowMs) : PRUNE_AFTER_MS;
+  const cutoff = Date.now() - span;
   const q = query(
     ref(db, "activity"), orderByChild("at"), endAt(cutoff), limitToLast(PRUNE_BATCH)
   );
@@ -165,7 +172,7 @@ export function pruneActivity() {
       // The client half of the rule, so the app asks only for what will be
       // allowed — `isPrunable` and the rule's `at < now - a year` are the same
       // sentence in two languages.
-      if (isPrunable(child.val(), Date.now())) olds.push(child.key);
+      if (isPrunable(child.val(), Date.now(), span)) olds.push(child.key);
     });
     return Promise.all(olds.map(function (id) {
       return remove(ref(db, "activity/" + id)).catch(function () {

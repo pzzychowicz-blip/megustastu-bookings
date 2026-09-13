@@ -33,6 +33,11 @@ import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
 import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkSolidBtn, AutoHeight } from "./atoms";
 import { renderText, activityCsv, activityCsvName } from "../lib/activity";
+// v18.0.0 session 11: the same index the Customers tab is built from, so "can
+// this row lead anywhere" is answered by the thing that would have to answer it
+// on arrival. Memoised on `bookings` exactly as CustomersSettings does — it
+// walks every booking, and the modal already walks them once for `byId`.
+import { customerIndex } from "../lib/customers";
 // v18.0.0 session 11: `isReadableDate` is no longer imported here. Session 10
 // had this panel re-ask whether the day was readable so it would not report an
 // unasked question as an answer — but with two independently optional dates the
@@ -87,7 +92,7 @@ function personOf(email) {
 export function ActivityLogModal({
   fromDay, toDay, onSetFromDay, onSetToDay, badDay, backwards,
   rows, loading, loadingMore, hasMore, onLoadOlder,
-  canClear, clearBusy, clearMsg, onClearRange, onDownload,
+  canClear, clearBusy, clearMsg, onClearRange, onDownload, onOpenCustomer, retentionText,
   bookings, onOpenBooking, onClose,
 }) {
   const [armed, setArmed] = useState(false);
@@ -120,6 +125,26 @@ export function ActivityLogModal({
     const m = {};
     (bookings || []).forEach(function (b) { if (b && b.id) m[b.id] = b; });
     return m;
+  }, [bookings]);
+
+  // Which names are actually reachable in Customers. A guest whose only booking
+  // was DELETED is not a customer — the index is derived from the bookings list
+  // — so offering "Find them in Customers" on those rows would be a control that
+  // always lands on "No customers match". Measured: it did, on the first row
+  // tried, which is the case the affordance was added for.
+  //
+  // Exact-name membership is the right predicate and not a near-enough one:
+  // `searchCustomers` matches by SUBSTRING, so a name that is in this set is
+  // guaranteed to be found by the search we seed with it. Anonymised bookings
+  // are absent from the index, so "Data removed" correctly stops being offered.
+  const customerNames = useMemo(function () {
+    const idx = customerIndex(bookings || []);
+    const set = {};
+    Object.keys(idx).forEach(function (k) {
+      const n = idx[k] && idx[k].name;
+      if (n) set[String(n).toLowerCase()] = true;
+    });
+    return set;
   }, [bookings]);
 
   const people = useMemo(function () {
@@ -291,10 +316,20 @@ export function ActivityLogModal({
             </div>
           ) : shown.map(function (r) {
             const text = renderText(r.text, byId, r.subject && r.subject.name);
-            // A row naming a booking that still exists can open it. One that
-            // names a deleted one cannot, and must not look as though it could.
+            // A row naming a booking that still exists can open it.
+            //
+            // v18.0.0 session 11: and one naming a DELETED booking now leads
+            // somewhere too — to the guest in Customers. That row used to be
+            // plain text on the grounds that it "must not look as though it
+            // could" open a booking, which was right about the booking and
+            // wrong about the row: a deleted booking is exactly the case where
+            // this log holds the only remaining name, so it is the row where a
+            // way through is worth most. Two destinations, never both, so no
+            // row gains a second control and the dense list is unchanged.
             const first = r.bookings ? Object.keys(r.bookings)[0] : null;
             const live = first && byId[first] ? first : null;
+            const named = !live && r.subject && r.subject.name ? r.subject.name : null;
+            const goneName = named && customerNames[String(named).toLowerCase()] ? named : null;
             return (
               <div key={r.id} style={{
                 display: "flex", gap: SP.base, alignItems: "baseline",
@@ -313,11 +348,14 @@ export function ActivityLogModal({
                   {personOf(r.email)}
                 </span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: T.body, color: S.text }}>
-                  {live ? (
+                  {live || goneName ? (
                     <button
                       type="button"
                       className="mgt-hover-scale"
-                      onClick={function () { onOpenBooking(live); }}
+                      title={live ? "Open this booking" : "Find " + goneName + " in Customers"}
+                      onClick={function () {
+                        if (live) onOpenBooking(live); else onOpenCustomer(goneName);
+                      }}
                       style={mkBtn({
                         background: "transparent", border: "none", boxShadow: "none",
                         color: "var(--text-primary)", padding: SP.none, minHeight: 0,
@@ -444,8 +482,8 @@ export function ActivityLogModal({
             the rules having given up their 12-month delete floor. An admin can
             now remove a range on purpose, so "kept for 12 months" is a policy
             the app keeps rather than a guarantee the database enforces. */}
-        Kept for 12 months, and an admin can clear a range sooner — a clear is
-        itself recorded. Any signed-in account can read this log — it is hidden
+        Kept for {retentionText}, and an admin can clear a range sooner — a clear
+        is itself recorded. Any signed-in account can read this log — it is hidden
         from the app, not from the database.
       </div>
     </Overlay>

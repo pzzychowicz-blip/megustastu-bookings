@@ -1034,6 +1034,9 @@ export function SettingsContent({
   // v18.0.0 session 8: the activity log opens from the Admin tab, above this
   // overlay — App owns the modal, this only carries the door handle down.
   onOpenActivity,
+  customerSeek,
+  activityRetentionDays,
+  onSetActivityRetention,
   appVersion,
   isDark,
   onToggleDark,
@@ -1172,7 +1175,7 @@ export function SettingsContent({
       modules={modules} onSetModule={onSetModule} moduleWarning={moduleWarning}
       onSetRole={onSetRole} onRemoveUser={onRemoveUser} onInvite={onInvite}
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
-      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} />;
+      onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention} />;
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {
@@ -1181,7 +1184,7 @@ export function SettingsContent({
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
   } else if (cur === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
-    content = <CustomersTabContent bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
+    content = <CustomersTabContent key={customerSeek || ""} seekQuery={customerSeek || ""} bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
   } else if (cur === "vouchers") {
     // v18.0.0: gift vouchers — the records AND their configuration, because a
     // voucher setting is edited where vouchers are.

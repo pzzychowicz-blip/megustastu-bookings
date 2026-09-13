@@ -25327,3 +25327,62 @@ Reading the raw bytes gives `EF BB BF`. Verified live: "Download 95 shown"
 produced 96 lines with the right header and well-formed rows.
 
 Gate: `131.15 kB` gz · **1480 tests** · 0 lint errors (88 warnings) · style OK.
+
+### Commit 124 (session 11) — the last two of the four additions
+
+Committed together because they were built and verified together and their edits
+interleave in `App.jsx`, `Settings.jsx` and the modal; splitting them now would
+mean unpicking shared hunks for a tidier history than the work actually had.
+
+**A row can open the CUSTOMER, not only the booking.** A row naming a deleted
+booking used to be plain text, on the grounds that it "must not look as though
+it could" open a booking — right about the booking and wrong about the row,
+because a deleted booking is exactly the case where this log holds the only
+remaining name. Two destinations, never both, so no row gains a second control
+and the dense list is unchanged.
+
+It seeds the Customers search with the NAME and not the `guestKey`, which is a
+correction made before writing it: `searchCustomers` matches on name or phone
+digits and **never on a `guestId`**, so the raw key would have found nothing for
+exactly the phone-less guests this was added to reach. `CustomersTabContent`
+takes the seed through a `useState` initialiser plus `key={seek}` at the mount —
+App's own `key={user.uid}` idiom — rather than an effect, which would have been
+a synchronous setState in an effect; and the state a remount discards (the
+expanded row, the armed delete) is state that SHOULD be discarded when you jump
+to somebody else.
+
+**Then it was gated, because the first version led nowhere.** Measured: clicking
+"Find YC TWO in Customers" landed on the Customers tab with the name filled in
+and "No customers match" — for the very case the affordance was added for. A
+guest whose only booking was deleted **is not a customer**: the index is derived
+from the bookings list. So the jump is offered only for a name that is actually
+in `customerIndex`, and exact-name membership is the right predicate rather than
+a near-enough one — `searchCustomers` matches by SUBSTRING, so a name in that
+set is guaranteed to be found by the search we seed with it. Anonymised bookings
+are absent from the index, so "Find Data removed in Customers" correctly stopped
+being offered too.
+
+**Retention is a setting** (`settings/admin.activityRetentionDays`, a select of
+named spans — a person chooses "6 months", not 184). A new FIELD on an existing
+node, so no rules change; `writeAdmin` already merges onto what is stored.
+
+It could only become a setting BECAUSE Commit 122 took the year out of the
+rules. While the window lived in two languages that cannot read each other —
+`PRUNE_AFTER_MS` here and `now - 31536000000` there — a configurable one meant
+either the app asking for deletes the server refuses, or a number in the rules
+no setting could move. This is the follow-on that the weakening bought, and it
+is the reason to prefer it to a rule that merely looked stricter.
+
+**Every fallback widens, never narrows**, and the tests pin the direction:
+`retentionMs` and `isPrunable` both answer the shipped year for `0`, `null`,
+`""`, `NaN` or nonsense, because "prune everything older than 0ms" is the whole
+log, deleted by whoever next opened it. The clamp in `sanitizeAdminSettings` is
+30–3650 days for the same reason. Sabotage-proved: making `retentionMs` fall
+back to `0` turns that test red.
+
+Verified live: the select round-trips through Firebase and the modal footnote
+follows it ("Kept for 6 months…"); the customer jump lands on the Customers tab
+with the name seeded; and after the gate, 66 of 97 rows lead to a booking and
+none offer a customer this DEV database cannot show.
+
+Gate: `131.49 kB` gz · **1485 tests** · 0 lint errors (88 warnings) · style OK.
