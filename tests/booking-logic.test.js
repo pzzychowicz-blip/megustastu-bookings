@@ -10,7 +10,7 @@
 // Dates use a fixed FUTURE day so optimizerActiveFor(date, …) is always true and
 // syncLiveDurations (seated-today only) never perturbs the fixtures.
 
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   toMins, toTime, overlaps, genId, getDur, statusOrder,
@@ -2619,5 +2619,80 @@ describe("unseatRestore", () => {
     const r = unseatRestore(b, 2);
     expect(r.time).toBe("20:30");
     expect(r.duration).toBe(90);
+  });
+});
+
+// ── v18.0.0 session 10 (/code-review) ────────────────────────────────────────
+// `replacePinnedClashes` is what stops a pinned save writing an overlap the OFF
+// path will not resolve. It was gated on `needsR`, which asks whether the
+// placement INPUTS moved — and the WINDOW moves by two more routes the same
+// save already knows about: a length change (`planChanged`) and a revival
+// (`revived`). `recheck` is the union, and it is the gate now.
+//
+// TODAY, with the toggle off, is the only way to reach the OFF path
+// (`optimizerActiveFor` is true for every other date whatever the toggle says),
+// so the clock is PINNED: `bookingsAfterAction` reads `new Date()` for
+// `syncLiveDurations`, which extends a live seated booking's duration to the
+// elapsed time and would make these fixtures mean different things at different
+// hours of the CI day.
+describe("a pinned save's window can move without needsR (v18.0.0 session 10)", () => {
+  const T = todayStr();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(T + "T19:30:00"));
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
+  // A seated party on table 2 at 19:00 for 90, and a confirmed booking on the
+  // SAME table at 20:45. Clean to begin with.
+  const seatedOn2 = () => mk({ id: "A", name: "Seated", date: T, time: "19:00", duration: 90, status: "seated", tables: ["2"] });
+  const laterOn2 = () => mk({ id: "B", name: "Later", date: T, time: "20:45", duration: 90, status: "confirmed", tables: ["2"], updatedAt: 5 });
+
+  it("the save that only LENGTHENS a seated booking is still a pinned save", () => {
+    expect(tablesPinned("seated", false, false)).toBe(true);
+  });
+
+  it("with the optimiser off, the extension writes a clash that nothing re-places", () => {
+    const list = [seatedOn2(), laterOn2()];
+    expect(findClashes(list, T), "clean before the save").toHaveLength(0);
+    // 90 → 150 minutes: `pinned` keeps the tables and `forceReassign` is false.
+    const upd = list.map((b) => (b.id === "A" ? { ...b, duration: 150, originalDuration: 150, customDur: 150 } : b));
+    const out = bookingsAfterAction(upd, T, [], "A", false, false);
+    expect(findClashes(out, T).length, "the defect this gate exists to prevent").toBeGreaterThan(0);
+    // …and the locked refusal cannot catch it: the partner is MOVABLE.
+    expect(pinnedClashParties(out, T, "A").locked).toHaveLength(0);
+    expect(pinnedClashParties(out, T, "A").movable.length).toBeGreaterThan(0);
+  });
+
+  it("replacePinnedClashes on that same output clears it", () => {
+    const list = [seatedOn2(), laterOn2()];
+    const upd = list.map((b) => (b.id === "A" ? { ...b, duration: 150, originalDuration: 150, customDur: 150 } : b));
+    const out = bookingsAfterAction(upd, T, [], "A", false, false);
+    const fixed = replacePinnedClashes(out, T, "A", [], false);
+    expect(findClashes(fixed, T)).toHaveLength(0);
+    expect(fixed.find((b) => b.id === "A").tables, "the seated party never moves").toEqual(["2"]);
+    expect(fixed.find((b) => b.id === "B").tables).not.toEqual(["2"]);
+  });
+
+  it("it is free where the gate was already right — no movable clash returns the INPUT", () => {
+    const clean = [seatedOn2(), mk({ id: "C", date: T, time: "20:45", status: "confirmed", tables: ["3"] })];
+    expect(replacePinnedClashes(clean, T, "A", [], false)).toBe(clean);
+  });
+});
+
+// The pure facts above are only worth having if `doSaveEdit` calls it on the
+// right condition, and that is a closure this suite does not run — so the gate
+// is pinned by reading the source, the way the preview row's wiring is.
+describe("doSaveEdit calls replacePinnedClashes on `recheck` (v18.0.0 session 10)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("the gate is recheck, never needsR", () => {
+    expect(/if\(pinned&&recheck\) out=replacePinnedClashes\(/.test(APP)).toBe(true);
+    expect(/if\(pinned&&needsR\) out=replacePinnedClashes\(/.test(APP)).toBe(false);
+  });
+
+  it("and `recheck` is still the union that makes that gate wider than needsR", () => {
+    expect(/const recheck=needsR\|\|planChanged\|\|revived\|\|!!unseat;/.test(APP)).toBe(true);
   });
 });

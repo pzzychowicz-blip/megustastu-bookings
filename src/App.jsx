@@ -2613,7 +2613,29 @@ function BookingApp({uid}){
           // With the optimiser ON this has already happened inside `applyOpt`,
           // which places everyone around a locked booking, so the call is a
           // no-op there and returns its input.
-          if(pinned&&needsR) out=replacePinnedClashes(out,f.date,editId,tableBlocks,optStateForSave);
+          //
+          // v18.0.0 session 10 (/code-review): gated on `recheck`, not on
+          // `needsR`. `needsR` is "did the placement INPUTS move" and the
+          // window moves by two more routes the line above already knows
+          // about — a length change and a revival — so a seated booking
+          // extended 90 → 150 minutes, or a cancelled one walked straight
+          // to Seated, kept its tables with nothing re-placing whoever it
+          // now overlapped. That is R3's own mechanism, left open on the
+          // pinned branch by the commit that closed it everywhere else:
+          // `forceReassign` is false when `pinned`, the OFF path keeps
+          // every booking's tables, the displacement guard below sees
+          // nobody without tables, and the locked refusal above sees a
+          // MOVABLE partner — so the clash was saved and the reconciler
+          // moved somebody 400ms later under a toast blaming syncing.
+          //
+          // Proven with the pure functions: `bookingsAfterAction` with
+          // `forceReassign:false` and the optimiser off leaves the clash,
+          // and `replacePinnedClashes` on that same output clears it.
+          // Widening the gate is free where it was already right — it
+          // returns its INPUT when nothing is movable, and with the
+          // optimiser ON `applyOpt` has already placed everyone around the
+          // locked booking, so there is nothing left for it to find.
+          if(pinned&&recheck) out=replacePinnedClashes(out,f.date,editId,tableBlocks,optStateForSave);
           return out;
         }
         // /code-review perf: buildNext runs a full optimiser pass (expensive on

@@ -24758,3 +24758,47 @@ it.
 
 Gate: `129.53 kB` gz · **1433 tests** · 0 lint errors (88 warnings) · style OK.
 
+### Commit 110 (session 10, /code-review) — the pinned save's clash gate was narrower than its own window test
+
+**The finding.** Commit 90 (session 8, item 3) added `replacePinnedClashes` so a
+pinned save re-places whoever its new window now overlaps, instead of writing the
+clash and leaving the reconciliation effect to move somebody 400 ms later under
+"Resolved a table conflict after syncing" — R3's own mechanism. It was called on
+`pinned && needsR`.
+
+`needsR` asks whether the placement INPUTS moved: size, time, date, preference,
+a cleared manual assignment, preferred tables. The WINDOW moves by two more
+routes the very same save already knows about, and Commit 91 named them:
+`recheck = needsR || planChanged || revived || !!unseat`. So a **seated booking
+extended 90 → 150 minutes**, or a **cancelled one walked straight to Seated**,
+took the pinned branch with the clash gate switched off.
+
+Nothing else catches it on that path. `forceReassign` is false when `pinned`, so
+the optimiser-OFF branch of `bookingsAfterAction` keeps every booking's tables;
+the displacement guard below sees nobody left without tables; and the locked
+refusal above sees a **movable** partner, which is not what it refuses. The
+overlap is saved, and the reconciler moves the other party under a toast blaming
+a sync that never happened.
+
+`unseat` and `pinned` are mutually exclusive (`unseat` needs a draft status of
+confirmed or pending), so the two routes this opens are the length change and
+the revival — both reachable in ordinary service, and the length change on a
+seated booking is a party staying longer.
+
+**The fix is the gate: `pinned && recheck`.** Widening it is free where it was
+already right — `replacePinnedClashes` returns its INPUT array when nothing is
+movable, and with the optimiser ON `applyOpt` has already placed everyone around
+the locked booking.
+
+Six pins in `tests/booking-logic.test.js`: four on the pure facts (the clash is
+written, the locked refusal cannot see it, `replacePinnedClashes` clears it
+without moving the seated party, and it returns its input on a clean day) and
+two source pins on the gate, since `doSaveEdit` is a closure this suite does not
+run. The clock is pinned with `vi.setSystemTime`, because TODAY with the toggle
+off is the only way to reach the OFF path and `bookingsAfterAction` reads
+`new Date()` for `syncLiveDurations` — without that, the fixtures mean different
+things at different hours of the CI day. Reverting the gate to `needsR` turns
+the source pin red.
+
+Gate: `129.53 kB` gz · **1439 tests** · 0 lint errors (88 warnings) · style OK.
+
