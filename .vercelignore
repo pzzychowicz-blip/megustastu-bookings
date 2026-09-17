@@ -28,3 +28,6 @@
 # `tests/wa-sandbox-integrity.test.js` exists to catch, after it happened twice —
 # while an appended line survives the merge untouched. Check it after every sync.
 api/wa-sim-*.js
+
+# Claude's notes for this directory — not part of the deployment.
+api/CLAUDE.md
