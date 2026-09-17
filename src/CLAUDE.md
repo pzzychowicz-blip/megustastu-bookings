@@ -433,6 +433,18 @@ the whole Rule of law; this is how each one works.
 4. **Save feedback + retry (v15.4.0, v15.6.0, v15.7.0, v17.16.9).** `saveBookings`/`saveBlocks` return a boolean (`true` = dispatched) and every handler gates its success UI on it — `const ok = saveBookings(fn); if (ok && …) flash();` — so a refused write is **never** shown as saved. The red `setWriteWarning` banner is reserved for hard failures (not loaded, empty array, retries exhausted). A held or server-rejected **function-form, non-silent** write parks in `pendingRetriesRef` and replays on fresh data after `clearStale()`, up to `MAX_RETRIES` (3), after which it waits in `parkedRef` for the banner's retry/discard. **Value-form and silent writes never queue** — replaying a precomputed array would re-write stale data; they recompute next tick. A held write is applied to local state at once, and `drainPending()` runs from both `resync()` and the live `bookings` `onValue`, so a fresh snapshot cannot wipe the optimistic change. `doSave` uses the function form too (v15.7.0): intent is captured once (`genId()`, the edit fields), a pure `buildNext(prev)` replays it on whatever `prev` arrives, the synchronous guards (capacity/displacement/no-table) run once against `const fin=buildNext(bookings)`, and `applyBase` filters out `newId` before `concat`, so a replay cannot duplicate.
 5. **Per-booking storage + diff-write (v15.5.0).** `bookings` is a keyed object `/bookings/{id}`, so two devices editing different bookings — even both offline — write disjoint paths and Firebase merges them. A save computes from the `bookingsRef` mirror (never inside a `setState` updater — Gotchas) and sends a multi-path `update(ref(db,"bookings"), patch)` of changed children plus `{id: null}` deletions; an empty diff writes nothing, and `bookingChanged` ignores `updatedAt` so a server echo is not a change. A legacy **array** node is migrated once (`migratedRef`, connected-gated) by a multi-path `update()` of children, and `arrayShapeRef` holds per-child writes until the keyed shape echoes. Two ordering details in that migration are load-bearing: old keys are read off the SNAPSHOT (so a row `sanitizeAll` dropped is still cleared), and the keyed rows are `Object.assign`ed OVER the nulls (so an id equal to an old index is not deleted by the patch writing it).
 
+## Lessons carried over from the root CLAUDE.md
+
+Moved on 2026-09-18 — each one is about writing app code, so it belongs where the app
+code is. The root file keeps the lessons about working in this repo at all (worktree
+paths, not reverting confirmed behaviour, pushing back on bad architecture, the
+conversation budget, and checking the instrument before the measurement).
+
+- **StrictMode mounted-ref bug.** Set `mounted.current = true` **inside** the subscription effect, not only via the `useRef` initializer.
+- **Check computed styles before iterating on visual feedback.** When Patryk says "too big" / "doesn't match", read the computed font-size / padding / dims first — visual mismatches usually have one structural root cause that geometry tuning won't fix.
+- **Preserve inline styles on refactor.** When splitting a shared style object into per-element styles, grep the original for every declaration and verify each survives. Also: `{ marginLeft: n, ...someStyle }` where `someStyle` has a `margin` shorthand silently resets the margin — put the specific side **after** the spread.
+- **Grep unfamiliar atoms before use.** Verify a helper's actual return/props at a call site before relying on it (the `mkInp`/`mkBtn` JSX-vs-style-object divergence is exactly this trap).
+
 ## Gotchas and constraints
 
 | Issue | Constraint |
