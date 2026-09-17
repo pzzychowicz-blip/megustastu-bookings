@@ -101,26 +101,16 @@ each scale.** The part you cannot skip:
   `height` / `minHeight` number, a white-inset shadow over a theme-flipping
   fill, a drop-shadow literal, a **colour** literal, a numeric icon `size`, or
   a hand-written duration/curve.
-- **SIX exemption markers, and they live in two places.** Four go inline in
-  the STYLE OBJECT, never in JSX children position: `/* @canvas */` (geometry
-  and type one-offs), `/* @fixed-fill */` (the surface under this does not flip
-  with the theme), `/* @shadow */` (a genuine one-off shadow), `/* @motion */`
-  (the WAAPI escape hatch). A marker in children position RENDERS AS TEXT —
-  Rule 0 rejects that placement because eight of them once shipped. The other
-  two go inside the OPENING TAG, because what they exempt is the tag rather
-  than a declaration: `<button /* @no-lift <reason> */ …>` (Rule 10, the hover
-  lift) and `<Overlay /* @static-height <reason> */ …>` (Rule 12 — a modal body
-  not wrapped in `<AutoHeight>`, which resizes the card in one frame when its
-  contents change). **Both tag markers take a REASON and the reason is checked**:
-  Rule 12 shipped with nine, and each was verified by reading the body before it
-  was written — seven confirm dialogs whose body is one fixed sentence, the
-  Settings overlay (which delegates to `SettingsContent`'s own
-  `AutoHeight watch={cur}`), `HistoryPopup` (a list built once per open) and
-  `VoucherRedeemModal`, whose only variable content is a `Reveal` and a Reveal
-  eases its own height. That last one is why the rule cannot be "does this body
-  change height": not statically decidable, and it would have been wrong about
-  the one modal that solves the problem another way. What IS decidable is
-  whether the house pattern was applied, and if not, whether anybody said why.
+- **SIX exemption markers, in two placements.** Four go inline in the STYLE
+  OBJECT — `/* @canvas */` (geometry and type one-offs), `/* @fixed-fill */`
+  (the surface under this does not flip with the theme), `/* @shadow */` (a
+  genuine one-off shadow), `/* @motion */` (the WAAPI escape hatch) — and never
+  in JSX children position, where a marker RENDERS AS TEXT (Rule 0 rejects that
+  placement because eight of them once shipped). Two go inside the OPENING TAG,
+  because what they exempt is the tag: `@no-lift` (Rule 10, the hover lift) and
+  `@static-height` (Rule 12, a modal body not wrapped in `<AutoHeight>`), and
+  **both take a REASON that is checked**. What each means and why the reason is
+  checked rather than the behaviour: `DESIGN.md`.
 - **A fill that carries text is registered in `tests/contrast.test.js`**, in
   both themes, or the coverage guard fails the build.
 - **`mkInp` / `mkBtn` return style objects**, not JSX — the sibling Scheduling
@@ -242,54 +232,36 @@ View, the unsaved-changes guard, and `formRef.current` vs `form`.
 
 ## UI / style rules — see `DESIGN.md`
 
-The visual system moved to **`DESIGN.md`** in v17.13.0: surfaces and glass,
-theming and the token families, the three label treatments, the shadow 2×2,
-hover / press / motion, the icon set's house style, and the accessibility
-contract. It was 57% of this file, and none of it is needed to answer a
-question about the optimizer, the write guards or the data shape.
+The visual system is **`DESIGN.md`**: surfaces and glass, theming and the token
+families, the three label treatments, the shadow 2×2, hover / press / motion, the
+icon set's house style, and the accessibility contract — which since 2026-09-18
+also holds the three `tests/a11y.test.js` rules learned by shipping their
+violation, the hidden-control rule (hide by TRANSLATION, never `display:none`),
+and why `var(--scrim)` may appear in exactly one file.
 
 **Read `DESIGN.md` before changing how anything looks or behaves on screen.**
-What stays here is the short list that ships a bug when unseen:
+Four rules stay here, because each one ships a bug from code that is not visual:
 
-- **≤4 simultaneous `backdrop-filter: blur()`.** This was a real production
-  perf bug on the tablet (51 instances). Reuse the `Overlay` atom rather than
-  adding a blurred surface.
-- **Every modal uses `Overlay`**, which owns the blur, the mobile-sheet /
-  desktop-card branching, `role="dialog"`, the focus trap and focus restore.
-  **"Every" became literally true in v17.15.0**, and `tests/a11y.test.js`
-  enforces it structurally: `var(--scrim)` may appear in exactly ONE file. A
-  modal needing to sit above another is wrapped in a positioned div with a
-  higher z-index (ReminderEditor 250, the discard confirm 260) — never given a
-  hand-written scrim. The popups paint `--tl-popup-scrim` instead, because a
-  popup is not a dialog and must not claim to be one.
-  Escape is NOT handled there — `useKeyboardShortcuts` owns it, and it never
-  touches a mount-site `onClose`. Since v17.14.0 it acts on the topmost entry
-  of the modal STACK (`MODAL_Z` in `useModalStack.js`, the z-order as data) via
-  the `escapeAction` table, so a surface's guarded close is named once.
-- **No colour literal in JS.** Every colour is a `var(--…)` token; see the
-  marker list above for the deliberate exceptions.
-- **A colour token may only sit on a surface that flips with it.** The
-  `--*-text` tokens invert between themes; on a hard-coded pale fill they
-  invert out from under themselves. Triage a colour exactly like a shadow: ask
-  whether the SURFACE UNDER it flips.
-- **Accessibility is enforced by `tests/a11y.test.js`** (v17.13.0), and three
-  of its rules were learned by shipping their violation: `role="button"` never
-  goes on a container of controls (a button's children are presentational);
-  `inert` marks the page BEHIND a dialog, never `<main>` (which holds the toast
-  live region); and a live region must already be in the DOM when its content
-  changes. Adding a role also SUBSCRIBES the element to every shared CSS rule
-  written for that role — grep `src/index.css` before adding one, especially to
-  an SVG.
-- **A hidden control can be present and useless in ways nothing shows you**
-  (v17.14.0's skip link). Hiding it with `display:none` or `visibility:hidden`
-  makes it unfocusable, so it can never be reached while looking correct in the
-  source — hide by TRANSLATION. A fragment link moves focus to its target only
-  if the target can hold focus, so `<main>` carries `tabIndex={-1}`; without it
-  the page scrolls and the next Tab starts from the header again, which looks
-  exactly like the link working. And it must sit OUTSIDE any subtree that takes
-  `inert`, for the same reason a live region must.
+- **≤4 simultaneous `backdrop-filter: blur()`.** A real production perf bug on
+  the tablet (51 instances). Reuse the `Overlay` atom rather than adding a
+  blurred surface.
+- **Every modal uses `Overlay`** — it owns the blur, the mobile-sheet /
+  desktop-card branching, `role="dialog"`, the focus trap and focus restore. A
+  modal that must sit above another gets a positioned wrapper with a higher
+  z-index (ReminderEditor 250, the discard confirm 260), never a hand-written
+  scrim; the popups paint `--tl-popup-scrim`, because a popup is not a dialog
+  and must not claim to be one.
+- **No colour literal in JS**, and **a colour token may only sit on a surface
+  that flips with it** — the `--*-text` tokens invert between themes, so on a
+  hard-coded pale fill they invert out from under themselves. Triage a colour
+  exactly like a shadow: ask whether the SURFACE UNDER it flips.
+- **Escape is not `Overlay`'s.** `useKeyboardShortcuts` owns it, never touching
+  a mount-site `onClose`, and since v17.14.0 it acts on the topmost entry of the
+  modal STACK (`MODAL_Z` in `useModalStack.js`, the z-order as data) through the
+  `escapeAction` table, so a surface's guarded close is named once.
 - **Making something focusable makes the browser scroll it into view on
-  mousedown**, which moves it out from under the finger — see the Gotchas table in `src/CLAUDE.md`.
+  mousedown**, which moves it out from under the finger — see the Gotchas table
+  in `src/CLAUDE.md`.
 
 ---
 
