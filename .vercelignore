@@ -28,3 +28,10 @@
 # `tests/wa-sandbox-integrity.test.js` exists to catch, after it happened twice —
 # while an appended line survives the merge untouched. Check it after every sync.
 api/wa-sim-*.js
+
+# ── The sandbox branch re-includes the simulator endpoints ───────────────────
+# APPENDED, never by deleting the exclusion above: a prod-sync merge silently
+# reinstates a deleted line, which is the failure tests/wa-sandbox-integrity.test.js
+# exists to catch. This branch is deployed to the separate wa-sandbox Vercel
+# project, which sets VITE_FB_TARGET=dev, so these three run against DEV Firebase.
+!api/wa-sim-*.js

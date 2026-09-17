@@ -379,7 +379,10 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.0.0",
+  // wa-sandbox: the marker is the boot banner's only way to say which deployment
+  // you are looking at. Resolve it to `<prod>-wa-sandbox` at every sync.
+  version:"18.0.0-wa-sandbox",
+  sandbox:"WhatsApp simulator endpoints re-included; DEV Firebase",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
