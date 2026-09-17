@@ -404,13 +404,17 @@ Then, in order:
    status with the number, and list what remains — his merge, then the prod boot-banner
    check, then `git checkout main && git pull --ff-only`. A determination, not an
    assumption; this is the one place the default would be wrong.
-4. **Update both folders.** The summary as `MGT_Bookings_<topic>_Thread_Summary.md` in
+4. **Write the thread summary into the context folder.**
+   `MGT_Bookings_<topic>_Thread_Summary.md` in
    `/Users/patrykzychowicz/Desktop/megustastu-bookings context` (absolute path — a
-   relative one silently targets the wrong place in a worktree), plus refreshed
-   `CLAUDE.md` and `REFACTOR_LOG.md` mirrors there. **Nothing reminds you of this step
-   here**: the `UserPromptSubmit` hook greps for "sum up this/the thread", which
-   `/code-review and ship` does not contain, so this list is the only thing standing
-   between the run and a stale context folder.
+   relative one silently targets the wrong place in a worktree). **The summary and
+   nothing else.** `CLAUDE.md`, `REFACTOR_LOG.md` and `ROADMAP.md` are NOT copied
+   there: the repo is the single copy of each, and a mirror's only possible future is
+   to go stale. The three that existed were deleted on 2026-09-18 (Patryk's call,
+   after a check found them byte-identical to `main`). **Nothing reminds you of the
+   summary here**: the `UserPromptSubmit` hook greps for "sum up this/the thread",
+   which `/code-review and ship` does not contain, so this list is the only thing
+   standing between the run and a missing summary.
 5. **§9's two sum-up questions are checks here, not questions.** Whether PROD Firebase
    rules need the manual console step is answerable from the diff — a new persisted
    node or `<name>Rev` pair (`database.rules.README.md`) — so grep for it and state the
@@ -531,7 +535,7 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
 - **"give me changelog"** — a PDF changelog per `MGT_Changelog_Instructions.md`.
 - **"/code-review and ship"** — the ship run (§5), end to end in one turn: review the
   branch diff → verify each finding → fix the ones that survive, one commit each →
-  full gate → push → open the PR → write the thread summary into both folders → one
+  full gate → push → open the PR → write the thread summary to the context folder → one
   closing report. No question mid-run; a finding that would change shipped behaviour
   goes to ROADMAP.md instead of being built. You can't invoke `/code-review` yourself,
   so if a push is due without one, ask him to issue the phrase.
@@ -565,10 +569,9 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   **If nothing is genuinely undeterminable, ask nothing and write the summary.** These
   confirmations catch real gaps; they are not a ritual.
 
-  Then update *both* folders: the summary as `MGT_Bookings_<topic>_Thread_Summary.md`
-  in `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, plus refreshed
-  `CLAUDE.md` / `REFACTOR_LOG.md` mirrors there. Mechanics: CLAUDE.md's "Trigger
-  phrases" section.
+  Then write it as `MGT_Bookings_<topic>_Thread_Summary.md` in
+  `/Users/patrykzychowicz/Desktop/megustastu-bookings context` — **the summary only,
+  never a copy of `CLAUDE.md` / `REFACTOR_LOG.md` / `ROADMAP.md`** (§5 step 4).
 
 ## When this skill doesn't apply
 
