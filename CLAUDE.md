@@ -134,38 +134,19 @@ and the auth shell are in `src/CLAUDE.md`.
 
 ### The offline shell (v17.10.1) — a service worker, on terms
 
-v17.4.0's worker froze the app on iOS and was withdrawn with root cause
-unestablished. v17.10.1 established it: the freeze happened **in iOS Chrome as
-well as a home-screen shortcut**, and a service worker *cannot run in iOS Chrome
-at all* (WKWebView exposes `navigator.serviceWorker` only under App-Bound
-Domains, which a general-purpose browser cannot use). The same symptom in a
-context where the worker cannot exist means one cause explains both — the CSP
-blocking Firebase's JSONP fallback, already fixed in v17.5.1.
+v17.4.0's worker froze the app on iOS and was withdrawn with root cause unestablished;
+v17.10.1 established it (the CSP blocking Firebase's JSONP fallback, already fixed in
+v17.5.1) and shipped one with **four properties, none of which may be dropped**:
+`respondWith` fires for exactly two things, both same-origin GET — navigations
+(network-first) and hashed assets (cache-first), so every Firebase request is
+cross-origin and dropped on the handler's first line; registration is gated on
+`bookingsReady`, while DISABLING is not gated and must work in any state; there are
+two independent ways out, both verified on the tablet (`?sw=off` and re-deploying the
+v17.4.1 kill switch at the same URL); and there is **no `skipWaiting`**.
 
-Four properties make the new one safe, and none may be dropped:
-
-1. **It is not near the data path.** `respondWith` fires for exactly two things,
-   both same-origin GET: navigations (**network-first**) and hashed assets
-   (**cache-first**). Everything else falls through untouched — every Firebase
-   request is cross-origin and dropped on the handler's first line. Network-first
-   on navigation is what makes it structurally impossible to pin the app to a
-   stale build.
-2. **It installs only where the app demonstrably works** — registration is gated
-   on `bookingsReady`, so a build that cannot reach Firebase can never cache
-   itself and serve itself back. Disabling is NOT gated: it must work in any
-   state.
-3. **Two independent ways out**, both verified on the tablet: `?sw=off` (in the
-   boot script, so it works when React never mounts) and re-deploying the
-   v17.4.1 kill switch at the same URL.
-4. **No `skipWaiting`** — a new version takes over on the next navigation, so
-   nothing swaps under a shift in progress. The kill switch keeps its
-   `skipWaiting`; there, immediacy is the point.
-
-**The test rig the ROADMAP said did not exist now does:** `adb reverse tcp:5174`
-makes `http://localhost:5174` a **secure context** on the tablet, so a worker
-installs there exactly as it would in production. What still cannot be tested
-locally is the production offline BOOT (dev modules are not under `/assets/`, and
-a prod build points at PROD Firebase) — which is why the boot watchdog exists.
+**Load the `mgt-service-worker` skill before touching `public/sw.js`, the registration
+or the boot script** — it holds why each property is load-bearing, the evidence that
+settled the v17.4.0 root cause, and what still cannot be tested locally.
 
 ---
 
