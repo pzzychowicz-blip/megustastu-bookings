@@ -30,23 +30,13 @@ _(nothing pending)_
 
 ## Ideas
 
-Both entries below come from the **2026-07-24 `/engineering:tech-debt` scan's feature
-shortlist**, whose other items shipped in v17.4.0. That plan file no longer exists in
-`~/.claude/plans/`, so **no scope was ever recorded for either** — what is written here
-is the idea plus what the code does today, not a design. Added 2026-09-18.
+Both come from the **2026-07-24 `/engineering:tech-debt` scan's feature shortlist**,
+whose other items shipped in v17.4.0. That plan file is gone from `~/.claude/plans/`,
+so **no scope was ever recorded for either** and both need one before they are work.
 
-- **Deposits reporting.** A deposit is a per-booking number (`deposit`, rendered in
-  `settings/general.currency`) and every surface shows it one booking at a time — the
-  booking form, the list and timeline rows, and `DaySheet`'s shared money column.
-  Nothing aggregates them, so "how much is held in deposits for Saturday" is a manual
-  count off the day sheet. Scope unknown: which period, which statuses (a cancelled
-  booking's deposit is the interesting case), and whether it is a surface of its own or
-  a line on the existing day summary.
-- **Structured guest tags.** A booking carries free-text `notes`, and that is where
-  "nut allergy" and "birthday cake" actually live today (`seatNoteFor` raises them at
-  seating). Free text cannot be filtered, counted or carried from one visit to the
-  next, and `deleteCustomer`'s anonymisation wipes `notes` outright (`App.jsx`), so a returning guest's
-  allergy is gone with their phone number. The idea is a structured tag set on the
-  CUSTOMER identity (`guestId` / phone key, `customers.js`) rather than prose on one
-  booking. Scope unknown: a fixed vocabulary or free tags, and whether tags are
-  personal data that erasure must reach.
+- **Deposits reporting.** `deposit` is per-booking and every surface shows it one
+  booking at a time; nothing aggregates it. Undecided: period, which statuses, and
+  whether it is its own surface or a line on the day summary.
+- **Structured guest tags.** Allergies and occasions live in free-text `notes`, which
+  cannot be filtered or carried between visits and which `deleteCustomer` wipes.
+  Undecided: fixed vocabulary or free tags, and whether tags are erasable personal data.
