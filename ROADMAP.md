@@ -19,10 +19,7 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **The v18.0.0 production deploy.** Pending from the moment the release merges,
-  and ordered: the six steps, and where each one's detail lives, are
-  `database.rules.README.md` § *v18.0.0 — the production deploy, in order*.
-  Delete this entry when the last of them — `enforceRoles` on — is done.
+_(nothing pending)_
 
 ## Designed, not implemented
 
