@@ -1,7 +1,8 @@
 ---
 name: mgt-workflow
 version: 5
-description: The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings) — session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
+description: >-
+  The standing workflow contract for the MGT Bookings repo (Me Gustas Tú booking system, github.com/pzzychowicz-blip/megustastu-bookings). Load this at the START of every session in this repo — even before any coding task is clear — and AGAIN the moment PLAN MODE opens: the effort level gets checked before the research starts, and every plan ends with an effort recommendation for executing it and for the ship run. ALSO load it before any edit under src/, before any commit, push, branch, PR or version bump, and before finishing any task — the branch name, whether you're even allowed to start, and which docs need updating are all decided before the first edit and at task close, not at commit time. Also triggers on "/code-review and ship" (the one-run ship gate — review, verify, fix, build, commit, push, PR and thread summary in a single turn; the older "/code-review, fix all findings, push and sum up the thread" and "/code-review and push" name the same run), "give me the deployment version", "give me changelog", "sum up this thread", "ship this", "let's deploy/release this", "continue where we left off", "what's on the roadmap", "add this to the roadmap/backlog", or any reference to prior context, branch naming, __APP_SIGNATURE__, REFACTOR_LOG.md, DESIGN.md, GLOSSARY.md or ROADMAP.md. Two rules govern everything here: Claude never settles a judgement call alone (anything with a defensible alternative goes to AskUserQuestion with a recommendation attached), and Claude never asserts what it has not measured. It covers session bootstrapping (dev server + Preview bridge up first), plan-mode effort calibration, git/branching/versioning (one version per branch, but one commit per feature — never bundle changes into a single commit; commits land as work lands, pushes never do), the full local gate that matches CI (build · test · lint · check:style, plus test:rules when the rules move), the mandatory pre-push review gate, and keeping the four living docs (CLAUDE.md · DESIGN.md · GLOSSARY.md · ROADMAP.md) current. Use this instead of re-deriving the workflow from CLAUDE.md's prose each time — same rules, as a checklist that's hard to skim past.
 ---
 
 # MGT Bookings — workflow contract (v5)
@@ -403,13 +404,17 @@ Then, in order:
    status with the number, and list what remains — his merge, then the prod boot-banner
    check, then `git checkout main && git pull --ff-only`. A determination, not an
    assumption; this is the one place the default would be wrong.
-4. **Update both folders.** The summary as `MGT_Bookings_<topic>_Thread_Summary.md` in
+4. **Write the thread summary into the context folder.**
+   `MGT_Bookings_<topic>_Thread_Summary.md` in
    `/Users/patrykzychowicz/Desktop/megustastu-bookings context` (absolute path — a
-   relative one silently targets the wrong place in a worktree), plus refreshed
-   `CLAUDE.md` and `REFACTOR_LOG.md` mirrors there. **Nothing reminds you of this step
-   here**: the `UserPromptSubmit` hook greps for "sum up this/the thread", which
-   `/code-review and ship` does not contain, so this list is the only thing standing
-   between the run and a stale context folder.
+   relative one silently targets the wrong place in a worktree). **The summary and
+   nothing else.** `CLAUDE.md`, `REFACTOR_LOG.md` and `ROADMAP.md` are NOT copied
+   there: the repo is the single copy of each, and a mirror's only possible future is
+   to go stale. The three that existed were deleted on 2026-09-18 (Patryk's call,
+   after a check found them byte-identical to `main`). **Nothing reminds you of the
+   summary here**: the `UserPromptSubmit` hook greps for "sum up this/the thread",
+   which `/code-review and ship` does not contain, so this list is the only thing
+   standing between the run and a missing summary.
 5. **§9's two sum-up questions are checks here, not questions.** Whether PROD Firebase
    rules need the manual console step is answerable from the diff — a new persisted
    node or `<name>Rev` pair (`database.rules.README.md`) — so grep for it and state the
@@ -530,7 +535,7 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
 - **"give me changelog"** — a PDF changelog per `MGT_Changelog_Instructions.md`.
 - **"/code-review and ship"** — the ship run (§5), end to end in one turn: review the
   branch diff → verify each finding → fix the ones that survive, one commit each →
-  full gate → push → open the PR → write the thread summary into both folders → one
+  full gate → push → open the PR → write the thread summary to the context folder → one
   closing report. No question mid-run; a finding that would change shipped behaviour
   goes to ROADMAP.md instead of being built. You can't invoke `/code-review` yourself,
   so if a push is due without one, ask him to issue the phrase.
@@ -564,10 +569,9 @@ to avoid deleting it from ROADMAP — evergreen lessons belong there regardless,
   **If nothing is genuinely undeterminable, ask nothing and write the summary.** These
   confirmations catch real gaps; they are not a ritual.
 
-  Then update *both* folders: the summary as `MGT_Bookings_<topic>_Thread_Summary.md`
-  in `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, plus refreshed
-  `CLAUDE.md` / `REFACTOR_LOG.md` mirrors there. Mechanics: CLAUDE.md's "Trigger
-  phrases" section.
+  Then write it as `MGT_Bookings_<topic>_Thread_Summary.md` in
+  `/Users/patrykzychowicz/Desktop/megustastu-bookings context` — **the summary only,
+  never a copy of `CLAUDE.md` / `REFACTOR_LOG.md` / `ROADMAP.md`** (§5 step 4).
 
 ## When this skill doesn't apply
 

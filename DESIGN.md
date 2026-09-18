@@ -183,6 +183,21 @@ explaining why is usually the one to read.
   broke and it reported OK on all of them. Rule 0 now rejects the placement.
   **A checker that cannot see its own annotation is worth less than none**,
   because it also carries the authority of having passed.
+- **Two exemption markers go in the OPENING TAG instead, and both take a REASON
+  that is checked.** What they exempt is the tag rather than a declaration:
+  `<button /* @no-lift <reason> */ …>` (Rule 10, the hover lift) and
+  `<Overlay /* @static-height <reason> */ …>` (Rule 12 — a modal body not wrapped
+  in `<AutoHeight>`, which resizes the card in one frame when its contents
+  change). Rule 12 shipped with nine, and each was verified by reading the body
+  before it was written — seven confirm dialogs whose body is one fixed sentence,
+  the Settings overlay (which delegates to `SettingsContent`'s own
+  `AutoHeight watch={cur}`), `HistoryPopup` (a list built once per open) and
+  `VoucherRedeemModal`, whose only variable content is a `Reveal` and a Reveal
+  eases its own height. That last one is why the rule cannot be "does this body
+  change height": not statically decidable, and it would have been wrong about
+  the one modal that solves the problem another way. What IS decidable is whether
+  the house pattern was applied, and if not, whether anybody said why. (Moved
+  from `CLAUDE.md` on 2026-09-18.)
 - **44px is a FLOOR, not a target (v17.8.0).** The tap-target pass applied
   Apple's figure to every small control and overshot: a 44px circle beside a
   40px date field made the date-nav row stop reading as chrome. Toolbar chrome
@@ -957,6 +972,14 @@ dialog role" would have caught nothing here, because the file was not a modal
 that forgot its role. A modal that must sit above another gets a positioned
 wrapper with a higher z-index; the popups paint `--tl-popup-scrim`, since a
 popup is not a dialog and must not claim to be one.
+
+**Three of `tests/a11y.test.js`'s rules were learned by shipping their violation**
+(moved here from `CLAUDE.md` on 2026-09-18): `role="button"` never goes on a
+container of controls (a button's children are presentational); `inert` marks the
+page BEHIND a dialog, never `<main>` (which holds the toast live region); and a
+live region must already be in the DOM when its content changes. Adding a role
+also SUBSCRIBES the element to every shared CSS rule written for that role — grep
+`src/index.css` before adding one, especially to an SVG.
 
 **SVG breaks the focus rule in two ways, and both are invisible in source.**
 A browser paints **no `outline` on a `<g>`** (it does on the shape child), and

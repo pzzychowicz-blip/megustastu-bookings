@@ -26,8 +26,27 @@ session and keeping it in sync.
 
 ## Designed, not implemented
 
-_(nothing pending)_
+- **The doc-load split has three loose ends, all scope calls rather than defects**
+  (`/code-review`, 2026-09-18, measured). (1) Root restates 29–34% of what it
+  relocated, word for word: the five-guard summary against `src/CLAUDE.md`, the
+  service-worker summary against its skill, the `api/` pointer against
+  `api/CLAUDE.md` — two copies with nothing keeping them in step, which is the
+  shape CLAUDE.md's own Gotchas row names. The node inventory at 0% is what a
+  pointer should look like. (2) The write guards' mechanics sit in
+  `src/CLAUDE.md`, which every src session loads, where 47% of them never open
+  `src/hooks/`. (3) CLAUDE.md is 94 bytes under 40,000 and nothing measures it,
+  so the next added row crosses silently. Deciding any of these means deciding
+  what a root-only session must still know.
 
 ## Ideas
 
-_(nothing pending)_
+Both come from the **2026-07-24 `/engineering:tech-debt` scan's feature shortlist**,
+whose other items shipped in v17.4.0. That plan file is gone from `~/.claude/plans/`,
+so **no scope was ever recorded for either** and both need one before they are work.
+
+- **Deposits reporting.** `deposit` is per-booking and every surface shows it one
+  booking at a time; nothing aggregates it. Undecided: period, which statuses, and
+  whether it is its own surface or a line on the day summary.
+- **Structured guest tags.** Allergies and occasions live in free-text `notes`, which
+  cannot be filtered or carried between visits and which `deleteCustomer` wipes.
+  Undecided: fixed vocabulary or free tags, and whether tags are erasable personal data.

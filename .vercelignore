@@ -27,4 +27,10 @@
 # silently reinstates a deleted line — that is the failure
 # `tests/wa-sandbox-integrity.test.js` exists to catch, after it happened twice —
 # while an appended line survives the merge untouched. Check it after every sync.
+# Claude's notes for this directory — not part of the deployment. Deliberately
+# ABOVE the wa-sim line: the wa-sandbox branch appends its `!api/wa-sim-*.js`
+# re-include at EOF, and two branches editing the same end of this file is a
+# merge conflict in the one file that branch depends on.
+api/CLAUDE.md
+
 api/wa-sim-*.js
