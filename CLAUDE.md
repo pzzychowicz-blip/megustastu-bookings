@@ -180,7 +180,7 @@ function saveBookings(next, isSilent) {
 
 **Origin:** post-v13-deploy data-loss incident. Auto-extend effect fired `saveBookings([])` on mount before `onValue` returned. The pattern was retrofitted to all Firebase writes.
 
-**Five guards stand between a write and the database, in the order a write meets them.** Their mechanics moved to `src/CLAUDE.md` on 2026-09-18, with the implementation in `src/hooks/usePersistence.js` and its pure core `src/lib/write-path.js` (per-file notes in `src/hooks/CLAUDE.md` and `src/lib/CLAUDE.md`); how each guard was FOUND is in `REFACTOR_LOG.md` under the version named. What none of that moves:
+**Five guards stand between a write and the database, in the order a write meets them.** Their mechanics are in `src/CLAUDE.md`, with the implementation in `src/hooks/usePersistence.js` and its pure core `src/lib/write-path.js` (per-file notes in `src/hooks/CLAUDE.md` and `src/lib/CLAUDE.md`); how each guard was FOUND is in `REFACTOR_LOG.md` under the version named. What none of that moves:
 
 1. **Loaded + non-empty** — the pattern above. No write before the first `onValue` returns, and no empty array over a database that had data.
 2. **Freshness / resync gate (v15.2.0)** — a heartbeat gap over `STALE_GAP_MS` (90s) means the event loop was frozen, so the write is refused **at write time, before any `setState`**, and the app force-pulls fresh data.
@@ -199,7 +199,7 @@ function saveBookings(next, isSilent) {
 
 Nothing else skips a CAS.
 
-**Persisted collections** — every node, its shape, its CAS or rev pair and the hook that owns it moved to `src/hooks/CLAUDE.md` on 2026-09-18 (authoritative paths and predicates: `database.rules.json`). The inventory, so this file still answers what exists: `bookings` · `vouchers` · `roles` + `invites` · `activity` · `tableBlocks` · `waitlist` · `reminders` · `reminderFires` · `recurring` · `templates` · `conversations` · `messages` · nine `settings/*` nodes · `settings/users/{uid}/prefs`.
+**Persisted collections** — every node, its shape, its CAS or rev pair and the hook that owns it, is in `src/hooks/CLAUDE.md` (authoritative paths and predicates: `database.rules.json`). The inventory, so this file still answers what exists: `bookings` · `vouchers` · `roles` + `invites` · `activity` · `tableBlocks` · `waitlist` · `reminders` · `reminderFires` · `recurring` · `templates` · `conversations` · `messages` · nine `settings/*` nodes · `settings/users/{uid}/prefs`.
 
 **Single central save path:** route every mutation of a collection through one helper (e.g. `bookingsAfterAction`) so future conflict-detection / re-derivation has one hook point.
 
@@ -215,8 +215,7 @@ View, the unsaved-changes guard, and `formRef.current` vs `form`.
 
 The visual system is **`DESIGN.md`**: surfaces and glass, theming and the token
 families, the three label treatments, the shadow 2×2, hover / press / motion, the
-icon set's house style, and the accessibility contract — which since 2026-09-18
-also holds the three `tests/a11y.test.js` rules learned by shipping their
+icon set's house style, and the accessibility contract, which also holds the three `tests/a11y.test.js` rules learned by shipping their
 violation, the hidden-control rule (hide by TRANSLATION, never `display:none`),
 and why `var(--scrim)` may appear in exactly one file.
 
