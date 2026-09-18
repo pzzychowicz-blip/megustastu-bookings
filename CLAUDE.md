@@ -268,7 +268,7 @@ Four rules stay here, because each one ships a bug from code that is not visual:
 - DEV sign-in `auth/invalid-credential` on localhost is almost always environmental, not a code bug.
 
 ### Trigger phrases — see the `mgt-workflow` skill
-Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread") with the same file-naming rules — this section used to duplicate it verbatim. A thread summary goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there (2026-09-18 — one copy of each, in the repo).
+Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread") with the same file-naming rules. A thread summary goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there — one copy of each, in the repo.
 
 ## Common operations
 
