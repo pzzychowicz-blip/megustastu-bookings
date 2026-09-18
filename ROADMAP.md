@@ -26,7 +26,17 @@ session and keeping it in sync.
 
 ## Designed, not implemented
 
-_(nothing pending)_
+- **The doc-load split has three loose ends, all scope calls rather than defects**
+  (`/code-review`, 2026-09-18, measured). (1) Root restates 29–34% of what it
+  relocated, word for word: the five-guard summary against `src/CLAUDE.md`, the
+  service-worker summary against its skill, the `api/` pointer against
+  `api/CLAUDE.md` — two copies with nothing keeping them in step, which is the
+  shape CLAUDE.md's own Gotchas row names. The node inventory at 0% is what a
+  pointer should look like. (2) The write guards' mechanics sit in
+  `src/CLAUDE.md`, which every src session loads, where 47% of them never open
+  `src/hooks/`. (3) CLAUDE.md is 94 bytes under 40,000 and nothing measures it,
+  so the next added row crosses silently. Deciding any of these means deciding
+  what a root-only session must still know.
 
 ## Ideas
 
