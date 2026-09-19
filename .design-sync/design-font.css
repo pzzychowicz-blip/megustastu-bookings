@@ -1,0 +1,10 @@
+/* Claude Design only — compiled after src/index.css into the design system's
+ * stylesheet by .design-sync/vite.lib.config.mjs; the app never loads it.
+ *
+ * Puts Inter (shipped by .design-sync/fonts.css) in front of the app's system
+ * stack. One token, so every component that reads var(--font-app) follows,
+ * and dark mode needs nothing: [data-theme="dark"] never redefines it.
+ */
+:root {
+  --font-app: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+}

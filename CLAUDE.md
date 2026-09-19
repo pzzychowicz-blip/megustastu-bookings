@@ -56,6 +56,13 @@ api/                                 serverless functions (v18.0.0 phase 5) — 
                                      every gate is a RUNTIME one; and `_lib/rtdb.js` writes through
                                      **firebase-admin, which bypasses the security rules entirely** — see
                                      the CAS exemptions under the Rule of law below
+
+.design-sync/                        the Claude Design sync (/design-sync, 2026-09-19): a barrel of the UI kit
+                                     and seven screens, compiled by its own vite.lib.config.mjs, plus the
+                                     hand-written previews, docs and conventions page the design agent reads.
+                                     Tooling only — the app's build never reads it. **Notes in
+                                     `.design-sync/NOTES.md`**; the rule that bites: the barrel must never
+                                     reach src/firebase.js, or every design initialises Firebase
 ```
 
 **REFACTOR_LOG.md** at repo root contains the full version history with architectural decisions for each phase (B1–B5, C1–C3, D1–D4, E1+).

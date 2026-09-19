@@ -36,3 +36,14 @@ dist-ssr
 # firebase-debug.log / database-debug.log). There is deliberately NO
 # .firebaserc in this repo — see database.rules.README.md.
 .firebase/
+
+# Claude Design sync (/design-sync) — the staged converter scripts, the bundle
+# they generate, the library build they read and their machine state. All of
+# it is regenerated on every sync. The COMMITTED half is everything else under
+# .design-sync/: config, notes, the conventions header, docs and previews.
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/.lib/
+.design-sync/learnings/
+.design-sync/node_modules
