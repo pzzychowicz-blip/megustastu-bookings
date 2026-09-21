@@ -25664,3 +25664,30 @@ default to the United Kingdom → a new booking opens on 🇬🇧 +44 and its li
 reads Spain · UK · Germany · France · Netherlands · Belgium, then the alphabet.
 Dark theme checked on the open list. **DEV `settings/general` is left that way**
 (scratch database, per the workflow's no-cleanup rule).
+
+### /code-review (high) — three findings, two fixed, one a rollout note
+
+1. **Fixed** (`a country pick no longer opens the phone suggestion list`):
+   `PhoneField`'s `onChange` fed the booking form's `setPhoneFocus(true)` for
+   a country pick too, so the customer list could open with focus on the
+   picker, where no blur of the number box would ever close it. `onChange` now
+   passes a source (`"picker"`), and only typing opens the list. Measured live:
+   "+49 170" shows 1 suggestion while typing, 0 after blur, and still 0 after
+   re-picking Germany (previously it came back).
+2. **Fixed** (`a stale partial prefix gives way…`): the held "+3" was cleared
+   only by the field's own handlers, so a guest picked from the NAME list wrote
+   "+49 170 1234567" while the box still read "+3". `raw` now shows only while
+   the stored phone is empty. Measured live: the box reads "170 1234567" under
+   🇩🇪 after the pick.
+3. **Rollout note, not code.** `sanitizeGeneral` is a whitelist and writes the
+   whole node, so a device still on v18.0.0 that saves ANY General setting
+   drops `phoneCountry`/`pinnedCountries` (the pinned list falls back to the
+   seed, the default country to what the prefix names) and truncates a 5–6
+   digit prefix ("+441481" → "+4414"). Harmless and self-healing once every
+   device has reloaded — the v15.9.0 priorities caveat again. **Reload the
+   restaurant's devices before editing the pinned list.**
+
+Gate after the fixes: `137.74 kB` gz · **1505 tests** · 0 lint errors (89
+warnings) · style OK. Rules untouched (`settings/general` validates no field
+names; `generalRev` covers the new fields), so `test:rules` was not re-run and
+**no PROD console step** is needed.
