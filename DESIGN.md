@@ -604,6 +604,15 @@ explaining why is usually the one to read.
   fixed its twin in the booking form. **Audit a SHAPE with a brace-balanced scan
   of the whole style object, never a line grep** — the script is in v17.15.2's
   `REFACTOR_LOG.md` entry.
+  **v18.1.0: an outline BUTTON follows the same rule, and "Save pending" was
+  the one that didn't.** Its ring was the pending block FILL at 55% while its
+  text was `--status-pending-text` — two families again — and in light it
+  measured **1.44:1** against the sheet (WCAG 1.4.11 wants 3:1 for a control's
+  boundary), so it read as loose brown text; dark cleared 3.09. It now uses
+  `--pending-outline`, the ink at **70%** (3.48 light · 5.62 dark). A chip's
+  50% is fine for a label but only 2.31:1 here: a stroke that marks a
+  CONTROL is held to 3:1, a chip's is decoration. Measured in
+  `tests/contrast.test.js`, which also pins the ring's rgb to the ink's.
   The banned shape is the fourth one: pale semantic fill
   *plus* a matching border *plus* bold text in a third shade, which encodes one
   signal three times. The outline chip drops the fill and earns its extra border

@@ -913,8 +913,10 @@ export function BookingFormModal({
                ALTERNATIVE save, not the main one, and it should look like it.
                The amber pair here is a legitimate use of --status-pending-*:
                both the text token and the sheet under it flip with the theme,
-               unlike the banned case where a flipping token sits on a fixed fill. */
-            style={{background:"transparent",border:"2px solid "+(canSave?"rgba(var(--status-pending-rgb),0.55)":"var(--border-soft)"),borderRadius:R.pill,padding:"8px 16px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--status-pending-text)":"var(--text-faint)",minHeight:44}}>Save pending</button>
+               unlike the banned case where a flipping token sits on a fixed fill.
+               v18.1.0: the ring is --pending-outline (the ink at 70%) — the
+               fill-derived one measured 1.44:1 on the light sheet (index.css). */
+            style={{background:"transparent",border:"2px solid "+(canSave?"var(--pending-outline)":"var(--border-soft)"),borderRadius:R.pill,padding:"8px 16px",cursor:canSave?"pointer":"not-allowed",fontSize: T.lead,fontWeight: FW.semi,color:canSave?"var(--status-pending-text)":"var(--text-faint)",minHeight:44}}>Save pending</button>
         );
       })()}</div><div style={{display:"flex",gap:8}}><button
         className="mgt-hover-scale"

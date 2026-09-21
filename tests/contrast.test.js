@@ -1000,3 +1000,23 @@ describe("waitlist ghost — the dimmed block, as rendered", () => {
     }
   }
 });
+
+// ── v18.1.0: the "Save pending" outline is a control BOUNDARY ────────────────
+// WCAG 1.4.11 wants 3:1 for the stroke that tells you a control is there. The
+// old ring (the pending block fill at 55%) measured 1.44:1 on the light base,
+// so light-mode "Save pending" read as loose brown text. The ring is now the
+// ink itself at an alpha, and its rgb must BE the ink's, or the one-hue
+// property the fix bought quietly lapses when somebody retunes the ink.
+describe("Save pending outline (--pending-outline)", () => {
+  for (const theme of ["light", "dark"]) {
+    it(`clears 3:1 against the sheet and matches the ink in ${theme}`, () => {
+      const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+      const ring = parse(vars["--pending-outline"]);
+      const ink = parse(vars["--status-pending-text"]);
+      expect({ r: ring.r, g: ring.g, b: ring.b }).toEqual({ r: ink.r, g: ink.g, b: ink.b });
+      const base = BASE[theme];
+      const got = ratio(over(ring, base), base);
+      expect(got, `--pending-outline in ${theme}: ${got.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+    });
+  }
+});

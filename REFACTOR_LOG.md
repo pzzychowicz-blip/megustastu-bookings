@@ -25574,3 +25574,20 @@ labels (the Block-table subtitle, voucher expiry lines).
 `min` and Fld's `id` move into `inputProps`, because they name the INPUT, not
 the pill. Measured live in DEV: label `for` still resolves to the input,
 `min` = today, pill height 44, and setting 2026-09-25 repaints "Fri".
+
+### Commit 2 — "Save pending" gets a ring you can see in daylight
+
+`src/index.css`, `src/components/BookingFormModal.jsx`,
+`tests/contrast.test.js`, `DESIGN.md`.
+
+Measured before deciding (text · ring against the lightest / mobile sheet):
+light **6.85 / 6.16 · 1.44 / 1.36**, dark **9.70 / 12.91 · 3.09 / 3.58**. The
+text was never the problem; the ring was below WCAG 1.4.11's 3:1 in light only,
+and its hue (92°, from the block fill) disagreed with the text's (62°), while
+dark's ring and text shared a hue. Four options went to Patryk — ink-derived
+ring · plus a gold light ink · plus a pale fill · leave it — and he chose the
+first: `--pending-outline`, the ink at 70%, per theme → **3.48:1** light,
+5.62 dark. 50% (the chips' value) would have been 2.31.
+
+Live in DEV: computed border `rgba(133, 77, 14, 0.7)` light,
+`rgba(253, 224, 71, 0.7)` dark. Two new tests (1488 → 1490).
