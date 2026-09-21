@@ -24,6 +24,38 @@ session and keeping it in sync.
   `database.rules.README.md` § *v18.0.0 — the production deploy, in order*.
   Delete this entry when the last of them — `enforceRoles` on — is done.
 
+- **Four code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
+  `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
+  (1) **Photos in the inbox** — staff send the menu as a picture and customers send
+  photos back, while `api/_lib/meta.js` sends text only and `api/wa-inbound.js` stores
+  any non-text message as `"[image message]"`; Meta holds the files (7 days received,
+  30 days sent), so nothing new is stored here. (2) **A public `/privacy` page** —
+  Meta will not switch the app to Live, and so will not deliver real webhooks, without
+  a reachable privacy-policy URL. (3) **`GRAPH_VERSION` v21.0 → v26.0**
+  (`api/_lib/meta.js`) — v21.0 stops working on 21 January 2027. (4) **A stale comment**
+  — `api/_lib/env.js`'s header names `gemini-3-flash` as the fallback model; the real
+  default is `gemini-3.1-flash-lite` (`api/_lib/gemini.js:216`).
+
+- **WhatsApp coexistence — the Business app and the Cloud API on one number**
+  (decided 2026-09-21, go-live plan § 3a–3b). Replaces the ops-SIM migration: the groups
+  never move and staff keep answering from the phone. **Milestone 1 is a rehearsal and
+  gates everything else:** onboard a cheap disposable number running the Business app to
+  the *sandbox* app through **Embedded Signup v4** (v2 is retired 15 Oct 2026), subscribe
+  `history` · `smb_app_state_sync` · `smb_message_echoes`, and check that the one-shot
+  24-hour history sync arrives, echoes flow both ways, and groups stay out of the API.
+  If it passes, the full build: Embedded Signup in place of the single system-user token,
+  the three webhook topics, echo mirroring into the inbox — load-bearing, since without it
+  two staff can answer one customer — and disconnection handling (`account_update`, error
+  `131060`). If it fails, the plan's Phase B comes back.
+
+- **A WhatsApp cost counter in Settings → WhatsApp**, after go-live. Meta charges for
+  every message a business sends from **1 October 2026**, replies included, so the panel
+  shows messages sent this month and their cost, read from Meta's Pricing Analytics API
+  (`pricing_category: SERVICE`) rather than counted locally — that way it matches the
+  invoice even for anything sent outside MGT. Its own visibility capability: **manager
+  and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
+  Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**
