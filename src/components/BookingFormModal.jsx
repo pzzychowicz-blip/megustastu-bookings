@@ -980,7 +980,10 @@ export function BookingFormModal({
                on focus is gone: the code lives in the picker now. The label
                names the NUMBER box, which is where the typing happens. */
             value={form.phone}
-            onChange={function(v){setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
+            /* /code-review: only TYPING opens the suggestion list. A country
+               pick left it open with focus on the picker, where no blur of the
+               number box can ever arrive to close it. */
+            onChange={function(v,src){if(src!=="picker") setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
             defaultIso={phoneCountry}
             pinned={pinnedCountries}
             inputProps={{id:fid,

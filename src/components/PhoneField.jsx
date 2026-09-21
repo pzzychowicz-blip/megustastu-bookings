@@ -23,6 +23,9 @@
 // holds the number alone; typing or pasting "+44 …" / "0044 …" there still
 // works and moves the picker to the country it names.
 //
+// `onChange(value, source)`: `source` is "picker" for a country pick and
+// undefined for typing — the caller's suggestion list must only open on typing.
+//
 // `inputProps` land on the NUMBER input (its id — so the form's label names it
 // — and the focus/blur handlers the customer-suggestion list is driven by);
 // `children` render inside the positioned row, which is where that suggestion
@@ -48,12 +51,15 @@ export function PhoneField({ value, onChange, defaultIso, pinned, inputProps, ch
     setRaw(null);
     // An empty number stays empty — switching country must never WRITE a
     // phone. A typed one is re-prefixed with the new code.
-    if (national) { onChange(joinPhone(nextIso, national)); return; }
+    // The second argument says WHERE the change came from: the booking form
+    // opens its customer-suggestion list on a number-box change, and one
+    // opened by a picker change has no blur to close it (/code-review).
+    if (national) { onChange(joinPhone(nextIso, national), "picker"); return; }
     // The untouched field holds the SEEDED prefix ("+34", from Settings), and
     // a string that names a code outranks `chosen` — so without this, picking
     // Belgium on a fresh form read back as Spain. Measured live on the first
     // try. Clear it: "" and the seed are the same nothing to `enteredPhone`.
-    if (value) onChange("");
+    if (value) onChange("", "picker");
   }
   function onNumber(e) {
     const s = String(e.target.value || "");
