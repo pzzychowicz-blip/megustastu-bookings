@@ -25642,3 +25642,25 @@ booking stores `+49 170 1234567`, reopens as Germany + the number, and an
 untouched reopen closes with no discard prompt. Main bundle **+5.98 kB gz**
 (131.67 → 137.65), most of it the country table, which the booking form needs
 eagerly. Tests 1490 → 1505.
+
+### Commit 4 — Settings chooses the default country and the pinned list
+
+`src/components/Settings.jsx`, `src/components/CountryPicker.jsx`.
+
+General → Restaurant: the typed **Phone prefix** box became **Default country**
+(the same `CountryPicker`; a pick writes `phoneCountry` AND `phonePrefix`
+together, since the prefix is what seeds the phone field and what
+`enteredPhone` compares against), and a new **Pinned countries** editor, which
+Patryk asked for: each pinned country is an `OutlineChip` button that unpins it
+("Unpin Spain"), and **+ Add country** is the picker in a new `label` mode, with
+`exclude` leaving out what is already pinned. Capped at `MAX_PINNED` (12), where
+the add button disables and says so. Both commit on the pick, like the steppers,
+so there is no draft and nothing registers with the unsaved-changes aggregator.
+Order is the order added. There is no reordering: the list is short and you can
+unpin and re-add.
+
+Verified live in DEV, through a reload: pinned Belgium, unpinned Italy, set the
+default to the United Kingdom → a new booking opens on 🇬🇧 +44 and its list
+reads Spain · UK · Germany · France · Netherlands · Belgium, then the alphabet.
+Dark theme checked on the open list. **DEV `settings/general` is left that way**
+(scratch database, per the workflow's no-cleanup rule).

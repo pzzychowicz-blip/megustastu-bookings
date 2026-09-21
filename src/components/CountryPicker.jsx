@@ -39,7 +39,10 @@ const HEAD = {
   textTransform: "uppercase", letterSpacing: "0.04em",
 };
 
-export function CountryPicker({ iso, onPick, pinned, ariaLabel = "Country code", style, disabled = false }) {
+// `label` turns the pill into an ACTION ("+ Add country") rather than a
+// readout of the current choice: Settings' pinned-list editor picks a country
+// to add, and has no "current" one to show. Its name is then the label itself.
+export function CountryPicker({ iso, onPick, pinned, exclude, ariaLabel = "Country code", label, style, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -54,7 +57,10 @@ export function CountryPicker({ iso, onPick, pinned, ariaLabel = "Country code",
   // (a pinned one appears in both, as in every phone app — the long list is
   // the complete alphabet and should not have holes in it). Filtered: one list.
   const pins = (pinned || []).map(countryByIso).filter(Boolean);
-  const all = q ? COUNTRIES.filter(function (c) { return matchesCountry(c, q); }) : COUNTRIES;
+  // `exclude`: countries not to offer at all (the pinned editor's "add" list
+  // leaves out what is already pinned, or the second tap on Spain does nothing).
+  const offer = exclude && exclude.length ? COUNTRIES.filter(function (c) { return exclude.indexOf(c.iso) < 0; }) : COUNTRIES;
+  const all = q ? offer.filter(function (c) { return matchesCountry(c, q); }) : offer;
   const rows = q ? all.map(function (c) { return { c: c, sec: "all" }; })
     : pins.map(function (c) { return { c: c, sec: "pin" }; }).concat(all.map(function (c) { return { c: c, sec: "all" }; }));
 
@@ -113,15 +119,17 @@ export function CountryPicker({ iso, onPick, pinned, ariaLabel = "Country code",
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={ariaLabel + ": " + (cur ? cur.name + " " + dialLabel(cur) : "none")}
+        aria-label={label ? undefined : ariaLabel + ": " + (cur ? cur.name + " " + dialLabel(cur) : "none")}
         onClick={function () { if (open) close(false); else openList(); }}
         style={Object.assign({}, mkInp(), {
           width: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: SP.snug,
           cursor: disabled ? "default" : "pointer", whiteSpace: "nowrap",
         }, style)}
       >
-        <span aria-hidden="true">{cur ? flagOf(cur.iso) : ""}</span>
-        <span>{cur ? dialLabel(cur) : "+"}</span>
+        {label ? <span>{label}</span> : <>
+          <span aria-hidden="true">{cur ? flagOf(cur.iso) : ""}</span>
+          <span>{cur ? dialLabel(cur) : "+"}</span>
+        </>}
         <span aria-hidden="true" style={{ color: S.muted, display: "flex" }}><ChevronDownIcon size={IC.inline} /></span>
       </button>
       {open ? (

@@ -30,8 +30,10 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
-import { BTN, R, M, T, FW, H, IC, APP_NAME } from "../lib/constants";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
+import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
+import { CountryPicker } from "./CountryPicker";
+import { countryByIso, flagOf, dialLabel, MAX_PINNED } from "../lib/phone-countries";
 // v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
 import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 
@@ -181,6 +183,57 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
         onBlur={() => { if (draft !== value) onCommit(draft); }}
         onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
         style={{ ...mkInp(), width: width || 180, boxSizing: "border-box" }} />
+    </div>
+  );
+}
+
+// ── v18.1.0: the phone field's two restaurant settings ───────────────────────
+// Both commit on the pick, like the steppers — there is no draft to guard, so
+// neither registers with the unsaved-changes aggregator. The pickers need a
+// POSITIONED wrapper: CountryPicker's list is drawn against it (see there).
+function PhoneCountrySetting({ gs, onSave }) {
+  return (
+    <div>
+      <div id="gs-country-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Default country</div>
+      <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
+        <CountryPicker iso={gs.phoneCountry} pinned={gs.pinnedCountries} ariaLabel="Default country"
+          onPick={(iso) => { const c = countryByIso(iso); if (c) onSave({ phoneCountry: c.iso, phonePrefix: "+" + c.dial }); }} />
+      </div>
+    </div>
+  );
+}
+
+function PinnedCountriesSetting({ gs, onSave }) {
+  const list = gs.pinnedCountries || [];
+  const full = list.length >= MAX_PINNED;
+  return (
+    <div role="group" aria-labelledby="gs-pinned-label">
+      <div id="gs-pinned-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Pinned countries</div>
+      <div style={{ display: "flex", gap: SP.snug, flexWrap: "wrap", alignItems: "center" }}>
+        {list.map((iso) => {
+          const c = countryByIso(iso);
+          if (!c) return null;
+          return (
+            <OutlineChip key={iso} as="button" size="small" className="mgt-hover-scale"
+              aria-label={"Unpin " + c.name}
+              onClick={() => onSave({ pinnedCountries: list.filter((x) => x !== iso) })}
+              style={{ minHeight: H.chip }}>
+              <span aria-hidden="true">{flagOf(c.iso)}</span>{c.name + " " + dialLabel(c)}
+              <CloseIcon size={IC.inline} />
+            </OutlineChip>
+          );
+        })}
+        {/* The list of countries to ADD leaves out the ones already pinned —
+            offering Spain twice would let the second tap do nothing. */}
+        <div style={{ position: "relative", width: 280 /* @canvas as PhoneCountrySetting */ }}>
+          <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} disabled={full} exclude={list}
+            onPick={(iso) => { if (list.indexOf(iso) < 0) onSave({ pinnedCountries: list.concat(iso) }); }}
+            style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
+        </div>
+      </div>
+      {list.length === 0 ? (
+        <div style={{ fontSize: T.body, color: "var(--text-muted)", marginTop: SP.snug }}>Nothing pinned — the code list starts at A.</div>
+      ) : null}
     </div>
   );
 }
@@ -584,7 +637,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
       {sw ? (
       <Collapsible
         title="Restaurant"
-        subtitle="Name, currency and phone prefix."
+        subtitle="Name, currency and the phone field's countries."
         summary={gs.restaurantName}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
@@ -593,11 +646,15 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
               onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
-            <GsTextField label="Phone prefix" value={gs.phonePrefix} width={100} onDirty={onDirty} dirtyId="gs-prefix"
-              onCommit={(v) => onSaveGeneralSettings({ phonePrefix: v })} />
+            {/* v18.1.0: the prefix is CHOSEN from the country list, not typed.
+                Both fields are written together — `phoneCountry` because
+                "+1" names no single country, `phonePrefix` because it is what
+                seeds the phone field and what `enteredPhone` compares against. */}
+            <PhoneCountrySetting gs={gs} onSave={onSaveGeneralSettings} />
           </div>
+          <PinnedCountriesSetting gs={gs} onSave={onSaveGeneralSettings} />
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
-            The name shows in the header and on the printed day sheet; the currency on deposits; the prefix seeds the phone field on new bookings.
+            The name shows in the header and on the printed day sheet; the currency on deposits; the default country seeds the phone field on new bookings, and the pinned countries sit at the top of its code list.
           </div>
         </div>
       </Collapsible>
