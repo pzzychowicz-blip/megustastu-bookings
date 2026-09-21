@@ -5,7 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // The Claude Design sync's generated output (see .gitignore) — a compiled
+  // bundle and staged third-party scripts, not source. Without this, `eslint .`
+  // lints them whenever a sync has run locally and the lint gate goes red.
+  globalIgnores(['dist', 'ds-bundle', '.ds-sync', '.design-sync/.lib', '.design-sync/.cache']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
