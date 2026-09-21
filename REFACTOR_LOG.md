@@ -25546,3 +25546,31 @@ identity matrix, before believing any measurement taken inside a modal.
 
 Gate: `131.67 kB` gz · **1488 tests** · 0 lint errors (88 warnings) · style OK.
 Rules untouched, so `test:rules` was not re-run.
+
+## v18.1.0 — UI updates: weekday dates, the country-code phone field, Save pending
+
+**Date:** 2026-09-21 · **Branch:** `feat/v18.1.0-ui-updates` ·
+**Behavioural change:** yes — visible in the Reminder editor, the booking form's
+phone field, the General settings and the booking form's footer.
+**Files:** each commit lists its own.
+
+Three requests from Patryk: every date field shows its weekday, the phone field
+splits the country code from the number (with the world's calling codes to pick
+from), and the light-mode "Save pending" button was measured and fixed per the
+option he chose.
+
+### Commit 1 — every date INPUT carries its weekday
+
+`src/App.jsx` (the bump), `src/components/ReminderEditor.jsx`,
+`src/components/whatsapp/WaSimulator.jsx`.
+
+A sweep for `type="date"` found five date inputs. Three were already
+`DateField` (the header, the booking form, the Activity log's From/To). The two
+that were not: the Reminder editor's one-off **Date** — the only one staff see —
+and the DEV-only WhatsApp simulator's, converted too so the rule holds without
+an exception. Scope was put to Patryk: inputs only, not the read-only date
+labels (the Block-table subtitle, voucher expiry lines).
+
+`min` and Fld's `id` move into `inputProps`, because they name the INPUT, not
+the pill. Measured live in DEV: label `for` still resolves to the input,
+`min` = today, pill height 44, and setting 2026-09-25 repaints "Fri".

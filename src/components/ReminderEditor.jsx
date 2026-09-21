@@ -34,7 +34,7 @@
 
 import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight } from "./atoms";
+import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight, DateField } from "./atoms";
 import { CloseIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 
@@ -238,14 +238,14 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
 
         {rec.type === "once" ? (
           <Fld label="Date" style={{ marginBottom: 12 }}>{(fid) => (
-            <input
-              id={fid}
-              type="date"
+            /* v18.1.0: the weekday inside the pill, like every other date
+               field in the app (atoms.jsx DateField). The id names the INPUT,
+               so it rides in inputProps with `min`. */
+            <DateField
               value={rec.date || ""}
-              min={today}
               onChange={(e) => setDate(e.target.value)}
-              className="mgt-hover-scale"
               style={mkInp()}
+              inputProps={{ id: fid, min: today }}
             />
           )}</Fld>
         ) : null}
