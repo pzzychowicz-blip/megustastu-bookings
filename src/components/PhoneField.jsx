@@ -86,7 +86,11 @@ export function PhoneField({ value, onChange, defaultIso, pinned, inputProps, ch
         type="tel"
         inputMode="tel"
         autoComplete="tel-national"
-        value={raw !== null ? raw : national}
+        /* `raw` counts only while the stored phone is still empty — it is
+           what an incomplete prefix stores. Once anything else writes the
+           phone (a guest picked from the NAME list, Book Again) the stale
+           "+3" must give way to the number the form will save (/code-review). */
+        value={raw !== null && !value ? raw : national}
         onChange={onNumber}
         placeholder={placeholder}
         className="mgt-hover-scale"
