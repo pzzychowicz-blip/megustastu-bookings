@@ -36,6 +36,18 @@ session and keeping it in sync.
   — `api/_lib/env.js`'s header names `gemini-3-flash` as the fallback model; the real
   default is `gemini-3.1-flash-lite` (`api/_lib/gemini.js:216`).
 
+- **WhatsApp coexistence — the Business app and the Cloud API on one number**
+  (decided 2026-09-21, go-live plan § 3a–3b). Replaces the ops-SIM migration: the groups
+  never move and staff keep answering from the phone. **Milestone 1 is a rehearsal and
+  gates everything else:** onboard a cheap disposable number running the Business app to
+  the *sandbox* app through **Embedded Signup v4** (v2 is retired 15 Oct 2026), subscribe
+  `history` · `smb_app_state_sync` · `smb_message_echoes`, and check that the one-shot
+  24-hour history sync arrives, echoes flow both ways, and groups stay out of the API.
+  If it passes, the full build: Embedded Signup in place of the single system-user token,
+  the three webhook topics, echo mirroring into the inbox — load-bearing, since without it
+  two staff can answer one customer — and disconnection handling (`account_update`, error
+  `131060`). If it fails, the plan's Phase B comes back.
+
 - **A WhatsApp cost counter in Settings → WhatsApp**, after go-live. Meta charges for
   every message a business sends from **1 October 2026**, replies included, so the panel
   shows messages sent this month and their cost, read from Meta's Pricing Analytics API
