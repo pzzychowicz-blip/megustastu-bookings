@@ -5,11 +5,15 @@ Read this first; add to it whenever a sync teaches something new.
 
 ## Status
 
-- **First sync, started 2026-09-19.** Built, validated with zero warnings, and all
-  75 components graded `good` locally. **Not uploaded yet**: DesignSync needs a
-  one-time `/design-login` from an interactive `claude` session on this Mac.
-  The project is to be called **MGT Bookings** (the app's name, not the
-  restaurant's). There is no `projectId` in `config.json` until it is created.
+- **First sync, started 2026-09-19, uploaded 2026-09-21.** Built, validated with
+  zero warnings, all 75 components graded `good`, and uploaded to the
+  **MGT Bookings** project (`projectId` in `config.json`). `/design-login` was
+  the one-time blocker on 2026-09-19 (needed an interactive `claude` session on
+  this Mac to authorize DesignSync) — done on 2026-09-21, upload proceeded
+  straight through the incremental path (project was empty, so no batching was
+  needed: the full verified set uploaded in one push after the sentinel fence).
+  Re-syncs from here on are the one-command driver flow (§"Re-syncs are one
+  command" in the skill's package-shape doc), not a first-time import.
 
 ## Decisions (Patryk, 2026-09-19)
 
