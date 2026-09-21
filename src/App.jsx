@@ -379,7 +379,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.0.0",
+  version:"18.1.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -5116,6 +5116,8 @@ function BookingApp({uid}){
               vouchersByCode={vouchersByCode}
               vouchersOn={vouchersOn}
               regularMin={generalSettings.regularMin}
+              phoneCountry={generalSettings.phoneCountry}
+              pinnedCountries={generalSettings.pinnedCountries}
               today={today}
               nowMins={nowMins}
               onSave={function(){save();}}

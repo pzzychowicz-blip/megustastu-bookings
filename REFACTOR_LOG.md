@@ -25546,3 +25546,148 @@ identity matrix, before believing any measurement taken inside a modal.
 
 Gate: `131.67 kB` gz · **1488 tests** · 0 lint errors (88 warnings) · style OK.
 Rules untouched, so `test:rules` was not re-run.
+
+## v18.1.0 — UI updates: weekday dates, the country-code phone field, Save pending
+
+**Date:** 2026-09-21 · **Branch:** `feat/v18.1.0-ui-updates` ·
+**Behavioural change:** yes — visible in the Reminder editor, the booking form's
+phone field, the General settings and the booking form's footer.
+**Files:** each commit lists its own.
+
+Three requests from Patryk: every date field shows its weekday, the phone field
+splits the country code from the number (with the world's calling codes to pick
+from), and the light-mode "Save pending" button was measured and fixed per the
+option he chose.
+
+### Commit 1 — every date INPUT carries its weekday
+
+`src/App.jsx` (the bump), `src/components/ReminderEditor.jsx`,
+`src/components/whatsapp/WaSimulator.jsx`.
+
+A sweep for `type="date"` found five date inputs. Three were already
+`DateField` (the header, the booking form, the Activity log's From/To). The two
+that were not: the Reminder editor's one-off **Date** — the only one staff see —
+and the DEV-only WhatsApp simulator's, converted too so the rule holds without
+an exception. Scope was put to Patryk: inputs only, not the read-only date
+labels (the Block-table subtitle, voucher expiry lines).
+
+`min` and Fld's `id` move into `inputProps`, because they name the INPUT, not
+the pill. Measured live in DEV: label `for` still resolves to the input,
+`min` = today, pill height 44, and setting 2026-09-25 repaints "Fri".
+
+### Commit 2 — "Save pending" gets a ring you can see in daylight
+
+`src/index.css`, `src/components/BookingFormModal.jsx`,
+`tests/contrast.test.js`, `DESIGN.md`.
+
+Measured before deciding (text · ring against the lightest / mobile sheet):
+light **6.85 / 6.16 · 1.44 / 1.36**, dark **9.70 / 12.91 · 3.09 / 3.58**. The
+text was never the problem; the ring was below WCAG 1.4.11's 3:1 in light only,
+and its hue (92°, from the block fill) disagreed with the text's (62°), while
+dark's ring and text shared a hue. Four options went to Patryk — ink-derived
+ring · plus a gold light ink · plus a pale fill · leave it — and he chose the
+first: `--pending-outline`, the ink at 70%, per theme → **3.48:1** light,
+5.62 dark. 50% (the chips' value) would have been 2.31.
+
+Live in DEV: computed border `rgba(133, 77, 14, 0.7)` light,
+`rgba(253, 224, 71, 0.7)` dark. Two new tests (1488 → 1490).
+
+### Commit 3 — the phone field: country code and number, still one string
+
+New: `src/lib/phone-countries.js`, `src/components/CountryPicker.jsx`,
+`src/components/PhoneField.jsx`, `tests/phone-countries.test.js`. Changed:
+`src/components/BookingFormModal.jsx`, `src/hooks/useGeneralSettings.js`,
+`src/App.jsx`, `GLOSSARY.md`, three per-directory `CLAUDE.md`s.
+
+**The data did not change shape, and that was the first decision.**
+`booking.phone` is still "+34 600 123 456". Customer identity
+(`normalizePhone`), the WhatsApp phone key, history diffs and `enteredPhone`
+all key on that string; storing the code and the number apart would be a new
+per-booking field (five lists, CLAUDE.md's gotcha) and would re-key every
+customer. The picker and the number box are a VIEW of the string —
+`splitPhone` / `joinPhone` — and a round-trip test pins that the identity is
+unchanged. No rules change, no console step.
+
+**The list** is countrycode.org's, static (CSP and offline rule out fetching
+it): 240 countries, ISO + name + code. NANP islands and Crown dependencies
+carry their area code as part of the code ("1876" Jamaica, "441481" Guernsey),
+so a stored number parses back to the right place; shared codes (+1, +7, +44,
++61…) resolve through the user's last pick, then a primary country.
+
+**The picker** (Patryk's choice: searchable, not a native `<select>`) filters
+by name, ISO or digits, with pinned countries on top. `settings/general` gains
+`phoneCountry` (derived from `phonePrefix` when absent — "+1" names no single
+country, so the prefix alone cannot) and `pinnedCountries` (seed: ES, GB, DE,
+FR, IT, NL; written as `"none"` when emptied, since RTDB drops `[]`). The
+prefix cap rose from 4 digits to 6 so "+441481" survives the sanitiser. The
+Settings UI for both is commit 4.
+
+**Four defects found by running it, none visible to the gate:**
+- Picking Belgium on a fresh form read back as Spain — the field holds the
+  seeded "+34", and a string naming a code outranks the pick. The pick now
+  clears the seed (`enteredPhone` already treats both as empty).
+- The first `joinPhone`/`splitPhone` trimmed the whole string; they run per
+  keystroke, so the space typed between "600" and "123" vanished. Leading space
+  only now; the save path trims as it always has.
+- Typing "+44" one key at a time ate the "+", because "+" and "+4" name no code
+  yet. `PhoneField` holds the incomplete prefix until `dialOf` recognises it.
+- **Enter anywhere in the booking form is SAVE** (`useKeyboardShortcuts`, a
+  window bubble listener) and Escape closes the form. The search box stops both
+  keys; measured with a window listener, neither reaches it, the form stays
+  open and focus returns to the picker.
+
+Verified live in DEV: search "belg" + Enter → Belgium +32; "united k" → UK;
+"+49 170 1234567" typed into the number box → Germany, "170 1234567"; saved
+booking stores `+49 170 1234567`, reopens as Germany + the number, and an
+untouched reopen closes with no discard prompt. Main bundle **+5.98 kB gz**
+(131.67 → 137.65), most of it the country table, which the booking form needs
+eagerly. Tests 1490 → 1505.
+
+### Commit 4 — Settings chooses the default country and the pinned list
+
+`src/components/Settings.jsx`, `src/components/CountryPicker.jsx`.
+
+General → Restaurant: the typed **Phone prefix** box became **Default country**
+(the same `CountryPicker`; a pick writes `phoneCountry` AND `phonePrefix`
+together, since the prefix is what seeds the phone field and what
+`enteredPhone` compares against), and a new **Pinned countries** editor, which
+Patryk asked for: each pinned country is an `OutlineChip` button that unpins it
+("Unpin Spain"), and **+ Add country** is the picker in a new `label` mode, with
+`exclude` leaving out what is already pinned. Capped at `MAX_PINNED` (12), where
+the add button disables and says so. Both commit on the pick, like the steppers,
+so there is no draft and nothing registers with the unsaved-changes aggregator.
+Order is the order added. There is no reordering: the list is short and you can
+unpin and re-add.
+
+Verified live in DEV, through a reload: pinned Belgium, unpinned Italy, set the
+default to the United Kingdom → a new booking opens on 🇬🇧 +44 and its list
+reads Spain · UK · Germany · France · Netherlands · Belgium, then the alphabet.
+Dark theme checked on the open list. **DEV `settings/general` is left that way**
+(scratch database, per the workflow's no-cleanup rule).
+
+### /code-review (high) — three findings, two fixed, one a rollout note
+
+1. **Fixed** (`a country pick no longer opens the phone suggestion list`):
+   `PhoneField`'s `onChange` fed the booking form's `setPhoneFocus(true)` for
+   a country pick too, so the customer list could open with focus on the
+   picker, where no blur of the number box would ever close it. `onChange` now
+   passes a source (`"picker"`), and only typing opens the list. Measured live:
+   "+49 170" shows 1 suggestion while typing, 0 after blur, and still 0 after
+   re-picking Germany (previously it came back).
+2. **Fixed** (`a stale partial prefix gives way…`): the held "+3" was cleared
+   only by the field's own handlers, so a guest picked from the NAME list wrote
+   "+49 170 1234567" while the box still read "+3". `raw` now shows only while
+   the stored phone is empty. Measured live: the box reads "170 1234567" under
+   🇩🇪 after the pick.
+3. **Rollout note, not code.** `sanitizeGeneral` is a whitelist and writes the
+   whole node, so a device still on v18.0.0 that saves ANY General setting
+   drops `phoneCountry`/`pinnedCountries` (the pinned list falls back to the
+   seed, the default country to what the prefix names) and truncates a 5–6
+   digit prefix ("+441481" → "+4414"). Harmless and self-healing once every
+   device has reloaded — the v15.9.0 priorities caveat again. **Reload the
+   restaurant's devices before editing the pinned list.**
+
+Gate after the fixes: `137.74 kB` gz · **1505 tests** · 0 lint errors (89
+warnings) · style OK. Rules untouched (`settings/general` validates no field
+names; `generalRev` covers the new fields), so `test:rules` was not re-run and
+**no PROD console step** is needed.

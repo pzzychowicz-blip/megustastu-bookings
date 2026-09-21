@@ -76,7 +76,7 @@ pair, plus its own `.write` grant — stays in the root file, under *Rule of law
   - `settings/dayShifts` — `{split, enabled}` (`useDayShifts.js`)
   - `settings/optimizer` — `{cutoff, autoSwitch}` (`useOptimizerSettings.js`)
   - `settings/layout` — `{tables, joinGroups, comboCaps, megaCombos, kitchenLimit}` + `priorities` (`useLayout.js`, which also refuses an empty-`tables` config)
-  - `settings/general` — `{v, restaurantName, currency, phonePrefix, regularMin, lateCollapseMax, waitMatchWin, undoSecs}` (`useGeneralSettings.js`)
+  - `settings/general` — `{v, restaurantName, currency, phonePrefix, regularMin, lateCollapseMax, waitMatchWin, undoSecs, defaultBookingSize, defaultWalkinSize, phoneCountry, pinnedCountries}` (`useGeneralSettings.js`; the last two v18.1.0 — `pinnedCountries` is written as `"none"` when empty, because RTDB drops an empty array and absence reads as the seed)
   - `settings/bookingDefaults` — `{v, tiers:[{max,dur}…], restDur, lateEnabled, lateWarnMin, lateNoShowMin, freeSoonEnabled, freeSoonWindow}` (`useBookingDefaults.js`); a present node's missing `tiers` array means EMPTY (RTDB drops empty arrays), never the default
   - `settings/voucherDefaults` — `{v, expiryMonths}`, where `0` means never (`useVoucherDefaults.js`). Named so, and not `settings/vouchers`, for the reason `settings/bookingDefaults` is not `settings/bookings`: two paths a character apart, one holding records and one config, is a trap.
   - `settings/whatsapp` (`useWaSettings.js`)

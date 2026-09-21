@@ -23,7 +23,7 @@
 //
 // Model: { v, restaurantName, currency, phonePrefix, regularMin,
 // lateCollapseMax, waitMatchWin, undoSecs, defaultBookingSize,
-// defaultWalkinSize (v17.2.0) }. `v:1` is the presence marker
+// defaultWalkinSize (v17.2.0), phoneCountry, pinnedCountries (v18.1.0) }. `v:1` is the presence marker
 // (the v15.9.0 priorities lesson). Seed = the historical literals, so an
 // absent node is a no-op. Write-guard mirrors useBookingDefaults: `loaded`
 // ref + revGuard CAS (generalRev) — the v16.0.0 rule of law for new nodes.
@@ -42,6 +42,8 @@ import { emitActivity } from "../lib/activitySink";
 // The "Regular" threshold is owned by the customer-identity layer — the chip
 // helper there falls back to it too, so both agree by construction.
 import { DEFAULT_REGULAR_MIN } from "../lib/customers";
+// v18.1.0: the phone field's country list.
+import { countryByIso, splitPhone, cleanPinned, DEFAULT_PINNED } from "../lib/phone-countries";
 
 export const DEFAULT_GENERAL_SETTINGS = {
   v: 1,
@@ -60,7 +62,16 @@ export const DEFAULT_GENERAL_SETTINGS = {
   // hard-coded 2 in EMPTY_FORM's consumer + useWalkin). Restaurant-wide
   // preference, so shared here — not per-device.
   defaultBookingSize: 2,
-  defaultWalkinSize: 2
+  defaultWalkinSize: 2,
+  // v18.1.0: the phone field's DEFAULT country and the codes PINNED to the top
+  // of its picker. `phoneCountry` exists beside `phonePrefix` because a code
+  // does not name a country ("+1" is the USA, Canada and twenty islands), and
+  // the prefix stays because it is what seeds the field and what
+  // `enteredPhone` compares against — Settings writes the two together.
+  // Absent on every restaurant's node until someone saves, so both DERIVE:
+  // the country from the prefix, the list from the seed.
+  phoneCountry: null,
+  pinnedCountries: DEFAULT_PINNED
 };
 
 // ── The restaurant name's pre-auth cache (v17.9.0) ───────────────────────────
@@ -95,9 +106,14 @@ function cleanText(raw, def, maxLen){
 function sanitizeGeneral(raw){
   const src = raw && typeof raw === "object" ? raw : {};
   const d = DEFAULT_GENERAL_SETTINGS;
-  // phonePrefix: always starts with "+", digits only after it, ≤5 chars total.
+  // phonePrefix: always starts with "+", digits only after it. v18.1.0 raised
+  // the cap from 4 digits to 6: a picked Crown dependency is "+44 1481", and
+  // the old cap would have stored "+4414", which names no country at all.
   let prefix = typeof src.phonePrefix === "string" ? src.phonePrefix.trim() : d.phonePrefix;
-  prefix = "+" + prefix.replace(/[^\d]/g, "").slice(0, 4);
+  prefix = "+" + prefix.replace(/[^\d]/g, "").slice(0, 6);
+  // v18.1.0: a stored country wins; otherwise the one the prefix names.
+  const country = countryByIso(src.phoneCountry);
+  const phoneCountry = country ? country.iso : splitPhone(prefix).iso;
   return {
     v: 1,
     restaurantName: cleanText(src.restaurantName, d.restaurantName, 60),
@@ -108,7 +124,12 @@ function sanitizeGeneral(raw){
     waitMatchWin: clampStep(src.waitMatchWin, d.waitMatchWin, 15, 240, 15),
     undoSecs: clampStep(src.undoSecs, d.undoSecs, 5, 60, 5),
     defaultBookingSize: clampStep(src.defaultBookingSize, d.defaultBookingSize, 1, 20, 1),
-    defaultWalkinSize: clampStep(src.defaultWalkinSize, d.defaultWalkinSize, 1, 20, 1)
+    defaultWalkinSize: clampStep(src.defaultWalkinSize, d.defaultWalkinSize, 1, 20, 1),
+    phoneCountry: phoneCountry,
+    // RTDB stores no empty array — writing [] deletes the key — so "nothing
+    // pinned" reads back as ABSENT, which would restore the seed. `"none"` is
+    // the explicit empty: stored when the list is emptied, read as [].
+    pinnedCountries: src.pinnedCountries === "none" ? [] : cleanPinned(src.pinnedCountries)
   };
 }
 
@@ -177,7 +198,9 @@ export function useGeneralSettings(){
     const prev = generalSettings;
     const next = sanitizeGeneral({ ...prev, ...(partial || {}) });
     setGS(next);
-    writeWithRev("settings/general", next, revRef, undefined, function () {
+    // v18.1.0: an emptied pinned list is written as "none" (see sanitizeGeneral).
+    const stored = next.pinnedCountries.length ? next : { ...next, pinnedCountries: "none" };
+    writeWithRev("settings/general", stored, revRef, undefined, function () {
       // Null when nothing actually differs — a save is not a change, and this
       // runs on every press of a settings control whether or not one moved.
       const entry = settingsWriteEntry("settings/general", prev, next);

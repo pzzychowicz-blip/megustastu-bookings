@@ -13,7 +13,7 @@
 // the conversations/messages nodes.
 
 import { useState, useEffect } from "react";
-import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn } from "../atoms";
+import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn, DateField } from "../atoms";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
@@ -294,7 +294,7 @@ export function WaSimulator({ ctx, onClose }) {
             )}
           </Fld>
           <Fld label="Size">{(id) => <input id={id} className="mgt-hover-scale" type="number" value={form.size} onChange={upd("size")} style={mkInp()} />}</Fld>
-          <Fld label="Date">{(id) => <input id={id} className="mgt-hover-scale" type="date" value={form.date} onChange={upd("date")} style={mkInp()} />}</Fld>
+          <Fld label="Date">{(id) => <DateField value={form.date} onChange={upd("date")} style={mkInp()} inputProps={{ id: id }} />}</Fld>
           <Fld label="Time">{(id) => <input id={id} className="mgt-hover-scale" type="time" value={form.time} onChange={upd("time")} style={mkInp()} />}</Fld>
           <Fld label="Message" style={{ gridColumn: "1 / -1" }}>{(id) => <textarea id={id} className="mgt-hover-scale" value={form.text} onChange={upd("text")} rows={2} style={mkArea()} placeholder="What the customer typed…" />}</Fld>
         </div>
