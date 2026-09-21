@@ -25591,3 +25591,54 @@ first: `--pending-outline`, the ink at 70%, per theme → **3.48:1** light,
 
 Live in DEV: computed border `rgba(133, 77, 14, 0.7)` light,
 `rgba(253, 224, 71, 0.7)` dark. Two new tests (1488 → 1490).
+
+### Commit 3 — the phone field: country code and number, still one string
+
+New: `src/lib/phone-countries.js`, `src/components/CountryPicker.jsx`,
+`src/components/PhoneField.jsx`, `tests/phone-countries.test.js`. Changed:
+`src/components/BookingFormModal.jsx`, `src/hooks/useGeneralSettings.js`,
+`src/App.jsx`, `GLOSSARY.md`, three per-directory `CLAUDE.md`s.
+
+**The data did not change shape, and that was the first decision.**
+`booking.phone` is still "+34 600 123 456". Customer identity
+(`normalizePhone`), the WhatsApp phone key, history diffs and `enteredPhone`
+all key on that string; storing the code and the number apart would be a new
+per-booking field (five lists, CLAUDE.md's gotcha) and would re-key every
+customer. The picker and the number box are a VIEW of the string —
+`splitPhone` / `joinPhone` — and a round-trip test pins that the identity is
+unchanged. No rules change, no console step.
+
+**The list** is countrycode.org's, static (CSP and offline rule out fetching
+it): 240 countries, ISO + name + code. NANP islands and Crown dependencies
+carry their area code as part of the code ("1876" Jamaica, "441481" Guernsey),
+so a stored number parses back to the right place; shared codes (+1, +7, +44,
++61…) resolve through the user's last pick, then a primary country.
+
+**The picker** (Patryk's choice: searchable, not a native `<select>`) filters
+by name, ISO or digits, with pinned countries on top. `settings/general` gains
+`phoneCountry` (derived from `phonePrefix` when absent — "+1" names no single
+country, so the prefix alone cannot) and `pinnedCountries` (seed: ES, GB, DE,
+FR, IT, NL; written as `"none"` when emptied, since RTDB drops `[]`). The
+prefix cap rose from 4 digits to 6 so "+441481" survives the sanitiser. The
+Settings UI for both is commit 4.
+
+**Four defects found by running it, none visible to the gate:**
+- Picking Belgium on a fresh form read back as Spain — the field holds the
+  seeded "+34", and a string naming a code outranks the pick. The pick now
+  clears the seed (`enteredPhone` already treats both as empty).
+- The first `joinPhone`/`splitPhone` trimmed the whole string; they run per
+  keystroke, so the space typed between "600" and "123" vanished. Leading space
+  only now; the save path trims as it always has.
+- Typing "+44" one key at a time ate the "+", because "+" and "+4" name no code
+  yet. `PhoneField` holds the incomplete prefix until `dialOf` recognises it.
+- **Enter anywhere in the booking form is SAVE** (`useKeyboardShortcuts`, a
+  window bubble listener) and Escape closes the form. The search box stops both
+  keys; measured with a window listener, neither reaches it, the form stays
+  open and focus returns to the picker.
+
+Verified live in DEV: search "belg" + Enter → Belgium +32; "united k" → UK;
+"+49 170 1234567" typed into the number box → Germany, "170 1234567"; saved
+booking stores `+49 170 1234567`, reopens as Germany + the number, and an
+untouched reopen closes with no discard prompt. Main bundle **+5.98 kB gz**
+(131.67 → 137.65), most of it the country table, which the booking form needs
+eagerly. Tests 1490 → 1505.

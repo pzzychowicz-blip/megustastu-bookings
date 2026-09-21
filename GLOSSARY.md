@@ -42,7 +42,10 @@ admin has not enabled the module. The one thing still not shipped is the
 | Corner brackets around one pane | **focused pane** | Which half the keyboard acts on. |
 | ‹ date › row under the header | **date-nav row** (`<nav aria-label="Date">`) | Previous day · viewed date · next day. The viewed date is a **date field**, so it names its weekday. |
 | The date currently on screen | **viewed date** (`viewDate`) | Distinct from **today** — most notifications are today-only, clashes are not. |
-| "Fri 11/09/2026" — a date pill that names its weekday | **date field** (`DateField`, `atoms.jsx`) | A native date input with its weekday inside the same pill (v18.0.0 session 7): the header's viewed date and the booking form's Date field. No date, no weekday. Its focus ring is drawn on the pill, not on the input inside it. |
+| "Fri 11/09/2026" — a date pill that names its weekday | **date field** (`DateField`, `atoms.jsx`) | A native date input with its weekday inside the same pill (v18.0.0 session 7): the header's viewed date, the booking form's Date field, the Activity log's From/To and (v18.1.0) the Reminder editor's Date — every date input in the app. No date, no weekday. Its focus ring is drawn on the pill, not on the input inside it. |
+| 🇪🇸 +34 ▾ beside the phone number | **country-code picker** (`CountryPicker`) | v18.1.0. A searchable list of every country's calling code — type a name, an ISO code or digits — with the restaurant's **pinned countries** on top. Opens under the phone field; Escape and Enter act on the list, never on the form behind it. |
+| The booking form's phone number | **phone field** (`PhoneField`) | v18.1.0. Country-code picker + the number. Still stored as ONE string (`booking.phone`, "+34 600 123 456"); the split is only on screen. Typing "+44 …" into the number box moves the picker. |
+| Countries at the top of the code list | **pinned countries** (`settings/general.pinnedCountries`) | v18.1.0. Chosen in Settings → General → Restaurant. Seeded with Spain, UK, Germany, France, Italy, Netherlands. |
 | Pinned header and nav that don't scroll away | **fixed shell** (`shellFixed`) | One layout mode behind both "Lock navigation" and split view. |
 | A pill that appears at the top-left on Tab | **skip link** (`.mgt-skip`) | Jumps keyboard focus past the header to the bookings. |
 

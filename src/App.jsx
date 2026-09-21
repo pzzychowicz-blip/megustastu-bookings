@@ -5116,6 +5116,8 @@ function BookingApp({uid}){
               vouchersByCode={vouchersByCode}
               vouchersOn={vouchersOn}
               regularMin={generalSettings.regularMin}
+              phoneCountry={generalSettings.phoneCountry}
+              pinnedCountries={generalSettings.pinnedCountries}
               today={today}
               nowMins={nowMins}
               onSave={function(){save();}}

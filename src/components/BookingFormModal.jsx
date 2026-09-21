@@ -66,6 +66,7 @@ import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, Stat
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
+import { PhoneField } from "./PhoneField";
 // v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
 // two predicates the "carried from" note is derived with.
 import { guestOpenVouchers, normalizeCode, isUnsettled } from "../lib/vouchers";
@@ -90,6 +91,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
+  phoneCountry, pinnedCountries,  // v18.1.0: settings/general — the phone field's default + pinned codes
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
@@ -970,18 +972,23 @@ export function BookingFormModal({
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number">{function(fid){return <div style={{position:"relative"}}><input
-            id={fid}
-            type="tel"
+            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number">{function(fid){return <PhoneField
+            /* v18.1.0: the country code is its own control (PhoneField,
+               CountryPicker). `form.phone` is still ONE string, so every
+               consumer below — the suggestion list, the chips, the duplicate
+               warning — reads exactly what it read before. The old "+" typed
+               on focus is gone: the code lives in the picker now. The label
+               names the NUMBER box, which is where the typing happens. */
             value={form.phone}
-            /* Same reopen fix as the name field above. */
-            onChange={function(e){setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:e.target.value});});}}
-            onFocus={function(e){setPhoneFocus(true);const el=e.target;if(!el.value) setForm(function(f){return Object.assign({},f,{phone:"+"});});setTimeout(function(){el.selectionStart=el.selectionEnd=el.value.length;},0);}}
-            onClick={function(){setPhoneFocus(true);}}
-            onBlur={function(){setPhoneFocus(false);}}
-            placeholder="+34 600 000 000"
-            className="mgt-hover-scale"
-            style={inp()} />{phoneDropdown}</div>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <><DateField
+            onChange={function(v){setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
+            defaultIso={phoneCountry}
+            pinned={pinnedCountries}
+            inputProps={{id:fid,
+              /* Same reopen fix as the name field above. */
+              onFocus:function(){setPhoneFocus(true);},
+              onClick:function(){setPhoneFocus(true);},
+              onBlur:function(){setPhoneFocus(false);}}}
+          >{phoneDropdown}</PhoneField>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <><DateField
             /* v18.0.0 session 7: the weekday inside the pill. Fld's id and
                state attrs name the INPUT, so they ride in inputProps. */
             inputProps={dateLocked
