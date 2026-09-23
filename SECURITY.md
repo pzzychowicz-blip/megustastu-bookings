@@ -138,7 +138,7 @@ An EU business (Fuerteventura, Spain). What the app keeps about people, and wher
 | Where | What | Kept for |
 |---|---|---|
 | `bookings` | guest names, phone numbers, free-text notes (allergies, occasions), history | **no automatic purge** (an auto-erase was investigated and dropped) |
-| `vouchers` | free-text `notes` | never deleted, only voided (the code is the key) |
+| `vouchers` | free-text `notes`, and `issuedBy` (the issuing account's email) | never deleted, only voided (the code is the key) |
 | `activity` | every entry's author (`uid`, `email`). Guest names are never stored, except a DELETED booking's `subject` and `guestKey` | pruned after `settings/admin.activityRetentionDays` (default 365, at most 3650) |
 | `conversations`, `messages` (WhatsApp, when the module is on) | the guest's phone number (the key) and message text, up to 4,000 characters per message | **no retention: nothing deletes them automatically** |
 | Download backup | the database on a device: the whole of it since v18.1.1, partial before that | as long as the file is kept. Treat it as the database |
@@ -150,8 +150,10 @@ An EU business (Fuerteventura, Spain). What the app keeps about people, and wher
   characters of each inbound message (`WA_PARSE_TEXT_LEN`), plus up to 12 recent
   messages of the conversation on a re-check, go out to be parsed.
 - **Vercel (function logs):** `api/_lib/gemini.js` logs **the first 200 characters of
-  every parsed message** and the parse result (name, party size, date, time) on every
-  parse. A re-check logs its parse result. Vercel's log retention applies.
+  every parsed message** and the parse result on every parse. The result holds name,
+  party size, date, time and `notes`, which the prompt fills with allergies,
+  birthdays and wheelchair needs. **Those notes are health data** (GDPR Art. 9). A
+  re-check logs its parse result too. Vercel's log retention applies.
 
 **Right to erasure.** Settings → Customers → **Delete customer & all data**
 anonymizes that guest's bookings (name → "Data removed", phone, notes and history
@@ -165,7 +167,7 @@ for one small team, but it's a decision, not an accident.
 
 **Open, to decide before WhatsApp goes live:**
 - a retention period for messages
-- whether the parse log line keeps the message text in live mode
+- whether the parse log line keeps the message text and `notes` in live mode
 - erasure reaching WhatsApp data
 - per-role read scope
 
