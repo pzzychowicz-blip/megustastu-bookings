@@ -62,6 +62,19 @@ function checkMirrors(text) {
   return out;
 }
 
+// A setter mentioned WITHOUT being called — `.then(setBookings)`, `cb = setTableBlocks`
+// — sets state with no mirror assignment beside it, and the call scan above cannot
+// see it (/code-review). The only legitimate bare mention is the useState line that
+// declares the setter.
+function bareSetterRefs(text) {
+  const out = [];
+  stripComments(text).forEach((line, idx) => {
+    if (/^\s*const \[\w+, ?set(Bookings|TableBlocks)\] ?= ?useState\(/.test(line)) return;
+    if (/\b(setBookings|setTableBlocks)\b(?!\s*\()/.test(line)) out.push("L" + (idx + 1) + ": " + line.trim());
+  });
+  return out;
+}
+
 describe("usePersistence.js — every set site assigns its mirror first", () => {
   const sites = checkMirrors(readFileSync(FILE, "utf8"));
 
@@ -73,6 +86,10 @@ describe("usePersistence.js — every set site assigns its mirror first", () => 
   it("each setBookings / setTableBlocks is preceded by `<mirror>.current = <same value>`", () => {
     const bad = sites.filter((s) => !s.ok).map((s) => `L${s.line} ${s.setter}(${s.arg}) after "${s.before}"`);
     expect(bad, "a set site without its mirror hands the next save a stale prev").toEqual([]);
+  });
+
+  it("no setter is passed by reference, where no mirror can precede it", () => {
+    expect(bareSetterRefs(readFileSync(FILE, "utf8"))).toEqual([]);
   });
 });
 
@@ -97,6 +114,13 @@ describe("the checker itself — proven against known-bad input", () => {
   it("refuses the WRONG mirror", () => {
     expect(verdicts("blocksRef.current=x;\nsetBookings(x);")).toEqual([false]);
     expect(verdicts("bookingsRef.current=x;\nsetTableBlocks(x);")).toEqual([false]);
+  });
+
+  it("flags a setter passed by reference, and lets the useState declaration through", () => {
+    expect(bareSetterRefs("get(ref(db,\"bookings\")).then(setBookings);")).toHaveLength(1);
+    expect(bareSetterRefs("const cb=setTableBlocks;")).toHaveLength(1);
+    expect(bareSetterRefs("  const [bookings, setBookings] = useState([]);")).toEqual([]);
+    expect(bareSetterRefs("bookingsRef.current=x;\nsetBookings(x);")).toEqual([]);
   });
 
   it("refuses an updater function — computing inside setState is the shape v17.16.10 removed", () => {
