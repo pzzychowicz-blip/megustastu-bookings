@@ -4995,7 +4995,10 @@ function BookingApp({uid}){
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(dayClosed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
+                collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
+                22:00" — one run of numbers (the design critique). A middle dot
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}

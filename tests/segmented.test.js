@@ -43,3 +43,10 @@ describe("one segment look, two users", () => {
     expect(Atoms).toMatch(/color: active \? "var\(--text-primary\)" : "var\(--text-muted\)"/);
   });
 });
+
+describe("the header subtitle (v18.2.0)", () => {
+  const App = read("App.jsx");
+  it("separates its three facts, and ranges with an en dash", () => {
+    expect(App).toMatch(/INDOOR\.length\+" indoor · "\+OUTDOOR\.length\+" outdoor · "\+\(dayClosed\?"Closed":hourLabel\(OPEN\)\+"–"\+hourLabel\(CLOSE\)\)/);
+  });
+});

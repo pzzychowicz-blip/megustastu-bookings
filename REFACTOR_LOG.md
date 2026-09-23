@@ -26024,7 +26024,7 @@ Timeline/List/Plan buttons as one segmented control, with the chosen view lifted
   Measured live in the header: chosen 10.8:1 light / 16.8:1 dark, the others 7.5 /
   5.3.
 
-Tests: `tests/segmented.test.js` (7) and two new contrast registry entries.
+Tests: `tests/segmented.test.js` (5) and two new contrast registry entries.
 
 ### 7. The phone's bottom bar
 
@@ -26095,3 +26095,11 @@ Five buttons drew it as a hyphen (the booking form's two, the walk-in form's two
 zoom). They are U+2212 now, which Settings and LayoutSettings already used. Measured
 in the app font at 17px 600: hyphen 7.7px, U+2212 10.7px, "+" 10.7px. A test refuses
 a button whose whole content is a hyphen, anywhere in `src/`.
+
+### 11. Separators in the header subtitle
+
+`INDOOR.length+" indoor  "+…+" - "+…`: HTML collapsed the double spaces, so it read
+"4 indoor 9 outdoor 13:00 - 22:00", one run of numbers. It is now "4 indoor ·
+9 outdoor · 13:00–22:00", read back from the live DOM. One test in
+`tests/segmented.test.js`. (That file's count in §6 is corrected there to 5: this
+entry's recount found §6 had said 7.)
