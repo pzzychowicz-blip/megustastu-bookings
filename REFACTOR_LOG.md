@@ -26087,3 +26087,11 @@ control in each, the duration **Reset**. With Patryk's say-so:
 Tests: the a11y stepper check now covers both forms, counts 5 `stepPress` uses each,
 and forbids any `onPointerDown=` left in either. `tests/keyboard.test.js` adds 2 unit
 tests for `stepPress`.
+
+### 10. A true minus
+
+The critique: every stepper's and the zoom's "−" sat visibly smaller than its "+".
+Five buttons drew it as a hyphen (the booking form's two, the walk-in form's two, the
+zoom). They are U+2212 now, which Settings and LayoutSettings already used. Measured
+in the app font at 17px 600: hyphen 7.7px, U+2212 10.7px, "+" 10.7px. A test refuses
+a button whose whole content is a hyphen, anywhere in `src/`.

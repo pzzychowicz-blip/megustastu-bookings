@@ -1025,7 +1025,7 @@ export function BookingFormModal({
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease number of guests"
-              {...stepPress(function(){const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});})}>-</button><span
+              {...stepPress(function(){const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});})}>−</button><span
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{String(Number(form.size)||2)}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
@@ -1034,7 +1034,7 @@ export function BookingFormModal({
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease duration"
-              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>-</button><span
+              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>−</button><span
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{dur+" min"}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}

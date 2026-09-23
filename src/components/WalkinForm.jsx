@@ -419,7 +419,7 @@ export function WalkinForm({
                   });
                 })}
               >
-                -
+                −
               </button>
               <span style={stepperValueStyle}>{String(wSize)}</span>
               <button
@@ -449,7 +449,7 @@ export function WalkinForm({
                   setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
                 })}
               >
-                -
+                −
               </button>
               <span style={stepperValueStyle}>{wDur + " min"}</span>
               <button

@@ -1541,3 +1541,15 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
       "the reset button shows text, so its accessible name must start with that text");
   });
 });
+
+describe("a minus control is drawn with U+2212, never a hyphen (v18.2.0)", () => {
+  // The design critique: the − of every stepper and the zoom sat visibly
+  // smaller than the + beside it. Measured in the app font at 17px 600: hyphen
+  // 7.7px wide, U+2212 10.7px, "+" 10.7px. LayoutSettings and Settings already
+  // drew U+2212; the booking form, the walk-in form and the zoom did not.
+  it("no button in src/ has a bare hyphen as its whole content", () => {
+    const offenders = srcFilesMatching(/>\s*-\s*<\/button>/)
+      .map(([f]) => f);
+    expect(offenders).toEqual([]);
+  });
+});

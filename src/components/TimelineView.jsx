@@ -1808,7 +1808,7 @@ export const TimelineView = memo(function TimelineView({
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
-        -
+        −
       </button>
       {/* v17.2.0 follow-up: the reset label grows "1x" → "Nx → 1x" when zoomed —
           the widening used to SNAP and shove the whole toolbar group sideways.
