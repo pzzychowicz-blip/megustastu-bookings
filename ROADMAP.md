@@ -19,11 +19,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **The v18.0.0 production deploy.** Pending from the moment the release merges,
-  and ordered: the six steps, and where each one's detail lives, are
-  `database.rules.README.md` § *v18.0.0 — the production deploy, in order*.
-  Delete this entry when the last of them — `enforceRoles` on — is done.
-
 - **Four code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send
@@ -56,6 +51,66 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
+The next nine come from the **2026-09-23 tech-debt scan**. `#N` is the item's number
+in its register, and the report
+(`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
+evidence for each.
+
+- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23). It needs a
+  scheduled job in a separate PRIVATE repository, because this one is public and its
+  Actions artifacts and logs are world-readable. The job uses a dedicated read-only
+  service account, writes the same file v18.1.1's `lib/backup.js` builds, encrypts it
+  with `age` to a key only Patryk holds, and keeps N days. Undecided: GitHub Actions or
+  Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
+  (`database.rules.README.md` § Backups and restore).
+
+- **Measure `/bookings` before its size becomes a problem (#3).** Every device
+  subscribes to every booking ever made, each with an uncapped `history`, and a resync
+  re-reads the lot. Nothing purges old bookings. First, read Firebase console →
+  Realtime Database → Usage (storage, downloads a month) and set a threshold.
+  Archiving needs design, because customer history derives from all bookings.
+
+- **Before WhatsApp goes live (#4, #8, #24):**
+  1. Node tests for `api/wa-send.js`, `wa-recheck.js`, `wa-config.js`,
+     `_lib/inbound-core.js` and `_lib/meta.js`. No test runs any of them.
+  2. Load a conversation's messages when it opens (`messages/$phoneKey`) instead of
+     every device subscribing to all of `/messages`, and set a retention period.
+  3. **"Delete customer & all data" must also remove the guest's `conversations/` and
+     `messages/`.** Today only the Inbox's delete does.
+  4. Decide whether `api/_lib/gemini.js`'s parse log keeps 200 characters of message
+     text in live mode.
+
+  SECURITY.md §3 lists all four as open.
+
+- **Lint: triage, then decide a gate (#10).** There are 89 warnings, up from about 71 to
+  88 to 89. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so
+  fix each one or keep it with `-- <reason>`. Then decide whether CI gets
+  `--max-warnings N`, which is a policy change.
+
+- **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
+  confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
+  referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
+
+- **One field table for a booking (#13).** Its fields are written out by hand in
+  seven places (CLAUDE.md's per-booking-field row). Derive `sanitize`, `UNDO_FIELDS`
+  and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
+  and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
+  first. This is a data-touching patch version.
+
+- **In-range dependency updates, and whether to automate them (#14).** firebase 12.12 →
+  12.19 needs a tablet check first (the `forceWebSockets`/JSONP history). react 19.3 and
+  plugin-react 6.1 are also available, and eslint 10 and vitest 5 are waiting as majors.
+  Optionally, turn on Dependabot for security updates only.
+
+- **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
+  141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with
+  a pure `resolveShortcut` in `lib/` so it can be tested.
+
+- **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
+  lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
+  one domain per patch version: the save path (#13) first, then recurring generation,
+  backup/export and drag-drop.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**
@@ -66,9 +121,10 @@ session and keeping it in sync.
   shape CLAUDE.md's own Gotchas row names. The node inventory at 0% is what a
   pointer should look like. (2) The write guards' mechanics sit in
   `src/CLAUDE.md`, which every src session loads, where 47% of them never open
-  `src/hooks/`. (3) CLAUDE.md is 94 bytes under 40,000 and nothing measures it,
-  so the next added row crosses silently. Deciding any of these means deciding
-  what a root-only session must still know.
+  `src/hooks/`. (3) **CLAUDE.md crossed 40,000 on 2026-09-19** (`c3f2d6b`), silently,
+  as predicted, and it is 40,162 characters after the scan's drift fixes. Nothing
+  measures it yet, and a size-guard test waits on the decision of what leaves root.
+  Deciding any of these means deciding what a root-only session must still know.
 
 ## Ideas
 

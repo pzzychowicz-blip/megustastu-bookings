@@ -43,7 +43,7 @@ its detail lives rather than repeating it.
    console value, reversible in one console value (*`enforceRoles` — off, and what
    that means*).
 
-`ROADMAP.md` carries a one-line pointer to this section until step 6 is done.
+**All six steps are done** (confirmed by Patryk, 2026-09-23), so `ROADMAP.md` no longer points here.
 
 ## Applying the rules — two routes
 
