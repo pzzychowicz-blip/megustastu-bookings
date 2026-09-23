@@ -328,6 +328,24 @@ export function ClashIcon(props) {
   );
 }
 
+// Not on the grid (v18.2.0) — the notification strip's section for bookings the
+// timeline's Unplaced row holds. A DASHED table: dashes are already this app's
+// word for "not really there" — the Unplaced row's own border, the seated
+// ghost's original-duration outline, the resh waitlist ghost's edge — so the
+// mark reuses a vocabulary instead of inventing one. It is an IDENTITY in the
+// strip's collapsed tally (see ClashIcon above), so it must not read as any
+// neighbour there: ClashIcon is two SOLID squares, ClosedIcon a slashed circle,
+// OverlapIcon two bars. One square, broken. Dash length is chosen for the 14px
+// it ships at (IC.control): four dashes a side read as a broken edge there,
+// where eight blur back into a solid square.
+export function UnplacedIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="3" strokeDasharray="3.2 2.8" />
+    </Svg>
+  );
+}
+
 // Copy the voucher number (v18.0.0 session 8) — Patryk supplied the mark: two
 // overlapping sheets inside a ring.
 //

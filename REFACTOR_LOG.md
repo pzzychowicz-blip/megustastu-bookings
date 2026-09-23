@@ -25875,3 +25875,57 @@ glyph.
 
 Tests: 3 in `tests/a11y.test.js` (stepPress on all four, names, zoom names) and
 `tests/keyboard.test.js` (4: the helper, and that the guard sits before the loop).
+
+### 3. The Unplaced row, and "Not on the grid"
+
+The critique's critical finding. On 3 Oct in DEV, 8 of 12 bookings held table ids the
+layout does not have (`1`, `5`, `8`–`13` against `1A/1B`, `2`–`4`, `5A/5B`, `6`, `7`,
+`i1`–`i4`). The header said 12 bookings and 37 covers, the grid drew 4, and nothing
+said why. The timeline drew a booking once per table on that table's ROW, and a
+missing table has no row. Emil Kovacs ("tables 1 and 2") appeared on 2 only. The DEV
+data was a stale seed, but a LOCKED booking (every walk-in, drag and manual assign)
+keeps its stored tables through `applyOpt`, so renaming or removing a table in
+Settings → Layout does the same to real bookings.
+
+Patryk's calls in this session: one row at the TOP, called Unplaced, merging the old
+bottom "unassigned" row (no tables, `_conflict`) with the new case; a half-placed
+booking shows on its real rows AND in the row; blocks there are tappable and
+draggable; a strip section listing everything in the row, naming the missing tables;
+"N of M on the grid" in the Summary when the two differ.
+
+- **`lib/unplaced.js`** (new, pure): `unplacedReason` / `unplacedOf` (reasons
+  `none` → `missing` → `conflict`; cancelled and completed never unplaced),
+  `primaryGridTable`, `unplacedPhrase`, `packLanes`.
+- **TimelineView.** The row moved to the top. Two problems surfaced by running it,
+  each fixed and measured:
+  - **Lanes.** One lane painted nine blocks over each other, so the invisibility moved
+    up a level. `packLanes` (greedy by start, then id) gives 7 lanes on 3 Oct; every
+    block is readable.
+  - **The drop maths.** `tableForClientY` adds `unplacedH`, or every drop would land
+    rows low. The first cut was 1px out: the dashed border added a pixel the label
+    column did not. The container height is now pinned border-box. Measured after:
+    the first table row, the 1A label and the computed offset all at 336px.
+  - The FLIP id keys on `primaryGridTable` (the first table with a row), not
+    `tables[0]`. Before, a half-placed booking carried no FLIP id at all.
+- **`UnplacedBanner`** (new strip section, "Not on the grid") has a row per booking with
+  the reason ("tables 11, 12 aren't in the layout") and **Assign** → the manual picker.
+  It is scoped to the viewed date, sits after the clash section, and has no ✕ (it
+  clears itself). Its mark, **`UnplacedIcon`**, is a dashed square, rasterised at 14px
+  beside Clash / Closed / Overlap and distinct from all three.
+- **Summary** takes `unplacedCount` from the same App memo: "3 of 12 on the grid" in
+  `--danger-text`, 7.88:1 light and about 8:1 dark (a first dark reading of 1.65 was
+  taken mid theme-transition; re-read settled).
+- **ManualModal** seeds its selection with tables the layout HAS. Reached from the new
+  Assign button, it had pre-selected the missing "1" as "Selected: 1 · Capacity: 0".
+
+**Verified live on DEV (3 Oct):** all 12 bookings are on screen (9 in the Unplaced
+row, Emil there and on 2); the strip lists the 9 with their reasons; the summary
+reads "3 of 12 on the grid"; Assign opens the picker with only real tables
+selected and closes clean. **Not verifiable here: a real drag out of the row.**
+TimelineBlock coalesces moves per animation frame and automation finishes a drag
+inside one frame (the `mgt-measurement-traps` row), so the geometry was measured
+instead. The finger test on the tablet is Patryk's before merging.
+
+Tests: `tests/unplaced.test.js` (19) — the reasons, the 3 Oct day, lanes never
+overlapping and deterministic, and source scans that the three surfaces read the one
+rule, the row is above the table rows, and the drop offset is in.

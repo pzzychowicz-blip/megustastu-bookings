@@ -48,7 +48,7 @@ function freeingParts(freeing){
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek, onPrint }) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, onToggle, onOpenWeek, onPrint }) {
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
@@ -108,6 +108,16 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         >
           <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
           <span style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
+          {/* v18.2.0: said only when it differs. The headline counted 12
+              bookings while the grid drew 4 and nothing reconciled the two;
+              "on the grid" is lib/unplaced.js's definition (not in the
+              timeline's Unplaced row), and App passes the count so this panel
+              and the strip read ONE derivation. */}
+          {unplacedCount > 0 ? (
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--danger-text)" }}>
+              {Math.max(s.totalBookings - unplacedCount, 0) + " of " + s.totalBookings + " on the grid"}
+            </span>
+          ) : null}
         </button>
         {/* Right cluster — the live status bar (today only) + Week + chevron, right-aligned
             via marginLeft:auto; wraps below the headline as a unit on narrow widths. */}

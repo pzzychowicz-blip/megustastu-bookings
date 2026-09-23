@@ -86,6 +86,7 @@ however many fire — that is the whole point of it.
 | Amber "Running late" rows | **Running late** section (`LateBanner.jsx`) | Confirmed bookings past their time today. Offers No show. |
 | Amber "Overlap warnings" rows | **Overlap warnings** section (`OverlapBanner.jsx`) | A **seated** party overstaying into the next booking. A prediction. |
 | Red "Double-booked" / "Double-bookings" rows | **clash** section (`ClashBanner.jsx`, `findClashes`) | Two bookings genuinely on one table. **Not** an overlap warning — the schedule is already wrong. Offers Assign. |
+| Red "Not on the grid" rows, dashed-square mark | **Not on the grid** section (`UnplacedBanner.jsx`, `UnplacedIcon`, `unplacedOf`) | v18.2.0. Every booking in the timeline's **Unplaced row**, one row each, saying why (no table · a table the layout does not have · an optimiser conflict). Offers Assign. No ✕: it clears itself when the booking is placed. |
 | Green "Waitlist — table free" rows | **waitlist availability** section (`WaitAvailBanner.jsx`) | A waiting party a table now fits. Offers Book. |
 | "Reminder(s)" rows | **reminder banner** (`useReminders.jsx`) | A reminder inside its fire window. Snooze / Done. |
 | "Working offline" | **offline section** (`appBannerSections`) | The socket is down; edits queue. |
@@ -121,6 +122,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | What you see | Correct term | What it does |
 |---|---|---|
 | One coloured bar | **block** (`TimelineBlock`) | One booking. Reads left-to-right: identity, then status. |
+| "Unplaced" rows at the top of the grid, above a dashed line | **Unplaced row** (`unplaced`, `packLanes`, `lib/unplaced.js`) | v18.2.0 (was the bottom "unassigned" row). Bookings the table rows cannot show: no tables, a table the layout does not have, or an optimiser conflict. One lane per overlapping booking. A booking with SOME real tables is on those rows AND here. Blocks work as anywhere else, including a drag onto a table. Only drawn when something is unplaced. |
 | The fixed-width strip of marks at the block's right | **flag rail** (`railFlags`) | `StatusIcon` leads, then the flags below. Every item is `flexShrink: 0`. |
 | Banknote mark | **deposit flag** (`DepositIcon`) | A deposit was taken. Amount is in the hover title. |
 | Star | **preferred flag** (`StarIcon`) | The booking has preferred tables. |

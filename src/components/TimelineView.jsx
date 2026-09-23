@@ -54,6 +54,7 @@ import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
+import { unplacedOf, primaryGridTable, packLanes } from "../lib/unplaced";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -1283,9 +1284,25 @@ export const TimelineView = memo(function TimelineView({
   const ghostKeysFor = (tableId) => ghostRenderIds.filter(
     (k) => k.slice(k.indexOf(GHOST_SEP) + 1) === tableId
   );
-  const unassigned = day.filter((b) =>
-    b.status !== "completed" && (!(b.tables || []).length || b._conflict)
-  );
+  // v18.2.0: the Unplaced row — every booking not properly drawn on the grid
+  // (no tables, a table the layout does not have, or an optimiser conflict),
+  // decided by lib/unplaced.js so the strip and the summary agree with it. It
+  // was the "unassigned" row, which missed the middle case entirely: a booking
+  // on a table with no row was drawn NOWHERE.
+  const gridIds = new Set(TIMELINE_TABLES.map((t) => t.id));
+  const unplaced = unplacedOf(day, gridIds).map((u) => u.b);
+  // One LANE per overlapping booking (lib/unplaced.js `packLanes`): a table
+  // row holds one party at a time, this row holds everything unplaced, and in
+  // one lane nine of them painted over each other. Lanes use the same width
+  // the block is drawn at (`liveBarDur`), so two blocks in a lane never touch.
+  const unplacedLanes = packLanes(unplaced.map((b) => {
+    const s = toMins(b.time);
+    return { id: b.id, s: s, e: s + Math.max(liveBarDur(b, nowMins, today), 1), b: b };
+  })).map((lane) => lane.map((it) => it.b));
+  // Rows sit below the header strip AND, when it is there, below the Unplaced
+  // row — `tableForClientY` needs the offset, or every drop lands rows low.
+  const UNPLACED_GAP = 4;
+  const unplacedH = unplacedLanes.length > 0 ? unplacedLanes.length * ROW_H + UNPLACED_GAP : 0;
 
   // v16.0.0 follow-up: start-time chips are CONFIRMED-ONLY (a seated/completed
   // party has arrived — the start time is no longer at-a-glance info, so those
@@ -1325,7 +1342,8 @@ export const TimelineView = memo(function TimelineView({
   // cont.4 fix: a booking on N tables renders N cells — tagging every cell with the
   // same b.id made useFlip's id→top map collide (last cell wins), so on EVERY change
   // (open/date/view switch, add/edit) the booking spuriously animated. So only the
-  // booking's PRIMARY cell (its first table, or the unassigned cell when it has none)
+  // booking's PRIMARY cell (its first table ON THE GRID — `primaryGridTable` —
+  // or the Unplaced row's cell when none of its tables has a row)
   // carries data-flip-id — one element per id, no collision, animates only a real move.
   const assignSig = day.map((b) => b.id + "@" + (b.tables || []).join("-")).join(",");
   const flipRef = useFlip([assignSig]);
@@ -1404,7 +1422,7 @@ export const TimelineView = memo(function TimelineView({
       );
     });
 
-  // ── Labels column (left) — sticky table IDs + optional "unassigned" row ──
+  // ── Labels column (left) — sticky table IDs + optional Unplaced row ──────
   const labelCol = (
     // v14.3.1 (Fix 3): paddingTop mirrors the grid scroller's padding so the
     // 24px header + ROW_H rows line up with the grid column after the pad.
@@ -1415,6 +1433,22 @@ export const TimelineView = memo(function TimelineView({
         borderBottom: "2px solid var(--tl-header-border)",
         boxSizing: "border-box"
       }} />
+      {/* v18.2.0: the Unplaced row leads, directly under the header — it holds
+          the bookings the rows below cannot show, so it is the first thing to
+          read rather than the last thing below eleven rows of tables. */}
+      {unplaced.length > 0 ? (
+        <div style={{
+          height: (unplacedLanes.length * ROW_H) + "px",
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          paddingRight: 6,
+          borderBottom: "1px dashed var(--tl-unassigned-border)",
+          marginBottom: UNPLACED_GAP, boxSizing: "border-box"
+        }}>
+          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
+            Unplaced
+          </span>
+        </div>
+      ) : null}
       {TIMELINE_TABLES.map((tbl) => {
         const id = tbl.id;
         const indoor = isIn(id);
@@ -1450,19 +1484,6 @@ export const TimelineView = memo(function TimelineView({
           </div>
         );
       })}
-      {unassigned.length > 0 ? (
-        <div style={{
-          height: ROW_H + "px",
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          paddingRight: 6,
-          borderTop: "1px dashed var(--tl-unassigned-border)",
-          marginTop: 4, boxSizing: "border-box"
-        }}>
-          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
-            unassigned
-          </span>
-        </div>
-      ) : null}
     </div>
   );
 
@@ -1473,12 +1494,13 @@ export const TimelineView = memo(function TimelineView({
   // how long they've actually stayed), and the actual booking blocks.
   // v17.0.0 correction: map a pointer's clientY to the table row under it —
   // rows are exactly ROW_H tall inside the grid body (flipRef.current), after
-  // the 24px header strip. Returns null outside the table rows (header /
-  // unassigned row / off-grid) so a drop there is a no-op snap-back.
+  // the 24px header strip and (v18.2.0) the Unplaced row when it is shown.
+  // Returns null outside the table rows (header / Unplaced row / off-grid) so a
+  // drop there is a no-op snap-back.
   function tableForClientY(clientY) {
     const el = flipRef.current;
     if (!el) return null;
-    const top = el.getBoundingClientRect().top + 24;
+    const top = el.getBoundingClientRect().top + 24 + unplacedH;
     const idx = Math.floor((clientY - top) / ROW_H);
     return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
   }
@@ -1580,7 +1602,7 @@ export const TimelineView = memo(function TimelineView({
             ghost = (
               <div
                 className="mgt-tlghost"
-                data-flip-id={(b.tables || [])[0] === id ? b.id + "__ghost" : undefined}
+                data-flip-id={primaryGridTable(b, gridIds) === id ? b.id + "__ghost" : undefined}
                 style={{
                   position: "absolute", top: 3, height: (ROW_H - 8) + "px",
                   left: gLeft, width: gW,
@@ -1596,7 +1618,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primaryGridTable(b, gridIds) === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1609,15 +1631,27 @@ export const TimelineView = memo(function TimelineView({
     );
   });
 
-  // ── Unassigned grid row (parallels the unassigned label row in labelCol) ─
-  const unassignedGrid = unassigned.length > 0 ? (
+  // ── Unplaced grid row (parallels the Unplaced label row in labelCol) ─────
+  // v18.2.0: at the TOP, and holding the missing-table case as well. A block
+  // here is a normal block — tap to edit, the assign handle, the quick-status
+  // hold — and drags onto a table row like any other: `homeTable={null}` makes
+  // every row a move target, and `tableForClientY` skips this row's height.
+  const unplacedGrid = unplaced.length > 0 ? (
+    // The HEIGHT is pinned, border-box: the dashed border then sits inside the
+    // last lane instead of adding 1px, so this, the label cell and
+    // `unplacedH` agree to the pixel (measured: unpinned, the rows below sat
+    // 1px lower than `tableForClientY` and the label column believed).
     <div style={{
-      height: ROW_H + "px", position: "relative",
-      borderTop: "1px dashed var(--tl-unassigned-border)",
-      marginTop: 4, boxSizing: "border-box"
+      height: (unplacedLanes.length * ROW_H) + "px",
+      borderBottom: "1px dashed var(--tl-unassigned-border)",
+      marginBottom: UNPLACED_GAP, boxSizing: "border-box"
     }}>
-      <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unplacedLanes.map((lane, li) => (
+        <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
+          <GridLines />
+          {lane.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+        </div>
+      ))}
     </div>
   ) : null;
 
@@ -1680,8 +1714,8 @@ export const TimelineView = memo(function TimelineView({
           <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
           {headerLabels}
         </div>
+        {unplacedGrid}
         {gridRows}
-        {unassignedGrid}
         {nowLine}
       </div>
     </div>

@@ -29,7 +29,7 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { S, BTN, R, M, T, FW, ALL_TABLES } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
   toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
@@ -41,7 +41,15 @@ import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
 
 export function ManualModal({ booking, bookings, onSave, onClose, onDirty, titleText, blocks = [] }) {
-  const [selected, setSelected] = useState(booking && booking.tables ? booking.tables.slice() : []);
+  // v18.2.0: seeded with the tables the layout HAS. A booking reaching this
+  // picker from the strip's "Not on the grid" row can hold a table id that no
+  // longer exists, and seeding it verbatim pre-selected a phantom the grid below
+  // cannot draw or deselect: "Selected: 1 · Capacity: 0". `ALL_TABLES` is a live
+  // binding, read here at mount, which is the call time it needs.
+  const [selected, setSelected] = useState(function () {
+    const known = new Set(ALL_TABLES.map(function (t) { return t.id; }));
+    return booking && booking.tables ? booking.tables.filter(function (t) { return known.has(t); }) : [];
+  });
   const [swapBusy, setSwapBusy] = useState(false);
 
   // v17.5.0 (unsaved-changes guard): the table picks live HERE, not in App, so

@@ -28,7 +28,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
 
 import {
   getDur, toMins, genId, sanitizeBlock,
@@ -181,7 +181,7 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, VoucherIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, UnplacedIcon, VoucherIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -192,6 +192,8 @@ const WeekView = lazyChunk(function(){return import("./components/WeekView").the
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
 import { ClashBanner } from "./components/ClashBanner";
+import { UnplacedBanner } from "./components/UnplacedBanner";
+import { unplacedOf } from "./lib/unplaced";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
@@ -4399,6 +4401,19 @@ function BookingApp({uid}){
     if(!vouchersOn) return EMPTY_ARR;
     return bookings.filter(function(b){return b.date===viewDate&&isUnsettled(b,vouchersByCode);});
   },[bookings,viewDate,vouchersByCode,vouchersOn]);
+  // v18.2.0: the viewed day's bookings that are not properly on the timeline
+  // grid — no tables, a table the layout does not have, or an optimiser
+  // conflict (lib/unplaced.js, the ONE rule the timeline's Unplaced row reads
+  // too). Feeds the strip's "Not on the grid" section, `notifAnnounce` through
+  // it, and the Summary's "N of M on the grid". `layout` is in the deps
+  // because the grid's rows are the `TIMELINE_TABLES` LIVE BINDING, which a
+  // memo cannot see (the hoursSig/layoutSig rule) — renaming a table in
+  // Settings must re-derive this.
+  const unplacedItems=useMemo(function(){
+    const gridIds=new Set(TIMELINE_TABLES.map(function(t){return t.id;}));
+    return unplacedOf(bookings.filter(function(b){return b&&b.date===viewDate;}),gridIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `layout` stands in for the TIMELINE_TABLES live binding
+  },[bookings,viewDate,layout]);
   const notifSections=[].concat(
     appBannerSections({
       isOnline:isOnline,
@@ -4428,6 +4443,11 @@ function BookingApp({uid}){
     hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
       title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
       node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} swapKey={viewDate} />}]:[],
+    // v18.2.0: right after the double-bookings — both are faults of ASSIGNMENT,
+    // and a booking drawn nowhere is as wrong as two drawn in one place.
+    unplacedItems.length?[{id:"unplaced",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:UnplacedIcon,
+      title:"Not on the grid",count:unplacedItems.length,
+      node:<UnplacedBanner items={unplacedItems} onAssign={setManualTarget} swapKey={viewDate} />}]:[],
     hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
@@ -4798,6 +4818,7 @@ function BookingApp({uid}){
     freeing={freeingList}
     hoursSig={weekHours}
     layoutSig={layout}
+    unplacedCount={unplacedItems.length}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint} />;
