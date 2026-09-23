@@ -21,27 +21,34 @@
 
 import { useMemo, memo } from "react";
 import { daySummary } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC } from "../lib/constants";
-import { mkBtn, Reveal } from "./atoms";
+import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP } from "../lib/constants";
+import { mkBtn, Reveal, TBadge } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
 import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
 function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
 function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
 
-// v16.3.0: "freeing soon" entries from the freeing list ([{tables,inMin}]).
-// Tables joined with + (a multi-table booking), cap at 3 entries + a "+N" tail.
-// Returns an ARRAY so each entry can render as its own no-wrap span — the line
-// wraps BETWEEN entries (never mid-token) when several tables are freeing at
-// once, instead of overflowing the card (v16.3.0-correction).
-function freeingParts(freeing){
-  if(!freeing || !freeing.length) return [];
-  const parts = freeing.slice(0, 3).map(function(f){
-    const t = (f.tables && f.tables.length) ? f.tables.join("+") : "?";
-    return t + " (~" + f.inMin + "m)";
-  });
-  if(freeing.length > 3) parts.push("+" + (freeing.length - 3));
-  return parts;
+// v16.3.0: "freeing soon" entries from the freeing list ([{id,tables,inMin}]),
+// capped at 3 entries + a "+N" tail. Each entry is its own no-wrap unit, so the
+// line wraps BETWEEN entries (never mid-token) when several tables are freeing
+// at once, instead of overflowing the card (v16.3.0-correction).
+//
+// v18.2.0 (Patryk): each table is a TABLE BADGE (`TBadge`), the one the List
+// card and the booking form print, rather than its id as text ("5A+5B
+// (~6m)"). The badge's indoor/outdoor fill is the same cue it is everywhere
+// else, and a multi-table booking reads as its badges side by side, as it
+// does on the card. A booking with no table keeps the "?" it always had, as
+// TEXT: a badge would give it an outdoor fill it has no claim to.
+const FREEING_SHOWN = 3;
+function FreeingEntry({ f }) {
+  const tables = f.tables && f.tables.length ? f.tables : null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: SP.tight, whiteSpace: "nowrap", verticalAlign: "middle" }}>
+      {tables ? tables.map(function(t){ return <TBadge key={t} id={t} />; }) : "?"}
+      <span>{"~" + f.inMin + "m"}</span>
+    </span>
+  );
 }
 
 // v17.1.0 perf: React.memo — Summary sits in the always-visible date-nav row,
@@ -138,11 +145,12 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 <span style={{ color: "var(--success-text)", fontWeight: FW.semi }}>
                   <span style={{ margin: "0 4px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
                   <span style={{ whiteSpace: "nowrap" }}>freeing soon:</span>{" "}
-                  {freeingParts(freeing).map(function(p, i){
+                  {freeing.slice(0, FREEING_SHOWN).map(function(f, i){
                     return (
-                      <span key={i}>{i > 0 ? ", " : ""}<span style={{ whiteSpace: "nowrap" }}>{p}</span></span>
+                      <span key={f.id}>{i > 0 ? ", " : ""}<FreeingEntry f={f} /></span>
                     );
                   })}
+                  {freeing.length > FREEING_SHOWN ? ", +" + (freeing.length - FREEING_SHOWN) : null}
                 </span>
               ) : null}
             </div>

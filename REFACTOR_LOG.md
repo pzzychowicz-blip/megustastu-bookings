@@ -26262,3 +26262,30 @@ to two lines, and its badge stays at 277.1 on the first line. The finished cards
 sit inside the Collapsible's 15px inset, so they line up with each other and not
 with the active cards (they also have no next-step button). That is left as it
 was. 9 tests in the new `tests/list-columns.test.js`.
+
+### 17. The Summary's freeing-soon list shows table badges
+
+Patryk: the "freeing soon" entries in the Summary should show the table badge
+from the List card. It printed the ids as text, "5A+5B (~6m)". It is
+**`TBadge`** (`atoms.jsx`), the table badge, which `GLOSSARY.md` had no row for;
+it has one now, along with a row for the Summary itself and one for this list.
+Each entry is now its tables' badges and "~6m", in a module-scope
+`FreeingEntry` that never breaks between them. Three entries, then ", +N", as
+before. A booking with no table keeps its "?" as text, because a badge would
+give it an outdoor fill it has no claim to.
+
+Verified live without writing to DEV. The only seated party then was 57 minutes
+from its end, and the window is 15, so raising the Settings stepper to 60 would
+have meant nine writes up, nine down and eighteen activity-log entries. Instead
+App.jsx's window was set to 60 for one reload and then restored from a
+scratchpad backup, confirmed identical with `cmp`. The Summary read "freeing
+soon: [5B] ~5m, [5A] ~14m, [4] ~57m": three 24px badges in the outdoor fill,
+one line at 1024px (58px card, on its own line under the date controls because
+the longer line no longer fits beside them, §15), two lines at 668px. 6 tests
+in the new `tests/summary-freeing.test.js`.
+
+**Gate after phase 17:** `120.42 kB` gz main bundle (119.90 after phase 14:
++0.25 for §15's hook, +0.23 for §16's grid, +0.04 here) · **1625 tests** (1600
+after phase 14: +10, +9, +6) · 0 lint errors, 91 warnings (unchanged) · style
+OK. The follow-up round adds three commits to this version and changes no
+persisted data, so no Firebase console step is needed.
