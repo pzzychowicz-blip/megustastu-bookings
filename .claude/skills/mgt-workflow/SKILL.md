@@ -293,7 +293,7 @@ npm run build 2>&1 | tail -3 && npm test 2>&1 | grep -E "Tests +[0-9]" && npm ru
 Four lines out, in order: main-bundle gz size · test count · lint problem count · the
 style verdict. Measured on this repo: **0.1s · 1.8s · 4.0s · 0.3s** — about six seconds
 for all four, so run them per commit; a `git bisect` should never land on a broken one.
-`lint` is a **hard** gate at 0 errors (warnings don't block; there are ~71 by design).
+`lint` is a **hard** gate at 0 errors (warnings don't block; most are the React-Compiler advisories kept as warnings on purpose — read the count off the `✖ N problems` line, never a number written here).
 
 **`set -o pipefail` is load-bearing — without it this line lies.** A pipeline's exit
 status is its LAST element's, and every stage here ends in a filter that succeeds on
@@ -323,7 +323,7 @@ been: it was written, and verified, against a passing one.
 
 **A fifth gate, when the diff touches the rules.** Changed `database.rules.json`,
 `tests/rules/**`, `firebase.json` or `vitest.rules.config.js`? Also run
-`npm run test:rules` (121 tests against a local RTDB emulator). It is a **separate CI
+`npm run test:rules` (the rules suite, against a local RTDB emulator — its run prints the count). It is a **separate CI
 job**, so nothing in the four above will catch a rules regression — you'd find out
 after the push. It needs a JVM and a global `firebase-tools`; if it can't run where you
 are, say so plainly rather than reporting a gate you didn't clear. A new `<name>Rev`

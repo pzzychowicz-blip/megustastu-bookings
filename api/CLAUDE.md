@@ -33,3 +33,18 @@ staff-auth gated because a map of which integrations are unconfigured is a map o
 a deployment is soft. The client keeps its own labels and groups and asks only the
 question a browser cannot answer — presentation there, fact here, so the key list is not
 one list in two places
+
+**The `jose` override in `package.json` is load-bearing for every function here**
+(`"overrides": { "jose": "^5.9.6" }`, currently resolving to 5.10.0). firebase-admin
+verifies ID tokens through `jwks-rsa`, which declares `jose ^6.1.3` and loads it with
+`require('jose')`. But jose 6 is ESM-only, and Vercel's function runtime could not
+`require()` an ES module: every function died with `ERR_REQUIRE_ESM` /
+`FUNCTION_INVOCATION_FAILED` (commits `9a0e232` and `850713c`, 2026-06-25/26, where
+pinning Node 22 alone was not enough). jose 5 ships a CommonJS build, and the JWKS API
+`jwks-rsa` uses is the same in both. **Local Node cannot reproduce the failure**,
+because it supports `require(esm)`, so a green local run proves nothing about this.
+**After any firebase-admin or `jwks-rsa` bump, call one deployed function**
+(`wa-config` with a staff token is the cheapest) and check that `npm ls jose` still
+shows 5.x. The override can go when Vercel's runtime loads ESM through `require()`,
+or when `jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one
+of those is true on a deployment, not locally.
