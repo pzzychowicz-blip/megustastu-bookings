@@ -174,8 +174,17 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
 
       {/* Expanded body — shift chips + hourly bars. Wrapped in Reveal (v15.8.0)
           so the panel eases open/closed instead of snapping the column below
-          it (the outer panel is overflow:hidden, so the collapse won't spill). */}
-      <Reveal show={open}>
+          it (the outer panel is overflow:hidden, so the collapse won't spill).
+
+          v18.2.0: `contain: inline-size` keeps the body out of the panel's
+          INTRINSIC width. App's date-nav row sizes this panel by its one-line
+          width (flexBasis "auto") to decide whether it fits beside the date
+          controls, and that width must be the HEADER's: the body only exists
+          while open, and it is the wider of the two on a day that is not
+          today (measured: ~388px against a ~270px header), so counting it
+          would move the panel onto the next line the moment it opened. Laid
+          out, the body still takes the panel's full width. */}
+      <Reveal show={open} style={{ contain: "inline-size" }}>
         <div style={{ padding: "2px 14px 14px" }}>
           {hasData ? (
             <div>

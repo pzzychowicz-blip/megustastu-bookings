@@ -354,6 +354,16 @@ explaining why is usually the one to read.
   timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
   ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
   of the same height ends `<main>` so the last row is never under it.
+- **The Summary sits beside the date controls only on one line (v18.2.0).** The
+  controls are centred on the 58px collapsed card beside them (`DATE_CTRL_DROP`,
+  9px). That centring applies only while the Summary is MEASURED on their line
+  (`useSharesLine`). Its basis is its own one-line width, so where it cannot
+  fit beside them on one line it takes its own full-width line underneath: 12px
+  under the header, 8px under the controls. The old 360px basis gave two wrong
+  states: from 600 to ~680px the Summary wrapped while the controls still
+  dropped, 1px into its card (Patryk's screenshot); from ~680 to ~1000px it
+  stayed beside them as a half-empty two-line card with the controls 22px off
+  centre.
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).

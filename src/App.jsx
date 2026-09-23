@@ -225,6 +225,9 @@ import { BookingFormModal } from "./components/BookingFormModal";
 // App.jsx. One hook per file in src/hooks/, mirroring the components/
 // pattern. No barrel index — explicit imports keep dependencies visible.
 import { useWinW } from "./hooks/useWinW";
+// v18.2.0: whether the Summary shares the date controls' flex line — see
+// DATE_CTRL_DROP and the hook's own header.
+import { useSharesLine } from "./hooks/useSharesLine";
 
 // ── v14.2.0: Dark-mode theming hook ───────────────────────────────────────
 // `useThemeMode(explicitPref)` -> isDark, writing <html data-theme>. Ported
@@ -540,6 +543,15 @@ const CHROME_BTN={
 // compositor-only, so this eases without reflowing a row whose sibling is the
 // timeline. Reduce-motion needs nothing: index.html's data-motion="reduce" block
 // zeroes transition-duration with !important, which beats an inline transition.
+//
+// v18.2.0: every sentence above assumes the Summary is BESIDE the controls, and
+// it is not always. The row wraps, and the Summary took a 360px basis, so from
+// 600 to ~680px it wrapped onto its own line while the controls still dropped
+// 9px — into the gap and 1px INTO the Summary card (Patryk's screenshot, 668px).
+// Two changes: the drop applies only while `useSharesLine` MEASURES the Summary
+// on the controls' line, and the Summary's basis is its own one-line width, so
+// it sits beside the controls only when its collapsed card is one line — the
+// 58px this constant is centred against — and drops below them otherwise.
 const DATE_CTRL_DROP=9;
 function readAppWidth(){
   try{
@@ -4866,13 +4878,21 @@ function BookingApp({uid}){
   // DATE_CTRL_DROP. Applied to BOTH groups so the arrows/date field and the
   // Today/waitlist pills stay on one line as they move.
   //
-  // Guarded on !isMobile: below 600px the Summary's flexBasis is "100%", so it
-  // wraps onto its own flex line and the controls' line is exactly control
-  // height. There is nothing to centre in there, and an unguarded offset would
-  // push them down into the row gap instead. At >=600 the Summary is
-  // flexShrink:1 with minWidth:0, so it shrinks rather than wrapping and the
-  // single-line assumption this offset depends on holds.
-  const dateCtrlShift=(isMobile||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
+  // v18.2.0: gated on the Summary being MEASURED on the controls' line. This
+  // was `!isMobile`, on the belief that at >=600 the Summary "shrinks rather
+  // than wrapping" — false: in a wrapping row an item breaks onto a new line
+  // on its flex BASIS before any shrinking is considered, so it wrapped from
+  // 600 to ~680px and the offset pushed the controls 1px into the Summary card
+  // (Patryk's screenshot). On its own line there is nothing to centre against,
+  // exactly as the phone case always said. `same` is null until measured, and
+  // the transition switches on only once `settled`, so the first paint never
+  // slides 9px in from a guess — see the hook's header.
+  const dateRowRef=useRef(null);
+  const dateNavRef=useRef(null);
+  const summarySlotRef=useRef(null);
+  const summaryLine=useSharesLine(dateRowRef,dateNavRef,summarySlotRef);
+  const dateCtrlShift=(summaryLine.same!==true||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
+  const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
@@ -5065,7 +5085,8 @@ function BookingApp({uid}){
              row happened to have in that one frame — which, on collapse, was
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
+          ref={dateRowRef}
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" ref={dateNavRef} style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><button
               onClick={function(){goToDate(stepDate(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
@@ -5084,7 +5105,7 @@ function BookingApp({uid}){
               inputProps={{"aria-label":"Viewed date"}}
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
@@ -5103,7 +5124,18 @@ function BookingApp({uid}){
                  white text is a recorded exemption, extended to this chrome by
                  Patryk after seeing all three candidate treatments side by side
                  in both themes. */
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div>{/* v18.2.0: the basis is "auto" — the Summary's own ONE-LINE width — where it
+              was 360 (and "100%" on a phone). A wrapping row breaks on the basis,
+              so at 360 the Summary stayed beside the controls from ~680px up even
+              when its numbers needed ~600, and its collapsed card went to two
+              lines half empty, with the controls' 9px drop no longer centring
+              anything (measured at 720px: 22px off). Now it sits beside them only
+              when it fits on one line and takes its own full-width line
+              otherwise (Patryk's choice). A phone needs no case of its own: the
+              one-line width never fits beside the controls there, and alone on
+              its line the card shrinks (minWidth 0) and wraps inside, as before.
+              The opened body is kept out of that width (`contain`, Summary.jsx),
+              or opening the Summary could bounce it onto the next line. */}<div ref={summarySlotRef} style={{flexGrow:1,flexShrink:1,flexBasis:"auto",minWidth:0}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
               gone — both buttons moved up into the header row above, each to the
               thing it acts on (see CHROME_BTN). The pair was created to give all
               three views ONE copy of these controls, and that still holds: the

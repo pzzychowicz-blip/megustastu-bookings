@@ -26165,3 +26165,53 @@ timeline's `scrollDateRef` write, §4) · style OK.
 **Not verified here, and needed before merge:** a real finger dragging a booking out
 of the Unplaced row onto a table on the tablet. Automation cannot hold a drag across
 frames (`mgt-measurement-traps`), so only the drop geometry was measured (§3).
+
+### Follow-up round — three requests after the entry closed
+
+Patryk, looking over the branch before the ship run, asked for three more changes
+(same version, same entry). He chose the two layout forks from previews:
+**fixed columns** on the List card over columns sized to each day, and **the
+Summary drops below** the date controls over keeping it beside them on two lines.
+
+### 15. The date controls stop dropping into the Summary
+
+Patryk's screenshot at 668px: the date controls touched the Summary card, 21px
+under the header and 1px into the card (measured: controls' bottom 165, card top
+164). Two faults in the date-nav row, both found by measuring it.
+
+- **The 9px drop assumed a shared line.** `DATE_CTRL_DROP` centres the 40px
+  controls on the 58px collapsed Summary BESIDE them, gated on `!isMobile` with the
+  comment "at >=600 the Summary … shrinks rather than wrapping". In a wrapping
+  row an item breaks onto a new line on its flex BASIS before any shrinking, so
+  with a 360px basis the Summary wrapped from 600 to ~680px (wider with the Today
+  or waitlist pill), and the controls dropped into the gap. **`useSharesLine`**
+  (new, `src/hooks/`) measures it instead: `sharesLine(a, b)` compares offsetTops
+  (transform-blind, so the drop never feeds back into its own gate), one
+  ResizeObserver on the ROW (a line break always changes its height), a layout
+  effect so the first answer is there before paint. Its `settled` flag holds the
+  transition at "none" for that first answer: a style that changes in the same
+  recalc as its `transition` takes the new transition, so enabling both at once
+  would slide the controls 9px on every load where they sit beside the Summary.
+- **The 360px basis also put a two-line Summary beside the controls** from ~680 to
+  ~1000px: its card half empty and the controls 22px off-centre (measured at
+  720). The basis is now `"auto"`, the Summary's own one-line width (~605px on
+  today with the status numbers), so it is beside the controls only when it fits
+  there on one line and on its own line otherwise (Patryk's choice). A phone needs
+  no case of its own, as the one-line width never fits beside the controls there.
+  The Summary's opened body is kept out of that width with
+  `contain: inline-size` on its Reveal: it is the wider half on a day that is not
+  today (~388 vs ~270px), so opening the Summary moved it onto the next line.
+  Measured with the property removed live (the panel went to 688px wide on its
+  own line) and with it back (it stayed beside at 331).
+
+Live, after a full reload: 668px → no drop, 12px under the header, 8px above the
+Summary. 600 and 375 are the same. 720 → the Summary on its own line and ONE line
+tall (58px). 1024 and 1300 → beside it, the controls centred exactly (midlines 0px
+apart), transition on. 720 on a non-today date → beside at 331px; opening leaves it
+there with the controls at the top, and closing re-centres them. 10 tests in the new
+`tests/date-row.test.js`.
+
+The first live check after the edit was wrong. The hot-reloaded page ran the new
+render code (the transition read `none`) but the new layout effect never answered,
+and resizing to 1300 left the drop off. A full reload fixed it. Recorded in
+`mgt-measurement-traps`.

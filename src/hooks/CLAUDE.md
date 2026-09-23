@@ -16,6 +16,8 @@ Extracted from the root `CLAUDE.md` File Structure block (moved here so it loads
 
 - **useWinW.js** — viewport-width hook
 
+- **useSharesLine.js** — v18.2.0. `{ same, settled }`: does flex item `b` sit on item `a`'s line in a wrapping row? It gates the date controls' `DATE_CTRL_DROP`. The drop assumed the Summary sat beside the controls at 600px and up, and the Summary wrapped, so the controls were pushed 1px into it. Where an item lands is decided by its siblings' widths, the viewed date and the day's numbers, so it is MEASURED. The pure `sharesLine(a, b)` compares `offsetTop`s, which ignore transforms, so the drop never feeds back into its own gate. It uses ONE ResizeObserver, on the row: a line break always changes the row's height. `settled` is false for the first measurement only; a caller keeps its `transition` at `none` until then, because a style that changes in the same recalc as its transition takes the new transition and would animate on load. Unchanged state is handed back as the same object, so the Summary's open/close (which resizes the row every frame) does not re-render the app per frame
+
 - **useThemeMode.js** — dark-mode resolver (localStorage pref → isDark; writes data-theme)
 
 - **useOperatingHours.js** — PER-WEEKDAY open/close + closed days → constants.js live bindings via hoursFor(date)/setActiveDayHours; Firebase settings/operatingHours (v14.4.0; 24h v14.5.0; per-weekday v15.0.0)
