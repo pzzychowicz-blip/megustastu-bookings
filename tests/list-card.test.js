@@ -76,3 +76,24 @@ describe("the card and the popup", () => {
     expect(Popup).toMatch(/startArmed = false/);
   });
 });
+
+describe("startingPhrase — the forms' 'Starting at this time:' line (v18.2.0)", () => {
+  it("counts only the OTHER bookings, so an empty slot says so", async () => {
+    const { startingPhrase } = await import("../src/lib/booking-logic.js");
+    expect(startingPhrase({ starts: 0, guests: 0 })).toBe("none yet");
+    expect(startingPhrase(null)).toBe("none yet");
+    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1 booking · 1 guest");
+    expect(startingPhrase({ starts: 2, guests: 4 })).toBe("2 bookings · 4 guests");
+  });
+
+  it("both forms print it; neither prints the draft-inclusive count any more", () => {
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+    const Form = stripComments(readFileSync(join(SRC, "components/BookingFormModal.jsx"), "utf8")).join("\n");
+    const Walk = stripComments(readFileSync(join(SRC, "components/WalkinForm.jsx"), "utf8")).join("\n");
+    expect(Form).toMatch(/Starting at this time: <\/span>\{startingPhrase\(kitchenLoad\)\}/);
+    expect(Walk).toMatch(/\{startingPhrase\(wKitchenLoad\)\}/);
+    // The THRESHOLD still counts the draft — that is the kitchen's question.
+    expect(Form).toMatch(/const kitchenStarts=kitchenLoad\?kitchenLoad\.starts\+1:1;/);
+    expect(Walk).toMatch(/const wKitchenStarts = wKitchenLoad\.starts \+ 1;/);
+  });
+});

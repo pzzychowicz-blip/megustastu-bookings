@@ -26125,3 +26125,14 @@ everywhere but drop what made it look pressable: `--shadow-btn` and the solid
 buttons' white rim (`RIM_SOLID`). Live: the title computes `box-shadow: none`,
 `border: 0px none`, and keeps `rgba(0, 116, 243, 0.75)`. 1 test in
 `tests/segmented.test.js`.
+
+### 14. "Starting at this time" counts the others
+
+Both forms printed `starts + 1` and `guests + this party`, the same inclusive figure
+the kitchen-busy threshold uses. On an empty 13:00 slot the line said "1 booking ·
+2 guests" about a booking not yet made (the critique). **`startingPhrase(load)`**
+(booking-logic) prints the OTHER bookings starting then, or "none yet", in both
+forms. The threshold still counts the draft, because "with this one there would be
+N" is the kitchen's question. Only the sentence changed. The inclusive guest sums
+were then unused and are gone. Live, today: 13:00 read "none yet"; 18:00 read "2
+bookings · 4 guests" (the day's two, 4 covers). 2 tests in `tests/list-card.test.js`.

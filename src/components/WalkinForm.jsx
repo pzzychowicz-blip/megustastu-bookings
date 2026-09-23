@@ -42,7 +42,7 @@ import {
   getBlockSlots, getBusy, occupancyEnd, padEnd,
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes,
+  getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   comboCapBest, nowTime
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
@@ -192,7 +192,6 @@ export function WalkinForm({
   // a full search every render.
   const wKitchenLoad = getKitchenLoad(bookings, wDate, wTime, wDur, null);
   const wKitchenStarts = wKitchenLoad.starts + 1;
-  const wKitchenGuests = wKitchenLoad.guests + wSize;
   const wKitchenBusy = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
   const wKitchenSugg = wKitchenBusy
     ? findKitchenFriendlyTimes(bookings, wDate, wSize, "auto", wDur, wTime, null, tableBlocks)
@@ -302,8 +301,8 @@ export function WalkinForm({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <span>
             <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
-            {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
-              + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
+            {/* v18.2.0: the OTHER parties starting then — lib's startingPhrase. */}
+            {startingPhrase(wKitchenLoad)}
           </span>
           {wKitchenBusy ? <OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip> : null}
         </div>

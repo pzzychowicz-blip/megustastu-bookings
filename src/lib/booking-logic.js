@@ -922,6 +922,19 @@ export function getKitchenLoad(bookings,date,time,dur,excludeId){
   starting.forEach(function(b){guests+=b.size||2;tblCount+=(b.tables||[]).length||1;});
   return {tables:tblCount,guests:guests,starts:starting.length};
 }
+// v18.2.0: what the forms' "Starting at this time:" line SAYS — the OTHER
+// bookings starting then, from `getKitchenLoad`. Both forms printed
+// starts + 1 and guests + this party's size, the same inclusive figure their
+// kitchen-busy threshold uses, so on an empty 13:00 slot the line read "1
+// booking · 2 guests" about a booking that did not exist yet (the design
+// critique). The THRESHOLD still counts the draft — "with this one there would
+// be N" is the right question for the kitchen — only the sentence changed.
+export function startingPhrase(load){
+  var n=(load&&load.starts)||0;
+  if(!n) return "none yet";
+  var g=(load&&load.guests)||0;
+  return n+" booking"+(n!==1?"s":"")+" · "+g+" guest"+(g!==1?"s":"");
+}
 export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date
   if(h.closed) return {before:[],after:[]}; // closed day → no times to suggest

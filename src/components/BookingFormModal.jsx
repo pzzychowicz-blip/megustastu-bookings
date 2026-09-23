@@ -40,7 +40,7 @@ import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOO
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes,
+  getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   optimizerActiveFor, seatingClosed,
   // v18.0.0 session 10: the predicate `applyOpt` itself branches on, so the
   // preview asks "will the optimiser choose these tables?" with the optimiser's
@@ -647,7 +647,6 @@ export function BookingFormModal({
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
   const kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
-  const kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
   const kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
   // v16.3.0 perf: deferred like formAvail — a per-quarter-slot day scan that must
   // not run at mount-paint time nor on unrelated keystrokes (name/notes/phone).
@@ -725,7 +724,7 @@ export function BookingFormModal({
     {/* Indented under the title only when there IS one; the calm state has no
         mark to line up under, so it takes the pane's own padding. */}
     <div style={{padding:kitchenBusy?"4px "+NOTIF_PAD_X+"px 4px "+NOTIF_GUTTER+"px":"0 "+NOTIF_PAD_X+"px",fontSize: T.body,color:kitchenBusy?"var(--text-primary)":S.muted}}><div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{startingPhrase(kitchenLoad)}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>
   </AlertPanel>:null;
 
   // v17.6.0: which statuses the edit form offers.
