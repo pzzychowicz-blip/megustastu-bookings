@@ -1445,17 +1445,32 @@ export const TimelineView = memo(function TimelineView({
     );
   });
 
+  // v18.2.0: an hour label the now-pill is sitting on steps aside. The two are
+  // the same shape on the same baseline, so "15:17" drawn over "15:00" read as
+  // one smudged pill (the design critique). Measured: hour pill 38.2px wide,
+  // now-pill 34.2px, so they touch when their centres are within ~36px; 38
+  // leaves a hair of air. `pxPerMin` is gridW's LOWER bound (the grid can
+  // stretch wider), so the error is towards hiding a label a little early,
+  // never towards leaving it under the pill. It fades both ways on M.tap, so
+  // the label that comes back as the clock moves on eases in, not snaps.
+  // (`nowInRange` is declared further down; this reads the same condition
+  // inline rather than a const above its declaration — the TDZ gotcha.)
+  const NOW_PILL_CLEAR = 38;
+  const nowShown = isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60;
   const headerLabels = QUARTER_HOURS
     .filter((m) => isHourMark(m) && m < GRID_CLOSE * 60)
     .map((m) => {
       const center = ((m + 30 - OPEN * 60) / totalMins) * 100;
+      const covered = nowShown && Math.abs(m + 30 - nowMins) * pxPerMin < NOW_PILL_CLEAR;
       return (
         <span
           key={"h" + m}
+          aria-hidden={covered ? "true" : undefined}
           style={{
             ...HOUR_PILL,
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            pointerEvents: "none", zIndex: 1
+            pointerEvents: "none", zIndex: 1,
+            opacity: covered ? 0 : 1, transition: "opacity " + M.tap
           }}
         >
           {hourLabelAt(m)}

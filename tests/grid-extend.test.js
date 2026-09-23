@@ -91,3 +91,18 @@ describe("the call sites", () => {
     expect(App).toMatch(/scrollDateRef=\{timelineScrollDateRef\}/);
   });
 });
+
+describe("the hour label under the now-pill steps aside (v18.2.0)", () => {
+  const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+  const Timeline = stripComments(readFileSync(join(SRC, "components/TimelineView.jsx"), "utf8")).join("\n");
+
+  it("hides a label whose centre is within one pill of now, measured in px", () => {
+    expect(Timeline).toMatch(/const covered = nowShown && Math\.abs\(m \+ 30 - nowMins\) \* pxPerMin < NOW_PILL_CLEAR;/);
+    expect(Timeline).toMatch(/const NOW_PILL_CLEAR = 38;/);
+  });
+
+  it("fades BOTH ways (an opacity transition, never an unmount) and leaves the a11y tree while hidden", () => {
+    expect(Timeline).toMatch(/opacity: covered \? 0 : 1, transition: "opacity " \+ M\.tap/);
+    expect(Timeline).toMatch(/aria-hidden=\{covered \? "true" : undefined\}/);
+  });
+});

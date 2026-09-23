@@ -26103,3 +26103,15 @@ a button whose whole content is a hyphen, anywhere in `src/`.
 9 outdoor · 13:00–22:00", read back from the live DOM. One test in
 `tests/segmented.test.js`. (That file's count in §6 is corrected there to 5: this
 entry's recount found §6 had said 7.)
+
+### 12. The hour label steps aside for the now-pill
+
+"15:17" drawn over the "15:00" hour label read as one smudged pill (the critique's
+first screenshot). Both are the same shape on the same baseline. Measured: the hour
+pill is 38.2px wide and the now-pill 34.2px, so they touch when their centres are
+within about 36px. A label whose centre is within `NOW_PILL_CLEAR` (38px) of now
+fades to 0 on `M.tap` and is `aria-hidden`. Because it is an opacity transition and
+not an unmount, it fades back in once the clock moves on (the in-and-out rule). The
+distance uses `pxPerMin`, gridW's lower bound, so any error hides a label slightly
+early, never leaves it under the pill. Live at 15:18, only 15:00 hides (centre 14px
+away); 14:00 at 58px and 16:00 at 86px stay. 2 tests in `tests/grid-extend.test.js`.
