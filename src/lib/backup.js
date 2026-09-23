@@ -46,13 +46,6 @@ export const BACKUP_OMIT = {
     "an already-seen banner once, which pruneOldReminderFires then re-prunes",
 };
 
-// A node that holds nothing. RTDB never stores an empty object or array — it
-// deletes the key — so in a snapshot "empty" and "absent" are the same fact.
-function isEmptyNode(v) {
-  if (v === null || v === undefined) return true;
-  return typeof v === "object" && Object.keys(v).length === 0;
-}
-
 // root: the database root as `get(ref(db)).val()` returns it — null for an empty
 // database. meta: { exportedAt, appVersion }. Returns the object to serialise.
 export function buildBackup(root, meta) {
@@ -74,17 +67,13 @@ export function buildBackup(root, meta) {
   return out;
 }
 
-// The partial-read guard — a BACKSTOP, stated as one. `held` maps a collection
-// to how many entries this device is holding right now. Any collection held
-// non-empty must be present and non-empty in the snapshot, or the file would be
-// missing it without saying so. Offline, a root read was measured to WAIT for the
-// socket rather than resolve from the local cache (`usePersistence`'s
-// `readDatabaseRoot`), so this has not been seen to fire. It stays because the
-// failure it names is the exact one this module exists to end, at the cost of a
-// key lookup per collection. Returns the names that fail, in `held`'s order.
-export function missingFromSnapshot(root, held) {
-  const src = root && typeof root === "object" ? root : {};
-  return Object.keys(held || {}).filter(function (k) {
-    return held[k] > 0 && isEmptyNode(src[k]);
-  });
-}
+// There is deliberately NO "did the read come back whole" check here. The first
+// version had one, comparing the collections this device holds against the
+// snapshot, and /code-review showed it could not do its job: a root read served
+// from the SDK's local cache would hold exactly the paths this device LISTENS to
+// (those are what the cache has), so it would pass; meanwhile a collection
+// emptied by another device during the read made it refuse a complete backup.
+// What actually prevents a partial file is the SDK: a root `get()` is never
+// answered from an incomplete cache — measured offline on DEV, it stays pending
+// until the socket returns — and `usePersistence`'s `readDatabaseRoot` refuses
+// up front when the device is offline.

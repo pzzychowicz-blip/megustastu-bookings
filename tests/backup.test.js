@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { buildBackup, missingFromSnapshot, BACKUP_OMIT, BACKUP_META_KEY } from "../src/lib/backup.js";
+import { buildBackup, BACKUP_OMIT, BACKUP_META_KEY } from "../src/lib/backup.js";
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RULES = JSON.parse(readFileSync(join(ROOT_DIR, "database.rules.json"), "utf8")).rules;
@@ -27,6 +27,8 @@ const RULES = JSON.parse(readFileSync(join(ROOT_DIR, "database.rules.json"), "ut
 const isNode = (k) => !k.startsWith(".") && !k.startsWith("$");
 const TOP = Object.keys(RULES).filter(isNode);
 const SETTINGS = Object.keys(RULES.settings).filter(isNode);
+
+const omitted = (k) => Object.prototype.hasOwnProperty.call(BACKUP_OMIT, k);
 
 const META = { exportedAt: "2026-09-23T10:00:00.000Z", appVersion: "18.1.1" };
 
@@ -53,7 +55,7 @@ describe("buildBackup — the file is the whole database, minus a reasoned list"
     const db = fullDatabase();
     const out = buildBackup(db, META);
     for (const k of TOP) {
-      if (k in BACKUP_OMIT) expect(out, "omitted on purpose: " + k).not.toHaveProperty(k);
+      if (omitted(k)) expect(out, "omitted on purpose: " + k).not.toHaveProperty(k);
       else expect(out[k], "missing from the backup: " + k).toEqual(db[k]);
     }
   });
@@ -133,28 +135,6 @@ describe("the file's own metadata", () => {
   });
 });
 
-describe("missingFromSnapshot — the partial-read guard", () => {
-  it("passes when everything held came back", () => {
-    expect(missingFromSnapshot({ bookings: { a: {} }, vouchers: { X: {} } }, { bookings: 1, vouchers: 1 })).toEqual([]);
-  });
-
-  it("names a held collection the read came back without", () => {
-    expect(missingFromSnapshot({ vouchers: { X: {} } }, { bookings: 12, vouchers: 1 })).toEqual(["bookings"]);
-  });
-
-  it("treats an empty node as absent — RTDB never stores one", () => {
-    expect(missingFromSnapshot({ bookings: {}, waitlist: [] }, { bookings: 3, waitlist: 2 })).toEqual(["bookings", "waitlist"]);
-  });
-
-  it("ignores what this device holds nothing of", () => {
-    expect(missingFromSnapshot({}, { bookings: 0, reminders: 0 })).toEqual([]);
-  });
-
-  it("a null read fails every held collection", () => {
-    expect(missingFromSnapshot(null, { bookings: 1, tableBlocks: 0, vouchers: 4 })).toEqual(["bookings", "vouchers"]);
-  });
-});
-
 describe("App's doBackup goes through the builder", () => {
   // Read STRIPPED (tests/test-hygiene.test.js): the comment above doBackup
   // describes the hand-built payload it replaced, and a raw read would match it.
@@ -168,17 +148,14 @@ describe("App's doBackup goes through the builder", () => {
     expect(end).toBeGreaterThan(start);
   });
 
-  it("reads the root, checks it, then builds with buildBackup", () => {
+  it("reads the root, then builds with buildBackup", () => {
     expect(body).toContain("readDatabaseRoot(");
-    expect(body).toContain("missingFromSnapshot(");
     expect(body).toContain("buildBackup(");
     expect(body).toContain('refused("dataExport")');
   });
 
   it("no longer hand-builds a payload from in-memory state", () => {
-    // `bookings:bookings.length` (the held counts) is fine; `bookings:bookings,`
-    // as a payload key is the old shape.
-    expect(body).not.toMatch(/\bbookings:bookings\b(?!\.)/);
+    expect(body).not.toMatch(/\bbookings:bookings\b/);
     expect(body).not.toMatch(/\boperatingHours:weekHours\b/);
   });
 });

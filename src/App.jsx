@@ -86,7 +86,7 @@ import { hourLabel, spanZoom } from "./lib/time-grid";
 import { placeWaitlist } from "./lib/waitlist-match";
 // v18.1.1: what "Download backup" writes — the whole database minus a named,
 // reasoned omission list — decided in a pure module (tests/backup.test.js).
-import { buildBackup, missingFromSnapshot } from "./lib/backup";
+import { buildBackup } from "./lib/backup";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -2298,16 +2298,6 @@ function BookingApp({uid}){
     if(backupInFlightRef.current) return;
     backupInFlightRef.current=true;
     readDatabaseRoot().then(function(root){
-      // Backstop: whatever this device is holding must be in what came back, or
-      // the file would be missing it silently (see missingFromSnapshot).
-      const missing=missingFromSnapshot(root,{
-        bookings:bookings.length,tableBlocks:tableBlocks.length,waitlist:waitlist.length,
-        reminders:reminders.length,vouchers:vouchers.length,
-      });
-      if(missing.length){
-        setWriteWarning("Backup not saved: the database read came back without "+missing.join(", ")+". Try again once the connection is steady.");
-        return;
-      }
       const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
       try{
         const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
