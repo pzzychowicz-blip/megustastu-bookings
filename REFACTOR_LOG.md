@@ -26136,3 +26136,32 @@ forms. The threshold still counts the draft, because "with this one there would 
 N" is the kitchen's question. Only the sentence changed. The inclusive guest sums
 were then unused and are gone. Live, today: 13:00 read "none yet"; 18:00 read "2
 bookings · 4 guests" (the day's two, 4 covers). 2 tests in `tests/list-card.test.js`.
+
+### Closing the entry
+
+**Files:** new `src/lib/unplaced.js`, `src/components/UnplacedBanner.jsx`, and seven
+test files (`empty-day`, `keyboard`, `unplaced`, `grid-extend`, `list-card`,
+`mobile-bar`, `segmented`). Changed: `App.jsx`, `atoms.jsx`, `BookingFormModal`,
+`Icons`, `ListView`, `ManualModal`, `PlanView`, `QuickStatusPopup`, `Settings`,
+`Summary`, `TimelineView`, `ViewSwitcher`, `WalkinForm`, `useKeyboardShortcuts`,
+`index.css`, `booking-logic`, `constants`, `keyboard`, `a11y` and `contrast` tests,
+the four living docs, the three per-directory notes and the `mgt-measurement-traps`
+skill. 37 files, +1926 / −221 before this paragraph, in 15 commits.
+
+**Beyond the interview's 13 items, each put to Patryk as it surfaced:**
+- Enter on a focused button now presses that button (phase 2).
+- The two rows merge into one Unplaced row, and the ⋯ opens the quick-status card
+  (phases 3, 5).
+- Primary text on the lifted segment, which also fixes Settings' tabs (phase 6).
+- Dismiss changes at the token (phase 8).
+- The walk-in form's steppers get the same fix (phase 9).
+- Modal titles go flat in every modal (phase 13).
+
+**Gate after phase 14:** `119.90 kB` gz main bundle (118.16 after phase 1, which
+already carried the version bump) · **1600 tests** (1520 on `main`) · 0 lint errors,
+91 warnings (89 on `main`; the two new ones are React Compiler advisories on the
+timeline's `scrollDateRef` write, §4) · style OK.
+
+**Not verified here, and needed before merge:** a real finger dragging a booking out
+of the Unplaced row onto a table on the tablet. Automation cannot hold a drag across
+frames (`mgt-measurement-traps`), so only the drop geometry was measured (§3).

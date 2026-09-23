@@ -121,6 +121,18 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
+- **The Plan view opens a non-today day at opening time (v18.2.0 follow-up).** The
+  timeline now opens a day on its first booking; the Plan's scrubber still defaults to
+  `OPEN`, so an evening-only future day shows an empty room. Same rule, one line in
+  `PlanView`'s slider default, but it was not part of the approved change, so it is a
+  decision for later.
+
+- **A List card's table pill does not say the table is missing (v18.2.0 follow-up).**
+  The timeline's Unplaced row and the strip's "Not on the grid" section name a table the
+  layout does not have. The List card still draws `TBadge "9"` as if it were real. A
+  dashed or struck pill for an id `unplacedReason` calls missing would close the last
+  surface.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**
