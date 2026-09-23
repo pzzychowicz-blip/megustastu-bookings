@@ -382,7 +382,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.1.1",
+  version:"18.2.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -4307,9 +4307,20 @@ function BookingApp({uid}){
   // cancelled bookings while Timeline's and Plan's exclude them — so a day whose
   // bookings had all been cancelled showed the prompt in two views and a nearly
   // blank card list in the third. A cancelled booking is not a booked table.
+  //
+  // v18.2.0: and "empty" needs the first snapshot. Before it lands `bookings`
+  // is `[]` whatever the database holds, so this answered TRUE on every cold
+  // start — "Nothing booked for this day yet." with New booking / Walk-in
+  // buttons, drawn beside the "Loading bookings…" pill that contradicted it,
+  // for as long as the first read took (seconds on the restaurant's wifi).
+  // A host who believed it could seat a walk-in on a taken table.
+  // `bookingsReady` is the RENDER signal (state); `firstLoadCount` is a ref and
+  // would not repaint when it flips. A load that never finishes leaves this
+  // false, and the strip's "Couldn't load bookings" is the answer for that.
   const isEmptyDay=useMemo(function(){
+    if(!bookingsReady) return false;
     return !bookings.some(function(b){return b&&b.date===viewDate&&b.status!=="cancelled";});
-  },[bookings,viewDate]);
+  },[bookings,viewDate,bookingsReady]);
   const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
   useEffect(function(){
     if(zoomTouchedRef.current) return;

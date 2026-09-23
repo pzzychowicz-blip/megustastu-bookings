@@ -25810,3 +25810,34 @@ Gate after the review fix: `138.20 kB` gz (+0.44 on 137.74) · **1520 tests** ·
 errors (89 warnings) · style OK. Re-checked live on DEV: the served code has no
 backstop, and the captured file leads with `_backup` (18.1.1), holds 17 vouchers, and
 has no `presence` or `reminderFires`. No file was saved.
+
+## v18.2.0 — the design-critique fixes
+
+**Date:** 2026-09-23 · **Branch:** `feat/v18.2.0-design-critique` ·
+**Behavioural change:** yes, user-visible across the timeline, plan, list, booking
+form and header.
+
+A `/design:design-critique` pass over the running DEV app (tablet 1280×800, phone
+375×812, both themes) produced a list of findings, and Patryk chose what to fix in an
+interview: 13 changes, one version. Each lands as its own commit and extends this
+entry. What was deliberately NOT taken: raising the 34–40px controls to 44px, and the
+amber blocks' white-ink contrast (already a recorded exemption in `DESIGN.md`).
+
+### 1. The empty-day prompt waits for the first snapshot
+
+`isEmptyDay` (App.jsx) answered TRUE on every cold start: before the first bookings
+snapshot `bookings` is `[]` whatever the database holds, so all three views drew
+"Nothing booked for this day yet." with New booking / Walk-in buttons — beside the
+"Loading bookings…" pill that contradicted it, for the whole first read. Seen in the
+critique's first screenshot on DEV, on a day that had two bookings. A host who
+believed it could seat a walk-in on a taken table.
+
+The gate is `bookingsReady` (usePersistence's STATE), not `firstLoadCount` — that one
+is a ref and would not repaint when it flips. A load that never finishes leaves the
+prompt hidden, and the strip's "Couldn't load bookings" is the answer for that case.
+One derivation, so all three views change together.
+
+**Verified live on DEV** (18.2.0 served): 1.2s into a reload the page showed the
+loading pill and no prompt; after load, an empty day (28 Sep) still showed it.
+`tests/empty-day.test.js` (3 tests) reads the memo stripped; removing the guard fails
+it.
