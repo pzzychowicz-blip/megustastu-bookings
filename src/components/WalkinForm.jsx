@@ -35,6 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
+import { stepPress } from "../lib/keyboard";
 import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
@@ -406,8 +407,8 @@ export function WalkinForm({
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Decrease number of guests"
+                {...stepPress(() => {
                   setDraft({
                     ...wf,
                     size: Math.max(1, (Number(wf.size) || 2) - 1),
@@ -416,7 +417,7 @@ export function WalkinForm({
                     // Walk-in-button path still resets so auto-fit re-runs.
                     tables: wf._pre ? (wf.tables || []) : []
                   });
-                }}
+                })}
               >
                 -
               </button>
@@ -424,14 +425,14 @@ export function WalkinForm({
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Increase number of guests"
+                {...stepPress(() => {
                   setDraft({
                     ...wf,
                     size: Math.min(25, (Number(wf.size) || 2) + 1),
                     tables: wf._pre ? (wf.tables || []) : [] // v17.1.1: see the − stepper
                   });
-                }}
+                })}
               >
                 +
               </button>
@@ -442,11 +443,11 @@ export function WalkinForm({
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Decrease duration"
+                {...stepPress(() => {
                   const cd = wf.customDur || getDur(Number(wf.size) || 2);
                   setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
-                }}
+                })}
               >
                 -
               </button>
@@ -454,11 +455,11 @@ export function WalkinForm({
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Increase duration"
+                {...stepPress(() => {
                   const cd = wf.customDur || getDur(Number(wf.size) || 2);
                   setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
-                }}
+                })}
               >
                 +
               </button>
@@ -469,10 +470,8 @@ export function WalkinForm({
                 <button
                   className="mgt-hover-scale mgt-press"
                   style={mkBtn({ fontSize: T.body, background: BTN.reset })}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    setDraft({ ...wf, customDur: null });
-                  }}
+                  // v18.2.0: pointer-only like the steppers beside it; same fix.
+                  {...stepPress(() => setDraft({ ...wf, customDur: null }))}
                 >
                   Reset
                 </button>

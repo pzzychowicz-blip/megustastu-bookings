@@ -1513,16 +1513,23 @@ describe("the booking form's steppers and the timeline zoom work from the keyboa
   // their names were the glyphs. The timeline's − / + zoom buttons had the same
   // names. Measured live before the fix: `.click()` on "+" left guests at 2.
   it("every form stepper goes through stepPress, which also answers a keyboard click", () => {
-    has(BookingForm, "BookingFormModal", /function stepPress\(apply\)[\s\S]*?onClick:\s*function\s*\(e\)\s*\{\s*if\s*\(e\.detail === 0\) apply\(\);/,
+    // v18.2.0: the helper moved to lib/keyboard.js when the walk-in form's
+    // steppers — the same pointer-only defect — took it too.
+    const Keyboard = read("lib/keyboard.js");
+    has(Keyboard, "lib/keyboard.js", /export function stepPress\(apply\)[\s\S]*?onClick:\s*function\s*\(e\)\s*\{\s*if\s*\(e\.detail === 0\) apply\(\);/,
       "stepPress must act on a click with detail 0 — the keyboard's — or Enter/Space step nothing");
-    expect(count(BookingForm, /\{\.\.\.stepPress\(/g), "four steppers: guests − +, duration − +").toBe(4);
-    hasnt(BookingForm, "BookingFormModal", /onPointerDown=\{function\(e\)\{e\.preventDefault\(\);const v=/,
-      "a stepper stepping on pointerdown alone is back — keyboard users cannot change it");
+    for (const [name, src] of [["BookingFormModal", BookingForm], ["WalkinForm", Walkin]]) {
+      expect(count(src, /\{\.\.\.stepPress\(/g), name + ": four steppers (guests − +, duration − +) and the duration Reset").toBe(5);
+      hasnt(src, name, /onPointerDown=/,
+        "a control acting on pointerdown alone is back — Enter and Space fire click, never a pointer event");
+    }
   });
 
   it("each form stepper is named for what it steps", () => {
-    for (const name of ["Decrease number of guests", "Increase number of guests", "Decrease duration", "Increase duration"]) {
-      expect(count(BookingForm, new RegExp('aria-label="' + name + '"', "g")), name).toBe(1);
+    for (const [what, src] of [["BookingFormModal", BookingForm], ["WalkinForm", Walkin]]) {
+      for (const name of ["Decrease number of guests", "Increase number of guests", "Decrease duration", "Increase duration"]) {
+        expect(count(src, new RegExp('aria-label="' + name + '"', "g")), what + ": " + name).toBe(1);
+      }
     }
   });
 

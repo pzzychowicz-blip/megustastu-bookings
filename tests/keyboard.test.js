@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { activatesItself, isTyping } from "../src/lib/keyboard.js";
+import { activatesItself, isTyping, stepPress } from "../src/lib/keyboard.js";
 
 function el(tagName, attrs = {}) {
   return {
@@ -53,5 +53,25 @@ describe("activatesItself", () => {
     const loop = src.indexOf("for(let i=0;i<MODAL_ENTER_ORDER.length;i++)", enter);
     expect(guard, "the guard is in the Enter branch").toBeGreaterThan(enter);
     expect(guard, "and runs before any modal's Enter action").toBeLessThan(loop);
+  });
+});
+
+describe("stepPress — a stepper that steps once per press, from a pointer OR a key", () => {
+  const fake = (extra) => Object.assign({ preventDefault() { this.prevented = true; } }, extra);
+
+  it("a pointer press steps once: on pointerdown, and NOT again on its click", () => {
+    let n = 0;
+    const h = stepPress(() => { n++; });
+    const down = fake({});
+    h.onPointerDown(down);
+    h.onClick(fake({ detail: 1 }));
+    expect(n).toBe(1);
+    expect(down.prevented, "no focus on a tap, so nothing scrolls under the finger").toBe(true);
+  });
+
+  it("a keyboard click (detail 0) steps", () => {
+    let n = 0;
+    stepPress(() => { n++; }).onClick(fake({ detail: 0 }));
+    expect(n).toBe(1);
   });
 });

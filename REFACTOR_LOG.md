@@ -26069,3 +26069,21 @@ light.
 
 Tests: 2 in `tests/contrast.test.js` (the alias, and the resolver refusing bad
 input).
+
+### 9. The walk-in form's steppers, the same fix
+
+The walk-in form had phase 2's defect exactly: four pointer-only − / + buttons named
+"-" / "+". Checking every pointer-down handler in both forms turned up one more
+control in each, the duration **Reset**. With Patryk's say-so:
+
+- `stepPress` moved from BookingFormModal to **`lib/keyboard.js`**, and both forms
+  import it. Its pointer half is unchanged.
+- The walk-in form's four steppers and both forms' Reset go through it. The steppers
+  carry the booking form's names.
+- Verified live in the walk-in form: a keyboard click stepped guests 2 → 3; a pointer
+  press plus its `detail: 1` click stepped once (3 → 4); the four names were present;
+  a keyboard-activated Reset took duration 105 → 90.
+
+Tests: the a11y stepper check now covers both forms, counts 5 `stepPress` uses each,
+and forbids any `onPointerDown=` left in either. `tests/keyboard.test.js` adds 2 unit
+tests for `stepPress`.

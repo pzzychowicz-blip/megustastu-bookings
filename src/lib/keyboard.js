@@ -46,3 +46,26 @@ export function activatesItself(el) {
   const role = el.getAttribute ? el.getAttribute("role") : null;
   return !!role && SELF_ACTIVATING_ROLES.includes(role);
 }
+
+// ── stepPress ────────────────────────────────────────────────────────────────
+// v18.2.0: the press handlers for a − / + stepper button (the booking form's
+// and the walk-in form's guests and duration).
+//
+// They stepped on `pointerdown` with `preventDefault()` — which keeps a tap from
+// focusing the button (and so from scrolling it under the finger, the Gotchas
+// row in src/CLAUDE.md) and makes a quick run of taps step once per touch. But
+// the KEYBOARD never fires a pointer event: Enter and Space on a focused button
+// fire `click` and nothing else, so the party size and the duration could not be
+// changed from the keyboard at all (WCAG 2.1.1). Measured in the critique:
+// `.click()` left guests at 2, a dispatched pointerdown moved it to 3.
+//
+// `onClick` acts only when `detail === 0`, i.e. a click no pointer produced
+// (a key, or assistive tech activating the control). A pointer click carries
+// `detail >= 1` and has ALREADY stepped on its pointerdown, so acting on it too
+// would step twice per tap.
+export function stepPress(apply) {
+  return {
+    onPointerDown: function (e) { e.preventDefault(); apply(); },
+    onClick: function (e) { if (e.detail === 0) apply(); },
+  };
+}

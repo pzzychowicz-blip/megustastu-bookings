@@ -64,7 +64,7 @@ Extracted from the root `CLAUDE.md` File Structure block (moved here so it loads
 
 - **CountryPicker.jsx** — v18.1.0 — searchable calling-code picker (name / ISO / digits), pinned countries first. Its root is `display:contents` and the menu is `position:absolute`, so the CALLER's positioned ancestor sets the list's width (the phone row, so the list spans picker + number). **Enter and Escape are stopped at its search box**: `useKeyboardShortcuts` treats Enter anywhere in the booking form as SAVE and Escape as close-the-form, on a window bubble listener, so an unstopped key would save or close the booking — measured, both stay inside (a window listener sees neither). The keyboard's current row wears the tint through `--row-bg`, not `background`, for `SearchField`'s reason.
 
-- **WalkinForm.jsx** — walk-in entry form (v16.0.0 "Add to waitlist" under the no-tables banner; v17.1.1 the Plan-path pre-selected table (`_pre` draft flag from openWalkin) survives guest-count edits — plain-path steppers still reset tables — and wToggle deselects a selected-but-busy table)
+- **WalkinForm.jsx** — v18.2.0: its guests / duration − and + and the duration Reset go through `stepPress` (`lib/keyboard.js`) and the steppers are named, the booking form's fix — they were pointer-only too. Walk-in entry form (v16.0.0 "Add to waitlist" under the no-tables banner; v17.1.1 the Plan-path pre-selected table (`_pre` draft flag from openWalkin) survives guest-count edits — plain-path steppers still reset tables — and wToggle deselects a selected-but-busy table)
 
 - **WaitlistPanel.jsx** — waitlist Overlay (v16.0.0) — day's entries FCFS, fits-now chip, Book (prefills the booking form) + two-tap Remove
 

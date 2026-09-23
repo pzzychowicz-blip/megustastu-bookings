@@ -57,6 +57,7 @@ import {
 } from "../lib/booking-logic";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
 import { WEEKDAY_LONG } from "../lib/day";
+import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -83,27 +84,8 @@ import { matchesIdentity } from "../lib/customers";
 // cannot collide; useId() would be the answer if that stopped being true.
 const FORM_ERROR_ID = "mgt-form-error";
 
-// ── stepPress ────────────────────────────────────────────────────────────────
-// v18.2.0: the press handlers for the guests / duration − and + buttons.
-//
-// They stepped on `pointerdown` with `preventDefault()` — which keeps a tap from
-// focusing the button (and so from scrolling it under the finger, the Gotchas
-// row in src/CLAUDE.md) and makes a quick run of taps step once per touch. But
-// the KEYBOARD never fires a pointer event: Enter and Space on a focused button
-// fire `click` and nothing else, so the party size and the duration could not be
-// changed from the keyboard at all (WCAG 2.1.1). Measured in the critique:
-// `.click()` left guests at 2, a dispatched pointerdown moved it to 3.
-//
-// `onClick` acts only when `detail === 0`, i.e. a click no pointer produced
-// (a key, or assistive tech activating the control). A pointer click carries
-// `detail >= 1` and has ALREADY stepped on its pointerdown, so acting on it too
-// would step twice per tap.
-function stepPress(apply) {
-  return {
-    onPointerDown: function (e) { e.preventDefault(); apply(); },
-    onClick: function (e) { if (e.detail === 0) apply(); },
-  };
-}
+// v18.2.0: the − / + press handlers are `stepPress` in lib/keyboard.js, shared
+// with the walk-in form's steppers, which had the same pointer-only defect.
 
 export function BookingFormModal({
   form, setForm, editId, error, errorField,
@@ -904,7 +886,9 @@ export function BookingFormModal({
     key="rd"
     className="mgt-hover-scale mgt-press"
     style={mkBtn({fontSize: T.body,background:BTN.reset})}
-    onPointerDown={function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}}>Reset</button>:null;
+    /* v18.2.0: pointer-only like the steppers beside it — Enter and Space did
+       nothing — so it takes the same stepPress. */
+    {...stepPress(function(){setForm(function(f){return Object.assign({},f,{customDur:null});});})}>Reset</button>:null;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
   // v14.4.1: action row pinned to the modal bottom via Overlay's `footer` slot.
