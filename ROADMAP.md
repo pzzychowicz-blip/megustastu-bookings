@@ -51,7 +51,7 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
-The next nine come from the **2026-09-23 tech-debt scan**. `#N` is the item's number
+The next ten come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
@@ -63,6 +63,15 @@ evidence for each.
   with `age` to a key only Patryk holds, and keeps N days. Undecided: GitHub Actions or
   Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
   (`database.rules.README.md` § Backups and restore).
+
+- **Download backup: feedback inside Settings, and offline** (v18.1.1's `/code-review`).
+  v18.1.1 reads the server, so offline it refuses, and the refusal lands in the red
+  "Couldn't save" banner behind the Settings dialog. Measured: it is covered by the
+  overlay and sits under `inert`, so the press looks dead until Settings closes.
+  Before v18.1.1, an offline press still exported the device's in-memory copy.
+  Decide an inline status line under the button, and whether offline falls back to a
+  clearly-partial device export. Also check one backup on the iPad/iPhone: the
+  download now fires after an async read, which only Chromium has been seen to allow.
 
 - **Measure `/bookings` before its size becomes a problem (#3).** Every device
   subscribes to every booking ever made, each with an uncapped `history`, and a resync
@@ -82,8 +91,8 @@ evidence for each.
 
   SECURITY.md §3 lists all four as open.
 
-- **Lint: triage, then decide a gate (#10).** There are 89 warnings, up from about 71 to
-  88 to 89. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so
+- **Lint: triage, then decide a gate (#10).** There are 89 warnings: about 71 when the
+  workflow skill was written, 88 on 2026-09-18, 89 now. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so
   fix each one or keep it with `-- <reason>`. Then decide whether CI gets
   `--max-warnings N`, which is a policy change.
 
@@ -92,7 +101,8 @@ evidence for each.
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
 
 - **One field table for a booking (#13).** Its fields are written out by hand in
-  seven places (CLAUDE.md's per-booking-field row). Derive `sanitize`, `UNDO_FIELDS`
+  eight places (CLAUDE.md's per-booking-field row), and the walk-in build in
+  `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
   first. This is a data-touching patch version.
