@@ -85,6 +85,47 @@ Three properties worth knowing before using it:
   per-version section below says so). A faster deploy route does not make a deploy
   safe to do in the other order.
 
+## Backups and restore (v18.1.1)
+
+The free plan has no automatic backups, so the only one is **Settings → General →
+Download backup** (capability `dataExport`), which saves `mgt-backup-<date>.json`.
+
+**What the file is.** Since v18.1.1, the whole database as the server holds it, read
+in one `get()` of the root, **minus `presence` and `reminderFires`**. The reasons for
+leaving those two out are in `src/lib/backup.js` and inside the file itself, under
+`_backup.omitted`. Values are copied verbatim, and every `<name>Rev` counter is
+included, so each node comes back with a counter that matches it. **A file saved
+before v18.1.1 is partial** (no vouchers, roles, invites, activity log, WhatsApp data
+or four of the settings nodes) and shaped differently (bookings as an array, settings
+nested by hand). Do not import one at the root.
+
+**The file holds every customer's personal data**: names, phone numbers, notes,
+WhatsApp messages and the activity log. Treat it like the database, keep it off
+shared devices, and never commit it to this repository, which is public.
+
+**Restoring** is a Firebase-console job, never an app one:
+
+1. **Take a fresh backup of the current state first**, even a damaged one. A restore
+   replaces everything, and the state being replaced may hold something the file
+   does not.
+2. **Rehearse on DEV** (`megustastu-bookings-dev`) with the same file before PROD.
+3. Outside service hours: Realtime Database → Data → ⋮ → **Import JSON**. **At the
+   root it REPLACES THE WHOLE DATABASE** with the file. To restore one node (say
+   `vouchers`), take that key out of the file into its own file and import it at
+   `/vouchers`, which replaces only that node.
+4. **Check your own `/roles/<uid>` row is in the file before importing at the root.**
+   Roles come back as they were when the file was saved, and with `enforceRoles` on,
+   a missing row reads as staff.
+5. **Reload every device afterwards.** A device left open holds pre-restore data and
+   rev counters. Its next write is refused by the compare-and-swap and it resyncs,
+   which is safe, but a reload avoids a round of refused writes.
+6. The import creates a `_backup` node, the file's own metadata. Nothing reads it, and
+   the next backup drops it, so delete it in the console or leave it.
+
+**Console imports bypass these rules entirely**, because the console acts with owner
+rights. No `.validate` checks what a restore writes, so import only files this app
+produced.
+
 ## Testing the rules — the local emulator (the THIRD environment)
 
 The rules are no longer protected only by reading them. `npm run test:rules`
