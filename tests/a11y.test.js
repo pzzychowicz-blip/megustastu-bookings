@@ -1220,12 +1220,24 @@ describe("the List card's actions stay named by their ancestor (v17.15.6)", () =
     // that none of them carries an `aria-label` at all. No spelling to guess,
     // and it catches all four candidates plus any phrasing nobody has thought
     // of yet.
+    //
+    // v18.2.0 narrowed it by ONE shape, deliberately. The card's actions became
+    // Assign · No show · the next step · ⋯ (the rest moved into the
+    // quick-status card), and ⋯ is ICON-ONLY — a control with no text has no
+    // name at all, so it MUST carry a label. What v17.15.6 decided against is
+    // repeating the BOOKING on every control, and a static "More actions"
+    // repeats nothing. So the pin is now: no label built from an expression
+    // (`aria-label={…}`, which is where a guest name would have to come in),
+    // and a static label only on a button with no text of its own.
     const actions = openingTagsOf(List, "button")
       .filter((t) => /\bonClick=\{stopped\(/.test(t));
-    expect(actions.length, "the card's action row should still hold ~5 buttons " +
+    expect(actions.length, "the card's action row should still hold ~4 buttons " +
       "wrapped in `stopped()` — if this drops to 0 the guard has stopped " +
       "looking at anything").toBeGreaterThanOrEqual(4);
-    const named = actions.filter((t) => /\baria-label=/.test(t));
+    const named = actions.filter((t) => /\baria-label=\{/.test(t));
+    const staticNamed = actions.filter((t) => /\baria-label="/.test(t));
+    expect(staticNamed.map((t) => (t.match(/aria-label="([^"]*)"/) || [])[1]),
+      "only the icon-only ⋯ carries a static label").toEqual(["More actions"]);
     expect(named, "DECIDED in v17.15.6, not overlooked: the card is a named " +
       "listitem carrying describeBooking, so these inherit the booking. " +
       "Renaming all sixty repeats the guest on every control and is measurably " +

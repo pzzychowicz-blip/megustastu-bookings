@@ -25968,3 +25968,35 @@ Lint went 89 → 91 warnings, 0 errors. Both new ones are React Compiler advisor
 Tests: `tests/grid-extend.test.js` (10) — the extension's bounds, that it never
 touches `hoursFor`, that the next render resets it, the call order in App, the Plan
 bound, and the scroll guard writing `scrollPosRef`.
+
+### 5. The List card: time first, the next step, and ⋯
+
+The critique counted up to six equal-weight buttons on every card (Assign, Seated,
+Completed, Cancelled, Delete, and No show when due), with the time at the far right
+of a wrapping header. Four of twelve bookings fitted a 1280×800 screen. Patryk chose
+the time as a leading column, the next step visible, and the rest behind ⋯, which
+opens the existing quick-status card rather than a new menu.
+
+- **`nextStatusOf(b, today, nowMins)`** (booking-logic, pure) is the one status the
+  card offers. It uses the same gates as every other status surface, so it never
+  offers Seated past close.
+- **Card layout.** The time is a fixed left column (start over end). Assign, No show
+  (when due; too urgent to hide), the next step and ⋯ share the line with the tables
+  and phone. Measured on 3 Oct at 1280px: cards went from about 133px to **98px**.
+- **⋯ → `QuickStatusPopup`**, the card a hold opens on the timeline and plan, so one
+  status picker serves the whole app. It gained `onDelete` (Delete last, through
+  App's confirm) and `startArmed`. Without `startArmed`, a click-opened card waits for
+  a release that has already happened, and a keyboard user could press nothing for
+  the 10s backstop. With it, focus moves in, Escape closes (captured and stopped, or
+  the global Escape would also drop the List selection), and focus returns to ⋯.
+- **Verified live:** ⋯ opened the card (seated, completed, cancelled, Delete) without
+  also opening the edit form. Focus landed on its first button; Escape closed it and
+  returned focus to ⋯. Delete raised the existing "Delete booking?" confirm, and Back
+  cancelled it.
+- **A decision pin narrowed:** `tests/a11y.test.js` pinned v17.15.6's "the card's
+  buttons are not renamed". ⋯ is icon-only, so it must carry a name. The pin now
+  forbids a label built from an expression (where a guest name would come in) and
+  allows one static label, on ⋯ only. The reasoning is rewritten in place, as that
+  test asks.
+
+Tests: `tests/list-card.test.js` (8).

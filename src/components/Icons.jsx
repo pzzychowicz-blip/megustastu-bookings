@@ -328,6 +328,20 @@ export function ClashIcon(props) {
   );
 }
 
+// More actions (v18.2.0) — the List card's ⋯, which opens the quick-status
+// card. Three FILLED dots: a zero-length round-capped stroke is exactly the
+// stroke width, which at the 14px this ships at is ~1.3px — a dot you cannot
+// aim at or see. r 1.4 plus the house stroke gives ~2.5px dots at 14px.
+export function MoreIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" />
+    </Svg>
+  );
+}
+
 // Not on the grid (v18.2.0) — the notification strip's section for bookings the
 // timeline's Unplaced row holds. A DASHED table: dashes are already this app's
 // word for "not really there" — the Unplaced row's own border, the seated

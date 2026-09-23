@@ -236,6 +236,22 @@ export function pastCloseMins(dateStr,todayS,nowMins){
 export function seatingClosed(dateStr,todayS,nowMins){
   return pastCloseMins(dateStr,todayS,nowMins)!==null;
 }
+// v18.2.0: the ONE status a List card offers as a button — the next step in a
+// visit. Everything else moved behind the card's ⋯ (the quick-status card):
+// six equal-weight buttons on every card fitted four bookings to a tablet
+// screen and gave "Delete" the same weight as "Seated". Pending → Confirmed
+// (its only forward status); Confirmed → Seated, or → Completed once the day's
+// close has passed (`seatingClosed`: the close-time auto-complete would take a
+// manual seat straight back); Seated → Completed; a finished visit has no next
+// step. Same gates as every other status surface, so it cannot offer what the
+// popup, the form or the S key would refuse.
+export function nextStatusOf(b,todayS,nowMins){
+  if(!b) return null;
+  if(b.status==="pending") return "confirmed";
+  if(b.status==="confirmed") return seatingClosed(b.date,todayS,nowMins)?"completed":"seated";
+  if(b.status==="seated") return "completed";
+  return null;
+}
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 // ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
 // The separation between bookings (Settings → General; off by default, so

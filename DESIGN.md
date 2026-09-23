@@ -931,9 +931,9 @@ rule puts the booking form's `role="alert"` wrapper permanently in the tree with
 only its child conditional.
 
 **`role="button"` makes its children PRESENTATIONAL — never put it on a container
-of controls.** The List card holds Assign, four status changers and Delete;
-labelling it a button would have hidden all six, trading one unreachable card for
-six unreachable controls. It is a `role="listitem"` in a `role="list"`, focusable
+of controls.** The List card holds Assign, four status changers and Delete (since v18.2.0:
+Assign, No show when due, the next status and ⋯); labelling it a button would have
+hidden all six, trading one unreachable card for six unreachable controls. It is a `role="listitem"` in a `role="list"`, focusable
 and operable. A timeline block is a **leaf**, so `role="button"` is right there
 and its flags' meaning goes into the name. `role="grid"`/`row` is the pattern
 built for rows-with-controls and was the first choice for List — it fails because

@@ -31,12 +31,13 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, seatingClosed } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
-import { AssignIcon, CloseIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon } from "./Icons";
+import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon } from "./Icons";
+import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
 // The same facts TimelineBlock draws on its right-hand rail, in the same order
@@ -190,6 +191,9 @@ export const ListView = memo(function ListView({
   // day's FIRST booking without a remount (no slide bump) changed the hook
   // count between renders and crashed the view.
   const [, bumpAnim] = useState(0);
+  // v18.2.0: the booking whose ⋯ is open (the quick-status card). Up here with
+  // the other hooks, above the empty-day early return (the v16.4.0 rule).
+  const [menuFor, setMenuFor] = useState(null);
   useEffect(function () {
     const prev = __listPrev;
     const now = Date.now();
@@ -534,41 +538,45 @@ export const ListView = memo(function ListView({
           <span style={{ fontSize: T.body, color: S.text, marginLeft: 4 }}>{b.phone}</span>
         ) : null;
 
-        // v14.4.0: Cancel + Delete are pulled into a right-aligned group (Cancel
-        // then Delete); the remaining status changers stay in the left group.
-        // v17.0.0: a pending card's only forward status is Confirmed (the
-        // right-group Cancel button stays — the decline flow).
-        // v17.10.0: each status carries its OWN mark (STATUS_ICON, Icons.jsx)
-        // instead of all of them sharing a ChevronRightIcon — which said "there
-        // is more this way", not what the button does. IC.control, not
-        // IC.inline: these are marks ON a control, and the Assign button beside
-        // them in this same row has always been IC.control.
-        // v17.16.12: `seated` is dropped once that day's close has passed — the
-        // close-time auto-complete would flip it back within one tick, so the
-        // button could only ever look broken. See seatingClosed.
-        const statusBtns = (b.status === "pending" ? ["confirmed"] : ["confirmed", "seated", "completed"])
-          .filter((s) => s !== "seated" || !seatingClosed(b.date, today, nowMins))
-          .filter((s) => s !== b.status)
-          .map((s) => (
-            <button
-              key={s}
-              className="mgt-hover-scale"
-              style={mkBtn({ background: BLOCK_BG[s], color: BLOCK_INK[s] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
-              onClick={stopped(() => onStatus(b.id, s))}
-            >
-              <StatusIcon status={s} size={IC.control} />{s}
-            </button>
-          ));
-        const cancelBtn = b.status !== "cancelled" ? (
+        // v18.2.0: ONE status button — the next step in the visit
+        // (`nextStatusOf`: Pending → Confirmed, Confirmed → Seated, or →
+        // Completed once the day's close has passed, Seated → Completed). The
+        // rest — the other statuses, Cancelled and Delete — moved behind ⋯,
+        // which opens the quick-status card the timeline and plan open on a
+        // hold. The card carried up to six equal-weight buttons, so four
+        // bookings filled a tablet screen and Delete sat as loud as Seated.
+        // The design critique's finding; Patryk chose this shape.
+        // (History: v14.4.0 grouped Cancel + Delete right; v17.0.0 limited a
+        // pending card to Confirmed; v17.10.0 gave each status its own mark;
+        // v17.16.12 dropped Seated after close — all of which `nextStatusOf`
+        // and the popup still honour.)
+        const nextSt = nextStatusOf(b, today, nowMins);
+        const nextBtn = nextSt ? (
           <button
-            key="cancelled"
             className="mgt-hover-scale"
-            style={mkBtn({ background: BLOCK_BG.cancelled, textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
-            onClick={stopped(() => onStatus(b.id, "cancelled"))}
+            style={mkBtn({ background: BLOCK_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
+            onClick={stopped(() => onStatus(b.id, nextSt))}
           >
-            <CloseIcon size={IC.control} />cancelled
+            <StatusIcon status={nextSt} size={IC.control} />{nextSt}
           </button>
         ) : null;
+        // Icon-only, so it needs a name. The card is a NAMED listitem
+        // (`describeBooking`), so a static "More actions" leans on it — the
+        // v17.15.6 rule for repeated controls, the same call the other card
+        // buttons make.
+        const moreBtn = (
+          <button
+            className="mgt-hover-scale"
+            aria-label="More actions"
+            aria-haspopup="dialog"
+            aria-expanded={menuFor === b.id}
+            title="More actions"
+            style={mkBtn({ background: BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}
+            onClick={stopped(() => setMenuFor(b.id))}
+          >
+            <MoreIcon size={IC.control} />
+          </button>
+        );
 
         const animFrom = listAnimFrom(b.id);
         return (
@@ -703,6 +711,17 @@ export const ListView = memo(function ListView({
             <div style={{ position: "relative", zIndex: 1 }}>
             {conflictEl}
             {warnEl}
+            {/* v18.2.0: the TIME LEADS, in its own column. A List is read down
+                its start times during service, and they sat at the far right of
+                a wrapping header, after the name and up to ten flags, so their
+                x position moved from card to card. A fixed column puts every
+                start time on one line of sight. */}
+            <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div style={{ flexShrink: 0, minWidth: 58 }}>
+              <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, lineHeight: 1.2 }}>{b.time}</div>
+              <div style={{ fontSize: T.small, fontWeight: FW.semi, color: S.muted }}>{"–" + end}</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               display: "flex", alignItems: "flex-start", justifyContent: "space-between",
               flexWrap: "wrap", gap: 8
@@ -733,33 +752,29 @@ export const ListView = memo(function ListView({
                 {lateTag}
                 {durationTag}
               </div>
-              <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>{b.time + "–" + end}</span>
             </div>
+            {/* v18.2.0: tables and phone on the LEFT, the actions on the
+                RIGHT of one line — the actions were a third line of their own,
+                which is most of why four cards filled a tablet screen. It wraps
+                on a narrow card, where the actions drop below as before. */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
               {(b.tables || []).map((t) => <TBadge key={t} id={t} />)}
               {phonEl}
-            </div>
-            {notesEl}
-            {/* v17.10.0: THREE groups. Assign stays left; the status changers are
-                pushed right by `marginLeft:auto`; the ways a booking ENDS sit
-                hard right after a wider gap. The Edit button is gone — the card
-                itself opens the form now (see the card's onClick above), which is
-                what the pointer cursor and the hover tint have implied since
-                v17.9.1. Every control in here stops propagation, or it would open
-                the edit form on its way to doing its own job. */}
-            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
+              {/* Every control in here goes through `stopped()`, or it opens the
+                  edit form on its way to doing its own job. No show sits
+                  before the next step when it is due — a one-tap action at the
+                  moment it matters (v16.1.0), too urgent to hide in ⋯. */}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>
-                {statusBtns}
-              </div>
-              <div style={{ display: "flex", gap: 6, marginLeft: 18, flexWrap: "wrap", alignItems: "center" }}>
-                {/* v16.1.0: one-tap No show once past the no-show threshold. */}
+                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
                 {lateSt === "noshow" ? (
                   <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
                 ) : null}
-                {cancelBtn}
-                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.del })} onClick={stopped(() => onDelete(b.id))}>Delete</button>
+                {nextBtn}
+                {moreBtn}
               </div>
+            </div>
+            {notesEl}
+            </div>
             </div>
             </div>
           </div>
@@ -807,6 +822,22 @@ export const ListView = memo(function ListView({
             {finished.map(renderCard)}
           </div>
         </Collapsible>
+      ) : null}
+      {/* v18.2.0: the ⋯ card. Resolved from `day` on every render so a status
+          change from another device reaches an open card, and it closes itself
+          if the booking leaves the day. `startArmed`: it was opened by a click,
+          so there is no held finger to wait for (see QuickStatusPopup). */}
+      {menuFor ? (
+        <QuickStatusPopup
+          booking={day.find((x) => x.id === menuFor) || null}
+          late={late}
+          today={today}
+          nowMins={nowMins}
+          onStatus={onStatus}
+          onNoShow={onNoShow}
+          onDelete={onDelete}
+          startArmed
+          onClose={() => setMenuFor(null)} />
       ) : null}
     </div>
   );
