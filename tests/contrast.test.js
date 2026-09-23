@@ -75,8 +75,31 @@ function block(selector) {
   for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
-const LIGHT_VARS = block(":root {");
-const DARK_VARS = Object.assign({}, LIGHT_VARS, block('[data-theme="dark"] {'));
+// v18.2.0: a token may ALIAS another (`--btn-dismiss: var(--app-btn-slate)`),
+// and the alias must resolve per theme, after the dark block has overridden the
+// target — so resolution runs on each merged map, never on the raw blocks. The
+// alternative was pasting slate's literal into --btn-dismiss in both themes,
+// which is the "a literal duplicate of a token is a token that cannot be fixed"
+// defect DESIGN.md records. Depth-limited, and a cycle or a dangling name
+// THROWS rather than handing parse() a string it would misread.
+function resolveAliases(map) {
+  const out = {};
+  for (const k of Object.keys(map)) {
+    let v = map[k];
+    for (let hop = 0; hop < 5; hop++) {
+      const m = v.match(/^var\((--[a-z0-9-]+)\)$/);
+      if (!m) break;
+      if (!(m[1] in map)) throw new Error(k + " aliases " + m[1] + ", which src/index.css does not declare");
+      v = map[m[1]];
+      if (hop === 4) throw new Error(k + " is an alias chain five deep, or a cycle");
+    }
+    out[k] = v;
+  }
+  return out;
+}
+const RAW_LIGHT = block(":root {");
+const LIGHT_VARS = resolveAliases(RAW_LIGHT);
+const DARK_VARS = resolveAliases(Object.assign({}, RAW_LIGHT, block('[data-theme="dark"] {')));
 
 // ── Colour maths ─────────────────────────────────────────────────────────────
 function parse(v) {
@@ -1030,4 +1053,17 @@ describe("Save pending outline (--pending-outline)", () => {
       expect(got, `--pending-outline in ${theme}: ${got.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
     });
   }
+});
+
+describe("dismiss is not destructive (v18.2.0)", () => {
+  it("--btn-dismiss ALIASES the dialog secondary's slate — no red, no copied literal", () => {
+    expect(RAW_LIGHT["--btn-dismiss"]).toBe("var(--app-btn-slate)");
+    expect(LIGHT_VARS["--btn-dismiss"]).toBe(LIGHT_VARS["--app-btn-slate"]);
+    expect(DARK_VARS["--btn-dismiss"], "resolved AFTER the dark block overrides slate").toBe(DARK_VARS["--app-btn-slate"]);
+  });
+
+  it("the alias resolver refuses a dangling name instead of passing a string to parse()", () => {
+    expect(() => resolveAliases({ "--a": "var(--nope)" })).toThrow(/does not declare/);
+    expect(() => resolveAliases({ "--a": "var(--b)", "--b": "var(--a)" })).toThrow(/cycle/);
+  });
 });

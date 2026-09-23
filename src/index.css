@@ -170,7 +170,13 @@
   --btn-reset: rgba(211, 58, 58, 0.7);
   --btn-today: rgba(0, 108, 225, 0.7);
   --btn-nav: rgba(39, 43, 49, 0.5);
-  --btn-dismiss: rgba(211, 58, 58, 0.7);
+  /* v18.2.0: the dialog secondary's slate, not the delete red. "Dismiss"
+     (the reshuffle suggestion) and every banner row's close control wore the
+     same red as Delete and Cancel, so the app's word for "destructive" was
+     also its word for "not now" — the design critique. An ALIAS, not a copy
+     of slate's value, so it follows slate in both themes (the contrast test
+     resolves aliases per theme). */
+  --btn-dismiss: var(--app-btn-slate);
   --btn-orange: rgba(210, 91, 28, 0.8);
   /* v17.8.0: booking-attribute FLAGS (manual / locked / preferred-tables).
      They were three unrelated hand-picked hues — #0369a1 blue (a shade off

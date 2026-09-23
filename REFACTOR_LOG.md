@@ -26050,3 +26050,22 @@ for the two create actions, on phones only.
   button, on in DEV, sharing the second header row with the view switcher.
 
 Tests: `tests/mobile-bar.test.js` (4).
+
+### 8. Dismiss stops looking like Delete
+
+`--btn-dismiss` was `rgba(211, 58, 58, 0.7)`, the red of Delete and Cancel. It fills
+the reshuffle suggestion's Dismiss and the ✕ on every banner row (Double-booked,
+Running late, Overlap, Waitlist), plus the split view's Leave ✕. None of those is
+destructive. With Patryk's say-so the token itself changed, so every dismiss follows:
+it is now **`var(--app-btn-slate)`**, the dialog secondary.
+
+An alias rather than slate's literal, so it follows slate in both themes.
+`tests/contrast.test.js` could not read a `var()` (its parser takes hex and rgba), so
+it gained `resolveAliases`. It runs per MERGED theme map, after the dark block
+overrides the target, and throws on a dangling name or a cycle rather than handing
+`parse()` a string it would misread. The existing `--btn-dismiss` registry entry now
+measures the slate. Live: the reshuffle Dismiss computes `rgb(100, 116, 139)` in
+light.
+
+Tests: 2 in `tests/contrast.test.js` (the alias, and the resolver refusing bad
+input).

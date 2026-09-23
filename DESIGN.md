@@ -313,6 +313,12 @@ explaining why is usually the one to read.
   again, ~8 L\* is the bar.** A backdrop either commits to being seen or commits
   to being a surface.
 - **One app font (v16.0.0):** the stack lives in `src/index.css` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
+- **Red means destructive, and only that (v18.2.0).** `--btn-dismiss` was the
+  delete red, so "Dismiss" on the reshuffle suggestion and every banner row's ✕
+  looked like Delete and Cancel beside them. It is now an ALIAS of
+  `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
+  every dismiss in the app. The `BTN.cancel is RED` row in `src/CLAUDE.md` is the
+  same rule from the other side.
 - **A selected SEGMENT is lifted, not filled (v18.2.0).** The header's
   Timeline/List/Plan were three solid pills with the active one solid accent —
   the same blue as "+ New" beside them, so "where I am" and "what I can do"
