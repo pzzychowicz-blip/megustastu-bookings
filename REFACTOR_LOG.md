@@ -26158,8 +26158,8 @@ skill. 37 files, +1926 / −221 before this paragraph, in 15 commits.
 - Modal titles go flat in every modal (phase 13).
 
 **Gate after phase 14:** `119.90 kB` gz main bundle (118.16 after phase 1, which
-already carried the version bump) · **1600 tests** (1520 on `main`) · 0 lint errors,
-91 warnings (89 on `main`; the two new ones are React Compiler advisories on the
+already carried the version bump) · **1600 tests** (1529 on `main`: phase 1's run measured 1532 with exactly its 3 new tests) · 0 lint errors,
+91 warnings (89 at phase 1; the two new ones are React Compiler advisories on the
 timeline's `scrollDateRef` write, §4) · style OK.
 
 **Not verified here, and needed before merge:** a real finger dragging a booking out
