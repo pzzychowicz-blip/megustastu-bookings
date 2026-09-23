@@ -26115,3 +26115,13 @@ not an unmount, it fades back in once the clock moves on (the in-and-out rule). 
 distance uses `pxPerMin`, gridW's lower bound, so any error hides a label slightly
 early, never leaves it under the pill. Live at 15:18, only 15:00 hides (centre 14px
 away); 14:00 at 58px and 16:00 at 86px stay. 2 tests in `tests/grid-extend.test.js`.
+
+### 13. Modal titles are flat labels
+
+The critique: the booking form's "New booking" title, a blue raised pill, read as a
+button. `ModalTitle` is the atom behind every modal title, and its colour matches the
+button that opened the modal. Patryk's call was to keep the pill and its colour
+everywhere but drop what made it look pressable: `--shadow-btn` and the solid
+buttons' white rim (`RIM_SOLID`). Live: the title computes `box-shadow: none`,
+`border: 0px none`, and keeps `rgba(0, 116, 243, 0.75)`. 1 test in
+`tests/segmented.test.js`.

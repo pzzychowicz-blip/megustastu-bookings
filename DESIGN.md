@@ -313,6 +313,12 @@ explaining why is usually the one to read.
   again, ~8 L\* is the bar.** A backdrop either commits to being seen or commits
   to being a surface.
 - **One app font (v16.0.0):** the stack lives in `src/index.css` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
+- **A modal title is a flat label (v18.2.0).** `ModalTitle` wore
+  `--shadow-btn` and the solid buttons' white rim — a button's dress, in a
+  button's colour, above a form of buttons — so "New booking" read as something
+  to press (the design critique). Both are gone from the atom, for all seven
+  titles; the colour stays, because it is information (it matches the button
+  that opened the modal).
 - **A minus is U+2212, never a hyphen (v18.2.0).** The booking form's and the
   walk-in form's steppers and the timeline's zoom drew "−" as `-`, 7.7px wide
   against the "+" beside it at 10.7px in the app font at 17px — the pair looked

@@ -569,15 +569,20 @@ export function Overlay({ onClose, children, footer, panel }) {
 // in front and holding focus. Overlay assigns a unique id per instance instead.
 export const MODAL_TITLE_ATTR = "data-mgt-modal-title";
 
+// v18.2.0: FLAT. The pill carried `--shadow-btn` and the solid buttons' white
+// rim (RIM_SOLID), i.e. exactly what a button wears, in a button's blue, above
+// a form full of buttons — so "New booking" read as something to press (the
+// design critique). A heading is not a control: the shadow and the rim are
+// gone, and the colour stays, because it is information (it matches the
+// button that opened the modal — see above). Patryk's call, for every modal
+// at once, since all seven titles come through here.
 export function ModalTitle({ background, marginBottom = 14, children }) {
   return (
     <div style={{ textAlign: "center", marginBottom }}>
       <h2 {...{ [MODAL_TITLE_ATTR]: "" }} style={{
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-        background, margin: 0,
-        border: RIM_SOLID,
-        boxShadow: "var(--shadow-btn)"
+        background, margin: 0
       }}>{children}</h2>
     </div>
   );

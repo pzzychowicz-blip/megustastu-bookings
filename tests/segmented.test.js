@@ -50,3 +50,12 @@ describe("the header subtitle (v18.2.0)", () => {
     expect(App).toMatch(/INDOOR\.length\+" indoor · "\+OUTDOOR\.length\+" outdoor · "\+\(dayClosed\?"Closed":hourLabel\(OPEN\)\+"–"\+hourLabel\(CLOSE\)\)/);
   });
 });
+
+describe("a modal title is a label, not a button (v18.2.0)", () => {
+  it("ModalTitle keeps its colour but wears no button shadow and no solid-button rim", () => {
+    const fn = Atoms.slice(Atoms.indexOf("export function ModalTitle"), Atoms.indexOf("\n}\n", Atoms.indexOf("export function ModalTitle")));
+    expect(fn).toMatch(/background, margin: 0/);
+    expect(fn).not.toMatch(/boxShadow/);
+    expect(fn).not.toMatch(/RIM_SOLID/);
+  });
+});
