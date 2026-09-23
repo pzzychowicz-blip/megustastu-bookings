@@ -33,8 +33,8 @@ dist-ssr
 .impeccable/
 
 # Firebase emulator working dir (the *.log line above already covers
-# firebase-debug.log / database-debug.log). There is deliberately NO
-# .firebaserc in this repo — see database.rules.README.md.
+# firebase-debug.log / database-debug.log). `.firebaserc` IS committed since
+# v18.0.0 phase 2 — two aliases, deliberately no default; see database.rules.README.md.
 .firebase/
 
 # Claude Design sync (/design-sync) — the staged converter scripts, the bundle
