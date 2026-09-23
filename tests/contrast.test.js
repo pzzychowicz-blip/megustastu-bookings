@@ -252,6 +252,17 @@ const FILLS = [
   { fill: "--bg-soft", alpha: null, ink: "--text-muted", role: "label", what: "panel secondary text + the voucher row's disclosure chevron" },
   { fill: "--bg-soft", alpha: null, ink: "--text-primary", role: "label", what: "panel body text (redemption rows, customer history)" },
 
+  // v18.2.0 — the SEGMENTED CONTROL (atoms' SEG_TRACK / segStyle): Settings'
+  // TabBar since v16.2.0, and now the main view switcher in the header, which
+  // is the app's most-pressed control. Neither pair was registered — `--bg-*`
+  // matches none of the coverage guard's prefixes, the blind spot the two
+  // blocks above already record — so they were unmeasured on the one surface
+  // every shift uses.
+  // The chosen segment's ink was --accent: 4.02:1 light, 2.25:1 dark, measured
+  // by THIS entry the first time it existed. Primary text since v18.2.0.
+  { fill: "--bg-tab-active", alpha: null, ink: "--text-primary", role: "label", what: "segmented control, the chosen segment (view switcher, Settings tabs)" },
+  { fill: "--bg-tabbar", alpha: null, ink: "--text-muted", role: "label", what: "segmented control, an unchosen segment" },
+
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
   { fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "danger tag" },

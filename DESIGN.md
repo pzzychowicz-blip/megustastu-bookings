@@ -313,6 +313,21 @@ explaining why is usually the one to read.
   again, ~8 L\* is the bar.** A backdrop either commits to being seen or commits
   to being a surface.
 - **One app font (v16.0.0):** the stack lives in `src/index.css` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
+- **A selected SEGMENT is lifted, not filled (v18.2.0).** The header's
+  Timeline/List/Plan were three solid pills with the active one solid accent —
+  the same blue as "+ New" beside them, so "where I am" and "what I can do"
+  read as one thing (the design critique). They are now one segmented control
+  in Settings' TabBar treatment: a `--bg-tabbar` track, the chosen segment a
+  `--bg-tab-active` pill with `--shadow-btn`, shared as STYLE through atoms'
+  `SEG_TRACK` / `segStyle` (the two cannot share behaviour — the switcher
+  carries the split-view gestures). **The rule: the solid accent in the header
+  is reserved for the primary ACTION ("+ New"); a selection is shown by lift.**
+  The chosen segment's ink is `--text-primary`, not `--accent`: registering the
+  pair for the first time measured the accent at 4.02:1 light and 2.25:1 dark,
+  under a small bold label's 4.5:1, and that had been Settings' tab bar since
+  v16.2.0. The lift, the weight and the shadow say "chosen"; the colour does
+  not have to. The track's hairline is an inset shadow so the control stands
+  exactly `H.control` tall beside the header's buttons.
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).

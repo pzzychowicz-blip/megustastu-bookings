@@ -204,6 +204,45 @@ export function mkSolidBtn(background, extra) {
   };
 }
 
+// ── Segmented control: the track and a segment (v18.2.0) ─────────────────────
+// Settings' TabBar has drawn this since v16.2.0 — a pill track, the chosen tab
+// LIFTED as a white pill with accent text — and the main view switcher became
+// its second user in v18.2.0. It was three solid pills there (the active one
+// solid blue), sitting beside "+ New" in the same blue, so the eye could not
+// tell "where I am" from "what I can do". Shared as STYLE rather than a
+// component because the two cannot share behaviour: the view buttons carry the
+// split-view hold and right-click, TabBar a scroller. A second hand-typed copy
+// of the shape is the defect `src/CLAUDE.md` records for OutlineChip.
+//
+// The track's hairline is an INSET shadow, not a border: a border adds 2px to
+// the height, and the header's switcher has to stand exactly H.control tall
+// beside the buttons next to it (a H.chrome segment + 2px of track padding).
+//
+// The pairs are registered in tests/contrast.test.js: --text-primary on
+// --bg-tab-active (the lifted segment), --text-muted on --bg-tabbar (the rest).
+// The lifted segment's ink was --accent until v18.2.0 — TabBar's since v16.2.0,
+// never registered — and registering it measured 4.02:1 light and 2.25:1 dark
+// against the 4.5:1 a small bold label takes. Primary text, Patryk's call: the
+// LIFT, the weight and the shadow say "chosen", the colour does not have to.
+export const SEG_TRACK = {
+  display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill,
+  background: "var(--bg-tabbar)", boxShadow: "inset 0 0 0 1px var(--border-soft)"
+};
+export function segStyle(active) {
+  return {
+    borderRadius: R.pill, border: "none", cursor: "pointer",
+    background: active ? "var(--bg-tab-active)" : "transparent",
+    color: active ? "var(--text-primary)" : "var(--text-muted)",
+    fontWeight: active ? FW.bold : FW.semi,
+    fontSize: T.body,
+    boxShadow: active ? "var(--shadow-btn)" : "none",
+    // `transform` MUST be listed: these carry .mgt-hover-scale, and an inline
+    // `transition` REPLACES the class's, so a list without it snaps the lift
+    // (the collision TabBar's own comment recorded when it lost it).
+    transition: "transform " + M.tap + ", background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
+  };
+}
+
 // ── Modal overlay (mobile = full-screen sheet, desktop = centered card) ──────
 // Optional `footer` (v14.4.1): when provided, the action buttons render PINNED
 // to the modal bottom while `children` scroll above them — so Save/Cancel stay

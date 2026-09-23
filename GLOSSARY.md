@@ -33,7 +33,7 @@ admin has not enabled the module. The one thing still not shipped is the
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| The **T · L · P** buttons in the header | **view switcher** (`ViewSwitcher.jsx`) | Switches the main view. Right-click or press-and-hold opens the split menu. |
+| The **T · L · P** buttons in the header | **view switcher** (`ViewSwitcher.jsx`) | Switches the main view. Right-click or press-and-hold opens the split menu. Since v18.2.0 one **segmented control** (`SEG_TRACK` / `segStyle`, shared with Settings' tab bar): the chosen view is a lifted pill, never the accent fill "+ New" wears. |
 | Horizontal grid, one row per table, bookings as coloured bars | **Timeline view** (`TimelineView.jsx`) | The service view — the whole day at a glance, Gantt-style. |
 | Vertical stack of booking cards | **List view** (`ListView.jsx`) | Sorted cards with full detail and per-booking actions. |
 | Top-down drawing of the room | **Plan view** (`PlanView.jsx`) | The floor plan, filled by occupancy at a chosen minute. |

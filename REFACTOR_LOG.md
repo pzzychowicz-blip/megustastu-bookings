@@ -26000,3 +26000,28 @@ opens the existing quick-status card rather than a new menu.
   test asks.
 
 Tests: `tests/list-card.test.js` (8).
+
+### 6. The view switcher becomes a segmented control
+
+The critique found the active view (solid accent) and "+ New" (the same blue) side by
+side in the header, so where-you-are and what-you-can-do read alike. Patryk chose the
+Timeline/List/Plan buttons as one segmented control, with the chosen view lifted and
+"+ New" left as the only solid blue.
+
+- **`SEG_TRACK` / `segStyle(active)`** (atoms.jsx). Settings' TabBar has drawn this
+  look since v16.2.0; it is now shared as style, and TabBar reads `segStyle` with the
+  same values, moved rather than copied. The two cannot share a component: the
+  switcher carries the split-view hold and right-click. The track's hairline is an
+  inset shadow, so the control measures exactly 40px (`H.control`).
+- **ViewSwitcher** is a `role="group" aria-label="View"` of the three buttons. Each
+  keeps `aria-pressed` and its split gestures. The focused pane's underline is now
+  accent on the lifted pill.
+- **A contrast defect found by registering the pair**, fixed with Patryk's say-so.
+  Neither segment pair was in `tests/contrast.test.js` (`--bg-*` matches none of the
+  coverage guard's prefixes). Registering them measured the chosen segment's
+  `--accent` ink at **4.02:1 light / 2.25:1 dark**, under 4.5:1. That had been
+  Settings' tab bar since v16.2.0. The ink is `--text-primary` in both places now.
+  Measured live in the header: chosen 10.8:1 light / 16.8:1 dark, the others 7.5 /
+  5.3.
+
+Tests: `tests/segmented.test.js` (7) and two new contrast registry entries.

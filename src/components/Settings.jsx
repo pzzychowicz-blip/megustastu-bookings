@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 import { CountryPicker } from "./CountryPicker";
 import { countryByIso, flagOf, dialLabel, MAX_PINNED } from "../lib/phone-countries";
@@ -81,31 +81,11 @@ export function TabBar({ tabs, current, onSelect }) {
             key={t.id}
             className="mgt-hover-scale"
             onClick={() => onSelect(t.id)}
-            style={{
-              flex: "1 0 0%",
-              whiteSpace: "nowrap",
-              padding: "8px 12px",
-              borderRadius: R.pill,
-              border: "none",
-              background: active ? "var(--bg-tab-active)" : "transparent",
-              color: active ? "var(--accent)" : "var(--text-muted)",
-              fontWeight: active ? FW.bold : FW.semi,
-              fontSize: T.body,
-              cursor: "pointer",
-              boxShadow: active ? "var(--shadow-btn)" : "none",
-              // Not `all`: `all` animates layout properties too (this button's
-              // font-weight jumps 600->700 on activation, and `all` would have
-              // tried to tween it), and it is the transition equivalent of a
-              // wildcard import — you cannot tell what moves by reading it.
-              // `transform` IS in the list, and has to be: this button carries
-              // .mgt-hover-scale, an inline shorthand REPLACES the class's
-              // declaration (and `button {}`'s), and naming three properties
-              // here silently dropped the fourth — so the tab's hover lift and
-              // its press dip both snapped. Exactly the collision documented at
-              // index.html's .mgt-hover-scale rule, one layer up: an inline
-              // transition on a hover-scale element must list transform.
-              transition: "transform " + M.tap + ", background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
-            }}
+            // v18.2.0: the segment's look is `segStyle` (atoms.jsx), shared
+            // with the main view switcher — the SAME values this button carried
+            // inline, moved rather than changed. What stays here is what is
+            // TabBar's own: it stretches, and it never wraps its label.
+            style={{ ...segStyle(active), flex: "1 0 0%", whiteSpace: "nowrap", padding: "8px 12px" }}
           >
             {t.label}
           </button>

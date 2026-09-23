@@ -23,8 +23,8 @@
 // left-click behaviour below is then exactly what App.jsx did before.
 
 import { useRef, useEffect } from "react";
-import { S, BTN, T, IC } from "../lib/constants";
-import { mkBtn, Presence } from "./atoms";
+import { BTN, T, IC, H } from "../lib/constants";
+import { mkBtn, Presence, SEG_TRACK, segStyle } from "./atoms";
 import { beginHold } from "../lib/holdSelection";
 import { CloseIcon, SplitSideIcon, SplitStackIcon, SwapIcon } from "./Icons";
 
@@ -119,6 +119,16 @@ export function ViewSwitcher({
 
   return (
     <>
+      {/* v18.2.0: ONE segmented control instead of three solid pills. The
+          active view was solid accent blue, and "+ New" beside it is the same
+          blue, so where-you-are and what-you-can-do read as one thing — the
+          design critique's finding. The chosen view is now LIFTED (Settings'
+          TabBar treatment, shared through atoms' SEG_TRACK / segStyle) and
+          "+ New" is the only solid blue in the header. `role="group"` names
+          the three as one control; each keeps `aria-pressed`, which is what
+          says which one is on. In a split BOTH pane views are lifted, and the
+          focused pane's carries the inset underline it always had. */}
+      <div role="group" aria-label="View" style={SEG_TRACK}>
       {ORD.map((v) => (
         <button
           key={v}
@@ -128,60 +138,23 @@ export function ViewSwitcher({
           onPointerDown={(e) => startPress(v, e)}
           onPointerUp={clearPress}
           onPointerCancel={clearPress}
-          // v18.0.0 session 9: the active view was signalled by FILL ALONE —
-          // `S.accent` against `--app-btn-grey`, measured in the running app as
-          // rgb(10,132,255) vs rgba(110,118,135,.5) — on the app's PRIMARY
-          // navigation. That is CLAUDE.md's "state is colour alone" rule broken
-          // in the one place every session starts.
-          //
-          // The predicate is not a new decision: `isActive` already decides
-          // which buttons paint as active, so `aria-pressed` is wired to THAT
-          // and cannot drift from what the eye sees. In a split both panes' views
-          // are active and both read pressed — a view plainly on screen must not
-          // announce as off.
-          //
-          // `aria-current` carries the second, finer state the fill cannot: which
-          // of the two active buttons the keyboard is pointed at. It is the same
-          // `isFocusedPaneView` that draws the inset underline, so that mark stops
-          // being shape-alone too. Undefined when there is no split, because with
-          // one view there is no "which of them".
-          //
-          // Deliberately NO `aria-label`. These buttons have visible text, so
-          // Chrome computes the name from their contents and a label here would
-          // REPLACE a working name with a paraphrase — v17.15.4's Label-in-Name
-          // defect, which v17.16.3 then nearly re-introduced after an automation
-          // tree reported all three as named by this `title`. `title` is a
-          // description of last resort and loses to contents; it stays as it is.
           aria-pressed={isActive(v)}
           aria-current={isFocusedPaneView(v) ? "true" : undefined}
           title={gesturesOn ? "Right-click or hold to add to a split view" : undefined}
           style={Object.assign(
-            mkBtn({ background: isActive(v) ? S.accent : "var(--app-btn-grey)", textTransform: "capitalize", minHeight: 40 }),
+            segStyle(isActive(v)),
+            { textTransform: "capitalize", minHeight: H.chrome, padding: "6px 14px" },
             {
               WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
               touchAction: "manipulation",
             },
-            // In a split, a mark shows WHICH of the two active buttons the
-            // keyboard is pointed at — the fill alone can't say that.
-            // v17.8.0: it used to be `outline: 2px solid white, offset -4`,
-            // which is indistinguishable from a keyboard focus ring — and once
-            // v17.8.0 added a REAL one, two different meanings wore the same
-            // clothes. It is now an inset underline in the pane-focus colour,
-            // echoing SplitLayout's corner brackets (the established "this pane
-            // is focused" device) rather than impersonating focus.
-            // boxShadow, not border/outline: it must not change the button's
-            // box or fight the focus ring for the outline property.
-            // v17.8.0 review fix: mkBtn ALREADY sets boxShadow, and Object.assign
-            // replaces a property rather than merging it — so this used to strip
-            // the button's drop shadow, leaving the focused pane's button sitting
-            // flatter than the unfocused one for no reason a user could read. Two
-            // shadows, one comma-separated list.
             isFocusedPaneView(v)
-              ? { boxShadow: "inset 0 -3px 0 var(--text-on-accent), var(--shadow-btn)" }
+              ? { boxShadow: "inset 0 -3px 0 var(--accent), var(--shadow-btn)" }
               : null
           )}
         >{v}</button>
       ))}
+      </div>
       <Presence show={!!split} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
         <span style={{ display: "inline-flex", gap: 6 }}>
           <button className="mgt-hover-scale" onClick={onSwapSides}
