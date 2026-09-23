@@ -25929,3 +25929,42 @@ instead. The finger test on the tablet is Patryk's before merging.
 Tests: `tests/unplaced.test.js` (19) — the reasons, the 3 Oct day, lanes never
 overlapping and deterministic, and source scans that the three surfaces read the one
 rule, the row is above the table rows, and the drop offset is in.
+
+### 4. The grid reaches the last booking, and a day opens where its bookings are
+
+- **`extendActiveGrid(endMins)`** (`constants.js`) stretches the active day's
+  `GRID_CLOSE` / `QUARTER_HOURS` to the viewed day's latest booking end. It rounds up
+  to the hour, never shortens, and caps at 26. App calls it during render, right after
+  `useOperatingHours(viewDate)` resets the bindings; `viewLatestEnd` is a memo over
+  `bookings` / `viewDate` of time + duration.
+  - Display only: every live-binding reader widens together (timeline, `pct()`,
+    TimeAxis, now-line, BlockModal's From/To bound and default "to"). `hoursFor()`,
+    which placement reads, is unchanged.
+  - Measured on 3 Oct (Emil Kovacs 21:45 → 23:45): the axis ran to 24:00, and the Plan
+    scrubber's labels went to 23:00 instead of 22:00.
+  - `PlanView`'s own scrub bound (`closeM`) read `hoursFor().gridClose`, which would
+    have clamped the selection an hour short of the tape. It now takes the larger of
+    that and the live `GRID_CLOSE`.
+- **Once-per-date scroll** in TimelineView. Today opens on the now-line; any other day
+  opens on its first booking, `followLeadMins` early. Both go through `centerNow`.
+  - App's `timelineScrollDateRef` guards it, so a remount restores instead of jumping.
+  - It also writes `scrollPosRef`, as Follow does. The first cut did not, and in DEV
+    the restore effect put the previous day's 200px back every time. Found by tracing
+    both effects: StrictMode's re-run reads the ref before the scroll event lands.
+    Production has the same race, on the 15s tick and on width changes.
+- **Measured at 375px:** today (14:51) opens with 14:00 in view; 3 Oct opens with
+  20:00 in view (19:30 lead). A view switch after a scroll to 100 comes back at 100.
+- **A trap hit while verifying**, now in the `mgt-measurement-traps` skill: a scripted
+  `scrollLeft` write fires no `scroll` event in the Browser pane. The first view-switch
+  check therefore "restored" 468 over a 100 the app never heard about, and read as a
+  regression. Dispatching the event showed the app was right.
+
+Not done, and worth a word: the Plan view still opens a non-today day at opening time
+rather than at its first booking. The approved change was the timeline's scroll, and
+the Plan's default is a separate decision.
+
+Lint went 89 → 91 warnings, 0 errors. Both new ones are React Compiler advisories on the effect writing `scrollDateRef.current`, a ref it receives as a prop. That is the same shape as the existing `scrollPosRef` writes, and kept as warnings for the house reason.
+
+Tests: `tests/grid-extend.test.js` (10) — the extension's bounds, that it never
+touches `hoursFor`, that the next render resets it, the call order in App, the Plan
+bound, and the scroll guard writing `scrollPosRef`.

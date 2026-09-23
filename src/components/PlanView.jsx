@@ -32,7 +32,7 @@
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -87,7 +87,12 @@ export const PlanView = memo(function PlanView({
   // CLOSE — matching the Timeline axis exactly, which is what lets TimeAxis
   // reuse pct()/QUARTER_HOURS unchanged. It also lets you scrub into the tail
   // where a late booking actually runs out, which the old slider couldn't reach.
-  const closeM = (h.closed ? 23 : h.gridClose) * 60;
+  // v18.2.0: the LIVE `GRID_CLOSE`, which is the viewed day's gridClose
+  // stretched to its latest booking (constants.js `extendActiveGrid`) — the
+  // bound TimeAxis and the Timeline already read, so the scrubber reaches a
+  // 23:45 finish too. `hoursFor(date).gridClose` would clamp the selection
+  // an hour short of the tape it is scrubbing.
+  const closeM = (h.closed ? 23 : Math.max(h.gridClose, GRID_CLOSE)) * 60;
 
   // ── Time scrubber (defaults: now on today, opening time otherwise) ─────────
   // Absolute minutes-since-midnight, clamped to the day's span and NOT rounded.

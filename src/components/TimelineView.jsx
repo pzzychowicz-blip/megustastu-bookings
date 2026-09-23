@@ -1151,6 +1151,11 @@ export const TimelineView = memo(function TimelineView({
   maxZoom = 5,         // the + button's ceiling (was hard-coded 5)
   followNow, setFollowNow,
   scrollPosRef,
+  // v18.2.0: which DATE the grid was last placed for (a ref owned by BookingApp,
+  // like scrollPosRef). The once-per-date scroll to the first booking checks
+  // it, so a remount — switching to List and back — restores your position
+  // instead of jumping away from it.
+  scrollDateRef = null,
   autoOptimizer = true,
   setAutoOptimizer = () => {},
   currency = "€", // v17.0.0: settings/general deposit marker
@@ -1234,6 +1239,42 @@ export const TimelineView = memo(function TimelineView({
   }
 
   const day = bookings.filter((b) => b.date === date && b.status !== "cancelled");
+
+  // ── v18.2.0: open the day where its bookings are ─────────────────────────
+  // A day opened wherever the LAST day was scrolled — for a future evening
+  // service at 13:00, so on a phone the first screen held nothing, and on the
+  // tablet the eye started at the empty half. Now, once per viewed date: today
+  // opens on the now-line, any other day on its first booking, each with the
+  // same lead Follow uses (`followLeadMins`) so the start is not flush against
+  // the edge. Not while Following (that owns the scroll), and not again after
+  // a remount for the same date (`scrollDateRef`). An EMPTY non-today day does
+  // not mark itself done: its bookings may simply not have loaded yet.
+  //
+  // Through `centerNow`, not a plain scrollLeft write, because the grid WIDTH
+  // may be easing to a new value in this same commit (a day that reaches later
+  // widens the grid — constants.js `extendActiveGrid`), and centerNow is the
+  // helper that re-derives scrollLeft from the live width for that window.
+  const firstStart = day.reduce((m, b) => Math.min(m, toMins(b.time)), Infinity);
+  useEffect(() => {
+    if (!scrollDateRef || !scrollRef.current) return;
+    if (scrollDateRef.current === date) return;
+    if (followNow && isToday) { scrollDateRef.current = date; return; }
+    let target = null;
+    if (isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60) target = nowMins - followLeadMins;
+    else if (Number.isFinite(firstStart)) target = firstStart - followLeadMins;
+    if (target == null) return;
+    scrollDateRef.current = date;
+    const fraction = Math.max(0, (target - OPEN * 60) / totalMins);
+    centerNow(fraction);
+    // …and record it where the RESTORE effect above reads, as Follow does. That
+    // effect re-applies `scrollPosRef` whenever its deps change, and it reads
+    // the ref synchronously — before the scroll event that would have updated
+    // it. Measured in DEV: StrictMode's re-run put the old day's 200px back
+    // over this placement every time. Production runs it on the 15s tick and
+    // on a width change, which is the same race with a longer fuse.
+    if (scrollPosRef) scrollPosRef.current = fraction * gridW;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per date: nowMins / totalMins are read, not watched
+  }, [date, firstStart, isToday, followNow]);
   // v17.16.6 (/code-review): filtered through the SAME predicate getBlockSlots
   // uses, because BlockBar below calls toMins(bl.from) itself. Guarding only the
   // placement path left an unreadable block throwing during RENDER, where the

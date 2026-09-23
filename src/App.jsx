@@ -28,7 +28,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
 
 import {
   getDur, toMins, genId, sanitizeBlock,
@@ -881,6 +881,8 @@ function BookingApp({uid}){
     setTimelineZoom(z);
   }
   const timelineScrollRef=useRef(0);
+  // v18.2.0: the date TimelineView last auto-placed its scroll for (see there).
+  const timelineScrollDateRef=useRef(null);
   const [followNow, setFollowNow] = useState(false);
   // ── v17.14.0: the modal stack ───────────────────────────────────────────────
   // ONE ordered stack (src/hooks/useModalStack.js) replacing eighteen
@@ -1236,6 +1238,22 @@ function BookingApp({uid}){
   // the re-render that repaints the timeline + form time limits. saveDayHours /
   // saveAllDays are wired to the Settings General-tab 7-day editor below.
   const { weekHours, saveDayHours, saveAllDays } = useOperatingHours(viewDate);
+  // v18.2.0: then stretch the viewed day's grid to its latest booking's end
+  // (constants.js `extendActiveGrid` — display only, never shorter). Same
+  // render-time module mutation as the line above, and it must come AFTER it,
+  // which resets the bindings to the day's hours. The scheduled end
+  // (time + duration); a seated party's live overstay is written back into
+  // `duration` by syncLiveDurations, so this follows it.
+  const viewLatestEnd=useMemo(function(){
+    let end=-Infinity;
+    bookings.forEach(function(b){
+      if(!b||b.date!==viewDate||b.status==="cancelled") return;
+      const e=toMins(b.time)+(Number(b.duration)||0);
+      if(Number.isFinite(e)&&e>end) end=e;
+    });
+    return end;
+  },[bookings,viewDate]);
+  extendActiveGrid(viewLatestEnd);
   // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
@@ -4700,6 +4718,7 @@ function BookingApp({uid}){
     followLeadMins={tlSettings.followLead}
     maxZoom={tlSettings.maxZoom}
     scrollPosRef={timelineScrollRef}
+    scrollDateRef={timelineScrollDateRef}
     followNow={followNow}
     setFollowNow={setFollowNow}
     autoOptimizer={autoOptimizer}
