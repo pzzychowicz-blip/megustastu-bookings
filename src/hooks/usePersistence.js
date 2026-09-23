@@ -334,6 +334,19 @@ export function usePersistence({ autoOptimizer, nowMins }){
       resyncInFlightRef.current=false;
     });
   }
+  // v18.1.1: the WHOLE database in one read, for "Download backup"
+  // (`lib/backup.js` decides what the file keeps). Gated like resync(), and the
+  // measurement is what the gate is for: offline on DEV, get() of a LISTENED
+  // path resolved at once from the local cache (`bookings`, 593 rows), while
+  // get() of the ROOT — which nothing listens to — stayed pending past 4s,
+  // waiting for the socket. Ungated, the button would hang in silence and then
+  // download minutes later; gated, it refuses at once and says why. REJECTS
+  // rather than resolving null, so no caller can mistake "offline" for "the
+  // database is empty". Read-only: no write guard applies, no state is touched.
+  function readDatabaseRoot(){
+    if(!isConnectedRef.current) return Promise.reject(new Error("offline"));
+    return get(ref(db)).then(function(snap){return snap.val();});
+  }
   // Flag the local snapshot as possibly-stale and kick a resync (if connected;
   // otherwise the .info/connected reconnect handler runs it). Idempotent + cheap.
   function markStale(){
@@ -922,6 +935,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // v17.10.1: the manual half of the reconnect watchdog — the connection
     // popover's "Reconnect now". Same lever the watchdog pulls, on demand.
     forceReconnect,
+    // v18.1.1: one read of the whole database, for "Download backup".
+    readDatabaseRoot,
     // firstLoadCount is exposed as a ref because the load-banner JSX in
     // BookingApp reads .current to show the booking count from the first
     // successful Firebase load. It must remain a ref (not state) so

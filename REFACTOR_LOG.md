@@ -25691,3 +25691,122 @@ Gate after the fixes: `137.74 kB` gz · **1505 tests** · 0 lint errors (89
 warnings) · style OK. Rules untouched (`settings/general` validates no field
 names; `generalRev` covers the new fields), so `test:rules` was not re-run and
 **no PROD console step** is needed.
+
+## v18.1.1 — the backup that skipped vouchers
+
+**Date:** 2026-09-23 · **Branch:** `fix/v18.1.1-backup-coverage` ·
+**Behavioural change:** yes. Settings → General → **Download backup** now saves the
+whole database, and the file's shape changed. There is no new UI, and two new warning
+messages cover a refused read.
+**Files:** new `src/lib/backup.js`, `tests/backup.test.js`; changed `src/App.jsx`,
+`src/hooks/usePersistence.js`, `database.rules.README.md`, `src/lib/CLAUDE.md`,
+`src/hooks/CLAUDE.md`. +376 / −34 before this entry.
+
+Found by the 2026-09-23 tech-debt scan (item 1 of its register; the report is
+`MGT_Bookings_Tech_Debt_Scan_2026-09-23.md` in the context folder). `doBackup` was
+written in v16.3.0 (`d351d63`) as a hand-built object: five collections from
+in-memory state, plus five settings nodes. Nothing added since had joined it. Measured
+against `database.rules.json`, it covered **5 of the 14 top-level data nodes and 5 of
+the 10 `settings/*` nodes**.
+
+**Missing:**
+- `vouchers`, which holds gift-voucher balances, i.e. money owed to guests
+- `roles`, `invites`, `activity`
+- `conversations`, `messages`, `templates`
+- `settings/admin`, `general`, `voucherDefaults`, `whatsapp`, `users`
+
+Nothing could see it: no test read the payload, and no doc described a restore. **A
+restore from any backup taken since v18.0.0 would have lost every voucher.**
+
+**Patryk chose the whole-database form over extending the list.** The list was the
+"any set of facts written out N times" defect with the rules file as the other copy,
+and a longer hand-kept list is the same defect with more entries.
+
+- **`lib/backup.js`** (pure).
+  - `buildBackup(root, meta)` returns the root tree minus `BACKUP_OMIT` (`presence`,
+    `reminderFires`, each with its reason) and minus any stale `_backup` node, plus
+    `_backup: {exportedAt, appVersion, omitted}` as the FIRST key. Values are verbatim,
+    never sanitized, and revs are included, so the file is what the console's Import
+    JSON takes at the root.
+- **`usePersistence.readDatabaseRoot()`** is `get(ref(db))`, gated on `isConnectedRef`
+  like `resync()`. It rejects rather than resolving null.
+- **`doBackup`** reads, builds, then downloads with the same code and filename. An
+  in-flight ref ignores a second tap. A refused read sets one new `setWriteWarning`
+  message (offline) or a generic one.
+- **The restore runbook** is `database.rules.README.md` § Backups and restore: back up
+  the current state first, rehearse on DEV, import at the root (or per node), check
+  your own `/roles/<uid>` row, reload every device. It also records that a pre-v18.1.1
+  file is partial and must not be imported at the root.
+
+**Measured before the comments were written, and it changed them.** The first draft
+said an offline root `get()` could resolve from the partial local cache. On DEV, with
+`goOffline(db)` on the app's own instance, **a root `get()` stayed PENDING past 4s,
+while `get("bookings")` resolved at once from cache (593 rows)**. So the gate's job is
+to turn a silent hang, and then a download minutes later, into an immediate refusal
+that says why. (The first cut also kept a completeness backstop for the unobserved
+case; the `/code-review` round below removed it.)
+
+**Verification.**
+- `tests/backup.test.js` had 20 tests (15 after the review round), with node names DERIVED from
+  `database.rules.json`. Mutation-checked: making the builder drop `vouchers` fails 2
+  tests, one of them naming the node; restoring the file byte-identical turns them green.
+- Live on DEV, with the Blob captured in memory and the download click swallowed, so
+  no file was saved:
+  - the read took 204 ms, and the file was 830,617 bytes
+  - `_backup` came first, with `appVersion: "18.1.1"` and both omission reasons
+  - vouchers (17), roles (3), activity (544), bookings (593) and all ten settings
+    nodes with their revs were present
+  - `presence` was absent, although this tab's own presence child existed
+  - `reminderFires` was absent
+  - offline, the press showed "Backup needs a connection to the database. Try again
+    once the app shows Connected." and captured nothing
+  - after `goOnline`, it worked again; the console showed no errors
+- The whole-database file also carries nodes the rules do not declare. DEV holds
+  `__probe` and `configRevisions`. That's correct for a restore, and the file is the
+  only place anybody would learn they exist.
+- **Not done here, and Patryk's:** a restore rehearsal on DEV through the console.
+
+Gate: `138.30 kB` gz (+0.56 on 137.74) · **1525 tests** (+20, with the three dist-gated
+ones running after the build) · 0 lint errors (89 warnings, unchanged) · style OK. The
+rules are untouched, so `test:rules` was not re-run and **no PROD console step** is needed.
+
+### `/code-review` round (2026-09-23)
+
+The ship run reviewed all three branches of the tech-debt scan together. The findings
+for this version:
+
+1. **Fixed** (`drop the partial-read backstop, which could not see a partial read`).
+   `missingFromSnapshot` checked that the collections this device holds (bookings,
+   tableBlocks, waitlist, reminders, vouchers) came back non-empty. A root read served
+   from the SDK's local cache would contain exactly those, because they are the
+   listened paths the cache holds, so the check could never catch the partial read it
+   named. It could also refuse a complete backup, if another device emptied a
+   held collection during the ~200 ms read (RTDB deletes an empty node). Removed from
+   `lib/backup.js`, `doBackup` and the tests (20 → 15). What prevents a partial file
+   is the SDK itself, measured: offline, a root `get()` waits for the socket rather
+   than answering from an incomplete cache. `readDatabaseRoot` refuses up front when
+   offline. The test's "omitted" check now uses `hasOwnProperty` like the builder,
+   where it had used `in`, which walks the prototype chain.
+2. **Deferred to ROADMAP** (on the scan's chore branch): **feedback inside Settings,
+   and offline.** Measured on DEV: with Settings open, a refused backup's message
+   lands in the red "Couldn't save" banner, which sits outside the dialog, under an
+   `inert` ancestor, and is covered by the overlay (`elementFromPoint` returns the
+   overlay's div). So an offline press visibly does nothing until Settings closes.
+   Before v18.1.1 an offline press still produced a file, from the device's memory.
+   Both need a UI decision (an inline status line, and whether an offline fallback
+   exports a clearly-partial device copy), so neither was built in the ship run.
+3. **Not fixed, and why:**
+   - **No timeout on the read.** A stale-`true` `isConnectedRef` just after a wake can
+     leave the read pending until the reconnect watchdog. A timeout would also refuse
+     a slow-but-healthy read of a database whose PROD size is unmeasured (scan item
+     #3), which is worse than a late file.
+   - **The download now fires after an async read.** It is outside the tap handler,
+     and WebKit may need transient activation. The DEV run was Chromium, so **check
+     one backup on the iPad/iPhone after deploy**.
+   - **The Blob/anchor code is duplicated** with `doDownloadActivity`. That's
+     pre-existing, and outside this fix.
+
+Gate after the review fix: `138.20 kB` gz (+0.44 on 137.74) · **1520 tests** · 0 lint
+errors (89 warnings) · style OK. Re-checked live on DEV: the served code has no
+backstop, and the captured file leads with `_backup` (18.1.1), holds 17 vouchers, and
+has no `presence` or `reminderFires`. No file was saved.

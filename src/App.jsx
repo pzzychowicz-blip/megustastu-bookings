@@ -84,6 +84,9 @@ import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
+// v18.1.1: what "Download backup" writes — the whole database minus a named,
+// reasoned omission list — decided in a pure module (tests/backup.test.js).
+import { buildBackup } from "./lib/backup";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -379,7 +382,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.1.0",
+  version:"18.1.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1164,7 +1167,7 @@ function BookingApp({uid}){
     parkedWrites, retryParked, discardParked,
     loadBannerShown, reconnectShown, resyncing, bookingsReady,
     loadStalled, readError, hasConnected, forceReconnect,
-    firstLoadCount,
+    firstLoadCount, readDatabaseRoot,
   } = usePersistence({ autoOptimizer, nowMins });
 
   // v18.0.0 phase 5: `useRoles` moved UP to here, from below `useVouchers`. It
@@ -2276,6 +2279,13 @@ function BookingApp({uid}){
   // v16.3.0: download a JSON backup of every collection + all settings to the
   // device. Read-only (no write-guard concerns). The Firebase free plan has NO
   // automatic backups, so this is one-tap insurance; restore stays manual.
+  // v18.1.1: the file is now the WHOLE database, read from the server in one
+  // get(). The hand-built payload it replaces named five collections and five
+  // settings nodes and never learned about vouchers, roles, invites, the
+  // activity log or four more settings nodes, so a restore from it would have
+  // lost every gift-voucher balance. `lib/backup.js` holds the rule and the why;
+  // `database.rules.README.md` § Backups and restore holds the restore.
+  const backupInFlightRef=useRef(false);
   function doBackup(){
     // The widest data-protection action in the app — every booking, every
     // customer name and every phone number in one file — and the ONE gated
@@ -2283,38 +2293,28 @@ function BookingApp({uid}){
     // reads, and `.read` is `auth != null` at the root. `CAPABILITIES` says so
     // rather than letting the enforced badge imply otherwise.
     if(refused("dataExport")) return;
-    const payload={
-      exportedAt:new Date().toISOString(),
-      appVersion:__APP_SIGNATURE__.version,
-      // /code-review: reminderFires (the transient per-device fire log) is
-      // DELIBERATELY omitted — restoring reminders without it can only re-show
-      // an already-seen banner once, which pruneOldReminderFires then re-prunes.
-      // Recorded in the file itself so a future restore knows it wasn't lost.
-      omitted:["reminderFires (transient reminder fire-log — intentionally not backed up)"],
-      bookings:bookings,
-      tableBlocks:tableBlocks,
-      waitlist:waitlist,
-      reminders:reminders,
-      recurring:recurring,
-      settings:{
-        operatingHours:weekHours,
-        dayShifts:dayShifts,
-        optimizer:optimizerSettings,
-        layout:layout,
-        bookingDefaults:bookingDefaults
-      }
-    };
-    try{
-      const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;
-      a.download="mgt-backup-"+todayStr()+".json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    }catch{setWriteWarning("Couldn't create the backup file on this device.");}
+    // One read at a time: a second tap while the first is out would only
+    // download the same file twice.
+    if(backupInFlightRef.current) return;
+    backupInFlightRef.current=true;
+    readDatabaseRoot().then(function(root){
+      const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
+      try{
+        const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url;
+        a.download="mgt-backup-"+todayStr()+".json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){URL.revokeObjectURL(url);},1000);
+      }catch{setWriteWarning("Couldn't create the backup file on this device.");}
+    },function(err){
+      setWriteWarning(err&&err.message==="offline"
+        ?"Backup needs a connection to the database. Try again once the app shows Connected."
+        :"Couldn't read the database for the backup.");
+    }).finally(function(){backupInFlightRef.current=false;});
   }
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
