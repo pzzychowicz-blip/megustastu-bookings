@@ -47,6 +47,7 @@ admin has not enabled the module. The one thing still not shipped is the
 | The booking form's phone number | **phone field** (`PhoneField`) | v18.1.0. Country-code picker + the number. Still stored as ONE string (`booking.phone`, "+34 600 123 456"); the split is only on screen. Typing "+44 …" into the number box moves the picker. |
 | Countries at the top of the code list | **pinned countries** (`settings/general.pinnedCountries`) | v18.1.0. Chosen in Settings → General → Restaurant. Seeded with Spain, UK, Germany, France, Italy, Netherlands. |
 | Pinned header and nav that don't scroll away | **fixed shell** (`shellFixed`) | One layout mode behind both "Lock navigation" and split view. |
+| Walk-in and "+ New" pinned to the bottom of a phone | **bottom bar** (`MOBILE_BAR`) | v18.2.0, phones only (<600px). The two create actions, thumb-reachable, instead of wrapping onto a second header row. Inside `<header>`, so it goes inert under a modal. |
 | A pill that appears at the top-left on Tab | **skip link** (`.mgt-skip`) | Jumps keyboard focus past the header to the bookings. |
 
 ---

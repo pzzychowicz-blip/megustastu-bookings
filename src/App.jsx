@@ -489,6 +489,27 @@ const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 // A module const in App.jsx rather than an atom or a surviving ViewTools.jsx:
 // both call sites are in this file, and exporting a style that nothing else
 // reads is distance, not sharing (the lib/time-grid.js lesson).
+// ── v18.2.0: the phone's bottom bar ──────────────────────────────────────────
+// Walk-in and "+ New" on a phone, thumb-reachable, instead of wrapping onto a
+// second header row. Rendered INSIDE <header>, so the header's `inert` (while a
+// modal is open) reaches it too; `position: fixed` takes it out of the header's
+// layout, not out of its subtree. z 100: over the page and the toast layer
+// (60), under every modal (200). No backdrop blur — the ≤4 simultaneous blur
+// budget (CLAUDE.md) — so the MOBILE sheet token (0.98 in both themes: the one
+// sheet fill opaque enough that a timeline row scrolling beneath does not show
+// through, measured with `--bg-sheet` at 0.72), with a hairline and the soft
+// shadow to separate it from what scrolls beneath. The safe-area inset keeps
+// both buttons clear of an iPhone's home indicator.
+const MOBILE_BAR={
+  position:"fixed",left:0,right:0,bottom:0,zIndex:100,
+  display:"flex",gap:8,padding:"8px 12px",
+  paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))",
+  background:"var(--bg-sheet-mobile)",borderTop:"1px solid var(--border-soft)",boxShadow:"var(--shadow-soft)"
+};
+// The same height, as empty space at the end of <main>: H.touch (mkSolidBtn's
+// minHeight) + the bar's 8px padding top and bottom + its 1px top hairline +
+// the safe area. Measured: the bar stands 61px on a phone with no inset.
+const MOBILE_BAR_SPACER={flexShrink:0,height:"calc("+(H.touch+16+1)+"px + env(safe-area-inset-bottom, 0px))"};
 const CHROME_BTN={
   background:"var(--cog-bg)",
   border:"1px solid var(--cog-border)",
@@ -4984,13 +5005,17 @@ function BookingApp({uid}){
               onOpenSplitMenu={setSplitMenuFor}
               onSwapSides={swapSides}
               onToggleDir={toggleSplitDir}
-              onExitSplit={exitSplit} /><button
+              onExitSplit={exitSplit} />{/* v18.2.0: on a phone the two CREATE actions leave the header for the
+              bottom bar below (MOBILE_BAR). They wrapped "+ New" onto a second
+              header row on its own, and the header + date row took ~455 of an
+              812px screen before the grid began. The design critique; Patryk
+              chose the bar. Tablet and desktop are unchanged. */}{isMobile?null:<><button
               onClick={openWalkin}
               className="mgt-hover-scale"
               style={mkSolidBtn("var(--app-walkin)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button>{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
+              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button></>}{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
               WA_SANDBOX. Same guarantee — the module ships off, so a build on PROD
               Firebase (including a main-project Vercel preview of this branch) reads
               `settings/admin.modules`, finds WhatsApp disabled and shows no WA UI —
@@ -5010,7 +5035,15 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></header><div
+              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div>{isMobile?<div
+            role="group" aria-label="Add a booking"
+            style={MOBILE_BAR}><button
+              onClick={openWalkin}
+              className="mgt-hover-scale"
+              style={mkSolidBtn("var(--app-walkin)",{flex:1,fontSize: T.body})}>Walk-in</button><button
+              onClick={openNew}
+              className="mgt-hover-scale"
+              style={mkSolidBtn("var(--app-new)",{flex:1,fontSize: T.body})}>+ New</button></div>:null}</header><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
              flush against the top of the row with 18px of dead space beneath —
@@ -5138,7 +5171,10 @@ function BookingApp({uid}){
                 focused={focusedPane}
                 onFocus={setFocusedPane}
                 paneA={viewEl[split.a]}
-                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div>{/* v18.2.0: room for the phone's bottom bar, so it never covers
+                the last card or row. Inside <main>, because in the fixed
+                shell <main> is the scroll container; a plain block at the end
+                of the page otherwise. */}{isMobile?<div aria-hidden="true" style={MOBILE_BAR_SPACER} />:null}</div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
         is not tidiness. `inert` removes a subtree from the accessibility tree as
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection

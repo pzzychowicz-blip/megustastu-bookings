@@ -26025,3 +26025,28 @@ Timeline/List/Plan buttons as one segmented control, with the chosen view lifted
   5.3.
 
 Tests: `tests/segmented.test.js` (7) and two new contrast registry entries.
+
+### 7. The phone's bottom bar
+
+At 375×812 the header wrapped "+ New" onto a second row of its own, and the header
+plus the date row took about 455px before the grid began. Patryk chose a bottom bar
+for the two create actions, on phones only.
+
+- **`MOBILE_BAR`** (App.jsx): fixed to the bottom, with two equal `mkSolidBtn`s
+  (Walk-in, "+ New") and a safe-area inset.
+  - It is rendered inside `<header>`, so the header's `inert` reaches it under a
+    modal. Measured: inert while the form was open, and the dialog is the element at
+    its position.
+  - z 100: over the page and the toast layer (60), under `Overlay` (200). No blur,
+    for the ≤4 budget.
+  - The background is the opaque `--bg-sheet-mobile`. The first cut used
+    `--bg-sheet` (0.72) and a timeline row showed through.
+- **`MOBILE_BAR_SPACER`** ends `<main>` at the bar's exact height (H.touch + 16 +
+  the 1px hairline, and measured: both 61px). After scrolling to the bottom, the last
+  table row ends at 601 against the bar's 751.
+- Tablet and desktop are unchanged: the header buttons render as before whenever
+  `!isMobile`.
+- Measured at 375px: the grid starts at 411 (was about 455). The rest is the WhatsApp
+  button, on in DEV, sharing the second header row with the view switcher.
+
+Tests: `tests/mobile-bar.test.js` (4).

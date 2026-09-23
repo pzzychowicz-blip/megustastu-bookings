@@ -328,6 +328,14 @@ explaining why is usually the one to read.
   v16.2.0. The lift, the weight and the shadow say "chosen"; the colour does
   not have to. The track's hairline is an inset shadow so the control stands
   exactly `H.control` tall beside the header's buttons.
+- **On a phone, the create actions live in a bottom bar (v18.2.0).** Walk-in
+  and "+ New" wrapped onto a second header row of their own, and the header and
+  date row took ~455 of an 812px screen before the grid began. Below 600px they
+  are `MOBILE_BAR` (App.jsx): fixed to the bottom, two equal thumb-width
+  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet` at 0.72 let a
+  timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
+  ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
+  of the same height ends `<main>` so the last row is never under it.
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
