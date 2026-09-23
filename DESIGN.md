@@ -364,6 +364,19 @@ explaining why is usually the one to read.
   dropped, 1px into its card (Patryk's screenshot); from ~680 to ~1000px it
   stayed beside them as a half-empty two-line card with the controls 22px off
   centre.
+- **A List card is a table row: every badge and button keeps its column
+  (v18.2.0).** Each width that varied from card to card takes a fixed one, the
+  way Settings → Vouchers' Copy column does (`CODE_COL`): the name 180px
+  (wrapping inside it, never clipped), the status badge's cell 98 (the widest
+  badge), the next-step button 116 (the widest label), the flags box a 104
+  basis (the widest chip). So the status, the size ring, the first flag,
+  Assign, the next step and ⋯ land at one x on every card, every day. Patryk
+  chose fixed widths over columns sized to each day's entries. Two rules came
+  with it. An OPTIONAL control goes at the far end of a right-anchored group
+  (No show left of Assign), so it moves nothing when it appears. A thicker
+  border is paid for out of the padding, never out of the content's x.
+  Measured before at 668px: the badge at x 175 · 185 · 194, Assign at 359 ·
+  384. After: one value each, at 375, 668 and 1024px.
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
@@ -983,7 +996,7 @@ only its child conditional.
 
 **`role="button"` makes its children PRESENTATIONAL — never put it on a container
 of controls.** The List card holds Assign, four status changers and Delete (since v18.2.0:
-Assign, No show when due, the next status and ⋯); labelling it a button would have
+No show when due, Assign, the next status and ⋯); labelling it a button would have
 hidden all six, trading one unreachable card for six unreachable controls. It is a `role="listitem"` in a `role="list"`, focusable
 and operable. A timeline block is a **leaf**, so `role="button"` is right there
 and its flags' meaning goes into the name. `role="grid"`/`row` is the pattern

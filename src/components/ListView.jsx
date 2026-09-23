@@ -77,6 +77,47 @@ const FLAG_SUCCESS = "var(--success-text)";
 // three siblings (8.31:1 light, 6.73:1 dark).
 const FLAG_DANGER = "var(--danger-text)";
 
+// ── The card's columns (v18.2.0) ─────────────────────────────────────────────
+// Patryk: every status badge, flag and button must line up down the List, the
+// way the Copy column does in Settings → Vouchers (`CODE_COL`). Measured at
+// 668px before this, on three cards: the status badge at x = 175 · 185 · 194
+// (it followed names of 76–97px), the size ring at 260 · 288 · 298, and Assign
+// at 359 · 384 (it followed a next-step button of 116 or 92px). Every width
+// that varied now takes a FIXED one, so what follows it lands at the same x on
+// every card and every day. Patryk chose that over columns sized to each day's
+// entries: the positions never move.
+//
+//   NAME_COL   180 — fits "María José Fernández" (178px at T.title bold). A
+//                    longer name WRAPS inside it and is never clipped (the
+//                    voucher panel's rule: a name nobody can read is worse
+//                    than a taller card).
+//   STATUS_COL  98 — the widest status badge, "Completed" (97.8px); "Seated"
+//                    is 76.
+//   NEXT_COL   116 — the widest next-step button, "Completed" (115.7px);
+//                    "Seated" is 92.
+//   NAME_LINE   20 — the name's line box, and the badge's height (both 20px
+//                    measured). The cells beside the name are this tall and
+//                    centre what they hold, so a wrapped name keeps its badge,
+//                    ring and flags on its FIRST line instead of centring them
+//                    between two.
+//
+// All four, and FLAGS_MIN below, are measured widths in the app font, like
+// CODE_COL: re-measure if the font, T.title or the badge's padding changes.
+// The time column and its gap, as numbers because the actions row indents its
+// tables by exactly their sum (it spans the card under the time, see renderCard).
+const TIME_COL = 58;
+const TIME_GAP = 14;
+const NAME_COL = 180;
+const STATUS_COL = 98;
+const NEXT_COL = 116;
+const NAME_LINE = 20;
+// FLAGS_MIN 104 — the widest flag chip, "double-booked" with its mark
+//                  (101.3px; a voucher code is ~80). Beside the status on a
+//                  375px phone: 124 + 8 + 104 = 236 of the 245 there.
+const FLAGS_MIN = 104;
+// A cell beside the name: as tall as the name's first line, content centred.
+const NAME_CELL = { display: "flex", alignItems: "center", minHeight: NAME_LINE };
+
 // An icon-bearing flag. `role="img"` + `aria-label` for TimelineBlock's own
 // reason: every icon in Icons.jsx is `aria-hidden` (correctly — an icon beside
 // its own label must not be announced twice), so without a role and a label on
@@ -406,7 +447,9 @@ export const ListView = memo(function ListView({
               : b._conflict
                 ? "var(--card-conflict-border)"
                 : (useStatusColor || isPending) ? sc.border : "var(--border-card-plain)";
-        const cardBrdW = (clash || warn || lateSt) ? "3px" : (useStatusColor || isPending) ? "3px" : "1px";
+        // v18.2.0: a number, so the card's padding can give back what a 3px
+        // border takes (see `padding` below).
+        const cardBw = (clash || warn || lateSt || useStatusColor || isPending) ? 3 : 1;
 
         // v17.6.0: the same "how long were they here" number survives the visit.
         // Seated shows the LIVE elapsed minutes (green, still running); completed
@@ -551,10 +594,12 @@ export const ListView = memo(function ListView({
         // v17.16.12 dropped Seated after close — all of which `nextStatusOf`
         // and the popup still honour.)
         const nextSt = nextStatusOf(b, today, nowMins);
+        // v18.2.0: NEXT_COL wide whatever it says, so Assign beside it keeps
+        // one x down the List. The label centres in the spare width.
         const nextBtn = nextSt ? (
           <button
             className="mgt-hover-scale"
-            style={mkBtn({ background: BLOCK_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", gap: 6 })}
+            style={mkBtn({ background: BLOCK_BG[nextSt], color: BLOCK_INK[nextSt] || "var(--text-on-accent)", textTransform: "capitalize", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: NEXT_COL })}
             onClick={stopped(() => onStatus(b.id, nextSt))}
           >
             <StatusIcon status={nextSt} size={IC.control} />{nextSt}
@@ -687,8 +732,13 @@ export const ListView = memo(function ListView({
                  hover-scale rule uses, not the accent wash a dropdown row takes. */
               "--row-bg": cardBg,
               "--row-bg-hover": "var(--bg-hover-card)",
-              border: cardBrdW + " solid " + cardBrd,
-              borderRadius: R.card, padding: "14px 16px",
+              border: cardBw + "px solid " + cardBrd,
+              // v18.2.0: the padding gives back what a 3px border takes, so
+              // the content box — and every column in it — starts at the same
+              // x on a seated, late or pending card as on a plain confirmed
+              // one (measured 2px apart: the time at 19 against 17, ⋯ at 577
+              // against 579).
+              borderRadius: R.card, padding: cardBw === 3 ? "12px 14px" : "14px 16px",
               position: "relative",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
               // v14.4.0: accent ring marks the keyboard-focused card (List shortcuts).
@@ -715,20 +765,47 @@ export const ListView = memo(function ListView({
                 its start times during service, and they sat at the far right of
                 a wrapping header, after the name and up to ten flags, so their
                 x position moved from card to card. A fixed column puts every
-                start time on one line of sight. */}
-            <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-            <div style={{ flexShrink: 0, minWidth: 58 }}>
+                start time on one line of sight.
+                v18.2.0 follow-up: a GRID, not a flex row, because the actions
+                row must be able to reach under the time. Row 1 is the name row
+                beside the time; row 2 spans BOTH columns, with its tables
+                indented past the time (TIME_COL + TIME_GAP) and its actions
+                anchored to the card's right edge. On a wide card that is the
+                same one line as before. On a narrow one — a phone, or a List
+                in a split pane — the actions wrap to a line of the card's FULL
+                width, where Assign, the next step and ⋯ fit side by side
+                (258.5px, against 245 beside the time column on a phone: ⋯ fell
+                to a third line and every card grew to 222px). The time spans
+                rows 1–2, and row 2's first 8px is its own margin, so the time
+                never overlaps anything painted. */}
+            <div style={{ display: "grid", gridTemplateColumns: TIME_COL + "px minmax(0, 1fr)", columnGap: TIME_GAP }}>
+            {/* v18.2.0: tabular figures, so every time is the same width
+                (49.4px at T.title bold, where "11:11" was 38.6 and "08:08"
+                50.5) and the digits stack down the List. */}
+            <div style={{ gridColumn: 1, gridRow: "1 / span 2", fontVariantNumeric: "tabular-nums" }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, lineHeight: 1.2 }}>{b.time}</div>
               <div style={{ fontSize: T.small, fontWeight: FW.semi, color: S.muted }}>{"–" + end}</div>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-              flexWrap: "wrap", gap: 8
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: FW.bold, fontSize: T.title, color: S.text }}>{b.name}</span>
-                <SBadge status={b.status} />
+            {/* v18.2.0: the name, then the status and size, then the flags —
+                each in a column of its own width (NAME_COL and friends, top of
+                file), so they line up down the List.
+                The NAME grows 1 against the flags' 1000: wherever it shares a
+                line it keeps its 180 (it takes 1/1001 of the slack, the same
+                fraction of the same slack on every card, so the columns still
+                line up), and where it is alone on its line — a phone, where
+                the status wraps under it — it takes the whole line.
+                Status + ring are ONE unit, so they wrap together. The flags
+                box is ALWAYS rendered, empty or not, because the name's share
+                of the slack depends on its basis: dropping it on a card with
+                no flags would hand that card's name all the slack and move its
+                badge. Its basis is FLAGS_MIN, the widest chip, so on a card too
+                narrow for it the flags take a line of their own rather than
+                pushing a chip past the card's edge — and on a phone it still
+                fits beside the status, so an empty box costs no line. */}
+            <div style={{ gridColumn: 2, gridRow: 1, minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
+              <span style={{ flex: "1 0 " + NAME_COL + "px", minWidth: 0, fontWeight: FW.bold, fontSize: T.title, color: S.text, lineHeight: NAME_LINE + "px", overflowWrap: "anywhere" }}>{b.name}</span>
+              <span style={{ ...NAME_CELL, flex: "0 0 auto", gap: 8 }}>
+                <span style={{ ...NAME_CELL, width: STATUS_COL, flexShrink: 0 }}><SBadge status={b.status} /></span>
                 {/* v17.15.5: the party size as the block's own ring, not
                     "4 pax". The `rim` is the card's, not the block's — see
                     SizeRing: 0.55 white is a measurement taken against a
@@ -737,11 +814,13 @@ export const ListView = memo(function ListView({
                     aria-label comes from `describeBooking`, which says
                     "4 guests" and always has. */}
                 <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
-                {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
-                    then the exception flags (locked / repeat-no-show), so the
-                    two views read the same left-to-right. `manual` sits with
-                    `locked` because it is the same fact one notch weaker, and
-                    the two counters that have no block counterpart come last. */}
+              </span>
+              {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
+                  then the exception flags (locked / repeat-no-show), so the
+                  two views read the same left-to-right. `manual` sits with
+                  `locked` because it is the same fact one notch weaker, and
+                  the two counters that have no block counterpart come last. */}
+              <div style={{ ...NAME_CELL, flex: "1000 1 " + FLAGS_MIN + "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" }}>
                 {depositTag}
                 {voucherTag}
                 {prefTag}
@@ -757,24 +836,30 @@ export const ListView = memo(function ListView({
                 RIGHT of one line — the actions were a third line of their own,
                 which is most of why four cards filled a tablet screen. It wraps
                 on a narrow card, where the actions drop below as before. */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
-              {(b.tables || []).map((t) => <TBadge key={t} id={t} />)}
-              {phonEl}
+            <div style={{ gridColumn: "1 / -1", gridRow: 2, minWidth: 0, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginLeft: TIME_COL + TIME_GAP }}>
+                {(b.tables || []).map((t) => <TBadge key={t} id={t} />)}
+                {phonEl}
+              </div>
               {/* Every control in here goes through `stopped()`, or it opens the
-                  edit form on its way to doing its own job. No show sits
-                  before the next step when it is due — a one-tap action at the
-                  moment it matters (v16.1.0), too urgent to hide in ⋯. */}
-              <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center" }}>
-                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
+                  edit form on its way to doing its own job. No show, when it
+                  is due, is a one-tap action at the moment it matters
+                  (v16.1.0), too urgent to hide in ⋯.
+                  v18.2.0: it sits at the LEFT end, not between Assign and the
+                  next step. The group is anchored right, so everything to the
+                  right of an optional button keeps its x: Assign, the next
+                  step (NEXT_COL wide) and ⋯ now line up down the List, and a
+                  late card only grows leftwards. */}
+              <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
                 {lateSt === "noshow" ? (
                   <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
                 ) : null}
+                <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
                 {nextBtn}
                 {moreBtn}
               </div>
             </div>
-            {notesEl}
-            </div>
+            {notesEl ? <div style={{ gridColumn: 2, gridRow: 3, minWidth: 0 }}>{notesEl}</div> : null}
             </div>
             </div>
           </div>

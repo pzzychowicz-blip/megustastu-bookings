@@ -26215,3 +26215,50 @@ The first live check after the edit was wrong. The hot-reloaded page ran the new
 render code (the transition read `none`) but the new layout effect never answered,
 and resizing to 1300 left the drop off. A full reload fixed it. Recorded in
 `mgt-measurement-traps`.
+
+### 16. The List card lines up in columns
+
+Patryk: every status badge, flag and button on the List should stay in one column,
+the way the Copy button does in Settings → Vouchers. Measured at 668px on three
+cards: the status badge at x = 175 · 185 · 194 (after names of 76–97px), the
+size ring at 260 · 288 · 298, Assign at 359 · 384 (after a next-step button of 116
+or 92px). The seated card's contents also sat 2px right of the confirmed ones
+(time at 19 vs 17, ⋯ at 577 vs 579), because a 3px border ate into them.
+
+Each width that varied now takes a fixed one, measured in the app font like
+`CODE_COL`: `NAME_COL` 180 (fits "María José Fernández"; a longer name wraps
+inside it), `STATUS_COL` 98 (the "Completed" badge), `NEXT_COL` 116 (the
+"Completed" button), `FLAGS_MIN` 104 (the "double-booked" chip),
+`NAME_LINE` 20 (the name's line box: the cells beside it centre their content
+on it, so a wrapped name keeps its badges on its first line). Times use tabular
+figures. A 3px border is paid for out of the padding (`12px 14px` against
+`14px 16px`). No show moves to the left end of the right-anchored action group,
+so an optional button moves nothing (it had sat between Assign and the next step).
+
+Two layout details were found by measuring, not planned.
+
+- **The phone.** The first version kept the actions inside the column beside
+  the time. That column is 245px on a 375px phone, and Assign + the fixed next
+  step + ⋯ is 258.5, so ⋯ fell to a third line and every card grew to 222px.
+  The pre-change heights were 128–199, measured by swapping the old file in from
+  `HEAD` (backup in the scratchpad). The card body is now a two-column grid: the
+  time spans rows 1–2, and the actions row spans BOTH columns with its tables
+  indented past the time. A wide card is unchanged, still one line. On a narrow
+  card (a phone, or a List in a split pane, which is why this cannot be an
+  `isMobile` switch) the actions wrap to the card's full width and fit in one
+  row. Phone cards are 152px, all alike.
+- **The flags box is always rendered.** The name grows 1 against the flags' 1000,
+  so it keeps its 180 where it shares a line and takes the whole line on a
+  phone. That share depends on every basis on the line, so a card with no flags
+  and no box would give its name all the slack and move its badge. Its 104 basis
+  also means an empty box fits beside the status on a phone and costs no line.
+
+Live after a full reload, every active card lines up: at 668px the time at 17,
+the name 89, the badge 277.1, the ring 383.1, the first flag 409.1, Assign 360.5,
+the next step 457 and ⋯ 579, at the same 98px height as before. The same holds at
+1024px (badge 277.5, ⋯ 935) and on a 375px phone (badge 89, Assign 75.5, ⋯ 294,
+one action row). A name edited in the DOM to "Christopher Montgomery-Smith" wraps
+to two lines, and its badge stays at 277.1 on the first line. The finished cards
+sit inside the Collapsible's 15px inset, so they line up with each other and not
+with the active cards (they also have no next-step button). That is left as it
+was. 9 tests in the new `tests/list-columns.test.js`.

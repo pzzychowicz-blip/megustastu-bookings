@@ -35,7 +35,7 @@ admin has not enabled the module. The one thing still not shipped is the
 |---|---|---|
 | The **T · L · P** buttons in the header | **view switcher** (`ViewSwitcher.jsx`) | Switches the main view. Right-click or press-and-hold opens the split menu. Since v18.2.0 one **segmented control** (`SEG_TRACK` / `segStyle`, shared with Settings' tab bar): the chosen view is a lifted pill, never the accent fill "+ New" wears. |
 | Horizontal grid, one row per table, bookings as coloured bars | **Timeline view** (`TimelineView.jsx`) | The service view — the whole day at a glance, Gantt-style. |
-| Vertical stack of booking cards | **List view** (`ListView.jsx`) | Sorted cards with full detail and per-booking actions. |
+| Vertical stack of booking cards | **List view** (`ListView.jsx`) | Sorted cards with full detail and per-booking actions. Since v18.2.0 each card is laid out in fixed columns, so its status badge, size, flags and buttons line up with the card above. |
 | Top-down drawing of the room | **Plan view** (`PlanView.jsx`) | The floor plan, filled by occupancy at a chosen minute. |
 | Two views at once, with a draggable divider | **split view** (`SplitLayout.jsx`, `split` state) | Tablet/desktop only (≥600px). The same view can never fill both panes. |
 | The two-step popup that sets a split up | **split menu** (`SplitMenu.jsx`) | Direction, then which second view. |
