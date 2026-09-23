@@ -1494,3 +1494,31 @@ describe("the gate proves itself", () => {
     expect(count("<h2>a</h2>", /<h1\b/g)).toBe(0);
   });
 });
+
+describe("the booking form's steppers and the timeline zoom work from the keyboard (WCAG 2.1.1, 4.1.2)", () => {
+  // v18.2.0. The four − / + buttons in the booking form stepped on
+  // `pointerdown` only, so Enter / Space (which fire `click`) did nothing, and
+  // their names were the glyphs. The timeline's − / + zoom buttons had the same
+  // names. Measured live before the fix: `.click()` on "+" left guests at 2.
+  it("every form stepper goes through stepPress, which also answers a keyboard click", () => {
+    has(BookingForm, "BookingFormModal", /function stepPress\(apply\)[\s\S]*?onClick:\s*function\s*\(e\)\s*\{\s*if\s*\(e\.detail === 0\) apply\(\);/,
+      "stepPress must act on a click with detail 0 — the keyboard's — or Enter/Space step nothing");
+    expect(count(BookingForm, /\{\.\.\.stepPress\(/g), "four steppers: guests − +, duration − +").toBe(4);
+    hasnt(BookingForm, "BookingFormModal", /onPointerDown=\{function\(e\)\{e\.preventDefault\(\);const v=/,
+      "a stepper stepping on pointerdown alone is back — keyboard users cannot change it");
+  });
+
+  it("each form stepper is named for what it steps", () => {
+    for (const name of ["Decrease number of guests", "Increase number of guests", "Decrease duration", "Increase duration"]) {
+      expect(count(BookingForm, new RegExp('aria-label="' + name + '"', "g")), name).toBe(1);
+    }
+  });
+
+  it("the zoom buttons are named, and the reset button's name LEADS with its text", () => {
+    expect(count(Timeline, /aria-label="Zoom out"/g)).toBe(1);
+    expect(count(Timeline, /aria-label="Zoom in"/g)).toBe(1);
+    // Label in Name: the visible "1x" (or "2x → 1x") comes first.
+    has(Timeline, "TimelineView", /aria-label=\{\(zoom !== 1 \? zoom \+ "x → " : ""\) \+ "1x \(reset zoom\)"\}/,
+      "the reset button shows text, so its accessible name must start with that text");
+  });
+});

@@ -1722,8 +1722,14 @@ export const TimelineView = memo(function TimelineView({
   const zoomBtns = (
     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
       {followBtn}
+      {/* v18.2.0: named. Their whole content is a glyph, so they announced as
+          "-" and "+" — the LayoutSettings `Stepper` defect (v17.15.5), and the
+          same reasoning: a glyph doing an icon's job carries no word a voice-
+          control user could say, so a name in words takes nothing away. The
+          reset button below DOES carry text, so its name leads with it. */}
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
+        aria-label="Zoom out"
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
@@ -1736,6 +1742,7 @@ export const TimelineView = memo(function TimelineView({
           constant "1x" tail keeps the button's identity while collapsed. */}
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
+        aria-label={(zoom !== 1 ? zoom + "x → " : "") + "1x (reset zoom)"}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
@@ -1750,6 +1757,7 @@ export const TimelineView = memo(function TimelineView({
       </button>
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
+        aria-label="Zoom in"
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >

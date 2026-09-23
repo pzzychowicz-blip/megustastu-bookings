@@ -25841,3 +25841,37 @@ One derivation, so all three views change together.
 loading pill and no prompt; after load, an empty day (28 Sep) still showed it.
 `tests/empty-day.test.js` (3 tests) reads the memo stripped; removing the guard fails
 it.
+
+### 2. The steppers and zoom buttons work from the keyboard, and have names
+
+The booking form's four − / + buttons (guests, duration) stepped on `pointerdown`
+with `preventDefault()` and had no `onClick`. Enter and Space fire `click` only, so
+the party size and duration could not be changed from the keyboard at all (WCAG
+2.1.1). Measured in the critique: `.click()` left guests at 2, a dispatched
+pointerdown moved it to 3. All four, and the timeline's zoom − / +, announced as the
+glyph.
+
+- **`stepPress(apply)`** (BookingFormModal, module scope) returns both handlers. The
+  pointerdown half is unchanged — no focus on a tap, one step per touch. `onClick`
+  acts only on `detail === 0`, the keyboard's click; a pointer click has already
+  stepped, so acting on it too would step twice. Verified live: keyboard click 2 → 3,
+  pointerdown + a `detail: 1` click 3 → 4 (once), duration 90 → 105.
+- **Names** follow LayoutSettings' `Stepper` convention: "Decrease / Increase number of
+  guests", "… duration", and "Zoom out" / "Zoom in". Label in Name does not bind a
+  glyph (v17.15.5's reasoning). The zoom RESET button shows text, so its name leads
+  with it: "1x (reset zoom)", or "2x → 1x (reset zoom)" while zoomed.
+- **The Enter chain, Patryk's call in this session.** Making the steppers keyboard-
+  operable exposed that `useKeyboardShortcuts` mapped Enter to the booking form's Save
+  whatever held focus, `preventDefault()`ing the key — so Enter on a focused Back,
+  Assign, Preferred or − / + saved the booking. `activatesItself(el)` (`lib/keyboard.js`,
+  beside `isTyping`) is true for a `<button>`, an `<a href>` and the roles this app
+  wires to Enter itself; the Enter branch returns before the modal loop when it holds.
+  A freshly opened modal is unchanged: `Overlay` focuses the dialog container, so
+  Enter still does the primary action until you Tab onto a control, and Enter in a
+  text field still saves. Verified after a full reload (the first check ran against a
+  window listener hot reload had left in place, and read as a failure): Enter on Back
+  and on + was not prevented and saved nothing; Enter on the dialog raised "Customer
+  name is required."
+
+Tests: 3 in `tests/a11y.test.js` (stepPress on all four, names, zoom names) and
+`tests/keyboard.test.js` (4: the helper, and that the guard sits before the loop).
