@@ -116,3 +116,21 @@ describe("W5 — the phone's inbox", () => {
     expect(Composer).toMatch(/\(TOUCH \? "Type a reply…" : "Type a reply\.\.\. \(Enter to send, Shift\+Enter for new line\)"\)/);
   });
 });
+
+// v18.2.0 phase 46 (round 3's W-1). Measured on a 375px phone: the linked
+// booking card's title was 28px wide and "Open booking" was drawn over its
+// label and its status badge ("✓ Co"). A wrapping header's title takes its
+// content as its basis, so the actions drop under it; after, on the phone the
+// label and badge share line one and Open booking starts at y 263 against a
+// title ending at 255, while the tablet's header is still one line.
+describe("W-1 — a wrapping pane header never draws its actions over its title", () => {
+  const Panel = read("components/AlertPanel.jsx");
+  it("gives the title its content as basis when the header wraps", () => {
+    expect(Panel).toMatch(/flex: onHeaderClick \? "1 1 auto" : 1, minWidth: 0 \}\}>\{title\}<\/span>/);
+    expect(Panel, "the header wraps only when it is a toggle").toMatch(/\.\.\.\(onHeaderClick \? \{ cursor: "pointer", flexWrap: "wrap" \} : null\)/);
+  });
+  it("is the header both linked-booking panes use", () => {
+    expect(read("components/whatsapp/LinkedBookingCard.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
+    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
+  });
+});

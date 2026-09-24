@@ -27254,3 +27254,31 @@ and a fourth refuses a breaking one.
 
 **Gate after phase 45:** `121.87 kB` gz main bundle (±0) · **1830 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### Patryk's picks from the round-3 report
+
+The report offered twelve fixes beyond the rules; Patryk took **all twelve**, one phase each from §46,
+and sent the thirteenth finding, L-1 (the waitlist forgets a party's seating preference and offers
+outdoor tables to a party refused indoor), to ROADMAP, because it changes matching behaviour rather
+than design.
+
+### 46. The linked-booking card's header on a phone (W-1)
+
+On a 375px phone "Open booking" was drawn over the linked card's "LINKED BOOKING" label and its status
+badge, which read "✓ Co" behind the button. Measured: the title was 28px wide and its content — the
+103px label and the 96px badge — spilled under the button group. `AlertPanel`'s title was `flex: 1`, a
+zero basis, and a wrapping line wraps on its items' bases, so the actions stayed on the title's line
+whenever they alone fitted it (Open booking + Cancel booking + the chevron, 259 of 345px) and took
+their width out of the title. The intent banner below wrapped only because its buttons are wider.
+
+A wrapping header's title now takes its content as its basis, so the actions drop under it. Only the
+two headers that wrap (`onHeaderClick`: the linked card and the intent banner) take it; every other
+pane keeps `flex: 1`, where the title is the one item that shrinks either way and nothing moves.
+
+Live on DEV: phone, Sofía's conversation — the label [51–154] and badge [162–258] on line one (y 235–
+255), Open booking from y 263, no overlap; the intent banner's buttons under its title as before.
+Tablet — both headers still one line (Open booking at x 952 on the title's line).
+`tests/wa-inbox-layout.test.js` +2.
+
+**Gate after phase 46:** `121.88 kB` gz main bundle (+0.01) · **1832 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
