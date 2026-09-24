@@ -48,6 +48,11 @@
 // simply cannot issue it. So `normalizeCode` keeps every alphanumeric and the
 // unambiguous alphabet governs `generateCode` alone.
 
+// v18.2.0 (the design critique, C1): the module's one import, so a refusal
+// names the other booking's day the way the rest of the app writes it. day.js
+// imports nothing, so this cannot close a loop.
+import { formatDay } from "./day.js";
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 // Generation alphabet: 31 characters, deliberately missing 0/O and 1/I/L so a
@@ -513,7 +518,7 @@ export function attachRefusal(v, code, bookings, bookingId, now) {
   if (st === "spent") return "That voucher has no balance left.";
   if (st === "expired") return "That voucher has expired.";
   const other = attachedElsewhere(bookings, code, bookingId);
-  if (other) return "That voucher is already on " + (other.name || "another booking") + " on " + other.date + ".";
+  if (other) return "That voucher is already on " + (other.name || "another booking") + " on " + formatDay(other.date) + ".";
   return "";
 }
 
@@ -522,7 +527,8 @@ export function attachRefusal(v, code, bookings, bookingId, now) {
 // adding a voucher if the voucher has not been fully redeemed."*
 //
 // It takes the guest's BOOKINGS rather than a customer or an identity, so this
-// module keeps importing nothing: the caller builds that list with
+// module imports nothing but `formatDay` (lib/day.js, which itself imports
+// nothing): the caller builds that list with
 // `matchesIdentity` (customers.js), which keeps ONE identity rule in the app
 // rather than a second one growing here.
 //

@@ -447,6 +447,30 @@ explaining why is usually the one to read.
   Simulator were icon-only; each now carries its word beside the mark (the
   shape Archive already had), and the title stays as the longer description.
   A bare ✕ for Close is the one exception: everybody reads it.
+- **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
+  month, and the year only when it is not this year: "Fri 15.01.2027". It is
+  `formatDay` in `lib/day.js`, and nothing else writes a date on screen. The
+  critique found seven shapes and no rule: ISO "2026-09-24" in Customers,
+  Vouchers, Find a booking, the draft card, the block modal, a waitlist's
+  title and a reminder; "24.09" in the Activity log; "Sep 21 – 27, 2026" in the
+  Week view; "24 Sept 2026" in a booking's history; and two home-made
+  "Fri 18/09" and "24/09" in the voucher-carry wording. The date field is what
+  staff read every shift, so its shape won. The weekday leads because staff
+  think in service days. Two exceptions, each an option of `formatDay` and
+  nothing else: **no weekday** where one would be noise or is already there
+  (a voucher's dates, which say when it is valid; the Week view's range, whose
+  ends are always Monday and Sunday; the Day sheet, which prints the long
+  weekday beside it), and **the year always** on the printed Day sheet, which
+  gets filed. **Stored text keeps ISO**: a history entry or an Activity log
+  line is a record, so it is never re-written; `formatDaysIn` writes its dates
+  the house way on the way to the screen, the Activity log's search matches
+  what it shows, and the CSV export stays ISO because a spreadsheet sorts it.
+  Two things stay as they are: the native date input (the browser draws it)
+  and the day announcement, "Thursday 24 September", which a screen reader
+  says aloud. **A column of dates is as wide as its widest date** (`showsYear`
+  decides the year): 68px, or 104 when a date prints its year, in Find a
+  booking and Customers, and 54 or 84 in the Activity log. So a year never
+  pushes one row's times out of line.
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's

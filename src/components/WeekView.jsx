@@ -29,11 +29,10 @@ import { daySummary, rangeStats } from "../lib/booking-logic";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
-import { todayStr, addDays, isReadableDate } from "../lib/day";
+import { todayStr, addDays, isReadableDate, formatDay } from "../lib/day";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
-const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONF = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // 7 ISO date strings (Mon→Sun) for the week containing `dateStr`.
@@ -76,12 +75,12 @@ function monthGrid(dateStr){
   return weeks;
 }
 
+// v18.2.0 (the design critique, C1): the house date at both ends, "21.09 –
+// 27.09", where it was "Sep 21 – 27, 2026". No weekdays — a week here always
+// runs Monday to Sunday, and the columns under it say so. The year appears
+// where `formatDay` puts it, on an end that is not this year.
 function weekRangeLabel(days){
-  const a = new Date(days[0]);
-  const b = new Date(days[6]);
-  const aL = MON[a.getUTCMonth()] + " " + a.getUTCDate();
-  const bL = (a.getUTCMonth() === b.getUTCMonth() ? "" : MON[b.getUTCMonth()] + " ") + b.getUTCDate();
-  return aL + " – " + bL + ", " + b.getUTCFullYear();
+  return formatDay(days[0], { weekday: false }) + " – " + formatDay(days[6], { weekday: false });
 }
 function monthLabel(dateStr){
   const d = new Date(dateStr);

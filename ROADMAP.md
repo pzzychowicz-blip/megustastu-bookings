@@ -140,6 +140,10 @@ evidence for each.
   - Stats: the fifth tile sits alone on a full-width row; "Table 1" is listed although
     the layout has no such table; tables are text rather than badges (X6).
   - Find a booking: the pax and phone columns shift with the name's length (X7).
+    v18.2.0 phase 37 did the part C1 made worse: the date column is fixed per result
+    list, and the name has a 64px basis, so a phone row no longer squeezes it to
+    nothing (it measured 21.5px at 375px, 1.5px beside a year). The pax, phone and
+    badge still follow the name's width on a wide screen.
 
 - **A List card's table pill does not say the table is missing (v18.2.0 follow-up).**
   The timeline's Unplaced row and the strip's "Not on the grid" section name a table the

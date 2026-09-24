@@ -21,7 +21,7 @@
 
 import { BTN, R, T, FW } from "../lib/constants";
 import { Toggle, mkBtn, mkDangerBtn, OutlineChip } from "./atoms";
-import { WEEKDAY_SHORT } from "../lib/day";
+import { WEEKDAY_SHORT, formatDay } from "../lib/day";
 
 // ── One reminder card ────────────────────────────────────────────────────────
 export // A paused reminder's text, faded — never its buttons, which still work.
@@ -32,7 +32,7 @@ function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
   const rec = r.recurrence || {};
   let recText = "";
   if (rec.type === "once") {
-    recText = "Once on " + rec.date;
+    recText = "Once on " + formatDay(rec.date);
   } else if (rec.type === "weekly") {
     const ds = (rec.days || []).slice().sort((a, b) => a - b).map((i) => WEEKDAY_SHORT[i]);
     recText = "Weekly: " + ds.join(", ");

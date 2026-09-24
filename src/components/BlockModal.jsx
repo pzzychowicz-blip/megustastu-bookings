@@ -23,6 +23,7 @@ import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkInp, Reveal, AutoHeight } f
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon } from "./Icons";
 import { useRevealRows } from "../hooks/useRevealRows";
+import { formatDay } from "../lib/day";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
@@ -114,7 +115,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             {tableId}
           </span>
           <span style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text }}>
-            {"Table " + tableId + " — " + date}
+            {"Table " + tableId + " — " + formatDay(date)}
           </span>
         </div>
         {/* v17.15.2: ONE pane with N rows, where this drew N CARDS — each with
@@ -210,7 +211,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           {"Block table " + tableId}
         </span>
       </div>
-      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{date}</div>
+      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{formatDay(date)}</div>
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Fld label="From">{(fid) => (

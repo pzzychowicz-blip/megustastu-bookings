@@ -123,7 +123,7 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // re-expressed — see sanitizeParse below. Both files carry their explicit .js
 // extension because api/_lib imports this module under Node ESM.
 import { isReadableTime } from "./booking-logic.js";
-import { isReadableDate } from "./day.js";
+import { isReadableDate, formatDay, localDay } from "./day.js";
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {
@@ -137,8 +137,9 @@ export function formatRelativeTime(ts) {
   const d = Math.floor(h / 24);
   if (d === 1) return "yesterday";
   if (d < 7) return d + " days ago";
-  const dt = new Date(ts);
-  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  // v18.2.0 (the design critique, C1): past a week, the house date — "Thu
+  // 17.09" — where this wrote the locale's "17 Sept".
+  return formatDay(localDay(ts));
 }
 
 // Format a timestamp as an inline bubble caption ("14:32").

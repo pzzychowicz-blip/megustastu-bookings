@@ -56,7 +56,7 @@ import {
   lastStartMins
 } from "../lib/booking-logic";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
-import { WEEKDAY_LONG } from "../lib/day";
+import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
 import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
@@ -291,7 +291,7 @@ export function BookingFormModal({
       title={noshow?"No-shows":"Past bookings"}
       count={histList.length}
       style={{marginTop:8}}>
-      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</AlertRow>;})}
+      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(formatDay(b.date)||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</AlertRow>;})}
       {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</AlertRow>:null}
     </AlertPanel>;
   }
@@ -325,7 +325,7 @@ export function BookingFormModal({
   // double-booking the strip's own Double-booked section reports, seen from
   // inside the form that is about to create one.
   const dupWarn=dupPhone.length?<AlertPanel role="warn" icon={ClashIcon} style={{marginTop:8}}
-    title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}>
+    title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+formatDay(form.date)+":"}>
     {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
     {dupPhone.length>3?<AlertRow>{"+ "+(dupPhone.length-3)+" more"}</AlertRow>:null}
   </AlertPanel>:null;
@@ -359,7 +359,7 @@ export function BookingFormModal({
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+formatDay(r.latestDate):"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -439,8 +439,8 @@ export function BookingFormModal({
     if(!form.voucherCode||!form.returnOf) return null;
     const src=bookings.find(function(b){return b.id===form.returnOf;});
     if(!src||normalizeCode(src.voucherCode)!==normalizeCode(form.voucherCode)) return null;
-    const d=/^\d{4}-\d{2}-\d{2}$/.test(src.date||"")?src.date.slice(8,10)+"/"+src.date.slice(5,7):src.date;
-    return "Carried from the "+d+" visit"+(isUnsettled(src,vouchersByCode)?" — that visit was never recorded against it.":".");
+    // v18.2.0 (C1): the house date — this was a sixth shape of its own, "24/09".
+    return "Carried from the "+formatDay(src.date)+" visit"+(isUnsettled(src,vouchersByCode)?" — that visit was never recorded against it.":".");
   })();
 
   // v18.0.0 session 8 (item 3): a seated party cannot be moved to another day —
@@ -846,7 +846,7 @@ export function BookingFormModal({
            left-aligns, because the banner is a sibling of the title's centred
            wrapper rather than inside it — so it needs `width:fit-content` plus
            auto side margins to shrink-wrap AND centre. */
-        style={{display:"flex",width:"fit-content",margin:"0 auto 10px",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+src.date+" "+srcTime+" — set a date"}</div>
+        style={{display:"flex",width:"fit-content",margin:"0 auto 10px",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+formatDay(src.date)+" "+srcTime+" — set a date"}</div>
     );
   })();
 

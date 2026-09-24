@@ -24,14 +24,13 @@
 import { S, T, FW } from "../lib/constants";
 import { Overlay, mkBtn, mkSolidBtn } from "./atoms";
 import { formatCode } from "../lib/vouchers";
-import { WEEKDAY_SHORT } from "../lib/day";
+import { formatDay } from "../lib/day";
 
-// "Fri 18/09" — the weekday is what staff actually navigate by, and the app's
-// one weekday list is in lib/day.js.
+// "Fri 18.09 at 20:00" — the weekday is what staff actually navigate by. The
+// house date since v18.2.0 (the design critique, C1: `formatDay`), where this
+// wrote its own "Fri 18/09".
 function whenLabel(date, time) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return (date || "") + (time ? " at " + time : "");
-  const wd = WEEKDAY_SHORT[new Date(date).getUTCDay()] || "";
-  return (wd ? wd + " " : "") + date.slice(8, 10) + "/" + date.slice(5, 7) + (time ? " at " + time : "");
+  return formatDay(date) + (time ? " at " + time : "");
 }
 
 export function VoucherCarryModal({ carry, currency = "€", onMove, onNotNow }) {

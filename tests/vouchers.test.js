@@ -730,7 +730,9 @@ describe("attachRefusal", () => {
     all.forEach((m) => expect(m).toBeTruthy());
     expect(new Set(all).size).toBe(5);
     expect(elsewhere).toMatch(/Pau/);
-    expect(elsewhere).toMatch(/2026-06-01/);
+    // v18.2.0 (C1): the house date, "Mon 01.06" (and ".2026" once it is not
+    // this year, which is why the pattern stops at the month).
+    expect(elsewhere).toMatch(/ on Mon 01\.06/);
   });
 
   it("a booking already settled against it keeps it, whatever the state says", () => {

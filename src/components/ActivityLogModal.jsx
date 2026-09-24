@@ -49,7 +49,7 @@ import { customerIndex } from "../lib/customers";
 // `addDays` rather than hand-rolled date arithmetic for the quick ranges,
 // because `setDate(getDate() - 6)` returns the SAME date on the spring-forward
 // day (v17.16.2).
-import { todayStr, addDays } from "../lib/day";
+import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear } from "../lib/day";
 import { DownloadIcon } from "./Icons";
 
 // The kinds a person would filter by, in the order they matter during service.
@@ -73,12 +73,12 @@ function timeOf(ms) {
 
 // v18.0.0 session 11: the day, for a list that can now span them. `dd.mm`
 // rather than a locale month name — it is the shape the date fields above it
-// already show, it sorts visually, and it stays two fixed-width columns so a
-// list of a hundred rows lines up.
+// already show, it sorts visually, and it stays a fixed-width column so a list
+// of a hundred rows lines up. v18.2.0 (C1): the house date, `formatDay`, which
+// is that shape with the weekday in front and the year when it is not this one.
 function dateOf(ms) {
   if (!ms) return "";
-  const d = new Date(ms);
-  return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0");
+  return formatDay(localDay(ms));
 }
 
 // The author, as a person would say it: the local part of the email, which is
@@ -177,10 +177,16 @@ export function ActivityLogModal({
       // a guest's name finds nothing, which is the first thing anybody tries.
       // v18.2.0: `rowText`, so the name a booking row now LEADS with (X1) is
       // searchable too — "created" rows were otherwise unfindable by guest.
-      const text = rowText(r, byId);
+      // Its dates are written the house way (C1), as the row shows them, so
+      // typing "24.09" finds a row that stored "2026-09-24".
+      const text = formatDaysIn(rowText(r, byId));
       return (text + " " + personOf(r.email)).toLowerCase().includes(needle);
     });
   }, [rows, kinds, anyKind, whoActive, peopleOnly, q, byId]);
+  // v18.2.0 (the design critique, C1): the date column fits the widest date it
+  // holds — "Wed 24.09" is 53px here, "Wed 24.09.2025" 82 (tabular, measured on
+  // DEV). The log keeps a year by default, so a range often crosses one.
+  const dateCol = showDate && shown.some(function (r) { return showsYear(localDay(r.at)); }) ? 84 : 54;
 
   function toggleKind(k) {
     setKinds(function (prev) {
@@ -328,7 +334,9 @@ export function ActivityLogModal({
                     : "Nothing was recorded in that range."}
             </div>
           ) : shown.map(function (r) {
-            const text = rowText(r, byId);
+            // The stored text keeps the sortable ISO date (and so does the CSV);
+            // the screen writes it the house way (v18.2.0, C1).
+            const text = formatDaysIn(rowText(r, byId));
             // A row naming a booking that still exists can open it.
             //
             // v18.0.0 session 11: and one naming a DELETED booking now leads
@@ -350,7 +358,7 @@ export function ActivityLogModal({
                 borderBottom: "1px solid var(--border-soft)",
               }}>
                 {showDate ? (
-                  <span style={{ fontSize: T.micro, color: S.muted, minWidth: 40, fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontSize: T.micro, color: S.muted, minWidth: dateCol, fontVariantNumeric: "tabular-nums" }}>
                     {dateOf(r.at)}
                   </span>
                 ) : null}

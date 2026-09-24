@@ -37,6 +37,7 @@ import {
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
 import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
+import { formatDay, localDay } from "../lib/day";
 
 // The four states, and the chip tone each reads as. `open` is the only one that
 // can still be spent, so it is the only one in success green.
@@ -62,10 +63,12 @@ const STATE_LABEL = { open: "open", spent: "spent", expired: "expired", void: "v
 // read is the one thing this panel must not ship.
 const CODE_COL = 204;
 
+// v18.2.0 (the design critique, C1): the house date, "24.09.2027" — without
+// the weekday, because a voucher's dates say when it is valid, not which
+// service it was. Same width as the ISO it replaces, so `CODE_COL` holds.
 function dateLabel(ms) {
   if (!ms) return "—";
-  const d = new Date(ms);
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return formatDay(localDay(ms), { weekday: false });
 }
 
 // ── Copy the number ─────────────────────────────────────────────────────────
@@ -242,7 +245,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
                   <div key={bid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}>
                     <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{money(e.amount, currency)}</span>
                     <span style={{ fontSize: T.body, color: S.muted }}>
-                      {b ? (b.date + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + bid}
+                      {b ? (formatDay(b.date) + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + bid}
                     </span>
                   </div>
                 );
@@ -264,7 +267,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
                   <div key={rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, border: "1px dashed var(--border-soft)", marginBottom: 4 }}>
                     <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.muted, minWidth: 84 }}>{"Reversed " + money(e.amount, currency)}</span>
                     <span style={{ fontSize: T.body, color: S.muted }}>
-                      {(b ? (b.date + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + e.bookingId)
+                      {(b ? (formatDay(b.date) + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + e.bookingId)
                         + (e.reversedBy ? "  ·  by " + e.reversedBy : "")
                         + (e.reversedAt ? "  ·  " + dateLabel(e.reversedAt) : "")}
                     </span>

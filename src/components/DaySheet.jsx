@@ -22,7 +22,7 @@ import { T, FW, APP_NAME } from "../lib/constants";
 import { daySummary } from "../lib/booking-logic";
 import { normalizeCode, formatCode } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
-import { WEEKDAY_LONG } from "../lib/day";
+import { WEEKDAY_LONG, formatDay } from "../lib/day";
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
 // it returns the day NUMBER (0–6). Two functions, one name, incompatible return
 // types, one of them on the shared module. That is worse than a duplicate: it is
@@ -65,7 +65,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
     <div className="mgt-print-sheet" style={{ color: "#000", /* @fixed-fill */ background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", /* @fixed-fill */ paddingBottom: 8, marginBottom: 12 }}>
         <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || APP_NAME) + " — Day sheet"}</div>
-        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + date}</div>
+        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + formatDay(date, { weekday: false, year: "always" })}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
           {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
             + " · Afternoon " + s.afternoon.covers + " / Evening " + s.evening.covers}

@@ -15,6 +15,7 @@
 import { useState, useRef, useEffect } from "react";
 import { S, R, T, FW } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
+import { formatDay, showsYear } from "../lib/day";
 import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge } from "./atoms";
 
 export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
@@ -23,6 +24,12 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
   useEffect(function () { if (inputRef.current) inputRef.current.focus(); }, []);
 
   const results = query.trim() ? searchBookings(bookings, query, todayStr, 30) : [];
+
+  // v18.2.0 (the design critique, C1): the date column is as wide as the widest
+  // date the results hold — "Wed 24.09" is 66px in this bold and
+  // "Wed 24.09.2025" 103 (measured on DEV) — so the times stay a column when a
+  // booking from another year is among them.
+  const dateCol = results.some(function (b) { return showsYear(b.date); }) ? 104 : 68;
 
   const rows = results.map(function (b) {
     return (
@@ -36,9 +43,18 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
           background: "var(--bg-soft)", border: "1px solid var(--border-soft)", textAlign: "left",
           boxShadow: "var(--shadow-input)"
         }}>
-        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 84 }}>{b.date}</span>
+        <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: dateCol }}>{formatDay(b.date)}</span>
         <span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
+        {/* v18.2.0 (C1): a BASIS, where it was `flex: 1` with a zero one. The row
+            wraps on a phone, and a line is packed by basis, so a name that
+            asked for 0px stayed on line one with whatever the phone and the
+            badge left it: measured at 375px, 21.5px ("C…"), and 1.5px once a
+            date with a year widened the column. 64px keeps a word and sends
+            the phone and badge to line two (the name then fills line one:
+            104px beside a year, 140 without). It is no bigger because the
+            tablet's 506px line holds a year, a phone and a badge with 88px to
+            spare, and 96 measured a wrap there that 64 does not. */}
+        <span style={{ flex: "1 1 64px", minWidth: 0, fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
         <span style={{ fontSize: T.body, color: S.muted }}>{b.size + " pax"}</span>
         {b.phone ? <span style={{ fontSize: T.body, color: S.muted }}>{formatPhone(b.phone)}</span> : null}
         {/* v17.15.6: it IS `SBadge`. v17.7.0 gave this copy "the same fill, text

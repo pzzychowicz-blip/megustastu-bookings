@@ -353,7 +353,7 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
-import { todayStr, stepDate, WEEKDAY_LONG } from "./lib/day";
+import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
@@ -3983,7 +3983,11 @@ function BookingApp({uid}){
     setVoucherCarry(null);
     if(refused("bookingEdit")) return;
     const user=getUser();
-    const fromLabel=/^\d{4}-\d{2}-\d{2}$/.test(c.from||"")?c.from.slice(8,10)+"/"+c.from.slice(5,7):(c.from||"");
+    // v18.2.0 (the design critique, C1): the history entry stores the ISO day,
+    // as every other history text does ("date 2026-09-24→…"), and the screen
+    // writes it the house way (`formatDaysIn`, HistoryPopup and the Activity
+    // log). It stored its own "24/09", which nothing could re-write.
+    const fromLabel=c.from||"";
     const ok=saveBookings(function(prev){
       // v18.0.0 session 10 (/code-review): the OTHER half of the same race.
       // The line below guards the target booking against having acquired a
@@ -5501,7 +5505,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
+              style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+formatDay(bk.date)+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}

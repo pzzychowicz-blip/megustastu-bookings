@@ -26923,3 +26923,73 @@ Live on DEV: in the walk-in form, table 3 picked, Clear read `rgb(100, 116, 139)
 
 **Gate after phase 36:** `121.95 kB` gz main bundle (±0) · **1729 tests** (+1) · 0 lint errors, 91 warnings
 (unchanged) · style OK.
+
+### 37. One date format (C1)
+
+Every date on screen now goes through `formatDay` (`lib/day.js`): "Thu 24.09", and "Fri 15.01.2027"
+when it is not this year. The critique counted five shapes; reading every site found seven. ISO
+"2026-09-24" appeared in Customers, Vouchers, Find a booking, the draft card, the linked booking
+card, the block modal (both branches), a waitlist's title, a reminder's "Once on", the booking
+form's past visits, duplicate warning, return-guest pill and name suggestions, the Archive prompt
+and a voucher refusal. The Activity log had "24.09", the Week view "Sep 21 – 27, 2026" and a
+booking's history "24 Sept 2026" (measured: Chrome's en-GB short month is "Sept"). The WhatsApp
+list had "17 Sept" past a week, and there were two home-made shapes: "Fri 18/09" in the voucher
+carry prompt and "24/09" in the carried-voucher note. The date field's shape won, because staff
+read it every shift.
+
+- **Exceptions.** Each is an option of `formatDay`, never a second formatter. No weekday on a
+  voucher's dates (they say when it is valid, and the expiry keeps the ISO's width, so `CODE_COL`
+  holds) or on the Week range (always Monday to Sunday). The printed Day sheet reads "Thursday ·
+  24.09.2026", with the year always, because it gets filed.
+- **Stored text keeps ISO.** A history entry and an Activity log line are records. `formatDaysIn`
+  writes their dates the house way on the way to the screen. The log's search matches what it shows,
+  and the CSV stays ISO. The carried-voucher history entry now STORES the ISO day, where it stored
+  its own "24/09", which nothing could have re-written.
+- **Unchanged:** the native date input, and the spoken day announcement ("Thursday 24 September"),
+  which is for the ear.
+- **A broken date shows as stored.** DEV's "31/08/2026" probe reads "31/08/2026", never "" or a
+  plausible day, because it is the one somebody needs to find and repair.
+
+**Columns, and what measuring them turned up.** A date is no longer one width: "Wed 24.09" measures
+66px in Find a booking's bold and "Wed 24.09.2025" 103. `showsYear` is the one decision about the
+year, and a list sizes its date column once from it:
+
+| List | Width, this year | Width, with a year |
+|---|---|---|
+| Find a booking | 68px | 104px |
+| Customers | 68px | 104px |
+| Activity log | 54px | 84px |
+
+Two defects came out of the measuring. On a 375px phone, Find a booking's name is `flex: 1`, a zero
+basis. A wrapping line is packed by basis, so the name got whatever the phone and the badge left:
+21.5px at the old 84px column, and 1.5px beside a year. It now takes a 64px basis. 96 was tried
+first and wrapped a row on the 1280px tablet (a year, a phone and a badge leave 88px); 64 wraps
+nothing there. The other was Customers' visit row, which does not wrap: with a year's column it put
+the badge 6px past its edge on a phone, and it wraps now.
+
+Live on DEV:
+
+- **Find a booking:** "Thu 24.09" at 68px. With a 2027 booking among the results, every row is 104px
+  and every time starts at x 215. At 375px the names are 104px and 140px, and at 1280px every row is
+  one line.
+- **Customers:** "Thu 24.09" at 68px, times aligned at x 135.
+- **Vouchers:** "expires 17.03.2027" on one line (14px tall), "Issued 17.09", redemptions
+  "Mon 07.09 · 13:00 · …".
+- **Activity log:** 500 date cells, all 54px, none overflowing. "deleted Rosa Linares · Thu 24.09
+  20:30". Searching "16.01" finds the row that stored "2027-01-16".
+- **History:** "C1 Year Probe — Sat 16.01.2027 20:00", and "edited: date Fri 15.01.2027→Sat
+  16.01.2027" over a stored "2027-01-15→2027-01-16".
+- **Elsewhere:** the Week view "21.09 – 27.09" (and "11.01.2027 – 17.01.2027"), a reminder "21:00 ·
+  Once on Fri 02.10", the draft card "2 pax · Fri 25.09 · 14:00", the block modal "Block table 2 ·
+  Thu 24.09", the printed sheet "Thursday · 24.09.2026".
+- **Not shown live:** the waitlist's title (DEV had nobody waiting within 40 days, and a 25-guest party
+  still found tables), the linked booking card (no linked conversation) and the WhatsApp list past a
+  week (both conversations 9 hours old). The last is pinned by a unit test.
+- **DEV data from testing:** the C1 Year Probe booking (2027-01-16) and a one-off reminder for
+  2026-10-02.
+
+`tests/date-format.test.js` 48 tests (new). `tests/vouchers.test.js`: the refusal's date reads
+"on Mon 01.06".
+
+**Gate after phase 37:** `121.81 kB` gz main bundle (−0.14; the hand-built shapes went) ·
+**1777 tests** (+48) · 0 lint errors, 91 warnings (unchanged) · style OK.

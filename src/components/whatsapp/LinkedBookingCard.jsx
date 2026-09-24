@@ -8,6 +8,7 @@ import { Reveal, mkSolidBtn, OutlineChip, SBadge } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { useCollapseState } from "../../hooks/useCollapseState";
 import { T, FW, M, IC, H } from "../../lib/constants";
+import { formatDay } from "../../lib/day";
 import { LinkIcon } from "./WaIcons";
 import { ChevronRightIcon } from "../Icons";
 
@@ -23,7 +24,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
   const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed);
   if (!booking) return null;
   const canCancel = booking.status !== "cancelled" && booking.status !== "completed";
-  const summary = (booking.name || "(no name)") + " · " + (booking.date || "?") + " · " + booking.time + " · " + booking.size + " pax";
+  const summary = (booking.name || "(no name)") + " · " + (formatDay(booking.date) || "?") + " · " + booking.time + " · " + booking.size + " pax";
 
   // v15.8.2-wa-sandbox: the two booking actions moved up onto the header row
   // (before the chevron) instead of stacking vertically in the body, to reclaim
@@ -124,7 +125,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
       <Reveal show={!collapsed}>
         <AlertRow first>
           <div style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi, marginBottom: 2 }}>{booking.name || "(no name)"}</div>
-          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{(booking.date || "?") + " · " + booking.time + " · " + booking.size + " pax" + (booking.tables && booking.tables.length ? " · tables " + booking.tables.join(", ") : "")}</div>
+          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{(formatDay(booking.date) || "?") + " · " + booking.time + " · " + booking.size + " pax" + (booking.tables && booking.tables.length ? " · tables " + booking.tables.join(", ") : "")}</div>
         </AlertRow>
       </Reveal>
     </AlertPanel>

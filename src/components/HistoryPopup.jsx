@@ -5,8 +5,8 @@
 // every save / status change / manual assignment / etc.
 //
 // Renders in reverse-chronological order (most recent first). Empty state
-// shows "No history yet." Dates are formatted with Intl-aware locale strings
-// rather than the raw ISO so that staff in the Canary Islands see local dates.
+// shows "No history yet." Each entry's stamp is its LOCAL day and time, in the
+// house date shape (v18.2.0, C1: `formatDay` in lib/day.js).
 //
 // Parent wires up:
 //   • Conditional render: only mount when both `editId` and `showHistory`
@@ -20,6 +20,7 @@
 
 import { S, R, T, FW } from "../lib/constants";
 import { Overlay, mkBtn } from "./atoms";
+import { formatDay, formatDaysIn, localDay } from "../lib/day";
 
 export function HistoryPopup({ booking, onClose }) {
   // Defensive check — the parent should already guarantee this, but the
@@ -38,7 +39,7 @@ export function HistoryPopup({ booking, onClose }) {
         Booking history
       </h2>
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 12 }}>
-        {booking.name + " — " + booking.date + " " + booking.time}
+        {booking.name + " — " + formatDay(booking.date) + " " + booking.time}
       </div>
       <div style={{
         maxHeight: 300, overflowY: "auto",
@@ -50,10 +51,10 @@ export function HistoryPopup({ booking, onClose }) {
       }}>
         {reversed.length ? reversed.map((h, i) => {
           const d = new Date(h.at);
-          // en-GB chosen deliberately — gives "12 May 2026" / "21:30" rather
-          // than the US-style "May 12, 2026" / "9:30 PM". Matches what staff
-          // see elsewhere in the app.
-          const dateStr = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+          // v18.2.0 (C1): the day in the house shape, "Thu 24.09", where this
+          // was the one place in the app writing "24 Sept 2026". The time stays
+          // en-GB, which gives "21:30" rather than the US-style "9:30 PM".
+          const dateStr = formatDay(localDay(h.at));
           const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
           return (
             <div
@@ -67,7 +68,7 @@ export function HistoryPopup({ booking, onClose }) {
               <span style={{ fontWeight: FW.semi, color: S.text }}>{dateStr + " " + timeStr}</span>
               {" — "}
               <span style={{ color: "var(--accent)", fontWeight: FW.semi }}>{h.by || "staff"}</span>
-              <div style={{ marginTop: 2, color: S.text }}>{h.action}</div>
+              <div style={{ marginTop: 2, color: S.text }}>{formatDaysIn(h.action)}</div>
             </div>
           );
         }) : (

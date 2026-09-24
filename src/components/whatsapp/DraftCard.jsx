@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { clampConfidence } from "../../lib/whatsapp";
+import { formatDay } from "../../lib/day";
 import { R, T, FW, IC, M, H, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
 import { CloseIcon, CheckIcon, ChevronRightIcon } from "../Icons";
@@ -106,7 +107,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   const prefSuffix = (d.preference === "indoor" || d.preference === "outdoor")
     ? " · " + (d.preference === "indoor" ? "Indoor" : "Outdoor")
     : "";
-  const summary = (d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix;
+  const summary = (d.size != null ? d.size + " pax" : "? pax") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix;
   // Confidence is shown inline in the compact bar (always), so only notes /
   // ambiguity are "revealable" content behind the toggle.
   const hasDetail = !!(d.notes || d.ambiguity);
@@ -193,7 +194,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
         <OutlineChip tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</OutlineChip>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
-        <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
+        <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
         {d.notes ? <div style={{ fontSize: T.body, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
       {/* v17.15.3: --danger-bg + a MATCHING --danger-border + --danger-text was
