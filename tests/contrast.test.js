@@ -315,6 +315,11 @@ const FILLS = [
   // always drawn on and nothing had registered.
   { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "button", what: "row delete at rest (mkDangerBtn)" },
   { fill: "--bg-stepper", alpha: null, ink: "--text-primary", role: "button", what: "stepper ± and Layout's Cancel ×" },
+  // v18.2.0 phase 34: the Week / Month / Stats cells, opaque now. Today's
+  // number in --accent is a pre-existing pair left out here: the accent as
+  // small text measured under 4.5:1 when ViewSwitcher first registered it.
+  { fill: "--bg-cal-cell", alpha: null, ink: "--text-primary", role: "label", what: "calendar cell: the day, the covers" },
+  { fill: "--bg-cal-cell", alpha: null, ink: "--text-secondary", role: "label", what: "calendar cell: a month day's cover count" },
 
   // The --app-btn-* family. These were missed by the first pass of this file
   // because the coverage check below only knew the --btn-* prefix, and the one

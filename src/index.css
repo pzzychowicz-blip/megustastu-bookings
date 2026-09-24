@@ -200,6 +200,13 @@
   --bg-veil: rgba(0, 0, 0, 0.05);
   --bg-soft: rgba(248, 250, 253, 0.95);          /* Section panel */
   --bg-input: rgba(255, 255, 255, 0.5);          /* text inputs / selects */
+  /* v18.2.0 (the design critique, X2): an OPAQUE cell for the Week / Month /
+     Stats popover. Its cells were --bg-input — half-transparent, over a sheet
+     that is itself translucent — so the page behind the modal coloured the
+     calendar: the timeline's orange blocks tinted some days amber, which reads
+     as data. This is what a cell looked like over a plain page (the input
+     white over the sheet over --bg-app), made solid. */
+  --bg-cal-cell: #fbfcfd;
   --bg-kbd: rgba(255, 255, 255, 0.75);           /* keycap */
   --btn-default: rgba(58, 62, 72, 0.55);         /* mkBtn default grey fill — v17.8.0, was rgba(120,130,150,.55) = 1.99:1 white-on-grey */
   --bg-stepper: rgba(235, 239, 246, 0.95);       /* +/- stepper buttons (form) */
@@ -742,6 +749,7 @@
   --bg-veil: rgba(255, 255, 255, 0.07);          /* v17.9.1: see :root */
   --bg-soft: rgba(255, 255, 255, 0.05);
   --bg-input: rgba(118, 118, 128, 0.24);
+  --bg-cal-cell: #3c3c40;                          /* v18.2.0: see :root */
   --bg-kbd: rgba(255, 255, 255, 0.1);
   --btn-default: rgba(110, 118, 135, 0.5);
   --bg-stepper: rgba(255, 255, 255, 0.1);

@@ -26862,3 +26862,28 @@ being used by hand, not this session's automation. `tests/activity.test.js` +5.
 
 **Gate after phase 33:** `121.95 kB` gz main bundle (+0.06) · **1718 tests** (+5) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+
+### 34. The Month view's cells are opaque, and its shading has a key (X2)
+
+The Week / Month / Stats popover's cells were `--bg-input`, `rgba(255,255,255,0.5)`, over a sheet that
+is itself translucent, so the page behind the modal coloured the calendar. The critique measured it by
+putting the List behind instead of the Timeline: days 18–20 and 25–27 were amber over the Timeline's
+orange blocks and grey over the List. That colour reads as data. The blue busyness shading had no key.
+
+- **`--bg-cal-cell`** (new token, both themes): the colour a cell had over a plain page (the input white
+  over the sheet over `--bg-app`, `#fbfcfd`; dark `#3c3c40`), made solid. The month's days, the week's
+  rows and the Stats tiles all take it, and so does the mode toggle's track, which the next phase
+  restyles. Registered in `tests/contrast.test.js` under `--text-primary` and `--text-secondary`.
+  Today's number in `--accent` stays unregistered: the accent as small text measured under 4.5:1 when
+  ViewSwitcher first registered it, and a change to how today is marked is a separate question.
+- **Out-of-month days fade their NUMBER**, not the cell. At 40% the whole button was see-through again.
+- **A key**, "Fewer covers ▭ More", whose swatch runs from the cell to the accent at `HEAT` (30%), the
+  constant the cells' shading reads, so the key cannot describe a different scale.
+
+Live on DEV (light), September 2026 over the Timeline: 35 cells, every one `rgb(251, 252, 253)` at
+opacity 1; 31 August's content at 0.4; no amber anywhere; the key under the grid.
+`tests/week-view.test.js` 4 tests (new), `tests/contrast.test.js` +2 pairs.
+
+**Gate after phase 34:** `121.95 kB` gz main bundle (±0; WeekView is a lazy chunk) · **1726 tests** (+8) ·
+0 lint errors, 91 warnings (unchanged) · style OK.

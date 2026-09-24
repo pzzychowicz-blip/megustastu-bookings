@@ -91,6 +91,17 @@ function sameMonth(a, b){
   const x = new Date(a), y = new Date(b);
   return x.getUTCMonth() === y.getUTCMonth() && x.getUTCFullYear() === y.getUTCFullYear();
 }
+// v18.2.0 (the design critique, X2): the popover's cells are OPAQUE. They were
+// --bg-input, half-transparent over a translucent sheet, so the page behind the
+// modal showed through and the timeline's orange blocks tinted days amber —
+// measured, days 18–20 and 25–27 amber over the Timeline, grey over the List.
+const CELL = "var(--bg-cal-cell)";
+// The busiest in-month day's shading (the accent at up to 30%), shared by the
+// cells and the key under them so the key cannot describe a different scale.
+const HEAT = 0.3;
+// An out-of-month day's number, faded; the cell stays solid.
+const OUT_OF_MONTH = 0.4;
+
 export function WeekView({ bookings, viewDate, onPick, onClose }){
   const [mode, setMode] = useState("week");   // "week" | "month"
   // v17.16.11: seed from `viewDate` only when it is a date this view can step
@@ -193,7 +204,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+        <div style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill, background: CELL, border: "1px solid var(--border-input)" }}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
@@ -243,7 +254,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                 display: "flex", alignItems: "center", gap: 10,
                 padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
-                background: "var(--bg-input)",
+                background: CELL,
                 border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
                 boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
               }}
@@ -277,7 +288,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     const maxT = st.tables.reduce(function(mx, t){ return Math.max(mx, t.bookings); }, 0) || 1;
     const stat = function(val, label, color){
       return (
-        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: CELL, border: "1px solid var(--border-input)", borderRadius: R.inset }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: color || "var(--text-primary)" }}>{val}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{label}</div>
         </div>
@@ -356,14 +367,17 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                       position: "relative", overflow: "hidden",
                       minHeight: 54,   /* @canvas */ padding: "6px 4px 4px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
-                      background: "var(--bg-input)",
-                      opacity: c.inMonth ? 1 : 0.4,
+                      background: CELL,
                       border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
                       boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
                     }}
                   >
-                    <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
-                    <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * HEAT, pointerEvents: "none" }} />
+                    {/* v18.2.0: an out-of-month day fades its NUMBER, not the
+                        cell — at 40% the whole button was see-through again,
+                        the defect this phase fixes (and the paused reminder's
+                        rule: fade the content, keep the surface). */}
+                    <div style={{ position: "relative", opacity: c.inMonth ? 1 : OUT_OF_MONTH }}>
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
                       <div style={{ fontSize: T.micro, fontWeight: FW.medium, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 2 }}>
                         {c.inMonth ? cov : ""}
@@ -374,6 +388,14 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
               })}
             </div>
           ); })}
+        </div>
+        {/* v18.2.0 (X2): the key the blue shading never had. The swatch runs
+            from an empty day to the fullest one, which is exactly what the
+            cells draw: the accent at up to HEAT (30%) over the cell. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, fontSize: T.small, color: "var(--text-muted)" }}>
+          <span>Fewer covers</span>
+          <span aria-hidden="true" style={{ width: 64, height: 8, borderRadius: 4,   /* @canvas */ border: "1px solid var(--border-input)", background: "linear-gradient(to right, " + CELL + ", color-mix(in srgb, var(--accent) " + (HEAT * 100) + "%, " + CELL + "))" }} />
+          <span>More</span>
         </div>
       </div>
     );

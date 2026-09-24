@@ -344,6 +344,13 @@ explaining why is usually the one to read.
   shipped exactly that and phase 28 took the border off. The sentence saying
   what the second tap does sits UNDER the row, never above the button. Users:
   People's Remove, Reminders, Templates, Layout's ×, standing bookings.
+- **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
+  cells were `--bg-input` (half-transparent) over a translucent sheet, so the
+  page behind the modal showed through and the timeline's orange blocks
+  tinted some days amber — colour that reads as data and is not. They are
+  `--bg-cal-cell` now, the solid colour a cell had over a plain page. Glass is
+  for chrome; anything whose colour MEANS something sits on a solid fill. The
+  busyness shading got the key it never had, drawn from the same `HEAT` scale.
 - **A Cancel is never red.** Layout's rename and add-table Cancel shared the
   remove button's red × (`X_BTN`); it is the stepper's neutral now (`CANCEL_X`).
 - **A paused item fades its TEXT, never its controls (v18.2.0, S5).** A paused
