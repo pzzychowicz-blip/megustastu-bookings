@@ -379,7 +379,12 @@ function onKeyDown(e) {
 // It deliberately does NOT accept arbitrary style. A caller that needs more
 // than a size and a surface is describing a different component, and the next
 // person should have to say so out loud rather than reach for a fifth key.
-export function Overlay({ onClose, children, footer, panel }) {
+//
+// `maxWidth` (v18.2.0) — the desktop card's cap, 580 when omitted. Settings is
+// the one caller: its nine tabs need ~720px on one row, and at 580 the last
+// three sat out of sight (the design critique, S1). A number, not a style, for
+// the same reason as `panel`; the phone sheet is full-width either way.
+export function Overlay({ onClose, children, footer, panel, maxWidth }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
   const scrollRef = useRef(null);
@@ -491,7 +496,7 @@ export function Overlay({ onClose, children, footer, panel }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -500,7 +505,7 @@ export function Overlay({ onClose, children, footer, panel }) {
           </div>
         </div>
       ) : (
-        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}

@@ -24,7 +24,7 @@
 // __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
 // for version changes.
 
-import { useState, useEffect, useRef, useCallback, useId } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useId } from "react";
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
@@ -32,6 +32,8 @@ import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
 import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
+// v18.2.0: how TabBar lays its tabs out.
+import { tabColumns } from "../lib/tab-rows";
 import { CountryPicker } from "./CountryPicker";
 import { countryByIso, flagOf, dialLabel, MAX_PINNED } from "../lib/phone-countries";
 // v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
@@ -56,24 +58,85 @@ export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 // Reusable enough for future modals to import; lives here for now because
 // only the Settings modal uses it. If a second consumer appears later, this
 // could move to atoms.jsx painlessly.
+//
+// v18.2.0 (the design critique, S1): EVERY tab in view. The bar used to be a
+// one-row horizontal scroller with its scrollbar hidden, and nine tabs need
+// ~700px, so on the 1280px tablet's 530px bar App, Shortcuts and Admin sat out
+// of sight, on a phone five of the nine did, nothing said there were more, and
+// choosing one with ←/→ left it scrolled away (scrollLeft stayed 0). Now the
+// card is 800px on a tablet (SETTINGS_CARD_W), which takes the nine on one row,
+// and where one row does not fit — a phone, a narrow window, a wider system
+// font — the tabs become a balanced grid (`tabColumns`, lib/tab-rows.js): 3 × 3
+// on a phone, Patryk's choice.
+//
+// The question is MEASURED, from the labels' own widths in the platform's font
+// (canvas text metrics, the ListView name column's method), not a breakpoint,
+// and not by watching the row wrap — a grid cannot say whether a row would fit.
+//
+// A grid is a rounded rectangle of rounded-rectangle tabs: R.card around
+// R.inset with the bar's 4px padding between, so the corners stay concentric
+// (10 + 4 = 14). Pills stacked in rows inside one pill read as a stadium with
+// the corner tabs poking at its curve.
+const TAB_GAP = 4;
+const TAB_ROW_PAD = 12;     // a tab's side padding in the natural row
+const TAB_CELL_PAD = 6;     // the same in a grid cell, where the cell sets the width
+const tabTextWidths = new Map();
+let tabTextCtx = null;
+function tabTextWidth(label, weight, size, family) {
+  const key = weight + "|" + size + "|" + family + "|" + label;
+  const hit = tabTextWidths.get(key);
+  if (hit !== undefined) return hit;
+  if (!tabTextCtx) {
+    if (typeof document === "undefined") return 0;
+    tabTextCtx = document.createElement("canvas").getContext("2d");
+    if (!tabTextCtx) return 0;
+  }
+  tabTextCtx.font = weight + " " + size + " " + family;
+  const w = Math.ceil(tabTextCtx.measureText(label).width) + 1;
+  tabTextWidths.set(key, w);
+  return w;
+}
 export function TabBar({ tabs, current, onSelect }) {
+  const barRef = useRef(null);
+  const [cols, setCols] = useState(0);   // 0 = one natural row
+  // The labels as one string, so the effect re-measures when the SET of tabs
+  // changes (a module or a capability toggled) and not on every render.
+  const labelKey = tabs.map(function (t) { return t.label; }).join("\n");
+  // Layout effect, so the first paint already has the right shape; the
+  // observer answers a resize.
+  useLayoutEffect(function () {
+    const bar = barRef.current;
+    if (!bar) return undefined;
+    const labels = labelKey.split("\n");
+    function measure() {
+      const b = bar.firstElementChild;
+      if (!b) return;
+      const cs = getComputedStyle(b);
+      const semi = labels.map(function (l) { return tabTextWidth(l, FW.semi, cs.fontSize, cs.fontFamily); });
+      const bold = labels.map(function (l) { return tabTextWidth(l, FW.bold, cs.fontSize, cs.fontFamily); });
+      const next = tabColumns(semi, bold, bar.clientWidth - 2 * TAB_GAP, TAB_GAP, 2 * TAB_ROW_PAD, 2 * TAB_CELL_PAD);
+      setCols(function (prev) { return prev === next ? prev : next; });
+    }
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(bar);
+    return function () { ro.disconnect(); };
+  }, [labelKey]);
+  const grid = cols > 0;
   return (
-    <div style={{
-      display: "flex", gap: 4, padding: 4,
-      borderRadius: R.pill,
+    <div ref={barRef} style={Object.assign({
+      gap: TAB_GAP, padding: TAB_GAP,
+      borderRadius: grid ? R.card : R.pill,
       background: "var(--bg-tabbar)",
       marginBottom: 16,
-      border: "1px solid var(--border-soft)",
-      // v16.2.0: on a narrow screen (iPhone 12 mini, 375px) the 5 tabs' combined
-      // min-content width used to force the whole modal wider than the viewport
-      // (content cut off on both edges). Making the tab row its own horizontal
-      // scroller gives it min-width:0, so the modal collapses back to viewport
-      // width and the tabs scroll independently instead. Buttons don't shrink
-      // (flex-shrink 0) — they keep full-label width and overflow to scroll.
-      overflowX: "auto",
-      WebkitOverflowScrolling: "touch",
-      scrollbarWidth: "none"
-    }}>
+      border: "1px solid var(--border-soft)"
+    }, grid
+      ? { display: "grid", gridTemplateColumns: "repeat(" + cols + ", minmax(0, 1fr))" }
+      // `wrap` on the one-row branch is a safety net, not a layout: should
+      // the canvas and the page ever disagree by a pixel, a tab wraps into
+      // view instead of overflowing the bar.
+      : { display: "flex", flexWrap: "wrap" })}>
       {tabs.map((t) => {
         const active = t.id === current;
         return (
@@ -84,8 +147,15 @@ export function TabBar({ tabs, current, onSelect }) {
             // v18.2.0: the segment's look is `segStyle` (atoms.jsx), shared
             // with the main view switcher — the SAME values this button carried
             // inline, moved rather than changed. What stays here is what is
-            // TabBar's own: it stretches, and it never wraps its label.
-            style={{ ...segStyle(active), flex: "1 0 0%", whiteSpace: "nowrap", padding: "8px 12px" }}
+            // TabBar's own: it stretches, it never wraps its label, and it
+            // takes the grid's shape with the bar.
+            style={{
+              ...segStyle(active),
+              whiteSpace: "nowrap",
+              padding: "8px " + (grid ? TAB_CELL_PAD : TAB_ROW_PAD) + "px",
+              borderRadius: grid ? R.inset : R.pill,
+              ...(grid ? null : { flex: "1 0 0%" })
+            }}
           >
             {t.label}
           </button>

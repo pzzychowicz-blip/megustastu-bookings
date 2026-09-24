@@ -26621,3 +26621,36 @@ onto its own line but the Summary is still beside the controls, now runs from ab
 
 **Gate after phase 24:** `121.54 kB` gz main bundle (±0) · **1673 tests** (+1) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 25. Every Settings tab in view (S1)
+
+The critique's first finding. The tab bar was one row that scrolled sideways with its scrollbar
+hidden, and nine tabs need about 700px: on the 1280px tablet the bar was 530 (App, Shortcuts and
+Admin out of sight, "Ap" cut at the edge) and on a phone 337 (five of nine). Nothing said there
+were more, and choosing a hidden tab with ←/→ did not scroll it into view (`scrollLeft` stayed 0).
+
+- **The Settings card is 800px on a tablet** (`SETTINGS_CARD_W`, through a new optional `maxWidth`
+  on `Overlay`; every other modal keeps 580). The bar is 750 there and the nine sit on one row, and
+  in portrait (776 card, 726 bar) as well.
+- **Where one row does not fit, a balanced grid** (`tabColumns`, new `lib/tab-rows.js`): the fewest
+  rows whose equal cells hold the widest label. On a phone that is 3 × 3, Patryk's choice over two
+  tight rows (4 + 5 needed 6px side padding and still broke into three rows on a 360px phone). In a
+  narrow window it is 5 + 4. A plain wrap had given 4 + 4 + a lonely Admin on the phone and 7 + 2 at
+  700px, with Shortcuts and Admin stretched to 306px each (measured, then replaced).
+- **Measured, not by breakpoint**: canvas text metrics of the labels in the button's own computed
+  font (the ListView name column's method), re-measured on the bar's ResizeObserver. Watching the
+  row wrap could not do it: a grid cannot say whether a row would fit. The one-row test adds the
+  most any one label gains in bold (the chosen tab's weight), so choosing a tab cannot flip the
+  layout; measured, the row asks 712px and the portrait bar holds 716.
+- **A grid is rounded rectangles in a rounded rectangle**: `R.inset` tabs inside an `R.card` bar,
+  concentric with the 4px padding between (10 + 4 = 14). Pills stay for one row.
+
+Live on DEV. At 1280: one row, 9 in a 750px bar, with General or Customers chosen. At 800
+(portrait): one row. At 780 and 700: 5 + 4 in 136 and 120px cells. At 375: 3 × 3 in 107px cells.
+At 320: 3 × 3 in 88.7px cells. Every tab inside the bar and every label unclipped at each width.
+Settings' `TabBar` test in `tests/segmented.test.js` still pins the `segStyle(active)` spread.
+`tests/tab-rows.test.js` 8 tests (new), fed the label widths read on DEV with the component's
+own measure.
+
+**Gate after phase 25:** `121.60 kB` gz main bundle (+0.06) · **1681 tests** (+8) · 0 lint errors, 91
+warnings (unchanged) · style OK.

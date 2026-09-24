@@ -346,6 +346,17 @@ explaining why is usually the one to read.
   v16.2.0. The lift, the weight and the shadow say "chosen"; the colour does
   not have to. The track's hairline is an inset shadow so the control stands
   exactly `H.control` tall beside the header's buttons.
+- **Every Settings tab is in view (v18.2.0, the design critique's S1).** The
+  tab bar was one row that scrolled sideways with its scrollbar hidden, so on
+  the tablet three of nine tabs, and on a phone five, were out of sight with
+  nothing saying so. On a tablet the Settings card is 800px (`SETTINGS_CARD_W`,
+  `Overlay`'s `maxWidth`) and the nine sit on one row. Where one row does not
+  fit, the tabs become a BALANCED grid: the fewest rows whose equal cells hold
+  the widest label (`tabColumns`), so 3 × 3 on a phone (Patryk's choice) and
+  5 + 4 in a narrow window, never a lonely last tab stretched across the bar.
+  Measured from the labels in the platform's font, not by breakpoint. A grid is
+  rounded rectangles in a rounded rectangle, `R.inset` inside `R.card` with the
+  4px padding between, so the corners are concentric; pills stay for one row.
 - **On a phone, the create actions live in a bottom bar (v18.2.0).** Walk-in
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they

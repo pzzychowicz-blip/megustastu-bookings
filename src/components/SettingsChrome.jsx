@@ -76,6 +76,17 @@ export const SETTINGS_TABS = [
   { id: "admin", label: "Admin", caps: ["settingsAdmin"] },
 ];
 
+// ── SETTINGS_CARD_W — the Settings card's width on a tablet (v18.2.0) ────────
+// The design critique (S1): at Overlay's default 580 the tab bar is 530px and
+// the nine tabs need ~700 on one row (measured, SF Pro), so App, Shortcuts and
+// Admin sat out of sight with nothing saying they were there. At 800 the bar
+// is 750: the row fits with ~40px to spare, which is the margin a wider system
+// font (Roboto on the Android tablet) gets before the row wraps — and wrapping
+// is TabBar's fallback, not a failure. Here rather than in Settings.jsx because
+// App reads it at the mount site and this module is already in the startup
+// chunk (Settings itself is lazy).
+export const SETTINGS_CARD_W = 800;
+
 // ── visibleTabs — the ONE filter, for the same reason as the ONE list ────────
 // v18.0.0 phase 3. `SETTINGS_TABS` being single-sourced is not enough on its
 // own: the ←/→ keyboard cycle derives from it, so filtering the list at the
