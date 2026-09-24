@@ -357,6 +357,14 @@ explaining why is usually the one to read.
   Measured from the labels in the platform's font, not by breakpoint. A grid is
   rounded rectangles in a rounded rectangle, `R.inset` inside `R.card` with the
   4px padding between, so the corners are concentric; pills stay for one row.
+- **Settings hangs from a fixed top (v18.2.0, S2).** A centred card that
+  changes height moves its top, and Settings' tab bar sat at 120, 205, 120,
+  120, 186 and 280px for six tabs in a row, so after one click the next tab had
+  moved from under the finger. `Overlay`'s `anchor="top"` hangs the desktop
+  card at 5dvh, where a centred card already sits at its 90dvh ceiling: the
+  tallest tabs do not move and the others stop moving; only the bottom edge
+  follows the content. **Any modal whose body swaps while its top holds
+  controls wants the same.** The phone sheet is full-screen and unaffected.
 - **On a phone, the create actions live in a bottom bar (v18.2.0).** Walk-in
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they

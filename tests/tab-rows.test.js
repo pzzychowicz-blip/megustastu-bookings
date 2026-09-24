@@ -68,6 +68,17 @@ describe("the tab bar and the card", () => {
     expect(Settings).toMatch(/borderRadius: grid \? R\.inset : R\.pill,/);
   });
 
+  // v18.2.0 phase 26 (S2): the card is centred and its height follows the tab,
+  // so the bar sat at 120 · 205 · 120 · 120 · 186 · 280px for six tabs in a row.
+  // Hung from the top, it measured 115 on all nine.
+  it("hangs Settings from a fixed top, so the tab bar does not move between tabs", () => {
+    expect(App).toMatch(/maxWidth=\{SETTINGS_CARD_W\} anchor="top"/);
+    expect((App.match(/anchor="top"/g) || []).length, "Settings is the one caller").toBe(1);
+    expect(Atoms).toMatch(/const TOP_ANCHOR = "max\(0px, calc\(5dvh - 12px\)\)";/);
+    expect(Atoms).toMatch(/alignItems: top \? "flex-start" : "center"/);
+    expect((Atoms.match(/marginTop: top \? TOP_ANCHOR : 0,/g) || []).length, "both card branches").toBe(2);
+  });
+
   it("gives Settings the 800px card, and every other modal keeps 580", () => {
     expect(App).toMatch(/onClose=\{requestCloseSettings\} maxWidth=\{SETTINGS_CARD_W\}/);
     expect((Atoms.match(/maxWidth: maxWidth \|\| 580,/g) || []).length).toBe(2);

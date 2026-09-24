@@ -357,6 +357,10 @@ function onKeyDown(e) {
   return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
 }
 
+// Where an `anchor="top"` card's top edge sits: 5dvh, the top of a centred card
+// at its 90dvh ceiling, less the scrim's 12px padding, never negative.
+const TOP_ANCHOR = "max(0px, calc(5dvh - 12px))";
+
 // `panel` (17.15.0-wa-sandbox) — a dialog that brings its OWN body.
 //
 // Every branch below gives you a padded, scrolling card at maxWidth 580 on
@@ -384,7 +388,16 @@ function onKeyDown(e) {
 // the one caller: its nine tabs need ~720px on one row, and at 580 the last
 // three sat out of sight (the design critique, S1). A number, not a style, for
 // the same reason as `panel`; the phone sheet is full-width either way.
-export function Overlay({ onClose, children, footer, panel, maxWidth }) {
+//
+// `anchor="top"` (v18.2.0) — the desktop card hangs from a fixed top instead of
+// being centred. A centred card that changes height moves its TOP, and with it
+// everything along the top: Settings' tab bar sat at 120 · 205 · 120 · 120 ·
+// 186 · 280px for six tabs in a row (the design critique, S2), so after one
+// click the next tab was no longer under the finger. The top is 5dvh, where a
+// centred card already sits at its 90dvh ceiling, so the tallest tabs do not
+// move at all and the shorter ones stop moving; only the bottom edge follows
+// the content. The phone sheet is full-screen and has no top to move.
+export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
   const scrollRef = useRef(null);
@@ -488,15 +501,16 @@ export function Overlay({ onClose, children, footer, panel, maxWidth }) {
 
   // Desktop centered card. With a footer, the card is a flex column: body
   // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
-  // (exactly as before).
+  // (exactly as before). `top`: hung from TOP_ANCHOR instead — see `anchor`.
+  const top = anchor === "top";
   return wrap(
     <div
       className={scrimCls}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: 12 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -505,7 +519,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth }) {
           </div>
         </div>
       ) : (
-        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}

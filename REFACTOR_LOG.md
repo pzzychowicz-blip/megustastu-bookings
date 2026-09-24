@@ -26654,3 +26654,24 @@ own measure.
 
 **Gate after phase 25:** `121.60 kB` gz main bundle (+0.06) · **1681 tests** (+8) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 26. The tab bar stays put (S2)
+
+The critique measured Settings' tab bar at 120, 205, 120, 120, 186 and 280px for General,
+Layout, Customers, Vouchers, Reminders and WhatsApp at 1280×800. The card is centred and its
+height follows the tab, so its top moved with every click, and the next tab was no longer under
+the finger.
+
+`Overlay` takes `anchor="top"`: the desktop scrim aligns the card to the top and the card hangs
+from `TOP_ANCHOR`, `max(0px, calc(5dvh - 12px))`, i.e. 5dvh once the scrim's 12px padding is
+counted. That is where a centred card already sat at its 90dvh ceiling, so the tall tabs do not
+move at all and the short ones stop moving; only the bottom edge follows the content, eased by
+the body's `AutoHeight` as before. Settings is the one caller. The phone sheet is full-screen and
+has no top to move.
+
+Live on DEV, 1280×800, clicking through all nine tabs: the bar's top read 115 on every one, and
+the card ran from 40 down to 426 (WhatsApp) through 590 (Layout) and 629 (Reminders) to 760.
+`tests/tab-rows.test.js` +1.
+
+**Gate after phase 26:** `121.61 kB` gz main bundle (+0.01) · **1682 tests** (+1) · 0 lint errors, 91
+warnings (unchanged) · style OK.
