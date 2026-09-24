@@ -3926,7 +3926,12 @@ function BookingApp({uid}){
     // Escape was the only exit and it abandoned the status change silently.
     setVoucherAsk(null);
     if(refused("voucherRedeem")) return;
-    const ok=withRedeemAsked(function(){
+    // v18.2.0 phase 48: a SETTLE is the missing ledger entry of a booking that
+    // is ALREADY completed, so there is no booking write to go first — the
+    // order below exists for a completion, and here the voucher is the only
+    // write. (Going through updateStatus would have logged a second "status →
+    // completed" for a status that did not change.)
+    const ok=ask.from==="settle"?true:withRedeemAsked(function(){
       if(ask.from!=="form") return updateStatus(ask.id,ask.status);
       // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
       // NOTHING — so the form path redeemed the voucher whether or not the
@@ -4559,7 +4564,12 @@ function BookingApp({uid}){
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[],
     unsettledBookings.length?[{id:"unsettled",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:VoucherIcon,
       title:"Voucher not recorded",count:unsettledBookings.length,
-      node:<UnsettledBanner bookings={unsettledBookings} vouchersByCode={vouchersByCode} currency={generalSettings.currency} onOpen={function(id){const b=bookings.find(function(x){return x.id===id;});if(b) openEdit(b);}} swapKey={viewDate} />}]:[]
+      // v18.2.0 phase 48 (round 3's V-3): Settle opens the redeem prompt
+      // itself. It opened the whole edit form, whose voucher line promised a
+      // question "when this booking is completed" about a booking already
+      // completed; what settled it was Save, and nothing said so. `from:
+      // "settle"` tells settleVoucher there is no status to write.
+      node:<UnsettledBanner bookings={unsettledBookings} vouchersByCode={vouchersByCode} currency={generalSettings.currency} onOpen={function(id){if(refused("voucherRedeem"))return;setVoucherAsk({id:id,status:"completed",from:"settle"});}} swapKey={viewDate} />}]:[]
   );
   // v17.12.0: what a screen reader is TOLD when the strip changes.
   //
@@ -5342,8 +5352,9 @@ function BookingApp({uid}){
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
               booking={bookings.find(function(x){return x.id===voucherAsk.id;})}
               currency={generalSettings.currency}
+              settle={voucherAsk.from==="settle"}
               onRedeem={function(amount){settleVoucher(amount);}}
-              onSkip={function(){settleVoucher(0);}}
+              onSkip={function(){if(voucherAsk.from==="settle")setVoucherAsk(null);else settleVoucher(0);}}
               onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherBack}>{voucherBack&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherBack.id;})||{}).voucherCode)]?<Overlay /* @static-height two fixed sentences and two buttons */ onClose={function(){setVoucherBack(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}

@@ -27310,3 +27310,29 @@ it. Phone, dark: 298 → 537, the list [477–743] inside the port [0–743]. `t
 
 **Gate after phase 47:** `122.00 kB` gz main bundle (+0.12) · **1838 tests** (+6) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 48. Settle opens the redeem prompt (V-3)
+
+The strip's "Voucher not recorded" row offered "Settle <name>", which opened the whole edit form. Its
+voucher line said "You will be asked how much of it the bill used when this booking is completed" —
+of a booking already completed — and what actually settled it was pressing Save booking, which raised
+the redeem prompt through `voucherToAsk`. Nothing on screen said so; Back left it unsettled.
+
+Settle now opens that prompt itself, behind `voucherRedeem`, as `from: "settle"`. Three things follow
+from the booking already being completed:
+
+- **No status write.** `settleVoucher`'s order — booking first, voucher only if that dispatched —
+  exists for a completion. A settle has no booking write, so the voucher is the only one. Going through
+  `updateStatus` would have logged a second "status → completed" for a status that did not change.
+- **"Not now" and "Redeem"**, not "Complete without using it" and "Redeem & complete", and "Not now"
+  only closes: the booking stays unsettled and in the strip. The sentence reads "Unsettled Probe's
+  visit was completed without recording this voucher. 30 € left on it."
+- The carry offer still follows a partial redemption, as after a completion.
+
+Live on DEV (Unsettled Probe, FFBV-JYT7, 30 €): Settle opened the prompt in its settle wording; Not now
+closed it and the row stayed. Settle again, 10 → "20 € stays on the voucher for a later visit",
+Redeem: the row cleared; the voucher's `redemptions` gained the booking's entry (amount 10, remaining
+20); the booking's history is unchanged. `tests/voucher-settle.test.js` (4, new).
+
+**Gate after phase 48:** `122.14 kB` gz main bundle (+0.14) · **1842 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.
