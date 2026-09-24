@@ -419,6 +419,14 @@ explaining why is usually the one to read.
   portrait, the switcher starts its wrapped line at the margin while the
   Summary sits beside the date controls, and Patryk kept that rather than split
   the header's line.
+- **What a decision is about never truncates (v18.2.0, W1).** The WhatsApp
+  draft bar on a phone read "2 pax · 202…": its details were `flex: 1;
+  min-width: 0` beside the confidence chip, Accept and Dismiss, so the
+  controls kept their width and the date and time went into the ellipsis —
+  staff were asked to accept what they could not see. The details now take
+  their own content's width and do not shrink, and the controls, as ONE group,
+  wrap to a second line instead. Rule: in a row of "the thing + what you can
+  do to it", the thing keeps its width and the controls move.
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's

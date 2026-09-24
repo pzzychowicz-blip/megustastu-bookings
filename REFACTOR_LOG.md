@@ -26748,3 +26748,24 @@ without saving. Standing bookings are off on DEV with no rules, so their Delete 
 
 **Gate after phase 28:** `121.69 kB` gz main bundle (+0.07) · **1700 tests** (+10) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 29. The phone's draft card shows what it proposes (W1)
+
+On a phone the inbox uses the compact draft bar (`compact` is `winH < INBOX_COMPACT_HEIGHT`, 820, so
+the 800px tablet uses it too), and the bar read "2 pax · 202…": the details were `flex: 1;
+min-width: 0` on one wrapping row with the confidence chip, Accept and Dismiss, so the controls
+kept their width and the date and time went into the ellipsis. Staff were asked to accept a
+booking they could not see.
+
+The details now take a basis of their own content and do not shrink (`flex: "1 0 auto"`, with
+`maxWidth: 100%` so the ellipsis survives only as a last resort). The first version let the row
+wrap item by item, and at 375px Accept stayed on line one while Dismiss dropped alone to the left
+of line two, so the three controls are now ONE group with an auto left margin and wrap together.
+
+Live on DEV (Anna Priks, "¿tienen mesa para 2 mañana a las 14:00?"). At 375×812: line one
+"2 pax · 2026-09-25 · 14:00", whole; line two HIGH, Accept and Dismiss, right-aligned at one top.
+At 1280×800 the bar is 847px and everything sits on one line, as before.
+`tests/wa-inbox-layout.test.js` 2 tests (new).
+
+**Gate after phase 29:** `121.71 kB` gz main bundle (+0.02) · **1702 tests** (+2) · 0 lint errors, 91
+warnings (unchanged) · style OK.
