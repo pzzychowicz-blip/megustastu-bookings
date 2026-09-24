@@ -145,6 +145,15 @@ evidence for each.
     nothing (it measured 21.5px at 375px, 1.5px beside a year). The pax, phone and
     badge still follow the name's width on a wide screen.
 
+- **The waitlist forgets a party's seating preference (v18.2.0 critique, round 3, L-1).**
+  `addFormToWaitlist` stores name, phone, size, date, wanted time and notes — not
+  `preference` — so a party refused because INDOOR is full is matched to anything.
+  Measured on DEV: "Indoor Probe", 11 guests wanting indoor (the indoor combination seats
+  10), was offered outdoor tables 2, 3, 4, 5A and 5B as "table free". Store the
+  preference on the entry and have `placeWaitlist` honour it (tests beside
+  `tests/waitlist-match.test.js`), and print it on the waitlist row. Patryk's call: a
+  matching change, not this critique's.
+
 - **A List card's table pill does not say the table is missing (v18.2.0 follow-up).**
   The timeline's Unplaced row and the strip's "Not on the grid" section name a table the
   layout does not have. The List card still draws `TBadge "9"` as if it were real. A
