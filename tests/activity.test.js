@@ -13,7 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText,
+  ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText, rowText,
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
   isPrunable, activityWindow, activityCsv, activityCsvName, clearedEntry,
   retentionMs, retentionLabel, RETENTION_CHOICES, DEFAULT_RETENTION_DAYS,
@@ -925,5 +925,37 @@ describe("retention", () => {
     // A value written by an older build, or by hand in the console, still reads
     // as something rather than as blank.
     expect(retentionLabel(400)).toBe("400 days");
+  });
+});
+
+// v18.2.0 (the design critique, X1): a booking row leads with the booking's
+// CURRENT name. Measured on DEV: rows read "created" and "edited: pref
+// outdoor→indoor" with nothing saying whose; after, "Phase20 Save B · edited:
+// pref outdoor→indoor", "Marco Rossi · moved to 1B (drag)".
+describe("rowText — a booking row says whose it is", () => {
+  const byId = { b1: { id: "b1", name: "Anna Priks" }, b2: { id: "b2", name: "Tom" } };
+
+  it("leads a history row with the booking's current name", () => {
+    expect(rowText({ kind: "booking", text: "created", bookings: { b1: true } }, byId)).toBe("Anna Priks · created");
+  });
+
+  it("names entries written before it existed — nothing is re-written, the id was always there", () => {
+    expect(rowText({ kind: "booking", text: "edited: pref outdoor→indoor", bookings: { b1: true } }, byId))
+      .toBe("Anna Priks · edited: pref outdoor→indoor");
+  });
+
+  it("leaves a row alone that already names its booking through a token", () => {
+    const r = { kind: "booking", text: "deleted " + bookingToken("b1") + " · 2026-09-24", bookings: { b1: true } };
+    expect(rowText(r, byId)).toBe("deleted Anna Priks · 2026-09-24");
+  });
+
+  it("falls back to the entry's own subject for a deleted booking, and adds nothing when there is no name", () => {
+    expect(rowText({ kind: "booking", text: "created", bookings: { gone: true }, subject: { name: "Old Guest" } }, byId)).toBe("Old Guest · created");
+    expect(rowText({ kind: "booking", text: "created", bookings: { gone: true } }, byId)).toBe("created");
+  });
+
+  it("does not lead a row about several bookings, or one that is not about a booking", () => {
+    expect(rowText({ kind: "booking", text: "2 bookings re-placed", bookings: { b1: true, b2: true } }, byId)).toBe("2 bookings re-placed");
+    expect(rowText({ kind: "reminder", text: "changed the reminders" }, byId)).toBe("changed the reminders");
   });
 });

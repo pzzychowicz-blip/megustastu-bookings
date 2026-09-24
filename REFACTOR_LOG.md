@@ -26838,3 +26838,27 @@ placeholder. `tests/wa-inbox-layout.test.js` +6.
 
 **Gate after phase 32:** `121.89 kB` gz main bundle (+0.15) · **1713 tests** (+6) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 33. The Activity log says which booking (X1)
+
+Rows read "patrykmgtbooking · created" and "edited: pref outdoor→indoor". The entries written from
+a booking's own history carry only the action, and although each carries the booking's id (`bookings`)
+and the row is a button that opens it, you had to open each row to find out whose it was.
+
+`rowText(r, byId)` (lib/activity.js) is what a row shows: a row about ONE booking leads with that
+booking's current name ("Anna Priks · created"), else the entry's own `subject.name` for a deleted
+one, else nothing. Resolved at display from an id every such entry has always had, so the old
+entries gain their names with nothing re-written, and a renamed or anonymised guest reads by their
+current name, the log's existing rule. A row already naming its booking through a token (a delete) is
+left alone, as is a row about several bookings or none. The search and the CSV read the same function,
+so a guest's name now finds their "created" rows. The log itself is unchanged: still no names stored.
+
+Live on DEV, 1280×800: "Marco Rossi · moved to 1B (drag)", "Phase22 Outdoor · created", "Phase20 Save B
+· edited: pref outdoor→indoor". While checking it, the log showed four settings entries at 09:46
+("changed the reminders" and "changed people and roles", two each, a second apart) under the same
+account. Read from DEV, they post-date this session's last browser interaction for phase 28, and the
+same account had dragged two bookings at 09:15 while code was being written, so they are the pane
+being used by hand, not this session's automation. `tests/activity.test.js` +5.
+
+**Gate after phase 33:** `121.95 kB` gz main bundle (+0.06) · **1718 tests** (+5) · 0 lint errors, 91
+warnings (unchanged) · style OK.

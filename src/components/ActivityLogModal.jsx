@@ -32,7 +32,7 @@
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
 import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkSolidBtn, AutoHeight } from "./atoms";
-import { renderText, activityCsv, activityCsvName } from "../lib/activity";
+import { rowText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: the same index the Customers tab is built from, so "can
 // this row lead anywhere" is answered by the thing that would have to answer it
 // on arrival. Memoised on `bookings` exactly as CustomersSettings does — it
@@ -175,7 +175,9 @@ export function ActivityLogModal({
       if (!needle) return true;
       // Searched against what is ON SCREEN, tokens resolved — otherwise typing
       // a guest's name finds nothing, which is the first thing anybody tries.
-      const text = renderText(r.text, byId, r.subject && r.subject.name);
+      // v18.2.0: `rowText`, so the name a booking row now LEADS with (X1) is
+      // searchable too — "created" rows were otherwise unfindable by guest.
+      const text = rowText(r, byId);
       return (text + " " + personOf(r.email)).toLowerCase().includes(needle);
     });
   }, [rows, kinds, anyKind, whoActive, peopleOnly, q, byId]);
@@ -326,7 +328,7 @@ export function ActivityLogModal({
                     : "Nothing was recorded in that range."}
             </div>
           ) : shown.map(function (r) {
-            const text = renderText(r.text, byId, r.subject && r.subject.name);
+            const text = rowText(r, byId);
             // A row naming a booking that still exists can open it.
             //
             // v18.0.0 session 11: and one naming a DELETED booking now leads

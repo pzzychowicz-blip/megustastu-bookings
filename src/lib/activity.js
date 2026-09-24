@@ -154,6 +154,26 @@ export function renderText(text, byId, fallback) {
   });
 }
 
+// A row's text as the log SHOWS it (v18.2.0, the design critique's X1): a row
+// about ONE booking leads with that booking's current name. The entries written
+// from a booking's own history carry only the action — "created", "edited: pref
+// outdoor→indoor" — so every row had to be opened to learn whose it was. The
+// name comes from `bookings`, which every such entry has always carried, so it
+// names entries written before this as well; nothing is re-written. A row whose
+// text already names its booking (a delete, or an action that mentioned the
+// guest and was tokenised) is left alone, and a row with no name to give is
+// left as it was rather than led by "a deleted booking".
+export function rowText(r, byId) {
+  const text = renderText(r && r.text, byId, r && r.subject && r.subject.name);
+  if (!r || r.kind !== "booking" || !r.bookings) return text;
+  const ids = Object.keys(r.bookings);
+  if (ids.length !== 1) return text;
+  if (String(r.text || "").indexOf(bookingToken(ids[0])) !== -1) return text;
+  const b = byId && byId[ids[0]];
+  const name = (b && b.name) || (r.subject && r.subject.name) || "";
+  return name ? name + " · " + text : text;
+}
+
 // ── Bookings ─────────────────────────────────────────────────────────────────
 
 function byIdMap(list) {
@@ -625,7 +645,7 @@ export function activityCsv(rows, byId) {
     lines.push([
       at.date, at.time, r.email || "",
       r.kind || "",
-      renderText(r.text, byId || {}, r.subject && r.subject.name),
+      rowText(r, byId || {}),
       r.auto ? "yes" : "",
     ].map(csvCell).join(","));
   });
