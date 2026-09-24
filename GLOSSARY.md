@@ -299,7 +299,7 @@ order** by `visibleTabs`: a **module** gate hides it from everybody, admin
 included, when the restaurant does not have the feature — Vouchers, WhatsApp
 (*does this restaurant have it*); a **capability** gate shows it only to an
 account holding one of its capabilities — General, Layout, Reminders, WhatsApp,
-Admin (*may you*). Customers, App and Shortcuts are always there.
+Admin (*may you*). Customers, App and Shortcuts are always there. (Shortcuts itself lists the WhatsApp keys only with the module on, and the simulator's `X` only in the sandbox, since v18.2.0.)
 
 | What you see | Correct term | What it does |
 |---|---|---|

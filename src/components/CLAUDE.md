@@ -106,7 +106,7 @@ Extracted from the root `CLAUDE.md` File Structure block (moved here so it loads
 
 - **LayoutSettings.jsx** — **v18.2.0 phase 28:** `X_BTN` (every row's remove ×) is the danger tint with the glass rim, not solid red (thirteen on the tables list alone), and the two Cancel ×s left it for `CANCEL_X`, the stepper's neutral — a Cancel is not red. Layout-tab body (v15.0.0) — FULL layout editor: Tables (add/remove/rename·cap·zone, orphan-booking warning on remove/rename) + collapsible Combos (editable join-groups → auto-combo cap overrides + cross-group mega add/edit/remove) + collapsible Table priorities (v15.9.0 — size bands · combo preferences · anchors/mixed-require · swap rules; rename remaps priorities refs too) + kitchen limit; takes `bookings` for orphan detection
 
-- **Shortcuts.jsx** — keyboard cheatsheet
+- **Shortcuts.jsx** — keyboard cheatsheet. **v18.2.0 (S8)**: a row or section whose key works only behind a gate carries `when`, and the sheet lists it only where the key works, through the SAME gate `useKeyboardShortcuts` checks — `"sandbox"` is `WA_SANDBOX` (X, the simulator, was listed in production), `"whatsapp"` is the module (I and the eleven-row inbox section were listed for a restaurant with WhatsApp off, which is how it ships); Settings passes `whatsappOn`. Each section is a `Section` card titled in the Collapsible header's type, where this was the one tab on the bare sheet with blue uppercase headings. `shortcutShown` is module-private for the `react-refresh/only-export-components` reason; `tests/shortcuts-tab.test.js` CALLS the component and reads its element tree, with `WA_SANDBOX` mocked off
 
 - **TableGrid.jsx** — 13-table picker (used by Manual/Block modals)
 

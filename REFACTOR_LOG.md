@@ -27087,3 +27087,26 @@ DESIGN.md records the rule. `tests/money-format.test.js` has 12 tests (new).
 
 **Gate after phase 39:** `121.82 kB` gz main bundle (+0.01) · **1813 tests** (+12) · 0 lint errors,
 90 warnings (unchanged) · style OK.
+
+### 40. The Shortcuts tab: cards, and only keys that work (S8)
+
+Shortcuts was the one Settings tab drawn on the bare sheet, with blue uppercase headings of its own.
+Its ten sections are `Section` cards now, titled in the Collapsible header's type (14px, semibold,
+primary ink), and a card's last row draws no hairline under itself.
+
+It also listed keys that do nothing. "X · Open WhatsApp simulator" appeared in production, where
+`useKeyboardShortcuts` gates X on `WA_SANDBOX`: that was the critique's finding. Reading the handler
+beside it found the same thing twice more, both gated on the WhatsApp module, which ships off: "I ·
+Open WhatsApp inbox" and the eleven-row inbox section. That is beyond the finding as written, and
+taken with it because it is the same defect behind the next gate over. A row or section now carries
+`when`, and the sheet lists it through the handler's own gate. Settings passes `whatsappOn`.
+
+Live on DEV (a dev build, with the module on): ten cards, titles `14px 600 rgb(26, 29, 36)` with no
+transform, cards on `--bg-soft` with a 14px radius, the last row borderless, and I and X both listed,
+which is correct there. The other paths cannot be shown on DEV without switching its WhatsApp module
+off under whoever else is using it. `tests/shortcuts-tab.test.js` (6, new) calls `ShortcutsContent`
+with `WA_SANDBOX` mocked off and reads its element tree, the way the error-boundary test reads its
+boundary, for the module off and on. Breaking the sandbox gate fails three of its tests.
+
+**Gate after phase 40:** `121.82 kB` gz main bundle (±0; Settings is a lazy chunk) · **1819 tests** (+6) ·
+0 lint errors, 90 warnings (unchanged) · style OK.

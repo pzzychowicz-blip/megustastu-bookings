@@ -398,6 +398,13 @@ explaining why is usually the one to read.
   tallest tabs do not move and the others stop moving; only the bottom edge
   follows the content. **Any modal whose body swaps while its top holds
   controls wants the same.** The phone sheet is full-screen and unaffected.
+- **Every Settings tab is drawn on the same cards (v18.2.0, S8).** Shortcuts
+  was the one tab on the bare sheet, with blue uppercase headings of its own;
+  its sections are `Section` cards now, titled in the Collapsible header's type
+  (14px, semibold, primary ink). And **a cheat sheet lists a key only where
+  the key works**, through the gate the key handler itself checks: the
+  simulator's X only in the sandbox, the inbox's keys only with the WhatsApp
+  module on.
 - **On a phone, the create actions live in a bottom bar (v18.2.0).** Walk-in
   and "+ New" wrapped onto a second header row of their own, and the header and
   date row took ~455 of an 812px screen before the grid began. Below 600px they

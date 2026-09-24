@@ -1324,7 +1324,9 @@ export function SettingsContent({
       />
     );
   } else {
-    content = <ShortcutsContent />;
+    // v18.2.0 (S8): the sheet lists a key only where it works — the inbox keys
+    // follow the WhatsApp module, as `useKeyboardShortcuts` does.
+    content = <ShortcutsContent whatsappOn={typeof hasModule === "function" && hasModule("whatsapp")} />;
   }
   return (
     <div>
