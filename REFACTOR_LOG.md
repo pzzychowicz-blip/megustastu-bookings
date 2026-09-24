@@ -26289,3 +26289,58 @@ in the new `tests/summary-freeing.test.js`.
 after phase 14: +10, +9, +6) · 0 lint errors, 91 warnings (unchanged) · style
 OK. The follow-up round adds three commits to this version and changes no
 persisted data, so no Firebase console step is needed.
+
+### Second follow-up round — six requests on 2026-09-24
+
+Patryk, on the unpushed branch, asked for six more changes (same version, same
+entry): the List card's name gap and column order (§18), a `/design:design-critique`
+pass over the modules the first one skipped (Settings' tabs, the WhatsApp inbox),
+the phone field detecting a typed country code, the country-code picker starting
+empty, table availability on the Plan view behind a Settings toggle, and deposit
+and indoor/outdoor flags on the timeline block. The forks went to him first. He
+took every recommendation, and chose the indoor/outdoor mark himself: a house with
+an arrow drawn inside it for indoor, and outside it for outdoor.
+
+### 18. The List card: name, covers, status — and a name column sized to the day
+
+Patryk's screenshot of "Miki", "YD revived" and "YD squatter": the space between
+the name and the status badge was too big, and after the name should come the
+number of guests, then the status, then the rest. The gap was not padding. It was
+§16's fixed 180px name column (sized for "María José Fernández") under names of
+34–97px.
+
+- **The name column is the day's widest name, capped at 180** (`nameColFor`,
+  `ListView.jsx`). Measured on a canvas in the name's own font (bold, `T.title`,
+  the font stack read from `<body>`) during render, so no card is painted at one
+  width and corrected after. Cached per name, +1px for the fraction a canvas and a
+  laid-out text run disagree by. The finished cards count too, so opening
+  "Completed & cancelled" moves nothing. He chose this over a narrower fixed
+  column (names wrapping from ~14 characters) and over no column (the badges
+  would stop lining up). The column moves between days and holds within one.
+- **Order: name → covers → status → flags.** The size ring moved in front of the
+  status inside the unit they already formed.
+- **The flags moved INSIDE the unit's box, found by measuring the phone.** The
+  first version kept three items on the row (name, unit, flags). With a narrow
+  name column the unit fits on the name's line at 375px, so a card's flags wrapped
+  alone to the next line, and the name, now sharing its line only with the unit,
+  took that line's slack: the covers sat at x 222 on the one card with a flag
+  against 208 on the two without. The row now holds two items, the name and one
+  box whose basis is the unit (`UNIT_W` = ring 18 + 8 + `STATUS_COL`), and the
+  flags wrap inside that box, under the unit. Because the box is always there, the
+  flags can be conditional; §16's "the flags box is always rendered" rule is gone
+  with the problem it solved.
+
+Live after a full reload. At 1024px on 23 Sep: the column 99.3px (the widest name,
+"YD squatter", lays out at 97.4), the ring at x 212.3 and the badge at 238.3 on all
+three cards, every name on one line. On 31 Aug, whose names run past the cap: the
+column 180, "Second Deliberate Booking" wrapping to two lines inside it, the unit
+at 293.6 on every active card, and the finished cards at 308.5 with each other (the
+fold's 15px inset, §16). At 375px on 23 Sep: the unit at x 208 on all three cards,
+the lock flag under it on the card that has one; cards without flags are 128px
+tall (152 in §16, when the status always took a second line), the one with a flag
+152. On 31 Aug at 375px every name takes its own full line and the unit sits at
+x 101 on the next. `tests/list-columns.test.js` follows the new structure (11
+tests, +2).
+
+**Gate after phase 18:** `120.68 kB` gz main bundle (+0.26) · **1627 tests** (+2) ·
+0 lint errors, 91 warnings (unchanged) · style OK.

@@ -87,10 +87,23 @@ const FLAG_DANGER = "var(--danger-text)";
 // every card and every day. Patryk chose that over columns sized to each day's
 // entries: the positions never move.
 //
-//   NAME_COL   180 — fits "María José Fernández" (178px at T.title bold). A
-//                    longer name WRAPS inside it and is never clipped (the
-//                    voucher panel's rule: a name nobody can read is worse
-//                    than a taller card).
+// v18.2.0 phase 18 — the NAME column stopped being fixed, and that choice was
+// reversed for it alone. Patryk, on a screenshot of "Miki", "YD revived" and
+// "YD squatter": the space between the name and the status badge is too big.
+// It was not padding — it was NAME_COL's 180px, sized for the longest name the
+// column had to hold, under names a third of that. The column is now as wide as
+// the WIDEST name among the day's cards (`nameColFor`, below), capped at
+// NAME_COL, so everything after it still lines up down the List and the gap is
+// only as wide as that day's longest name needs. It moves between days and
+// holds within one. He chose it over a narrower fixed column (names wrapping
+// from ~14 characters) and over no column at all (the badges would stop lining
+// up). The ORDER changed in the same request: name → covers (the size ring) →
+// status → flags, so the party size is read with the name it belongs to.
+//
+//   NAME_COL   180 — the CAP: fits "María José Fernández" (178px at T.title
+//                    bold). A longer name WRAPS inside it and is never clipped
+//                    (the voucher panel's rule: a name nobody can read is
+//                    worse than a taller card).
 //   STATUS_COL  98 — the widest status badge, "Completed" (97.8px); "Seated"
 //                    is 76.
 //   NEXT_COL   116 — the widest next-step button, "Completed" (115.7px);
@@ -112,11 +125,53 @@ const STATUS_COL = 98;
 const NEXT_COL = 116;
 const NAME_LINE = 20;
 // FLAGS_MIN 104 — the widest flag chip, "double-booked" with its mark
-//                  (101.3px; a voucher code is ~80). Beside the status on a
-//                  375px phone: 124 + 8 + 104 = 236 of the 245 there.
+//                  (101.3px; a voucher code is ~80). Beside the size and status
+//                  on a 375px phone: 124 + 8 + 104 = 236 of the 245 there.
 const FLAGS_MIN = 104;
+// UNIT_W 124 — the size ring (SizeRing, a fixed 18px), its 8px gap and the
+//              status cell: the covers + status unit that follows the name.
+//              It is the basis of the box holding the unit and the flags, so
+//              "do the size and status fit beside the name" has one answer per
+//              day (phase 18).
+const UNIT_W = 18 + 8 + STATUS_COL;
 // A cell beside the name: as tall as the name's first line, content centred.
 const NAME_CELL = { display: "flex", alignItems: "center", minHeight: NAME_LINE };
+
+// ── The name column's width (v18.2.0 phase 18) ───────────────────────────────
+// The widest of the day's names, measured on a canvas in the name's own font
+// (bold, T.title, the app's font stack read from <body>). A canvas measures
+// without layout, so the width is known in the render that draws the cards:
+// nothing is painted at one width and corrected after. Cached per name, because
+// the List re-renders every minute and on every booking change while a name's
+// width never changes. +1px, because a canvas and a laid-out text run can
+// disagree by a fraction of a pixel, and a column 0.4px too narrow wraps its
+// widest name onto a second line.
+//
+// No `document` (a test importing this file) or no 2D context: the cap, which
+// is what this column was before phase 18.
+const nameWidths = new Map();
+let nameCtx = null;
+function nameWidth(name) {
+  const s = String(name || "");
+  if (!s) return 0;
+  const hit = nameWidths.get(s);
+  if (hit !== undefined) return hit;
+  if (!nameCtx) {
+    if (typeof document === "undefined") return NAME_COL;
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return NAME_COL;
+    ctx.font = FW.bold + " " + T.title + "px " + getComputedStyle(document.body).fontFamily;
+    nameCtx = ctx;
+  }
+  const w = Math.ceil(nameCtx.measureText(s).width) + 1;
+  nameWidths.set(s, w);
+  return w;
+}
+function nameColFor(bookings) {
+  let w = 0;
+  bookings.forEach((b) => { w = Math.max(w, nameWidth(b.name)); });
+  return Math.min(NAME_COL, w);
+}
 
 // An icon-bearing flag. `role="img"` + `aria-label` for TimelineBlock's own
 // reason: every icon in Icons.jsx is `aria-hidden` (correctly — an icon beside
@@ -224,6 +279,9 @@ export const ListView = memo(function ListView({
   // preserves the exact visual order the inline list had.
   const active = day.filter((b) => b.status !== "completed" && b.status !== "cancelled");
   const finished = day.filter((b) => b.status === "completed" || b.status === "cancelled");
+  // v18.2.0 phase 18: one name column for the whole day — the finished cards
+  // included, so opening "Completed & cancelled" never moves the cards above.
+  const nameCol = nameColFor(day);
 
   // v15.8.0: detect status changes → stamp a wipe of the OLD colour; FLIP the
   // active list so a re-sorted card eases to its new position instead of jumping.
@@ -566,6 +624,10 @@ export const ListView = memo(function ListView({
             <ClashIcon size={IC.control} />double-booked
           </CardFlag>
         ) : null;
+        // v18.2.0 phase 18: whether there is a flags box at all. It lives inside
+        // the size + status box, so leaving it out moves nothing (the name row
+        // below says why that placement matters).
+        const hasFlags = !!(depositTag || voucherTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || lateTag || durationTag);
 
         const notesEl = b.notes ? (
           <div style={{
@@ -786,50 +848,65 @@ export const ListView = memo(function ListView({
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, lineHeight: 1.2 }}>{b.time}</div>
               <div style={{ fontSize: T.small, fontWeight: FW.semi, color: S.muted }}>{"–" + end}</div>
             </div>
-            {/* v18.2.0: the name, then the status and size, then the flags —
-                each in a column of its own width (NAME_COL and friends, top of
-                file), so they line up down the List.
-                The NAME grows 1 against the flags' 1000: wherever it shares a
-                line it keeps its 180 (it takes 1/1001 of the slack, the same
-                fraction of the same slack on every card, so the columns still
-                line up), and where it is alone on its line — a phone, where
-                the status wraps under it — it takes the whole line.
-                Status + ring are ONE unit, so they wrap together. The flags
-                box is ALWAYS rendered, empty or not, because the name's share
-                of the slack depends on its basis: dropping it on a card with
-                no flags would hand that card's name all the slack and move its
-                badge. Its basis is FLAGS_MIN, the widest chip, so on a card too
-                narrow for it the flags take a line of their own rather than
-                pushing a chip past the card's edge — and on a phone it still
-                fits beside the status, so an empty box costs no line. */}
+            {/* v18.2.0: the name, then the size and status, then the flags —
+                each in a column of its own width (`nameCol` and the constants
+                at the top of the file), so they line up down the List.
+                v18.2.0 phase 18: the name column is the day's widest name
+                (`nameCol`, capped at NAME_COL), and the size ring comes BEFORE
+                the status — Patryk's order: name, covers, status, the rest.
+                TWO items on this row, not three: the name, and ONE box holding
+                the size + status unit and then the flags. The name grows 1
+                against that box's 1000, so wherever the two share a line the
+                name keeps `nameCol` (1/1001 of the slack, the same fraction of
+                the same slack on every card, so the columns still line up), and
+                where the name is alone on its line — a phone with a long name —
+                it takes the whole line. The box's basis is the unit alone
+                (UNIT_W), so whether the size and status fit beside the name is
+                decided by the name column and nothing else, identically on
+                every card of the day.
+                The flags live INSIDE the box for the reason the first version
+                of this change failed on a phone: as a third item on the row, a
+                card's flags could wrap to the next line and leave the name
+                alone with the unit, and the name then took that line's slack —
+                measured at 375px, the covers at x 222 on the one card with a
+                flag against 208 on the two without. Inside the box, a flag that
+                does not fit wraps under the unit and moves nothing, and the box
+                can be left out of nothing: it is always there, so the flags can
+                be conditional. Their basis is FLAGS_MIN, the widest chip, so on
+                a narrow card they take a line of their own rather than pushing a
+                chip past the card's edge. */}
             <div style={{ gridColumn: 2, gridRow: 1, minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
-              <span style={{ flex: "1 0 " + NAME_COL + "px", minWidth: 0, fontWeight: FW.bold, fontSize: T.title, color: S.text, lineHeight: NAME_LINE + "px", overflowWrap: "anywhere" }}>{b.name}</span>
-              <span style={{ ...NAME_CELL, flex: "0 0 auto", gap: 8 }}>
-                <span style={{ ...NAME_CELL, width: STATUS_COL, flexShrink: 0 }}><SBadge status={b.status} /></span>
-                {/* v17.15.5: the party size as the block's own ring, not
-                    "4 pax". The `rim` is the card's, not the block's — see
-                    SizeRing: 0.55 white is a measurement taken against a
-                    SATURATED fill and is close to invisible on a card. Nothing
-                    is lost to a screen reader, because the card's own
-                    aria-label comes from `describeBooking`, which says
-                    "4 guests" and always has. */}
-                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
-              </span>
-              {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
-                  then the exception flags (locked / repeat-no-show), so the
-                  two views read the same left-to-right. `manual` sits with
-                  `locked` because it is the same fact one notch weaker, and
-                  the two counters that have no block counterpart come last. */}
-              <div style={{ ...NAME_CELL, flex: "1000 1 " + FLAGS_MIN + "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" }}>
-                {depositTag}
-                {voucherTag}
-                {prefTag}
-                {lockedTag}
-                {manualTag}
-                {noShowTag}
-                {clashTag}
-                {lateTag}
-                {durationTag}
+              <span style={{ flex: "1 0 " + nameCol + "px", minWidth: 0, fontWeight: FW.bold, fontSize: T.title, color: S.text, lineHeight: NAME_LINE + "px", overflowWrap: "anywhere" }}>{b.name}</span>
+              <div style={{ flex: "1000 1 " + UNIT_W + "px", minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
+                <span style={{ ...NAME_CELL, flex: "0 0 auto", gap: 8 }}>
+                  {/* v17.15.5: the party size as the block's own ring, not
+                      "4 pax". The `rim` is the card's, not the block's — see
+                      SizeRing: 0.55 white is a measurement taken against a
+                      SATURATED fill and is close to invisible on a card. Nothing
+                      is lost to a screen reader, because the card's own
+                      aria-label comes from `describeBooking`, which says
+                      "4 guests" and always has. */}
+                  <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
+                  <span style={{ ...NAME_CELL, width: STATUS_COL, flexShrink: 0 }}><SBadge status={b.status} /></span>
+                </span>
+                {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
+                    then the exception flags (locked / repeat-no-show), so the
+                    two views read the same left-to-right. `manual` sits with
+                    `locked` because it is the same fact one notch weaker, and
+                    the two counters that have no block counterpart come last. */}
+                {hasFlags ? (
+                  <div style={{ ...NAME_CELL, flex: "1 1 " + FLAGS_MIN + "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" }}>
+                    {depositTag}
+                    {voucherTag}
+                    {prefTag}
+                    {lockedTag}
+                    {manualTag}
+                    {noShowTag}
+                    {clashTag}
+                    {lateTag}
+                    {durationTag}
+                  </div>
+                ) : null}
               </div>
             </div>
             {/* v18.2.0: tables and phone on the LEFT, the actions on the

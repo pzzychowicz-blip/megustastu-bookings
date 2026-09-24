@@ -366,17 +366,26 @@ explaining why is usually the one to read.
   centre.
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
-  way Settings → Vouchers' Copy column does (`CODE_COL`): the name 180px
-  (wrapping inside it, never clipped), the status badge's cell 98 (the widest
-  badge), the next-step button 116 (the widest label), the flags box a 104
-  basis (the widest chip). So the status, the size ring, the first flag,
-  Assign, the next step and ⋯ land at one x on every card, every day. Patryk
-  chose fixed widths over columns sized to each day's entries. Two rules came
+  way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's
+  cell 98 (the widest badge), the next-step button 116 (the widest label), the
+  flags a 104 basis (the widest chip). So the size ring, the status, the first
+  flag, Assign, the next step and ⋯ land at one x on every card. Two rules came
   with it. An OPTIONAL control goes at the far end of a right-anchored group
   (No show left of Assign), so it moves nothing when it appears. A thicker
   border is paid for out of the padding, never out of the content's x.
   Measured before at 668px: the badge at x 175 · 185 · 194, Assign at 359 ·
   384. After: one value each, at 375, 668 and 1024px.
+  **The name column is the one exception, sized to the DAY (phase 18).** It
+  was fixed at 180px too, and under three short names that read as a gap
+  "too big" before the status (Patryk's screenshot). It is now the widest of
+  the day's names, capped at 180 (a longer name wraps inside it, never
+  clipped), so the columns still line up within a day and move between days.
+  Patryk chose that over a narrower fixed column and over no column. The order
+  is **name → covers (the size ring) → status → flags**: the party size is read
+  with the name. The flags sit INSIDE the covers + status box, not beside it:
+  as a third item on the row, a card's flags could wrap alone to the next
+  line on a phone and leave the name to take that line's slack, which moved
+  that card's covers 14px (x 222 against 208, measured).
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).

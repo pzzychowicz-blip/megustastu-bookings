@@ -6,6 +6,11 @@
 // Assign at 359 · 384. Each width that varied (the name, the badge, the
 // next-step button, the border) now takes a fixed one. He chose fixed widths
 // over columns sized to each day's entries.
+//
+// Phase 18 reversed that for the NAME alone: under three short names the 180px
+// column read as a gap "too big" before the status badge. It is now the day's
+// widest name, capped at 180, and the size ring moved in front of the status
+// (Patryk's order: name, covers, status, the rest).
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -18,7 +23,7 @@ const num = (name) => Number((List.match(new RegExp("const " + name + " = (\\d+)
 
 describe("the column widths are the measured ones", () => {
   it("fit the widest thing each column holds", () => {
-    expect(num("NAME_COL"), "María José Fernández is 178px").toBe(180);
+    expect(num("NAME_COL"), "the CAP: María José Fernández is 178px").toBe(180);
     expect(num("STATUS_COL"), "the Completed badge is 97.8px").toBe(98);
     expect(num("NEXT_COL"), "the Completed button is 115.7px").toBe(116);
     expect(num("NAME_LINE"), "the name's line box and the badge are 20px").toBe(20);
@@ -34,17 +39,33 @@ describe("the column widths are the measured ones", () => {
 });
 
 describe("the name row", () => {
-  it("the name holds its column, wrapping inside it rather than pushing the badge", () => {
-    expect(List).toMatch(/flex: "1 0 " \+ NAME_COL \+ "px", minWidth: 0,[^}]*lineHeight: NAME_LINE \+ "px", overflowWrap: "anywhere"/);
+  it("the name holds the day's column, wrapping inside it rather than pushing the badge", () => {
+    expect(List).toMatch(/flex: "1 0 " \+ nameCol \+ "px", minWidth: 0,[^}]*lineHeight: NAME_LINE \+ "px", overflowWrap: "anywhere"/);
   });
 
-  it("the status badge sits in a STATUS_COL cell, so the ring after it never moves", () => {
-    expect(List).toMatch(/<span style=\{\{ \.\.\.NAME_CELL, width: STATUS_COL, flexShrink: 0 \}\}><SBadge status=\{b\.status\} \/><\/span>/);
+  it("the column is the widest of ALL the day's names — finished cards included — capped at NAME_COL", () => {
+    expect(List).toMatch(/const nameCol = nameColFor\(day\);/);
+    expect(List).toMatch(/return Math\.min\(NAME_COL, w\);/);
+    // Measured in the name's own font: bold, T.title.
+    expect(List).toMatch(/ctx\.font = FW\.bold \+ " " \+ T\.title \+ "px " \+/);
   });
 
-  it("the flags box is ALWAYS rendered, at the FLAGS_MIN basis — dropping it would give that card's name all the slack", () => {
-    expect(List).toMatch(/<div style=\{\{ \.\.\.NAME_CELL, flex: "1000 1 " \+ FLAGS_MIN \+ "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" \}\}>\s*\{depositTag\}/);
-    expect(List, "the box must not be conditional").not.toMatch(/\?\s*\(?\s*<div style=\{\{ \.\.\.NAME_CELL, flex: "1000/);
+  it("covers come before the status, and the status sits in a STATUS_COL cell", () => {
+    const unit = List.slice(List.indexOf("<SizeRing n={b.size}"));
+    expect(unit.indexOf("<SizeRing")).toBe(0);
+    expect(unit).toMatch(/^<SizeRing n=\{b\.size\} rim="var\(--chip-neutral-border\)" \/>\s*<span style=\{\{ \.\.\.NAME_CELL, width: STATUS_COL, flexShrink: 0 \}\}><SBadge status=\{b\.status\} \/><\/span>/);
+  });
+
+  it("beside the name sits ONE box, always rendered, whose basis is the size + status unit", () => {
+    expect(List).toMatch(/const UNIT_W = 18 \+ 8 \+ STATUS_COL;/);
+    expect(List).toMatch(/<div style=\{\{ flex: "1000 1 " \+ UNIT_W \+ "px", minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" \}\}>\s*<span style=\{\{ \.\.\.NAME_CELL, flex: "0 0 auto", gap: 8 \}\}>/);
+    expect(List, "the box must not be conditional").not.toMatch(/\?\s*\(?\s*<div style=\{\{ flex: "1000 1 " \+ UNIT_W/);
+  });
+
+  it("the flags live INSIDE that box, after the unit — a third item on the row let a wrapped flag move the covers (x 222 against 208 at 375px)", () => {
+    expect(List).toMatch(/\{hasFlags \? \(\s*<div style=\{\{ \.\.\.NAME_CELL, flex: "1 1 " \+ FLAGS_MIN \+ "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" \}\}>\s*\{depositTag\}/);
+    const box = List.slice(List.indexOf('flex: "1000 1 " + UNIT_W'));
+    expect(box.indexOf("<SBadge status={b.status} />")).toBeLessThan(box.indexOf("{hasFlags ? ("));
   });
 });
 
