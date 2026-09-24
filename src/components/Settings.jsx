@@ -167,22 +167,15 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   );
 }
 
-// ── v18.1.0: the phone field's two restaurant settings ───────────────────────
-// Both commit on the pick, like the steppers — there is no draft to guard, so
-// neither registers with the unsaved-changes aggregator. The pickers need a
+// ── v18.1.0: the phone field's restaurant setting ────────────────────────────
+// It commits on the pick, like the steppers — there is no draft to guard, so it
+// does not register with the unsaved-changes aggregator. The picker needs a
 // POSITIONED wrapper: CountryPicker's list is drawn against it (see there).
-function PhoneCountrySetting({ gs, onSave }) {
-  return (
-    <div>
-      <div id="gs-country-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Default country</div>
-      <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
-        <CountryPicker iso={gs.phoneCountry} pinned={gs.pinnedCountries} ariaLabel="Default country"
-          onPick={(iso) => { const c = countryByIso(iso); if (c) onSave({ phoneCountry: c.iso, phonePrefix: "+" + c.dial }); }} />
-      </div>
-    </div>
-  );
-}
-
+// v18.2.0 phase 19: "Default country" beside it is gone. Patryk: the phone
+// field's picker shows no country until one is chosen, so there is nothing
+// left for a default to seed. `phoneCountry` / `phonePrefix` stay in the node
+// (an older version still reads them while a new one rolls out) and nothing
+// here writes them any more.
 function PinnedCountriesSetting({ gs, onSave }) {
   const list = gs.pinnedCountries || [];
   const full = list.length >= MAX_PINNED;
@@ -205,7 +198,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
         })}
         {/* The list of countries to ADD leaves out the ones already pinned —
             offering Spain twice would let the second tap do nothing. */}
-        <div style={{ position: "relative", width: 280 /* @canvas as PhoneCountrySetting */ }}>
+        <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
           <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} disabled={full} exclude={list}
             onPick={(iso) => { if (list.indexOf(iso) < 0) onSave({ pinnedCountries: list.concat(iso) }); }}
             style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
@@ -623,18 +616,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
           <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} onDirty={onDirty} dirtyId="gs-name"
             onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
-              onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
-            {/* v18.1.0: the prefix is CHOSEN from the country list, not typed.
-                Both fields are written together — `phoneCountry` because
-                "+1" names no single country, `phonePrefix` because it is what
-                seeds the phone field and what `enteredPhone` compares against. */}
-            <PhoneCountrySetting gs={gs} onSave={onSaveGeneralSettings} />
-          </div>
+          <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
+            onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
           <PinnedCountriesSetting gs={gs} onSave={onSaveGeneralSettings} />
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
-            The name shows in the header and on the printed day sheet; the currency on deposits; the default country seeds the phone field on new bookings, and the pinned countries sit at the top of its code list.
+            The name shows in the header and on the printed day sheet; the currency on deposits; the pinned countries sit at the top of the phone field&rsquo;s code list.
           </div>
         </div>
       </Collapsible>

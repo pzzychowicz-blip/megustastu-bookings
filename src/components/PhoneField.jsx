@@ -13,9 +13,18 @@
 // `chosen`: the country the user last picked. The string cannot always carry
 // it — an EMPTY number stores nothing (`joinPhone`), and "+1" is the USA and
 // Canada and twenty islands — so without it, choosing Canada on an empty field
-// would snap straight back to the default, and choosing it for "+1 416…" would
+// would snap straight back to no country, and choosing it for "+1 416…" would
 // snap back to the USA. It is a PREFERENCE handed to `splitPhone`, so a string
 // that names a different code still wins.
+//
+// ── No default country (v18.2.0 phase 19) ────────────────────────────────────
+// Patryk: the picker shows no country code until one is chosen. It used to
+// start on the restaurant's Settings default ("+34"), which the form also
+// seeded into the phone itself, so a foreign number typed without its code was
+// saved as a Spanish one and nothing on screen had asked. Now a number typed
+// with no country is stored as typed (`joinPhone`), the picker reads "Code",
+// and the booking form's Save refuses it until a code is picked or typed
+// (`phoneHasCode`, App's `doSave`).
 //
 // ── What changed about focus ─────────────────────────────────────────────────
 // The old field typed a "+" into itself on focus so the number started in
@@ -37,14 +46,14 @@ import { mkInp } from "./atoms";
 import { CountryPicker } from "./CountryPicker";
 import { splitPhone, joinPhone, dialOf } from "../lib/phone-countries";
 
-export function PhoneField({ value, onChange, defaultIso, pinned, inputProps, children, placeholder = "600 000 000" }) {
+export function PhoneField({ value, onChange, pinned, inputProps, children, placeholder = "600 000 000" }) {
   const [chosen, setChosen] = useState(null);
   // An international prefix typed one key at a time ("+", "+3") names no
   // country yet. It is held HERE, shown in the box and stored as nothing,
   // until it grows into a code ("+34") — at which point the picker takes the
   // code and the box keeps only what follows it.
   const [raw, setRaw] = useState(null);
-  const { iso, national } = splitPhone(value, chosen || defaultIso);
+  const { iso, national } = splitPhone(value, chosen);
 
   function onPick(nextIso) {
     setChosen(nextIso);
@@ -55,10 +64,12 @@ export function PhoneField({ value, onChange, defaultIso, pinned, inputProps, ch
     // opens its customer-suggestion list on a number-box change, and one
     // opened by a picker change has no blur to close it (/code-review).
     if (national) { onChange(joinPhone(nextIso, national), "picker"); return; }
-    // The untouched field holds the SEEDED prefix ("+34", from Settings), and
-    // a string that names a code outranks `chosen` — so without this, picking
-    // Belgium on a fresh form read back as Spain. Measured live on the first
-    // try. Clear it: "" and the seed are the same nothing to `enteredPhone`.
+    // A string that names a code outranks `chosen`, so a leftover code-only
+    // value must go or the pick reads back as the old country. Found live in
+    // v18.1.0, when the form was seeded with "+34" and picking Belgium on a
+    // fresh form read back as Spain. v18.2.0 seeds nothing, so this is now
+    // defensive: it covers a code-only string arriving from outside the field.
+    // Clear it: "" and a bare prefix are the same nothing to `enteredPhone`.
     if (value) onChange("", "picker");
   }
   function onNumber(e) {

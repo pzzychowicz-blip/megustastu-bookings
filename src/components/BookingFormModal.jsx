@@ -95,7 +95,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
-  phoneCountry, pinnedCountries,  // v18.1.0: settings/general — the phone field's default + pinned codes
+  pinnedCountries,  // v18.1.0: settings/general — the codes pinned to the top of the phone field's list (v18.2.0: no default country any more)
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
@@ -977,25 +977,27 @@ export function BookingFormModal({
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number">{function(fid){return <PhoneField
+            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number" invalid={invalidField("phone")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <PhoneField
             /* v18.1.0: the country code is its own control (PhoneField,
                CountryPicker). `form.phone` is still ONE string, so every
                consumer below — the suggestion list, the chips, the duplicate
                warning — reads exactly what it read before. The old "+" typed
                on focus is gone: the code lives in the picker now. The label
-               names the NUMBER box, which is where the typing happens. */
+               names the NUMBER box, which is where the typing happens.
+               v18.2.0 phase 19: no default country — the picker starts empty,
+               and Save refuses a number without a code ("phone" is its
+               errorField, so the state attrs land on the number box). */
             value={form.phone}
             /* /code-review: only TYPING opens the suggestion list. A country
                pick left it open with focus on the picker, where no blur of the
                number box can ever arrive to close it. */
             onChange={function(v,src){if(src!=="picker") setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
-            defaultIso={phoneCountry}
             pinned={pinnedCountries}
-            inputProps={{id:fid,
+            inputProps={Object.assign({id:fid},attrs,{
               /* Same reopen fix as the name field above. */
               onFocus:function(){setPhoneFocus(true);},
               onClick:function(){setPhoneFocus(true);},
-              onBlur:function(){setPhoneFocus(false);}}}
+              onBlur:function(){setPhoneFocus(false);}})}
           >{phoneDropdown}</PhoneField>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <><DateField
             /* v18.0.0 session 7: the weekday inside the pill. Fld's id and
                state attrs name the INPUT, so they ride in inputProps. */

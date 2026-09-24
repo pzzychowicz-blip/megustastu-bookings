@@ -78,6 +78,8 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
+// v18.2.0 phase 19: Save refuses a typed number that names no country code.
+import { phoneHasCode } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -1147,7 +1149,9 @@ function BookingApp({uid}){
   // `aria-describedby` pointing at that message for the whole time it is being
   // corrected, which is the one field where "required" is the only thing that
   // can be wrong.
-  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.time,form.size,form.date,form.preference,form.customDur]);
+  // v18.2.0 phase 19: form.phone joins the list — Save can now refuse a number
+  // without a country code, and picking one has to clear that message.
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
@@ -1190,6 +1194,9 @@ function BookingApp({uid}){
   // so `diffBooking` can apply the SAME one. This stays as the name the save
   // path has used since v17.0.0, and supplies the setting the pure module
   // cannot read.
+  // v18.2.0 phase 19: the form no longer SEEDS the prefix — it opens with an
+  // empty phone and an empty country-code picker — so the prefix clause is now
+  // only a guard for a value an older version put in the form.
   function cleanPhoneOf(p){ return enteredPhone(p,generalSettings.phonePrefix); }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
@@ -2278,7 +2285,7 @@ function BookingApp({uid}){
     const avail=waitAvail[w.id];
     openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
-      phone:w.phone||generalSettings.phonePrefix,
+      phone:w.phone||"",
       date:w.date,
       time:(avail&&avail.time)||w.prefTime||"",
       size:w.size||2,
@@ -2422,8 +2429,8 @@ function BookingApp({uid}){
   // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
-  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||"",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -2471,7 +2478,7 @@ function BookingApp({uid}){
     })();
     openForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
-      phone:sourceBooking.phone||generalSettings.phonePrefix,
+      phone:sourceBooking.phone||"",
       date:"",
       time:schedTime,
       size:againSize,
@@ -3025,6 +3032,18 @@ function BookingApp({uid}){
     setErrorField(null);
     try{
       if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
+      // v18.2.0 phase 19 (Patryk): a number is saved only once it names its
+      // country. The picker starts empty now, so a number typed without a code
+      // would otherwise be stored without one — and the same guest with and
+      // without "+34" is two customers (`normalizePhone`), whom WhatsApp cannot
+      // link either. Checked right after the name, the field beside it.
+      // An EDIT that leaves an old code-less number untouched still saves: the
+      // rule is about numbers typed now, not a sweep of the stored ones.
+      {const ph=cleanPhoneOf(f.phone);
+        if(ph&&!phoneHasCode(ph)){
+          const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
+          if(!origB||cleanPhoneOf(origB.phone)!==ph){setErrorField("phone");setError("Choose the country code for this phone number.");return;}
+        }}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setErrorField("date");setError("Please set a date.");return;}
@@ -5238,7 +5257,6 @@ function BookingApp({uid}){
               vouchersByCode={vouchersByCode}
               vouchersOn={vouchersOn}
               regularMin={generalSettings.regularMin}
-              phoneCountry={generalSettings.phoneCountry}
               pinnedCountries={generalSettings.pinnedCountries}
               today={today}
               nowMins={nowMins}

@@ -1,10 +1,17 @@
 // v18.1.0 — the country-code phone field's pure core (src/lib/phone-countries.js).
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   COUNTRIES, countryByIso, splitPhone, joinPhone, dialLabel, cleanPinned,
-  matchesCountry, flagOf, DEFAULT_PINNED,
+  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode,
 } from "../src/lib/phone-countries";
+import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
+import { stripComments } from "../scripts/strip-comments.mjs";
+
+const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...p), "utf8")).join("\n");
 
 describe("the country list", () => {
   it("has every country once, with a digits-only code", () => {
@@ -46,6 +53,12 @@ describe("splitPhone", () => {
     expect(splitPhone("+34", "GB")).toEqual({ iso: "ES", national: "" });
     expect(splitPhone("600 123 456", "ES")).toEqual({ iso: "ES", national: "600 123 456" });
   });
+  it("v18.2.0 phase 19: with no preference either, the country is NULL — never Spain", () => {
+    expect(splitPhone("")).toEqual({ iso: null, national: "" });
+    expect(splitPhone("+")).toEqual({ iso: null, national: "" });
+    expect(splitPhone("600 123 456")).toEqual({ iso: null, national: "600 123 456" });
+    expect(phoneLib.DEFAULT_COUNTRY, "the default country is gone").toBeUndefined();
+  });
 });
 
 describe("joinPhone", () => {
@@ -61,6 +74,12 @@ describe("joinPhone", () => {
   it("takes an international number typed into the number box whole", () => {
     expect(joinPhone("ES", "+44 7700 900123")).toBe("+44 7700 900123");
     expect(joinPhone("ES", "0044 7700 900123")).toBe("+44 7700 900123");
+    expect(joinPhone(null, "0044 7700 900123")).toBe("+44 7700 900123");
+  });
+  it("v18.2.0 phase 19: with no country, keeps the number as typed — no code is invented", () => {
+    expect(joinPhone(null, "600 123 456")).toBe("600 123 456");
+    expect(joinPhone(undefined, "600 123 456")).toBe("600 123 456");
+    expect(joinPhone(null, "  ")).toBe("");
   });
   it("round-trips to the SAME customer identity the old one-box field stored", () => {
     for (const p of ["+34 600 123 456", "+1 876 555 1234", "+44 1481 123456", "+49 170 1234567"]) {
@@ -98,5 +117,61 @@ describe("typing into the number box (v18.1.0)", () => {
     expect(dialOf("+34")).toBe("34");
     expect(dialOf("0044 77")).toBe("44");
     expect(dialOf("600 123")).toBe("");
+  });
+});
+
+describe("phoneHasCode (v18.2.0 phase 19)", () => {
+  it("is true for a number that names its country — a leading + or 00", () => {
+    expect(phoneHasCode("+34 600 123 456")).toBe(true);
+    expect(phoneHasCode("(+34) 600 123 456")).toBe(true);
+    expect(phoneHasCode("0044 7700 900123")).toBe(true);
+  });
+  it("is false for a local number, or a + that comes after the digits", () => {
+    expect(phoneHasCode("600 123 456")).toBe(false);
+    expect(phoneHasCode("07700 900123")).toBe(false);
+    expect(phoneHasCode("600+34")).toBe(false);
+  });
+  it("agrees with normalizePhone: coded means an international key", () => {
+    for (const p of ["+34 600 123 456", "(+34) 600 123 456", "600 123 456", "600+34"]) {
+      expect(phoneHasCode(p), p).toBe(normalizePhone(p).charAt(0) === "+");
+    }
+  });
+  it("has nothing to ask about an empty phone", () => {
+    expect(phoneHasCode("")).toBe(true);
+    expect(phoneHasCode("+")).toBe(true);
+    expect(phoneHasCode(null)).toBe(true);
+  });
+});
+
+describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
+  const App = read("src", "App.jsx");
+  const Field = read("src", "components", "PhoneField.jsx");
+  const Settings = read("src", "components", "Settings.jsx");
+
+  it("no form is seeded with the Settings prefix any more", () => {
+    expect(App).not.toMatch(/phone:[^,}]*generalSettings\.phonePrefix/);
+    expect(App).toMatch(/phone:b\.phone\|\|""/);
+    expect(App).toMatch(/phone:sourceBooking\.phone\|\|""/);
+    expect(App).toMatch(/phone:w\.phone\|\|""/);
+    expect(App).toMatch(/EMPTY_FORM,\{date:seedDate,phone:"",/);
+  });
+
+  it("Save refuses a typed number without a code, as the phone field's error, right after the name", () => {
+    const save = App.slice(App.indexOf("function doSave(){"));
+    const name = save.indexOf('setErrorField("name")');
+    const phone = save.indexOf('setErrorField("phone")');
+    const date = save.indexOf('setErrorField("date")');
+    expect(name).toBeGreaterThan(-1);
+    expect(phone).toBeGreaterThan(name);
+    expect(phone).toBeLessThan(date);
+    expect(save).toMatch(/if\(ph&&!phoneHasCode\(ph\)\)/);
+    // An edit that leaves an old code-less number untouched still saves.
+    expect(save).toMatch(/if\(!origB\|\|cleanPhoneOf\(origB\.phone\)!==ph\)\{setErrorField\("phone"\)/);
+  });
+
+  it("the phone field takes no default country", () => {
+    expect(Field).toMatch(/splitPhone\(value, chosen\)/);
+    expect(Field).not.toMatch(/defaultIso/);
+    expect(Settings, "Settings no longer offers a default country").not.toMatch(/phoneCountry/);
   });
 });

@@ -26358,3 +26358,49 @@ at their source rather than by lowering the floor:
   is `FW.medium` now. On `main` the range was one bold span, so no shipped text
   changed weight.
 The commit before phase 19 measures 130 of 429 (30.3%).
+
+### 19. The country-code picker starts empty, and Save asks for the code
+
+Patryk: the country-code picker should show no country code before one is chosen.
+Until now it opened on the restaurant's Settings default, and the form seeded that
+prefix ("+34") into the phone itself, so a foreign number typed without its code
+was saved as a Spanish one and nothing on screen had asked. Put to him with the
+consequence spelled out, he chose **Save asks for the code** over quietly applying
+the default once a number is typed, and over saving numbers without a code (the
+same guest with and without "+34" is two customers to `normalizePhone`, and
+WhatsApp cannot link either).
+
+- **No default country anywhere.** `splitPhone` answers `iso: null` when neither the
+  string nor the user's pick names a country (it fell back to Spain), and
+  `joinPhone(null, …)` keeps the number exactly as typed. `DEFAULT_COUNTRY` is gone.
+  `PhoneField` lost `defaultIso`; the four form openers (new, edit, Book Again,
+  waitlist) seed `phone: ""` instead of `generalSettings.phonePrefix`.
+- **The pill reads a muted "Code"** (`CountryPicker`), named "Country code: none".
+  It read "+", which no caller could show while the form always passed a default.
+  Opened empty, the list starts on its first row, so Enter picks the first pinned
+  country.
+- **Save refuses a typed number without a code**: "Choose the country code for this
+  phone number.", errorField `phone`, checked right after the name (the field beside
+  it). `phoneHasCode` (`lib/phone-countries.js`) reads a code exactly where
+  `normalizePhone` reads its "+": ahead of the digits, or an international "00". An
+  edit that leaves an old code-less number untouched still saves; the rule is about
+  numbers typed now. `form.phone` joined the effect that clears a stale error, so
+  picking the code clears the message.
+- **Settings → General → Restaurant loses "Default country".** `phonePrefix` and
+  `phoneCountry` stay in the node and the sanitizer, unwritten, because a version
+  still rolling out reads them. "Add to waitlist" still takes the number as typed:
+  it validates nothing today (not even the name), and the number meets this check
+  when the entry is booked.
+
+Live after a full reload (values set through React's input events; typing through
+the pane had sent the keys to the app's shortcuts once focus moved): a new form's
+picker read "Code" and the phone was empty. Save with "612 345 678" was refused with
+the message above, the number box carrying `aria-invalid` and `aria-describedby`
+pointing at it. Enter on the opened list picked 🇪🇸 Spain (+34), the invalid state
+cleared, and Save stored `"+34 612 345 678"`. Settings → Restaurant showed name,
+currency and pinned countries only. **Not exercised live:** the untouched code-less
+edit, because none of DEV's 599 bookings has a phone without a code; it is pinned by
+a source test. `tests/phone-countries.test.js` 24 tests (+8).
+
+**Gate after phase 19:** `120.46 kB` gz main bundle (−0.21 against the follow-up's
+120.67) · **1636 tests** (+9) · 0 lint errors, 91 warnings (unchanged) · style OK.

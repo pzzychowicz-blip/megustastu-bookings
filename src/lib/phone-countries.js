@@ -111,8 +111,10 @@ const PRIMARY = { "1": "US", "7": "RU", "44": "GB", "47": "NO", "61": "AU",
 
 // The restaurant's default when nothing has been chosen — the countries its
 // guests most often come from. Only a SEED: Settings → General edits the list.
+// v18.2.0 phase 19: there is no default COUNTRY any more (`DEFAULT_COUNTRY`
+// was "ES", and the phone field fell back to it). The picker starts empty and
+// a number is saved only once it names its code — see `splitPhone`.
 export const DEFAULT_PINNED = ["ES", "GB", "DE", "FR", "IT", "NL"];
-export const DEFAULT_COUNTRY = "ES";
 export const MAX_PINNED = 12;
 
 // The flag as an emoji: two regional-indicator letters. Kosovo's "XK" is not
@@ -161,12 +163,17 @@ export function dialOf(phone) {
 // ── splitPhone ───────────────────────────────────────────────────────────────
 // "+34 600 123 456" → { iso: "ES", national: "600 123 456" }. The number keeps
 // whatever spacing was typed; only the "+" and the code's own digits are
-// consumed. `preferIso` settles shared codes (the country the user picked, or
-// the restaurant's default) and is the answer when the string names no
-// country at all — empty, a lone "+", or a legacy number stored without one,
-// which is shown as-is and NOT rewritten unless somebody edits it.
+// consumed. `preferIso` settles shared codes (the country the user picked) and
+// is the answer when the string names no country at all — empty, a lone "+",
+// or a number typed or stored without one, which is shown as-is and NOT
+// rewritten unless somebody edits it.
+//
+// v18.2.0 phase 19: with no preference either, `iso` is NULL — the picker shows
+// no country. It used to fall back to Spain (`DEFAULT_COUNTRY`), then to the
+// restaurant's Settings default, so every new form opened on "+34" and a
+// foreign number typed without its code was saved as a Spanish one.
 export function splitPhone(phone, preferIso) {
-  const fallback = countryByIso(preferIso) ? countryByIso(preferIso).iso : DEFAULT_COUNTRY;
+  const fallback = countryByIso(preferIso) ? countryByIso(preferIso).iso : null;
   // LEADING space only: this runs on every keystroke of the number box, and
   // trimming the END would eat the space you just typed between "600" and
   // "123". The save path trims (`enteredPhone`), as it always has.
@@ -189,13 +196,31 @@ export function splitPhone(phone, preferIso) {
 // without one stays without one (the `enteredPhone` rule, now at the source).
 // A number typed or pasted in international form ("+44 7700…", "0044 …")
 // is taken whole: it already says its own country, and the field re-reads it.
+// v18.2.0 phase 19: with no country, the number is kept exactly as typed —
+// no code is invented for it. The booking form refuses to SAVE it that way
+// (`phoneHasCode`, App's `doSave`), which is where the choice is asked for.
 export function joinPhone(iso, national) {
   const n = national == null ? "" : String(national).replace(/^\s+/, "");
   if (!/\d/.test(n)) return "";
   if (n.charAt(0) === "+") return n;
   if (n.slice(0, 2) === "00") return "+" + n.slice(2);
-  const c = countryByIso(iso) || countryByIso(DEFAULT_COUNTRY);
-  return dialLabel(c) + " " + n;
+  const c = countryByIso(iso);
+  return c ? dialLabel(c) + " " + n : n;
+}
+
+// ── phoneHasCode (v18.2.0 phase 19) ──────────────────────────────────────────
+// Does a phone string name its country? A "+" AHEAD of the digits, or an
+// international "00" — the same reading `normalizePhone` (lib/customers.js)
+// uses for its own "+", so a string this calls coded is one that normalises to
+// an international key. An empty string has nothing to name, so it is `true`:
+// the question is only ever asked about a number somebody typed.
+export function phoneHasCode(phone) {
+  const s = phone == null ? "" : String(phone).trim();
+  const firstDigit = s.search(/\d/);
+  if (firstDigit === -1) return true;
+  const plusAt = s.indexOf("+");
+  if (plusAt !== -1 && plusAt < firstDigit) return true;
+  return s.replace(/\D/g, "").slice(0, 2) === "00";
 }
 
 // The pinned list as stored: known ISO codes, upper-case, no repeats, capped.
