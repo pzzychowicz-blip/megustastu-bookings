@@ -27191,3 +27191,29 @@ at 13:00)", armed "Confirm — delete (test standing, every Fri at 13:00)". `tes
 
 **Gate after phase 42:** `121.86 kB` gz main bundle (±0; Settings is a lazy chunk) · **1824 tests** (+1) ·
 0 lint errors, 90 warnings (unchanged) · style OK.
+
+### 43. Two sizes phase 38 could not see (C2)
+
+Phase 38 found "4 pax" on twenty-one lines by searching for the word. Two sizes had no word at all,
+only brackets, and both were on surfaces round 2 did not reach:
+
+- **The waitlist ghost's hover title** read "Waiting: Waitlist Probe (25) at 20:00 — fits after
+  re-optimising. Tap to book.", beside a spoken label that already said "25 guests". It reads
+  "Waiting: Indoor Probe, 11 guests, at 18:30. Tap to book." now.
+- **The Plan view's table popover** listed "Phase19 Test (2)", with the size inside the ellipsised
+  name, so a long name lost the size first. It takes the List card's `SizeRing`, with the card's
+  rim. Text "2 guests" was tried first and measured: on a 375px phone it pushed the card edge to edge
+  (1–374px), and bounded to the screen it left a name 71px ("Unsettled Pr…"). The ring leaves 102px
+  and a 343px card on both screens. The row is a small List card (time · name · size · status), and
+  GLOSSARY now says where the ring is the size: a booking's row.
+
+`tests/party-size.test.js` refuses a size in brackets anywhere in `src`. It matches a closing string
+that STARTS with ")", because the ghost's was `") at "` and a pattern for exactly `")"` would have
+missed it (checked against both old lines).
+
+Live on DEV: the ghost's title "Waiting: Indoor Probe, 11 guests, at 18:30. Tap to book."; table
+1A's popover, six rows, each ring "2" titled "2 guests", no name clipped, the card 343px wide on the
+tablet and on the phone (16px from each edge). `tests/party-size.test.js` +3.
+
+**Gate after phase 43:** `121.87 kB` gz main bundle (+0.01) · **1827 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.

@@ -75,8 +75,21 @@ describe("no surface says pax", () => {
     expect(read("components/Settings.jsx")).toMatch(/<HourStepper label="Parties up to" value=\{t\.max\} fmt=\{upToLabel\}/);
   });
 
+  // v18.2.0 phase 43: two "(25)"s survived phase 38, because the sweep looked
+  // for the word "pax" and these had no word at all — the waitlist ghost's
+  // hover title and the Plan view's table popover ("Phase19 Test (2)").
+  it("no source file puts a party's size in brackets", () => {
+    const hits = [];
+    for (const f of sources()) {
+      if (/" \(" \+ \w+\.size \+ "\)/.test(read(f))) hits.push(f);
+    }
+    expect(hits).toEqual([]);
+  });
+
   const sites = [
     ["components/SearchPanel.jsx", /\{guestsLabel\(b\.size\)\}/],
+    ["components/PlanView.jsx", /\{b\.name\}<\/span>[\s{}]*<SizeRing n=\{b\.size\} rim="var\(--chip-neutral-border\)" \/>/],
+    ["components/TimelineView.jsx", /title=\{"Waiting: " \+ g\.name \+ ", " \+ guestsLabel\(g\.size\) \+ ", at " \+ g\.time/],
     ["components/CustomersSettings.jsx", /\{guestsLabel\(b\.size\)\}/],
     ["components/WaitlistPanel.jsx", /\{guestsLabel\(w\.size\)\}/],
     ["components/WaitAvailBanner.jsx", /who \+ " · " \+ guestsLabel\(w\.size\) \+ " — table free"/],

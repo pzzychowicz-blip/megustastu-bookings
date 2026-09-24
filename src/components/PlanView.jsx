@@ -47,7 +47,7 @@ import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn, Reveal, SBadge } from "./atoms";
+import { mkBtn, Reveal, SBadge, SizeRing } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
 import { todayStr } from "../lib/day";
 
@@ -418,7 +418,15 @@ export const PlanView = memo(function PlanView({
                 onClick={() => { setTablePop(null); onEdit(b); }}
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+                {/* v18.2.0 phase 43 (C2): the party size as the List card's
+                    ring — this row IS a small List card (time · name · size ·
+                    status). It was "Name (2)", inside the name, so the ellipsis
+                    took the size first. Measured on a 375px phone, "2 guests"
+                    as text left a name 71px once the card fits the screen
+                    ("Unsettled Pr…"); the 18px ring leaves 102. Its title
+                    says "2 guests". */}
+                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
                 {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
                     pointed at `SBadge`. That comment ("solid, like every other
                     status label") was true about the fill and silently false

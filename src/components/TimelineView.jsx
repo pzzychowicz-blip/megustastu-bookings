@@ -1082,7 +1082,10 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       onMouseEnter={leaving ? undefined : () => setGroupHover(true)}
       onMouseLeave={leaving ? undefined : () => setGroupHover(false)}
       onClick={leaving ? undefined : () => onBook(g.id)}
-      title={"Waiting: " + g.name + " (" + g.size + ") at " + g.time
+      /* v18.2.0 phase 43 (C2): the hover title says "25 guests", as the
+         spoken label above it does — it said "(25)", which phase 38's sweep
+         for "pax" could not see. */
+      title={"Waiting: " + g.name + ", " + guestsLabel(g.size) + ", at " + g.time
         + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
       style={{
         // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
