@@ -209,15 +209,23 @@ export function mkSolidBtn(background, extra) {
 // row makes the rarest action the loudest thing on screen — thirteen of them in
 // Layout → Tables — and a Remove in the same grey as the Capabilities beside it
 // says nothing about what it does. So a row's destructive button is the danger
-// TINT at rest (ALERT_TONES.danger, the danger pane's registered pair, with its
-// hairline): recognisably destructive, not shouting. ARMED — the first tap of a
-// two-tap confirm — it turns solid `--app-danger-solid`, the one moment it
-// should. Both states keep mkBtn's geometry, so arming changes the colour and
-// the label, never the size under the finger.
+// TINT at rest (ALERT_TONES.danger, the danger pane's registered pair):
+// recognisably destructive, not shouting. ARMED — the first tap of a two-tap
+// confirm, or the button that opens a confirm — it turns solid
+// `--app-danger-solid`, the one moment it should. Both states keep mkBtn's
+// geometry, so arming changes the colour and the label, never the size under
+// the finger.
+//
+// The rest state keeps mkBtn's own glass rim and takes NO danger border. Phase
+// 27 shipped it with `--danger-border`, which made it pale fill + matching
+// border + text in a third shade: the shape DESIGN.md bans, because it encodes
+// one signal three times (LayoutSettings' X_BTN had been moved OFF it for that
+// reason in v17.8.0). Tint and tone alone are the tinted-pane shape
+// (InlineAlert, AlertPanel), which is allowed. Caught in phase 28.
 export function mkDangerBtn(armed, extra) {
   return mkBtn(Object.assign(armed
     ? { background: "var(--app-danger-solid)", color: "var(--text-on-accent)", border: RIM_SOLID, boxShadow: "var(--shadow-btn-solid)" }
-    : { background: ALERT_TONES.danger.tint, color: ALERT_TONES.danger.tone, border: "1px solid var(--danger-border)" },
+    : { background: ALERT_TONES.danger.tint, color: ALERT_TONES.danger.tone },
   extra));
 }
 

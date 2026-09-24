@@ -26,16 +26,25 @@ describe("mkDangerBtn — quiet until armed", () => {
 
   it("is the danger tint at rest and the solid danger fill when armed", () => {
     expect(fn).toMatch(/\{ background: "var\(--app-danger-solid\)", color: "var\(--text-on-accent\)", border: RIM_SOLID, boxShadow: "var\(--shadow-btn-solid\)" \}/);
-    expect(fn).toMatch(/\{ background: ALERT_TONES\.danger\.tint, color: ALERT_TONES\.danger\.tone, border: "1px solid var\(--danger-border\)" \}/);
+    expect(fn).toMatch(/: \{ background: ALERT_TONES\.danger\.tint, color: ALERT_TONES\.danger\.tone \},/);
+  });
+
+  // Phase 27 shipped the rest state WITH `--danger-border`: pale fill +
+  // matching border + text in a third shade, the shape DESIGN.md bans. Found
+  // in phase 28 by reading the ban before touching LayoutSettings' X_BTN, which
+  // v17.8.0 had moved off that exact shape.
+  it("takes no danger border at rest, which would be the banned three-encodings shape", () => {
+    expect(fn).not.toMatch(/--danger-border/);
   });
 
   it("keeps mkBtn's geometry in both states, so arming never resizes it under the finger", () => {
     expect(fn).toMatch(/return mkBtn\(Object\.assign\(armed/);
   });
 
-  it("paints only pairs the contrast registry already measures", () => {
-    expect(Contrast).toMatch(/fill: "--danger-bg", alpha: null, ink: "--danger-text"/);
+  it("paints only pairs the contrast registry measures, as a BUTTON at rest", () => {
+    expect(Contrast).toMatch(/fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "button"/);
     expect(Contrast).toMatch(/fill: "--app-danger-solid", alpha: null, ink: "--text-on-accent"/);
+    expect(Contrast).toMatch(/fill: "--bg-stepper", alpha: null, ink: "--text-primary", role: "button"/);
   });
 });
 
@@ -67,5 +76,51 @@ describe("Admin → People: Remove", () => {
       /onChange=\{function \(e\) \{ setArmedUid\(null\); say\(onSetRole\(r\.uid, \{ role: e\.target\.value \|\| null \}\)\); \}\}/,
       /onClick=\{function \(\) \{ setArmedUid\(null\); onOpenCapabilities\(r\.uid\); \}\}/,
     ]) expect(Admin).toMatch(site);
+  });
+});
+
+// v18.2.0 phase 28 (S5 + S6). Measured on DEV (dark): Reminders' three Deletes
+// in the tint with the glass rim; the paused reminder's text at 0.55 and its
+// "Paused" tag, Edit and card at 1; Layout's 13 table ×s tinted and the rename
+// Cancel × neutral; the Templates Delete armed as solid rgb(220, 38, 38)
+// "Confirm — delete", disarmed by Edit and by "+ Add template".
+const Reminders = read("components/Reminders.jsx");
+const Templates = read("components/whatsapp/TemplatesEditor.jsx");
+const Layout = read("components/LayoutSettings.jsx");
+const Settings = read("components/Settings.jsx");
+
+describe("the rows' deletes are quiet, and red only at the confirmation", () => {
+  it("Reminders: Delete opens the in-app confirmation, so the row's is the tint", () => {
+    expect(Reminders).toMatch(/style=\{mkDangerBtn\(false, \{ fontSize: T\.body, minHeight: 32, padding: "4px 12px" \}\)\}/);
+    expect(Reminders).not.toMatch(/background: BTN\.del/);
+  });
+
+  it("Templates: Delete takes two taps, names its template, and any other action disarms it", () => {
+    expect(Templates).toMatch(/onClick=\{\(\) => \{ if \(armed\) \{ setArmedId\(null\); removeT\(t\.id\); \} else setArmedId\(t\.id\); \}\}/);
+    expect(Templates).toMatch(/aria-label=\{\(armed \? "Confirm — delete \(" : "Delete \("\) \+ name \+ "\)"\}/);
+    expect(Templates).toMatch(/aria-label=\{"Edit \(" \+ name \+ "\)"\}/);
+    expect(Templates).toMatch(/function openEdit\(t\) \{ setArmedId\(null\);/);
+    expect(Templates).toMatch(/function openNew\(\) \{ setArmedId\(null\);/);
+  });
+
+  it("Layout: the row × is the tint, and Cancel is not red at all", () => {
+    const x = Layout.slice(Layout.indexOf("const X_BTN = {"), Layout.indexOf("const X_BTN = {") + 400);
+    expect(x).toMatch(/background: ALERT_TONES\.danger\.tint,/);
+    expect(x).toMatch(/color: ALERT_TONES\.danger\.tone,/);
+    expect(x).not.toMatch(/--btn-del/);
+    expect(Layout).not.toMatch(/title="Cancel" style=\{X_BTN\}/);
+    expect((Layout.match(/title="Cancel" style=\{CANCEL_X\}/g) || []).length).toBe(2);
+  });
+
+  it("Standing bookings: the same look, and the armed label says what the second tap does", () => {
+    expect(Settings).toMatch(/style=\{mkDangerBtn\(armed, \{ fontSize: T\.body, minHeight: 32, padding: "4px 10px" \}\)\}>\{armed \? "Confirm — delete" : "Delete"\}/);
+  });
+});
+
+describe("a paused reminder fades its text, never its buttons", () => {
+  it("dims the words and says Paused, with the card at full strength", () => {
+    expect(Reminders).not.toMatch(/opacity: r\.active \? 1 : 0\.55,\s*boxShadow/);
+    expect(Reminders).toMatch(/<span style=\{\{ opacity: r\.active \? 1 : PAUSED_FADE \}\}>\{r\.text\}<\/span>/);
+    expect(Reminders).toMatch(/\{r\.active \? null : <OutlineChip tone="neutral"[^>]*>Paused<\/OutlineChip>\}/);
   });
 });

@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
@@ -990,10 +990,13 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                     <Toggle
                       label={"Standing booking: " + (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time}
                       on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
+                    {/* v18.2.0 (S6): the rows' shared look — the danger tint,
+                        solid red only once armed — and the armed label says
+                        what the second tap does, as People's Remove does. */}
                     <button
                       onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
                       className="mgt-hover-scale mgt-press"
-                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.del, opacity: armed ? 1 : 0.85 })}>{armed ? "Confirm?" : "Delete"}</button>
+                      style={mkDangerBtn(armed, { fontSize: T.body, minHeight: 32, padding: "4px 10px" })}>{armed ? "Confirm — delete" : "Delete"}</button>
                   </div>
                 );
               })}

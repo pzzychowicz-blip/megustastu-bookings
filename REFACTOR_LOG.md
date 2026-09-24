@@ -26706,3 +26706,45 @@ second tap in the same place lands on it. `tests/destructive-buttons.test.js` 8 
 
 **Gate after phase 27:** `121.62 kB` gz main bundle (+0.01) · **1690 tests** (+8) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 28. Quieter row deletes, and a paused reminder that still looks usable (S5 + S6)
+
+**S6.** Reminders, Templates and Layout → Tables drew a solid red Delete or remove on every row,
+thirteen of them in Tables, so the rarest action was the loudest thing on screen. Each now wears
+`mkDangerBtn`'s rest state, and the red comes where the decision is made:
+
+- **Reminders**: Delete opens the in-app confirmation, which keeps its red; the row's button is
+  the tint.
+- **Templates**: Delete removed the row from the staged list on ONE tap. It is two-tap now ("Confirm
+  — delete", solid red), disarmed by Edit and "+ Add template", and Edit and Delete name their
+  template ("Delete (Confirm / Confirmar)"), since six rows of bare "Delete" are six identical names.
+- **Layout**: `X_BTN`, the × on every table, join-group, combo and rule row, is the tint. Removing a
+  table still asks inline, with the red Remove there. The two **Cancel** ×s (a rename, a new
+  table) shared `X_BTN`, so a Cancel was a red × too; they take `CANCEL_X`, the stepper's neutral.
+- **Standing bookings** (General) already armed; they take the same look, and "Confirm?" became
+  "Confirm — delete".
+
+**`mkDangerBtn` corrected.** Before touching `X_BTN` I read why v17.8.0 had made it solid: a pale
+danger wash + a danger border + danger text is the shape DESIGN.md bans, one signal encoded three
+times. Phase 27's `mkDangerBtn` rest state was exactly that (`--danger-border`), shipped one commit
+earlier. The border is gone: tint and tone on mkBtn's ordinary glass rim is the tinted-pane shape
+(InlineAlert, AlertPanel), which is allowed. The pair is registered as a button in
+`tests/contrast.test.js`, beside `--bg-stepper` / `--text-primary`, which the form's ± steppers have
+always drawn and nothing had registered; both pass in both themes.
+
+**S5.** A paused reminder drew its whole card at 55%, Edit and Delete included, while both work.
+Now only its text fades (`PAUSED_FADE`) and an outline "Paused" tag says the state, the way standing
+bookings already showed a paused rule.
+
+Live on DEV, dark theme. Reminders: three Deletes in the tint (`rgba(117, 30, 20, 0.32)`, ink
+`rgb(252, 165, 165)`, rim `rgba(255, 255, 255, 0.14)`), 32px as before; the paused reminder's text
+at 0.55 and its tag, Edit and card at 1. Layout: 13 table ×s in the tint, the rename Cancel ×
+neutral. People's Remove lost its red border. Templates: 6 Deletes; the first armed read
+"Confirm — delete", named "Confirm — delete (Confirm / Confirmar)", `rgb(220, 38, 38)` once its
+background-color transition was settled (read unsettled, the hidden pane showed it frozen at the
+tint), and Edit and "+ Add template" each disarmed it. Nothing was deleted, and the editor was closed
+without saving. Standing bookings are off on DEV with no rules, so their Delete was not shown live.
+`tests/destructive-buttons.test.js` +9, `tests/contrast.test.js` +2 pairs.
+
+**Gate after phase 28:** `121.69 kB` gz main bundle (+0.07) · **1700 tests** (+10) · 0 lint errors, 91
+warnings (unchanged) · style OK.

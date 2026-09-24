@@ -11,7 +11,7 @@
 //   • Kitchen limit.
 
 import { useState, useEffect } from "react";
-import { Section, Collapsible, Toggle, mkStep, mkBtn, Reveal } from "./atoms";
+import { Section, Collapsible, Toggle, mkStep, mkBtn, Reveal, ALERT_TONES } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
@@ -21,17 +21,31 @@ import { todayStr } from "../lib/day";
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
 const STEP_BTN = mkStep(H.compact);
-// Small circular remove (×) button — used by the editable combo rows.
+// Small circular remove (×) button — every table, join group, combo and rule
+// row's remove.
 // v17.8.0: SOLID, not a pale danger wash behind danger-coloured text with a
 // danger-coloured border — the banned three-encodings shape, and on a
-// destructive control it also read as disabled. Every other delete in the app
-// (BTN.del) is a solid red button with white text; this is one of them now.
+// destructive control it also read as disabled.
+// v18.2.0 (the design critique, S6): the danger TINT, without that border.
+// Solid red on every row made removal the loudest thing in the tab — thirteen
+// of them on the tables list alone — for the rarest thing anybody does there.
+// Tint and tone are the tinted-pane shape (mkDangerBtn's rest state), not the
+// triple: the rim is the glass one, not a third red. The red is kept for the
+// confirmation, where removing a table asks first.
 const X_BTN = {
-  background: "var(--btn-del)", border: "1px solid var(--border-glass)",
+  background: ALERT_TONES.danger.tint, border: "1px solid var(--border-glass)",
   borderRadius: R.pill, width: 28, height: 28, fontSize: T.title, fontWeight: FW.bold,
-  color: "var(--text-on-accent)", lineHeight: 1,
+  color: ALERT_TONES.danger.tone, lineHeight: 1,
   display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   cursor: "pointer", boxShadow: "var(--shadow-btn)"
+};
+// The same × for CANCEL (a rename, a new table), which is not destructive and
+// so wears no red at all: the stepper's neutral, like the Cancel beside the
+// remove confirmation. They shared X_BTN, so the Cancel was a red × too.
+const CANCEL_X = {
+  ...X_BTN,
+  background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
+  color: "var(--text-primary)"
 };
 // Editable join-group chip + its micro reorder/remove buttons.
 const GCHIP = {
@@ -490,7 +504,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   <>
                     <button onClick={function () { commitEdit(t.id); }} disabled={!editValid} className={editValid ? "mgt-hover-scale" : undefined}
                       title="Save name" style={{ ...ACT_BTN, padding: "4px 10px", opacity: editValid ? 1 : 0.4, cursor: editValid ? "pointer" : "not-allowed" }}><CheckIcon size={IC.control} /></button>
-                    <button onClick={cancelEdit} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={IC.control} /></button>
+                    <button onClick={cancelEdit} className="mgt-hover-scale" title="Cancel" style={CANCEL_X}><CloseIcon size={IC.control} /></button>
                   </>
                 ) : (
                   <>
@@ -591,7 +605,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button onClick={addTable} disabled={!newIdValid} className={newIdValid ? "mgt-hover-scale" : undefined}
                 style={{ ...ACT_BTN, opacity: newIdValid ? 1 : 0.4, cursor: newIdValid ? "pointer" : "not-allowed" }}>Add</button>
-              <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={IC.control} /></button>
+              <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={CANCEL_X}><CloseIcon size={IC.control} /></button>
             </div>
             {/* v17.15.2 /code-review: the ORIGINAL of the pair the rename row
                 mirrors — and the first pass wrapped the mirror and left this.

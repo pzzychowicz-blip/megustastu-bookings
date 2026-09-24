@@ -331,16 +331,25 @@ explaining why is usually the one to read.
   `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
   every dismiss in the app. The `BTN.cancel is RED` row in `src/CLAUDE.md` is the
   same rule from the other side.
-- **A row's destructive button is quiet until armed (v18.2.0, S4).** At rest
-  it is the danger TINT (`--danger-bg` / `--danger-text` with its hairline, the
-  danger pane's registered pair), so it reads as destructive without being the
-  loudest thing on the row; the first tap of its two-tap confirm turns it solid
-  `--app-danger-solid` and relabels it ("Confirm — remove"). `mkDangerBtn(armed)`
+- **A row's destructive button is quiet until armed (v18.2.0, S4 and S6).** At
+  rest it is the danger TINT (`--danger-bg` / `--danger-text`, the danger pane's
+  pair, registered as a button too) with mkBtn's ordinary glass rim, so it
+  reads as destructive without being the loudest thing on the row; the first
+  tap of its two-tap confirm turns it solid `--app-danger-solid` and relabels
+  it ("Confirm — remove", "Confirm — delete"), and where a row's delete opens a
+  confirmation instead (a reminder, a table), the red is in THAT. `mkDangerBtn(armed)`
   in atoms, on mkBtn's geometry, so arming changes colour and label and never
-  the size under the finger. The sentence saying what the second tap does sits
-  UNDER the row, never above the button. Admin → People's Remove is the first
-  user: it acted on one tap in the grey of Capabilities beside it, and it is no
-  longer offered on your own row, where it could only fail.
+  the size under the finger. **Never a danger border at rest**: tint + a border
+  in the hue + text in a third shade is the banned shape below — phase 27
+  shipped exactly that and phase 28 took the border off. The sentence saying
+  what the second tap does sits UNDER the row, never above the button. Users:
+  People's Remove, Reminders, Templates, Layout's ×, standing bookings.
+- **A Cancel is never red.** Layout's rename and add-table Cancel shared the
+  remove button's red × (`X_BTN`); it is the stepper's neutral now (`CANCEL_X`).
+- **A paused item fades its TEXT, never its controls (v18.2.0, S5).** A paused
+  reminder drew its whole card at 55%, so Edit and Delete looked disabled while
+  both worked; now the words fade and an outline "Paused" tag says the state,
+  as standing bookings already did.
 - **A selected SEGMENT is lifted, not filled (v18.2.0).** The header's
   Timeline/List/Plan were three solid pills with the active one solid accent —
   the same blue as "+ New" beside them, so "where I am" and "what I can do"

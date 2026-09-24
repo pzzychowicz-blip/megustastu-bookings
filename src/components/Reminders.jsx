@@ -20,11 +20,14 @@
 // since v18.0.0 session 7's /code-review).
 
 import { BTN, R, T, FW } from "../lib/constants";
-import { Toggle, mkBtn } from "./atoms";
+import { Toggle, mkBtn, mkDangerBtn, OutlineChip } from "./atoms";
 import { WEEKDAY_SHORT } from "../lib/day";
 
 // ── One reminder card ────────────────────────────────────────────────────────
-export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
+export // A paused reminder's text, faded — never its buttons, which still work.
+const PAUSED_FADE = 0.55;
+
+function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
   const r = reminder;
   const rec = r.recurrence || {};
   let recText = "";
@@ -57,15 +60,20 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
       borderRadius: R.card,
       padding: "12px 14px",
       marginBottom: 8,
-      opacity: r.active ? 1 : 0.55,
       boxShadow: "var(--shadow-card)"
     }}>
+      {/* v18.2.0 (the design critique, S5): a paused reminder fades its TEXT
+          and says "Paused". The whole card was at 55%, Edit and Delete with
+          it, so two buttons that work looked disabled (both measured
+          `disabled` false). Standing bookings in General already did it this
+          way: the name faded, the state in words beside it. */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 2, wordBreak: "break-word" }}>
-            {r.text}
+            <span style={{ opacity: r.active ? 1 : PAUSED_FADE }}>{r.text}</span>
+            {r.active ? null : <OutlineChip tone="neutral" style={{ marginLeft: 8, verticalAlign: "middle" }}>Paused</OutlineChip>}
           </div>
-          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
+          <div style={{ fontSize: T.body, color: "var(--text-muted)", opacity: r.active ? 1 : PAUSED_FADE }}>
             {timesText + "  ·  " + recText}
           </div>
         </div>
@@ -91,11 +99,14 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         >
           Edit
         </button>
+        {/* v18.2.0 (S6): quiet until it matters. This opens the in-app
+            confirmation, and the red is THERE; on the row it was the loudest
+            thing on the card for the rarest thing anybody does to it. */}
         <button
           onClick={() => onDelete(r.id)}
           aria-label={"Delete (" + rname + ")"}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.del })}
+          style={mkDangerBtn(false, { fontSize: T.body, minHeight: 32, padding: "4px 12px" })}
         >
           Delete
         </button>

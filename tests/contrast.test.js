@@ -309,6 +309,12 @@ const FILLS = [
   { fill: "--btn-reset", alpha: null, ink: "--text-on-accent", role: "button", what: "Reset" },
   { fill: "--btn-dismiss", alpha: null, ink: "--text-on-accent", role: "button", what: "Dismiss" },
   { fill: "--btn-orange", alpha: null, ink: "--text-on-accent", role: "button", what: "walk-in / count" },
+  // v18.2.0 phase 28: a row's destructive button at rest (mkDangerBtn, the
+  // Layout ×) is the danger pane's pair used as a button; and Layout's Cancel ×
+  // left the red for the stepper's neutral, which the form's ± steppers have
+  // always drawn on and nothing had registered.
+  { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "button", what: "row delete at rest (mkDangerBtn)" },
+  { fill: "--bg-stepper", alpha: null, ink: "--text-primary", role: "button", what: "stepper ± and Layout's Cancel ×" },
 
   // The --app-btn-* family. These were missed by the first pass of this file
   // because the coverage check below only knew the --btn-* prefix, and the one
