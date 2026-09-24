@@ -331,6 +331,16 @@ explaining why is usually the one to read.
   `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
   every dismiss in the app. The `BTN.cancel is RED` row in `src/CLAUDE.md` is the
   same rule from the other side.
+- **A row's destructive button is quiet until armed (v18.2.0, S4).** At rest
+  it is the danger TINT (`--danger-bg` / `--danger-text` with its hairline, the
+  danger pane's registered pair), so it reads as destructive without being the
+  loudest thing on the row; the first tap of its two-tap confirm turns it solid
+  `--app-danger-solid` and relabels it ("Confirm — remove"). `mkDangerBtn(armed)`
+  in atoms, on mkBtn's geometry, so arming changes colour and label and never
+  the size under the finger. The sentence saying what the second tap does sits
+  UNDER the row, never above the button. Admin → People's Remove is the first
+  user: it acted on one tap in the grey of Capabilities beside it, and it is no
+  longer offered on your own row, where it could only fail.
 - **A selected SEGMENT is lifted, not filled (v18.2.0).** The header's
   Timeline/List/Plan were three solid pills with the active one solid accent —
   the same blue as "+ New" beside them, so "where I am" and "what I can do"

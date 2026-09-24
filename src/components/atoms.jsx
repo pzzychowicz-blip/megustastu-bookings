@@ -204,6 +204,23 @@ export function mkSolidBtn(background, extra) {
   };
 }
 
+// ── A row's DESTRUCTIVE button: quiet until armed (v18.2.0) ──────────────────
+// The design critique (S4, S6): a Delete or Remove painted solid red on every
+// row makes the rarest action the loudest thing on screen — thirteen of them in
+// Layout → Tables — and a Remove in the same grey as the Capabilities beside it
+// says nothing about what it does. So a row's destructive button is the danger
+// TINT at rest (ALERT_TONES.danger, the danger pane's registered pair, with its
+// hairline): recognisably destructive, not shouting. ARMED — the first tap of a
+// two-tap confirm — it turns solid `--app-danger-solid`, the one moment it
+// should. Both states keep mkBtn's geometry, so arming changes the colour and
+// the label, never the size under the finger.
+export function mkDangerBtn(armed, extra) {
+  return mkBtn(Object.assign(armed
+    ? { background: "var(--app-danger-solid)", color: "var(--text-on-accent)", border: RIM_SOLID, boxShadow: "var(--shadow-btn-solid)" }
+    : { background: ALERT_TONES.danger.tint, color: ALERT_TONES.danger.tone, border: "1px solid var(--danger-border)" },
+  extra));
+}
+
 // ── Segmented control: the track and a segment (v18.2.0) ─────────────────────
 // Settings' TabBar has drawn this since v16.2.0 — a pill track, the chosen tab
 // LIFTED as a white pill with accent text — and the main view switcher became

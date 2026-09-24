@@ -20,9 +20,9 @@
 // this repo's crash tests hunt for, so the panel says which is which instead of
 // letting the reader assume.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useId } from "react";
 import { R, T, FW, SP, H } from "../lib/constants";
-import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel } from "./atoms";
+import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn } from "./atoms";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
@@ -687,6 +687,12 @@ export function AdminTabContent({
   // switch does NOT move while it waits, so the screen never shows a state the
   // database is not in.
   const [askOff, setAskOff] = useState(null);
+  // v18.2.0 (the design critique, S4): whose Remove is armed — the first tap of
+  // two. Remove used to act on ONE tap, in the grey of the Capabilities button
+  // beside it. Any other action in People disarms it, so a second tap can only
+  // ever confirm the row it was armed on.
+  const [armedUid, setArmedUid] = useState(null);
+  const removeWarnId = useId();
 
   if (!can("settingsAdmin") || !isAdmin) return <RefusalPanel />;
 
@@ -779,6 +785,7 @@ export function AdminTabContent({
           : rows.map(function (r) {
             const id = r.uid || r.inviteId;
             const self = r.uid && r.uid === myUid;
+            const armed = !!r.uid && r.uid === armedUid;
             return (
               <div key={id} style={{
                 display: "flex", alignItems: "center", gap: SP.base, flexWrap: "wrap",
@@ -799,7 +806,7 @@ export function AdminTabContent({
                         invited as {LEVEL_LABEL[r.role]}
                       </OutlineChip>
                       <button className="mgt-hover-scale"
-                        onClick={function () { onWithdrawInvite(r.inviteId); }}
+                        onClick={function () { setArmedUid(null); onWithdrawInvite(r.inviteId); }}
                         aria-label={"Withdraw the invitation for " + displayName(r)}
                         style={mkBtn()}
                       >Withdraw</button>
@@ -807,7 +814,7 @@ export function AdminTabContent({
                   : <>
                       {r.invite
                         ? <button className="mgt-hover-scale"
-                            onClick={function () { say(onApplyInvite(r.uid, r.invite)); }}
+                            onClick={function () { setArmedUid(null); say(onApplyInvite(r.uid, r.invite)); }}
                             aria-label={"Apply the " + LEVEL_LABEL[r.invite.role] + " invitation to " + displayName(r)}
                             style={mkSolidBtn("var(--accent)")}
                           >Apply {LEVEL_LABEL[r.invite.role]} invite</button>
@@ -815,22 +822,40 @@ export function AdminTabContent({
                       <select className="mgt-hover-scale"
                         value={r.role || ""}
                         aria-label={"Level for " + displayName(r)}
-                        onChange={function (e) { say(onSetRole(r.uid, { role: e.target.value || null })); }}
+                        onChange={function (e) { setArmedUid(null); say(onSetRole(r.uid, { role: e.target.value || null })); }}
                         style={mkSel()}
                       >
                         <option value="">No level (staff)</option>
                         {ROLES.map(function (x) { return <option key={x} value={x}>{LEVEL_LABEL[x]}</option>; })}
                       </select>
                       <button className="mgt-hover-scale"
-                        onClick={function () { onOpenCapabilities(r.uid); }}
+                        onClick={function () { setArmedUid(null); onOpenCapabilities(r.uid); }}
                         aria-label={"Capabilities for " + displayName(r)}
                         style={mkBtn()}
                       >Capabilities</button>
-                      <button className="mgt-hover-scale"
-                        onClick={function () { say(onRemoveUser(r.uid)); }}
-                        aria-label={"Remove " + displayName(r)}
-                        style={mkBtn()}
-                      >Remove</button>
+                      {/* v18.2.0 (S4): two taps, and never on your own row. On
+                          your own row it could only fail ("You can't remove your
+                          own admin access"), so it is not offered at all. The
+                          button stays where it is when armed and the sentence
+                          lands UNDER the row: an explanation that appeared above
+                          it would move the button out from under the second
+                          tap (the armed-confirm twin of the hover-lift trap). */}
+                      {self ? null : <button className="mgt-hover-scale"
+                        aria-describedby={armed ? removeWarnId : undefined}
+                        onClick={function () {
+                          if (armed) { setArmedUid(null); say(onRemoveUser(r.uid)); }
+                          else { setMsg(null); setArmedUid(r.uid); }
+                        }}
+                        aria-label={(armed ? "Confirm — remove " : "Remove ") + displayName(r)}
+                        style={mkDangerBtn(armed)}
+                      >{armed ? "Confirm — remove" : "Remove"}</button>}
+                      {armed ? (
+                        <div id={removeWarnId} style={{ flexBasis: "100%", fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>
+                          Deletes {displayName(r)}'s level and capabilities here. It does not lock them
+                          out: the next time they open the app they are back on this list with no
+                          level{enforceRoles ? ", which counts as staff" : ""}. Tap again to confirm.
+                        </div>
+                      ) : null}
                     </>}
               </div>
             );

@@ -26675,3 +26675,34 @@ the card ran from 40 down to 426 (WhatsApp) through 590 (Layout) and 629 (Remind
 
 **Gate after phase 26:** `121.61 kB` gz main bundle (+0.01) · **1682 tests** (+1) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 27. Confirm removing a person (S4)
+
+Admin → People's **Remove** acted on one tap, in the same grey as the Capabilities button beside
+it, and on your own row it could only fail ("You can't remove your own admin access — ask another
+admin to do it"). Reading `removeUser` before writing the confirm settled what the sentence has to
+say: it deletes the person's `/roles` row — their level, extras and denies — and nothing else. It
+does not sign them out. The self-registration stub (`useRoles`) writes a fresh no-level row the next
+time they open the app, which counts as staff while roles are enforced. A confirm that said "loses
+access" would have promised something the button does not do.
+
+- **Two taps.** The first arms the row: the button turns solid red, reads "Confirm — remove"
+  (named "Confirm — remove Marta", the visible label leading), and a sentence under the row says
+  what the second tap does. Any other action in People (the level, Capabilities, applying or
+  withdrawing an invitation) disarms it, and so does arming another row, so a second tap can only
+  confirm the row it was armed on.
+- **Not on your own row**, where it could only fail.
+- **`mkDangerBtn(armed)`** (atoms): the danger tint at rest (`--danger-bg` / `--danger-text` and
+  its hairline, the danger pane's registered pair) and solid `--app-danger-solid` once armed, both
+  on mkBtn's geometry, so arming changes colour and label and never the size under the finger. The
+  next phase gives the other rows' deletes the same look.
+
+Live on DEV (nothing was removed): your own row has no Remove; Marta's and Rubén's read Remove in
+the tint (`rgba(254, 226, 226, 0.7)`, ink `rgb(153, 27, 27)`), 40px tall. The first tap on Marta's
+made it `rgb(220, 38, 38)` with white text and the sentence linked by `aria-describedby`. Arming
+Rubén's disarmed Marta's. Opening Rubén's Capabilities disarmed it, and closing that modal left
+Settings open. The armed button grows to the right from a fixed left edge (77 → 140px), so a
+second tap in the same place lands on it. `tests/destructive-buttons.test.js` 8 tests (new).
+
+**Gate after phase 27:** `121.62 kB` gz main bundle (+0.01) · **1690 tests** (+8) · 0 lint errors, 91
+warnings (unchanged) · style OK.
