@@ -46,8 +46,11 @@ describe("the name row", () => {
   it("the column is the widest of ALL the day's names — finished cards included — capped at NAME_COL", () => {
     expect(List).toMatch(/const nameCol = nameColFor\(day\);/);
     expect(List).toMatch(/return Math\.min\(NAME_COL, w\);/);
-    // Measured in the name's own font: bold, T.title.
-    expect(List).toMatch(/ctx\.font = FW\.bold \+ " " \+ T\.title \+ "px " \+/);
+    // Measured in the name's own font — the SAME object the name span spreads,
+    // so the measured and the rendered font cannot drift apart.
+    expect(List).toMatch(/const NAME_FONT = \{ fontWeight: FW\.bold, fontSize: T\.title \};/);
+    expect(List).toMatch(/ctx\.font = NAME_FONT\.fontWeight \+ " " \+ NAME_FONT\.fontSize \+ "px " \+/);
+    expect(List).toMatch(/flex: "1 0 " \+ nameCol \+ "px", minWidth: 0, \.\.\.NAME_FONT, color: S\.text,/);
   });
 
   it("covers come before the status, and the status sits in a STATUS_COL cell", () => {

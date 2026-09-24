@@ -26344,3 +26344,17 @@ tests, +2).
 
 **Gate after phase 18:** `120.68 kB` gz main bundle (+0.26) · **1627 tests** (+2) ·
 0 lint errors, 91 warnings (unchanged) · style OK.
+
+**Phase 18 follow-up — found by the next phase's gate.** Phase 19 removes Settings'
+"Default country" label, one `FW.medium`, and `tests/style-check.test.js`'s weight
+ratchet then failed: regular + medium 128 of 429 references, 29.8% against its 30%
+floor. Two of this branch's own changes had used up the margin, and both are fixed
+at their source rather than by lowering the floor:
+- Phase 18's canvas font wrote the name's weight a second time (`FW.bold` in the
+  span and again in `ctx.font`). One `NAME_FONT` object now feeds both, which also
+  means the width the column is sized for and the font laid out in it cannot drift.
+- Phase 5 split the card's time range and gave its muted half, the end time,
+  `FW.semi`: muted ink at a primary weight, the pairing v17.13.0 demoted 46 of. It
+  is `FW.medium` now. On `main` the range was one bold span, so no shipped text
+  changed weight.
+The commit before phase 19 measures 130 of 429 (30.3%).

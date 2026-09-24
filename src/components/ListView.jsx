@@ -136,10 +136,14 @@ const FLAGS_MIN = 104;
 const UNIT_W = 18 + 8 + STATUS_COL;
 // A cell beside the name: as tall as the name's first line, content centred.
 const NAME_CELL = { display: "flex", alignItems: "center", minHeight: NAME_LINE };
+// The name's font, ONE object read by both the name span and the canvas that
+// measures it (`nameWidth`), so the width the column is sized for and the text
+// laid out in it cannot drift apart when either changes.
+const NAME_FONT = { fontWeight: FW.bold, fontSize: T.title };
 
 // ── The name column's width (v18.2.0 phase 18) ───────────────────────────────
 // The widest of the day's names, measured on a canvas in the name's own font
-// (bold, T.title, the app's font stack read from <body>). A canvas measures
+// (NAME_FONT, in the app's font stack read from <body>). A canvas measures
 // without layout, so the width is known in the render that draws the cards:
 // nothing is painted at one width and corrected after. Cached per name, because
 // the List re-renders every minute and on every booking change while a name's
@@ -160,7 +164,7 @@ function nameWidth(name) {
     if (typeof document === "undefined") return NAME_COL;
     const ctx = document.createElement("canvas").getContext("2d");
     if (!ctx) return NAME_COL;
-    ctx.font = FW.bold + " " + T.title + "px " + getComputedStyle(document.body).fontFamily;
+    ctx.font = NAME_FONT.fontWeight + " " + NAME_FONT.fontSize + "px " + getComputedStyle(document.body).fontFamily;
     nameCtx = ctx;
   }
   const w = Math.ceil(nameCtx.measureText(s).width) + 1;
@@ -846,7 +850,12 @@ export const ListView = memo(function ListView({
                 50.5) and the digits stack down the List. */}
             <div style={{ gridColumn: 1, gridRow: "1 / span 2", fontVariantNumeric: "tabular-nums" }}>
               <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, lineHeight: 1.2 }}>{b.time}</div>
-              <div style={{ fontSize: T.small, fontWeight: FW.semi, color: S.muted }}>{"–" + end}</div>
+              {/* v18.2.0 phase 18 follow-up: MEDIUM, not semi. The end time is
+                  the muted half of the pair, and muted ink at a primary weight
+                  is the combination v17.13.0 demoted 46 of (DESIGN.md's weight
+                  scale, `tests/style-check.test.js`'s ratchet). Phase 5 split
+                  the time range into this pair and gave the quiet half semi. */}
+              <div style={{ fontSize: T.small, fontWeight: FW.medium, color: S.muted }}>{"–" + end}</div>
             </div>
             {/* v18.2.0: the name, then the size and status, then the flags —
                 each in a column of its own width (`nameCol` and the constants
@@ -876,7 +885,7 @@ export const ListView = memo(function ListView({
                 a narrow card they take a line of their own rather than pushing a
                 chip past the card's edge. */}
             <div style={{ gridColumn: 2, gridRow: 1, minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
-              <span style={{ flex: "1 0 " + nameCol + "px", minWidth: 0, fontWeight: FW.bold, fontSize: T.title, color: S.text, lineHeight: NAME_LINE + "px", overflowWrap: "anywhere" }}>{b.name}</span>
+              <span style={{ flex: "1 0 " + nameCol + "px", minWidth: 0, ...NAME_FONT, color: S.text, lineHeight: NAME_LINE + "px", overflowWrap: "anywhere" }}>{b.name}</span>
               <div style={{ flex: "1000 1 " + UNIT_W + "px", minWidth: 0, display: "flex", alignItems: "flex-start", columnGap: 8, rowGap: 4, flexWrap: "wrap" }}>
                 <span style={{ ...NAME_CELL, flex: "0 0 auto", gap: 8 }}>
                   {/* v17.15.5: the party size as the block's own ring, not
