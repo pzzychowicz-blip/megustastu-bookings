@@ -26993,3 +26993,12 @@ Live on DEV:
 
 **Gate after phase 37:** `121.81 kB` gz main bundle (−0.14; the hand-built shapes went) ·
 **1777 tests** (+48) · 0 lint errors, 91 warnings (unchanged) · style OK.
+
+**Follow-up: two dates the sweep missed.** Phase 38's search for "pax" read two lines that also held a raw
+date: the conversation's "Past bookings" rows and the intent banner's "Linked to:". Both had the shape
+`(x.date || "?")`, which phase 37's sweep patterns did not cover. Both go through `formatDay` now, and a
+test fails on that shape anywhere in `src/components`. Neither could be shown live: no DEV conversation
+has past bookings or a linked booking. `tests/date-format.test.js` +2.
+
+**Gate after the follow-up:** `121.80 kB` gz main bundle (−0.01) · **1779 tests** (+2) · 0 lint errors,
+91 warnings (unchanged) · style OK.

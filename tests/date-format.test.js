@@ -175,6 +175,23 @@ describe("every date on screen goes through formatDay", () => {
     it(file + " — " + String(re).slice(1, 48), () => { expect(read(file)).toMatch(re); });
   }
 
+  // Found after phase 37 by a second sweep, for the `(x.date || "?")` shape the
+  // first one's patterns did not cover: the conversation's past bookings and
+  // the intent banner's "Linked to:".
+  it("the conversation's past bookings and the intent banner", () => {
+    expect(read("components/whatsapp/ConversationView.jsx")).toMatch(/\{\(formatDay\(b\.date\) \|\| "\?"\) \+ " · " \+ b\.time/);
+    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/"Linked to: " \+ \(formatDay\(linkedBooking\.date\) \|\| "\?"\)/);
+  });
+
+  // The shape both of those had: a date field with a text fallback. None may
+  // reach the screen unformatted; the matches left are all data, not text.
+  it("no date field with a text fallback is rendered raw", () => {
+    for (const f of readdirSync(join(SRC, "components"), { recursive: true })) {
+      if (!/\.jsx$/.test(f)) continue;
+      expect(read("components/" + f), f).not.toMatch(/\(\s*[a-zA-Z_]+\.date\s*\|\|\s*"\?/);
+    }
+  });
+
   it("the WhatsApp cards, both lines of each", () => {
     expect((read("components/whatsapp/DraftCard.jsx").match(/\(formatDay\(d\.date\) \|\| "\? date"\)/g) || []).length).toBe(2);
     expect((read("components/whatsapp/LinkedBookingCard.jsx").match(/\(formatDay\(booking\.date\) \|\| "\?"\)/g) || []).length).toBe(2);

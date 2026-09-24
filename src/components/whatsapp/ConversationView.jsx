@@ -16,6 +16,7 @@ import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
 import { R, T, FW, IC, H } from "../../lib/constants";
+import { formatDay } from "../../lib/day";
 
 export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
@@ -173,7 +174,7 @@ export function ConversationView({
     // section shape carries no border at all, the tint carries the semantics.
     <AlertPanel role="success" icon={CheckIcon} title="Past bookings" style={{ marginBottom: 10 }}>
       {pastList.slice(0, 5).map((b, i) => (
-        <AlertRow key={b.id} first={i === 0}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</AlertRow>
+        <AlertRow key={b.id} first={i === 0}>{(formatDay(b.date) || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</AlertRow>
       ))}
     </AlertPanel>
   ) : null;

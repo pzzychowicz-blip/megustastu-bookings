@@ -15,6 +15,7 @@ import { useCollapseState } from "../../hooks/useCollapseState";
 import { R, T, FW, M, IC, H, EXIT_MS } from "../../lib/constants";
 import { WarnIcon, PencilIcon } from "./WaIcons";
 import { CheckIcon, ChevronRightIcon } from "../Icons";
+import { formatDay } from "../../lib/day";
 
 export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "intent", false);
@@ -44,7 +45,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   const color = isCancel ? "var(--danger-text)" : "var(--warn-text)";
   const Icon = isCancel ? WarnIcon : PencilIcon;
   const title = isCancel ? "Customer is requesting to cancel" : "Customer is requesting changes";
-  const subtitle = linkedBooking ? ("Linked to: " + (linkedBooking.date || "?") + " · " + linkedBooking.time + " · " + linkedBooking.size + " pax") : "No linked booking found";
+  const subtitle = linkedBooking ? ("Linked to: " + (formatDay(linkedBooking.date) || "?") + " · " + linkedBooking.time + " · " + linkedBooking.size + " pax") : "No linked booking found";
 
   // v15.8.2-wa-sandbox: action buttons moved up onto the header row (between the
   // title and the chevron) to reclaim the vertical space they took as their own
