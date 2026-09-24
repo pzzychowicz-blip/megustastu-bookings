@@ -43,6 +43,7 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 // order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
 // which this line used to copy byte for byte.
 import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
+import { guestsLabel } from "../lib/booking-logic";
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
@@ -617,7 +618,9 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
     : DEFAULT_GENERAL_SETTINGS;
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
   const minsLabel = (n) => n + " min";
-  const guestsLabel = (n) => "≤ " + n;
+  // v18.2.0: named for what it says, "≤ 4". It was `guestsLabel`, and phase 38
+  // (C2) imported the real one into this file, which it then shadowed.
+  const upToLabel = (n) => "≤ " + n;
   // Tier-list edits: the hook's sanitizer re-sorts/dedupes/clamps, so these
   // just describe intent. Stepper bounds keep each `max` strictly between its
   // neighbours (1…19 at the edges), matching the sanitizer's invariants.
@@ -806,7 +809,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             return (
               <div key={i} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <div style={{ width: 150 }}>
-                  <HourStepper label="Parties up to" value={t.max} fmt={guestsLabel}
+                  <HourStepper label="Parties up to" value={t.max} fmt={upToLabel}
                     disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
                     onDec={() => updateTier(i, { max: t.max - 1 })} onInc={() => updateTier(i, { max: t.max + 1 })} />
                 </div>
@@ -844,7 +847,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               }}>+ Add tier</button>
           </div>
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
-            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? String(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max) + " guests → " + t.dur + " min").concat([restFrom + "+ → " + bd.restDur + " min"]).join(" · ") + ". Applies to new bookings only."}
+            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? guestsLabel(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max + " guests") + " → " + t.dur + " min").concat([restFrom + "+ guests → " + bd.restDur + " min"]).join(" · ") + ". Applies to new bookings only."}
           </div>
         </div>
       </Collapsible>
@@ -981,7 +984,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 return (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + r.size + " pax"}</div>
+                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + guestsLabel(r.size)}</div>
                       <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>
                     </div>
                     {/* v17.15.4: the ONE Toggle in the app that repeats. A
@@ -1046,11 +1049,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           {/* v17.2.0: starting party sizes of the new-booking / walk-in forms
               (were hard-coded 2). Only the form's INITIAL value — steppers in
               the forms still adjust per booking. */}
-          <HourStepper label="New booking starts at" value={gs.defaultBookingSize} fmt={(n) => n + (n === 1 ? " guest" : " guests")}
+          <HourStepper label="New booking starts at" value={gs.defaultBookingSize} fmt={guestsLabel}
             disableDec={gs.defaultBookingSize <= 1} disableInc={gs.defaultBookingSize >= 20}
             onDec={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize - 1 })}
             onInc={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize + 1 })} />
-          <HourStepper label="Walk-in starts at" value={gs.defaultWalkinSize} fmt={(n) => n + (n === 1 ? " guest" : " guests")}
+          <HourStepper label="Walk-in starts at" value={gs.defaultWalkinSize} fmt={guestsLabel}
             disableDec={gs.defaultWalkinSize <= 1} disableInc={gs.defaultWalkinSize >= 20}
             onDec={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize - 1 })}
             onInc={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize + 1 })} />

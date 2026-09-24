@@ -71,7 +71,9 @@ import {
   lastStartMins, toTime,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
-  isReadableTime
+  isReadableTime,
+  // v18.2.0 (C2): the one word for a party's size.
+  guestsLabel
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
@@ -5336,7 +5338,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+guestsLabel(l.guests);})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
               booking={bookings.find(function(x){return x.id===voucherAsk.id;})}
               currency={generalSettings.currency}

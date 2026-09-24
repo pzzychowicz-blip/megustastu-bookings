@@ -35,7 +35,7 @@
 // for soft-hint preferences here, the simpler version is correct.
 
 import { S, BTN, TBL, TABLE_GROUPS, R, T, FW, IC } from "../lib/constants";
-import { isIn, comboCap } from "../lib/booking-logic";
+import { isIn, comboCap, guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
 import { CheckIcon } from "./Icons";
 
@@ -67,7 +67,7 @@ export function PrefPickerModal({ selected, partySize, onChange, onClose }) {
     ? "No preference (auto)"
     : (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        {"Capacity: " + cap + " / " + needed + " pax"}
+        {"Capacity: " + cap + " / " + guestsLabel(needed)}
         {cap >= needed ? <CheckIcon size={IC.control} /> : <span>— need more</span>}
       </span>
     );

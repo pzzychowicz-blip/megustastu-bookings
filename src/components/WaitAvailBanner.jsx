@@ -23,6 +23,7 @@
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN, T, FW, IC, H } from "../lib/constants";
+import { guestsLabel } from "../lib/booking-logic";
 import { CloseIcon } from "./Icons";
 
 export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
@@ -41,10 +42,10 @@ export function WaitAvailBanner({ entries, availability, onBook, onDismiss, }) {
     const who = w.name || "(no name)";
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
-        <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{who + " · " + w.size + " pax — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
+        <span style={{ fontSize: T.body, color: "var(--success-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{who + " · " + guestsLabel(w.size) + " — table free" + (avail && avail.time ? " · " + avail.time : "")}</span>
         <button
           onClick={function () { onBook(w); }}
-          aria-label={"Book (" + who + ", " + w.size + " pax)"}
+          aria-label={"Book (" + who + ", " + guestsLabel(w.size) + ")"}
           className="mgt-hover-scale"
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: "var(--app-walkin)" })}>Book</button>
         <button

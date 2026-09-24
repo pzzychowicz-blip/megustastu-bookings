@@ -53,7 +53,9 @@ import {
   // preview has to ask the SAME question with the SAME helper.
   tablesFreeFor,
   // v18.0.0 session 8 (C7): the Time field's max is the last START, not close.
-  lastStartMins
+  lastStartMins,
+  // v18.2.0 (C2): "4 guests", never "4 pax".
+  guestsLabel
 } from "../lib/booking-logic";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
@@ -291,7 +293,7 @@ export function BookingFormModal({
       title={noshow?"No-shows":"Past bookings"}
       count={histList.length}
       style={{marginTop:8}}>
-      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(formatDay(b.date)||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</AlertRow>;})}
+      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(formatDay(b.date)||"?")+" · "+(b.scheduledTime||b.time)+" · "+guestsLabel(b.size)+" · "+b.status}</AlertRow>;})}
       {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</AlertRow>:null}
     </AlertPanel>;
   }
@@ -326,7 +328,7 @@ export function BookingFormModal({
   // inside the form that is about to create one.
   const dupWarn=dupPhone.length?<AlertPanel role="warn" icon={ClashIcon} style={{marginTop:8}}
     title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+formatDay(form.date)+":"}>
-    {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
+    {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+guestsLabel(b.size)+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
     {dupPhone.length>3?<AlertRow>{"+ "+(dupPhone.length-3)+" more"}</AlertRow>:null}
   </AlertPanel>:null;
   // The container stays mounted while ANY of the three can render, so the

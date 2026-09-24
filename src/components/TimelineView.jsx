@@ -42,7 +42,7 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
@@ -1069,7 +1069,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       tabIndex={leaving ? -1 : 0}
       aria-hidden={leaving ? true : undefined}
       aria-label={leaving ? undefined
-        : "Waiting: " + g.name + ", " + g.size + (g.size === 1 ? " guest" : " guests")
+        : "Waiting: " + g.name + ", " + guestsLabel(g.size)
         + ", " + g.time + (g.resh ? ", fits after re-optimising" : "") + ". Book this table."}
       onKeyDown={leaving ? undefined : (e) => {
         if (e.key !== "Enter" && e.key !== " ") return;

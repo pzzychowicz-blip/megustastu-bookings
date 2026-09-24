@@ -16,6 +16,7 @@ import { useState, useRef, useEffect } from "react";
 import { S, R, T, FW } from "../lib/constants";
 import { searchBookings, formatPhone } from "../lib/customers";
 import { formatDay, showsYear } from "../lib/day";
+import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge } from "./atoms";
 
 export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
@@ -55,7 +56,7 @@ export function SearchPanel({ bookings, todayStr, onPick, onClose }) {
             tablet's 506px line holds a year, a phone and a badge with 88px to
             spare, and 96 measured a wrap there that 64 does not. */}
         <span style={{ flex: "1 1 64px", minWidth: 0, fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
-        <span style={{ fontSize: T.body, color: S.muted }}>{b.size + " pax"}</span>
+        <span style={{ fontSize: T.body, color: S.muted }}>{guestsLabel(b.size)}</span>
         {b.phone ? <span style={{ fontSize: T.body, color: S.muted }}>{formatPhone(b.phone)}</span> : null}
         {/* v17.15.6: it IS `SBadge`. v17.7.0 gave this copy "the same fill, text
             and metrics as SBadge" and the sentence stopped being true the moment

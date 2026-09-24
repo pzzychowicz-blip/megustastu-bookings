@@ -1091,7 +1091,7 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
     // /code-review made against "copy → all".
     has(Late, "No show", /aria-label=\{"No show \(" \+ who \+ "\)"\}/,
       "the visible text leads; the guest follows in parentheses");
-    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ w\.size \+ " pax\)"\}/,
+    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ guestsLabel\(w\.size\) \+ "\)"\}/,
       "the visible text leads; the party follows in parentheses");
     // Overlap's Reassign and Clash's Assign are deliberately untouched: their
     // visible text already contains a name, so it differs per row on its own.
@@ -1137,7 +1137,8 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
       has(src, what + " who", /const who = \w+\.name \|\| "\(no name\)";/,
         "derive the display name once per row and read it everywhere in that row");
     }
-    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ w\.size \+ " pax/,
+    // v18.2.0 (C2): the party's size is `guestsLabel`, as on every other surface.
+    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ guestsLabel\(w\.size\) \+ " — table free"/,
       "the visible sentence must read the same expression the button's name does");
   });
 });

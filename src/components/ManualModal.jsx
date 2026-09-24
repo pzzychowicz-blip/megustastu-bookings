@@ -32,7 +32,7 @@ import { useState, useEffect, useRef } from "react";
 import { S, BTN, R, M, T, FW, ALL_TABLES } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
-  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
+  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd, guestsLabel
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
@@ -155,7 +155,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     ? "Select tables below."
     : conflict
       ? "Conflict: cannot use these tables together."
-      : "Capacity: " + cap + (cap >= needed ? " (fits " + needed + " pax)" : " — need " + needed + " pax");
+      : "Capacity: " + cap + (cap >= needed ? " (fits " + guestsLabel(needed) + ")" : " — need " + guestsLabel(needed));
   const isSwapping = affectedBookings.length > 0;
   const assignLabel = isSwapping ? "Swap & Assign" : "Assign";
   // v16.4.0 (Patryk): active swap-busy panel was pale peach + warn-text — low
@@ -254,7 +254,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       <AutoHeight>
       <ModalTitle marginBottom={4} background="var(--accent)">{titleText || "Manual table assignment"}</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 4, marginTop: 6, textAlign: "center" }}>
-        {booking.name + " · " + booking.size + " pax · " + booking.time + "–" + toTime(e)}
+        {booking.name + " · " + guestsLabel(booking.size) + " · " + booking.time + "–" + toTime(e)}
       </div>
       <div style={{
         marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between",

@@ -13,7 +13,7 @@
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
-import { isIn } from "../lib/booking-logic";
+import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
@@ -1703,7 +1703,7 @@ const SIZE_RING = {
 export function SizeRing({ n, rim, style }) {
   return (
     <span
-      title={n + " guest" + (n === 1 ? "" : "s")}
+      title={guestsLabel(n)}
       style={{
         ...SIZE_RING,
         ...(rim ? { border: "1px solid " + rim } : null),

@@ -113,9 +113,19 @@ export function freeingSoon(bookings,today,nowMins,windowMin){
 // Callers append their own state clauses (a block adds double-booked /
 // overstaying / running late) — those are properties of how a booking is being
 // DRAWN, not of the booking.
+// v18.2.0 (the design critique, C2): a party's size, as the screen says it —
+// "1 guest", "4 guests". The ONE word for it. Twenty-one lines in fourteen
+// files said "4 pax" (Find a booking, the waitlist, the draft card, the table
+// pickers, the Day sheet…) beside the booking form's "Number of guests", the
+// Settings tiers' "1–2 guests" and every spoken label's "2 guests", and the
+// plural was typed out by hand ten more times. "Covers" stays the word for a day's TOTAL (the Summary,
+// the Day sheet's head), which is what a restaurant means by it.
+export function guestsLabel(n){
+  return n+(Number(n)===1?" guest":" guests");
+}
 export function describeBooking(b, opts){
   const o=opts||{};
-  const out=[b.name, b.time, b.size+(b.size===1?" guest":" guests")];
+  const out=[b.name, b.time, guestsLabel(b.size)];
   // `tables: false` drops the clause entirely rather than saying "no table
   // assigned" — on the floor plan the table is already the subject.
   if(o.tables!==false){
@@ -933,7 +943,7 @@ export function startingPhrase(load){
   var n=(load&&load.starts)||0;
   if(!n) return "none yet";
   var g=(load&&load.guests)||0;
-  return n+" booking"+(n!==1?"s":"")+" · "+g+" guest"+(g!==1?"s":"");
+  return n+" booking"+(n!==1?"s":"")+" · "+guestsLabel(g);
 }
 export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date

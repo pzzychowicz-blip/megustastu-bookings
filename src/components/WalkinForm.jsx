@@ -43,7 +43,7 @@ import {
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
-  comboCapBest, nowTime
+  comboCapBest, nowTime, guestsLabel
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -166,7 +166,7 @@ export function WalkinForm({
   const wSummaryColor = wOk ? "var(--success-text)" : "var(--warn-text)";
   const wSummaryText = wSel.length === 0
     ? "Select tables below."
-    : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + wSize + " pax)" : " — need " + wSize + " pax");
+    : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + guestsLabel(wSize) + ")" : " — need " + guestsLabel(wSize));
   // v17.15.2: slides in and out. It appears the moment you tap a table and
   // vanishes the moment you clear — always under the eye of the person who
   // caused it — and it was doing both by hard cut. `Presence` with the

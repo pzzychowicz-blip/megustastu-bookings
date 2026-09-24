@@ -23,7 +23,14 @@ import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
 import { Section, OutlineChip, Reveal, mkInp, mkBtn, SBadge } from "./atoms";
 import { formatDay, showsYear } from "../lib/day";
+import { guestsLabel } from "../lib/booking-logic";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
+
+// v18.2.0 (the design critique, C2): a visit row's size column holds the widest
+// "N guests" a party can be — the form stops at 25, and "25 guests" measures
+// 56px in this font (DEV) — so the status badge after it lines up whatever the
+// size. It was 40, which "2 pax" fitted.
+const GUESTS_COL = 58;
 
 // v18.0.0 session 11: `seekQuery` seeds the search box. The activity log can
 // send you here for a guest whose booking has been deleted, which is exactly
@@ -111,7 +118,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const dateCol = open && c.bookings.some(function (b) { return showsYear(b.date); }) ? 104 : 68;
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: dateCol }}>{formatDay(b.date)}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.15.6: `SBadge`, not a copy of it — see the atom. */}<SBadge status={b.status} />{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? <OutlineChip tone="warn">no-show</OutlineChip> : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: dateCol }}>{formatDay(b.date)}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: GUESTS_COL }}>{guestsLabel(b.size)}</span>{/* v17.15.6: `SBadge`, not a copy of it — see the atom. */}<SBadge status={b.status} />{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? <OutlineChip tone="warn">no-show</OutlineChip> : null}</div>
       );
     }) : null;
     return (

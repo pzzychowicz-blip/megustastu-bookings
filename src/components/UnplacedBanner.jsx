@@ -26,6 +26,7 @@
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { unplacedPhrase } from "../lib/unplaced";
+import { guestsLabel } from "../lib/booking-logic";
 import { BTN, T, FW, H } from "../lib/constants";
 
 /**
@@ -44,7 +45,7 @@ export function UnplacedBanner({ items, onAssign, swapKey }) {
     // require one — every banner carries this fallback (ClashBanner's note).
     const who = b.name || "(no name)";
     const size = Number(b.size) || 2;
-    const msg = who + " (" + b.time + ", " + size + (size === 1 ? " guest" : " guests") + ") — " + unplacedPhrase(u) + ".";
+    const msg = who + " (" + b.time + ", " + guestsLabel(size) + ") — " + unplacedPhrase(u) + ".";
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--danger-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{msg}</span>

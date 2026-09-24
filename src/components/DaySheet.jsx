@@ -19,7 +19,7 @@
 import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW, APP_NAME } from "../lib/constants";
-import { daySummary } from "../lib/booking-logic";
+import { daySummary, guestsLabel } from "../lib/booking-logic";
 import { normalizeCode, formatCode } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
@@ -78,7 +78,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
             <tr>
               <th style={th}>Time</th>
               <th style={th}>Name</th>
-              <th style={th}>Pax</th>
+              <th style={th}>Guests</th>
               <th style={th}>Tables</th>
               <th style={th}>Phone</th>
               {/* v18.0.0 phase 4: the column is SHARED, so with the vouchers
@@ -128,7 +128,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         <div style={{ fontSize: T.body }}>
           <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Waitlist</div>
           {dayWait.map(function (w, i) {
-            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + w.size + " pax" + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + w.phone : "")}</div>;
+            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + guestsLabel(w.size) + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + w.phone : "")}</div>;
           })}
         </div>
       ) : null}

@@ -20,6 +20,7 @@ import { useState } from "react";
 import { S, BTN, BLOCK_BG, R, T, FW } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
+import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
 
 function addedLabel(ts){
@@ -46,7 +47,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
       <div
         key={w.id}
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
-          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{w.name||"(no name)"}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{w.size+" pax"}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{w.name||"(no name)"}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
             className="mgt-hover-scale"
             style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}
             onClick={function(){onBook(w);}}>Book</button><button

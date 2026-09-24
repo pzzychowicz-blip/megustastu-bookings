@@ -27008,3 +27008,55 @@ changes (`reqParts.push(draftData.date)`). It is the last: every remaining hit i
 
 **Gate after the second follow-up:** `121.81 kB` gz main bundle (+0.01) · **1780 tests** (+1) · 0 lint
 errors, 91 warnings (unchanged) · style OK.
+
+### 38. One word for a party's size (C2)
+
+"4 pax" appeared on twenty-one lines in fourteen files: Find a booking, the waitlist and its
+"table free" banner, the draft card, the linked booking card, the conversation's past bookings, the
+intent banner, both table pickers' capacity lines, the preferred-tables picker, the booking form's
+past visits and duplicate-phone warning, the standing rules and the Day sheet's "Pax" column. Beside
+them, the booking form asks for the "Number of guests", the Settings tiers read "1–2 guests" and
+every spoken label says "2 guests", with the plural typed out by hand ten more times.
+
+`guestsLabel(n)` (`booking-logic.js`) is now the one way to write it: "1 guest", "4 guests". It
+replaced the twenty-one "pax" lines and the ten hand-typed plurals, `describeBooking` and
+`startingPhrase` included. The Day sheet's column is "Guests". Two things stay: **covers** is the word
+for a day's total (the Summary, the Month view, the Day sheet's head), and "Party of N" stays in
+sentences, where it is the noun rather than the label. Both are recorded in GLOSSARY, with "pax"
+under Terms to avoid.
+
+- **Tiers.** A tier covering parties of one printed "1 guests"; DEV has one, so it was on screen. It
+  reads "1 guest" now, and the catch-all says what it counts: "6+ guests → 120 min".
+- **Customers.** The visit row's size column was 40px, which "2 pax" fitted. It is 58, the widest
+  label a party can have: the form stops at 25, and "25 guests" measures 56px. So the badge after it
+  lines up whatever the size.
+
+**Found live, not by a test.** Settings' durations section had its own `const guestsLabel = (n) =>
+"≤ " + n` for the "Parties up to" stepper. Once the real one was imported into that file, the local
+shadowed it across the whole component: the tiers line read "≤ 1 → 90 min" and both size steppers
+"≤ 2". Build, lint and 1801 tests were green. It is `upToLabel` now, and a test fails on any second
+definition of the name.
+
+Live on DEV:
+
+- **Find a booking** "2 guests", every row still one line at 1280px (CTWA's name 69px, above its
+  64px basis).
+- **Customers** "2 guests" in the 58px column, badge at x 253.
+- **Draft card** "2 guests · Fri 25.09 · 14:00".
+- **Table picker** "Phase19 Test · 2 guests · 13:00–14:30" and "Capacity: 2 (fits 2 guests)",
+  closed without assigning.
+- **Day sheet** "Time · Name · Guests · Tables · Phone · Deposit".
+- **Settings** "1 guest → 90 min · 2–4 guests → 90 min · 5 guests → 90 min · 6+ guests", the steppers
+  "2 guests", and "Parties up to ≤ 1 / ≤ 4 / ≤ 5" unchanged.
+- **Not shown live:** the waitlist rows, its banner and the timeline's waiting row (nobody waiting
+  on DEV), the standing rules (off on DEV), and the linked booking card and intent banner (no linked
+  conversation).
+
+Lint went from 91 warnings to 90. The React Compiler's `react-hooks/refs` advisory at
+`TimelineView.jsx:981` now reports 17 occurrences where it reported 18, in the render function whose
+waiting-row label changed; no other file's warnings moved (compared per file against the last
+commit). `tests/party-size.test.js` 21 tests (new); `tests/a11y.test.js`'s two waitlist-banner pins
+now read `guestsLabel`.
+
+**Gate after phase 38:** `121.81 kB` gz main bundle (±0) · **1801 tests** (+21) · 0 lint errors, 90 warnings
+(−1, above) · style OK.

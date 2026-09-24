@@ -266,7 +266,7 @@ Where the real ambiguity lives.
 | Indoor / outdoor | **zone** (`ZONE_OF`) | Purple indoor, teal outdoor. |
 | "Table priorities" in Settings → Layout | **priorities** (`PRIORITIES`) | The optimiser's heuristics as data — size bands, combo rules, anchors, swap rules. |
 | Afternoon / Evening | **day shift** (`settings/dayShifts`) | The split hour the summary counts against. |
-| The N in "Party of N" | **size** / **covers** | `size` is one booking's party; **covers** is the day's total served. |
+| "4 guests", "1 guest" — a party's size | **size** / **covers** (`guestsLabel`, `booking-logic.js`) | `size` is one booking's party, and the screen says it one way: **"N guests"** (v18.2.0; it said "4 pax" on twenty-one lines). **Covers** is the day's total served (the Summary, the Month view, the Day sheet's head). "Party of N" stays in sentences ("Party of 6 won't fit at 3"), where it is the noun, not the label. |
 | "Default length of new bookings by party size" | **duration tiers** (`DUR_TIERS`) | Size → default duration, plus a catch-all. |
 | An amber card border and "N min late" | **running late** (`lateState`) | `null` → `"warn"` → `"noshow"` against the configured thresholds. Today only. |
 | A weekly booking | **standing booking** / **recurring rule** (`useRecurring.js`) | The **rule** lives in `recurring`; each generated booking is an **occurrence** in `/bookings` with a deterministic id. Off by default. |
@@ -476,6 +476,7 @@ The tempting name, and why it's the wrong one.
 | chat / thread | **conversation** | `conversations/{phoneKey}` is the node; every identifier says conversation. |
 | status (in the WA module) | say **send status** or **draft status** | Two unrelated lifecycles: `sending/delivered/failed` on a message, `parsed/accepted/dismissed` on a draft. |
 | re-check (as sim tooling) | **re-check**, a staff feature | It ships with the module. Only the simulator around it doesn't. |
+| pax | **guests** (`guestsLabel`) | Trade shorthand the booking form never used: it asks for the "Number of guests", and every spoken label says "2 guests". v18.2.0 took it off all twenty-one lines that printed it, the Day sheet's column heading included. |
 
 ---
 
