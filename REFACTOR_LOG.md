@@ -27110,3 +27110,67 @@ boundary, for the module off and on. Breaking the sandbox gate fails three of it
 
 **Gate after phase 40:** `121.82 kB` gz main bundle (±0; Settings is a lazy chunk) · **1819 tests** (+6) ·
 0 lint errors, 90 warnings (unchanged) · style OK.
+
+### Fourth round — the live pass over what round 2 could not reach
+
+Planned work from the round-2 handoff (2026-09-24): make the DEV data each unreached surface needs, run
+`/design:design-critique` over them, and check the v18.2.0 rules on each — dates (C1), party size (C2),
+money (C3), quiet row deletes (S4/S6) and Shortcuts (S8) — at 1280×800 and 375×812 in both themes. The
+surfaces: the Waitlist panel, its "table free" banner, the timeline's waiting row and the Day sheet's
+waitlist lines; Settings → General → Standing bookings; the WhatsApp linked-booking card, intent
+banner and past bookings; the gift-voucher picker, the redeem and carry prompts and the unsettled
+section; Shortcuts with the WhatsApp module off. The report is
+`…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round3.md`.
+
+**How it was measured.** The Browser pane is 354px wide, so a 1280×800 viewport renders there at 28%
+and cannot be judged, and its screenshots ran a frame behind the DOM (a modal open and settled in the
+DOM, absent from three consecutive captures). The critique used a headless Playwright Chromium on a
+copy of the manual rig's DEV profile, against this worktree served on :5179 (the port that profile is
+signed in to): 1280×800 at DPR 1, and 375×812 at DPR 2 with touch. Its `locale` does not reach a native
+date or time input, which rendered "09/24/2026" and "03:00 PM" there; the pane showed "24.09.2026", so
+those are the tool's, not the app's.
+
+**What the rules found.** Six misses in this version's own sweeps, fixed below in five phases from
+41: the waitlist panel's Remove (S6), standing bookings' unnamed Deletes (S6), two "(4)" sizes in one
+phase (C2), a raw date in Customers (C1), and money breaking across a line (C3). Everything the
+critique found that no v18.2.0 rule covers is Patryk's call and is in the report, not built.
+
+**DEV data from this round** (DEV is scratch; nothing was tidied): waitlist "Waitlist Probe" (25) and
+"Indoor Probe" (11); vouchers JA98-KPHZ and HK48-KKNZ (20 € each, partly redeemed); bookings "Voucher
+Probe" (today, completed; Fri 25.09 carrying JA98-KPHZ), "Unsettled Probe" (today, completed with
+FFBV-JYT7 unrecorded) and "Dark Probe" (today, completed; Sat 26.09); the WA-SIM seed and three
+scenario conversations; a standing rule created and deleted ("Standing Probe", its two
+occurrences left in place). Standing bookings and the pre-existing "test standing" rule were restored
+to off / active, and the WhatsApp module to on.
+
+### 41. The waitlist panel's Remove is quiet until armed (S6)
+
+Reached live for the first time (DEV had never had a party waiting): every row carried a solid red
+Remove, `rgba(211, 58, 58, 0.75)`, and arming it changed only the word to "Confirm?". The row used
+`BTN.cancel` at rest and `BTN.del` armed — two tokens with one value, so there was no rest state to
+leave. It takes `mkDangerBtn`, as phase 28 gave standing bookings and Templates: the danger tint at
+rest, solid red once armed, and "Confirm — remove", People's word for the same act. Book and Remove
+name their party, "Book (Waitlist Probe, 25 guests)", in the shape the "table free" banner's Book
+already used, because two rows of bare "Book" are two identical names.
+
+**The fix made the phone worse before it made it better.** The armed label is 140px where "Confirm?"
+was 85, and the row's text was `flex: 1` — a zero basis, so on a 375px phone the buttons never
+wrapped and took their width out of the text instead: 129px at rest, and 67px once armed, with the
+phone line broken into five pieces and "Table free · 18:30" drawn under Book. The text now has a
+160px basis and the button group `marginLeft: auto`, so on a phone the buttons wrap under the text
+at the right edge. DESIGN.md's quiet-delete rule records it: a row whose buttons sit beside its text
+gives the text a basis.
+
+`BTN.cancel` has no users left after this. It stays, with its `src/CLAUDE.md` gotcha row, until it
+is removed on its own.
+
+Live on DEV, headless Chromium. Tablet, light: Remove in the tint `rgba(254, 226, 226, 0.7)`, ink
+`rgb(153, 27, 27)`, 36px; armed, "Confirm — remove" in `rgb(220, 38, 38)`, still 36px, its right edge
+fixed at 892 as it grew 77 → 140px; names "Remove (Waitlist Probe, 25 guests)" and "Confirm — remove
+(Indoor Probe, 11 guests)". Rows stay one line at rest (58px); arming grows that row to 77px as its
+phone line wraps, which moves the armed button about 9px down, still under the first tap. Phone,
+dark: text 283px (was 129), buttons under it 13px from the row's edge, rows 102px at rest and armed
+(armed was 192). Nothing was removed. `tests/destructive-buttons.test.js` +4.
+
+**Gate after phase 41:** `121.86 kB` gz main bundle (+0.04) · **1823 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.

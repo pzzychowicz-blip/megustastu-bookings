@@ -8,6 +8,20 @@
 //            its id; on successful save the entry is removed (returnOf-style).
 //   Remove — two-tap inline confirm (first tap arms, second deletes).
 //
+// v18.2.0 phase 41 (S6, reached live): Remove is `mkDangerBtn` — the danger
+// tint at rest, solid red once armed as "Confirm — remove". It was
+// `BTN.cancel` at rest and `BTN.del` armed, two tokens with ONE value
+// (rgba(211,58,58,.75)), so every row carried a solid red Remove and arming
+// changed only the word. Book and Remove name their party, in the "table
+// free" banner's shape, because N rows of bare "Book" are N identical names.
+// The row's text takes a 160px flex BASIS, where it was `flex: 1` (a zero
+// one): a wrapping line is packed by basis, so the buttons never wrapped and
+// took their width out of the text instead — 129px of it on a 375px phone,
+// and 67px once the armed "Confirm — remove" widened the group (measured:
+// "Table free · 18:30" slid under Book). Now the buttons drop under the text
+// on a phone and keep to the right edge (`marginLeft: auto`); the tablet's
+// 563px row holds 160px of text beside the armed group, so it is unchanged.
+//
 // Props:
 //   entries        — the day's waiting entries, sorted createdAt asc (parent)
 //   availability   — { [entryId]: {tables:[…], time:"HH:MM"} | null }
@@ -17,11 +31,11 @@
 //   onClose()      — close the panel
 
 import { useState } from "react";
-import { S, BTN, BLOCK_BG, R, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, R, T, FW } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
-import { Overlay, ModalTitle, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
 
 function addedLabel(ts){
   if(!ts) return "";
@@ -43,17 +57,21 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
       style={{fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)",whiteSpace:"nowrap",flexShrink:0}}>{"Table free"+(avail.time?" · "+avail.time:"")}</span>:<span
       style={{fontSize: T.small,fontWeight: FW.medium,color:S.muted,whiteSpace:"nowrap",flexShrink:0}}>waiting</span>;
     const arming=confirmId===w.id;
+    const who=w.name||"(no name)";
+    const party=who+", "+guestsLabel(w.size);
     return (
       <div
         key={w.id}
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
-          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{w.name||"(no name)"}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button
+          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto"}}><button
             className="mgt-hover-scale"
+            aria-label={"Book ("+party+")"}
             style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}
             onClick={function(){onBook(w);}}>Book</button><button
             className="mgt-hover-scale mgt-press"
-            style={mkBtn({fontSize: T.body,background:arming?BTN.del:BTN.cancel,minHeight:36})}
-            onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}>{arming?"Confirm?":"Remove"}</button></div></div>
+            aria-label={(arming?"Confirm — remove (":"Remove (")+party+")"}
+            style={mkDangerBtn(arming,{fontSize: T.body,minHeight:36})}
+            onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}>{arming?"Confirm — remove":"Remove"}</button></div></div>
     );
   });
 

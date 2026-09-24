@@ -346,7 +346,13 @@ explaining why is usually the one to read.
   in the hue + text in a third shade is the banned shape below — phase 27
   shipped exactly that and phase 28 took the border off. The sentence saying
   what the second tap does sits UNDER the row, never above the button. Users:
-  People's Remove, Reminders, Templates, Layout's ×, standing bookings.
+  People's Remove, Reminders, Templates, Layout's ×, standing bookings, the
+  waitlist panel's Remove (phase 41 — it only opens while a party waits, so
+  the critique could not reach it). **A row whose buttons sit beside its text
+  gives the text a flex BASIS**, or on a phone the buttons take their width
+  out of the text instead of wrapping under it — and the armed label is the
+  widest state, so that is when it bites (measured on the waitlist: 67px of
+  text beside "Confirm — remove").
 - **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
   cells were `--bg-input` (half-transparent) over a translucent sheet, so the
   page behind the modal showed through and the timeline's orange blocks

@@ -117,6 +117,38 @@ describe("the rows' deletes are quiet, and red only at the confirmation", () => 
   });
 });
 
+// v18.2.0 phase 41 (S6, reached live at last): the waitlist panel only opens
+// while a party waits, which DEV had not had. Measured there: every row's
+// Remove solid rgba(211, 58, 58, 0.75), and arming it changed only the word —
+// `BTN.cancel` and `BTN.del` are two tokens with one value.
+const Waitlist = read("components/WaitlistPanel.jsx");
+
+describe("the waitlist panel: Remove is quiet until armed", () => {
+  it("wears mkDangerBtn, and no red token at rest", () => {
+    expect(Waitlist).toMatch(/style=\{mkDangerBtn\(arming,\{fontSize: T\.body,minHeight:36\}\)\}/);
+    expect(Waitlist).not.toMatch(/BTN\.(cancel|del)/);
+  });
+
+  it("says what the second tap does, as People's Remove does", () => {
+    expect(Waitlist).toMatch(/>\{arming\?"Confirm — remove":"Remove"\}<\/button>/);
+    expect(Waitlist).not.toMatch(/"Confirm\?"/);
+  });
+
+  it("names the party on Book and Remove, the visible word leading", () => {
+    expect(Waitlist).toMatch(/const party=who\+", "\+guestsLabel\(w\.size\);/);
+    expect(Waitlist).toMatch(/aria-label=\{"Book \("\+party\+"\)"\}/);
+    expect(Waitlist).toMatch(/aria-label=\{\(arming\?"Confirm — remove \(":"Remove \("\)\+party\+"\)"\}/);
+  });
+
+  // Measured on a 375px phone: with a zero basis the buttons took their width
+  // out of the text — 129px of it, 67px once "Confirm — remove" widened the
+  // group. With the basis they drop under the text (283px) and stay right.
+  it("gives the row's text a basis, so the buttons wrap under it on a phone", () => {
+    expect(Waitlist).toMatch(/<div style=\{\{flex:"1 1 160px",minWidth:0\}\}>/);
+    expect(Waitlist).toMatch(/<div style=\{\{display:"flex",gap:6,flexShrink:0,marginLeft:"auto"\}\}>/);
+  });
+});
+
 describe("a paused reminder fades its text, never its buttons", () => {
   it("dims the words and says Paused, with the card at full strength", () => {
     expect(Reminders).not.toMatch(/opacity: r\.active \? 1 : 0\.55,\s*boxShadow/);
