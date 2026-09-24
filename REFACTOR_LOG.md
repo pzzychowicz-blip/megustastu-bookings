@@ -26489,8 +26489,8 @@ the rest drew nothing. On 23 Sep at 13:00, "until 15:45" on 1A and "until 18:00"
 6, in secondary ink. Switch off: no label drawn or spoken, `mgt-plan-avail` = "0";
 back on: both labels back and the key removed. Tapping table 2 offered no Walk-in
 here; tapping table 3 did. Light theme checked through `?theme=light`, which by
-design writes nothing to the account. `tests/plan-avail.test.js` (11 tests).
+design writes nothing to the account. `tests/plan-avail.test.js` (10 tests).
 
 **Gate after phase 21:** `121.07 kB` gz main bundle (+0.31) · **1659 tests** (+14:
-11 new, 2 contrast pairs, 1 prefs round-trip) · 0 lint errors, 91 warnings
-(unchanged) · style OK.
+10 in the new file, 4 for the two contrast pairs in both themes) · 0 lint errors,
+91 warnings (unchanged) · style OK.
