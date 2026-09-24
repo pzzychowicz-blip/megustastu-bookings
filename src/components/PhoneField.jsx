@@ -32,19 +32,39 @@
 // holds the number alone; typing or pasting "+44 …" / "0044 …" there still
 // works and moves the picker to the country it names.
 //
-// `onChange(value, source)`: `source` is "picker" for a country pick and
-// undefined for typing — the caller's suggestion list must only open on typing.
+// `onChange(value, source)`: `source` is "picker" for a country pick, "detect"
+// for a code found on blur (below), and undefined for typing — the caller's
+// suggestion list must only open on typing.
+//
+// ── A code typed without the plus (v18.2.0 phase 20) ─────────────────────────
+// Patryk: a number typed WITH its country code should put that code in the
+// picker. "+44 …" and "0044 …" always did, key by key. "44 7700 900123" did
+// not: it was stored behind whatever the picker held. `withTypedCode`
+// (lib/phone-countries.js) decides it, deliberately narrowly — see there — and
+// it runs when the number box LOSES focus, not per keystroke: digits alone
+// name a code only once the number is long enough, so doing it while typing
+// would strip "44" out from under the cursor at the eleventh digit. It runs
+// only if the box was typed in during that focus, so tabbing through an old
+// booking never rewrites its stored number. App's Save runs the same function
+// for a save that never blurred the box (Enter).
+//
+// A country the FIELD found (a typed "+44", "0044", or this detection) is
+// forgotten when the number is cleared: it was a reading of that number, and
+// with the number gone the picker goes back to "Code". Measured before this:
+// "44 7700 900123" detected 🇬🇧, the box was cleared, a French number typed
+// without its code was saved as "+44 33 6 12 34 56 78". A country somebody
+// PICKED stays — that was a choice about the guest, not about the digits.
 //
 // `inputProps` land on the NUMBER input (its id — so the form's label names it
 // — and the focus/blur handlers the customer-suggestion list is driven by);
 // `children` render inside the positioned row, which is where that suggestion
 // list has always hung.
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { SP } from "../lib/constants";
 import { mkInp } from "./atoms";
 import { CountryPicker } from "./CountryPicker";
-import { splitPhone, joinPhone, dialOf } from "../lib/phone-countries";
+import { splitPhone, joinPhone, dialOf, withTypedCode } from "../lib/phone-countries";
 
 export function PhoneField({ value, onChange, pinned, inputProps, children, placeholder = "600 000 000" }) {
   const [chosen, setChosen] = useState(null);
@@ -53,10 +73,16 @@ export function PhoneField({ value, onChange, pinned, inputProps, children, plac
   // until it grows into a code ("+34") — at which point the picker takes the
   // code and the box keeps only what follows it.
   const [raw, setRaw] = useState(null);
+  // Was the number box typed in since it last took focus? (phase 20, above)
+  const typedRef = useRef(false);
+  // Did the FIELD set `chosen` (from the digits) rather than the user? (above)
+  const foundRef = useRef(false);
   const { iso, national } = splitPhone(value, chosen);
+  const { onBlur: callerBlur, ...boxProps } = inputProps || {};
 
   function onPick(nextIso) {
     setChosen(nextIso);
+    foundRef.current = false;
     setRaw(null);
     // An empty number stays empty — switching country must never WRITE a
     // phone. A typed one is re-prefixed with the new code.
@@ -72,22 +98,48 @@ export function PhoneField({ value, onChange, pinned, inputProps, children, plac
     // Clear it: "" and a bare prefix are the same nothing to `enteredPhone`.
     if (value) onChange("", "picker");
   }
+  // The number is gone: a country the field found in it goes with it.
+  function forgetFound() {
+    if (!foundRef.current) return;
+    foundRef.current = false;
+    setChosen(null);
+  }
   function onNumber(e) {
+    typedRef.current = true;
     const s = String(e.target.value || "");
     const t = s.trim();
     if (t.charAt(0) === "+" || t.slice(0, 2) === "00") {
-      if (!dialOf(t)) { setRaw(s); onChange(""); return; }
+      if (!dialOf(t)) { setRaw(s); forgetFound(); onChange(""); return; }
       // It names its own country: move the picker there and keep the rest.
       const sp = splitPhone(t, iso);
       setRaw(null);
       setChosen(sp.iso);
+      foundRef.current = true;
       onChange(joinPhone(sp.iso, sp.national));
       return;
     }
     setRaw(null);
     // Clearing the box stores "" (joinPhone), never a bare code; text with no
     // digits at all is passed through as typed so the box does not eat it.
-    onChange(joinPhone(iso, s) || (/\d/.test(s) ? "" : t));
+    const next = joinPhone(iso, s) || (/\d/.test(s) ? "" : t);
+    // `iso` here is the one this render derived — possibly the country being
+    // forgotten — so the join above already used it; clearing is the only case
+    // that forgets, and a cleared box joins to "" whatever the country.
+    if (!/\d/.test(s)) forgetFound();
+    onChange(next);
+  }
+  function onBoxBlur(e) {
+    if (typedRef.current) {
+      typedRef.current = false;
+      const found = withTypedCode(value, pinned);
+      if (found !== value) {
+        setRaw(null);
+        setChosen(splitPhone(found, null).iso);
+        foundRef.current = true;
+        onChange(found, "detect");
+      }
+    }
+    if (callerBlur) callerBlur(e);
   }
 
   return (
@@ -105,7 +157,8 @@ export function PhoneField({ value, onChange, pinned, inputProps, children, plac
         onChange={onNumber}
         placeholder={placeholder}
         className="mgt-hover-scale"
-        {...inputProps}
+        {...boxProps}
+        onBlur={onBoxBlur}
         style={Object.assign({}, mkInp(), { flex: 1, minWidth: 0 })}
       />
       {children}

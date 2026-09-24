@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   COUNTRIES, countryByIso, splitPhone, joinPhone, dialLabel, cleanPinned,
-  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode,
+  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode,
 } from "../src/lib/phone-countries";
 import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
@@ -164,14 +164,94 @@ describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
     expect(name).toBeGreaterThan(-1);
     expect(phone).toBeGreaterThan(name);
     expect(phone).toBeLessThan(date);
-    expect(save).toMatch(/if\(ph&&!phoneHasCode\(ph\)\)/);
     // An edit that leaves an old code-less number untouched still saves.
-    expect(save).toMatch(/if\(!origB\|\|cleanPhoneOf\(origB\.phone\)!==ph\)\{setErrorField\("phone"\)/);
+    expect(save).toMatch(/if\(ph&&!phoneHasCode\(ph\)&&!phoneUntouched\)\{setErrorField\("phone"\)/);
+    expect(save).toMatch(/const phoneUntouched=!!origB&&cleanPhoneOf\(origB\.phone\)===cleanPhoneOf\(fIn\.phone\);/);
   });
 
   it("the phone field takes no default country", () => {
     expect(Field).toMatch(/splitPhone\(value, chosen\)/);
     expect(Field).not.toMatch(/defaultIso/);
     expect(Settings, "Settings no longer offers a default country").not.toMatch(/phoneCountry/);
+  });
+});
+
+describe("withTypedCode — a code typed without the plus (v18.2.0 phase 20)", () => {
+  const P = DEFAULT_PINNED; // ES GB DE FR IT NL
+
+  it("gives a pinned country's code to a long number that starts with it", () => {
+    expect(withTypedCode("44 7700 900123", P)).toBe("+44 7700 900123");
+    expect(withTypedCode("34612345678", P)).toBe("+34 612345678");
+    expect(withTypedCode("33 6 12 34 56 78", P)).toBe("+33 6 12 34 56 78");
+    expect(withTypedCode("31 6 12345678", P)).toBe("+31 6 12345678");
+    expect(withTypedCode("49 151 23456789", P)).toBe("+49 151 23456789");
+    expect(withTypedCode("39 312 345 6789", P)).toBe("+39 312 345 6789");
+  });
+
+  it("leaves a national number alone — too short, or led by a trunk 0", () => {
+    // A Spanish mobile read as a code would be Australia (+61).
+    expect(withTypedCode("612 345 678", P)).toBe("612 345 678");
+    // An Italian mobile starts "31", the Netherlands' code, and is 10 digits.
+    expect(withTypedCode("3123456789", P)).toBe("3123456789");
+    expect(withTypedCode("07700 900123", P)).toBe("07700 900123");
+  });
+
+  it("only knows the PINNED countries", () => {
+    expect(withTypedCode("48 512 345 678", P)).toBe("48 512 345 678");
+    expect(withTypedCode("48 512 345 678", ["PL"])).toBe("+48 512 345 678");
+    // +1 is not pinned by default: a Chinese or Brazilian national number starts with 1.
+    expect(withTypedCode("1 212 555 1234", P)).toBe("1 212 555 1234");
+    expect(withTypedCode("1 212 555 1234", ["US"])).toBe("+1 212 555 1234");
+    expect(withTypedCode("44 7700 900123", [])).toBe("44 7700 900123");
+    expect(withTypedCode("44 7700 900123", undefined)).toBe("44 7700 900123");
+  });
+
+  it("takes the longest pinned code, as splitPhone does", () => {
+    expect(withTypedCode("441481 123456", ["GB", "GG"])).toBe("+44 1481 123456");
+  });
+
+  it("never touches a number that already names its code", () => {
+    expect(withTypedCode("+44 7700 900123", P)).toBe("+44 7700 900123");
+    expect(withTypedCode("+34 44 7700 900123", P)).toBe("+34 44 7700 900123");
+    expect(withTypedCode("", P)).toBe("");
+    expect(withTypedCode(null, P)).toBe(null);
+  });
+});
+
+describe("where the detection runs (v18.2.0 phase 20)", () => {
+  const App = read("src", "App.jsx");
+  const Field = read("src", "components", "PhoneField.jsx");
+  const Form = read("src", "components", "BookingFormModal.jsx");
+
+  it("the number box runs it on BLUR, only after typing in that focus, and reports it as 'detect'", () => {
+    expect(Field).toMatch(/function onNumber\(e\) \{\s*typedRef\.current = true;/);
+    expect(Field).toMatch(/function onBoxBlur\(e\) \{\s*if \(typedRef\.current\) \{\s*typedRef\.current = false;\s*const found = withTypedCode\(value, pinned\);/);
+    expect(Field).toMatch(/onChange\(found, "detect"\);/);
+    // The caller's own blur (the form closes its suggestion list) still runs.
+    expect(Field).toMatch(/if \(callerBlur\) callerBlur\(e\);/);
+    expect(Field).toMatch(/\{\.\.\.boxProps\}\s*onBlur=\{onBoxBlur\}/);
+  });
+
+  it("a country the FIELD found is forgotten when the number is cleared; a PICKED one stays", () => {
+    // Measured before: "44 7700 900123" detected GB, the box was cleared, and a
+    // French number typed without its code saved as "+44 33 6 12 34 56 78".
+    expect(Field).toMatch(/function onPick\(nextIso\) \{\s*setChosen\(nextIso\);\s*foundRef\.current = false;/);
+    expect(Field).toMatch(/function forgetFound\(\) \{\s*if \(!foundRef\.current\) return;\s*foundRef\.current = false;\s*setChosen\(null\);/);
+    expect(Field).toMatch(/if \(!\/\\d\/\.test\(s\)\) forgetFound\(\);/);
+    // Both ways the field finds a country mark it as found.
+    expect(Field.match(/foundRef\.current = true;/g) || []).toHaveLength(2);
+  });
+
+  it("only typing (no source) opens the form's suggestion list", () => {
+    expect(Form).toMatch(/onChange=\{function\(v,src\)\{if\(!src\) setPhoneFocus\(true\);/);
+  });
+
+  it("Save runs it too — into `f`, never an untouched edit's number — before the code check", () => {
+    const save = App.slice(App.indexOf("function doSave(){"));
+    expect(save).toMatch(/const typedPhone=phoneUntouched\?fIn\.phone:withTypedCode\(fIn\.phone,generalSettings\.pinnedCountries\);/);
+    expect(save).toMatch(/const f=typedPhone!==fIn\.phone\?Object\.assign\(\{\},fIn,\{phone:typedPhone\}\):fIn;/);
+    expect(save.indexOf("withTypedCode(")).toBeLessThan(save.indexOf('setErrorField("phone")'));
+    // Not written back to the form: that would clear the error this save may set.
+    expect(save.slice(0, save.indexOf('setErrorField("phone")'))).not.toMatch(/setForm\(/);
   });
 });

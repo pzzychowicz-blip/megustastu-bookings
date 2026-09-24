@@ -223,6 +223,47 @@ export function phoneHasCode(phone) {
   return s.replace(/\D/g, "").slice(0, 2) === "00";
 }
 
+// ── withTypedCode (v18.2.0 phase 20) ─────────────────────────────────────────
+// Patryk: after typing a number WITH its country code, the code should be
+// detected and put in the picker. "+44 …" and "0044 …" already were (the
+// number box reads them as they are typed); this is the same number typed
+// without the plus — "44 7700 900123", "34612345678" — which used to be
+// saved behind whatever country the picker held ("+34 44 7700 900123").
+//
+// Digits alone do not say whether a code is there: "612 345 678" is a Spanish
+// mobile, and read as a code it is Australia (+61). So it is deliberately
+// narrow, and every limit is there for a case it would otherwise get wrong:
+//   • only a string that names NO code yet — a picked country, a "+" or "00"
+//     already answered the question;
+//   • only the restaurant's PINNED countries — the codes its guests actually
+//     give, which keeps +1 (a Chinese or Brazilian national number starts with
+//     1) and the rest of the world's short codes out of it;
+//   • only at 11+ digits — a pinned country's code plus a national number of 9
+//     or more. Without their trunk 0, Spanish, French and Dutch numbers are 9
+//     digits and British ones 10, so none of them reaches 11 alone. A German
+//     number can (it runs to 11), but it is written with its 0 at home, and
+//     without it every German mobile starts with 1, which no default pin has;
+//   • never with a leading 0 — that is a trunk prefix, i.e. a NATIONAL number
+//     ("07700 900123"), and no country code starts with 0.
+// The longest matching code wins, as in `splitPhone`, so a pinned Guernsey
+// (44 1481) beats the UK. Returns the number with its code ("+44 7700
+// 900123", via `joinPhone`), or the input unchanged when nothing applies.
+export function withTypedCode(phone, pinned) {
+  const s = phone == null ? "" : String(phone).trim();
+  if (!s || phoneHasCode(s)) return phone;
+  const digits = s.replace(/\D/g, "");
+  if (digits.length < 11 || digits.charAt(0) === "0") return phone;
+  const hit = (pinned || []).map(countryByIso).filter(Boolean)
+    .filter(function (c) { return digits.slice(0, c.dial.length) === c.dial; })
+    .sort(function (a, b) { return b.dial.length - a.dial.length; })[0];
+  if (!hit) return phone;
+  // Consume the code's digits from the typed string, so the rest keeps its
+  // own spacing (the same walk `splitPhone` does).
+  let used = 0, i = 0;
+  while (i < s.length && used < hit.dial.length) { if (/\d/.test(s[i])) used++; i++; }
+  return joinPhone(hit.iso, s.slice(i).replace(/^[\s\-().]+/, ""));
+}
+
 // The pinned list as stored: known ISO codes, upper-case, no repeats, capped.
 export function cleanPinned(list) {
   if (!Array.isArray(list)) return DEFAULT_PINNED.slice();

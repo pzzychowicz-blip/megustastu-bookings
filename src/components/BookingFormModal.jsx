@@ -990,8 +990,10 @@ export function BookingFormModal({
             value={form.phone}
             /* /code-review: only TYPING opens the suggestion list. A country
                pick left it open with focus on the picker, where no blur of the
-               number box can ever arrive to close it. */
-            onChange={function(v,src){if(src!=="picker") setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
+               number box can ever arrive to close it. v18.2.0 phase 20: typing
+               is the change with NO source — a code detected on blur ("detect")
+               happens as the box closes the list, and must not reopen it. */
+            onChange={function(v,src){if(!src) setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
             pinned={pinnedCountries}
             inputProps={Object.assign({id:fid},attrs,{
               /* Same reopen fix as the name field above. */

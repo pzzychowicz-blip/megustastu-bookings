@@ -78,8 +78,9 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
-// v18.2.0 phase 19: Save refuses a typed number that names no country code.
-import { phoneHasCode } from "./lib/phone-countries";
+// v18.2.0 phase 19: Save refuses a typed number that names no country code;
+// phase 20: a number typed WITH its code but no "+" gets that code first.
+import { phoneHasCode, withTypedCode } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -3026,7 +3027,20 @@ function BookingApp({uid}){
     // so every downstream read (status write, diffBooking history, completed-
     // duration gate, flash condition) sees the effective status uniformly.
     const so=statusOverrideRef.current;
-    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    const fIn=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    // v18.2.0 phase 20: a number typed WITH its country code but no "+"
+    // ("44 7700 900123") gets that code here as well as when the number box
+    // loses focus (PhoneField), because a save by Enter never blurs the box.
+    // It goes into `f` itself, so every read below — the code check, the
+    // stored phone, the history diff, the WhatsApp link — sees one number.
+    // Not into the form state: a `setForm` here would change `form.phone` and
+    // the stale-error effect would then clear any error this same save sets.
+    // An edit that leaves the stored number untouched is never rewritten —
+    // phase 19's exemption, one test for both.
+    const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
+    const phoneUntouched=!!origB&&cleanPhoneOf(origB.phone)===cleanPhoneOf(fIn.phone);
+    const typedPhone=phoneUntouched?fIn.phone:withTypedCode(fIn.phone,generalSettings.pinnedCountries);
+    const f=typedPhone!==fIn.phone?Object.assign({},fIn,{phone:typedPhone}):fIn;
     // v17.12.0: cleared here, set only by the field-specific branches below, so
     // the form-level errors further down leave it null without having to say so.
     setErrorField(null);
@@ -3040,10 +3054,7 @@ function BookingApp({uid}){
       // An EDIT that leaves an old code-less number untouched still saves: the
       // rule is about numbers typed now, not a sweep of the stored ones.
       {const ph=cleanPhoneOf(f.phone);
-        if(ph&&!phoneHasCode(ph)){
-          const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
-          if(!origB||cleanPhoneOf(origB.phone)!==ph){setErrorField("phone");setError("Choose the country code for this phone number.");return;}
-        }}
+        if(ph&&!phoneHasCode(ph)&&!phoneUntouched){setErrorField("phone");setError("Choose the country code for this phone number.");return;}}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setErrorField("date");setError("Please set a date.");return;}

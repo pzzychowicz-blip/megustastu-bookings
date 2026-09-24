@@ -26404,3 +26404,48 @@ a source test. `tests/phone-countries.test.js` 24 tests (+8).
 
 **Gate after phase 19:** `120.46 kB` gz main bundle (−0.21 against the follow-up's
 120.67) · **1636 tests** (+9) · 0 lint errors, 91 warnings (unchanged) · style OK.
+
+### 20. A country code typed without the plus is detected
+
+Patryk: after typing a phone number with its country code, the code should be
+detected and put in the picker. Measured first: "+34 612 345 678" and
+"0049 151 2345 6789" already were, key by key. "33 6 12 34 56 78" was not: it stayed
+behind the picker's country and would have saved as "+49 33 6 12 34 56 78".
+
+- **`withTypedCode(phone, pinned)`** (`lib/phone-countries.js`) gives such a number
+  its code. Digits alone do not say a code is there ("612 345 678" read as one is
+  Australia, +61), so it is narrow, as proposed to him: only a string that names no
+  code yet, only the restaurant's PINNED countries (which keeps +1 out: Chinese and
+  Brazilian national numbers start with 1), only at 11+ digits, never with a
+  leading 0 (a trunk prefix, i.e. a national number). The longest pinned code wins,
+  so a pinned Guernsey beats the UK.
+- **When:** as the number box loses focus, and only if it was typed in during that
+  focus, so tabbing through an old booking never rewrites its number. Not per
+  keystroke: the rule can only answer at the eleventh digit, which would strip the
+  code out from under the cursor. **Also at Save**, for a save by Enter that never
+  blurs the box, into `f` itself (so the check, the stored number, the history diff
+  and the WhatsApp link see one string) and never into the form state, where it
+  would let the stale-error effect clear an error that same save sets. An untouched
+  edit is never rewritten (phase 19's `phoneUntouched`, one test for both).
+- **A country the field found is forgotten with its number.** Found by measuring:
+  "44 7700 900123" detected 🇬🇧, the box was cleared, and a French number typed
+  without its code saved as "+44 33 6 12 34 56 78". `foundRef` marks a country the
+  field set (a typed "+44", "0044", or this detection); clearing the box forgets it
+  and the picker reads "Code" again. A PICKED country stays: that was a choice about
+  the guest, not a reading of the digits.
+- The form opens its suggestion list only for a change with no source (typing), so
+  the blur's "detect" change does not reopen it as the box closes it. `src/lib`'s
+  note on the file also catches up with phase 19, which missed it.
+
+Live, after a full reload (values through React's input events; one early run read
+"no detection" because the pane's document did not have focus, so `blur()` fired no
+event — re-run with `document.hasFocus()` true and the native focus/blur events
+recorded): "44 7700 900123", then leaving the box → 🇬🇧 +44 and "7700 900123".
+Clearing the box → "Code". "39 312 345 6789" typed with focus still in the box and
+Save clicked → stored "+39 312 345 6789" at 16:30, the Save path on its own (a first
+attempt at 13:00 raised the kitchen-busy confirm, whose focus change ran the blur
+path instead, so it proved nothing about Save). `tests/phone-countries.test.js` 33
+tests (+9).
+
+**Gate after phase 20:** `120.76 kB` gz main bundle (+0.30) · **1645 tests** (+9) ·
+0 lint errors, 91 warnings (unchanged) · style OK.
