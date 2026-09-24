@@ -115,6 +115,15 @@ describe("the rows' deletes are quiet, and red only at the confirmation", () => 
   it("Standing bookings: the same look, and the armed label says what the second tap does", () => {
     expect(Settings).toMatch(/style=\{mkDangerBtn\(armed, \{ fontSize: T\.body, minHeight: 32, padding: "4px 10px" \}\)\}>\{armed \? "Confirm — delete" : "Delete"\}/);
   });
+
+  // v18.2.0 phase 42: measured on DEV with two rules, both Deletes were named
+  // "Delete". The switch beside each already carried the rule's identity; the
+  // two now read ONE expression, so they cannot name different rules.
+  it("Standing bookings: Delete names its rule, from the same string as its switch", () => {
+    expect(Settings).toMatch(/const ruleWho = \(r\.name \|\| "\(no name\)"\) \+ ", every " \+ \(RULE_WD\[r\.weekday\] \|\| "\?"\) \+ " at " \+ r\.time;/);
+    expect(Settings).toMatch(/label=\{"Standing booking: " \+ ruleWho\}/);
+    expect(Settings).toMatch(/aria-label=\{\(armed \? "Confirm — delete \(" : "Delete \("\) \+ ruleWho \+ "\)"\}/);
+  });
 });
 
 // v18.2.0 phase 41 (S6, reached live at last): the waitlist panel only opens

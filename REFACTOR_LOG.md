@@ -27174,3 +27174,20 @@ dark: text 283px (was 129), buttons under it 13px from the row's edge, rows 102p
 
 **Gate after phase 41:** `121.86 kB` gz main bundle (+0.04) · **1823 tests** (+4) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 42. A standing booking's Delete names its rule (S6)
+
+Phase 28 gave Templates' Delete its template's name, because six rows of bare "Delete" are six
+identical names. Standing bookings took phase 28's look but not that half: with two rules on DEV,
+both Deletes were named "Delete" (read from the accessibility tree; nothing on screen shows it). The
+switch beside each already carried the rule's identity, "Standing booking: test standing, every Fri
+at 13:00". Both now read ONE expression, `ruleWho`, so the switch and the Delete cannot name different
+rules: "Delete (test standing, every Fri at 13:00)", and "Confirm — delete (…)" once armed.
+
+Live on DEV (standing bookings switched on for the check and off again, nothing deleted): the switch
+"Standing booking: test standing, every Fri at 13:00", the Delete "Delete (test standing, every Fri
+at 13:00)", armed "Confirm — delete (test standing, every Fri at 13:00)". `tests/destructive-buttons.test.js`
++1; `tests/a11y.test.js`'s pin on the switch's label still holds.
+
+**Gate after phase 42:** `121.86 kB` gz main bundle (±0; Settings is a lazy chunk) · **1824 tests** (+1) ·
+0 lint errors, 90 warnings (unchanged) · style OK.

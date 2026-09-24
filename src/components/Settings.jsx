@@ -981,6 +981,9 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No standing bookings yet.</div>
               ) : (recurring.rules || []).map(function (r) {
                 const armed = armedRule === r.id;
+                // v18.2.0 phase 42: the rule's identity, written once — the
+                // switch and the Delete both name it, so they cannot disagree.
+                const ruleWho = (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time;
                 return (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -994,12 +997,16 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                         the two lines to its left. Not " · paused": that is the
                         state, and aria-checked already says it. */}
                     <Toggle
-                      label={"Standing booking: " + (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time}
+                      label={"Standing booking: " + ruleWho}
                       on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
                     {/* v18.2.0 (S6): the rows' shared look — the danger tint,
                         solid red only once armed — and the armed label says
-                        what the second tap does, as People's Remove does. */}
+                        what the second tap does, as People's Remove does.
+                        Phase 42: and it names its rule, as Templates' Delete
+                        names its template — two rules were two buttons both
+                        called "Delete" (measured on DEV). */}
                     <button
+                      aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
                       onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
                       className="mgt-hover-scale mgt-press"
                       style={mkDangerBtn(armed, { fontSize: T.body, minHeight: 32, padding: "4px 10px" })}>{armed ? "Confirm — delete" : "Delete"}</button>
