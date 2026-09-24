@@ -366,7 +366,7 @@ Admin (*may you*). Customers, App and Shortcuts are always there.
 | "Linked booking" | **linked booking card** (`LinkedBookingCard.jsx`) | The booking this thread is attached to. Open booking · Cancel booking. |
 | EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. Edited from INSIDE the inbox, not from the settings tab: **Edit templates**, the pencil in the inbox header (`T`). Since v18.2.0 it and the composer's Insert template have different names and marks; both were "Templates" with one document icon. |
 | Settings › **WhatsApp** | **WhatsApp settings tab** (`WhatsAppTabContent`, `Settings.jsx`) | The module's one restaurant-wide setting: **Archive when the booking is completed**. Needs `settingsWrite` on top of the module, unlike the inbox — changing what the whole restaurant's inbox does is configuration, whereas answering a guest is service. |
-| 🧪 icon in the inbox header, or `X` | **simulator** (`WaSimulator.jsx`) | Sandbox-only. Fake inbound messages to drive the pipeline. |
+| 🧪 **Simulator** in the inbox header, or `X` | **simulator** (`WaSimulator.jsx`) | Sandbox-only. Fake inbound messages to drive the pipeline. |
 
 ### Conversation state
 
@@ -392,7 +392,7 @@ Admin (*may you*). Customers, App and Shortcuts are always there.
 | A number on the draft card | **confidence** (`clampConfidence`) | How sure the parse is. |
 | Two parses of one thread not fighting | **`mergeDraft`** (`lib/whatsapp.js`) | Folds a new parse into the existing draft rather than replacing it. |
 | The automatic "got it" reply | **auto-ack** (`AUTO_ACK_TEXT`) | Sent on inbound so the customer isn't left waiting. |
-| "Checking…" / the ↻ button | **re-check** (`api/wa-recheck.js`, `parseThread`) | A **real staff feature, not sim tooling.** Re-reads the last `WA_RECHECK_HISTORY` (12) messages *both directions* and asks what the customer wants **now**, then applies it through the same `applyParse` the webhook uses. |
+| **Re-check** (↻) in the conversation header, "Checking…" while it runs | **re-check** (`api/wa-recheck.js`, `parseThread`) | A **real staff feature, not sim tooling.** Re-reads the last `WA_RECHECK_HISTORY` (12) messages *both directions* and asks what the customer wants **now**, then applies it through the same `applyParse` the webhook uses. |
 | `conversations/{phoneKey}` | **phone key** (`phoneKey`) | The normalised phone, used as the RTDB child key. Writes are keyed, never whole-array. |
 | — | **`settings/whatsapp`** (`useWaSettings.js`) | `{v, autoArchiveOnComplete}` + revGuard CAS on `whatsappRev`. Its rules pair ships with the module (v18.0.0 phase 5); DEV is permissive, so it worked untouched there beforehand. |
 

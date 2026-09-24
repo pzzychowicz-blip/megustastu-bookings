@@ -26789,3 +26789,22 @@ document paths respectively, the second `aria-pressed="false"` until opened.
 
 **Gate after phase 30:** `121.75 kB` gz main bundle (+0.04) · **1705 tests** (+3) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 31. Words on the inbox's icon buttons (W3)
+
+The simulator flask, Templates and "Re-check this conversation" were icon-only, named by their
+`title` alone. That is an accessible name, but a hover tooltip the restaurant's tablets never show,
+so a finger never learned what the circular arrow does. Each now carries its word beside the mark,
+in the shape Archive already had (icon at `IC.inline`, `T.small`, 8/12 padding, `H.chrome` tall):
+**Re-check** ("Checking…" while it spins) in the conversation header, and **Edit templates** and the
+sandbox's **Simulator** in the inbox header (`HEAD_TEXT_BTN`). The titles stay, as the longer
+descriptions. Close stays a bare ✕, the one mark everybody reads. The W2 test now pins the header
+button's visible text, which is where its name comes from; the `aria-label` phase 30 gave it is
+gone, since a name written twice can drift apart.
+
+Live on DEV at 1280×800: Simulator 96px and Edit templates 123px in the header, Re-check 94px beside
+Archive 83px, all 36px tall. The phone's header, which already wrapped, is the next phase's (W5).
+`tests/wa-inbox-layout.test.js` +2.
+
+**Gate after phase 31:** `121.74 kB` gz main bundle (−0.01) · **1707 tests** (+2) · 0 lint errors, 91
+warnings (unchanged) · style OK.

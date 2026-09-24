@@ -179,8 +179,11 @@ export function ConversationView({
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
   // archived thread can be re-checked too; that's often exactly why you opened
-  // it). Icon-only to match the panel header's Templates / simulator buttons, and it
-  // spins while the round-trip is in flight.
+  // it). It spins while the round-trip is in flight.
+  // v18.2.0 (the design critique, W3): icon AND word, like Archive beside it.
+  // It was icon-only, named by its `title` alone — an accessible name, but a
+  // tooltip the tablets never show, so a finger never learned what the
+  // circular arrow does. The title stays, as the longer description.
   const running = recheck === "running";
   const recheckBtn = onRecheck ? (
     <button
@@ -188,14 +191,15 @@ export function ConversationView({
       disabled={running}
       title={running ? "Checking…" : "Re-check this conversation for requested changes"}
       className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={mkSolidBtn("var(--btn-default)", { width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 })}
+      style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", opacity: running ? 0.6 : 1 })}
     >
       {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
           direction curve describes it and it keeps `linear`. Documented
           exception, alongside .mgt-shimmer and .mgt-dot-pulse — and marked as
           one, so `check:style`'s motion rule reads it as a decision rather than
           as the sweep having missed a file (17.15.0-wa-sandbox). */}
-      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.control} /></span>
+      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.inline} /></span>
+      {running ? "Checking…" : "Re-check"}
     </button>
   ) : null;
 

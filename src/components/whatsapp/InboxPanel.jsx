@@ -89,6 +89,10 @@ function resolveInitialKey(convs) {
   return topKeyOfTab(convs, "inbox");
 }
 
+// v18.2.0 (W3): the header's icon-AND-word buttons (Edit templates, the
+// sandbox's Simulator), the shape of the conversation header's Archive.
+const HEAD_TEXT_BTN = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, lineHeight: 1 };
+
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
   onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
@@ -416,14 +420,17 @@ export function InboxPanel({
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
             {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><FlaskIcon size={IC.chrome} /></button>
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
             ) : null}
             {/* v18.2.0 (the design critique, W2): "Edit templates", with the
                 app's edit pencil. It was "Templates" with the same document
                 icon as the composer's "Templates", which does a different job
                 (it shows the chips that INSERT one into the reply), so two
-                controls with one name and one mark did two things. */}
-            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" aria-label="Edit templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><EditIcon size={IC.chrome} /></button>
+                controls with one name and one mark did two things.
+                W3: and it SAYS so, as does the simulator's — icon-only, their
+                meaning lived in a tooltip the tablets never show. Close stays
+                a bare ✕, the one mark everybody reads. */}
+            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
             <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><CloseIcon size={IC.chrome} /></button>
           </div>
         </div>

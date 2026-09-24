@@ -427,6 +427,12 @@ explaining why is usually the one to read.
   their own content's width and do not shrink, and the controls, as ONE group,
   wrap to a second line instead. Rule: in a row of "the thing + what you can
   do to it", the thing keeps its width and the controls move.
+- **A control's meaning is on the control, not in its tooltip (v18.2.0, W3).**
+  A `title` is an accessible name of last resort and a hover tooltip, and the
+  restaurant's tablets never hover. The inbox's Re-check, Edit templates and
+  Simulator were icon-only; each now carries its word beside the mark (the
+  shape Archive already had), and the title stays as the longer description.
+  A bare ✕ for Close is the one exception: everybody reads it.
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's
