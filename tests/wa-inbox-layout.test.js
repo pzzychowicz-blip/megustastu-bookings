@@ -129,8 +129,26 @@ describe("W-1 — a wrapping pane header never draws its actions over its title"
     expect(Panel).toMatch(/flex: onHeaderClick \? "1 1 auto" : 1, minWidth: 0 \}\}>\{title\}<\/span>/);
     expect(Panel, "the header wraps only when it is a toggle").toMatch(/\.\.\.\(onHeaderClick \? \{ cursor: "pointer", flexWrap: "wrap" \} : null\)/);
   });
-  it("is the header both linked-booking panes use", () => {
+  it("is the header the linked card uses, and the intent banner whenever it has a body (phase 49)", () => {
     expect(read("components/whatsapp/LinkedBookingCard.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
-    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
+    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{hasBody \? toggle : undefined\}/);
+  });
+});
+
+// v18.2.0 phase 49 (round 3's W-2 + W-3), measured on DEV: the intent banner
+// repeated "Linked to: Sun 27.09 · 20:30 · 4 guests" under the linked card that
+// says exactly that, and every past-bookings row ended "· completed".
+describe("W-2 + W-3 — the conversation says each thing once", () => {
+  const Banner = read("components/whatsapp/IntentBanner.jsx");
+  it("drops the Linked-to line, and says so only when there is no link", () => {
+    expect(Banner).toMatch(/const subtitle = linkedBooking \? null : "No linked booking found";/);
+  });
+  it("is not a toggle when it has nothing to disclose", () => {
+    expect(Banner).toMatch(/const hasBody = !!subtitle \|\| !!showApply;/);
+    expect(Banner).toMatch(/onHeaderClick=\{hasBody \? toggle : undefined\}/);
+    expect(Banner).toMatch(/\{hasBody \? <span style=\{\{ color, flexShrink: 0/);
+  });
+  it("past bookings end at the party's size", () => {
+    expect(View).not.toMatch(/guestsLabel\(b\.size\) \+ " · " \+ b\.status/);
   });
 });

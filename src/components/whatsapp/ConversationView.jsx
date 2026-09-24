@@ -175,7 +175,9 @@ export function ConversationView({
     // section shape carries no border at all, the tint carries the semantics.
     <AlertPanel role="success" icon={CheckIcon} title="Past bookings" style={{ marginBottom: 10 }}>
       {pastList.slice(0, 5).map((b, i) => (
-        <AlertRow key={b.id} first={i === 0}>{(formatDay(b.date) || "?") + " · " + b.time + " · " + guestsLabel(b.size) + " · " + b.status}</AlertRow>
+        // v18.2.0 phase 49 (round 3's W-3): no status. `regularBookings` holds
+        // completed visits only, so " · completed" ended every row and said nothing.
+        <AlertRow key={b.id} first={i === 0}>{(formatDay(b.date) || "?") + " · " + b.time + " · " + guestsLabel(b.size)}</AlertRow>
       ))}
     </AlertPanel>
   ) : null;

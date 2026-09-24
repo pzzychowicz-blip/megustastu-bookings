@@ -178,9 +178,11 @@ describe("every date on screen goes through formatDay", () => {
   // Found after phase 37 by a second sweep, for the `(x.date || "?")` shape the
   // first one's patterns did not cover: the conversation's past bookings and
   // the intent banner's "Linked to:".
-  it("the conversation's past bookings and the intent banner", () => {
+  // v18.2.0 phase 49: the intent banner no longer prints "Linked to:" at all —
+  // the linked card directly above it says the same (round 3's W-2).
+  it("the conversation's past bookings", () => {
     expect(read("components/whatsapp/ConversationView.jsx")).toMatch(/\{\(formatDay\(b\.date\) \|\| "\?"\) \+ " · " \+ b\.time/);
-    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/"Linked to: " \+ \(formatDay\(linkedBooking\.date\) \|\| "\?"\)/);
+    expect(read("components/whatsapp/IntentBanner.jsx")).not.toMatch(/Linked to: /);
   });
 
   // And a third, found by the sweep after that: a date PUSHED into a line

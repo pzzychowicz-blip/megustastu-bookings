@@ -27336,3 +27336,27 @@ Redeem: the row cleared; the voucher's `redemptions` gained the booking's entry 
 
 **Gate after phase 48:** `122.14 kB` gz main bundle (+0.14) · **1842 tests** (+4) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 49. The conversation says each thing once (W-2 + W-3)
+
+**W-2.** The intent banner printed "Linked to: Sun 27.09 · 20:30 · 4 guests" directly under the
+linked-booking card, which renders whenever there is a linked booking and says exactly that, open
+or collapsed. The banner's body now holds only what is not already on screen: the requested changes
+("Requested: 6 guests"), or "No linked booking found". A banner left with nothing to disclose — a
+linked cancel request, or a change the parser found nothing in — has no body, so it is not a toggle
+and has no chevron: a disclosure that opens onto nothing is noise.
+
+**W-3.** Every "Past bookings" row ended "· completed", because `regularBookings` holds completed
+visits only. The status is gone from both lists that show them, the conversation's and the booking
+form's (the same data under the same title). The booking form's "No-shows" list keeps its status: a
+legacy no-show, found by a history entry rather than the flag, can carry any status.
+
+Live on DEV, tablet: Sofía's banner "Customer is requesting changes · Apply changes · Mark as
+handled · Requested: 6 guests", still a toggle; Tom's "Customer is requesting to cancel · Mark as
+handled", one line, cursor `auto`, no chevron; Juan's past bookings "Thu 03.09 · 20:30 · 4 guests",
+in the conversation and in the booking form. `tests/wa-inbox-layout.test.js` +3; the phase-46 pin,
+`tests/wa-sandbox-integrity.test.js`, `tests/party-size.test.js` and `tests/date-format.test.js`
+follow the new shapes (the last now asserts "Linked to:" is gone).
+
+**Gate after phase 49:** `122.15 kB` gz main bundle (+0.01) · **1845 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.

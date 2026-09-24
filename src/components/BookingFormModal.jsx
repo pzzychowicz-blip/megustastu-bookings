@@ -293,7 +293,7 @@ export function BookingFormModal({
       title={noshow?"No-shows":"Past bookings"}
       count={histList.length}
       style={{marginTop:8}}>
-      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(formatDay(b.date)||"?")+" · "+(b.scheduledTime||b.time)+" · "+guestsLabel(b.size)+" · "+b.status}</AlertRow>;})}
+      {/* v18.2.0 phase 49 (W-3): "Past bookings" are completed visits only, so the status said nothing there; a legacy no-show can carry any status, so that list keeps it. */}{histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(formatDay(b.date)||"?")+" · "+(b.scheduledTime||b.time)+" · "+guestsLabel(b.size)+(noshow?" · "+b.status:"")}</AlertRow>;})}
       {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</AlertRow>:null}
     </AlertPanel>;
   }

@@ -98,8 +98,10 @@ describe("no surface says pax", () => {
     ["components/PrefPickerModal.jsx", /"Capacity: " \+ cap \+ " \/ " \+ guestsLabel\(needed\)/],
     ["components/Settings.jsx", /\(r\.name \|\| "\(no name\)"\) \+ " · " \+ guestsLabel\(r\.size\)/],
     ["components/DaySheet.jsx", /<th style=\{th\}>Guests<\/th>/],
-    ["components/BookingFormModal.jsx", /" · "\+guestsLabel\(b\.size\)\+" · "\+b\.status/],
-    ["components/whatsapp/ConversationView.jsx", /" · " \+ guestsLabel\(b\.size\) \+ " · " \+ b\.status/],
+    // v18.2.0 phase 49: "Past bookings" rows no longer end in their status
+    // (always "completed"); the no-show list keeps it.
+    ["components/BookingFormModal.jsx", /" · "\+guestsLabel\(b\.size\)\+\(noshow\?" · "\+b\.status:""\)/],
+    ["components/whatsapp/ConversationView.jsx", /" · " \+ guestsLabel\(b\.size\)\}<\/AlertRow>/],
     ["components/whatsapp/IntentBanner.jsx", /reqParts\.push\(guestsLabel\(draftData\.size\)\)/],
   ];
   for (const [file, re] of sites) {
