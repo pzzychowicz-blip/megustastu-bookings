@@ -73,6 +73,17 @@ describe("App's date-nav row", () => {
   });
 });
 
+describe("the Summary breaks its own line where the date row expects it to", () => {
+  // Measured at 800px: the slot sat beside the date controls (its one-line
+  // width counts the headline's ~138px of content) while the card broke its
+  // row on the headline's 200px basis, so it drew the two-line card the
+  // slot's rule exists to prevent, from about 784 to 846px wide.
+  it("gives the headline its content as its basis, not a fixed 200px", () => {
+    expect(Summary).toMatch(/flex: "1 1 auto", minWidth: 0, boxSizing: "border-box", padding: 0,/);
+    expect(Summary).not.toMatch(/flex: "1 1 200px"/);
+  });
+});
+
 describe("the Summary's opened body stays out of that width", () => {
   it("contains the Reveal's inline size, or opening it would bounce the panel onto the next line", () => {
     expect(Summary).toMatch(/<Reveal show=\{open\} style=\{\{ contain: "inline-size" \}\}>/);

@@ -102,7 +102,15 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           onClick={onToggle}
           aria-expanded={open}
           style={{
-            flex: "1 1 200px", minWidth: 0, boxSizing: "border-box", padding: 0,
+            // v18.2.0: basis "auto" (its own content), where it was 200px over
+            // ~138px of "14 covers  7 bookings". The date row decides whether
+            // this panel fits beside the date controls from its ONE-LINE width
+            // (App's summary slot, flexBasis "auto"), and that width counts the
+            // headline's content; this row broke its line on the 200px basis.
+            // Between the two (about 784–846px wide, the tablet in portrait
+            // included) the panel sat beside the controls as the two-line card
+            // the slot's own rule exists to prevent. It still grows to fill.
+            flex: "1 1 auto", minWidth: 0, boxSizing: "border-box", padding: 0,
             // v17.8.0: the box was only as tall as its text line — 17px — even
             // though it is the whole "tap to see the day" target. Wide enough
             // to hit horizontally, but 17px is thin for a thumb. 36 to match the

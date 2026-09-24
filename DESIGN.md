@@ -364,6 +364,10 @@ explaining why is usually the one to read.
   dropped, 1px into its card (Patryk's screenshot); from ~680 to ~1000px it
   stayed beside them as a half-empty two-line card with the controls 22px off
   centre.
+  **The card's headline takes its content as its basis** (phase 24). It was
+  200px over ~138px of text, so the slot (which measures content) and the
+  card's own row (which broke on the basis) disagreed from about 784 to 846px,
+  and the two-line card came back there.
 - **The view switcher stands over the Summary's left edge (v18.2.0).** Patryk's
   call: Timeline / List / Plan sits directly above the Summary card's left edge
   and follows it with an `M.shift` glide when the Summary's width changes (the
@@ -373,7 +377,7 @@ explaining why is usually the one to read.
   the action buttons. The glide is for the Summary moving. When the switcher's
   own slot moves (a resize, the split tools) it jumps in the same frame, so it
   stays where it is. Where the header wraps it onto a line of its own (a phone,
-  and ~600–750px) both start at the margin. From ~750 to 810px, the tablet in
+  and ~600–775px) both start at the margin. From ~775 to 810px, the tablet in
   portrait, the switcher starts its wrapped line at the margin while the
   Summary sits beside the date controls, and Patryk kept that rather than split
   the header's line.

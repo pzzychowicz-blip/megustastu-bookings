@@ -26550,8 +26550,8 @@ Week / Month / Stats, the Activity log and the table-assignment dialog, at 1280�
 `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`. The Waitlist
 panel was not reached (it opens only while a party waits, and with the optimiser on, even
 25 guests at 13:00 were placed by reshuffling) and the printed day sheet was not reviewed.
-Patryk took **all sixteen** offered fixes, one phase each from §24; §23 is a request he made
-first. The six minor findings
+Patryk took **all sixteen** offered fixes, one phase each from §25. §23 is a request he made
+first, and §24 a defect that measuring it turned up. The six minor findings
 he did not take are in ROADMAP.
 
 ### 23. The view switcher lines up with the Summary
@@ -26597,3 +26597,27 @@ new row in `mgt-measurement-traps`. `tests/align-left.test.js` 11 tests (new).
 
 **Gate after phase 23:** `121.54 kB` gz main bundle (+0.37) · **1672 tests** (+11) · 0 lint
 errors, 91 warnings (unchanged) · style OK.
+
+### 24. The Summary breaks its line where the date row expects it to
+
+Found while measuring §23: at 800px (the tablet in portrait) the Summary sat beside the date
+controls as a two-line card, "14 covers 7 bookings" over the live status line. That is the
+state §15 set out to remove: the panel's slot takes its own one-line width as its basis, so it
+sits beside the controls only when it fits there on one line. The slot and the card disagreed
+about that width. The slot's intrinsic width counts the headline button's CONTENT (137.6px), but
+the card's own row broke its line on the button's `flex: "1 1 200px"`. So the slot decided the
+panel fitted (452px of content against 477 free), and the card then needed 514 to stay on one
+line. In between, from about 784 to 846px wide, it went to two lines beside the controls. The
+basis had no recorded reason.
+
+Patryk chose to fix it, and the headline's basis is now its content (`flex: "1 1 auto"`). It still
+grows to fill its line, so the tap target is as wide as before. Live on DEV: at 800px the panel
+sits beside the controls on one line (58px, both halves at y=127, the controls centred on it);
+at 770px it takes its own line, still one line; at 1280px and 375px nothing changed (the
+headline grows to 643px; the phone card keeps its two lines). With the panel beside the
+controls from about 775px up, §23's portrait band, where the header has wrapped the switcher
+onto its own line but the Summary is still beside the controls, now runs from about 775 to
+810px. `tests/date-row.test.js` +1.
+
+**Gate after phase 24:** `121.54 kB` gz main bundle (±0) · **1673 tests** (+1) · 0 lint errors, 91
+warnings (unchanged) · style OK.
