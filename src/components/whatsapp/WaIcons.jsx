@@ -4,8 +4,10 @@
 // extra tokens. pointerEvents:none so the parent button owns all clicks.
 //
 // TemplatesIcon — a document (folded top-right corner) with three text lines.
-//   Used for: the panel-header "Templates" button (replaces "⚙ Templates") and
-//   the composer "Templates" toggle (replaces the text "Templates ▸" button).
+//   Used for: the composer's "Insert template" toggle (replaces the text
+//   "Templates ▸" button). v18.2.0: the panel header's button, which EDITS the
+//   templates, took the app's edit pencil (EditIcon) and the name "Edit
+//   templates" — the two had one mark and one name and did two jobs.
 // SelectIcon — a checkbox with a tick. Toggles multi-select mode in the inbox.
 
 import { IC } from "../../lib/constants";

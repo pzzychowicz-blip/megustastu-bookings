@@ -360,11 +360,11 @@ Admin (*may you*). Customers, App and Shortcuts are always there.
 | One line per customer | **conversation row** (`ConversationRow.jsx`) | Name-or-number, snippet, relative time, plus the state marks below. |
 | The thread itself | **conversation view** (`ConversationView.jsx`) | Messages, the cards below, Archive / Delete / Restore. |
 | One message | **message bubble** (`MessageBubble.jsx`) | Incoming left, outgoing right. Carries the send status. |
-| The text box at the bottom | **reply composer** (`ReplyComposer.jsx`) | Send, Templates. Disabled with "Conversation closed" outside the 24-hour window. |
+| The text box at the bottom | **reply composer** (`ReplyComposer.jsx`) | Send, and **Insert template** (the document button, `E`), which shows the templates as chips to put into the reply. Disabled with "Conversation closed" outside the 24-hour window. |
 | "Draft booking — parsed from message" | **draft card** (`DraftCard.jsx`) | What the model extracted. Accept · Accept & open · Dismiss. On a short screen it is a one-line **draft bar**; since v18.2.0, where the details and the controls do not fit on one line (a phone), the details keep line one whole and the controls take line two. |
 | "Customer is requesting changes / to cancel" | **intent banner** (`IntentBanner.jsx`) | A change or cancel request. Apply changes · Mark as handled. |
 | "Linked booking" | **linked booking card** (`LinkedBookingCard.jsx`) | The booking this thread is attached to. Open booking · Cancel booking. |
-| EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. Edited from INSIDE the inbox, not from the settings tab. |
+| EN/ES canned replies | **quick-reply templates** (`TemplatesEditor.jsx`) | Per-template label and text in both languages. Edited from INSIDE the inbox, not from the settings tab: **Edit templates**, the pencil in the inbox header (`T`). Since v18.2.0 it and the composer's Insert template have different names and marks; both were "Templates" with one document icon. |
 | Settings › **WhatsApp** | **WhatsApp settings tab** (`WhatsAppTabContent`, `Settings.jsx`) | The module's one restaurant-wide setting: **Archive when the booking is completed**. Needs `settingsWrite` on top of the module, unlike the inbox — changing what the whole restaurant's inbox does is configuration, whereas answering a guest is service. |
 | 🧪 icon in the inbox header, or `X` | **simulator** (`WaSimulator.jsx`) | Sandbox-only. Fake inbound messages to drive the pipeline. |
 

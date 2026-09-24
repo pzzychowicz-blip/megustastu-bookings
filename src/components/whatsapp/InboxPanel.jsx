@@ -28,8 +28,8 @@ import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, mat
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
-import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
-import { CloseIcon } from "../Icons";
+import { SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
+import { CloseIcon, EditIcon } from "../Icons";
 import { mkBtn, mkInp, mkSolidBtn, ModalPresence, Overlay, Reveal } from "../atoms";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
 
@@ -418,7 +418,12 @@ export function InboxPanel({
             {onOpenSim ? (
               <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><FlaskIcon size={IC.chrome} /></button>
             ) : null}
-            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><TemplatesIcon size={IC.chrome} /></button>
+            {/* v18.2.0 (the design critique, W2): "Edit templates", with the
+                app's edit pencil. It was "Templates" with the same document
+                icon as the composer's "Templates", which does a different job
+                (it shows the chips that INSERT one into the reply), so two
+                controls with one name and one mark did two things. */}
+            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" aria-label="Edit templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><EditIcon size={IC.chrome} /></button>
             <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><CloseIcon size={IC.chrome} /></button>
           </div>
         </div>

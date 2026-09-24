@@ -126,7 +126,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
         <button
           onClick={() => setTplOpen((v) => !v)}
           aria-pressed={tplOpen}
-          title="Templates"
+          // v18.2.0 (W2): "Insert template" — it shows the chips that put one
+          // into this reply. The header's button, which EDITS them, had the
+          // same name and icon.
+          aria-label="Insert template"
+          title="Insert template (E)"
           className="mgt-hover-scale mgt-press"
           style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "var(--shadow-btn)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         ><TemplatesIcon size={IC.chrome} /></button>

@@ -26769,3 +26769,23 @@ At 1280×800 the bar is 847px and everything sits on one line, as before.
 
 **Gate after phase 29:** `121.71 kB` gz main bundle (+0.02) · **1702 tests** (+2) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 30. Two "Templates" buttons become Edit templates and Insert template (W2)
+
+The inbox had two buttons named "Templates" (by `title`, since both are icon-only) with the same
+document icon. The header's opens the templates editor; the composer's shows the chips that insert
+one into the reply. One name and one mark for two jobs.
+
+- The header's is **Edit templates** (`aria-label`, title "Edit templates (T)") with the app's edit
+  pencil, `EditIcon`, already the rename mark in Layout. Reusing it rather than drawing a sixth
+  document variant keeps "edit" one shape across the app.
+- The composer's is **Insert template** (title "Insert template (E)"), keeping the document with
+  text lines, which is what it inserts. It keeps its `aria-pressed`.
+- Shortcuts reads "T · Edit templates" and "E · Insert a template (show or hide)".
+
+Live on DEV: the two buttons are named "Edit templates" and "Insert template", with the pencil and
+document paths respectively, the second `aria-pressed="false"` until opened.
+`tests/wa-inbox-layout.test.js` +3.
+
+**Gate after phase 30:** `121.75 kB` gz main bundle (+0.04) · **1705 tests** (+3) · 0 lint errors, 91
+warnings (unchanged) · style OK.

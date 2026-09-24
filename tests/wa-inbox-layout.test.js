@@ -16,6 +16,9 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
 const Draft = read("components/whatsapp/DraftCard.jsx");
+const Inbox = read("components/whatsapp/InboxPanel.jsx");
+const Composer = read("components/whatsapp/ReplyComposer.jsx");
+const Shortcuts = read("components/Shortcuts.jsx");
 
 describe("W1 — the draft bar never hides what it asks you to accept", () => {
   it("gives the details a basis of their own content, and no shrink", () => {
@@ -30,5 +33,27 @@ describe("W1 — the draft bar never hides what it asks you to accept", () => {
     expect(group).toMatch(/title=\{confLbl \+ " confidence"\}/);
     expect(group).toMatch(/>Accept<\/button>/);
     expect(group).toMatch(/>Dismiss<\/OutlineChip>/);
+  });
+});
+
+// W2, measured on DEV: the header's button and the composer's were both
+// "Templates" with the same document icon; one opens the editor, the other
+// shows the chips that insert one. After: "Edit templates" with the app's edit
+// pencil, and "Insert template" with the document.
+describe("W2 — two jobs, two names, two marks", () => {
+  it("the header's button edits the templates, under the edit pencil", () => {
+    expect(Inbox).toMatch(/title="Edit templates \(T\)" aria-label="Edit templates"[^>]*><EditIcon size=\{IC\.chrome\} \/><\/button>/);
+    expect(Inbox).not.toMatch(/title="Templates"/);
+  });
+
+  it("the composer's button inserts one, under the document mark", () => {
+    expect(Composer).toMatch(/aria-label="Insert template"\s*title="Insert template \(E\)"/);
+    expect(Composer).toMatch(/><TemplatesIcon size=\{IC\.chrome\} \/><\/button>/);
+    expect(Composer).not.toMatch(/title="Templates"/);
+  });
+
+  it("the keyboard list uses the same two names", () => {
+    expect(Shortcuts).toMatch(/\{ keys: \["T"\],\s*label: "Edit templates" \}/);
+    expect(Shortcuts).toMatch(/\{ keys: \["E"\],\s*label: "Insert a template \(show or hide\)" \}/);
   });
 });
