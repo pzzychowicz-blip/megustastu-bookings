@@ -28,7 +28,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   const reqParts = [];
   if (isModify && draftData) {
     if (draftData.size != null) reqParts.push(draftData.size + " pax");
-    if (draftData.date) reqParts.push(draftData.date);
+    if (draftData.date) reqParts.push(formatDay(draftData.date));
     if (draftData.time) reqParts.push(draftData.time);
     if (draftData.preference === "indoor" || draftData.preference === "outdoor") reqParts.push(draftData.preference === "indoor" ? "Indoor" : "Outdoor");
   }

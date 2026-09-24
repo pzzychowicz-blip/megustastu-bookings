@@ -183,6 +183,12 @@ describe("every date on screen goes through formatDay", () => {
     expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/"Linked to: " \+ \(formatDay\(linkedBooking\.date\) \|\| "\?"\)/);
   });
 
+  // And a third, found by the sweep after that: a date PUSHED into a line
+  // rather than concatenated — the modify banner's requested changes.
+  it("the intent banner's requested changes", () => {
+    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/if \(draftData\.date\) reqParts\.push\(formatDay\(draftData\.date\)\);/);
+  });
+
   // The shape both of those had: a date field with a text fallback. None may
   // reach the screen unformatted; the matches left are all data, not text.
   it("no date field with a text fallback is rendered raw", () => {
