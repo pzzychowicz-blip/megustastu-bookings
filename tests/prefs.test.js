@@ -1,7 +1,8 @@
 // tests/prefs.test.js - v17.14.0
 //
-// The localStorage convention behind the four boolean user prefs, which App had
-// written out three times each (initializer, toggle, seeding effect).
+// The localStorage convention behind the boolean user prefs (four here in
+// v17.14.0; v18.2.0 phase 21 added planAvail), which App had written out three
+// times each (initializer, toggle, seeding effect).
 //
 // The house rule these encode: only the NON-DEFAULT value is ever stored, so an
 // absent key means the default. Getting the direction backwards for one pref

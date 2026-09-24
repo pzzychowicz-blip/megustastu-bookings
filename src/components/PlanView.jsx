@@ -27,6 +27,13 @@
 //     all gated on `gesturesEnabled` (v17.1.2 per-device Settings toggle).
 //   • seated tables show the v16.3.0 freeing-soon countdown ("~Nm") when the
 //     slider sits at NOW (predictions are a "right now" read).
+//   • v18.2.0 phase 21 — AVAILABILITY (Settings → App, per person, on by
+//     default): a free table says how long it stays free ("until 19:30" under
+//     its number, nothing when it is free to closing), and one whose window is
+//     shorter than a default-size walk-in's visit plus the turnaround wears a
+//     dashed amber rim and amber label — the walk-in form's "busy". The answer
+//     is `lib/plan-avail.js`'s `freeWindow`, the same one the "Walk-in here"
+//     gate reads, so the rim and the offer cannot disagree.
 //
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
@@ -34,6 +41,7 @@ import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
+import { freeWindow } from "../lib/plan-avail";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
@@ -75,7 +83,12 @@ export const PlanView = memo(function PlanView({
   // v17.6.0: separation between bookings, in minutes (0 = off). Scalar from App
   // rather than the TURN_BUFFER live binding — React.memo can't see a live
   // binding (same reason hoursSig exists).
-  turnBuffer = 0
+  turnBuffer = 0,
+  // v18.2.0 phase 21: the availability overlay (the per-person Settings → App
+  // switch, on by default) and the walk-in party size it measures a visit for
+  // (settings/general.defaultWalkinSize — the size the walk-in form opens on).
+  // Both scalars, for the React.memo reason above.
+  showAvail = true, walkinSize = 2
 }) {
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
@@ -205,6 +218,16 @@ export const PlanView = memo(function PlanView({
   }
   const blockSlots = getBlockSlots(blocks, date);
   const isBlocked = (id) => blockSlots.some((sl) => sl.tables.indexOf(id) >= 0 && slider >= sl.s && slider < sl.e);
+
+  // v18.2.0 phase 21: how long a table FREE at the slider stays free, and
+  // whether a walk-in fits in that. The visit is a default-size walk-in's
+  // duration plus the turnaround — what the walk-in form opens on and checks.
+  // NB getDur reads the DUR_TIERS live binding, the staleness `canWalkin`
+  // below has always accepted (/code-review #5): at most one minute after a
+  // Settings duration edit, until the next nowMins tick busts the memo.
+  const needMins = getDur(walkinSize) + turnBuffer;
+  const freeAt = (id) => !occupying[id] && !isBlocked(id) && !resetting[id];
+  const windowOf = (id) => freeWindow(id, slider, day, blockSlots, closeM, needMins);
 
   // freeing-soon: {bookingId: inMin} → tableId → inMin (only meaningful at NOW).
   const freeSoonOf = {};
@@ -352,22 +375,18 @@ export const PlanView = memo(function PlanView({
     const queue = day
       .filter((b) => (b.tables || []).indexOf(id) >= 0)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
-    const occ = occupying[id];
     // v17.1.2 (Patryk): a table with ANY current occupant — including a seated
     // party — never offers "Walk-in here" (the v17.1.1 "seated-takeover" was
     // removed: an occupied table must not take another walk-in at that time).
     // v17.6.0: a table inside its turnaround tail is not free for a walk-in —
     // the optimizer would refuse the placement, so Plan must not offer it.
-    const freeNow = !occ && !isBlocked(id) && !resetting[id];
+    // v18.2.0 phase 21: both clauses are `freeAt`, which the availability
+    // overlay reads too — one definition of "free" for the rim and the offer.
+    const freeNow = freeAt(id);
     // v17.0.0 correction round 6: only OFFER a walk-in when the table can
     // actually seat one now — free at the slider AND a real window before the
     // next booking/block/close (≥ a minimal walk-in duration). A table free now
     // but booked in 10 min used to still show "Walk-in here" → dead-end form.
-    const nextBusy = Math.min(
-      closeM,
-      ...day.filter((b) => (b.status === "confirmed" || b.status === "pending") && (b.tables || []).indexOf(id) >= 0 && toMins(b.time) > slider).map((b) => toMins(b.time)),
-      ...blockSlots.filter((sl) => sl.tables.indexOf(id) >= 0 && sl.s > slider).map((sl) => sl.s)
-    );
     // NB getDur reads the DUR_TIERS live binding, which neither `layout` nor
     // `hoursSig` covers — after a Settings duration-tier edit this gate can be
     // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
@@ -375,7 +394,13 @@ export const PlanView = memo(function PlanView({
     // sig prop.
     // v17.6.0: …and must still fit the separation BEFORE the next booking, or
     // the walk-in form would open on a slot the placement check then refuses.
-    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2) + turnBuffer;
+    // v18.2.0 phase 21: the window is `freeWindow`'s, the one the availability
+    // rim draws, and the visit is the DEFAULT walk-in size's (`walkinSize`) —
+    // it was `getDur(2)`, the seed of that setting, so a restaurant whose
+    // walk-ins default to 4 was offered tables its own walk-in form then called
+    // busy. A later SEATED booking now counts as well as confirmed/pending:
+    // scrubbed back before a party sat down, their table is not free for them.
+    const canWalkin = freeNow && isToday && windowOf(id).fits;
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.
@@ -557,15 +582,23 @@ export const PlanView = memo(function PlanView({
               // table dropped — the table is already the subject of this
               // sentence. Same source as the List card and the timeline block,
               // so the three cannot word a booking differently.
+              // v18.2.0 phase 21: a free table's window, when the overlay is on.
+              const avail = showAvail && freeAt(t.id) ? windowOf(t.id) : null;
               const a11yLabel = "Table " + t.id + ", " + (
                 blocked ? "blocked"
                   : occ ? describeBooking(occ, { tables: false })
                     : resetting[t.id] ? "free after turnaround"
                       : "free"
-              ) + (soon != null ? ", free in about " + soon + " minutes" : "");
+              ) + (soon != null ? ", free in about " + soon + " minutes" : "")
+                + (avail && avail.until != null ? " until " + toTime(avail.until) : "")
+                + (avail && !avail.fits ? ", too short for a walk-in" : "");
+              // The short window's rim: dashed like `resetting` (not offerable
+              // now) but in the warn ink, and with the label below, so the two
+              // dashed states are told apart by colour AND text.
+              const rim = avail && !avail.fits ? { stroke: "var(--warn-text)", dash: "6 4" } : null;
               return (
                 <TableGlyph key={t.id} id={t.id} entry={e} ariaLabel={a11yLabel}
-                  fill={f.fill} stroke={f.stroke} strokeWidth={2} strokeDasharray={f.dash}
+                  fill={f.fill} stroke={rim ? rim.stroke : f.stroke} strokeWidth={2} strokeDasharray={rim ? rim.dash : f.dash}
                   // v17.1.1: occupancy colour changes fade with the timeline's
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't
                   // interpolate the blocked url(#pv-blocked) pattern fill, so
@@ -630,6 +663,20 @@ export const PlanView = memo(function PlanView({
                       style={{ color: BLOCK_INK[markStatus] || "var(--text-on-accent)", pointerEvents: "none" }}>
                       <StatusIcon status={markStatus} size={IC.control} />
                     </g>
+                  ) : null}
+                  {/* v18.2.0 phase 21: "until 19:30" in the status mark's place
+                      — a free table draws no mark, so the centre column under
+                      the id is empty, and it is the one place a rotated table
+                      cannot move (see the mark's note above). Secondary ink on
+                      the free fill; the warn ink when the window is too short
+                      for a walk-in. Both pairs are registered in
+                      tests/contrast.test.js. It mounts and unmounts with the
+                      scrub, like the mark: no transition, for the mark's reason. */}
+                  {avail && avail.until != null ? (
+                    <text x={0} y={MARK_TOP + 9} textAnchor="middle" fontSize={10} fontWeight={600}
+                      fill={avail.fits ? "var(--text-secondary)" : "var(--warn-text)"} style={{ pointerEvents: "none" }}>
+                      {"until " + toTime(avail.until)}
+                    </text>
                   ) : null}
                   {soon != null ? (
                     <g transform="translate(0,-22)">

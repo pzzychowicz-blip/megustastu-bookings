@@ -569,7 +569,7 @@ function readAppWidth(){
 // survives a reload/redeploy — losing your layout on every refresh would make
 // the feature not worth setting up.
 const SPLIT_KEY="mgt-split";   // also PREF_SPEC.splitEnabled.clears — keep in step
-// v17.14.0: read one of the four boolean prefs off this device, per its
+// v17.14.0: read one of the boolean prefs off this device, per its
 // PREF_SPEC convention. The try/catch is the same one the four initializers
 // each carried; the default on a throw is the pref's own default, which is
 // exactly what an absent key means.
@@ -1763,6 +1763,11 @@ function BookingApp({uid}){
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
   const [planGestures,setPlanGestures]=useState(function(){return readPrefLS("planGestures");});
   function onTogglePlanGestures(){togglePref("planGestures",planGestures,setPlanGestures);}
+  // v18.2.0 phase 21: "Table availability" on the Plan view (Settings → App,
+  // beside Plan zoom & pan). Default ON, so the planGestures shape: only "0"
+  // is ever stored. Per person, synced — Patryk's choice over restaurant-wide.
+  const [planAvail,setPlanAvail]=useState(function(){return readPrefLS("planAvail");});
+  function onTogglePlanAvail(){togglePref("planAvail",planAvail,setPlanAvail);}
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
   // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
@@ -1786,8 +1791,8 @@ function BookingApp({uid}){
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
   // ── v17.6.0: apply the signed-in user's preferences, or seed them ──────────
-  // Runs once the account's node has loaded. For each of the five synced
-  // settings: a value the user HAS saved overrides this device; a value they
+  // Runs once the account's node has loaded. For each of the synced settings
+  // (theme and the PREF_SPEC booleans): a value the user HAS saved overrides this device; a value they
   // have never saved is seeded from whatever this device is currently using and
   // written up, so logging in on a configured device adopts its setup instead
   // of resetting it. localStorage is written alongside, because it is what
@@ -1797,14 +1802,16 @@ function BookingApp({uid}){
   // hook resets it when the path changes), and re-running on every later
   // snapshot would fight the user's own toggles. Reading the current local
   // values here without depending on them is the point, not an oversight.
-  // The current value + setter for each of the four, so the seeding loop below
-  // can read "what is this device using" and "how do I change it" by name.
+  // The current value + setter for each boolean (five since v18.2.0 phase 21),
+  // so the seeding loop below can read "what is this device using" and "how
+  // do I change it" by name.
   // Rebuilt per render and read only inside the once-per-uid effect.
   const prefState={
     reduceMotion:{value:reduceMotion,set:setReduceMotion},
     planGestures:{value:planGestures,set:setPlanGestures},
     navLocked:{value:navLocked,set:setNavLocked},
     splitEnabled:{value:splitEnabled,set:setSplitEnabled},
+    planAvail:{value:planAvail,set:setPlanAvail},
   };
   const seededPrefsRef=useRef(false);
   useEffect(function(){
@@ -1831,7 +1838,7 @@ function BookingApp({uid}){
       // freeze the user to whatever the OS happened to say at first login.
       seed.theme=themePref?"dark":"light";
     }
-    // v17.14.0: the four booleans, one loop over PREF_SPEC. The TRI-STATE
+    // v17.14.0: the booleans, one loop over PREF_SPEC. The TRI-STATE
     // semantics are untouched and are the reason this cannot be simplified
     // further: `null` means "this user has never chosen", and a sanitize that
     // returned `false` for an absent field would reset every configured device
@@ -4744,6 +4751,8 @@ function BookingApp({uid}){
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     turnBuffer={turnBuffer}
+    showAvail={planAvail}
+    walkinSize={generalSettings.defaultWalkinSize}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
@@ -5354,6 +5363,8 @@ function BookingApp({uid}){
             splitEnabled={splitEnabled}
             onToggleSplitEnabled={onToggleSplitEnabled}
             planGestures={planGestures}
+            planAvail={planAvail}
+            onTogglePlanAvail={onTogglePlanAvail}
             onTogglePlanGestures={onTogglePlanGestures}
             tlSettings={tlSettings}
             onSetTlSetting={onSetTlSetting}

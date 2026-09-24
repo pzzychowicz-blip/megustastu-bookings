@@ -445,6 +445,19 @@ explaining why is usually the one to read.
   awaiting-confirmation is) and `NoShowIcon`; only **seated** and **completed**
   needed new shapes. Sizing: `IC.control`, not `IC.inline` — these are marks ON
   a control, and `Assign` sat in the same List row at `IC.control` already.
+- **A free floor-plan table can say how long it stays free (v18.2.0 phase 21,
+  Settings → App → Table availability, per person, on by default).** "until
+  19:30" sits in the status mark's place — the centre column under the id,
+  which a free table leaves empty and rotation cannot move — at the
+  freeing-soon pill's 10-unit size, in `--text-secondary` on the free fill
+  (`--bg-card`). Nothing is drawn when the table is free to closing. When the
+  window is shorter than a default-size walk-in's visit plus the turnaround —
+  the walk-in form's "busy" — the label takes `--warn-text` and the rim goes
+  DASHED in the same ink (`6 4`). Resetting was already a dashed rim, muted and
+  `4 3`, so the two dashed states differ by colour AND by the label, never by
+  colour alone. Both pairs are registered in `tests/contrast.test.js`. The
+  label mounts with the scrub like the mark, with no transition, for the
+  mark's reason.
 - **A control's LABEL is not selectable text (v17.10.1).** One rule in
   `src/index.css` — `button, [role="button"] { user-select: none;
   -webkit-touch-callout: none }` — because a long-press is TWO gestures at once:

@@ -248,7 +248,7 @@ CSP hash; `tests/prefs.test.js` runs the real script bytes to keep it that way.
 A device-local `"auto"` is still not seeded up: for a never-chosen account it
 already means what the account gets.
 
-**v17.14.0: the four BOOLEANS are driven by `PREF_SPEC`** (`useUserPrefs.js`),
+**v17.14.0: the BOOLEANS are driven by `PREF_SPEC`** (`useUserPrefs.js`; four then, five since v18.2.0 phase 21's `planAvail`, which needed nothing but its row there, its state and its prop),
 which states each one's localStorage key and default direction once instead of
 App writing it out three times. The house convention it encodes: **only the
 non-default value is ever stored, so an absent key means the default** —

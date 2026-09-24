@@ -315,7 +315,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -412,6 +412,18 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
             </div>
           </div>
           <Toggle label="Plan zoom and pan" on={planGestures} onClick={onTogglePlanGestures} />
+        </div>
+        {/* v18.2.0 phase 21: the Plan view's table availability — per person
+            like the row above (Patryk's choice), ON by default, so only "0" is
+            ever stored (PREF_SPEC.planAvail). */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Table availability</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+              In the Plan view, a free table shows how long it stays free. One too short for a walk-in gets a dashed amber outline.
+            </div>
+          </div>
+          <Toggle label="Table availability" on={planAvail} onClick={onTogglePlanAvail} />
         </div>
         {/* v17.5.0: per-device navigation lock (localStorage, theme pattern —
             but default OFF, so only the "1" is stored). Turns the app shell
@@ -1072,6 +1084,8 @@ export function SettingsContent({
   onToggleSw,
   onToggleReduceMotion,
   planGestures,
+  planAvail,
+  onTogglePlanAvail,
   navLocked,
   splitEnabled,
   onToggleSplitEnabled,
@@ -1200,7 +1214,7 @@ export function SettingsContent({
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
       onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention} />;
   } else if (cur === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {
     content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {

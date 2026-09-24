@@ -248,6 +248,11 @@ const FILLS = [
   { fill: "--bg-card-dim", alpha: null, ink: "--warn-text", role: "label", what: "card flag, warn (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked, dim card)" },
+  // v18.2.0 phase 21: the Plan view's availability label, drawn on a FREE
+  // table, whose fill is PlanView's FREE_FILL = --bg-card. Secondary ink for
+  // "until 19:30", the warn ink when that window is too short for a walk-in.
+  { fill: "--bg-card", alpha: null, ink: "--text-secondary", role: "label", what: "plan: a free table's 'until 19:30'" },
+  { fill: "--bg-card", alpha: null, ink: "--warn-text", role: "label", what: "plan: a free table too short for a walk-in" },
 
   // v18.0.0 session 8 — the SECTION PANEL as a text-bearing surface, registered
   // for the reason the card fills above were: something finally painted

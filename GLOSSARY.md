@@ -161,6 +161,8 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | seated / confirmed / pending swatches, top right | **legend** | What the fills mean. Each chip carries its status mark, because the room draws one. The three are the complete set a table can show. |
 | "free in about N minutes" pill | **freeing-soon pill** (`freeingSoon`, `freeSoonWindow`) | A table about to turn over. |
 | Dashed muted outline | **resetting** | The table is inside its turnaround buffer. |
+| "until 19:30" under a free table | **free-until label** (`freeWindow`, `lib/plan-avail.js`) | v18.2.0. How long a free table stays free at the selected minute. Nothing when it is free to closing. Behind **Table availability** (Settings → App, per person, on by default). |
+| Dashed amber outline, amber "until …" | **too short for a walk-in** | v18.2.0. The table is free, but not for a default-size walk-in's visit plus the turnaround — the walk-in form's "busy". The Walk-in here offer reads the same answer, so it is not offered there. |
 | "Walk-in here" in the tap popover | **walk-in shortcut** | Offered on **free** tables today only. |
 
 ---
@@ -307,7 +309,7 @@ Admin (*may you*). Customers, App and Shortcuts are always there.
 | Drag-and-drop room editor | **floor plan editor** (`FloorPlanEditor.jsx`) | Snap-10 canvas, walls, doors, per-side chairs. |
 | "Shared across all devices" | **restaurant-wide setting** | The six `settings/*` nodes. |
 | "This device only" | **per-device setting** | App width, the four zoom values, the saved split layout — properties of the screen. |
-| A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view. Tri-state: `null` means never chosen — and `theme` takes a third value, `"auto"` (the **automatic theme**). |
+| A setting that follows you to another device | **user preference** (`settings/users/{uid}/prefs`) | Theme · reduce motion · plan gestures · nav lock · split view · table availability (v18.2.0). Tri-state: `null` means never chosen — and `theme` takes a third value, `"auto"` (the **automatic theme**). |
 | The Admin tab body | **Admin** (`AdminSettings.jsx`) | People, their levels, invitations, and the enforcement switch. Admin-only at both layers — the tab is filtered out, and the rules refuse the writes regardless. |
 | Staff · Manager · Admin | **level** (`role`, `/roles/{uid}`) | The three named tiers. `staff` runs a service; `manager` owns money and configuration; `admin` also administers the app. An absent level reads as **staff**. The names on screen ARE the code's values — `staff` · `manager` · `admin` — unlike **optimiser** / `optimizer`, this file's one deliberate UI-vs-code split, so there is no second spelling to look for. |
 | A single ticked cell on someone's row | **extra** (`/roles/{uid}/extras/{cap}`) | One capability granted to one person **on top of** their level. The map that ADDS; its opposite is a **deny**, so a level is always a floor. |

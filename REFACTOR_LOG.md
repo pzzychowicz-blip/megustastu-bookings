@@ -26449,3 +26449,48 @@ tests (+9).
 
 **Gate after phase 20:** `120.76 kB` gz main bundle (+0.30) · **1645 tests** (+9) ·
 0 lint errors, 91 warnings (unchanged) · style OK.
+
+### 21. Table availability on the Plan view
+
+Patryk: the Plan view needs an option, a Settings toggle that is on by default, to
+see the availability of tables the way the walk-in form's preview does. The plan's
+fill answers who is at a table at the selected minute; the walk-in grid answers
+whether a party could sit there for a whole visit. They differed on a table free now
+and booked soon: white on the plan, "busy" in the walk-in form. He took the
+recommended reading, **free-until plus fit**, and the per-person switch.
+
+- **`lib/plan-avail.js`** (new, pure): `nextBusyAt` — the first later start that
+  claims a table (any booking but a completed one, or a table block), else the day's
+  end — and `freeWindow` → `{until, fits}`. A visit is a default-size walk-in's
+  duration plus the turnaround, which is what the walk-in form opens on and checks.
+- **What the plan draws**, only for a table free at the selected minute: "until
+  19:30" in the status mark's place under the id, nothing when it is free to
+  closing. A window too short for that visit gets a dashed `--warn-text` rim and
+  label. Resetting was already dashed (muted, `4 3`); this one is `6 4` and carries
+  the label, so the two are never told apart by colour alone. Both label pairs are
+  registered in `tests/contrast.test.js`. The spoken label gains "until HH:MM" and
+  "too short for a walk-in" while the overlay is on.
+- **One answer for the rim and the offer.** The "Walk-in here" gate now reads the
+  same `freeWindow(...).fits`. It used `getDur(2)`, the SEED of
+  `defaultWalkinSize`, so a restaurant whose walk-ins default to 4 was offered
+  tables its own walk-in form would call busy; and it counted only confirmed and
+  pending starts, so a later seated booking (scrubbed back to before the party sat)
+  now counts too.
+- **The switch:** Settings → App → **Table availability**, beside Plan zoom & pan,
+  per person and synced (`planAvail` in `PREF_SPEC`, `whenOff`, key
+  `mgt-plan-avail`). Joining the table was all the preference machinery needed: the
+  initializer, the toggle and the seeding branch are shared. No rules change, since
+  the prefs node takes any key under its rev pair.
+
+Live after a full reload, on DEV with one booking added at 14:00 today on table 2:
+at 13:00 table 2 wore the dashed rim and "until 14:00" in the warn ink ("Table 2,
+free until 14:00, too short for a walk-in"), the occupied 1A and 1B kept their fill,
+the rest drew nothing. On 23 Sep at 13:00, "until 15:45" on 1A and "until 18:00" on
+6, in secondary ink. Switch off: no label drawn or spoken, `mgt-plan-avail` = "0";
+back on: both labels back and the key removed. Tapping table 2 offered no Walk-in
+here; tapping table 3 did. Light theme checked through `?theme=light`, which by
+design writes nothing to the account. `tests/plan-avail.test.js` (11 tests).
+
+**Gate after phase 21:** `121.07 kB` gz main bundle (+0.31) · **1659 tests** (+14:
+11 new, 2 contrast pairs, 1 prefs round-trip) · 0 lint errors, 91 warnings
+(unchanged) · style OK.
