@@ -36,7 +36,7 @@
 
 import { useState } from "react";
 import { S, R, T, FW } from "../lib/constants";
-import { formatCode, remainingOf, redeemableAmount, clampMoney } from "../lib/vouchers";
+import { formatCode, remainingOf, redeemableAmount, clampMoney, money } from "../lib/vouchers";
 import { Overlay, ModalTitle, InlineAlert, Reveal, Fld, mkInp, mkBtn, mkSolidBtn } from "./atoms";
 
 export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedeem, onSkip, onClose }) {
@@ -49,7 +49,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
   function commit() {
     const n = clampMoney(amount);
     if (n <= 0) { setErr("Enter an amount above zero, or complete without using the voucher."); return; }
-    if (n > max) { setErr("That is more than the voucher has left (" + max + " " + currency + ")."); return; }
+    if (n > max) { setErr("That is more than the voucher has left (" + money(max, currency) + ")."); return; }
     onRedeem(redeemableAmount(voucher, n));
   }
 
@@ -76,7 +76,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
       </h2>
       <div style={{ fontSize: T.lead, color: S.text, marginBottom: 14 }}>
         {(booking && booking.name ? booking.name + "'s booking has this voucher attached. " : "")
-          + max + " " + currency + " left on it."}
+          + money(max, currency) + " left on it."}
       </div>
 
       {/* `Fld`, not a hand-written label — /code-review v18.0.0, the same
@@ -100,7 +100,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
 
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 10 }}>
         {left > 0
-          ? left + " " + currency + " stays on the voucher for a later visit."
+          ? money(left, currency) + " stays on the voucher for a later visit."
           : "This uses the whole voucher."}
       </div>
 

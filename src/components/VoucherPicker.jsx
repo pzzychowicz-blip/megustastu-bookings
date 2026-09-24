@@ -51,7 +51,7 @@ import { useState } from "react";
 import { S, BTN, R, T, FW } from "../lib/constants";
 import {
   normalizeCode, formatCode, voucherState, remainingOf,
-  isRedeemedBy, attachRefusal, searchVouchers,
+  isRedeemedBy, attachRefusal, searchVouchers, money,
 } from "../lib/vouchers";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { Fld, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn } from "./atoms";
@@ -94,7 +94,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
             {formatCode(code)}
           </span>
           {attached ? <OutlineChip tone={STATE_TONE[st]}>{st}</OutlineChip> : null}
-          {attached ? <OutlineChip tone="neutral">{remainingOf(attached) + " " + currency + " left"}</OutlineChip> : null}
+          {attached ? <OutlineChip tone="neutral">{money(remainingOf(attached), currency) + " left"}</OutlineChip> : null}
           {settledHere ? <OutlineChip tone="success">redeemed here</OutlineChip> : null}
           <span style={{ flex: 1 }} />
           {/* A booking that has already redeemed against this voucher keeps its
@@ -153,7 +153,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                 </div>
               ) : null}
             </div>
-            <OutlineChip tone="success">{remainingOf(v) + " " + currency + " left"}</OutlineChip>
+            <OutlineChip tone="success">{money(remainingOf(v), currency) + " left"}</OutlineChip>
           </div>
         );
       })}
@@ -180,7 +180,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                     <span style={{ fontSize: T.body, color: S.text }}>
                       {"This guest has voucher "}
                       <strong style={{ fontVariantNumeric: "tabular-nums" }}>{formatCode(s.code)}</strong>
-                      {"  ·  " + s.remaining + " " + currency + " left"}
+                      {"  ·  " + money(s.remaining, currency) + " left"}
                     </span>
                     {/* Not hidden when the last visit never recorded it: that is
                         money the restaurant has not accounted for, and the

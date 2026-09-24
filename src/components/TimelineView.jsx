@@ -55,6 +55,7 @@ import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes } from "../lib/unplaced";
+import { money } from "../lib/vouchers";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -134,7 +135,7 @@ function railFlagsOf(b, noShows, warn, currency) {
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   return [
     depositAmt > 0
-      ? { k: "dep", keep: 2, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={IC.control} /> } : null,
+      ? { k: "dep", keep: 2, title: "Deposit " + money(depositAmt, currency), icon: <DepositIcon size={IC.control} /> } : null,
     zone
       ? { k: "zone", keep: 3, title: zone === "indoor" ? "Prefers indoor" : "Prefers outdoor",
           icon: zone === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} /> } : null,

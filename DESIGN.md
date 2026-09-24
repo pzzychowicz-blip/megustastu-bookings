@@ -471,6 +471,14 @@ explaining why is usually the one to read.
   decides the year): 68px, or 104 when a date prints its year, in Find a
   booking and Customers, and 54 or 84 in the Activity log. So a year never
   pushes one row's times out of line.
+- **Money is written ONE way: "20 €" (v18.2.0, C3).** The amount, a space, then
+  the restaurant's currency symbol (`settings/general.currency`), through
+  `money()` in `lib/vouchers.js`, which also rounds to the cent. The List
+  card's deposit flag, its timeline block's title and the printed Day sheet
+  read "€20" while Vouchers beside them read "80 € left", and seven more sites
+  typed the right shape by hand without the rounding: a 20 € voucher with 12.30
+  used left `7.699999999999999`, and the redeem prompt printed it. A field's
+  label keeps the bare unit, "Deposit (€)".
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's

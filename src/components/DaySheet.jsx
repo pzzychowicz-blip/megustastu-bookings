@@ -20,7 +20,7 @@ import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW, APP_NAME } from "../lib/constants";
 import { daySummary, guestsLabel } from "../lib/booking-logic";
-import { normalizeCode, formatCode } from "../lib/vouchers";
+import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
@@ -104,7 +104,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                       A4 and read at the table, and the two are the same
                       question — has this guest already paid something. */}
                   <td style={cell}>{[
-                    (Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : null,
+                    (Number(b.deposit) || 0) > 0 ? money(Number(b.deposit), currency || "€") : null,
                     vouchersOn && normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
                   ].filter(Boolean).join("  ·  ") || "—"}</td>
                   <td style={cell}>{b.notes || ""}</td>

@@ -130,7 +130,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | One coloured bar | **block** (`TimelineBlock`) | One booking. Reads left-to-right: identity, then status. |
 | "Unplaced" rows at the top of the grid, above a dashed line | **Unplaced row** (`unplaced`, `packLanes`, `lib/unplaced.js`) | v18.2.0 (was the bottom "unassigned" row). Bookings the table rows cannot show: no tables, a table the layout does not have, or an optimiser conflict. One lane per overlapping booking. A booking with SOME real tables is on those rows AND here. Blocks work as anywhere else, including a drag onto a table. Only drawn when something is unplaced. |
 | The fixed-width strip of marks at the block's right | **flag rail** (`railFlags`) | `StatusIcon` leads, then the flags below. Every item is `flexShrink: 0`. |
-| Banknote mark | **deposit flag** (`DepositIcon`) | A deposit was taken. Amount is in the hover title. |
+| Banknote mark | **deposit flag** (`DepositIcon`) | A deposit was taken. Amount is in the hover title, and on the List card beside the mark, written the one money way, "20 €" (`money`, v18.2.0). |
 | Star | **preferred flag** (`StarIcon`) | The booking has preferred tables. |
 | House with an arrow down inside it | **indoor flag** (`IndoorIcon`) | v18.2.0. The booking's seating preference is indoor. The List card adds the word. With the deposit, the last flag a narrow block drops. |
 | House with an arrow leaving it | **outdoor flag** (`OutdoorIcon`) | v18.2.0. The booking's seating preference is outdoor (the terrace). As the indoor flag. |

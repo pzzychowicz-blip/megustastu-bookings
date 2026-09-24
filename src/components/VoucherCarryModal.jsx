@@ -23,7 +23,7 @@
 
 import { S, T, FW } from "../lib/constants";
 import { Overlay, mkBtn, mkSolidBtn } from "./atoms";
-import { formatCode } from "../lib/vouchers";
+import { formatCode, money } from "../lib/vouchers";
 import { formatDay } from "../lib/day";
 
 // "Fri 18.09 at 20:00" — the weekday is what staff actually navigate by. The
@@ -57,7 +57,7 @@ export function VoucherCarryModal({ carry, currency = "€", onMove, onNotNow })
         Move the rest of this voucher?
       </h2>
       <div style={{ fontSize: T.lead, color: S.text, marginBottom: 12 }}>
-        {carry.amount + " " + currency + " is left on voucher "}
+        {money(carry.amount, currency) + " is left on voucher "}
         <strong style={{ fontVariantNumeric: "tabular-nums" }}>{formatCode(carry.code)}</strong>
         {". Move it to " + (carry.name || "their next booking") + " on " + whenLabel(carry.date, carry.time) + "?"}
       </div>

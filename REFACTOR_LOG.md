@@ -27060,3 +27060,30 @@ now read `guestsLabel`.
 
 **Gate after phase 38:** `121.81 kB` gz main bundle (±0) · **1801 tests** (+21) · 0 lint errors, 90 warnings
 (−1, above) · style OK.
+
+### 39. One money format (C3)
+
+Money is written one way now: the amount, a space, then the restaurant's currency symbol. It goes
+through `money()` (`lib/vouchers.js`), which also rounds to the cent. Three sites put the symbol first:
+the List card's deposit flag, its timeline block's title and the printed Day sheet's deposit column,
+which read "€20" while Vouchers beside them read "80 € left". Seven more built "N €" by hand without
+the rounding: the voucher picker's three balances, the unsettled-voucher banner, the redeem prompt's
+three amounts and the carry prompt. That was a real defect, not a tidy-up: a 20 € voucher with 12.30
+used leaves `20 − 12.3 = 7.699999999999999`, and the redeem prompt printed it. A field's label keeps
+the bare unit, "Deposit (€)". The Activity log's "redeemed 20 of voucher …" is stored text and is left
+as it was.
+
+Live on DEV:
+
+- **List card** Phase22 Indoor's flag "20 €", titled "Deposit 20 €".
+- **Timeline block** at 1280px: "Deposit 20 €" (zoomed to 2.5× to find it, then reset to 1×).
+- **Day sheet** "20 €" in the Deposit / voucher column.
+- **Not shown live:** the voucher picker's suggestions (a scripted focus does not open them), the
+  unsettled banner (nothing unsettled today) and the redeem and carry prompts (no completion was run
+  on DEV for this). All of them already had the "N €" shape; what changed there is the rounding, which
+  the unit test pins.
+
+DESIGN.md records the rule. `tests/money-format.test.js` has 12 tests (new).
+
+**Gate after phase 39:** `121.82 kB` gz main bundle (+0.01) · **1813 tests** (+12) · 0 lint errors,
+90 warnings (unchanged) · style OK.

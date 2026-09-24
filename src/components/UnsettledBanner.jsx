@@ -34,7 +34,7 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { formatCode, normalizeCode, remainingOf } from "../lib/vouchers";
+import { formatCode, normalizeCode, remainingOf, money } from "../lib/vouchers";
 import { BTN, T, FW, H } from "../lib/constants";
 
 export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", onOpen, swapKey }) {
@@ -55,7 +55,7 @@ export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", on
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>
           {who + " (" + b.time + ") completed with voucher " + formatCode(code)
-            + " still unrecorded — " + left + " " + currency + " on it."}
+            + " still unrecorded — " + money(left, currency) + " on it."}
         </span>
         <button
           onClick={function () { onOpen(b.id); }}

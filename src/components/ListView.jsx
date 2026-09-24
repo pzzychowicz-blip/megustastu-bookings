@@ -32,7 +32,7 @@
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf } from "../lib/booking-logic";
-import { formatCode, normalizeCode, isUnsettled } from "../lib/vouchers";
+import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
@@ -601,9 +601,11 @@ export const ListView = memo(function ListView({
         // on the block it fits only in the title. v17.9.0's lesson holds: the
         // mark must never be the currency SYMBOL from settings/general, or
         // "money has been taken" is a different shape per restaurant setting.
+        // v18.2.0 (the design critique, C3): the amount is `money`'s "20 €", the
+        // shape Vouchers writes beside it — this flag read "€20".
         const depositTag = (Number(b.deposit) || 0) > 0 ? (
-          <CardFlag ink={FLAG_SUCCESS} title={"Deposit " + (currency || "€") + b.deposit}>
-            <DepositIcon size={IC.control} />{(currency || "€") + b.deposit}
+          <CardFlag ink={FLAG_SUCCESS} title={"Deposit " + money(Number(b.deposit), currency || "€")}>
+            <DepositIcon size={IC.control} />{money(Number(b.deposit), currency || "€")}
           </CardFlag>
         ) : null;
         // v18.0.0: the gift voucher. Deliberately NOT on the timeline block —
