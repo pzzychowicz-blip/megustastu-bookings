@@ -26550,5 +26550,50 @@ Week / Month / Stats, the Activity log and the table-assignment dialog, at 1280�
 `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`. The Waitlist
 panel was not reached (it opens only while a party waits, and with the optimiser on, even
 25 guests at 13:00 were placed by reshuffling) and the printed day sheet was not reviewed.
-Patryk took **all sixteen** offered fixes, one phase each from §23. The six minor findings
+Patryk took **all sixteen** offered fixes, one phase each from §24; §23 is a request he made
+first. The six minor findings
 he did not take are in ROADMAP.
+
+### 23. The view switcher lines up with the Summary
+
+Patryk selected the Timeline / List / Plan control in the header and asked for it to be aligned
+to the left edge of the Summary, to follow that edge when the Summary's width changes, and to
+move there smoothly and gently. Measured at 1280px: the switcher sat right-aligned beside
+Walk-in at 738.6, over a Summary card starting at 306.8. The edge moves more often than it
+looks: the Today pill (on any other day) and the waitlist pill appear to its left, and the date
+field is as wide as the date in it.
+
+- **`useAlignLeft`** (new, `src/hooks/`) measures the Summary's slot and the switcher's own slot
+  and moves the switcher by a transform: never closer to the title block than the header's 8px
+  gap, and never right, where the action buttons follow it. A transform, because a measured
+  margin would feed back into where the header wraps. Written inside the ResizeObserver
+  callback, which runs after layout and before paint, not through React state, which would
+  paint a frame late on every resize and re-render the app to do it.
+- **The glide (`M.shift`, 385ms cubic-out, the geometry token) plays only when the Summary moved
+  and the switcher's own slot did not.** A resize, or the split tools appearing, moves the slot:
+  the switcher jumps in the same frame, so it stays put over the Summary. A resize that wraps
+  the header moves both, and the first version glided there, sliding in from 36px off the left
+  edge of the screen (900 → 700px); that is a jump now too. A running glide is never cancelled:
+  nothing is written unless the destination changed, because `transition: none` ends a running
+  transition at its end value.
+- **The switcher and its split tools move as one box** (`viewSwitchRef`), whose React style
+  names neither property the hook writes.
+- **Portrait stays as it was, Patryk's call.** From about 750 to 810px (the tablet in portrait)
+  the header wraps the switcher onto a line of its own at the left edge, packed with Walk-in,
+  + New and WhatsApp, while the Summary still sits beside the date controls at 307px. Lining
+  the two up there means splitting that line; the switcher moving up beside the title, with the
+  actions alone on the second line, was offered and declined.
+
+Live on DEV. At 1280px: 306.797 against 306.797. On the next day, with Today showing: 372.750
+against 372.750, reached by one 385ms transform transition (`cubic-bezier(0.33, 1, 0.68, 1)`,
+recorded by a MutationObserver on the box). Resizing to 1100 wrote once, with no transition,
+and stayed on the edge. In a split (list and plan) the tools sat at 569–701 with Walk-in at 935
+and the switcher unmoved. At 700 and 375 both start at the margin (16 and 12). The first
+reading after a reload said 97px off, and it was the hidden Browser pane: a ResizeObserver
+notification is delivered in the rendering steps, which a hidden pane does not run, so the
+WhatsApp button's arrival (with the settings, after the first measurement) never reached the
+observer until a screenshot forced a frame — the missing 97px was that button and its gap. A
+new row in `mgt-measurement-traps`. `tests/align-left.test.js` 11 tests (new).
+
+**Gate after phase 23:** `121.54 kB` gz main bundle (+0.37) · **1672 tests** (+11) · 0 lint
+errors, 91 warnings (unchanged) · style OK.

@@ -33,7 +33,7 @@ admin has not enabled the module. The one thing still not shipped is the
 
 | What you see | Correct term | What it does |
 |---|---|---|
-| The **T · L · P** buttons in the header | **view switcher** (`ViewSwitcher.jsx`) | Switches the main view. Right-click or press-and-hold opens the split menu. Since v18.2.0 one **segmented control** (`SEG_TRACK` / `segStyle`, shared with Settings' tab bar): the chosen view is a lifted pill, never the accent fill "+ New" wears. |
+| The **T · L · P** buttons in the header | **view switcher** (`ViewSwitcher.jsx`) | Switches the main view. Right-click or press-and-hold opens the split menu. Since v18.2.0 one **segmented control** (`SEG_TRACK` / `segStyle`, shared with Settings' tab bar): the chosen view is a lifted pill, never the accent fill "+ New" wears. From about 810px up it stands over the Summary card's left edge and glides after it when the Summary's width changes (`useAlignLeft`). |
 | Horizontal grid, one row per table, bookings as coloured bars | **Timeline view** (`TimelineView.jsx`) | The service view — the whole day at a glance, Gantt-style. |
 | Vertical stack of booking cards | **List view** (`ListView.jsx`) | Sorted cards with full detail and per-booking actions. Since v18.2.0 each card is laid out in columns, so its size, status badge, flags and buttons line up with the card above: the name, then covers, then status, then flags. The name column is as wide as that day's longest name (at most 180px); the rest are fixed. |
 | Top-down drawing of the room | **Plan view** (`PlanView.jsx`) | The floor plan, filled by occupancy at a chosen minute. |

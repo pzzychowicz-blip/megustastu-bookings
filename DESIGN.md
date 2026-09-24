@@ -364,6 +364,19 @@ explaining why is usually the one to read.
   dropped, 1px into its card (Patryk's screenshot); from ~680 to ~1000px it
   stayed beside them as a half-empty two-line card with the controls 22px off
   centre.
+- **The view switcher stands over the Summary's left edge (v18.2.0).** Patryk's
+  call: Timeline / List / Plan sits directly above the Summary card's left edge
+  and follows it with an `M.shift` glide when the Summary's width changes (the
+  Today and waitlist pills appear to its left; the date field is as wide as its
+  date). It is MEASURED (`useAlignLeft`): a transform off the switcher's own
+  slot, never closer to the title than the header's gap and never right, into
+  the action buttons. The glide is for the Summary moving. When the switcher's
+  own slot moves (a resize, the split tools) it jumps in the same frame, so it
+  stays where it is. Where the header wraps it onto a line of its own (a phone,
+  and ~600–750px) both start at the margin. From ~750 to 810px, the tablet in
+  portrait, the switcher starts its wrapped line at the margin while the
+  Summary sits beside the date controls, and Patryk kept that rather than split
+  the header's line.
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's
