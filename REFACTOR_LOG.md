@@ -27282,3 +27282,31 @@ Tablet — both headers still one line (Open booking at x 952 on the title's lin
 
 **Gate after phase 46:** `121.88 kB` gz main bundle (+0.01) · **1832 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 47. The voucher picker's list is seen, and says what cannot be picked (V-1 + V-2)
+
+**V-1.** The Gift voucher field is the booking form's last, so its suggestion list opened below the
+fold and dropped into the pinned Save pending · Back · Save booking bar: on the tablet half of the
+first of 15 rows showed (menu top 647, scroll port bottom 682) until you thought to scroll the form.
+The list now scrolls itself into view when it opens — `block: "nearest"`, so a list already in view
+does not move, and no glide under Reduce animations (`reduceMotionOn()`, WAAPI and `scrollIntoView`
+being out of the CSS kill-switch's reach). `matches` moved above the attached-state early return,
+because the effect reads it and a hook cannot sit behind a return.
+
+**V-2.** The list offered a voucher already attached to another live booking (JA98-KPHZ, carried to
+Friday's), and picking it put the refusal UNDER the still-open list: `useAcRow` prevents the row's
+mousedown blur, so the input kept focus and the list stayed open over the error it had just caused.
+Such a voucher is marked in the list — "Already on Voucher Probe · Fri 25.09", in the warn ink, from
+`attachedElsewhere`, the refusal's own predicate, so the mark and the refusal cannot disagree. It stays
+pickable; a refusal now closes the list, and typing opens it again. `--warn-text` on `--bg-ac-menu` is a
+new text pairing and is registered in `tests/contrast.test.js` (passes in both themes).
+
+Live on DEV, a fresh load each time. Tablet: a real click on the field scrolled the form 189 → 420 and
+the 15-row list [416–682] lay inside the port [41–682]; the JA98 row read "JA98-KPHZ · Live pass carry
+probe · Already on Voucher Probe · Fri 25.09 · 7.7 € left"; picking it closed the list and showed "That
+voucher is already on Voucher Probe on Fri 25.09." with the input still focused; typing "Q" reopened
+it. Phone, dark: 298 → 537, the list [477–743] inside the port [0–743]. `tests/voucher-picker.test.js`
+(4, new), `tests/contrast.test.js` +2.
+
+**Gate after phase 47:** `122.00 kB` gz main bundle (+0.12) · **1838 tests** (+6) · 0 lint errors, 90
+warnings (unchanged) · style OK.

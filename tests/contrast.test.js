@@ -279,6 +279,9 @@ const FILLS = [
   { fill: "--bg-soft", alpha: null, ink: "--danger-text", role: "label", what: "panel chip, danger (voucher row: void)" },
   { fill: "--bg-soft", alpha: null, ink: "--text-muted", role: "label", what: "panel secondary text + the voucher row's disclosure chevron" },
   { fill: "--bg-soft", alpha: null, ink: "--text-primary", role: "label", what: "panel body text (redemption rows, customer history)" },
+  // v18.2.0 phase 47: the voucher picker's list names a voucher already on
+  // another live booking in the warn ink, on the autocomplete menu's fill.
+  { fill: "--bg-ac-menu", alpha: null, ink: "--warn-text", role: "label", what: "voucher suggestion: already on another booking" },
 
   // v18.2.0 — the SEGMENTED CONTROL (atoms' SEG_TRACK / segStyle): Settings'
   // TabBar since v16.2.0, and now the main view switcher in the header, which

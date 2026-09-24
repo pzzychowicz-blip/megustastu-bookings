@@ -47,14 +47,15 @@
 //   bookingId       — editId, or null for a new booking
 //   currency        — settings/general.currency
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { S, BTN, R, T, FW } from "../lib/constants";
 import {
   normalizeCode, formatCode, voucherState, remainingOf,
-  isRedeemedBy, attachRefusal, searchVouchers, money,
+  isRedeemedBy, attachRefusal, attachedElsewhere, searchVouchers, money,
 } from "../lib/vouchers";
+import { formatDay } from "../lib/day";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
-import { Fld, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn } from "./atoms";
+import { Fld, OutlineChip, Reveal, InlineAlert, mkInp, mkBtn, reduceMotionOn } from "./atoms";
 
 const STATE_TONE = { open: "success", spent: "neutral", expired: "warn", void: "danger" };
 
@@ -71,11 +72,30 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
   const attached = code ? (vouchersByCode || {})[normalizeCode(code)] : null;
   const settledHere = attached && isRedeemedBy(attached, bookingId);
 
+  // v18.2.0 phase 47 (round 3's V-1): the suggestion list is computed up here,
+  // above the attached-state early return, because the effect below needs it
+  // and hooks cannot sit behind a return. It opens under the form's LAST field,
+  // so it dropped into the pinned footer: measured on the tablet, half of the
+  // first of 15 rows showed (menu top 647, scroll port bottom 682). It now
+  // scrolls itself into view when it opens — "nearest", so a list already in
+  // view does not move, and without the glide under "Reduce animations".
+  const matches = !code && focus ? searchVouchers(vouchers, typed, 20, now) : [];
+  const menuOpen = matches.length > 0;
+  const menuRef = useRef(null);
+  useEffect(function () {
+    if (!menuOpen || !menuRef.current) return;
+    menuRef.current.scrollIntoView({ block: "nearest", behavior: reduceMotionOn() ? "auto" : "smooth" });
+  }, [menuOpen]);
+
   function attach(raw) {
     const c = normalizeCode(raw === undefined ? typed : raw);
     if (!c) { setErr("Enter a voucher number."); return; }
     const refusal = attachRefusal((vouchersByCode || {})[c], c, bookings, bookingId, now);
-    if (refusal) { setErr(refusal); return; }
+    // Phase 47 (V-2): a refusal CLOSES the list. A row keeps the input
+    // focused (useAcRow prevents the mousedown's blur), so the list stayed
+    // open and covered the refusal it had just caused — the pick seemed to do
+    // nothing. Typing opens it again (onChange below).
+    if (refusal) { setErr(refusal); setFocus(false); return; }
     setErr("");
     setTyped("");
     setFocus(false);
@@ -132,11 +152,16 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
   // ── Nothing attached ───────────────────────────────────────────────────────
   // The suggestion dropdown is the name/phone fields' own machinery, from the
   // shared `useAcRow` hook — so a tap on a row behaves identically here, and a
-  // swipe that scrolls the list does not pick a voucher.
-  const matches = focus ? searchVouchers(vouchers, typed, 20, now) : [];
-  const menu = matches.length ? (
-    <div style={AC_MENU}>
+  // swipe that scrolls the list does not pick a voucher. (`matches` is built
+  // above the early return, for the scroll-into-view effect.)
+  const menu = menuOpen ? (
+    <div ref={menuRef} style={AC_MENU}>
       {matches.map(function (v) {
+        // Phase 47 (V-2): a voucher on another live booking says so in the
+        // list, from `attachedElsewhere` — the same question `attachRefusal`
+        // asks when it is picked, so the mark and the refusal cannot disagree.
+        // It stays pickable: the refusal names the booking and closes the list.
+        const other = attachedElsewhere(bookings, v.code, bookingId);
         return (
           <div
             key={v.code}
@@ -150,6 +175,11 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
               {v.notes ? (
                 <div style={{ fontSize: T.small, color: S.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {v.notes}
+                </div>
+              ) : null}
+              {other ? (
+                <div style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--warn-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {"Already on " + (other.name || "another booking") + " · " + formatDay(other.date)}
                 </div>
               ) : null}
             </div>
@@ -205,7 +235,7 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                 id={fid}
                 type="text"
                 value={typed}
-                onChange={function (e) { setTyped(e.target.value); setErr(""); }}
+                onChange={function (e) { setTyped(e.target.value); setErr(""); setFocus(true); }}
                 onFocus={function () { setFocus(true); }}
                 onBlur={function () { setFocus(false); }}
                 onKeyDown={function (e) { if (e.key === "Enter") { e.preventDefault(); attach(); } }}
