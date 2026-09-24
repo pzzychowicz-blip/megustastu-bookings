@@ -127,6 +127,20 @@ evidence for each.
   `PlanView`'s slider default, but it was not part of the approved change, so it is a
   decision for later.
 
+- **The minor findings of the v18.2.0 critique, round 2 (2026-09-24).** Patryk took the
+  sixteen larger fixes into v18.2.0; these six were offered as "ROADMAP unless you say
+  otherwise" and he did not take them. Evidence for each is in
+  `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`.
+  - Vouchers: the Amount placeholder "50" reads as a pre-filled amount (S7).
+  - Layout → Tables: the zone toggle is a grey "Outdoor" chip that reads as a label,
+    ids are plain text rather than table badges, "cap" is an abbreviation (S9).
+  - WhatsApp draft card: the parser's confidence shows as "HIGH" with no explanation
+    (W6; its ISO date is covered by the one-date-format fix).
+  - Activity log: the range and category chips are 20px tall with 10px text (X4).
+  - Stats: the fifth tile sits alone on a full-width row; "Table 1" is listed although
+    the layout has no such table; tables are text rather than badges (X6).
+  - Find a booking: the pax and phone columns shift with the name's length (X7).
+
 - **A List card's table pill does not say the table is missing (v18.2.0 follow-up).**
   The timeline's Unplaced row and the strip's "Not on the grid" section name a table the
   layout does not have. The List card still draws `TBadge "9"` as if it were real. A

@@ -26540,3 +26540,15 @@ the same time. `tests/block-layout.test.js` 13 tests (+2).
 
 **Gate after phase 22:** `121.17 kB` gz main bundle (+0.10) · **1661 tests** (+2) ·
 0 lint errors, 91 warnings (unchanged) · style OK.
+
+### Third round — the critique of the modules round 1 skipped
+
+Request 2 of the six (2026-09-24): run `/design:design-critique` over every module the first
+pass had not covered. It covered every Settings tab, the WhatsApp inbox, Find a booking,
+Week / Month / Stats, the Activity log and the table-assignment dialog, at 1280×800 and
+375×812 in both themes; the report, with the measurement behind each finding, is
+`…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`. The Waitlist
+panel was not reached (it opens only while a party waits, and with the optimiser on, even
+25 guests at 13:00 were placed by reshuffling) and the printed day sheet was not reviewed.
+Patryk took **all sixteen** offered fixes, one phase each from §23. The six minor findings
+he did not take are in ROADMAP.
