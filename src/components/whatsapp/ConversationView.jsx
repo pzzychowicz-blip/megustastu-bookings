@@ -32,8 +32,12 @@ export function ConversationView({
   // pending/confirmed it isn't `completed`, so it never counted anyway — the
   // argument could only ever subtract a real past visit.
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
-  const displayName = match ? match.name : (conv.phone || conv.phoneKey);
-  const phoneDisplay = formatPhone(conv.phone || conv.phoneKey);
+  // v18.2.0 (W4): the number ONCE. An unknown sender's title was the raw key
+  // "+447811223344" followed by "+44 7811223344"; now the title is the
+  // formatted number and the grey number beside it appears only under a name.
+  const named = !!(match && match.name);
+  const displayName = named ? match.name : formatPhone(conv.phone || conv.phoneKey);
+  const phoneDisplay = named ? formatPhone(conv.phone || conv.phoneKey) : null;
   const [histOpen, setHistOpen] = useState(false);
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
@@ -244,7 +248,7 @@ export function ConversationView({
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, lineHeight: 1 }} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
-        <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
+        {phoneDisplay ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}
         {acceptedBadge}
         {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}

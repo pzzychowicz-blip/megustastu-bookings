@@ -30,10 +30,14 @@ const BOOKINGS = [
 describe("describeConversation", () => {
   it("names an unmatched conversation by its number and does not repeat it", () => {
     const s = describeConversation(CONV, { bookings: [] });
-    expect(s.startsWith("+34622334455")).toBe(true);
+    // v18.2.0 (W4): FORMATTED, as the row and the conversation header now
+    // show it — they showed the raw key, and the header added the formatted
+    // one beside it.
+    expect(s.startsWith("+34 622334455")).toBe(true);
     // The number is the NAME here, so it must not also appear as the phone
     // clause — the "say it twice" case the function guards.
-    expect(s.split("+34622334455").length - 1).toBe(1);
+    expect(s.split("+34 622334455").length - 1).toBe(1);
+    expect(s).not.toContain("+34622334455");
   });
 
   it("names a matched customer, then their number", () => {
@@ -88,6 +92,6 @@ describe("describeConversation", () => {
     expect(describeConversation(null, {})).toBe("");
     expect(describeConversation({ phoneKey: "34600000000" }, {})).toBe("34600000000");
     // No opts at all — the row renders before `bookings` has loaded.
-    expect(describeConversation(CONV)).toContain("+34622334455");
+    expect(describeConversation(CONV)).toContain("+34 622334455");
   });
 });

@@ -26808,3 +26808,33 @@ Archive 83px, all 36px tall. The phone's header, which already wrapped, is the n
 
 **Gate after phase 31:** `121.74 kB` gz main bundle (−0.01) · **1707 tests** (+2) · 0 lint errors, 91
 warnings (unchanged) · style OK.
+
+### 32. The inbox on a phone, and an unknown sender named once (W4 + W5)
+
+**W4.** An unknown sender's conversation was titled by the raw key, "+447811223344", with the
+formatted "+44 7811223344" beside it, and the list row showed only the raw key. The row, the
+conversation title and `describeConversation` now use `formatPhone` for an unnamed sender, and the grey
+number beside the title appears only under a name. The row also falls through to the number when the
+matched booking has no name (a walk-in), which rendered an empty title before; `describeConversation`
+already had that rule, and the row now shares it. Two assertions in `tests/whatsapp-describe.test.js`
+had pinned the raw title and now pin the formatted one.
+
+**W5.** On a phone (single-pane, below `INBOX_TWO_PANE_BREAKPOINT`):
+- **Close is in the top corner.** The header wrapped and Close landed on the second line at the left,
+  under the badge. It is its own item now: last on the tablet's one line, and on a phone second in
+  `order` with an auto margin, beside the badge, while Simulator and Edit templates take line two.
+- **The list's toolbar goes with the list.** Select, Needs action and the search stood above an open
+  conversation, about 140px of a phone's height; they render only while the list is on screen.
+- **"Search…"** where the long placeholder was cut to "Search name, number or". The field keeps its
+  `aria-label`.
+- **No Enter / Shift+Enter hint on a touch screen** (`hover: none` / `pointer: coarse`, index.css's
+  own touch query), where it spent two lines of the composer on keys the on-screen keyboard lacks.
+
+Live on DEV with the mobile preset (375×812, touch): the badge at top 28 and Close at 320–356, top 18;
+Edit templates on line two at top 65; "Search…"; the list's first row "+44 7811223344"; that
+conversation titled "+44 7811223344" once, no toolbar above it, composer "Type a reply…". At
+1280×800: the header on one line (Simulator, Edit templates and Close at top 58) and the long
+placeholder. `tests/wa-inbox-layout.test.js` +6.
+
+**Gate after phase 32:** `121.89 kB` gz main bundle (+0.15) · **1713 tests** (+6) · 0 lint errors, 91
+warnings (unchanged) · style OK.

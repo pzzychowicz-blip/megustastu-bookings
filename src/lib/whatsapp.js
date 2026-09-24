@@ -395,7 +395,9 @@ export function describeConversation(conv, opts) {
   // the number keeps the label a name rather than opening it with an empty
   // segment ("…, 34600111222, hola"), which is what `join(", ")` produces from
   // an empty first part.
-  const title = (match && match.name) || conv.phone || conv.phoneKey || "";
+  // v18.2.0 (W4): an unmatched conversation is titled by its FORMATTED number,
+  // as the row and the conversation header now show it.
+  const title = (match && match.name) || _formatPhone(conv.phone || conv.phoneKey || "") || "";
   if (title) parts.push(title);
   // The number is spoken only when it is not already the name — an unmatched
   // conversation is titled by its number, and saying it twice is noise.

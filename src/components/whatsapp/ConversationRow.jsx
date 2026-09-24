@@ -12,8 +12,14 @@ import { CheckIcon } from "../Icons";
 
 export function ConversationRow({ conv, active, onClick, bookings, flipId, selectMode, checked, roving = false, departing = false }) {
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
-  const displayName = match ? match.name : (conv.phone || conv.phoneKey);
-  const phoneLine = match ? formatPhone(conv.phone || conv.phoneKey) : null;
+  // v18.2.0 (the design critique, W4): an unknown sender is named by the
+  // FORMATTED number — this row showed the raw key ("+447811223344") while the
+  // open conversation added "+44 7811223344" beside the same raw key. And a
+  // match whose booking has no name (a walk-in) falls through to the number
+  // rather than rendering an empty title, describeConversation's own rule.
+  const named = !!(match && match.name);
+  const displayName = named ? match.name : formatPhone(conv.phone || conv.phoneKey);
+  const phoneLine = named ? formatPhone(conv.phone || conv.phoneKey) : null;
   const hasDraft = conv.draftStatus === "parsed" && conv.draftData;
   const hasAccepted = conv.draftStatus === "accepted";
   const intent = (conv.draftData && conv.draftData.intent) || null;

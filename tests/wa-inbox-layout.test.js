@@ -20,6 +20,7 @@ const Inbox = read("components/whatsapp/InboxPanel.jsx");
 const Composer = read("components/whatsapp/ReplyComposer.jsx");
 const Shortcuts = read("components/Shortcuts.jsx");
 const View = read("components/whatsapp/ConversationView.jsx");
+const Row = read("components/whatsapp/ConversationRow.jsx");
 
 describe("W1 — the draft bar never hides what it asks you to accept", () => {
   it("gives the details a basis of their own content, and no shrink", () => {
@@ -73,5 +74,45 @@ describe("W3 — the words are on the buttons, not in a tooltip", () => {
   it("the header's Edit templates and Simulator carry their words", () => {
     expect(Inbox).toMatch(/<FlaskIcon size=\{IC\.inline\} \/>Simulator<\/button>/);
     expect(Inbox).toMatch(/const HEAD_TEXT_BTN = \{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H\.chrome, fontSize: T\.small, flexShrink: 0, lineHeight: 1 \};/);
+  });
+});
+
+// W4 + W5, measured on DEV with the mobile preset (375×812, touch): Close in
+// the top corner (320–356, top 18) beside the badge, Simulator and Edit
+// templates on line two; "Search…"; the unknown sender "+44 7811223344" in the
+// list and ONCE in its conversation; no list toolbar over an open
+// conversation; the composer's placeholder "Type a reply…". At 1280×800 the
+// header is still one line and the placeholder is the long one.
+describe("W4 — an unknown sender's number, once and formatted", () => {
+  it("the row and the conversation title use the formatted number, and a nameless match falls through to it", () => {
+    for (const src of [Row, View]) {
+      expect(src).toMatch(/const named = !!\(match && match\.name\);/);
+      expect(src).toMatch(/const displayName = named \? match\.name : formatPhone\(conv\.phone \|\| conv\.phoneKey\);/);
+    }
+  });
+
+  it("the grey number beside the title appears only under a name", () => {
+    expect(View).toMatch(/const phoneDisplay = named \? formatPhone\(conv\.phone \|\| conv\.phoneKey\) : null;/);
+    expect(View).toMatch(/\{phoneDisplay \? <span/);
+  });
+});
+
+describe("W5 — the phone's inbox", () => {
+  it("keeps Close in the top corner, with the text buttons on a line of their own", () => {
+    expect(Inbox).toMatch(/<div style=\{\{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane \? 0 : 2, flexBasis: twoPane \? "auto" : "100%" \}\}>/);
+    expect(Inbox).toMatch(/order: twoPane \? 0 : 1, marginLeft: twoPane \? 0 : "auto" \}\)\}><CloseIcon size=\{IC\.chrome\} \/><\/button>/);
+  });
+
+  it("hides the LIST's toolbar while a conversation replaces the list", () => {
+    expect(Inbox).toMatch(/\{twoPane \|\| !activeKey \? \(\s*<div style=\{\{ padding: "8px 14px"/);
+  });
+
+  it("shortens the search placeholder where the long one was cut", () => {
+    expect(Inbox).toMatch(/placeholder=\{twoPane \? "Search name, number or message…" : "Search…"\}/);
+  });
+
+  it("offers Enter / Shift+Enter only where there is a keyboard", () => {
+    expect(Composer).toMatch(/const TOUCH = typeof window !== "undefined" && !!window\.matchMedia && window\.matchMedia\("\(hover: none\), \(pointer: coarse\)"\)\.matches;/);
+    expect(Composer).toMatch(/\(TOUCH \? "Type a reply…" : "Type a reply\.\.\. \(Enter to send, Shift\+Enter for new line\)"\)/);
   });
 });

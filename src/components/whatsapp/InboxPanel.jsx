@@ -415,7 +415,12 @@ export function InboxPanel({
               {tabBtn("archived", "Archived", archivedCount)}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          {/* v18.2.0 (the design critique, W5): on a phone this row wrapped and
+              Close landed on the second line at the LEFT, under the badge. Close
+              is now its own item: last on a tablet's one line, and on a phone
+              second in `order`, pushed into the top corner, while the text
+              buttons take a line of their own beneath. */}
+          <div style={{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane ? 0 : 2, flexBasis: twoPane ? "auto" : "100%" }}>
             {/* Simulator opener (sandbox builds only) — lives next to the
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
@@ -431,12 +436,16 @@ export function InboxPanel({
                 meaning lived in a tooltip the tablets never show. Close stays
                 a bare ✕, the one mark everybody reads. */}
             <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
-            <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><CloseIcon size={IC.chrome} /></button>
           </div>
+          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
             Order (Patryk, 2026-07-16): Select, then Needs action, then the
-            search box (search sits on the right). */}
+            search box (search sits on the right).
+            v18.2.0 (W5): it belongs to the LIST, so on a phone, where an open
+            conversation replaces the list, it goes with it — it stood above
+            the conversation taking ~140px of a phone's height. */}
+        {twoPane || !activeKey ? (
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
               sync: on these three controls selection is carried by an accent
@@ -480,12 +489,15 @@ export function InboxPanel({
               aria-label="Search conversations"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, number or message…"
+              // v18.2.0 (W5): a phone cut the long one to "Search name, number
+              // or". The field is named either way (aria-label above).
+              placeholder={twoPane ? "Search name, number or message…" : "Search…"}
               style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
             />
             {query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}
           </div>
         </div>
+        ) : null}
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one
             confirm). Select all / Cancel are always present. Eased open/closed
