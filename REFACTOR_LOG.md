@@ -27217,3 +27217,21 @@ tablet and on the phone (16px from each edge). `tests/party-size.test.js` +3.
 
 **Gate after phase 43:** `121.87 kB` gz main bundle (+0.01) · **1827 tests** (+3) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 44. The Customers list's last visit (C1)
+
+Settings → Customers still printed "+34 612345678 · last 2026-09-24" on every customer row. Phase 37
+converted the visit rows under each customer, and the booking form's name suggestions print the same
+sentence as "· last Thu 24.09", but this line survived all three of C1's sweeps: its field is
+`latestDate` rather than `.date`, and its fallback an em dash rather than "?". It reads "last Thu
+24.09" now, "last Fri 15.01.2027" in another year, and still "—" with no visit.
+
+`tests/date-format.test.js` gains the wider scan the three sweeps lacked: any `…Date` field with a
+NON-EMPTY text fallback, in any component, fails the build (the sorts' `|| ""` are data and do not
+match; checked that the old line would have).
+
+Live on DEV: 50 customer rows carry "last …", none of them ISO ("+34 612345678 · last Thu 24.09",
+"+34 600111222 · last Fri 02.10"). `tests/date-format.test.js` +2.
+
+**Gate after phase 44:** `121.87 kB` gz main bundle (±0; Settings is a lazy chunk) · **1829 tests** (+2) ·
+0 lint errors, 90 warnings (unchanged) · style OK.

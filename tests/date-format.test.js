@@ -198,6 +198,21 @@ describe("every date on screen goes through formatDay", () => {
     }
   });
 
+  // v18.2.0 phase 44: the Customers row's "· last 2026-09-24" survived all
+  // three sweeps — its field is `latestDate` and its fallback an em dash, and
+  // the scan above knows `.date` and "?". Any `…Date` field with a NON-EMPTY
+  // text fallback is text on its way to the screen; the sorts' `|| ""` are not.
+  it("no …Date field with a text fallback is rendered raw, whatever the fallback", () => {
+    for (const f of readdirSync(join(SRC, "components"), { recursive: true })) {
+      if (!/\.jsx$/.test(f)) continue;
+      expect(read("components/" + f), f).not.toMatch(/\(\s*[a-zA-Z_]+\.(?:date|[a-zA-Z]*Date)\s*\|\|\s*"[^"]+"/);
+    }
+  });
+
+  it("Customers: a customer's last visit, as the booking form's suggestions write it", () => {
+    expect(read("components/CustomersSettings.jsx")).toMatch(/" {2}\\u00b7 {2}last " \+ \(c\.latestDate \? formatDay\(c\.latestDate\) : "\\u2014"\)/);
+  });
+
   it("the WhatsApp cards, both lines of each", () => {
     expect((read("components/whatsapp/DraftCard.jsx").match(/\(formatDay\(d\.date\) \|\| "\? date"\)/g) || []).length).toBe(2);
     expect((read("components/whatsapp/LinkedBookingCard.jsx").match(/\(formatDay\(booking\.date\) \|\| "\?"\)/g) || []).length).toBe(2);
