@@ -502,6 +502,21 @@ explaining why is usually the one to read.
   the glyph does**, and **check for a reuse before drawing** — three of the
   block's markers needed only two new icons, because one of them renders the
   same data the notification strip already had a mark for.
+- **The seating preference is a flag, and the block drops it LAST with the
+  deposit (v18.2.0 phase 22).** A booking's indoor/outdoor preference had no
+  mark anywhere. Patryk drew it in words — a house with an arrow drawn inside
+  for Indoor, a house with an arrow outside for Outdoor — and `Icons.jsx`
+  records how that survived 14px (an arrow from the roof down the full height of
+  the widest house; the short arrow and a bare chevron both closed up). The
+  block shows the mark alone and the List card mark plus word, the card's rule
+  for all its flags. The rail's drop order changed with it, his call: the
+  overstaying mark survives longest, then the deposit and the preference, then
+  repeat no-show, locked and the preferred-tables star. It used to drop every
+  "informational" flag before any exception state. On a 1280px tablet a
+  90-minute block has no room for ANY flag at 1× (126px against 114 of fixed
+  parts), so what this buys is which flag appears FIRST as a block widens.
+  Measured in a 1010px window: at 1.5× a block carrying both showed the
+  deposit, at 2.5× both.
 
 - **Chrome sits with what it acts on, not with other chrome (v17.9.0).**
   `ViewTools.jsx` is **gone**. v17.0.0 round 8 created it to give all three views

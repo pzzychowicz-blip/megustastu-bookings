@@ -130,6 +130,8 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | The fixed-width strip of marks at the block's right | **flag rail** (`railFlags`) | `StatusIcon` leads, then the flags below. Every item is `flexShrink: 0`. |
 | Banknote mark | **deposit flag** (`DepositIcon`) | A deposit was taken. Amount is in the hover title. |
 | Star | **preferred flag** (`StarIcon`) | The booking has preferred tables. |
+| House with an arrow down inside it | **indoor flag** (`IndoorIcon`) | v18.2.0. The booking's seating preference is indoor. The List card adds the word. With the deposit, the last flag a narrow block drops. |
+| House with an arrow leaving it | **outdoor flag** (`OutdoorIcon`) | v18.2.0. The booking's seating preference is outdoor (the terrace). As the indoor flag. |
 | Padlock | **locked flag** (`LockIcon`) | The optimiser will not move it. Every walk-in and every drag-drop sets this. |
 | Crossed circle | **repeat-no-show flag** (`NoShowIcon`) | 2+ past no-shows on that phone number. |
 | Two offset bars | **overstaying flag** (`OverlapIcon`) | This party is sitting into the next booking's slot. |

@@ -26494,3 +26494,49 @@ design writes nothing to the account. `tests/plan-avail.test.js` (10 tests).
 **Gate after phase 21:** `121.07 kB` gz main bundle (+0.31) · **1659 tests** (+14:
 10 in the new file, 4 for the two contrast pairs in both themes) · 0 lint errors,
 91 warnings (unchanged) · style OK.
+
+### 22. Deposit and indoor/outdoor flags on the booking block
+
+Patryk: deposit, and an indoor or outdoor preference where there is one, should be
+visible on booking blocks. Measured first: the block already had a deposit flag, but
+it was the FIRST flag the rail dropped, and a 90-minute block at 1× on a 1280px
+tablet is 126px wide against 114 of fixed parts (name floor, status mark, assign
+handle), so no flag and no size ring fits there at all. No indoor/outdoor mark
+existed anywhere. He chose to make the two the **last flags to drop** (only the size
+ring and the overstaying mark outlast them), over squeezing the name for them or
+moving them off the rail, and drew the new mark himself: a house with an arrow drawn
+inside it for Indoor, outside it for Outdoor.
+
+- **`IndoorIcon` / `OutdoorIcon`** (`Icons.jsx`), judged rasterised at the shipped
+  14px and magnified 8×, the `DepositIcon` method. The indoor mark took three
+  rounds: a short arrow in the body filled into a blob, and a bare chevron read as an
+  envelope, so the arrow now runs from the roof down the full height of the widest
+  house the box allows. The outdoor house is smaller, on the left, with the arrow
+  leaving it. The two differ in silhouette, and neither shares an outline with the
+  banknote, lock, star or no-show mark.
+- **The rail's flags are built once** (`railFlagsOf`, module scope in
+  `TimelineView.jsx`), for the block that draws them and for `chipRoomFor`, which
+  counts them to decide the day's start-time chips. That count was a second
+  hand-kept list of the same conditions, and adding a flag to one and not the other
+  would have let the chips claim room a block does not have.
+- **New drop order:** overstaying (1), deposit (2), preference (3), repeat no-show
+  (4), locked (5), the preferred-tables star (6). It used to drop every
+  informational flag before any exception state. The rail's left-to-right order is
+  deposit, preference, star, locked, no-show, overstaying.
+  `tests/block-layout.test.js` follows it and now reads `railFlagsOf`, so its
+  fixture cannot drift from the component again.
+- **The List card** carries the mark plus "Indoor" / "Outdoor" after the deposit and
+  voucher, the card's rule for its flags.
+
+Live on DEV, two bookings added today (19:00 indoor with a €20 deposit on i1, 20:00
+outdoor on 1A). List cards: "€20 · Indoor" and "Outdoor", spoken as "Deposit €20"
+and "Prefers indoor/outdoor". Timeline in a 1010px window: at 1× (86px blocks) the
+status mark only; at 1.5× (116px) one flag each, the deposit winning on the booking
+that has both; at 2.5× (224px) the ring, the deposit and the indoor mark together.
+The zoom was reset to 1× afterwards (it is a per-device setting). A third booking
+also read "Indoor" and was correct: its history shows two preference edits at
+01:40–01:41 that were not made by this session, so Patryk was trying the pane at
+the same time. `tests/block-layout.test.js` 13 tests (+2).
+
+**Gate after phase 22:** `121.17 kB` gz main bundle (+0.10) · **1661 tests** (+2) ·
+0 lint errors, 91 warnings (unchanged) · style OK.

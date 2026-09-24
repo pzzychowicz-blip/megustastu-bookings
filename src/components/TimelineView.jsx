@@ -48,7 +48,7 @@ import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
-import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
@@ -105,12 +105,52 @@ const CLASH_PX = 18;     // the double-booked marker + its margin (v17.11.0)
 const STATUS_PX = 18;    // the status mark + its margin (v17.11.0) — on EVERY block
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
+// v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
+// survive" are two questions with two separate answers.
+//
+// TWO ORDERS, ONE LIST. The ARRAY order is the RAIL order (left to right on the
+// block). `keep` is the DROP priority (lowest survives longest); see
+// block-layout.js. They are one literal on purpose: held apart, they drift.
+//
+// v18.2.0 phase 22 — built HERE, once, for both readers. TimelineBlock draws
+// these and `chipRoomFor` counts them, and the count was a second hand-kept
+// list of the same five conditions: a flag added to the rail and not to it
+// would let the day's start-time chips claim room a block does not have. The
+// same phase added a flag, which is when that would have happened.
+//
+// Also phase 22, Patryk: deposit and the NEW indoor/outdoor preference should
+// be visible on booking blocks. At 1× on a 1280px tablet a 90-minute block is
+// 126px and its fixed parts take 114, so no flag fits there at all; he chose
+// to make these two the LAST flags to drop — only the size ring and the
+// overstaying mark outlast them — over squeezing the name for them or moving
+// them off the rail. So the ladder is no longer "informational first, then the
+// exception states": deposit and the preference now outrank locked and repeat
+// no-show, which still outrank the preferred-tables star. Overstaying stays on
+// top — a party sitting in the next booking's table, the one mark a host acts on
+// before anything else.
+function railFlagsOf(b, noShows, warn, currency) {
+  const depositAmt = Number(b.deposit) || 0;
+  const zone = b.preference === "indoor" || b.preference === "outdoor" ? b.preference : null;
+  const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
+  return [
+    depositAmt > 0
+      ? { k: "dep", keep: 2, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={IC.control} /> } : null,
+    zone
+      ? { k: "zone", keep: 3, title: zone === "indoor" ? "Prefers indoor" : "Prefers outdoor",
+          icon: zone === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} /> } : null,
+    hasPrefT
+      ? { k: "pref", keep: 6, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
+    isLocked(b)
+      ? { k: "lock", keep: 5, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
+    noShows >= 2
+      ? { k: "ns", keep: 4, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={IC.control} /> } : null,
+    warn && warn.overdue
+      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
+  ].filter(Boolean);
+}
+
 function chipRoomFor(b, noShows, warn, clash) {
-  const flags = ((Number(b.deposit) || 0) > 0 ? 1 : 0)
-    + ((b.preferredTables && b.preferredTables.length) ? 1 : 0)
-    + (isLocked(b) ? 1 : 0)
-    + (noShows >= 2 ? 1 : 0)
-    + (warn && warn.overdue ? 1 : 0);
+  const flags = railFlagsOf(b, noShows, warn, "").length;
   return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + STATUS_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
 }
 
@@ -204,7 +244,6 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     : warn
       ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
       : (late ? "3px solid var(--tl-block-late)" : "none");
-  const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   const hasNote = b.notes && b.notes.trim();
@@ -234,26 +273,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // never showed anyway — is in the hover title.
   // …and then the label stopped being a string at all: `name + " (size)"` is
   // now a name span and a size ring, so nothing is concatenated here.
-  const depositAmt = Number(b.deposit) || 0;
-  // v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
-  // survive" are two questions with two separate answers.
-  //
-  // TWO ORDERS, ONE LIST. The ARRAY order is the RAIL order — unchanged from
-  // v17.9.0, so a block wide enough for everything looks exactly as it did.
-  // `keep` is the DROP priority (lowest survives longest); see block-layout.js.
-  // They are one literal on purpose: held apart, they drift.
-  const allFlags = [
-    depositAmt > 0
-      ? { k: "dep", keep: 5, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={IC.control} /> } : null,
-    hasPrefT
-      ? { k: "pref", keep: 4, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
-    isLocked(b)
-      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
-    noShows >= 2
-      ? { k: "ns", keep: 2, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={IC.control} /> } : null,
-    warn && warn.overdue
-      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
-  ].filter(Boolean);
+  // The rail's flags — `railFlagsOf` (module scope) builds them, because
+  // `chipRoomFor` has to count the same list. v17.9.1's notes on the two
+  // orders, and phase 22's new drop order, are there.
+  const allFlags = railFlagsOf(b, noShows, warn, currency);
   // v17.9.1 review fix: the freeing-soon pill is part of the FIXED cost when it
   // is showing. It is `flexShrink: 0` like everything else on the rail, and the
   // comment at its render site — "the seated block is near full width this late,

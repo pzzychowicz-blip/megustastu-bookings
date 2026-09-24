@@ -12,7 +12,9 @@
 // least afford to lose, and the kind of thing a later reorder breaks silently.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { visibleRail } from "../src/lib/block-layout.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
 
 // The measured widths from TimelineView.jsx. Duplicated deliberately: this file
 // tests the LADDER, not the measurements, and pinning them here means a retune
@@ -22,12 +24,16 @@ const FLAG = 15;
 const FIXED = 41 + 55;   // HANDLE_PX + NAME_MIN_PX, no chip
 
 // Rail order (left → right on the block), with the drop priority TimelineView
-// assigns. Lowest `keep` survives longest.
+// assigns. Lowest `keep` survives longest. v18.2.0 phase 22 (Patryk): deposit
+// and the new indoor/outdoor preference are the last flags to drop — only the
+// ring and overstaying outlast them. The "fixture matches the component" test
+// at the bottom reads `railFlagsOf` so this list cannot drift from it.
 const RAIL = [
-  { k: "dep", keep: 5 },    // deposit          — informational
-  { k: "pref", keep: 4 },   // preferred tables — informational
-  { k: "lock", keep: 3 },   // locked
-  { k: "ns", keep: 2 },     // repeat no-show
+  { k: "dep", keep: 2 },    // deposit
+  { k: "zone", keep: 3 },   // prefers indoor / outdoor (v18.2.0)
+  { k: "pref", keep: 6 },   // preferred tables — first to drop
+  { k: "lock", keep: 5 },   // locked
+  { k: "ns", keep: 4 },     // repeat no-show
   { k: "over", keep: 1 }    // overstaying      — the most urgent
 ];
 
@@ -57,29 +63,30 @@ describe("visibleRail — the ladder", () => {
     expect(ks(r)).toEqual(["over"]);
   });
 
-  it("adds the exception flags before the informational ones", () => {
+  it("then deposit and the indoor/outdoor preference, before every other flag (v18.2.0)", () => {
     const two = visibleRail(FIXED + RING + FLAG * 2, FIXED, RING, FLAG, RAIL);
-    expect(ks(two)).toEqual(["ns", "over"]);
+    expect(ks(two)).toEqual(["dep", "over"]);
     const three = visibleRail(FIXED + RING + FLAG * 3, FIXED, RING, FLAG, RAIL);
-    expect(ks(three)).toEqual(["lock", "ns", "over"]);
+    expect(ks(three)).toEqual(["dep", "zone", "over"]);
     const four = visibleRail(FIXED + RING + FLAG * 4, FIXED, RING, FLAG, RAIL);
-    expect(ks(four)).toEqual(["pref", "lock", "ns", "over"]);
+    expect(ks(four)).toEqual(["dep", "zone", "ns", "over"]);
+    const five = visibleRail(FIXED + RING + FLAG * 5, FIXED, RING, FLAG, RAIL);
+    expect(ks(five)).toEqual(["dep", "zone", "lock", "ns", "over"]);
   });
 
   it("shows the whole rail once there is room, in RAIL order", () => {
-    // 162px is the next zoom step up, measured live with 2 flags active.
-    const r = visibleRail(FIXED + RING + FLAG * 5, FIXED, RING, FLAG, RAIL);
+    const r = visibleRail(FIXED + RING + FLAG * 6, FIXED, RING, FLAG, RAIL);
     expect(r.showRing).toBe(true);
-    expect(ks(r)).toEqual(["dep", "pref", "lock", "ns", "over"]);
+    expect(ks(r)).toEqual(["dep", "zone", "pref", "lock", "ns", "over"]);
   });
 
   it("renders survivors in RAIL order, never in priority order", () => {
     // The specific regression this guards: returning the sorted slice would put
-    // the star to the RIGHT of the lock on a narrow block and to its LEFT on a
-    // wide one, so the rail's layout would depend on the zoom level.
+    // the deposit to the RIGHT of the preference on a narrow block and to its
+    // LEFT on a wide one, so the rail's layout would depend on the zoom level.
     const r = visibleRail(FIXED + RING + FLAG * 3, FIXED, RING, FLAG, RAIL);
-    expect(ks(r)).toEqual(["lock", "ns", "over"]);
-    expect(ks(r)).not.toEqual(["over", "ns", "lock"]);
+    expect(ks(r)).toEqual(["dep", "zone", "over"]);
+    expect(ks(r)).not.toEqual(["over", "dep", "zone"]);
   });
 });
 
@@ -118,5 +125,23 @@ describe("visibleRail — edges", () => {
     const icon = {};
     const r = visibleRail(400, FIXED, RING, FLAG, [{ k: "dep", keep: 5, icon }]);
     expect(r.flags[0].icon).toBe(icon);
+  });
+});
+
+describe("the fixture matches the component (v18.2.0 phase 22)", () => {
+  // RAIL above is a copy of TimelineView's `railFlagsOf`, and a copy of an
+  // order is the kind of thing that drifts: this reads the component's own
+  // keys and priorities, in rail order, and compares.
+  const tv = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
+  const body = tv.slice(tv.indexOf("function railFlagsOf("), tv.indexOf("function chipRoomFor("));
+
+  it("same keys, same order, same drop priority", () => {
+    const found = [...body.matchAll(/\{ k: "(\w+)", keep: (\d+)/g)].map((m) => ({ k: m[1], keep: Number(m[2]) }));
+    expect(found).toEqual(RAIL);
+  });
+
+  it("the chip's room is counted from the SAME list the rail draws", () => {
+    expect(tv).toMatch(/function chipRoomFor\(b, noShows, warn, clash\) \{\s*const flags = railFlagsOf\(b, noShows, warn, ""\)\.length;/);
+    expect(tv).toMatch(/const allFlags = railFlagsOf\(b, noShows, warn, currency\);/);
   });
 });

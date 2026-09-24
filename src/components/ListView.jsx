@@ -36,12 +36,13 @@ import { formatCode, normalizeCode, isUnsettled } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
-import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon } from "./Icons";
+import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
 // ── The card's flag rail (v17.15.5) ──────────────────────────────────────────
 // The same facts TimelineBlock draws on its right-hand rail, in the same order
-// (deposit → preferred → locked → repeat-no-show), with the same icons at the
+// (deposit → preferred → locked → repeat-no-show; v18.2.0 phase 22 puts the
+// indoor/outdoor preference after the deposit), with the same icons at the
 // same IC.control size — so a booking reads the same left-to-right whichever
 // view you are in. Before this the card said them as seven solid coloured
 // pills printing words, and a host moving between the two views had to learn
@@ -570,6 +571,16 @@ export const ListView = memo(function ListView({
             <LockIcon size={IC.control} />
           </CardFlag>
         ) : null;
+        // v18.2.0 phase 22: the seating preference — Patryk's house marks
+        // (Icons.jsx), after the voucher, as the block's rail has it after the
+        // deposit. The word stays beside the mark, the card's rule for its
+        // flags (the block has room for the mark alone).
+        const zoneTag = (b.preference === "indoor" || b.preference === "outdoor") ? (
+          <CardFlag ink={FLAG_NEUTRAL} title={b.preference === "indoor" ? "Prefers indoor" : "Prefers outdoor"}>
+            {b.preference === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} />}
+            {b.preference === "indoor" ? "Indoor" : "Outdoor"}
+          </CardFlag>
+        ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
           <CardFlag ink={FLAG_NEUTRAL} title={"Preferred tables: " + b.preferredTables.join(", ")}>
             <StarIcon size={IC.control} />{b.preferredTables.join("+")}
@@ -631,7 +642,7 @@ export const ListView = memo(function ListView({
         // v18.2.0 phase 18: whether there is a flags box at all. It lives inside
         // the size + status box, so leaving it out moves nothing (the name row
         // below says why that placement matters).
-        const hasFlags = !!(depositTag || voucherTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || lateTag || durationTag);
+        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || lateTag || durationTag);
 
         const notesEl = b.notes ? (
           <div style={{
@@ -900,13 +911,16 @@ export const ListView = memo(function ListView({
                 </span>
                 {/* v17.15.5: TimelineBlock's rail order — deposit, preferred,
                     then the exception flags (locked / repeat-no-show), so the
-                    two views read the same left-to-right. `manual` sits with
+                    two views read the same left-to-right. v18.2.0 phase 22:
+                    the indoor/outdoor preference follows the deposit (and the
+                    card-only voucher). `manual` sits with
                     `locked` because it is the same fact one notch weaker, and
                     the two counters that have no block counterpart come last. */}
                 {hasFlags ? (
                   <div style={{ ...NAME_CELL, flex: "1 1 " + FLAGS_MIN + "px", minWidth: 0, flexWrap: "wrap", gap: "4px 8px" }}>
                     {depositTag}
                     {voucherTag}
+                    {zoneTag}
                     {prefTag}
                     {lockedTag}
                     {manualTag}

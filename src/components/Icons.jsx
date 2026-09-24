@@ -617,6 +617,47 @@ export function VoucherIcon(props) {
   );
 }
 
+// v18.2.0 phase 22 — the seating preference, Patryk's own marks: "a house with
+// an arrow drawn inside the house for Indoor, and a house with an arrow drawn
+// outside the house for Outdoor". A booking's `preference` ("indoor" /
+// "outdoor"; "auto" draws nothing) on the timeline block's rail and the List
+// card.
+//
+// Judged rasterised at the 14px they ship at and magnified 8×, the
+// `DepositIcon` method, and the indoor mark needed three rounds for the reason
+// that note records — an interior shape closes up under a 2.2 stroke:
+//   • a SHORT arrow in the body (shaft 7 units) filled into a blob at 14px;
+//   • a bare chevron read as an envelope, not as "in";
+//   • so the arrow starts up in the ROOF and runs the house's full height, in
+//     the widest house the box allows (walls 4→20), which leaves the gaps
+//     either side of it open. It still reads as a house with an arrow in it.
+// The outdoor house is SMALLER, on the left, so its arrow has room to be
+// outside it. The two differ in silhouette before any detail resolves — a
+// full-width house against a narrow one with a tail — which is what tells them
+// apart at a glance, and neither shares an outline with the rail's banknote,
+// lock, star or no-show mark. The arrows also point the way they mean: down
+// into the house, and out of it.
+export function IndoorIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M1.5 11.5 12 2.5l10.5 9" />
+      <path d="M4 9.5V21.5h16V9.5" />
+      <path d="M12 7.5v10.5" />
+      <path d="M8 14l4 4 4-4" />
+    </Svg>
+  );
+}
+export function OutdoorIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M2 12 8.5 5.5 15 12" />
+      <path d="M4 10.5V20h9v-9.5" />
+      <path d="M16 15.5h6" />
+      <path d="M19.5 12.5l3 3-3 3" />
+    </Svg>
+  );
+}
+
 // ── v17.10.0: the STATUS marks ───────────────────────────────────────────────
 // Every button that moves a booking to another status used to be prefixed with
 // the SAME ChevronRightIcon — ">Confirmed", ">Seated", ">Completed" — which is
