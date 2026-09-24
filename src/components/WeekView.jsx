@@ -24,9 +24,9 @@
 // v14.7.0 (week) · v14.9.0 (month view + W/M switch).
 
 import { useState, useEffect } from "react";
-import { Overlay, mkBtn, AutoHeight } from "./atoms";
+import { Overlay, mkBtn, AutoHeight, SEG_TRACK, segStyle } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
-import { S, BTN, R, T, FW, IC } from "../lib/constants";
+import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 import { todayStr, addDays, isReadableDate } from "../lib/day";
@@ -170,19 +170,19 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   }, [mode, ref, focus]);
 
   // ── Header: Week/Month segmented control + period label ──
+  // v18.2.0 (the design critique, X3): the app's ONE segmented look — atoms'
+  // SEG_TRACK / segStyle, the view switcher's and Settings' tab bar's. This was
+  // a third style, the chosen mode in solid accent blue where the other two
+  // lift a white segment, and it said which mode was on by colour alone:
+  // `aria-pressed` now, as ViewSwitcher's buttons.
   function modeBtn(m, label){
     const active = mode === m;
     return (
       <button
         onClick={function(){ switchMode(m); }}
         className="mgt-hover-scale"
-        style={{
-          border: "none", borderRadius: R.pill, padding: "6px 18px", cursor: "pointer",
-          fontSize: T.body, fontWeight: FW.bold, minHeight: 32,
-          background: active ? S.accent : "transparent",
-          color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
-          boxShadow: active ? "var(--shadow-btn-solid)" : "none"
-        }}
+        aria-pressed={active}
+        style={{ ...segStyle(active), padding: "6px 18px", minHeight: H.compact }}
       >
         {label}
       </button>
@@ -204,7 +204,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   return (
     <Overlay onClose={onClose} footer={footer}>
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill, background: CELL, border: "1px solid var(--border-input)" }}>
+        <div role="group" aria-label="Show" style={SEG_TRACK}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}

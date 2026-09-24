@@ -43,3 +43,24 @@ describe("X2 — the calendar is opaque, and its shading has a key", () => {
     expect(Week).toMatch(/<span>Fewer covers<\/span>/);
   });
 });
+
+// X3 + S3, measured on DEV: Week / Month / Stats marked the chosen mode with a
+// solid rgb(0, 122, 255) fill — a third segmented style beside the view
+// switcher and Settings, which lift a white segment — and none of its buttons,
+// nor Settings' nine tabs, exposed which one was on. After: the chosen segment
+// rgba(255, 255, 255, 0.95) with primary ink on the shared track, aria-pressed
+// true on it and false on the others, in both places.
+const Settings = read("components/Settings.jsx");
+
+describe("X3 + S3 — one segmented look, and its state said", () => {
+  it("Week / Month / Stats is atoms' SEG_TRACK and segStyle, not a third style", () => {
+    expect(Week).toMatch(/<div role="group" aria-label="Show" style=\{SEG_TRACK\}>/);
+    expect(Week).toMatch(/aria-pressed=\{active\}\s*style=\{\{ \.\.\.segStyle\(active\), padding: "6px 18px", minHeight: H\.compact \}\}/);
+    expect(Week).not.toMatch(/background: active \? S\.accent/);
+  });
+
+  it("Settings' tabs say which one is showing", () => {
+    const bar = Settings.slice(Settings.indexOf("export function TabBar"), Settings.indexOf("export function TabBar") + 6000);
+    expect(bar).toMatch(/onClick=\{\(\) => onSelect\(t\.id\)\}\s*aria-pressed=\{active\}/);
+  });
+});

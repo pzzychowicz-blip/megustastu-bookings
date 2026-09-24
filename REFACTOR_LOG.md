@@ -26887,3 +26887,22 @@ opacity 1; 31 August's content at 0.4; no amber anywhere; the key under the grid
 
 **Gate after phase 34:** `121.95 kB` gz main bundle (±0; WeekView is a lazy chunk) · **1726 tests** (+8) ·
 0 lint errors, 91 warnings (unchanged) · style OK.
+
+### 35. One segmented look, and its state said (X3 + S3)
+
+The Week / Month / Stats toggle marked the chosen mode with a solid accent fill, `rgb(0, 122, 255)`: a
+third segmented style beside the view switcher and Settings' tab bar, which lift a white segment. And it
+said which mode was on by colour alone. So did Settings' nine tabs: `aria-pressed` was null on all of
+them, while the view switcher's buttons have always carried it.
+
+- The toggle is atoms' `SEG_TRACK` with `segStyle(active)` buttons, as a `role="group"` named "Show",
+  each with `aria-pressed`. It keeps its own 6/18 padding and `H.compact` height; the look has one
+  source now.
+- `TabBar`'s buttons carry `aria-pressed`.
+
+Live on DEV (light): Week chosen reads `rgba(255, 255, 255, 0.95)` with ink `rgb(26, 29, 36)` and
+`aria-pressed="true"`, Month and Stats transparent and `"false"`; choosing Stats moves all three. The
+track is `--bg-tabbar`. Settings: General `true`, the other eight `false`. `tests/week-view.test.js` +2.
+
+**Gate after phase 35:** `121.95 kB` gz main bundle (±0) · **1728 tests** (+2) · 0 lint errors, 91 warnings
+(unchanged) · style OK.

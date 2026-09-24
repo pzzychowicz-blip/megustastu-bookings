@@ -144,6 +144,9 @@ export function TabBar({ tabs, current, onSelect }) {
             key={t.id}
             className="mgt-hover-scale"
             onClick={() => onSelect(t.id)}
+            // v18.2.0 (the design critique, S3): which tab is showing, said —
+            // not only lifted. `aria-pressed`, as the view switcher's buttons.
+            aria-pressed={active}
             // v18.2.0: the segment's look is `segStyle` (atoms.jsx), shared
             // with the main view switcher — the SAME values this button carried
             // inline, moved rather than changed. What stays here is what is
