@@ -26906,3 +26906,20 @@ track is `--bg-tabbar`. Settings: General `true`, the other eight `false`. `test
 
 **Gate after phase 35:** `121.95 kB` gz main bundle (±0) · **1728 tests** (+2) · 0 lint errors, 91 warnings
 (unchanged) · style OK.
+
+### 36. Clear is not red (X5)
+
+"Clear" empties a table SELECTION (the booking form's manual tables, twice, the walk-in form's, table
+assignment's and the preferred-tables picker's) and destroys nothing, but `--btn-clear` was
+`rgba(211, 58, 58, 0.7)`, the delete red. Phase 8 moved Dismiss off red for exactly this reason. It is
+now an alias of `--app-btn-slate`, as `--btn-dismiss` is: one token, all five buttons, both themes, and
+the contrast registry resolves the alias per theme and passes. (`--btn-reset`, the duration Reset, is
+also red and also destroys nothing; the critique did not raise it, so it stays for now and is named
+here so it is not rediscovered.)
+
+Live on DEV: in the walk-in form, table 3 picked, Clear read `rgb(100, 116, 139)`, exactly
+`--app-btn-slate`, with white text. The form was closed without seating anyone.
+`tests/destructive-buttons.test.js` +1.
+
+**Gate after phase 36:** `121.95 kB` gz main bundle (±0) · **1729 tests** (+1) · 0 lint errors, 91 warnings
+(unchanged) · style OK.

@@ -330,7 +330,10 @@ explaining why is usually the one to read.
   looked like Delete and Cancel beside them. It is now an ALIAS of
   `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
   every dismiss in the app. The `BTN.cancel is RED` row in `src/CLAUDE.md` is the
-  same rule from the other side.
+  same rule from the other side. **Phase 36 did the same for `--btn-clear`**
+  (the critique's X5): "Clear" empties a table selection — the booking form's,
+  the walk-in form's, table assignment's, the preferred tables' — and was the
+  delete red too.
 - **A row's destructive button is quiet until armed (v18.2.0, S4 and S6).** At
   rest it is the danger TINT (`--danger-bg` / `--danger-text`, the danger pane's
   pair, registered as a button too) with mkBtn's ordinary glass rim, so it
