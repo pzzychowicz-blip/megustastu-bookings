@@ -655,6 +655,12 @@ export function searchVouchers(vouchers, query, limit, now) {
 // reads literals, the contrast registry reads pairs, and neither can see a
 // shape. `currency` comes from `settings/general`; vouchers add no second
 // source for it.
+//
+// v18.2.0 phase 45 (C3): the amount and the symbol are joined by a NO-BREAK
+// space (U+00A0), so "20 €" is one unit to the line breaker. Measured on a
+// 375px phone, the redeem prompt's "… 20 € left on it." broke as "20" at the
+// end of one line and "€ left on it." at the start of the next. Every caller
+// is on-screen or printed text; nothing stores or exports what this returns.
 export function money(n, currency) {
-  return (Math.round(n * 100) / 100) + " " + currency;
+  return (Math.round(n * 100) / 100) + " " + currency;
 }

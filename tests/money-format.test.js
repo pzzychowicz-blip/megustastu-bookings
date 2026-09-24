@@ -18,22 +18,34 @@ import { money } from "../src/lib/vouchers.js";
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
 
+// v18.2.0 phase 45: the space is U+00A0, a NO-BREAK space. Measured on a
+// 375px phone, the redeem prompt broke "20 €" into "20" at the end of one line
+// and "€ left on it." at the start of the next. NB below is that character.
+const NB = "\u00a0";
+
 describe("money — the amount, then the symbol", () => {
   it("writes whole and part amounts", () => {
-    expect(money(20, "€")).toBe("20 €");
-    expect(money(12.5, "€")).toBe("12.5 €");
-    expect(money(0, "€")).toBe("0 €");
+    expect(money(20, "€")).toBe("20" + NB + "€");
+    expect(money(12.5, "€")).toBe("12.5" + NB + "€");
+    expect(money(0, "€")).toBe("0" + NB + "€");
   });
 
   it("rounds away a floating-point remainder", () => {
     expect(20 - 12.3).toBe(7.699999999999999);
-    expect(money(20 - 12.3, "€")).toBe("7.7 €");
-    expect(money(0.1 + 0.2, "€")).toBe("0.3 €");
+    expect(money(20 - 12.3, "€")).toBe("7.7" + NB + "€");
+    expect(money(0.1 + 0.2, "€")).toBe("0.3" + NB + "€");
   });
 
   it("uses the restaurant's symbol, whatever it is", () => {
-    expect(money(20, "£")).toBe("20 £");
-    expect(money(20, "CHF")).toBe("20 CHF");
+    expect(money(20, "£")).toBe("20" + NB + "£");
+    expect(money(20, "CHF")).toBe("20" + NB + "CHF");
+  });
+
+  it("never lets a line break part the amount from its symbol", () => {
+    for (const n of [0, 7.7, 20, 1250]) {
+      expect(money(n, "€")).not.toMatch(/ /);
+      expect(money(n, "€")).toMatch(/\u00a0€$/);
+    }
   });
 });
 

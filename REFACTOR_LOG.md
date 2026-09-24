@@ -27235,3 +27235,22 @@ Live on DEV: 50 customer rows carry "last …", none of them ISO ("+34 612345678
 
 **Gate after phase 44:** `121.87 kB` gz main bundle (±0; Settings is a lazy chunk) · **1829 tests** (+2) ·
 0 lint errors, 90 warnings (unchanged) · style OK.
+
+### 45. An amount and its symbol never part (C3)
+
+`money()` joined the amount and the currency symbol with an ordinary space, so a line could break
+between them. Measured on a 375px phone, the redeem prompt's sentence ended one line with "…this
+voucher attached. 20" and began the next with "€ left on it." Phase 39 made money read "20 €"
+everywhere; a wrap that splits it does not. The space is U+00A0 now, a no-break space, so the
+breaker treats "20 €" as one unit. Every caller is on-screen or printed text (the day sheet), and
+nothing stores or exports what `money()` returns, so no record changes shape. The same class exists
+for "Thu 24.09" and "4 guests"; no break was observed there, and it is listed for Patryk in the
+report rather than done unasked.
+
+Live on DEV, phone, dark: the same guest and voucher (15 € left) — the sentence now wraps as
+"…has this voucher attached." then "15 € left on it.", the amount and the symbol together; the
+string holds U+00A0. `tests/money-format.test.js`: the three shape tests expect the no-break space,
+and a fourth refuses a breaking one.
+
+**Gate after phase 45:** `121.87 kB` gz main bundle (±0) · **1830 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.

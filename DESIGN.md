@@ -484,7 +484,9 @@ explaining why is usually the one to read.
   decides the year): 68px, or 104 when a date prints its year, in Find a
   booking and Customers, and 54 or 84 in the Activity log. So a year never
   pushes one row's times out of line.
-- **Money is written ONE way: "20 €" (v18.2.0, C3).** The amount, a space, then
+- **Money is written ONE way: "20 €" (v18.2.0, C3).** The amount, a NO-BREAK
+  space (U+00A0, phase 45 — on a phone the redeem prompt broke "20" and "€ left
+  on it." onto two lines), then
   the restaurant's currency symbol (`settings/general.currency`), through
   `money()` in `lib/vouchers.js`, which also rounds to the cent. The List
   card's deposit flag, its timeline block's title and the printed Day sheet
