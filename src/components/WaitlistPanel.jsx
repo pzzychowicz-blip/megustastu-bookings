@@ -14,6 +14,8 @@
 // (rgba(211,58,58,.75)), so every row carried a solid red Remove and arming
 // changed only the word. Book and Remove name their party, in the "table
 // free" banner's shape, because N rows of bare "Book" are N identical names.
+// (Phase 62, Patryk: every destructive button is solid red at rest now, the
+// trash mark before Remove; arming changes only the label.)
 // The row's text takes a 160px flex BASIS, where it was `flex: 1` (a zero
 // one): a wrapping line is packed by basis, so the buttons never wrapped and
 // took their width out of the text instead — 129px of it on a 375px phone,
@@ -41,21 +43,23 @@
 //   onClose()      — close the panel
 
 import { useState } from "react";
-import { S, BLOCK_BG, R, T, FW } from "../lib/constants";
+import { S, BLOCK_BG, R, T, FW, IC } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
+import { TrashIcon } from "./Icons";
 
 // The button group's ARMED width: Book (60.3) + the 6px gap + "Confirm —
-// remove" (140.1) = 206.4, measured at T.body in the app's font (San Francisco
-// on the Mac), rounded up. Every pixel above it is a pixel of text on the
+// remove" with its trash mark (160.1; 140.1 before phase 62 gave it the mark) =
+// 226.4, measured at T.body in the app's font (San Francisco on the Mac),
+// rounded up. Every pixel above it is a pixel of text on the
 // tablet: 5% of slack cost the first DEV row a fourth line. A system font that
 // sets the label wider takes the difference out of the text when armed; it
 // cannot re-wrap the group on a phone, where a 440px screen leaves 29px before
 // the row would share its line. Re-measure if the labels, T.body or mkBtn's
 // padding change.
-const ACTIONS_W = 207;
+const ACTIONS_W = 227;
 
 function addedLabel(ts){
   if(!ts) return "";
@@ -90,8 +94,8 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
             onClick={function(){onBook(w);}}>Book</button><button
             className="mgt-hover-scale mgt-press"
             aria-label={(arming?"Confirm — remove (":"Remove (")+party+")"}
-            style={mkDangerBtn(arming,{fontSize: T.body,minHeight:36})}
-            onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}>{arming?"Confirm — remove":"Remove"}</button></div></div>
+            style={mkDangerBtn({fontSize: T.body,minHeight:36})}
+            onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}><TrashIcon size={IC.control} />{arming?"Confirm — remove":"Remove"}</button></div></div>
     );
   });
 

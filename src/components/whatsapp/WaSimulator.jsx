@@ -13,7 +13,7 @@
 // the conversations/messages nodes.
 
 import { useState, useEffect } from "react";
-import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn, DateField } from "../atoms";
+import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn, mkDangerBtn, DateField } from "../atoms";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
@@ -232,8 +232,8 @@ export function WaSimulator({ ctx, onClose }) {
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--text-secondary)", marginBottom: 8 }}>Sample data</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.today })} onClick={onSeed}>Seed sample bookings</button>
-          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del })} onClick={onClearBookings}>Clear WA-SIM bookings</button>
-          <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 12px", background: BTN.del })} onClick={onClearConvos}>Clear conversations</button>
+          <button className="mgt-hover-scale" style={mkDangerBtn({ minHeight: 40, padding: "8px 12px" })} onClick={onClearBookings}>Clear WA-SIM bookings</button>
+          <button className="mgt-hover-scale" style={mkDangerBtn({ minHeight: 40, padding: "8px 12px" })} onClick={onClearConvos}>Clear conversations</button>
         </div>
         <div style={{ fontSize: T.small, color: "var(--text-muted)", marginTop: 8 }}>Seed first — the linked cancel/modify and Regular-chip scenarios reference these bookings.</div>
       </Section>

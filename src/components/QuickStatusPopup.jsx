@@ -23,7 +23,8 @@ import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
 import { seatingClosed } from "../lib/booking-logic";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
-import { NoShowIcon, StatusIcon } from "./Icons";
+import { NoShowIcon, StatusIcon, TrashIcon } from "./Icons";
+import { mkDangerBtn } from "./atoms";
 
 // v18.2.0: two optional props, both for the List card's ⋯ — the first surface
 // to open this card with a CLICK rather than a hold.
@@ -182,21 +183,16 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
           {onDelete ? (
             <button
               className="mgt-hover-scale"
-              style={{
-                background: BTN.del, border: "none",
-                borderRadius: R.pill, padding: "10px 18px",
-                fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-on-accent)",
-                cursor: "pointer",
-                minHeight: 44, flex: "1 1 auto",
-                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
-              }}
+              // v18.2.0 phase 62: the app's one destructive look, on this
+              // card's own pill geometry.
+              style={mkDangerBtn({ fontSize: T.lead, fontWeight: FW.bold, padding: "10px 18px", minHeight: 44, flex: "1 1 auto" })}
               onClick={() => {
                 if (!armed) return;
                 onDelete(booking.id);
                 onClose();
               }}
             >
-              Delete
+              <TrashIcon size={IC.control} />Delete
             </button>
           ) : null}
         </div>

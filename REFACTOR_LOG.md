@@ -27681,3 +27681,50 @@ measured heights). The phone sheet is full-screen and unaffected. `tests/week-vi
 
 **Gate after phase 61:** `122.37 kB` gz main bundle (±0; WeekView is in a lazy chunk) · **1870 tests**
 (+2) · 0 lint errors, 90 warnings (unchanged) · style OK.
+
+### 62. One red for every destructive button, and the trash mark
+
+Patryk: Delete in the templates editor, Remove in Admin → People, "Delete customer & all data",
+Delete in Reminders, Void voucher, Clear this range and the booking form's Delete do one job and
+looked three ways — scan the app and unify them. The scan found them in four reds: the tint that
+turned solid when armed (People, Templates, Reminders, the waitlist, standing bookings), the
+translucent `--btn-del` (the booking form, the ⋯ card, Customers, the Activity log, Vouchers,
+Unblock, the floor plan's Delete door / wall, Layout's remove-table confirmation), `--app-danger-solid`
+(the "Delete booking?" and Discard dialogs) with `BTN.del` beside it in the reminder and conversation
+dialogs, and the inbox's own `--wa-btn-cancel`. He asked to see the options first: a scratch page drew
+today's buttons and three candidates with the app's own atoms, in both themes, and he chose solid red
+at rest plus a trash mark on a Delete or a Remove — reversing the quiet rows of phases 27, 28 and 41.
+Asked separately, he kept the editors' small icon-only × removers quiet (phase 63).
+
+`mkDangerBtn(extra)` is now one solid `--app-danger-solid` with the solid rim, at rest and armed, on
+mkBtn's geometry; the `armed` parameter is gone, since arming changes only the label.
+`mkDangerConfirm(extra)` is the same red on `mkSolidBtn`'s geometry for the three delete dialogs and
+Discard. `TrashIcon` moved from `whatsapp/WaIcons.jsx` to `Icons.jsx`, unchanged, so the inbox's
+Delete and the booking form's are one drawing (the inbox's now takes this set's 2.2 stroke below
+18px, where WaIcons drew 2). It leads every Delete and Remove; Void voucher, Unblock and Clear this
+range take the red without it, being no deletion of a thing. `--wa-btn-cancel` lost its last users and
+went, with its contrast registration. What stays on an old red, and is allow-listed by count in the new
+sweep: a blocked table's fill in `TableGrid` (a status, not a button), the sandbox simulator's "Make
+next staff reply fail" (destroys nothing), and the reminder editor's remove-time × (phase 63).
+
+**Found by measuring the change, and fixed in it.** The trash mark widened both armed-width reserves
+past their values: the waitlist's Book + armed Remove measures 226.4px (`ACTIONS_W` 207 → 227) and a
+standing booking's switch + armed Delete 201.5 (`RULE_ACTIONS_W` 182 → 202), so without the update the
+first tap would again have moved the button. And the Customers delete had two faults of its own: its
+armed sentence sat IN FRONT of the button in the same wrapping row, and its armed label is the SHORTER
+one, so the right-aligned button shrank from its left edge (209 → 154px) and a first tap there missed on
+the second. The sentence now sits under the button, tied by `aria-describedby` while it exists, the
+label reads "Confirm — delete", and the button keeps its resting width (`DELETE_W` 210; the label
+alone measures 208.8).
+
+Live on DEV at 1280×800: rgb(220, 38, 38) with the mark on the ⋯ card's Delete (44px), the booking
+form's (36px, beside Save booking's accent), the waitlist's Remove at rest and armed, a standing
+booking's Delete at rest and armed (Standing bookings switched on to measure, and back off), and the
+Customers delete, which measures x 792, 210px wide in both states with its warning below it; Void
+voucher the same red without the mark. `tests/destructive-buttons.test.js` rewritten for the new rule
+and extended (+8: the dialog helper, a sweep of every component for the old reds, the mark at every
+Delete and Remove, the dialogs, the three non-deletions, the Customers sentence and width, the one
+drawing); the contrast registry lost `--wa-btn-cancel`'s two cases.
+
+**Gate after phase 62:** `122.35 kB` gz main bundle (−0.02) · **1876 tests** (+6) · 0 lint errors, 90
+warnings (unchanged) · style OK.

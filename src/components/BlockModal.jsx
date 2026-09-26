@@ -16,10 +16,10 @@
 // original.
 
 import { useState, useEffect } from "react";
-import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
+import { S, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
-import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkInp, Reveal, AutoHeight } from "./atoms";
+import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, Reveal, AutoHeight } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon } from "./Icons";
 import { useRevealRows } from "../hooks/useRevealRows";
@@ -161,7 +161,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
                     <button
                       onClick={() => onRemove(bl)}
                       className="mgt-hover-scale"
-                      style={mkBtn({ background: BTN.del, fontSize: T.body, flexShrink: 0 })}
+                      style={mkDangerBtn({ fontSize: T.body, flexShrink: 0 })}
                     >
                       Unblock
                     </button>

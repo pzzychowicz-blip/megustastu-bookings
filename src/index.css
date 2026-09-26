@@ -570,7 +570,6 @@
      reason a green surface could sit outside the green family's audit. */
   --wa-draft-bg: rgba(254, 252, 232, 0.6);  --wa-draft-border: rgba(253, 224, 71, 0.65);  --wa-draft-text: #854d0e;  --wa-draft-text-dim: #713f12;
   --wa-btn-open: rgb(0, 122, 255);
-  --wa-btn-cancel: rgb(220, 38, 38);
   --wa-btn-handled: rgb(13, 148, 136);
   --wa-unread-dot: #dc2626;
   /* Two rings that were hard-coded COPIES of the two values above —

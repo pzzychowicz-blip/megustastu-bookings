@@ -28,9 +28,9 @@ import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, mat
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
-import { SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
-import { CloseIcon, EditIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, ModalPresence, Overlay, Reveal } from "../atoms";
+import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
+import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal } from "../atoms";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
 
 // A conversation is "actionable" when it needs a staff response. For a
@@ -515,7 +515,7 @@ export function InboxPanel({
               {tab === "archived" ? (
                 <>
                   <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
                 <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
@@ -542,7 +542,7 @@ export function InboxPanel({
             onClose={() => setConfirmBulkDelete(false)}
             footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--btn-default)" })}>Cancel</button>
-              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--wa-btn-cancel)" })}>Delete {selected.size}</button>
+              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >
             <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>Delete {selected.size} conversation{selected.size !== 1 ? "s" : ""}?</div>

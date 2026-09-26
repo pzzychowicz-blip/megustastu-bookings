@@ -342,35 +342,44 @@ explaining why is usually the one to read.
   (the critique's X5): "Clear" empties a table selection — the booking form's,
   the walk-in form's, table assignment's, the preferred tables' — and was the
   delete red too.
-- **A row's destructive button is quiet until armed (v18.2.0, S4 and S6).** At
-  rest it is the danger TINT (`--danger-bg` / `--danger-text`, the danger pane's
-  pair, registered as a button too) with mkBtn's ordinary glass rim, so it
-  reads as destructive without being the loudest thing on the row; the first
-  tap of its two-tap confirm turns it solid `--app-danger-solid` and relabels
-  it ("Confirm — remove", "Confirm — delete"), and where a row's delete opens a
-  confirmation instead (a reminder, a table), the red is in THAT. `mkDangerBtn(armed)`
-  in atoms, on mkBtn's geometry, so arming changes colour and label and never
-  the height — the label does change the width (Delete 61 → 126px), which the
-  row has to plan for (below). **Never a danger border at rest**: tint + a border
-  in the hue + text in a third shade is the banned shape below — phase 27
-  shipped exactly that and phase 28 took the border off. The sentence saying
-  what the second tap does sits UNDER the row, never above the button. Users:
-  People's Remove, Reminders, Templates, Layout's ×, standing bookings, the
-  waitlist panel's Remove (phase 41 — it only opens while a party waits, so
-  the critique could not reach it). **A row whose buttons sit beside its text
-  gives the text a flex BASIS**, or on a phone the buttons take their width
-  out of the text instead of wrapping under it — and the armed label is the
-  widest state, so that is when it bites (measured on the waitlist: 67px of
-  text beside "Confirm — remove"). **And its button group reserves the ARMED
-  width** (phase 51): a basis alone wraps the line on the group's CURRENT
-  width, so wherever the resting group fits beside the text and the armed one
-  does not, the first tap moves the button a line down and the second misses
-  it — measured on a 430px phone, 27px. Reserved (`minWidth` + `flex-end`), the
-  row wraps alike in both states, and arming grows the button leftwards into
-  space that was already empty, so nothing moves: not the button, not the
-  text, not the rows below. The reserve is the armed width measured and
-  rounded up (`ACTIONS_W`, `RULE_ACTIONS_W`); below it the window reopens,
-  and every pixel above it comes out of the text.
+- **A destructive button is ONE solid red, at rest and armed (v18.2.0 phase 62,
+  Patryk).** Everything that deletes, removes, voids, unblocks or clears is
+  `mkDangerBtn` (atoms): solid `--app-danger-solid` with the solid rim, on
+  mkBtn's geometry; arming a two-tap confirm changes the LABEL ("Confirm —
+  remove") and nothing else, not the colour and not the size under the finger.
+  **A Delete or a Remove carries `TrashIcon` before its word**; Void voucher,
+  Unblock and Clear this range do not, because they are not deletions of a
+  thing. A confirm dialog's red button is `mkDangerConfirm`, the same red on
+  `mkSolidBtn`'s geometry beside the dialog's 44px Back. Before, one job had
+  three looks and four reds: phases 27, 28 and 41 had made a row's delete the
+  danger TINT until armed (thirteen solid table ×s had been the loudest thing
+  in Layout), the booking form, Customers, the Activity log, Vouchers and the
+  floor plan kept the translucent `--btn-del`, the dialogs were split between
+  `--app-danger-solid` and `BTN.del`, and the inbox had its own
+  `--wa-btn-cancel` (removed). Patryk saw the options drawn by the real atoms in
+  both themes and chose solid. **The editors' small icon-only × removers are the
+  exception and stay quiet** (Layout's `X_BTN`, phase 63). **Never a danger
+  border on the tint**: tint + a border in the hue + text in a third shade is
+  the banned shape below; phase 27 shipped it and phase 28 took it off. The
+  sentence saying what the second tap does sits UNDER the button, never above
+  it or in front of it (Customers had it in front, in the same wrapping row,
+  until phase 62). **A row whose buttons sit beside its text gives the text a
+  flex BASIS**, or on a phone the buttons take their width out of the text
+  instead of wrapping under it, and the armed label is usually the widest
+  state, so that is when it bites (measured on the waitlist: 67px of text
+  beside "Confirm — remove"). **And its button group reserves the ARMED width**
+  (phase 51): a basis alone wraps the line on the group's CURRENT width, so
+  wherever the resting group fits beside the text and the armed one does not,
+  the first tap moves the button a line down and the second misses it,
+  measured on a 430px phone at 27px. Reserved (`minWidth` + `flex-end`), the
+  row wraps alike in both states and arming grows the button leftwards into
+  space that was already empty, so nothing moves. The reserve is the armed
+  width measured and rounded up (`ACTIONS_W` 227, `RULE_ACTIONS_W` 202 since
+  the trash mark joined the label); below it the window reopens, and every
+  pixel above it comes out of the text. **Where the armed label is the SHORTER
+  one, the button keeps its resting width** (Customers' `DELETE_W`, phase 62):
+  right-aligned, it otherwise shrank from its left edge (209 → 154px) and a
+  first tap there missed on the second.
 - **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
   cells were `--bg-input` (half-transparent) over a translucent sheet, so the
   page behind the modal showed through and the timeline's orange blocks

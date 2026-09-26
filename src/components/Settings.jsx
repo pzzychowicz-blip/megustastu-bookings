@@ -47,10 +47,11 @@ import { guestsLabel } from "../lib/booking-logic";
 
 // v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
 // armed width, as the waitlist panel's Book + Remove do (its ACTIONS_W says
-// why): the switch (48) + 8 + "Confirm — delete" (125.5) = 181.5, measured at
-// T.body on the Mac, rounded up. Re-measure if the label, T.body or the
-// button's padding changes.
-const RULE_ACTIONS_W = 182;
+// why): the switch (48) + 8 + "Confirm — delete" with its trash mark (145.5;
+// 125.5 before phase 62 gave it the mark) = 201.5, measured at T.body on the
+// Mac, rounded up. Re-measure if the label, the mark, T.body or the button's
+// padding changes.
+const RULE_ACTIONS_W = 202;
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
@@ -59,7 +60,7 @@ const RULE_ACTIONS_W = 182;
 import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
-import { CloseIcon, DownloadIcon } from "./Icons";
+import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
@@ -1041,9 +1042,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                       <Toggle
                         label={"Standing booking: " + ruleWho}
                         on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
-                      {/* v18.2.0 (S6): the rows' shared look — the danger tint,
-                          solid red only once armed — and the armed label says
-                          what the second tap does, as People's Remove does.
+                      {/* v18.2.0 (S6): the rows' shared look — since phase 62
+                          the app's one destructive look, solid red with the
+                          trash mark (Patryk) — and the armed label says what
+                          the second tap does, as People's Remove does.
                           Phase 42: and it names its rule, as Templates' Delete
                           names its template — two rules were two buttons both
                           called "Delete" (measured on DEV). */}
@@ -1051,7 +1053,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                         aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
                         onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
                         className="mgt-hover-scale mgt-press"
-                        style={mkDangerBtn(armed, { fontSize: T.body, minHeight: 32, padding: "4px 10px" })}>{armed ? "Confirm — delete" : "Delete"}</button>
+                        style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px" })}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete"}</button>
                     </div>
                   </div>
                 );

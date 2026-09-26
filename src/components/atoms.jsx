@@ -204,29 +204,37 @@ export function mkSolidBtn(background, extra) {
   };
 }
 
-// ── A row's DESTRUCTIVE button: quiet until armed (v18.2.0) ──────────────────
-// The design critique (S4, S6): a Delete or Remove painted solid red on every
-// row makes the rarest action the loudest thing on screen — thirteen of them in
-// Layout → Tables — and a Remove in the same grey as the Capabilities beside it
-// says nothing about what it does. So a row's destructive button is the danger
-// TINT at rest (ALERT_TONES.danger, the danger pane's registered pair):
-// recognisably destructive, not shouting. ARMED — the first tap of a two-tap
-// confirm, or the button that opens a confirm — it turns solid
-// `--app-danger-solid`, the one moment it should. Both states keep mkBtn's
-// geometry, so arming changes the colour and the label, never the size under
-// the finger.
+// ── A DESTRUCTIVE button: one solid red, at rest and armed (v18.2.0) ─────────
+// Every button that deletes, removes, voids, unblocks or clears something is
+// this: solid `--app-danger-solid` with the solid rim, on mkBtn's geometry.
+// Arming a two-tap confirm changes the LABEL ("Confirm — remove") and nothing
+// else — not the colour, not the size under the finger. A Delete or Remove
+// also carries `TrashIcon` before its word (the call site draws it, since Void
+// voucher, Unblock and Clear this range are not deletions of a thing).
 //
-// The rest state keeps mkBtn's own glass rim and takes NO danger border. Phase
-// 27 shipped it with `--danger-border`, which made it pale fill + matching
-// border + text in a third shade: the shape DESIGN.md bans, because it encodes
-// one signal three times (LayoutSettings' X_BTN had been moved OFF it for that
-// reason in v17.8.0). Tint and tone alone are the tinted-pane shape
-// (InlineAlert, AlertPanel), which is allowed. Caught in phase 28.
-export function mkDangerBtn(armed, extra) {
-  return mkBtn(Object.assign(armed
-    ? { background: "var(--app-danger-solid)", color: "var(--text-on-accent)", border: RIM_SOLID, boxShadow: "var(--shadow-btn-solid)" }
-    : { background: ALERT_TONES.danger.tint, color: ALERT_TONES.danger.tone },
-  extra));
+// Phase 62, Patryk's call, after seeing the app's own buttons side by side in
+// both themes: the same job had four reds and three looks (a tint that turned
+// solid when armed on six surfaces, a translucent `--btn-del` on others, the
+// inbox's own `--wa-btn-cancel`), and he chose SOLID at rest over the quiet
+// tint phases 27, 28 and 41 had built. The small icon-only × removers inside
+// the editors are the one exception, and they stay quiet (phase 63).
+// `inline-flex` so the icon and the word sit on one centred line.
+export function mkDangerBtn(extra) {
+  return mkBtn(Object.assign({
+    background: "var(--app-danger-solid)", color: "var(--text-on-accent)", border: RIM_SOLID, boxShadow: "var(--shadow-btn-solid)",
+    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
+  }, extra));
+}
+
+// The same red on a confirm DIALOG's button ("Delete booking?" · Delete,
+// "Discard unsaved changes?" · Discard): mkSolidBtn's geometry, T.lead at
+// H.touch, because it stands beside the dialog's 44px Back. Before phase 62
+// those buttons were three reds: `--app-danger-solid`, the translucent
+// `BTN.del` (reminders, conversations) and the inbox's `--wa-btn-cancel`.
+export function mkDangerConfirm(extra) {
+  return mkSolidBtn("var(--app-danger-solid)", Object.assign({
+    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
+  }, extra));
 }
 
 // ── Segmented control: the track and a segment (v18.2.0) ─────────────────────

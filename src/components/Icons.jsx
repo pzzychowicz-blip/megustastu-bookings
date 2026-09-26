@@ -145,6 +145,22 @@ export function DownloadIcon(props) {
   );
 }
 
+// v18.2.0 phase 62: the mark on every Delete and Remove — a bin with a lid and
+// two staves. It was the WhatsApp inbox's own (WaIcons.jsx, drawn for its two
+// Deletes) and moved here, unchanged, when Patryk made it the app's: one
+// drawing, so the inbox's Delete and the booking form's cannot drift.
+export function TrashIcon(props) {
+  return (
+    <Svg {...props}>
+      <line x1="4" y1="6.5" x2="20" y2="6.5" />
+      <path d="M9 6.5V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5v2" />
+      <path d="M6.5 6.5l1 13a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-13" />
+      <line x1="10.5" y1="10.5" x2="10.8" y2="17" />
+      <line x1="13.5" y1="10.5" x2="13.2" y2="17" />
+    </Svg>
+  );
+}
+
 // Rename / edit. A pencil on a baseline rather than a bare nib — at 14px a
 // lone diagonal reads as a slash, which is what the ex-✎ looked like next to
 // the ✓ it sits beside.

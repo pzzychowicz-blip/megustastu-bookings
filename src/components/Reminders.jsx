@@ -19,8 +19,9 @@
 // was co-located here as a module-level `const` (lib/day.js's WEEKDAY_SHORT
 // since v18.0.0 session 7's /code-review).
 
-import { BTN, R, T, FW } from "../lib/constants";
+import { BTN, R, T, FW, IC } from "../lib/constants";
 import { Toggle, mkBtn, mkDangerBtn, OutlineChip, PAUSED_FADE } from "./atoms";
+import { TrashIcon } from "./Icons";
 import { WEEKDAY_SHORT, formatDay } from "../lib/day";
 
 // ── One reminder card ────────────────────────────────────────────────────────
@@ -99,16 +100,16 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         >
           Edit
         </button>
-        {/* v18.2.0 (S6): quiet until it matters. This opens the in-app
-            confirmation, and the red is THERE; on the row it was the loudest
-            thing on the card for the rarest thing anybody does to it. */}
+        {/* v18.2.0 phase 62: the app's one destructive look (mkDangerBtn),
+            solid red with the trash mark — Patryk's call over the quiet tint
+            phase 28 gave it. It opens the in-app confirmation, as before. */}
         <button
           onClick={() => onDelete(r.id)}
           aria-label={"Delete (" + rname + ")"}
           className="mgt-hover-scale"
-          style={mkDangerBtn(false, { fontSize: T.body, minHeight: 32, padding: "4px 12px" })}
+          style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}
         >
-          Delete
+          <TrashIcon size={IC.control} />Delete
         </button>
       </div>
     </div>

@@ -21,8 +21,9 @@
 // letting the reader assume.
 
 import { useState, useRef, useEffect, useId } from "react";
-import { R, T, FW, SP, H } from "../lib/constants";
+import { R, T, FW, SP, H, IC } from "../lib/constants";
 import { Section, Collapsible, Toggle, InlineAlert, ALERT_TONES, OutlineChip, Overlay, ModalTitle, Reveal, AutoHeight, mkInp, mkBtn, mkSolidBtn, mkSel, mkDangerBtn } from "./atoms";
+import { TrashIcon } from "./Icons";
 import { CAPABILITIES, CAP_GROUPS, ROLES, ROLE_GRANTS, RULE_ENFORCED, capState, isGranted, effectiveRole, displayName } from "../lib/roles";
 import { MODULES, moduleOn } from "../lib/modules";
 import { RETENTION_CHOICES } from "../lib/activity";
@@ -847,8 +848,8 @@ export function AdminTabContent({
                           else { setMsg(null); setArmedUid(r.uid); }
                         }}
                         aria-label={(armed ? "Confirm — remove " : "Remove ") + displayName(r)}
-                        style={mkDangerBtn(armed)}
-                      >{armed ? "Confirm — remove" : "Remove"}</button>}
+                        style={mkDangerBtn()}
+                      ><TrashIcon size={IC.control} />{armed ? "Confirm — remove" : "Remove"}</button>}
                       {armed ? (
                         <div id={removeWarnId} style={{ flexBasis: "100%", fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>
                           Deletes {displayName(r)}'s level and capabilities here. It does not lock them

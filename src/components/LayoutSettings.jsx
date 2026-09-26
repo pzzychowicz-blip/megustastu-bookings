@@ -11,11 +11,11 @@
 //   • Kitchen limit.
 
 import { useState, useEffect } from "react";
-import { Section, Collapsible, Toggle, mkStep, mkBtn, Reveal, ALERT_TONES } from "./atoms";
+import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, Reveal, ALERT_TONES } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
-import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
@@ -29,9 +29,11 @@ const STEP_BTN = mkStep(H.compact);
 // v18.2.0 (the design critique, S6): the danger TINT, without that border.
 // Solid red on every row made removal the loudest thing in the tab — thirteen
 // of them on the tables list alone — for the rarest thing anybody does there.
-// Tint and tone are the tinted-pane shape (mkDangerBtn's rest state), not the
-// triple: the rim is the glass one, not a third red. The red is kept for the
-// confirmation, where removing a table asks first.
+// Tint and tone are the tinted-pane shape, not the triple: the rim is the glass
+// one, not a third red. The red is kept for the confirmation, where removing a
+// table asks first — since v18.2.0 phase 62 that is the app's one destructive
+// look (`mkDangerBtn`, solid, with the trash mark), while these small editor
+// ×s stay quiet (Patryk's call).
 const X_BTN = {
   background: ALERT_TONES.danger.tint, border: "1px solid var(--border-glass)",
   borderRadius: R.pill, width: 28, height: 28, fontSize: T.title, fontWeight: FW.bold,
@@ -576,7 +578,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
                       style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
-                      style={mkBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
+                      style={mkDangerBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact })}><TrashIcon size={IC.control} />{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
                 </AlertRow>
                 </AlertPanel>

@@ -21,10 +21,20 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, OutlineChip, Reveal, mkInp, mkBtn, SBadge } from "./atoms";
+import { Section, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
-import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
+import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
+
+// v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
+// by aria-describedby only while it is on screen. One row is armed at a time.
+const DELETE_WARN_ID = "customer-delete-warning";
+// Its RESTING width, which the button keeps once armed: "Confirm — delete" is
+// the SHORTER label, so without it the right-aligned button shrank from its left
+// edge and a first tap there missed on the second (209 → 154px, measured). The
+// resting label with its trash mark at T.body, measured on the Mac (San
+// Francisco), rounded up. Re-measure if the label, the mark or T.body change.
+const DELETE_W = 210;
 
 // v18.2.0 (the design critique, C2): a visit row's size column holds the widest
 // "N guests" a party can be — the form stops at 25, and "25 guests" measures
@@ -169,16 +179,23 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           <div style={{ padding: "0 12px 12px" }}>
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
             {historyRows}
+            {/* v18.2.0 phase 62: the app's one destructive look, and the armed
+                sentence UNDER the button. It was in FRONT of it in a wrapping
+                right-aligned row, so arming added text on the button's line
+                and could push the button along or down under the second tap —
+                the armed-confirm trap `src/CLAUDE.md` records. Only one row is
+                armed at a time, so one id serves. */}
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</span> : null}
               <button
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
+                aria-describedby={armed ? DELETE_WARN_ID : undefined}
+                style={mkDangerBtn({ fontSize: T.body, minHeight: 36, minWidth: DELETE_W })}
                 onClick={function () {
                   if (armed) { onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
                   else setArmedKey(c.key);
-                }}>{armed ? "Confirm delete" : "Delete customer & all data"}</button>
+                }}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete customer & all data"}</button>
             </div>
+            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</div> : null}
           </div>
         </Reveal>
       </div>

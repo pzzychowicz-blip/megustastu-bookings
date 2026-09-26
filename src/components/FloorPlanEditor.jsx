@@ -22,8 +22,9 @@
 // only positions what exists (a new table gets an auto slot via sanitize).
 
 import { useState, useRef, useEffect } from "react";
-import { S, R, T, FW } from "../lib/constants";
-import { mkBtn } from "./atoms";
+import { S, R, T, FW, IC } from "../lib/constants";
+import { mkBtn, mkDangerBtn } from "./atoms";
+import { TrashIcon } from "./Icons";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
 // so PlanView (main chunk) no longer pulls this whole editor in. Re-exported
 // here for back-compat with any older import path.
@@ -305,7 +306,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             </div>
           </div>
           <button onClick={function(){ commitFp({ ...fp, doors: fp.doors.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
-            className="mgt-hover-scale" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete door</button>
+            className="mgt-hover-scale" style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}><TrashIcon size={IC.control} />Delete door</button>
         </div>
       </div>
     );
@@ -316,7 +317,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text }}>{"Wall · " + len + " cm"}</div>
         <button onClick={function(){ commitFp({ ...fp, walls: fp.walls.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
-          className="mgt-hover-scale" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete wall</button>
+          className="mgt-hover-scale" style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}><TrashIcon size={IC.control} />Delete wall</button>
         <span style={{ fontSize: T.body, color: S.muted }}>Drag the wall to move it, or drag its endpoint handles to reshape it.</span>
       </div>
     );

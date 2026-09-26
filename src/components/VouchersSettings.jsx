@@ -35,7 +35,7 @@ import {
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
-import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn, mkDangerBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
 import { formatDay, localDay } from "../lib/day";
 
@@ -277,14 +277,16 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
             </div>
           ) : null}
 
-          {/* Void / un-void. The only destructive-looking action there is, and
-              it is not destructive: the record and its number both stay. */}
+          {/* Void / un-void. The record and its number both stay, so voiding is
+              undoable, but it ends what a voucher is for — v18.2.0 phase 62 gives
+              it the app's one destructive look (Patryk), without the trash mark,
+              which is for a Delete or a Remove. */}
           <button
             type="button"
             onClick={function (e) { e.stopPropagation(); onVoid(v.code, state !== "void"); }}
             aria-label={(state === "void" ? "Reinstate" : "Void") + " voucher " + formatCode(v.code)}
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, minHeight: 36, background: state === "void" ? BTN.nav : BTN.del })}>
+            style={state === "void" ? mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.nav }) : mkDangerBtn({ fontSize: T.body, minHeight: 36 })}>
             {state === "void" ? "Reinstate voucher" : "Void voucher"}
           </button>
           <div style={{ fontSize: T.micro, color: S.muted, marginTop: 6 }}>

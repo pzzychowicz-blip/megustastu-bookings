@@ -61,11 +61,11 @@ import {
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
@@ -809,7 +809,7 @@ export function BookingFormModal({
     <button
       onClick={function(){onRequestDelete(editId);}}
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({fontSize: T.body,background:BTN.del,padding:"8px 16px",minHeight:36})}>Delete</button>
+      style={mkDangerBtn({fontSize: T.body,padding:"8px 16px",minHeight:36})}><TrashIcon size={IC.control} />Delete</button>
   ):null;
   const bookAgainBtn=(function(){
     if(!editId) return null;

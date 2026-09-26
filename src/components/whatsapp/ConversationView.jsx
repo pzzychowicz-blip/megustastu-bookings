@@ -6,10 +6,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
-import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
+import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
@@ -217,7 +217,7 @@ export function ConversationView({
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
         <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-cancel)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)" })} ><TrashIcon size={IC.inline} />Delete</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkDangerBtn({ gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small })} ><TrashIcon size={IC.inline} />Delete</button>
       </div>
     );
   } else {

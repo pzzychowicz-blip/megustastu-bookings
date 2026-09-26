@@ -98,7 +98,7 @@ import { buildBackup } from "./lib/backup";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { appBannerSections } from "./components/AppBanners";
@@ -186,7 +186,7 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, UnplacedIcon, VoucherIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, TrashIcon, UnplacedIcon, VoucherIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
@@ -4972,7 +4972,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={mkSolidBtn("var(--app-danger-solid)")}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
+        style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -5002,7 +5002,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={mkSolidBtn("var(--app-danger-solid)")}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={mkDangerConfirm()}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
@@ -5470,7 +5470,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.del)}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
@@ -5525,7 +5525,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.del,{minHeight:H.touch})}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
+              style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
           onClose={function(){setShowSim(false);}} /></Suspense>:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:

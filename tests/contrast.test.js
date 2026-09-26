@@ -405,7 +405,6 @@ const FILLS = [
   { fill: "--wa-green", alpha: null, ink: "--text-on-accent", role: "label", what: "WA brand / needs-action count" },
   { fill: "--wa-green-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "Send" },
   { fill: "--wa-btn-open", alpha: null, ink: "--text-on-accent", role: "button", what: "Accept & open / Apply changes" },
-  { fill: "--wa-btn-cancel", alpha: null, ink: "--text-on-accent", role: "button", what: "Cancel booking / Delete conversation" },
   { fill: "--wa-btn-handled", alpha: null, ink: "--text-on-accent", role: "button", what: "Mark as handled / Restore" },
   { fill: "--wa-bubble-out", alpha: null, ink: "--text-on-accent", role: "label", what: "outgoing chat bubble" },
   { fill: "--wa-unread-dot", alpha: null, ink: "--text-on-accent", role: "label", what: "unread count badge" },

@@ -6,7 +6,8 @@
 
 import { useState } from "react";
 import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, mkDangerBtn, AutoHeight } from "../atoms";
-import { S, BTN, R, T, FW } from "../../lib/constants";
+import { S, BTN, R, T, FW, IC } from "../../lib/constants";
+import { TrashIcon } from "../Icons";
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
   const [list, setList] = useState(() => templates.slice().map((t) => Object.assign({}, t)));
@@ -50,9 +51,9 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
           <button className="mgt-hover-scale"
             aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
-            style={mkDangerBtn(armed, { fontSize: T.small, minHeight: 36, padding: "6px 12px" })}
+            style={mkDangerBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", gap: 4 })}
             onClick={() => { if (armed) { setArmedId(null); removeT(t.id); } else setArmedId(t.id); }}
-          >{armed ? "Confirm — delete" : "Delete"}</button>
+          ><TrashIcon size={IC.inline} />{armed ? "Confirm — delete" : "Delete"}</button>
         </div>
       </div>
     </div>
