@@ -120,8 +120,10 @@ export function freeingSoon(bookings,today,nowMins,windowMin){
 // Settings tiers' "1–2 guests" and every spoken label's "2 guests", and the
 // plural was typed out by hand ten more times. "Covers" stays the word for a day's TOTAL (the Summary,
 // the Day sheet's head), which is what a restaurant means by it.
+// Phase 54 (round 3's C-5): the number and the word are joined by a NO-BREAK
+// space (U+00A0), formatDay's and money()'s reason — a line never ends on "4".
 export function guestsLabel(n){
-  return n+(Number(n)===1?" guest":" guests");
+  return n+(Number(n)===1?"\u00a0guest":"\u00a0guests");
 }
 export function describeBooking(b, opts){
   const o=opts||{};

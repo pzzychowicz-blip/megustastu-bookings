@@ -27476,3 +27476,26 @@ source before this phase.
 
 **Gate after phase 53:** `122.12 kB` gz main bundle (−0.01) · **1857 tests** (+3) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 54. A day and a size never break across lines (C-5)
+
+Phase 45 joined money's amount and symbol with a no-break space; the report listed the same class for
+the other two house formatters, where no break had been seen yet. `formatDay` now joins the weekday
+and the day with U+00A0 ("Thu 24.09", "Fri 15.01.2027"), and `guestsLabel` the number and the word
+("4 guests"), so a wrapping line never ends on "Thu" or on "4". Other number-and-word pairs — "2
+bookings", "20 min late" — are typed at their own sites and were left.
+
+Nothing stores either: history and the Activity log keep ISO, the CSV exports the raw text, and no
+outbound WhatsApp text uses them (the templates are fixed sentences). The one consumer that had to
+change is the Activity log's search, which matches the text as it is shown: it now folds U+00A0 to a
+plain space on both sides, or a typed "Thu 24.09" would have found nothing.
+
+Live on DEV, tablet. The waitlist panel's title read "Waitlist — Sat<NBSP>26.09", its sizes
+"4<NBSP>guests" and "6<NBSP>guests", and Book's name "Book (Wait Probe Ana, 4<NBSP>guests)". The
+Activity log shows "Thu<NBSP>24.09" (and no plain-space form); searching "24.09" found 4 of 500
+entries, "thu 24.09" typed with a plain space 4, and with a no-break space 4. Twenty-nine expected
+strings across `date-format`, `party-size`, `booking-logic`, `list-card` and `vouchers` now carry the
+escape; +3 tests (no plain space inside either, and the search's fold).
+
+**Gate after phase 54:** `122.12 kB` gz main bundle (±0) · **1860 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.

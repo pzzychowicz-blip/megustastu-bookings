@@ -500,7 +500,12 @@ explaining why is usually the one to read.
   says aloud. **A column of dates is as wide as its widest date** (`showsYear`
   decides the year): 68px, or 104 when a date prints its year, in Find a
   booking and Customers, and 54 or 84 in the Activity log. So a year never
-  pushes one row's times out of line.
+  pushes one row's times out of line. **The weekday and the day are joined by a
+  NO-BREAK space** (U+00A0, phase 54, C-5), as money's amount and symbol are
+  (below), and so are a size's number and word (`guestsLabel`, "4 guests"): a
+  wrapping line never ends on "Thu" or on "4". Nothing stores it — records keep
+  ISO — but anything that SEARCHES the text as shown must fold it to a plain
+  space, or a typed "Thu 24.09" finds nothing (the Activity log's search does).
 - **Money is written ONE way: "20 €" (v18.2.0, C3).** The amount, a NO-BREAK
   space (U+00A0, phase 45 — on a phone the redeem prompt broke "20" and "€ left
   on it." onto two lines), then

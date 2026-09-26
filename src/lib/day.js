@@ -252,12 +252,18 @@ export function weekdayShort(dateStr) {
 // and a booking with a broken date is exactly the one somebody needs to SEE in
 // order to repair (the v17.16.6 BlockModal rule) — hiding it would make it
 // unfindable. Canonical is `weekdayShort`'s test, for the same reason.
+//
+// v18.2.0 phase 54 (round 3's C-5): the weekday and the day are joined by a
+// NO-BREAK space (U+00A0), as `money()` joins an amount and its symbol (phase
+// 45), so a wrapping line never ends on "Thu" and starts the next on "24.09".
+// Anything that SEARCHES text holding this must fold it to a plain space (the
+// Activity log does); nothing stores it — records keep ISO.
 export function formatDay(dateStr, opts) {
   const o = opts || {};
   if (typeof dateStr !== "string" || stepUTC(dateStr, 0) !== dateStr) return dateStr == null ? "" : String(dateStr);
   const withYear = o.year === "always" || showsYear(dateStr, o.today);
   const dm = dateStr.slice(8, 10) + "." + dateStr.slice(5, 7) + (withYear ? "." + dateStr.slice(0, 4) : "");
-  return o.weekday === false ? dm : WEEKDAY_SHORT[new Date(dateStr).getUTCDay()] + " " + dm;
+  return o.weekday === false ? dm : WEEKDAY_SHORT[new Date(dateStr).getUTCDay()] + "\u00a0" + dm;
 }
 
 // Does `formatDay` print this day's year? The one place that decides it, and

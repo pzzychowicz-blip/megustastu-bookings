@@ -167,7 +167,9 @@ export function ActivityLogModal({
   const whoActive = who && people.indexOf(who) !== -1 ? who : "";
 
   const shown = useMemo(function () {
-    const needle = q.trim().toLowerCase();
+    // v18.2.0 phase 54: the house date joins its weekday and day with a
+    // no-break space, which a typed space does not match — both sides fold it.
+    const needle = q.trim().toLowerCase().replace(/\u00a0/g, " ");
     return (rows || []).filter(function (r) {
       if (anyKind && !kinds[r.kind]) return false;
       if (whoActive && r.email !== whoActive) return false;
@@ -180,7 +182,7 @@ export function ActivityLogModal({
       // Its dates are written the house way (C1), as the row shows them, so
       // typing "24.09" finds a row that stored "2026-09-24".
       const text = formatDaysIn(rowText(r, byId));
-      return (text + " " + personOf(r.email)).toLowerCase().includes(needle);
+      return (text + " " + personOf(r.email)).toLowerCase().replace(/\u00a0/g, " ").includes(needle);
     });
   }, [rows, kinds, anyKind, whoActive, peopleOnly, q, byId]);
   // v18.2.0 (the design critique, C1): the date column fits the widest date it

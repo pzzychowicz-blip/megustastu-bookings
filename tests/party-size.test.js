@@ -22,22 +22,30 @@ const sources = () => readdirSync(SRC, { recursive: true }).filter((f) => /\.jsx
 
 describe("guestsLabel — the one word", () => {
   it("is singular for one and plural otherwise", () => {
-    expect(guestsLabel(1)).toBe("1 guest");
-    expect(guestsLabel(2)).toBe("2 guests");
-    expect(guestsLabel(12)).toBe("12 guests");
-    expect(guestsLabel(0)).toBe("0 guests");
+    expect(guestsLabel(1)).toBe("1\u00a0guest");
+    expect(guestsLabel(2)).toBe("2\u00a0guests");
+    expect(guestsLabel(12)).toBe("12\u00a0guests");
+    expect(guestsLabel(0)).toBe("0\u00a0guests");
   });
 
   it("reads a stored string the way it reads a number", () => {
-    expect(guestsLabel("1")).toBe("1 guest");
-    expect(guestsLabel("4")).toBe("4 guests");
+    expect(guestsLabel("1")).toBe("1\u00a0guest");
+    expect(guestsLabel("4")).toBe("4\u00a0guests");
   });
 
   it("is what the spoken labels and the forms' starting line say", () => {
     expect(describeBooking({ name: "Ana", time: "20:00", size: 1, tables: ["3"], status: "confirmed" }))
-      .toContain("1 guest,");
-    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1 booking · 1 guest");
-    expect(startingPhrase({ starts: 2, guests: 6 })).toBe("2 bookings · 6 guests");
+      .toContain("1\u00a0guest,");
+    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1 booking · 1\u00a0guest");
+    expect(startingPhrase({ starts: 2, guests: 6 })).toBe("2 bookings · 6\u00a0guests");
+  });
+
+  // v18.2.0 phase 54 (round 3's C-5): phase 45's no-break space, for the size.
+  it("never lets a line break part the number from its word", () => {
+    for (const n of [1, 2, 12]) {
+      expect(guestsLabel(n)).not.toMatch(/ /);
+      expect(guestsLabel(n)).toMatch(/^\d+\u00a0guests?$/);
+    }
   });
 });
 

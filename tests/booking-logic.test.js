@@ -1349,42 +1349,42 @@ describe("describeBooking", () => {
   const b = { name: "Pau Estévez", time: "20:00", size: 4, tables: ["3"], status: "confirmed" };
 
   it("reads as the List card and the timeline block always did", () => {
-    expect(describeBooking(b)).toBe("Pau Estévez, 20:00, 4 guests, table 3, confirmed");
+    expect(describeBooking(b)).toBe("Pau Estévez, 20:00, 4\u00a0guests, table 3, confirmed");
   });
 
   it("says `guest` for a party of one", () => {
     // The pluralisation was written out three times before this; a size of 1 is
     // the only input that told the three copies apart from each other.
-    expect(describeBooking({ ...b, size: 1 })).toBe("Pau Estévez, 20:00, 1 guest, table 3, confirmed");
+    expect(describeBooking({ ...b, size: 1 })).toBe("Pau Estévez, 20:00, 1\u00a0guest, table 3, confirmed");
   });
 
   it("names an unassigned booking as unassigned rather than trailing off", () => {
-    expect(describeBooking({ ...b, tables: [] })).toBe("Pau Estévez, 20:00, 4 guests, no table assigned, confirmed");
-    expect(describeBooking({ ...b, tables: undefined })).toBe("Pau Estévez, 20:00, 4 guests, no table assigned, confirmed");
+    expect(describeBooking({ ...b, tables: [] })).toBe("Pau Estévez, 20:00, 4\u00a0guests, no table assigned, confirmed");
+    expect(describeBooking({ ...b, tables: undefined })).toBe("Pau Estévez, 20:00, 4\u00a0guests, no table assigned, confirmed");
   });
 
   it("joins a two-table booking, and pluralises the noun", () => {
-    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 5A and 5B, confirmed");
+    expect(describeBooking({ ...b, tables: ["5A", "5B"] })).toBe("Pau Estévez, 20:00, 4\u00a0guests, tables 5A and 5B, confirmed");
   });
 
   it("joins THREE tables as a list, not as a chain of \"and\"", () => {
     // v17.14.0. The extraction commit joined with " and " throughout, which gave
     // "5A and 5B and 6". A three- or four-table mega-combo is an ordinary
     // Settings → Layout configuration, so this is reachable rather than theoretical.
-    expect(describeBooking({ ...b, tables: ["5A", "5B", "6"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 5A, 5B and 6, confirmed");
-    expect(describeBooking({ ...b, tables: ["1A", "1B", "2", "3"] })).toBe("Pau Estévez, 20:00, 4 guests, tables 1A, 1B, 2 and 3, confirmed");
+    expect(describeBooking({ ...b, tables: ["5A", "5B", "6"] })).toBe("Pau Estévez, 20:00, 4\u00a0guests, tables 5A, 5B and 6, confirmed");
+    expect(describeBooking({ ...b, tables: ["1A", "1B", "2", "3"] })).toBe("Pau Estévez, 20:00, 4\u00a0guests, tables 1A, 1B, 2 and 3, confirmed");
   });
 
   it("a single table keeps the singular noun and no join", () => {
-    expect(describeBooking({ ...b, tables: ["3"] })).toBe("Pau Estévez, 20:00, 4 guests, table 3, confirmed");
+    expect(describeBooking({ ...b, tables: ["3"] })).toBe("Pau Estévez, 20:00, 4\u00a0guests, table 3, confirmed");
   });
 
   it("drops the table clause entirely for PlanView, rather than saying none", () => {
     // On the floor plan the table IS the subject ("Table 3, …"), so repeating it
     // would be redundant and "no table assigned" would be false — the booking is
     // on the very table doing the asking.
-    expect(describeBooking(b, { tables: false })).toBe("Pau Estévez, 20:00, 4 guests, confirmed");
-    expect(describeBooking({ ...b, tables: [] }, { tables: false })).toBe("Pau Estévez, 20:00, 4 guests, confirmed");
+    expect(describeBooking(b, { tables: false })).toBe("Pau Estévez, 20:00, 4\u00a0guests, confirmed");
+    expect(describeBooking({ ...b, tables: [] }, { tables: false })).toBe("Pau Estévez, 20:00, 4\u00a0guests, confirmed");
   });
 
   it("treats any other option object as the default", () => {

@@ -34,13 +34,13 @@ const TODAY = "2026-09-24";
 
 describe("formatDay — the house date", () => {
   it("is weekday, day and month, this year", () => {
-    expect(formatDay("2026-09-24", { today: TODAY })).toBe("Thu 24.09");
-    expect(formatDay("2026-01-01", { today: TODAY })).toBe("Thu 01.01");
+    expect(formatDay("2026-09-24", { today: TODAY })).toBe("Thu\u00a024.09");
+    expect(formatDay("2026-01-01", { today: TODAY })).toBe("Thu\u00a001.01");
   });
 
   it("adds the year when it is not this year, in either direction", () => {
-    expect(formatDay("2027-01-15", { today: TODAY })).toBe("Fri 15.01.2027");
-    expect(formatDay("2025-12-31", { today: TODAY })).toBe("Wed 31.12.2025");
+    expect(formatDay("2027-01-15", { today: TODAY })).toBe("Fri\u00a015.01.2027");
+    expect(formatDay("2025-12-31", { today: TODAY })).toBe("Wed\u00a031.12.2025");
   });
 
   it("drops the weekday where one is asked not to be printed", () => {
@@ -49,7 +49,7 @@ describe("formatDay — the house date", () => {
   });
 
   it("prints the year always, for a record that outlives the year", () => {
-    expect(formatDay("2026-09-24", { today: TODAY, year: "always" })).toBe("Thu 24.09.2026");
+    expect(formatDay("2026-09-24", { today: TODAY, year: "always" })).toBe("Thu\u00a024.09.2026");
     expect(formatDay("2026-09-24", { today: TODAY, year: "always", weekday: false })).toBe("24.09.2026");
   });
 
@@ -71,8 +71,8 @@ describe("formatDay — the house date", () => {
   });
 
   it("takes the weekday in UTC, like every date-only string in the app", () => {
-    withTZ("Pacific/Honolulu", () => { expect(formatDay("2026-09-24", { today: TODAY })).toBe("Thu 24.09"); });
-    withTZ("Pacific/Kiritimati", () => { expect(formatDay("2026-09-24", { today: TODAY })).toBe("Thu 24.09"); });
+    withTZ("Pacific/Honolulu", () => { expect(formatDay("2026-09-24", { today: TODAY })).toBe("Thu\u00a024.09"); });
+    withTZ("Pacific/Kiritimati", () => { expect(formatDay("2026-09-24", { today: TODAY })).toBe("Thu\u00a024.09"); });
   });
 });
 
@@ -111,15 +111,15 @@ describe("localDay — the local day an instant fell on", () => {
 
 describe("formatDaysIn — stored text, written the house way on the way out", () => {
   it("rewrites every canonical date in a line and leaves the rest alone", () => {
-    expect(formatDaysIn("edited: date 2026-09-24→2026-09-25", { today: TODAY })).toBe("edited: date Thu 24.09→Fri 25.09");
-    expect(formatDaysIn("deleted Rosa · 2026-09-24 20:30", { today: TODAY })).toBe("deleted Rosa · Thu 24.09 20:30");
+    expect(formatDaysIn("edited: date 2026-09-24→2026-09-25", { today: TODAY })).toBe("edited: date Thu\u00a024.09→Fri\u00a025.09");
+    expect(formatDaysIn("deleted Rosa · 2026-09-24 20:30", { today: TODAY })).toBe("deleted Rosa · Thu\u00a024.09 20:30");
     expect(formatDaysIn("cleared the activity log · 2026-09-01 to 2027-01-02 · 5 entries", { today: TODAY }))
-      .toBe("cleared the activity log · Tue 01.09 to Sat 02.01.2027 · 5 entries");
+      .toBe("cleared the activity log · Tue\u00a001.09 to Sat\u00a002.01.2027 · 5 entries");
   });
 
   it("never touches a recurring occurrence's id or a date that is not one", () => {
     expect(formatDaysIn("rabc_2026-09-24", { today: TODAY })).toBe("rabc_2026-09-24");
-    expect(formatDaysIn("date 2026-02-30→2026-03-01", { today: TODAY })).toBe("date 2026-02-30→Sun 01.03");
+    expect(formatDaysIn("date 2026-02-30→2026-03-01", { today: TODAY })).toBe("date 2026-02-30→Sun\u00a001.03");
     expect(formatDaysIn("20260924 and 2026-9-24", { today: TODAY })).toBe("20260924 and 2026-9-24");
   });
 
@@ -134,11 +134,28 @@ describe("formatRelativeTime — past a week, the house date", () => {
   it("writes the day it was, where it wrote the locale's '17 Sept'", () => {
     const ts = Date.now() - 10 * 86400000;
     expect(formatRelativeTime(ts)).toBe(formatDay(localDay(ts)));
-    expect(formatRelativeTime(ts)).toMatch(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d\.\d\d(\.\d{4})?$/);
+    expect(formatRelativeTime(ts)).toMatch(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\u00a0\d\d\.\d\d(\.\d{4})?$/);
   });
 
   it("keeps the relative words inside the week", () => {
     expect(formatRelativeTime(Date.now() - 3 * 86400000)).toBe("3 days ago");
+  });
+});
+
+// v18.2.0 phase 54 (round 3's C-5): phase 45's no-break space, for the day. A
+// wrapping line cannot end on "Thu" and start the next on "24.09".
+describe("formatDay never lets a line break part the weekday from the day", () => {
+  it("joins them with U+00A0, with or without the year", () => {
+    for (const d of ["2026-09-24", "2027-01-15"]) {
+      expect(formatDay(d, { today: TODAY })).not.toMatch(/ /);
+      expect(formatDay(d, { today: TODAY })).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\u00a0\d\d\./);
+    }
+  });
+
+  it("and the Activity log's search, which matches the text as shown, folds it to a plain space", () => {
+    const Log = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "ActivityLogModal.jsx"), "utf8")).join("\n");
+    expect(Log).toMatch(/const needle = q\.trim\(\)\.toLowerCase\(\)\.replace\(\/\\u00a0\/g, " "\);/);
+    expect(Log).toMatch(/\.toLowerCase\(\)\.replace\(\/\\u00a0\/g, " "\)\.includes\(needle\)/);
   });
 });
 
