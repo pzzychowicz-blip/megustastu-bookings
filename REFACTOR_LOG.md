@@ -27262,6 +27262,13 @@ and sent the thirteenth finding, L-1 (the waitlist forgets a party's seating pre
 outdoor tables to a party refused indoor), to ROADMAP, because it changes matching behaviour rather
 than design.
 
+How they landed: W-1 §46 · V-1 + V-2 §47 · V-3 §48 · W-2 + W-3 §49 · C-4 §50 · L-2 §51 · V-4 §53 · C-5
+§54 · L-3 §55 · A-1 §56 · A-2 §57 · V-5 + V-6 §58 · T-1 §59. "L-2 + V-4" was offered as one phase and
+became two commits, §51 and §53, because measuring L-2 found the same fault in phase 41's waitlist
+rows, and that went into §51 as one rule for both. §52 is a regression in this version's own phase
+20, found while setting up V-4's check. A-1 and A-2 each came out wider than the report said; their
+sections say how.
+
 ### 46. The linked-booking card's header on a phone (W-1)
 
 On a 375px phone "Open booking" was drawn over the linked card's "LINKED BOOKING" label and its status
