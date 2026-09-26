@@ -160,6 +160,23 @@ evidence for each.
   dashed or struck pill for an id `unplacedReason` calls missing would close the last
   surface.
 
+- **Loose ends from the v18.2.0 critique, rounds 2 and 3 (2026-09-24 and 26).** Seen
+  while fixing other findings; none was in a report, so none was offered or built.
+  - Settings → General → durations: a tier's remove control is an icon-only × named by
+    its `title`, "Remove this tier", identically on every tier; armed it reads "Remove?"
+    in the danger tint WITH a danger border (the three-encodings shape DESIGN.md bans)
+    rather than S6's `mkDangerBtn` and "Confirm — remove". Round 3.
+  - Number-and-word pairs typed at their own sites ("2 bookings", "20 min late") can
+    still break across lines; phase 54 joined only `formatDay` and `guestsLabel`.
+    Round 3.
+  - `--btn-reset`, the duration Reset, is still red although it destroys nothing (named
+    in phase 36, which moved Clear to slate). Round 2.
+  - Phone header: at 375px the connection dot wraps onto a line of its own. Round 2.
+  - "Add to waitlist" takes the phone as typed — phase 19's code check is on the booking
+    form's Save only. Round 2.
+  - The Activity log stores a redemption as "redeemed 20 of voucher …", with no
+    currency; stored text is left as it was. Round 2.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**
