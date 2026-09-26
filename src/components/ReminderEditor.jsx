@@ -34,7 +34,7 @@
 
 import { S, BTN, R, T, FW, H, IC } from "../lib/constants";
 import { validateReminderDraft } from "../lib/reminders";
-import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight, DateField } from "./atoms";
+import { Overlay, Fld, InlineAlert, ModalTitle, Toggle, Reveal, mkBtn, mkSolidBtn, mkInp, mkArea, AutoHeight, DateField, mkRemoveX } from "./atoms";
 import { CloseIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 
@@ -200,7 +200,11 @@ export function ReminderEditor({ draft, setDraft, onSave, onCancel, isNew }) {
                   <button
                     onClick={() => removeTime(i)}
                     className="mgt-hover-scale"
-                    style={mkBtn({ minHeight: 40, minWidth: 40, padding: "0", fontSize: T.title, background: BTN.del, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
+                    // v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`), at
+                    // the time field's own height, and NAMED — it was a solid
+                    // red square with no accessible name at all.
+                    aria-label={"Remove time " + (i + 1)}
+                    style={mkRemoveX(H.control)}
                   >
                     <CloseIcon size={IC.control} />
                   </button>

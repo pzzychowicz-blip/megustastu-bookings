@@ -162,10 +162,6 @@ evidence for each.
 
 - **Loose ends from the v18.2.0 critique, rounds 2 and 3 (2026-09-24 and 26).** Seen
   while fixing other findings; none was in a report, so none was offered or built.
-  - Settings → General → durations: a tier's remove control is an icon-only × named by
-    its `title`, "Remove this tier", identically on every tier; armed it reads "Remove?"
-    in the danger tint WITH a danger border (the three-encodings shape DESIGN.md bans)
-    rather than S6's `mkDangerBtn` and "Confirm — remove". Round 3.
   - Number-and-word pairs typed at their own sites ("2 bookings", "20 min late") can
     still break across lines; phase 54 joined only `formatDay` and `guestsLabel`.
     Round 3.

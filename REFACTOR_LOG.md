@@ -27728,3 +27728,29 @@ drawing); the contrast registry lost `--wa-btn-cancel`'s two cases.
 
 **Gate after phase 62:** `122.35 kB` gz main bundle (−0.02) · **1876 tests** (+6) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 63. The editors' × removers: one quiet look, and named
+
+The other half of item 3, Patryk's call when asked alongside it: the small icon-only × that takes one
+item out of a list being edited stays quiet rather than turning solid, or Layout → Tables alone would
+carry thirteen red buttons. The app had three of them. Layout's `X_BTN` (the danger tint with the glass
+rim) moves to atoms as `mkRemoveX(size)` and becomes the one look. A duration tier's × was a stepper
+circle with a red glyph, named only by a `title` that read "Remove this tier" on every tier, and armed
+as "Remove?" in the tint WITH a danger border — the banned three-encodings shape, and the ROADMAP loose
+end this closes. The reminder editor's remove-time × was a solid `BTN.del` square with no accessible
+name at all.
+
+Now the tier's × is `mkRemoveX(H.compact)` named "Remove Tier N", and armed it is the destructive look
+of phase 62, "Confirm — remove" with the trash mark, in a slot reserving that width
+(`TIER_ARMED_W` 153: the armed button measures 152.1), with the × at the slot's left so arming grows
+the button rightwards from under the finger. The reminder editor's × is `mkRemoveX(H.control)`, the time
+field's height, named "Remove time N", still one tap: it edits a draft the editor's Cancel discards.
+
+Live on DEV (Settings → General → Booking durations, a 991px window): the tier × 32×32 at x 467.5,
+y 759, tint rgba(254, 226, 226, 0.7) with ink rgb(153, 27, 27) and the glass rim; armed, rgb(220, 38,
+38) "Confirm — remove" at the same x and y, the row 56px in both states; left alone it disarmed after
+3s, as before. `tests/destructive-buttons.test.js` +4 (and the sweep's allow-list lost the reminder
+editor).
+
+**Gate after phase 63:** `122.33 kB` gz main bundle (−0.02) · **1880 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.

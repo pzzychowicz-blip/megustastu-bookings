@@ -11,7 +11,7 @@
 //   • Kitchen limit.
 
 import { useState, useEffect } from "react";
-import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, Reveal, ALERT_TONES } from "./atoms";
+import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, mkRemoveX, Reveal } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
@@ -33,14 +33,9 @@ const STEP_BTN = mkStep(H.compact);
 // one, not a third red. The red is kept for the confirmation, where removing a
 // table asks first — since v18.2.0 phase 62 that is the app's one destructive
 // look (`mkDangerBtn`, solid, with the trash mark), while these small editor
-// ×s stay quiet (Patryk's call).
-const X_BTN = {
-  background: ALERT_TONES.danger.tint, border: "1px solid var(--border-glass)",
-  borderRadius: R.pill, width: 28, height: 28, fontSize: T.title, fontWeight: FW.bold,
-  color: ALERT_TONES.danger.tone, lineHeight: 1,
-  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  cursor: "pointer", boxShadow: "var(--shadow-btn)"
-};
+// ×s stay quiet (Patryk's call). Phase 63 moved this style to atoms as
+// `mkRemoveX`, so the duration tier's × and the reminder editor's share it.
+const X_BTN = mkRemoveX();
 // The same × for CANCEL (a rename, a new table), which is not destructive and
 // so wears no red at all: the stepper's neutral, like the Cancel beside the
 // remove confirmation. They shared X_BTN, so the Cancel was a red × too.

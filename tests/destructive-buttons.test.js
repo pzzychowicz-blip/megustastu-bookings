@@ -115,10 +115,13 @@ describe("the rows' deletes: one red, and the trash mark", () => {
   });
 
   it("Layout: the row × is the tint, and Cancel is not red at all", () => {
-    const x = Layout.slice(Layout.indexOf("const X_BTN = {"), Layout.indexOf("const X_BTN = {") + 400);
+    // Phase 63 moved X_BTN's style to atoms as mkRemoveX, the editors' ONE ×.
+    const x = Atoms.slice(Atoms.indexOf("export function mkRemoveX"), Atoms.indexOf("export function mkRemoveX") + 500);
+    expect(Layout).toMatch(/const X_BTN = mkRemoveX\(\);/);
     expect(x).toMatch(/background: ALERT_TONES\.danger\.tint,/);
     expect(x).toMatch(/color: ALERT_TONES\.danger\.tone,/);
-    expect(x).not.toMatch(/--btn-del/);
+    expect(x).toMatch(/border: "1px solid var\(--border-glass\)"/);
+    expect(x).not.toMatch(/--btn-del|--danger-border/);
     expect(Layout).not.toMatch(/title="Cancel" style=\{X_BTN\}/);
     expect((Layout.match(/title="Cancel" style=\{CANCEL_X\}/g) || []).length).toBe(2);
   });
@@ -251,7 +254,6 @@ describe("phase 62 — one red for every destructive control, and the trash mark
   const ALLOWED = {
     "components/TableGrid.jsx": 1,      // a BLOCKED table's fill: a status, not a button
     "components/whatsapp/WaSimulator.jsx": 1, // "Make next staff reply fail": sandbox-only, destroys nothing
-    "components/ReminderEditor.jsx": 1, // its remove-time ×: phase 63, the editors' quiet ×s
   };
   it("no control is left on BTN.del, --btn-del or --wa-btn-cancel", () => {
     for (const f of files) {
@@ -325,5 +327,39 @@ describe("phase 62 — the Customers delete keeps its width when armed", () => {
     const Cust = read("components/CustomersSettings.jsx");
     expect(Cust).toMatch(/style=\{mkDangerBtn\(\{ fontSize: T\.body, minHeight: 36, minWidth: DELETE_W \}\)\}/);
     expect(Number((Cust.match(/const DELETE_W = (\d+);/) || [])[1])).toBeGreaterThanOrEqual(209);
+  });
+});
+
+// v18.2.0 phase 63 (Patryk, asked with phase 62): the editors' small icon-only
+// × removers stay QUIET — one look, atoms' mkRemoveX. The duration tier's ×
+// was a stepper circle with a red glyph, named by a `title` that read "Remove
+// this tier" on every tier, and armed as "Remove?" in the tint WITH a danger
+// border (the banned three-encodings shape; ROADMAP's loose end). The reminder
+// editor's remove-time × was a solid BTN.del square with NO accessible name.
+// Measured on DEV: the tier × 32×32, tint rgba(254, 226, 226, 0.7) with ink
+// rgb(153, 27, 27); armed, rgb(220, 38, 38) "Confirm — remove" 152.1px wide at
+// the same x and y, the row still 56px, and it disarms by itself after 3s.
+describe("phase 63 — the editors' ×s: one quiet look, and named", () => {
+  const Reminder = read("components/ReminderEditor.jsx");
+
+  it("the duration tier's × is the quiet ×, named for its tier", () => {
+    expect(Settings).toMatch(/aria-label=\{"Remove Tier " \+ \(i \+ 1\)\}\s*title="Remove this tier"\s*style=\{mkRemoveX\(H\.compact\)\}><CloseIcon size=\{IC\.control\} \/><\/button>/);
+  });
+
+  it("armed, it is the app's destructive look saying what the second tap does — never the banned triple", () => {
+    expect(Settings).toMatch(/aria-label=\{"Confirm — remove Tier " \+ \(i \+ 1\)\}[\s\S]{0,120}style=\{mkDangerBtn\(\{ fontSize: T\.body, minHeight: H\.compact, padding: "4px 10px" \}\)\}><TrashIcon size=\{IC\.control\} \/>Confirm — remove<\/button>/);
+    expect(Settings).not.toMatch(/"Remove\?"/);
+    expect(Settings).not.toMatch(/border: "1px solid var\(--danger-border\)"/);
+  });
+
+  it("its slot reserves the armed width, so arming moves nothing", () => {
+    expect(Settings).toMatch(/<div style=\{\{ minWidth: TIER_ARMED_W, display: "flex", marginBottom: 2 \}\}>/);
+    // "Confirm — remove" with its trash mark, 152.1 measured.
+    expect(Number((Settings.match(/const TIER_ARMED_W = (\d+);/) || [])[1])).toBeGreaterThanOrEqual(153);
+  });
+
+  it("the reminder editor's remove-time × is the quiet ×, at the field's height, and named", () => {
+    expect(Reminder).toMatch(/aria-label=\{"Remove time " \+ \(i \+ 1\)\}\s*style=\{mkRemoveX\(H\.control\)\}/);
+    expect(Reminder).not.toMatch(/background: BTN\.del/);
   });
 });

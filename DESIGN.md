@@ -358,7 +358,11 @@ explaining why is usually the one to read.
   `--app-danger-solid` and `BTN.del`, and the inbox had its own
   `--wa-btn-cancel` (removed). Patryk saw the options drawn by the real atoms in
   both themes and chose solid. **The editors' small icon-only × removers are the
-  exception and stay quiet** (Layout's `X_BTN`, phase 63). **Never a danger
+  exception and stay quiet**: ONE look, atoms' `mkRemoveX` (phase 63) — Layout's
+  table, group, combo and rule ×s, a duration tier's × and the reminder
+  editor's remove-time ×, each NAMED for the item it removes ("Remove Tier 2",
+  "Remove time 2"). An armed tier × becomes "Confirm — remove" in the red, in a
+  slot reserving that width (`TIER_ARMED_W`). **Never a danger
   border on the tint**: tint + a border in the hue + text in a third shade is
   the banned shape below; phase 27 shipped it and phase 28 took it off. The
   sentence saying what the second tap does sits UNDER the button, never above

@@ -237,6 +237,27 @@ export function mkDangerConfirm(extra) {
   }, extra));
 }
 
+// ── An editor's small × remover: the ONE quiet exception (v18.2.0 phase 63) ──
+// The icon-only × that takes one item out of a list being edited — a table, a
+// join group, a combo, a priority rule (Layout), a duration tier (Settings →
+// General), a reminder's extra time (the reminder editor). Patryk kept these
+// quiet when every other destructive button became solid (phase 62): thirteen
+// solid ×s down Layout → Tables was the loudest thing in the tab. The danger
+// TINT with the glass rim, never a danger border (the banned triple). This was
+// Layout's `X_BTN`; the tier × was a stepper circle with a red glyph and the
+// reminder editor's a solid `BTN.del` square, so three ×s for one job. Each
+// call site names its × for the item it removes: an icon has no name of its own.
+export function mkRemoveX(size) {
+  const d = size || H.chip;
+  return {
+    background: ALERT_TONES.danger.tint, border: "1px solid var(--border-glass)",
+    borderRadius: R.pill, width: d, height: d, fontSize: T.title, fontWeight: FW.bold,
+    color: ALERT_TONES.danger.tone, lineHeight: 1,
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+    cursor: "pointer", boxShadow: "var(--shadow-btn)"
+  };
+}
+
 // ── Segmented control: the track and a segment (v18.2.0) ─────────────────────
 // Settings' TabBar has drawn this since v16.2.0 — a pill track, the chosen tab
 // LIFTED as a white pill with accent text — and the main view switcher became

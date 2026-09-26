@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, PAUSED_FADE } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
@@ -52,6 +52,13 @@ import { guestsLabel } from "../lib/booking-logic";
 // Mac, rounded up. Re-measure if the label, the mark, T.body or the button's
 // padding changes.
 const RULE_ACTIONS_W = 202;
+
+// v18.2.0 phase 63: a duration tier's remove slot reserves its ARMED width —
+// "Confirm — remove" with its trash mark at T.body and 10px padding, 152.1
+// measured on the Mac (San Francisco), rounded up — so the row wraps alike at
+// rest and armed. Re-measure if the label, the mark, T.body or the padding
+// change.
+const TIER_ARMED_W = 153;
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
@@ -840,13 +847,33 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 <HourStepper label="stay for" who={"Tier " + (i + 1)} value={t.dur} fmt={minsLabel}
                   disableDec={t.dur <= 15} disableInc={t.dur >= 360}
                   onDec={() => updateTier(i, { dur: t.dur - 15 })} onInc={() => updateTier(i, { dur: t.dur + 15 })} />
-                <button
-                  onClick={() => armTierRemove(i)}
-                  className="mgt-hover-scale"
-                  title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
-                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
-                    ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
-                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={IC.control} />}</button>
+                {/* v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`),
+                    named for its tier — it was a stepper circle with a red
+                    glyph, named only by a `title` that read "Remove this tier"
+                    on every tier. Armed it is the app's destructive look,
+                    "Confirm — remove" with the trash mark, where it read
+                    "Remove?" in the tint WITH a danger border: the banned
+                    three-encodings shape. The slot reserves the armed width
+                    (TIER_ARMED_W) and holds the × at its left, so arming grows
+                    the button rightwards from under the finger and wraps the
+                    row exactly as it wrapped at rest. */}
+                <div style={{ minWidth: TIER_ARMED_W, display: "flex", marginBottom: 2 }}>
+                  {armedTier === i ? (
+                    <button
+                      onClick={() => armTierRemove(i)}
+                      className="mgt-hover-scale mgt-press"
+                      aria-label={"Confirm — remove Tier " + (i + 1)}
+                      title="Tap again to remove"
+                      style={mkDangerBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px" })}><TrashIcon size={IC.control} />Confirm — remove</button>
+                  ) : (
+                    <button
+                      onClick={() => armTierRemove(i)}
+                      className="mgt-hover-scale"
+                      aria-label={"Remove Tier " + (i + 1)}
+                      title="Remove this tier"
+                      style={mkRemoveX(H.compact)}><CloseIcon size={IC.control} /></button>
+                  )}
+                </div>
               </div>
             );
           })}
