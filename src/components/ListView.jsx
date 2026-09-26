@@ -35,7 +35,7 @@ import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone } from "../lib/customers";
-import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
+import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
@@ -105,8 +105,8 @@ const FLAG_DANGER = "var(--danger-text)";
 //                    bold). A longer name WRAPS inside it and is never clipped
 //                    (the voucher panel's rule: a name nobody can read is
 //                    worse than a taller card).
-//   STATUS_COL  98 — the widest status badge, "Completed" (97.8px); "Seated"
-//                    is 76.
+//   STATUS_COL  98 — `SBADGE_W` (atoms.jsx since phase 75): the widest status
+//                    badge, "Completed" (97.8px); "Seated" is 76.
 //   NEXT_COL   116 — the widest next-step button, "Completed" (115.7px);
 //                    "Seated" is 92.
 //   NAME_LINE   20 — the name's line box, and the badge's height (both 20px
@@ -122,7 +122,7 @@ const FLAG_DANGER = "var(--danger-text)";
 const TIME_COL = 58;
 const TIME_GAP = 14;
 const NAME_COL = 180;
-const STATUS_COL = 98;
+const STATUS_COL = SBADGE_W;
 const NEXT_COL = 116;
 const NAME_LINE = 20;
 // FLAGS_MIN 104 — the widest flag chip, "double-booked" with its mark
@@ -154,23 +154,15 @@ const NAME_FONT = { fontWeight: FW.bold, fontSize: T.title };
 //
 // No `document` (a test importing this file) or no 2D context: the cap, which
 // is what this column was before phase 18.
-const nameWidths = new Map();
-let nameCtx = null;
+// v18.2.0 phase 75: the canvas is `textWidth` (atoms.jsx), the app's one text
+// measure, which caches per font and string; this keeps the font and the cap.
+let nameFamily = null;
 function nameWidth(name) {
   const s = String(name || "");
   if (!s) return 0;
-  const hit = nameWidths.get(s);
-  if (hit !== undefined) return hit;
-  if (!nameCtx) {
-    if (typeof document === "undefined") return NAME_COL;
-    const ctx = document.createElement("canvas").getContext("2d");
-    if (!ctx) return NAME_COL;
-    ctx.font = NAME_FONT.fontWeight + " " + NAME_FONT.fontSize + "px " + getComputedStyle(document.body).fontFamily;
-    nameCtx = ctx;
-  }
-  const w = Math.ceil(nameCtx.measureText(s).width) + 1;
-  nameWidths.set(s, w);
-  return w;
+  if (typeof document === "undefined") return NAME_COL;
+  if (!nameFamily) nameFamily = getComputedStyle(document.body).fontFamily;
+  return textWidth(s, NAME_FONT.fontWeight, NAME_FONT.fontSize + "px", nameFamily) || NAME_COL;
 }
 function nameColFor(bookings) {
   let w = 0;

@@ -1789,6 +1789,40 @@ export function SizeRing({ n, rim, style }) {
 //     stay one size across the row and only the pill comes down. Taking the
 //     icon to `IC.inline` would have shrunk the wrong half.
 //
+// ── SBADGE_W — the widest status badge (v18.2.0) ───────────────────────────
+// "Completed" measures 97.8px in the app's font; "Seated" is 76. A column that
+// holds any status reserves this, so whatever follows it lines up card to card.
+// It was ListView's STATUS_COL; phase 75 moved it here, beside the badge it
+// measures, for Find a booking's status column (phase 76). Re-measure if the
+// badge's font, padding or icon changes.
+export const SBADGE_W = 98;
+
+// ── textWidth — a string's width in a font, measured on a canvas ─────────────
+// A canvas measures without layout, so a column can be sized in the render that
+// draws it: nothing is painted at one width and corrected after. v18.2.0 phase
+// 75: ONE copy, where Settings' tab bar and the List's name column each had
+// their own, and Find a booking was about to be the third. `size` is a CSS
+// length ("14px"), `family` a computed font-family. Cached per font and string;
+// +1px, because a canvas and a laid-out run can disagree by a fraction, and a
+// column 0.4px too narrow wraps its widest entry. 0 with no `document` (a test
+// importing the file) or no 2D context: each caller picks its own fallback.
+const textWidths = new Map();
+let textCtx = null;
+export function textWidth(label, weight, size, family) {
+  const key = weight + "|" + size + "|" + family + "|" + label;
+  const hit = textWidths.get(key);
+  if (hit !== undefined) return hit;
+  if (!textCtx) {
+    if (typeof document === "undefined") return 0;
+    textCtx = document.createElement("canvas").getContext("2d");
+    if (!textCtx) return 0;
+  }
+  textCtx.font = weight + " " + size + " " + family;
+  const w = Math.ceil(textCtx.measureText(label).width) + 1;
+  textWidths.set(key, w);
+  return w;
+}
+
 // The rule, for the next label that feels loud: TREATMENT and SCALE are two
 // separate answers to "match your neighbours", and settling the first does not
 // settle the second.

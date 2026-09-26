@@ -13,13 +13,18 @@
 // (Patryk's order: name, covers, status, the rest).
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const List = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "ListView.jsx"), "utf8")).join("\n");
-const num = (name) => Number((List.match(new RegExp("const " + name + " = (\\d+);")) || [])[1]);
+const Atoms = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "atoms.jsx"), "utf8")).join("\n");
+// v18.2.0 phase 75: STATUS_COL reads SBADGE_W, which moved to atoms.jsx beside
+// the badge it measures, so its number is read there.
+const num = (name) => name === "STATUS_COL"
+  ? (/const STATUS_COL = SBADGE_W;/.test(List) ? Number((Atoms.match(/export const SBADGE_W = (\d+);/) || [])[1]) : NaN)
+  : Number((List.match(new RegExp("const " + name + " = (\\d+);")) || [])[1]);
 
 describe("the column widths are the measured ones", () => {
   it("fit the widest thing each column holds", () => {
@@ -49,7 +54,8 @@ describe("the name row", () => {
     // Measured in the name's own font — the SAME object the name span spreads,
     // so the measured and the rendered font cannot drift apart.
     expect(List).toMatch(/const NAME_FONT = \{ fontWeight: FW\.bold, fontSize: T\.title \};/);
-    expect(List).toMatch(/ctx\.font = NAME_FONT\.fontWeight \+ " " \+ NAME_FONT\.fontSize \+ "px " \+/);
+    // Since phase 75 through the shared `textWidth` (atoms.jsx).
+    expect(List).toMatch(/return textWidth\(s, NAME_FONT\.fontWeight, NAME_FONT\.fontSize \+ "px", nameFamily\) \|\| NAME_COL;/);
     expect(List).toMatch(/flex: "1 0 " \+ nameCol \+ "px", minWidth: 0, \.\.\.NAME_FONT, color: S\.text,/);
   });
 
@@ -101,5 +107,26 @@ describe("the card", () => {
     expect(List).toMatch(/gridColumn: 1, gridRow: "1 \/ span 2", fontVariantNumeric: "tabular-nums"/);
     expect(List).toMatch(/gridColumn: "1 \/ -1", gridRow: 2,/);
     expect(List).toMatch(/marginLeft: TIME_COL \+ TIME_GAP \}\}>\s*\{\(b\.tables \|\| \[\]\)\.map/);
+  });
+});
+
+// v18.2.0 phase 75: ONE canvas text measure. Settings' tab bar and this file's
+// name column each had their own, and Find a booking was about to be the third;
+// `textWidth` in atoms.jsx is the one, and a second `measureText` fails here.
+describe("one text measure", () => {
+  it("measureText and a 2D context appear only in atoms.jsx's textWidth", () => {
+    const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+    const files = [];
+    (function walk(dir) {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.(js|jsx)$/.test(e.name)) files.push(p);
+      }
+    })(SRC);
+    const hits = files.filter((f) => /measureText\(|getContext\(/.test(stripComments(readFileSync(f, "utf8")).join("\n")))
+      .map((f) => f.slice(SRC.length + 1));
+    expect(hits).toEqual(["components/atoms.jsx"]);
+    expect(Atoms).toMatch(/export function textWidth\(label, weight, size, family\) \{/);
   });
 });

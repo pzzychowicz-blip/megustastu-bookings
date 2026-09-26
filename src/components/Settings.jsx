@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
@@ -96,22 +96,8 @@ export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 const TAB_GAP = 4;
 const TAB_ROW_PAD = 12;     // a tab's side padding in the natural row
 const TAB_CELL_PAD = 6;     // the same in a grid cell, where the cell sets the width
-const tabTextWidths = new Map();
-let tabTextCtx = null;
-function tabTextWidth(label, weight, size, family) {
-  const key = weight + "|" + size + "|" + family + "|" + label;
-  const hit = tabTextWidths.get(key);
-  if (hit !== undefined) return hit;
-  if (!tabTextCtx) {
-    if (typeof document === "undefined") return 0;
-    tabTextCtx = document.createElement("canvas").getContext("2d");
-    if (!tabTextCtx) return 0;
-  }
-  tabTextCtx.font = weight + " " + size + " " + family;
-  const w = Math.ceil(tabTextCtx.measureText(label).width) + 1;
-  tabTextWidths.set(key, w);
-  return w;
-}
+// The labels' widths come from `textWidth` (atoms.jsx): this bar's own
+// measure until v18.2.0 phase 75 made it the app's one.
 export function TabBar({ tabs, current, onSelect }) {
   const barRef = useRef(null);
   const [cols, setCols] = useState(0);   // 0 = one natural row
@@ -128,8 +114,8 @@ export function TabBar({ tabs, current, onSelect }) {
       const b = bar.firstElementChild;
       if (!b) return;
       const cs = getComputedStyle(b);
-      const semi = labels.map(function (l) { return tabTextWidth(l, FW.semi, cs.fontSize, cs.fontFamily); });
-      const bold = labels.map(function (l) { return tabTextWidth(l, FW.bold, cs.fontSize, cs.fontFamily); });
+      const semi = labels.map(function (l) { return textWidth(l, FW.semi, cs.fontSize, cs.fontFamily); });
+      const bold = labels.map(function (l) { return textWidth(l, FW.bold, cs.fontSize, cs.fontFamily); });
       const next = tabColumns(semi, bold, bar.clientWidth - 2 * TAB_GAP, TAB_GAP, 2 * TAB_ROW_PAD, 2 * TAB_CELL_PAD);
       setCols(function (prev) { return prev === next ? prev : next; });
     }

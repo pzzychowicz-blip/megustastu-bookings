@@ -27982,3 +27982,24 @@ from the text line to the badge's 24px. `tests/minor-findings.test.js` +2.
 
 **Gate after phase 74:** `122.65 kB` gz main bundle (+0.01) · **1896 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 75. One canvas text measure, and the widest badge beside the badge
+
+A refactor ahead of X7, with no visible change. Find a booking's fixed columns (phase 76, Patryk's pick
+of a wider card with one line) size the name column to the widest name in the results, the way the
+List card does, which needs a text width measured on a canvas. The app had two copies of that already:
+Settings' tab bar (`tabTextWidth`, generic, keyed by font and string) and ListView's name column
+(`nameWidth`, its own context and cache). A third would have been the third copy of one fact, so the
+generic one moved to `atoms.jsx` as `textWidth(label, weight, size, family)`; the tab bar calls it, and
+`nameWidth` is a wrapper that keeps the List's font and its `NAME_COL` fallback. The List's widest status
+badge moved the same way: ListView's `STATUS_COL` (98, "Completed" 97.8px) is `SBADGE_W` beside
+`SBadge`, which Find a booking's status column will read. `tests/list-columns.test.js` reads the number
+there now, and fails on a `measureText` or a `getContext` anywhere in `src/` but `atoms.jsx`.
+
+Live on DEV, both readers unchanged: the List's name column for today rendered `1 0 170px`, which is
+what the old measure computes for its widest name (170); Settings' tab bar is one row at 1280×800 and
+3 × 3 in 107px cells at 375×812, the figures phase 25's entry recorded. No console errors.
+`tests/list-columns.test.js` +1.
+
+**Gate after phase 75:** `122.61 kB` gz main bundle (−0.04) · **1897 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
