@@ -29,6 +29,7 @@
 // primitives, and api/_lib/inbound-core.js imports whatsapp.js), and Node ESM
 // does not resolve extensionless specifiers. Vite is indifferent to it.
 import { overlaps, toMins, getDur } from "./booking-logic.js";
+import { dialOf } from "./phone-countries.js";
 
 export function normalizePhone(p) {
   if (!p) return "";
@@ -58,12 +59,23 @@ export function normalizePhone(p) {
 }
 
 // Pretty display phone (inserts a space after the country code for readability).
+//
+// v18.2.0 phase 50 (round 3's C-4): the ONE way a phone is shown, "+34
+// 612345678", and the code is the country's REAL calling code.
+// It split after two digits whatever the code was, so "+1 212 555 0123" read
+// "+12 125550123" and "+353 87 123 4567" "+35 3871234567" — a wrong country
+// on screen. `dialOf` (phone-countries.js, the country picker's own table,
+// longest code first) finds the code; a number whose code is not in the table
+// is shown whole rather than cut in a made-up place, and one stored without a
+// code is its digits. The List and the Day sheet printed the stored text raw
+// (three shapes on one List screen), and go through this now too.
 export function formatPhone(p) {
   if (!p) return "";
   const n = normalizePhone(p);
   if (n.length < 4) return n;
-  if (n.charAt(0) === "+") return n.slice(0, 3) + " " + n.slice(3);
-  return n;
+  if (n.charAt(0) !== "+") return n;
+  const dial = dialOf(n);
+  return dial ? "+" + dial + " " + n.slice(1 + dial.length) : n;
 }
 
 // hasRealPhone — a phone field with actual digits (not empty, not the lone "+"

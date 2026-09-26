@@ -494,6 +494,18 @@ explaining why is usually the one to read.
   typed the right shape by hand without the rounding: a 20 € voucher with 12.30
   used left `7.699999999999999`, and the redeem prompt printed it. A field's
   label keeps the bare unit, "Deposit (€)".
+- **A phone is written ONE way: "+34 612345678" (v18.2.0 phase 50, C-4).** The
+  country's calling code, one space, the digits, through `formatPhone` in
+  `lib/customers.js`, which finds the code in the country picker's own table
+  (`dialOf`). Round 3 found two shapes, one of them wrong: the List card and the
+  printed Day sheet printed the stored text as typed ("+34 612 345 678",
+  "+44 33 6 12 34 56 78" and "+34655443322" on one screen), and everything else
+  split after two digits whatever the code, so "+1 212 555 0123" read
+  "+12 125550123", a country that is not the guest's. The digits are not
+  grouped: groupings differ by country and the app has no table of them, and a
+  made-up grouping is the same defect as a made-up split. A code the table does
+  not know is shown whole. The stored string keeps what was typed; the phone
+  field is how a number is typed, this is how one is read.
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's

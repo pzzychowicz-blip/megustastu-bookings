@@ -34,7 +34,7 @@ import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "..
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
-import { noShowMap, identityKey } from "../lib/customers";
+import { noShowMap, identityKey, formatPhone } from "../lib/customers";
 import { SBadge, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -656,8 +656,11 @@ export const ListView = memo(function ListView({
           </div>
         ) : null;
 
+        // v18.2.0 phase 50 (C-4): the one phone shape, `formatPhone`. It printed
+        // the stored text — measured on one DEV List screen, "+34 612 345 678",
+        // "+44 33 6 12 34 56 78" and "+34655443322".
         const phonEl = b.phone ? (
-          <span style={{ fontSize: T.body, color: S.text, marginLeft: 4 }}>{b.phone}</span>
+          <span style={{ fontSize: T.body, color: S.text, marginLeft: 4 }}>{formatPhone(b.phone)}</span>
         ) : null;
 
         // v18.2.0: ONE status button — the next step in the visit

@@ -27360,3 +27360,35 @@ follow the new shapes (the last now asserts "Linked to:" is gone).
 
 **Gate after phase 49:** `122.15 kB` gz main bundle (+0.01) · **1845 tests** (+3) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 50. One phone format (C-4)
+
+A phone was written two ways, and one of them was wrong for some countries. The List card and the
+printed Day sheet printed the stored text as typed: one List screen (Thu 24.09 on DEV) read "+34 612
+345 678", "+44 33 6 12 34 56 78" and "+34655443322". Everything else — the waitlist, Customers, Find a
+booking, WhatsApp — printed `formatPhone`, which put its space after two digits whatever the code, so
+"+1 212 555 0123" read "+12 125550123" and "+353 87 123 4567" read "+35 3871234567": a country code
+that is not the guest's.
+
+`formatPhone` now finds the code in the country picker's own table (`dialOf`, `lib/phone-countries.js`,
+longest code first) and writes the code, one space, the digits: "+1 2125550123", "+353 871234567",
+"+34 612345678". A code the table does not know is shown whole rather than cut in a made-up place, and
+a number stored without a code is its digits. The digits are not grouped: groupings differ by country,
+there is no table of them, and a made-up grouping is the same defect as a made-up split. The List and
+the Day sheet (its bookings and its waitlist lines) go through it. Nothing stored changes — 141 of
+DEV's 274 stored phones carry spaces, and `normalizePhone` ignores them for the phone key.
+
+`customers.js` is in the Node chain the WhatsApp backend loads (`whatsapp.js` re-exports it), so the
+new import carries its `.js`, and `tests/wa-sandbox-integrity.test.js`'s walk now reaches
+`phone-countries.js`; Node imports `customers.js` and formats "+1 212 555 0123" as "+1 2125550123".
+
+Live on DEV, the same Thu 24.09. Tablet: the List read "+34 612345678", "+44 33612345678", "+34
+655443322" and five more in that shape; the Day sheet's eleven phone cells likewise. Phone: every
+number on one line (15px), the widest ending at x 254 of 375, no page scroll. The Day sheet's waitlist
+line was not exercised live — no waitlist entry on DEV has a phone — and is pinned in source.
+`tests/customers.test.js` +2. `tests/phone-format.test.js` (3, new) pins the two sites and fails on
+any component that prints a stored phone raw; against the tree before this phase it flags ListView
+once and DaySheet twice.
+
+**Gate after phase 50:** `122.13 kB` gz main bundle (−0.02) · **1850 tests** (+5) · 0 lint errors, 90
+warnings (unchanged) · style OK.

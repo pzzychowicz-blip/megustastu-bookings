@@ -20,6 +20,7 @@ import { useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW, APP_NAME } from "../lib/constants";
 import { daySummary, guestsLabel } from "../lib/booking-logic";
+import { formatPhone } from "../lib/customers";
 import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
@@ -98,7 +99,8 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                   <td style={Object.assign({}, cell, { fontWeight: FW.bold })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
-                  <td style={cell}>{b.phone || "—"}</td>
+                  {/* v18.2.0 phase 50 (C-4): the one phone shape, as on screen. */}
+                  <td style={cell}>{b.phone ? formatPhone(b.phone) : "—"}</td>
                   {/* v18.0.0: deposit and voucher share one money column. A
                       separate column would widen a sheet that is printed on
                       A4 and read at the table, and the two are the same
@@ -128,7 +130,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         <div style={{ fontSize: T.body }}>
           <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Waitlist</div>
           {dayWait.map(function (w, i) {
-            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + guestsLabel(w.size) + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + w.phone : "")}</div>;
+            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + guestsLabel(w.size) + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + formatPhone(w.phone) : "")}</div>;
           })}
         </div>
       ) : null}
