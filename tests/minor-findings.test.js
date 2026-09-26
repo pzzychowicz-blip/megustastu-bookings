@@ -44,3 +44,22 @@ describe("S9 — Layout's table rows: a zone segment, badges, and seats", () => 
     expect(L).not.toMatch(/>cap<\/span>/);
   });
 });
+
+// W6: the draft card's confidence chip read "HIGH" (and "HIGH CONFIDENCE" on
+// the full card), the parser's level in capitals with nothing saying what a
+// level asks of staff. Measured on DEV after (Anna Priks' draft, its stored
+// confidence set to each level in turn): "Looks right" green, "Check it",
+// "Check carefully" red, each titled "<Level> confidence", text-transform none,
+// on the one-line bar at 800×654 and the full card at 1180×1000.
+describe("W6 — the draft card's confidence says what to do", () => {
+  const D = read("components/whatsapp/DraftCard.jsx");
+  it("maps each level to an instruction", () => {
+    expect(D).toMatch(/const CONF_SAYS = \{ high: "Looks right", medium: "Check it", low: "Check carefully" \};/);
+    expect(D).toMatch(/const confTitle = conf\.charAt\(0\)\.toUpperCase\(\) \+ conf\.slice\(1\) \+ " confidence";/);
+  });
+  it("both the bar and the card say it, with the level as the tooltip", () => {
+    const chips = D.match(/<OutlineChip title=\{confTitle\} tone=\{confTone\} size="small">\{confSays\}<\/OutlineChip>/g) || [];
+    expect(chips.length).toBe(2);
+    expect(D, "the level in capitals is back").not.toMatch(/textTransform: "uppercase"/);
+  });
+});

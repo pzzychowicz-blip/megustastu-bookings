@@ -15,6 +15,11 @@ import { R, T, FW, IC, M, H, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
 import { CloseIcon, CheckIcon, ChevronRightIcon } from "../Icons";
 
+// v18.2.0 phase 72 (W6): what each level of the parser's confidence asks of
+// staff. `clampConfidence` caps it by what the draft lacks — a size, date or
+// time the app cannot use, or an ambiguity — so "low" means check it closely.
+const CONF_SAYS = { high: "Looks right", medium: "Check it", low: "Check carefully" };
+
 export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, compact }) {
   // Compact-mode disclosure for the new_booking bar (notes / warning / confidence).
   // Declared before the early returns so the hook order stays stable.
@@ -102,7 +107,12 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // INSIDE the draft card, which already has its own fill and 2px rim — a
   // filled chip in a filled container is the card-inside-a-card shape the
   // sweep bans. The border hue carries the confidence on its own.
-  const confLbl = conf;
+  // v18.2.0 phase 72 (round 2's W6): the chip says what to DO with the draft —
+  // it read "HIGH", the parser's level in capitals with nothing saying what a
+  // level means. The level is kept as the tooltip, "High confidence".
+  // `clampConfidence` only ever returns one of the three keys.
+  const confSays = CONF_SAYS[conf];
+  const confTitle = conf.charAt(0).toUpperCase() + conf.slice(1) + " confidence";
   // Seating preference suffix — only shown when the customer stated an area
   // (indoor/outdoor); "auto"/unset adds nothing (it's the default).
   const prefSuffix = (d.preference === "indoor" || d.preference === "outdoor")
@@ -149,7 +159,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
           {/* Confidence level — always shown, immediately left of Accept. */}
-          <OutlineChip title={confLbl + " confidence"} tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl}</OutlineChip>
+          <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
           <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)")}>Accept</button>
           {/* Secondary = OUTLINE (see the full card's note): one saturated pill
               per pane, so the eye can find the primary without reading. */}
@@ -192,7 +202,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
               pairing v17.13.0's pass demoted 46 of. */}
           <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
-        <OutlineChip tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</OutlineChip>
+        <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
         <span style={{ fontWeight: FW.semi }}>{(d.size != null ? guestsLabel(d.size) : "? guests") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>

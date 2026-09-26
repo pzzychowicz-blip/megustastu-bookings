@@ -27924,3 +27924,23 @@ segment flips, and Cancel closes it. `tests/minor-findings.test.js` +2.
 
 **Gate after phase 71:** `122.62 kB` gz main bundle (+0.02) · **1891 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 72. The draft card's confidence says what to do (W6)
+
+Round 2's W6: the WhatsApp draft card's confidence chip read "HIGH" on the one-line bar and "HIGH
+CONFIDENCE" on the full card, the parser's level set in capitals with nothing saying what a level asks
+of staff. The chip now says what to do with the draft, Patryk's pick of three: "Looks right" (high),
+"Check it" (medium), "Check carefully" (low), in sentence case and in the tones it already had
+(success, warn, danger). The level is not lost: each chip is titled "High confidence" etc., and the
+tone still carries it. `clampConfidence` only ever returns the three levels, so the map needs no
+fallback, and the `confLbl` alias went with the chip that used it. The round-2 note that the card's
+ISO date was covered by the one-date-format fix still holds ("Fri 25.09").
+
+Live on DEV, Anna Priks' draft, its stored confidence set to each level in turn and put back to "high":
+"Looks right" rgb(22, 101, 52), titled "High confidence", `text-transform: none`; "Check it", titled
+"Medium confidence"; "Check carefully" in red — on the one-line bar at 800×654, left of Accept, and in
+the full card's header at 1180×1000. `tests/wa-inbox-layout.test.js`' W1 pin moved to the new chip,
+`tests/minor-findings.test.js` +2.
+
+**Gate after phase 72:** `122.64 kB` gz main bundle (+0.02) · **1893 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

@@ -392,7 +392,7 @@ Admin (*may you*). Customers, App and Shortcuts are always there. (Shortcuts its
 | A message appearing by itself | **inbound webhook** (`api/wa-inbound.js`) | Meta posts here. Statuses arrive on the same webhook — there is no `wa-status`. |
 | — | **parse** (`parseMessage`, `_lib/gemini.js`) | Gemini turns free text into `{intent, …}`. |
 | book / cancel / modify | **intent** (`draftData.intent`) | The three things a customer can want. Drives which card the thread shows. |
-| A number on the draft card | **confidence** (`clampConfidence`) | How sure the parse is. |
+| The chip on the draft card: "Looks right" · "Check it" · "Check carefully" | **confidence** (`clampConfidence`) | How sure the parse is, capped by what the draft lacks (a usable size, date or time, or an ambiguity). Since v18.2.0 the chip says what to do with the draft; the level is its tooltip ("High confidence"). |
 | Two parses of one thread not fighting | **`mergeDraft`** (`lib/whatsapp.js`) | Folds a new parse into the existing draft rather than replacing it. |
 | The automatic "got it" reply | **auto-ack** (`AUTO_ACK_TEXT`) | Sent on inbound so the customer isn't left waiting. |
 | **Re-check** (↻) in the conversation header, "Checking…" while it runs | **re-check** (`api/wa-recheck.js`, `parseThread`) | A **real staff feature, not sim tooling.** Re-reads the last `WA_RECHECK_HISTORY` (12) messages *both directions* and asks what the customer wants **now**, then applies it through the same `applyParse` the webhook uses. |

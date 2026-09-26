@@ -32,7 +32,7 @@ describe("W1 — the draft bar never hides what it asks you to accept", () => {
     const i = Draft.indexOf('<div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>');
     expect(i).toBeGreaterThan(-1);
     const group = Draft.slice(i, Draft.indexOf("</div>", i));
-    expect(group).toMatch(/title=\{confLbl \+ " confidence"\}/);
+    expect(group).toMatch(/<OutlineChip title=\{confTitle\} tone=\{confTone\} size="small">\{confSays\}<\/OutlineChip>/);
     expect(group).toMatch(/>Accept<\/button>/);
     expect(group).toMatch(/>Dismiss<\/OutlineChip>/);
   });
