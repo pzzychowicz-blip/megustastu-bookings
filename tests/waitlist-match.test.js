@@ -12,8 +12,12 @@
 // paths out of the fixtures.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { placeWaitlist } from "../src/lib/waitlist-match.js";
-import { genId } from "../src/lib/booking-logic.js";
+import { genId, isAllIn, isAllOut } from "../src/lib/booking-logic.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 
 // ALL_TABLES holds {id, capacity} objects, not ids — a booking's `tables` is a
@@ -238,5 +242,72 @@ describe("placeWaitlist — purity", () => {
   it("never leaks a synthetic hold into the result", () => {
     const res = run({ waitlist: [w({ prefTime: "19:00" }), w({ prefTime: "19:00" })] });
     Object.keys(res).forEach((k) => expect(k.startsWith("__wait_")).toBe(false));
+  });
+});
+
+// v18.2.0 phase 68 — the critique's L-1. The waitlist forgot a party's seating
+// preference: measured on DEV, "Indoor Probe", 11 guests refused indoor (the
+// indoor combination seats 10), was offered outdoor tables 2, 3, 4, 5A and 5B.
+// The entry keeps the zone and the match honours it STRICTLY (Patryk): stricter
+// than the booking form on a day the optimiser runs, whose trialFits falls back
+// to any zone when the preferred one is full.
+describe("placeWaitlist — a party's seating preference (v18.2.0 phase 68)", () => {
+  it("offers an indoor party of 11 NOTHING when indoor seats 10 — L-1's case", () => {
+    const res = run({ waitlist: [w({ size: 11, prefTime: "20:00", preference: "indoor" })] });
+    expect(Object.keys(res)).toHaveLength(0);
+    // …where the same party with no preference is placed, and not indoors only
+    // (on the default layout, the mixed combination 1A + 1B + 7 + i4).
+    const auto = run({ waitlist: [w({ size: 11, prefTime: "20:00" })] });
+    const r = Object.values(auto)[0];
+    expect(r && r.tables.length).toBeGreaterThan(0);
+    expect(isAllIn(r.tables)).toBe(false);
+  });
+
+  it("offers an indoor party indoor tables, and an outdoor party outdoor ones", () => {
+    const res = run({ waitlist: [
+      w({ size: 4, prefTime: "20:00", preference: "indoor" }),
+      w({ size: 4, prefTime: "20:00", preference: "outdoor" }),
+    ] });
+    const [a, b] = Object.values(res);
+    expect(isAllIn(a.tables)).toBe(true);
+    expect(isAllOut(b.tables)).toBe(true);
+  });
+
+  it("with its zone full, an indoor party waits even though outdoor is free", () => {
+    const indoor = ALL_TABLES.filter((t) => t.zone === "indoor" || /^i/.test(t.id)).map((t) => t.id);
+    const full = indoor.map((id) => bk({ time: "19:30", duration: 180, tables: [id], _locked: true }));
+    const res = run({ bookings: full, waitlist: [w({ size: 2, prefTime: "20:00", preference: "indoor" })] });
+    expect(Object.keys(res)).toHaveLength(0);
+    const auto = run({ bookings: full, waitlist: [w({ size: 2, prefTime: "20:00" })] });
+    expect(isAllOut(Object.values(auto)[0].tables)).toBe(true);
+  });
+
+  it("an unknown or 'auto' preference changes nothing", () => {
+    const a = run({ waitlist: [w({ size: 2, prefTime: "20:00", preference: "auto" })] });
+    const b = run({ waitlist: [w({ size: 2, prefTime: "20:00", preference: "patio" })] });
+    const c = run({ waitlist: [w({ size: 2, prefTime: "20:00" })] });
+    expect(Object.values(a)[0].tables).toEqual(Object.values(c)[0].tables);
+    expect(Object.values(b)[0].tables).toEqual(Object.values(c)[0].tables);
+  });
+});
+
+// The entry has to CARRY the zone for the match to honour it: stored only when
+// one was stated (Firebase throws on an undefined property; absent reads as
+// "auto"), passed by the booking form's Add to waitlist, handed back by Book,
+// and said on the waitlist row and the printed Day sheet.
+describe("phase 68 — the entry carries the zone, and the row says it", () => {
+  const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+  const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
+  it("stores a stated zone and omits anything else", () => {
+    expect(read("hooks/useWaitlist.js")).toMatch(/if\(preference==="indoor"\|\|preference==="outdoor"\) entry\.preference=preference;/);
+  });
+  it("the booking form passes it, and Book brings it back", () => {
+    const App = read("App.jsx");
+    expect(App).toMatch(/notes:f\.notes\|\|"",\s*preference:f\.preference\s*\}\);/);
+    expect(App).toMatch(/preference:w\.preference==="indoor"\|\|w\.preference==="outdoor"\?w\.preference:"auto"/);
+  });
+  it("the waitlist row and the Day sheet say it", () => {
+    expect(read("components/WaitlistPanel.jsx")).toMatch(/\{w\.preference==="indoor"\|\|w\.preference==="outdoor"\?<span style=\{ZONE_FLAG\}>/);
+    expect(read("components/DaySheet.jsx")).toMatch(/\(w\.preference === "indoor" \? " · indoor" : w\.preference === "outdoor" \? " · outdoor" : ""\)/);
   });
 });

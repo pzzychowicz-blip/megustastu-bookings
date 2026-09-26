@@ -40,11 +40,30 @@
 
 import { hoursFor } from "./constants";
 import {
-  toMins, toTime, getDur, optimizerActiveFor, findFreeSlot, trialFits
+  toMins, toTime, getDur, optimizerActiveFor, findFreeSlot, trialFits, isAllIn, isAllOut
 } from "./booking-logic";
 
 // Whole-pass budget for the expensive trials, shared across entries.
 export const WAIT_SCAN_BUDGET_MS = 300;
+
+// ── v18.2.0 phase 68: a party's seating preference (the critique's L-1) ─────
+// An entry remembers the zone the party asked for, and the match honours it
+// STRICTLY: a table only in that zone. It was matched to anything — measured
+// on DEV, "Indoor Probe", 11 guests refused indoor (the indoor combination
+// seats 10), was offered outdoor tables 2, 3, 4, 5A and 5B as "table free".
+// Strict is Patryk's call and deliberately stricter than the booking form on a
+// day the optimiser runs: `findFreeSlot` treats a preference as hard, but
+// `trialFits` goes through the optimiser, which falls back to ANY zone when the
+// preferred one is full (`_runGreedy`'s `findBestAny`). A party waiting because
+// its zone was full is not offered the other one.
+function prefOf(w) {
+  return w && (w.preference === "indoor" || w.preference === "outdoor") ? w.preference : "auto";
+}
+function inZone(tables, pref) {
+  if (pref === "indoor") return isAllIn(tables);
+  if (pref === "outdoor") return isAllOut(tables);
+  return true;
+}
 
 /**
  * @param {object}   o
@@ -78,7 +97,7 @@ export function placeWaitlist(o) {
   function hold(w, size, dur, res) {
     holds.push({
       id: "__wait_" + w.id, name: "", phone: "", date: w.date, time: res.time,
-      size: size, duration: dur, preference: "auto", notes: "", status: "confirmed",
+      size: size, duration: dur, preference: prefOf(w), notes: "", status: "confirmed",
       tables: res.tables, customDur: null, _manual: true, _locked: true, _conflict: false,
       preferredTables: [], history: []
     });
@@ -97,6 +116,7 @@ export function placeWaitlist(o) {
     if (h.closed) return;
     const size = Number(w.size) || 2;
     const dur = getDur(size);
+    const pref = prefOf(w);
     const noResh = !optimizerActiveFor(w.date, o.autoOptimizer);
     const fromM = w.date === todayStr ? Math.max(nowMins, h.open * 60) : h.open * 60;
     let scanLo = Math.ceil(fromM / 15) * 15;
@@ -112,11 +132,13 @@ export function placeWaitlist(o) {
     const tryFit = function (timeStr) {
       const world = holds.length ? bookings.concat(holds) : bookings;
       if (!noResh) {
-        const cheap = findFreeSlot(world, w.date, timeStr, size, "auto", dur, blocks, null, null);
+        const cheap = findFreeSlot(world, w.date, timeStr, size, pref, dur, blocks, null, null);
         if (cheap) { lastResh = false; return cheap; }
       }
       if (clock() - scanT0 > budgetMs) { budgetHit = true; return null; }
-      const t = trialFits(world, w.date, timeStr, size, "auto", dur, blocks, null, null, noResh);
+      const found = trialFits(world, w.date, timeStr, size, pref, dur, blocks, null, null, noResh);
+      // The optimiser's fallback to the other zone is no offer (phase 68).
+      const t = found && inZone(found, pref) ? found : null;
       // noResh === true means trialFits was forbidden from moving anyone, so
       // its answer is a clean placement too.
       if (t) lastResh = !noResh;

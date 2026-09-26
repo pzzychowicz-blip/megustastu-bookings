@@ -157,7 +157,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         <div style={{ fontSize: T.body }}>
           <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Waitlist</div>
           {dayWait.map(function (w, i) {
-            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + guestsLabel(w.size) + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + formatPhone(w.phone) : "")}</div>;
+            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + guestsLabel(w.size) + (w.preference === "indoor" ? " · indoor" : w.preference === "outdoor" ? " · outdoor" : "") + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + formatPhone(w.phone) : "")}</div>;
           })}
         </div>
       ) : null}

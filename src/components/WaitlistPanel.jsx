@@ -43,12 +43,12 @@
 //   onClose()      — close the panel
 
 import { useState } from "react";
-import { S, BLOCK_BG, R, T, FW, IC } from "../lib/constants";
+import { S, BLOCK_BG, R, T, FW, IC, SP } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
-import { TrashIcon } from "./Icons";
+import { TrashIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 
 // The button group's ARMED width: Book (60.3) + the 6px gap + "Confirm —
 // remove" with its trash mark (160.1; 140.1 before phase 62 gave it the mark) =
@@ -60,6 +60,9 @@ import { TrashIcon } from "./Icons";
 // the row would share its line. Re-measure if the labels, T.body or mkBtn's
 // padding change.
 const ACTIONS_W = 227;
+
+// v18.2.0 phase 68: a party's zone, in the List card's flag look (its FLAG).
+const ZONE_FLAG = { display: "inline-flex", alignItems: "center", gap: SP.tight, fontSize: T.small, fontWeight: FW.semi, whiteSpace: "nowrap", color: "var(--text-secondary)" };
 
 function addedLabel(ts){
   if(!ts) return "";
@@ -87,7 +90,10 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
       <div
         key={w.id}
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
-          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto",justifyContent:"flex-end",minWidth:ACTIONS_W}}><button
+          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{/* v18.2.0 phase 68 (L-1): the
+            zone the party asked for, in the List card's flag look (mark +
+            word, secondary ink) — the match now honours it, and the row says
+            so. Absent means no preference. */}{w.preference==="indoor"||w.preference==="outdoor"?<span style={ZONE_FLAG}>{w.preference==="indoor"?<IndoorIcon size={IC.control} />:<OutdoorIcon size={IC.control} />}{w.preference==="indoor"?"Indoor":"Outdoor"}</span>:null}{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto",justifyContent:"flex-end",minWidth:ACTIONS_W}}><button
             className="mgt-hover-scale"
             aria-label={"Book ("+party+")"}
             style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}

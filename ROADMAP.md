@@ -139,14 +139,15 @@ evidence for each.
     nothing (it measured 21.5px at 375px, 1.5px beside a year). The pax, phone and
     badge still follow the name's width on a wide screen.
 
-- **The waitlist forgets a party's seating preference (v18.2.0 critique, round 3, L-1).**
-  `addFormToWaitlist` stores name, phone, size, date, wanted time and notes — not
-  `preference` — so a party refused because INDOOR is full is matched to anything.
-  Measured on DEV: "Indoor Probe", 11 guests wanting indoor (the indoor combination seats
-  10), was offered outdoor tables 2, 3, 4, 5A and 5B as "table free". Store the
-  preference on the entry and have `placeWaitlist` honour it (tests beside
-  `tests/waitlist-match.test.js`), and print it on the waitlist row. Patryk's call: a
-  matching change, not this critique's.
+- **A booking's seating preference is soft on a day the optimiser runs (found in v18.2.0
+  phase 68).** `findFreeSlot` treats "indoor"/"outdoor" as a hard constraint, but the
+  optimiser behind `trialFits` falls back to ANY zone when the preferred one is full
+  (`_runGreedy`'s `findBestAny`). So the booking form accepts or refuses the same party
+  depending on the day: measured on DEV, 11 guests wanting indoor (the indoor combination
+  seats 10) were offered outdoor 1A · 1B · 3 · 4 · 7 for tomorrow 20:00, and refused ("No
+  tables available (indoor preference)") for today 21:30, after the 15:00 cutoff. The
+  waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
+  a rule, and make both paths say the same.
 
 - **A List card's table pill does not say the table is missing (v18.2.0 follow-up).**
   The timeline's Unplaced row and the strip's "Not on the grid" section name a table the

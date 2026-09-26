@@ -27845,3 +27845,32 @@ Mon 28.09 (first 18:00) at "18:00"; back on today, "Now 20:18". `tests/plan-avai
 
 **Gate after phase 67:** `122.30 kB` gz main bundle (+0.07) · **1879 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 68. The waitlist keeps a party's seating preference (L-1)
+
+Round 3's L-1, which Patryk had sent to ROADMAP as a matching change: `addFormToWaitlist` stored no
+`preference`, so a party refused because INDOOR was full was matched to anything — measured then,
+"Indoor Probe", 11 guests (the indoor combination seats 10), offered outdoor tables 2, 3, 4, 5A and 5B
+as "table free". The entry now keeps the zone (`preference`: "indoor"/"outdoor", omitted otherwise,
+since Firebase throws on an undefined property and absence reads as "auto"; the node's rules validate
+no fields, so no console step), the booking form's Add to waitlist passes it, Book hands it back to the
+form, the waitlist row shows it in the List card's flag look ("Indoor" with the house mark) and the
+printed Day sheet's waitlist line says it.
+
+**Strict, Patryk's pick.** `placeWaitlist` passes the zone to `findFreeSlot` and `trialFits` and refuses
+a `trialFits` answer outside it. That second check matters because the two disagree, which this phase
+found by running them: `findFreeSlot` treats a preference as hard, while the optimiser behind
+`trialFits` falls back to ANY zone when the preferred one is full. Measured through the booking form on
+DEV, 11 guests wanting indoor are offered outdoor 1A · 1B · 3 · 4 · 7 for tomorrow at 20:00 and refused
+("No tables available (indoor preference)") for today at 21:30, after the 15:00 cutoff. The waitlist is
+now strict on both; whether the form should be is a decision about what a preference MEANS, so it is a
+new ROADMAP entry rather than part of this phase.
+
+Live on DEV: the refused party (today 21:30) added from the form's "Add to waitlist" was stored with
+`preference: "indoor"`, size 11; its row reads "Indoor Probe 2 · 11 guests · Indoor · waiting", with no
+"Table free"; Book opened "New booking" with the name and Indoor filled in. `tests/waitlist-match.test.js`
++7 (L-1's case, each zone, a full zone with the other free, "auto" and an unknown value unchanged, and
+the carriage from storage to the row).
+
+**Gate after phase 68:** `122.52 kB` gz main bundle (+0.22) · **1886 tests** (+7) · 0 lint errors, 90
+warnings (unchanged) · style OK.

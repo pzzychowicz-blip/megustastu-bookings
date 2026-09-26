@@ -2301,7 +2301,9 @@ function BookingApp({uid}){
       date:w.date,
       time:(avail&&avail.time)||w.prefTime||"",
       size:w.size||2,
-      notes:w.notes||""
+      notes:w.notes||"",
+      // v18.2.0 phase 68: the party's zone comes back with it.
+      preference:w.preference==="indoor"||w.preference==="outdoor"?w.preference:"auto"
     }));
     setEditId(null);setError("");setSwapAffected(null);
     pendingWaitlistRef.current=w.id;
@@ -2319,7 +2321,10 @@ function BookingApp({uid}){
       size:Number(f.size)||2,
       date:f.date||viewDate,
       prefTime:f.time||null,
-      notes:f.notes||""
+      notes:f.notes||"",
+      // v18.2.0 phase 68 (L-1): the zone the party was refused for, so the
+      // match offers only that zone and the row says it.
+      preference:f.preference
     });
     setShowForm(false);
     setWaitAddedShown(true);

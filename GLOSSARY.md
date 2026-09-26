@@ -259,7 +259,7 @@ Where the real ambiguity lives.
 | "Daily cutoff" in Settings | **cutoff** (`settings/optimizer.cutoff`) | The hour the optimiser stops acting on today. Off at 15:00, back on at the new day. |
 | A party that walked in | **walk-in** | `_manual: true, _locked: true` — immune to the optimiser. |
 | The ⏳ N badge in the date-nav row | **waitlist** (`useWaitlist.js`) | Parties waiting for a table, FCFS by `createdAt`. |
-| A waitlist party matched to a table | **waitlist match** (`placeWaitlist`, `lib/waitlist-match.js`) | **Sequential, not parallel** — each match is held as a synthetic locked booking the next scan sees. |
+| A waitlist party matched to a table | **waitlist match** (`placeWaitlist`, `lib/waitlist-match.js`) | v18.2.0 phase 68: only in the zone the party asked for (the entry's `preference`), shown as "Indoor" / "Outdoor" on its row. **Sequential, not parallel** — each match is held as a synthetic locked booking the next scan sees. |
 | "Separation between bookings" | **turnaround buffer** (`TURN_BUFFER`, `padEnd`) | Minutes a table stays unavailable after a party leaves. Off by default. **Placement only** — it never makes an already-booked day report clashes. |
 | Tables that can be pushed together | **join group** (`joinGroups`) | Which tables are physically adjacent. A table belongs to at most one. |
 | A run of joined tables used as one | **combo** (`VALID_COMBOS`) | **Derived** from join groups, not hand-listed. Every contiguous run of ≥2. |
