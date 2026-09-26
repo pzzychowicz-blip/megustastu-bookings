@@ -113,7 +113,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | What you see | Correct term | What it does |
 |---|---|---|
 | Solid fill, white text — `manual`, `locked`, `★`, `no-show ×2`, `N min late` | **solid tag** | Used where a tag competes inside a busy row. Neutral `--border-glass` rim. |
-| Teal or purple pill holding a table's id — "5A", "i2" | **table badge** (`TBadge`, `atoms.jsx`) | Names a table; the fill says outdoor (teal) or indoor (purple). The List card, the booking form, the seat-note and seat-clash modals, and (v18.2.0) the Summary's freeing-soon list. The timeline's row labels draw the same badge in its own copy, over the same fill. |
+| Teal or purple pill holding a table's id — "5A", "i2" | **table badge** (`TBadge`, `atoms.jsx`) | Names a table; the fill says outdoor (teal) or indoor (purple). The List card, the booking form, the seat-note and seat-clash modals, and (v18.2.0) the Summary's freeing-soon list. The timeline's row labels draw the same badge in its own copy, over the same fill. v18.2.0 phase 69: a table the layout does not have (`unplacedReason` "missing") is drawn DASHED, with no fill, named "Table 9, not in the layout" (`missing`). |
 | No fill, 2px border, text in the same hue — "N visits", "N no-shows" | **outline chip** (`OutlineChip`, `atoms.jsx`) | A count or a disclosure standing alone. Border is derived from its ink via `color-mix`. |
 | The same, but clickable (▸/▾) — "Regular · N past visits" | **chip button** (`OutlineChip as="button"`) | A disclosure. Reveals past bookings / no-shows. |
 | Coloured text, no fill, no border — "Table free · HH:MM", "This device" | **text treatment** | Where the colour carries itself unaided. |

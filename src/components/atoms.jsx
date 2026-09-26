@@ -1808,7 +1808,24 @@ export function SBadge({ status }) {
 }
 
 // ── Table badge (id, indoor/outdoor coloured) ────────────────────────────────
-export function TBadge({ id }) {
+// v18.2.0 phase 69: `missing` — the layout has no such table (`unplacedReason`
+// says "missing"), so the pill must not look like a real one. It had the
+// outdoor teal of any unknown id. Dashed, no fill, in the flags' secondary ink:
+// dashes are this app's word for "not really there" (the Unplaced mark, a
+// resetting table), and the name says it for anyone not seeing the border.
+export function TBadge({ id, missing = false }) {
+  if (missing) {
+    return (
+      <span role="img" aria-label={"Table " + id + ", not in the layout"} title={"Table " + id + " is not in the layout"} style={{
+        fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
+        background: "transparent", color: "var(--text-secondary)",
+        border: "1px dashed var(--text-secondary)",
+        fontWeight: FW.semi, display: "inline-block"
+      }}>
+        {id}
+      </span>
+    );
+  }
   const indoor = isIn(id);
   const t = indoor ? TBL.ind : TBL.out;
   return (

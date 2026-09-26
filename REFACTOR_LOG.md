@@ -27874,3 +27874,21 @@ the carriage from storage to the row).
 
 **Gate after phase 68:** `122.52 kB` gz main bundle (+0.22) · **1886 tests** (+7) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 69. A List card's table pill says the table is missing
+
+The last ROADMAP follow-up of the Unplaced work: the timeline's Unplaced row and the strip's "Not on
+the grid" name a table the layout does not have, while the List card still drew it as a real pill —
+in the outdoor teal `TBadge` gives any id it does not know. `TBadge` takes `missing`: no zone fill, a
+1px DASHED border and the id in `--text-secondary` (the flags' ink, registered on both card fills),
+named "Table 9, not in the layout". Dashes are this app's word for "not really there", the ROADMAP's
+own choice between dashed and struck. The card asks the same rule as the other two surfaces: App
+builds `missingTables` from `unplacedItems`, the memo the strip and the Summary already read, and
+passes it as a stable object for `React.memo`.
+
+Live on DEV, List, Sat 03.10 (a day with bookings on tables 8 to 13 from the critique's DEV data): Emil
+Kovacs's table "1" dashed rgb(74, 85, 104) with no fill, named "Table 1, not in the layout", and his real
+table "2" the solid outdoor teal; Noa Ribera's "13" dashed the same way. `tests/unplaced.test.js` +2.
+
+**Gate after phase 69:** `122.59 kB` gz main bundle (+0.07) · **1888 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

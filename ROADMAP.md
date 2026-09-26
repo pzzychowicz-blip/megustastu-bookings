@@ -149,12 +149,6 @@ evidence for each.
   waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
   a rule, and make both paths say the same.
 
-- **A List card's table pill does not say the table is missing (v18.2.0 follow-up).**
-  The timeline's Unplaced row and the strip's "Not on the grid" section name a table the
-  layout does not have. The List card still draws `TBadge "9"` as if it were real. A
-  dashed or struck pill for an id `unplacedReason` calls missing would close the last
-  surface.
-
 - **Loose ends from the v18.2.0 critique, rounds 2 and 3 (2026-09-24 and 26).** Seen
   while fixing other findings; none was in a report, so none was offered or built.
   - Number-and-word pairs typed at their own sites ("2 bookings", "20 min late") can

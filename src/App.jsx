@@ -4520,6 +4520,14 @@ function BookingApp({uid}){
     return unplacedOf(bookings.filter(function(b){return b&&b.date===viewDate;}),gridIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `layout` stands in for the TIMELINE_TABLES live binding
   },[bookings,viewDate,layout]);
+  // v18.2.0 phase 69: a booking's tables the layout does not have, by id — for
+  // the List card's pills, from the SAME list the strip and the Summary read,
+  // so a pill cannot call a table real that the Unplaced row calls missing.
+  const missingTables=useMemo(function(){
+    const out={};
+    unplacedItems.forEach(function(u){if(u.reason==="missing") out[u.b.id]=u.missing;});
+    return out;
+  },[unplacedItems]);
   const notifSections=[].concat(
     appBannerSections({
       isOnline:isOnline,
@@ -4837,6 +4845,7 @@ function BookingApp({uid}){
   // dismissing a strip row quiets the row, it does not make the double-booking
   // stop being true.
   const listEl=<ListView
+    missingTables={missingTables}
     vouchersByCode={vouchersByCode}
     vouchersOn={vouchersOn}
     bookings={bookings}

@@ -141,3 +141,28 @@ describe("the surfaces read the ONE rule", () => {
     expect(App).toMatch(/\},\[bookings,viewDate,layout\]\);/);
   });
 });
+
+// v18.2.0 phase 69 (the ROADMAP follow-up): the Unplaced row and the strip's
+// "Not on the grid" named a table the layout does not have, while the List
+// card still drew it as a real teal pill. Measured on DEV, Sat 03.10: Emil
+// Kovacs's table "1" dashed in rgb(74, 85, 104) with no fill and named "Table 1,
+// not in the layout", his real table "2" the solid outdoor teal; Noa Ribera's
+// "13" dashed the same way.
+describe("phase 69 — the List card's pill says a table is missing", () => {
+  const SRC2 = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+  const rd = (rel) => stripComments(readFileSync(join(SRC2, rel), "utf8")).join("\n");
+  it("TBadge draws a missing table dashed, without the zone fill, and names it", () => {
+    const tb = rd("components/atoms.jsx");
+    const fn = tb.slice(tb.indexOf("export function TBadge"), tb.indexOf("export function TBadge") + 700);
+    expect(fn).toMatch(/export function TBadge\(\{ id, missing = false \}\)/);
+    expect(fn).toMatch(/border: "1px dashed var\(--text-secondary\)"/);
+    expect(fn).toMatch(/background: "transparent", color: "var\(--text-secondary\)"/);
+    expect(fn).toMatch(/aria-label=\{"Table " \+ id \+ ", not in the layout"\}/);
+  });
+  it("the card asks the SAME rule the Unplaced row and the strip read", () => {
+    const App = rd("App.jsx");
+    expect(App).toMatch(/unplacedItems\.forEach\(function\(u\)\{if\(u\.reason==="missing"\) out\[u\.b\.id\]=u\.missing;\}\);/);
+    expect(App).toMatch(/<ListView\s+missingTables=\{missingTables\}/);
+    expect(rd("components/ListView.jsx")).toMatch(/<TBadge key=\{t\} id=\{t\} missing=\{\(missingTables\[b\.id\] \|\| \[\]\)\.indexOf\(t\) >= 0\} \/>/);
+  });
+});

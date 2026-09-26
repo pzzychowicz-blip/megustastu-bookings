@@ -262,6 +262,9 @@ export const ListView = memo(function ListView({
   // v18.0.0: code -> voucher, so a card can say whether an attached voucher is
   // still unsettled. A STABLE object from App's memo, per the React.memo rule.
   vouchersByCode = {},
+  // v18.2.0 phase 69: {bookingId: [table ids the layout lacks]} — App's memo
+  // over `unplacedItems`, the rule the Unplaced row and the strip read.
+  missingTables = {},
   // v18.0.0 phase 4: the module gate, as a SCALAR — this view is `React.memo`'d
   // and a memo cannot see a live binding. The tag keys on `b.voucherCode`
   // rather than on the map, so passing an empty `vouchersByCode` would not
@@ -954,7 +957,7 @@ export const ListView = memo(function ListView({
                 on a narrow card, where the actions drop below as before. */}
             <div style={{ gridColumn: "1 / -1", gridRow: 2, minWidth: 0, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginLeft: TIME_COL + TIME_GAP }}>
-                {(b.tables || []).map((t) => <TBadge key={t} id={t} />)}
+                {(b.tables || []).map((t) => <TBadge key={t} id={t} missing={(missingTables[b.id] || []).indexOf(t) >= 0} />)}
                 {phonEl}
               </div>
               {/* Every control in here goes through `stopped()`, or it opens the

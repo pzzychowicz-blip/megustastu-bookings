@@ -555,6 +555,14 @@ explaining why is usually the one to read.
   made-up grouping is the same defect as a made-up split. A code the table does
   not know is shown whole. The stored string keeps what was typed; the phone
   field is how a number is typed, this is how one is read.
+- **A table the layout does not have is DASHED, never a real pill (v18.2.0
+  phase 69).** `TBadge`'s `missing` state: no zone fill, a 1px dashed border and
+  the id in `--text-secondary`, named "Table 9, not in the layout". Dashes are
+  this app's word for "not really there" (the Unplaced mark, a resetting
+  table), and before this the List card gave such an id the outdoor teal of
+  any table it did not know, while the Unplaced row and the strip called it
+  missing. The card asks the SAME rule they read (App's `missingTables`, from
+  `unplacedItems`).
 - **A List card is a table row: every badge and button keeps its column
   (v18.2.0).** Each width that varied from card to card takes a fixed one, the
   way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's
