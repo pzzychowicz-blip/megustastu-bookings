@@ -27627,3 +27627,39 @@ stay gone); the registry lost the entry's two cases, one per theme (measured: 20
 
 **Gate after phase 59:** `122.27 kB` gz main bundle (±0) · **1866 tests** (−1: +1, −2) · 0 lint errors,
 90 warnings (unchanged) · style OK.
+
+### Fifth round — Patryk's changes, and the ROADMAP entries this version wrote (2026-09-26)
+
+Patryk brought six changes of his own and asked for the five ROADMAP entries v18.2.0 had added: the
+Plan view's opening time, the six minor round-2 findings, L-1 (the waitlist's seating preference), the
+List card's missing-table pill and the critique's loose ends. Every fork went to him first, each with a
+recommendation, and all but one took it. **The exception is the destructive button**: shown the app's
+own atoms side by side in both themes (today · quiet until armed · solid at rest · quiet + trash icon),
+he chose SOLID red at rest plus a trash icon on Delete and Remove, which reverses the quiet rows phases
+27, 28 and 41 built; the editors' small × removers stay quiet, his call too. The rest: the ⋯ card drops
+both of its duplicates, UK numbers means mobiles, the Day sheet saves as `mgt-day-sheet-YYYY-MM-DD`, the
+waitlist offers only the preferred zone, the voucher amount's hint is "e.g. 50", and the draft card's
+confidence says what to do.
+
+Half of one request was already on the branch: "Pax" → "Guests" on the printed Day sheet is phase 38's
+(its column and its waitlist line both read `guestsLabel`). `main` still prints "Pax", which is what a
+sheet printed from production shows.
+
+### 60. The ⋯ card leaves out what the card offers
+
+Patryk: the List card's ⋯ repeated the button beside it. The quick-status card offered every status
+but the current one, so on a confirmed card it led with "seated", the card's own next step, and at the
+no-show stage it offered No show a second time too. `QuickStatusPopup` takes `omitStatus` and
+`omitNoShow`, and `ListView` fills both from ONE module-scope `cardActionsOf(b, late, today, nowMins)`
+that the card's own buttons now read as well, so what the card shows and what ⋯ leaves out cannot
+drift apart. The timeline and the plan open the card on a hold and pass neither: their block and table
+carry no status buttons, so the card is the only place those actions live.
+
+Live on DEV, Sat 26.09, List: the four confirmed cards show "Assign · seated" and their ⋯ card
+"completed · cancelled · Delete". "Late Probe" (a confirmed 18:30, made for the check and past the
+no-show threshold) shows "No show · Assign · seated" on the card and "completed · cancelled · Delete"
+in ⋯.
+`tests/list-card.test.js` +2 (the one source, and the popup's two filters with their defaults).
+
+**Gate after phase 60:** `122.37 kB` gz main bundle (+0.10) · **1868 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

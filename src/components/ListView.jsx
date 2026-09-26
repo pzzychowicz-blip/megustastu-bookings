@@ -240,6 +240,16 @@ function endsASelection(el) {
   return el.contains(sel.anchorNode) || el.contains(sel.focusNode);
 }
 
+// v18.2.0 phase 60: what the CARD offers by itself — its next-step button and,
+// once due, No show. The ⋯ card leaves exactly these out: it offered the next
+// step a second time, one button away from the card's own (Patryk), and No show
+// too whenever the card showed it. ONE function, read by the card and by the
+// ⋯ card's mount, so what the card shows and what the ⋯ card omits cannot
+// drift apart.
+function cardActionsOf(b, late, today, nowMins) {
+  return { next: nextStatusOf(b, today, nowMins), noShow: late[b.id] === "noshow" };
+}
+
 // v17.1.0 perf: React.memo — all function props are App's stable VA wrappers,
 // data props change identity only on real change (memoized in BookingApp).
 export const ListView = memo(function ListView({
@@ -675,7 +685,8 @@ export const ListView = memo(function ListView({
         // pending card to Confirmed; v17.10.0 gave each status its own mark;
         // v17.16.12 dropped Seated after close — all of which `nextStatusOf`
         // and the popup still honour.)
-        const nextSt = nextStatusOf(b, today, nowMins);
+        const acts = cardActionsOf(b, late, today, nowMins);
+        const nextSt = acts.next;
         // v18.2.0: NEXT_COL wide whatever it says, so Assign beside it keeps
         // one x down the List. The label centres in the spare width.
         const nextBtn = nextSt ? (
@@ -956,7 +967,7 @@ export const ListView = memo(function ListView({
                   step (NEXT_COL wide) and ⋯ now line up down the List, and a
                   late card only grows leftwards. */}
               <div style={{ display: "flex", gap: 6, marginLeft: "auto", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
-                {lateSt === "noshow" ? (
+                {acts.noShow ? (
                   <button className="mgt-hover-scale" style={mkBtn({ background: BTN.orange, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onNoShow(b.id))}><NoShowIcon size={IC.control} />No show</button>
                 ) : null}
                 <button className="mgt-hover-scale" style={mkBtn({ background: BTN.tables, display: "inline-flex", alignItems: "center", gap: 6 })} onClick={stopped(() => onManual(b.id))}><AssignIcon size={IC.control} />Assign</button>
@@ -1016,19 +1027,27 @@ export const ListView = memo(function ListView({
       {/* v18.2.0: the ⋯ card. Resolved from `day` on every render so a status
           change from another device reaches an open card, and it closes itself
           if the booking leaves the day. `startArmed`: it was opened by a click,
-          so there is no held finger to wait for (see QuickStatusPopup). */}
-      {menuFor ? (
-        <QuickStatusPopup
-          booking={day.find((x) => x.id === menuFor) || null}
-          late={late}
-          today={today}
-          nowMins={nowMins}
-          onStatus={onStatus}
-          onNoShow={onNoShow}
-          onDelete={onDelete}
-          startArmed
-          onClose={() => setMenuFor(null)} />
-      ) : null}
+          so there is no held finger to wait for (see QuickStatusPopup).
+          Phase 60: it leaves out what the card already offers, read from the
+          same `cardActionsOf` the card draws from. */}
+      {menuFor ? (function () {
+        const menuB = day.find((x) => x.id === menuFor) || null;
+        const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false };
+        return (
+          <QuickStatusPopup
+            booking={menuB}
+            late={late}
+            today={today}
+            nowMins={nowMins}
+            onStatus={onStatus}
+            onNoShow={onNoShow}
+            onDelete={onDelete}
+            omitStatus={onCard.next}
+            omitNoShow={onCard.noShow}
+            startArmed
+            onClose={() => setMenuFor(null)} />
+        );
+      })() : null}
     </div>
   );
 }

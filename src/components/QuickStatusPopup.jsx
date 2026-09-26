@@ -39,7 +39,15 @@ import { NoShowIcon, StatusIcon } from "./Icons";
 //                returns to whatever opened it. The hold-opened path is
 //                untouched — its finger is still down, which is the whole
 //                reason the arming exists.
-export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, startArmed = false }) {
+// v18.2.0 phase 60: two more, also the List card's — what the opener ALREADY
+// offers, so this card does not offer it a second time (Patryk: the ⋯ card
+// repeated the next-step button beside it).
+//   omitStatus — the status its own button moves the booking to (the card's
+//                `nextStatusOf`), left out of the status row.
+//   omitNoShow — the opener shows No show itself, so this card does not.
+// The timeline and the plan pass neither: their block and table carry no
+// status buttons, so this card is the only place those actions live.
+export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, startArmed = false, omitStatus = null, omitNoShow = false }) {
   // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
   // so the finger that opened it is sitting on the card it just conjured. Until
   // that finger lifts, every control here is inert — see useArmAfterRelease for
@@ -117,6 +125,8 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             ? ["confirmed", "cancelled"]
             : ["confirmed", "seated", "completed", "cancelled"])
             .filter((st) => st !== booking.status)
+            // v18.2.0 phase 60: not the one the opener's own button offers.
+            .filter((st) => st !== omitStatus)
             // v17.16.12: never offer a status the app will take straight back.
             // On a day whose close has passed, the close-time auto-complete
             // flips a manual "seated" to "completed" on the next 15s tick — so
@@ -149,7 +159,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
                 <StatusIcon status={st} size={IC.control} />{st}
               </button>
             ))}
-          {(booking.status === "confirmed" || booking.status === "pending") && late[booking.id] === "noshow" ? (
+          {!omitNoShow && (booking.status === "confirmed" || booking.status === "pending") && late[booking.id] === "noshow" ? (
             <button
               className="mgt-hover-scale"
               style={{

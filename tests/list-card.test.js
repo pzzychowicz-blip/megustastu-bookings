@@ -44,7 +44,8 @@ describe("the card and the popup", () => {
   const Popup = read("components/QuickStatusPopup.jsx");
 
   it("the card renders ONE status button, from nextStatusOf", () => {
-    expect(List).toMatch(/const nextSt = nextStatusOf\(b, today, nowMins\);/);
+    expect(List).toMatch(/next: nextStatusOf\(b, today, nowMins\)/);
+    expect(List).toMatch(/const acts = cardActionsOf\(b, late, today, nowMins\);\s*const nextSt = acts\.next;/);
     expect(List, "the old per-status button row is back").not.toMatch(/const statusBtns =/);
     expect(List, "Delete is back on the card").not.toMatch(/onClick=\{stopped\(\(\) => onDelete\(b\.id\)\)\}/);
   });
@@ -74,6 +75,25 @@ describe("the card and the popup", () => {
   it("a click-opened popup is armed at once; a hold-opened one still waits", () => {
     expect(Popup).toMatch(/const armed = startArmed \|\| armedByRelease;/);
     expect(Popup).toMatch(/startArmed = false/);
+  });
+
+  // v18.2.0 phase 60 (Patryk): the ⋯ card repeated the card's next-step button,
+  // and its No show whenever the card showed one. What the card offers comes
+  // from ONE function, and the ⋯ card's mount reads that same function.
+  it("the ⋯ card leaves out what the card itself offers, from ONE source", () => {
+    expect(List).toMatch(/function cardActionsOf\(b, late, today, nowMins\) \{\s*return \{ next: nextStatusOf\(b, today, nowMins\), noShow: late\[b\.id\] === "noshow" \};/);
+    expect(List, "the card's No show must read the same source").toMatch(/\{acts\.noShow \? \(/);
+    expect(List).toMatch(/const onCard = menuB \? cardActionsOf\(menuB, late, today, nowMins\)/);
+    const tag = List.slice(List.indexOf("<QuickStatusPopup"), List.indexOf("/>", List.indexOf("<QuickStatusPopup")));
+    expect(tag).toMatch(/omitStatus=\{onCard\.next\}/);
+    expect(tag).toMatch(/omitNoShow=\{onCard\.noShow\}/);
+  });
+
+  it("the popup honours both omissions, and defaults to omitting nothing", () => {
+    expect(Popup).toMatch(/\.filter\(\(st\) => st !== omitStatus\)/);
+    expect(Popup).toMatch(/\{!omitNoShow && \(booking\.status === "confirmed" \|\| booking\.status === "pending"\) && late\[booking\.id\] === "noshow"/);
+    // The timeline and the plan pass neither, so their card keeps everything.
+    expect(Popup).toMatch(/omitStatus = null, omitNoShow = false/);
   });
 });
 
