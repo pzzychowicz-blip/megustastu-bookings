@@ -802,6 +802,51 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
       .toEqual([]);
   });
 
+  it("every MiniStepper in Settings names what it steps (v18.2.0 phase 56)", () => {
+    // Round 3's A-1: nine call sites, eighteen buttons announcing "−" and "+".
+    // The same rule as the Stepper above: `label` has no default, so this
+    // guards the CALL SITES; the weekday rows repeat seven times and carry the
+    // day.
+    const src = read("components/Settings.jsx");
+    const tags = openingTagsOf(src, "MiniStepper");
+    expect(tags.length, "Settings should still render nine mini-steppers").toBeGreaterThanOrEqual(9);
+    expect(tags.filter((t) => !/\blabel=/.test(t)), "a MiniStepper with no `label` announces as \u2212 and +")
+      .toEqual([]);
+    expect(count(src, /label=\{label \+ " (?:opening|closing) time"\}/g), "the weekday rows name their day").toBe(2);
+    expect(count(src, /aria-label=\{"(?:Decrease|Increase) " \+ label\}/g), "both buttons take the label").toBe(2);
+  });
+
+  it("every HourStepper in Settings names its buttons, and a repeated one its row (v18.2.0 phase 56)", () => {
+    // The report counted nine; measured on DEV, General held sixteen MORE
+    // unnamed steppers — this component, whose `label` was only the visible
+    // heading above the buttons. The duration tiers repeat per tier.
+    const src = read("components/Settings.jsx");
+    const tags = openingTagsOf(src, "HourStepper");
+    expect(tags.length, "Settings should still render ~14 hour steppers").toBeGreaterThanOrEqual(14);
+    expect(tags.filter((t) => !/\blabel=/.test(t))).toEqual([]);
+    expect(count(src, /aria-label=\{"(?:Decrease|Increase) " \+ name\}/g), "both buttons take the name").toBe(2);
+    expect(src).toMatch(/const name = \(who \? who \+ ": " : ""\) \+ label;/);
+    expect(count(src, /who=\{"Tier " \+ \(i \+ 1\)\}/g), "each tier's two steppers carry its number").toBe(2);
+    expect(src).toMatch(/label="stay for" who=\{tiers\.length \? "Larger parties" : "All parties"\}/);
+  });
+
+  // v18.2.0 phase 56: the rule the three tests above apply per component, for
+  // every component — a button whose whole content is − or + carries an
+  // aria-label. Against the sources before the phase it finds ten: Settings'
+  // two stepper components, the floor-plan editor's stepper and zoom, and the
+  // Customers tab's Regulars stepper.
+  it("no button anywhere is named by a − or + alone", () => {
+    const hits = [];
+    for (const f of readdirSync(join(SRC, "components"), { recursive: true })) {
+      if (!/\.jsx$/.test(f)) continue;
+      const src = read("components/" + f);
+      const re = /<button\b([^>]*(?:\{[^}]*\}[^>]*)*)>\s*([\u2212+])\s*<\/button>/g;
+      let m;
+      while ((m = re.exec(src)) !== null) if (!/aria-label=/.test(m[1])) hits.push(f + ": " + m[2]);
+    }
+    expect(hits).toEqual([]);
+  });
+
   it("a Stepper rendered from a list names the ITEM", () => {
     // Same rule as the list-rendered Toggle above, and the same reason a regex
     // cannot decide "inside a .map": these are pinned by name. Each of the four

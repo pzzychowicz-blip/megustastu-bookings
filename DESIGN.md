@@ -324,7 +324,13 @@ explaining why is usually the one to read.
   against the "+" beside it at 10.7px in the app font at 17px — the pair looked
   mismatched (the design critique). U+2212 measures 10.7px, the same as "+".
   Settings and LayoutSettings already used it; `tests/a11y.test.js` now refuses
-  a button whose whole content is a hyphen.
+  a button whose whole content is a hyphen. **And a − or + is named for what it steps
+  (phase 56, A-1)**: "Decrease Daily cutoff", "Increase Tier 2: stay for".
+  Settings' two stepper components, the floor-plan editor's and the Customers
+  tab's Regulars stepper announced the glyph alone — all 66 on the General
+  tab, with two names between them. A stepper repeated per row carries the row
+  (`who`); `tests/a11y.test.js` refuses a − or + button without an aria-label
+  in any component.
 - **Red means destructive, and only that (v18.2.0).** `--btn-dismiss` was the
   delete red, so "Dismiss" on the reshuffle suggestion and every banner row's ✕
   looked like Delete and Cancel beside them. It is now an ALIAS of

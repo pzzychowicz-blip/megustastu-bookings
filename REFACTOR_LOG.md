@@ -27521,3 +27521,32 @@ scroll. `tests/destructive-buttons.test.js` +1. §54's count of changed expectat
 
 **Gate after phase 55:** `122.09 kB` gz main bundle (−0.03) · **1861 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 56. Every − and + says what it steps (A-1)
+
+The report said Settings' nine mini-steppers named their buttons by the glyph alone. Measured on DEV
+the class was wider: `MiniStepper`'s nine call sites render 21 steppers (the opening and closing
+hours once per weekday), and `HourStepper` — whose `label` was only the heading above its buttons —
+another 17 on the General tab with three duration tiers. All 66 stepper buttons there, and the ten on
+the App tab, announced "−" or "+". So did the floor-plan editor's steppers and zoom, and the Customers
+tab's Regulars threshold. The report's "durations" were HourSteppers, which is how the count came out
+at nine.
+
+Each is now named for what it steps, LayoutSettings' `Stepper` shape: "Decrease " / "Increase " +
+what. `MiniStepper` takes a `label` (no default); `HourStepper` and the editor's `Step` use their
+visible label, with a `who` prefix where the visible text leaves the row implicit — "Tier 2: stay
+for" in the duration tiers, whose rows show only "Parties up to" and "stay for"; "Larger parties" for
+the rest row; "Chairs: Top" for the chair sides. The weekday rows carry their day, as the row's Open
+pill does ("Mon opening time"). The editor's zoom reads "Zoom out" / "Zoom in", as the timeline's.
+
+Live on DEV, tablet, every Settings tab swept with every collapsible open: 0 unnamed − or + buttons
+(General 66 and all unique, App 10, Layout 237, Vouchers 2); the Customers stepper, which renders only
+under the Regulars filter, reads "Decrease visits for a regular"; the editor's room steppers "Decrease
+Room width" / "Room height", and selecting table 1A (a real click) gave "Decrease Size", "Decrease
+Rotation" and "Decrease Chairs: Top" through "Chairs: Left". `tests/a11y.test.js` +3, one of them a scan
+of every component for a − or + button with no aria-label — against the sources before this phase it
+finds all ten such buttons in the source (the three stepper components' pairs, the editor's zoom pair
+and the Customers pair); phase 38's tier-stepper pin follows the new attribute.
+
+**Gate after phase 56:** `122.09 kB` gz main bundle (±0) · **1864 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.

@@ -191,8 +191,15 @@ const HOUR_STEP_BTN = mkStep(H.chrome);
 // `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
-function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }) {
+//
+// v18.2.0 phase 56 (round 3's A-1): its buttons are named for what they step —
+// "Decrease Daily cutoff" — where they announced "−" and "+". `label` is the
+// visible heading above them and already required; `who` prefixes the row's
+// identity where the stepper repeats (the duration tiers: "Tier 2: stay for"),
+// LayoutSettings' `bandName(b, i) + ": …"` shape.
+function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, fmt }) {
   const display = fmt ? fmt(value) : hourLabel(value);
+  const name = (who ? who + ": " : "") + label;
   return (
     <div>
       <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -200,6 +207,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
         <button
           onClick={onDec} disabled={disableDec}
           className={disableDec ? undefined : "mgt-hover-scale"}
+          aria-label={"Decrease " + name}
           style={{ ...HOUR_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}
         >
           −
@@ -210,6 +218,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
         <button
           onClick={onInc} disabled={disableInc}
           className={disableInc ? undefined : "mgt-hover-scale"}
+          aria-label={"Increase " + name}
           style={{ ...HOUR_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}
         >
           +
@@ -295,16 +304,23 @@ function PinnedCountriesSetting({ gs, onSave }) {
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
 const MINI_STEP_BTN = mkStep(H.compact);
-function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
+// v18.2.0 phase 56 (round 3's A-1): `label` names what it steps, and has no
+// default — LayoutSettings' Stepper's rule. Its nine call sites render 21
+// steppers (the opening and closing hours once per weekday), and all 42
+// buttons announced "−" and "+" and nothing else. A stepper rendered per ROW
+// carries the row's identity ("Mon opening time").
+function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
   const fmtFn = fmt || hourLabel;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
+        aria-label={"Decrease " + label}
         style={{ ...MINI_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmtFn(value)}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
+        aria-label={"Increase " + label}
         style={{ ...MINI_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );
@@ -344,10 +360,10 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
         <span style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No service this day</span>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <MiniStepper value={o} disableDec={o <= 6} disableInc={o >= c - 1}
+          <MiniStepper label={label + " opening time"} value={o} disableDec={o <= 6} disableInc={o >= c - 1}
             onDec={() => onChange({ open: o - 1 })} onInc={() => onChange({ open: o + 1 })} />
           <span style={{ color: "var(--text-faint)", fontWeight: FW.medium }}>–</span>
-          <MiniStepper value={c} disableDec={c <= o + 1} disableInc={c >= 25}
+          <MiniStepper label={label + " closing time"} value={c} disableDec={c <= o + 1} disableInc={c >= 25}
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
       )}
@@ -451,7 +467,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               This device only. Lower it if the app overflows your screen.
             </div>
           </div>
-          <MiniStepper value={appWidth} fmt={(v) => v + " px"}
+          <MiniStepper label="app width" value={appWidth} fmt={(v) => v + " px"}
             disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
             onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
         </div>
@@ -544,28 +560,28 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when opening the app</div>
-              <MiniStepper value={tl.defaultZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="zoom when opening the app" value={tl.defaultZoom} fmt={(v) => v + "×"}
                 disableDec={tl.defaultZoom <= 1} disableInc={tl.defaultZoom >= tl.maxZoom}
                 onDec={() => onSetTlSetting("defaultZoom", tl.defaultZoom - 0.5)}
                 onInc={() => onSetTlSetting("defaultZoom", tl.defaultZoom + 0.5)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when Follow turns on</div>
-              <MiniStepper value={tl.followZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="zoom when Follow turns on" value={tl.followZoom} fmt={(v) => v + "×"}
                 disableDec={tl.followZoom <= 1} disableInc={tl.followZoom >= tl.maxZoom}
                 onDec={() => onSetTlSetting("followZoom", tl.followZoom - 0.5)}
                 onInc={() => onSetTlSetting("followZoom", tl.followZoom + 0.5)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Time shown behind the now-line</div>
-              <MiniStepper value={tl.followLead} fmt={(v) => v + " min"}
+              <MiniStepper label="time shown behind the now-line" value={tl.followLead} fmt={(v) => v + " min"}
                 disableDec={tl.followLead <= 0} disableInc={tl.followLead >= 120}
                 onDec={() => onSetTlSetting("followLead", tl.followLead - 15)}
                 onInc={() => onSetTlSetting("followLead", tl.followLead + 15)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Maximum zoom (+ button)</div>
-              <MiniStepper value={tl.maxZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="maximum zoom" value={tl.maxZoom} fmt={(v) => v + "×"}
                 disableDec={tl.maxZoom <= 2} disableInc={tl.maxZoom >= 10}
                 onDec={() => onSetTlSetting("maxZoom", tl.maxZoom - 0.5)}
                 onInc={() => onSetTlSetting("maxZoom", tl.maxZoom + 0.5)} />
@@ -816,11 +832,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             return (
               <div key={i} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <div style={{ width: 150 }}>
-                  <HourStepper label="Parties up to" value={t.max} fmt={upToLabel}
+                  <HourStepper label="Parties up to" who={"Tier " + (i + 1)} value={t.max} fmt={upToLabel}
                     disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
                     onDec={() => updateTier(i, { max: t.max - 1 })} onInc={() => updateTier(i, { max: t.max + 1 })} />
                 </div>
-                <HourStepper label="stay for" value={t.dur} fmt={minsLabel}
+                <HourStepper label="stay for" who={"Tier " + (i + 1)} value={t.dur} fmt={minsLabel}
                   disableDec={t.dur <= 15} disableInc={t.dur >= 360}
                   onDec={() => updateTier(i, { dur: t.dur - 15 })} onInc={() => updateTier(i, { dur: t.dur + 15 })} />
                 <button
@@ -837,7 +853,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
-            <HourStepper label="stay for" value={bd.restDur} fmt={minsLabel}
+            <HourStepper label="stay for" who={tiers.length ? "Larger parties" : "All parties"} value={bd.restDur} fmt={minsLabel}
               disableDec={bd.restDur <= 15} disableInc={bd.restDur >= 360}
               onDec={() => onSaveBookingDefaults({ restDur: bd.restDur - 15 })} onInc={() => onSaveBookingDefaults({ restDur: bd.restDur + 15 })} />
           </div>
@@ -959,7 +975,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <AutoHeight>{bd.freeSoonEnabled !== false ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Predict up to</span>
-            <MiniStepper value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
+            <MiniStepper label="how far ahead to predict" value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
               disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
               onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
               onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
@@ -1042,7 +1058,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               })}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Generate ahead</span>
-                <MiniStepper value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
+                <MiniStepper label="weeks generated ahead" value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
                   disableDec={(recurring.horizonWeeks || 4) <= 1} disableInc={(recurring.horizonWeeks || 4) >= 12}
                   onDec={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) - 1)} onInc={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) + 1)} />
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>{"week" + ((recurring.horizonWeeks || 4) !== 1 ? "s" : "")}</span>

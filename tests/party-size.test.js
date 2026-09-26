@@ -80,7 +80,8 @@ describe("no surface says pax", () => {
       if (/\b(const|let|var|function)\s+guestsLabel\b/.test(read(f))) hits.push(f);
     }
     expect(hits).toEqual([]);
-    expect(read("components/Settings.jsx")).toMatch(/<HourStepper label="Parties up to" value=\{t\.max\} fmt=\{upToLabel\}/);
+    // Phase 56 put the tier's identity (`who`) between the label and the value.
+    expect(read("components/Settings.jsx")).toMatch(/<HourStepper label="Parties up to" who=\{"Tier " \+ \(i \+ 1\)\} value=\{t\.max\} fmt=\{upToLabel\}/);
   });
 
   // v18.2.0 phase 43: two "(25)"s survived phase 38, because the sweep looked

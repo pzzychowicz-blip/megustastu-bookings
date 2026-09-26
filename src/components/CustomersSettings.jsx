@@ -235,17 +235,21 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {filterChip("regulars", "Regulars")}
           {filterChip("noshows", "No-shows")}
           {/* v16.3.0 follow-up: Regulars visit-threshold stepper — visible while
-              the Regulars filter is active (and not overridden by a search). */}
+              the Regulars filter is active (and not overridden by a search).
+              v18.2.0 phase 56 (A-1): its buttons are named, as Settings'
+              steppers are — they announced "−" and "+". */}
           {filter === "regulars" && !searching ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
+                aria-label="Decrease visits for a regular"
                 disabled={regularMin <= 1}
                 className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
               <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
+                aria-label="Increase visits for a regular"
                 disabled={regularMin >= 50}
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>
