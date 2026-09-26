@@ -307,7 +307,6 @@ const FILLS = [
   { fill: "--btn-edit", alpha: null, ink: "--text-on-accent", role: "button", what: "Edit" },
   { fill: "--btn-today", alpha: null, ink: "--text-on-accent", role: "button", what: "Today" },
   { fill: "--btn-del", alpha: null, ink: "--text-on-accent", role: "button", what: "Delete" },
-  { fill: "--btn-cancel", alpha: null, ink: "--text-on-accent", role: "button", what: "Cancel booking" },
   { fill: "--btn-clear", alpha: null, ink: "--text-on-accent", role: "button", what: "Clear" },
   { fill: "--btn-reset", alpha: null, ink: "--text-on-accent", role: "button", what: "Reset" },
   { fill: "--btn-dismiss", alpha: null, ink: "--text-on-accent", role: "button", what: "Dismiss" },

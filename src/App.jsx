@@ -4981,8 +4981,8 @@ function BookingApp({uid}){
   // anchors to the viewport inside a plain relative/z-index ancestor (only
   // transform/filter/perspective would break that). Order-proof by construction.
   //
-  // "Keep editing" uses --app-btn-slate, NOT BTN.cancel: in this app's
-  // vocabulary "cancel" means cancel the BOOKING, so --btn-cancel is RED. The
+  // "Keep editing" uses --app-btn-slate, NOT a red: in this app's vocabulary
+  // "cancel" means cancel the BOOKING (BTN.cancel, red, removed v18.2.0). The
   // delModal footer this is otherwise modelled on can afford that (its safe
   // option is literally called Cancel); here the safe option sitting next to a
   // red Discard would read as two danger buttons — the exact mis-tap this

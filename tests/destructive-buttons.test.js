@@ -151,6 +151,16 @@ describe("the waitlist panel: Remove is quiet until armed", () => {
     expect(Waitlist).not.toMatch(/BTN\.(cancel|del)/);
   });
 
+  // v18.2.0 phase 59 (round 3's T-1): with the waitlist off it, BTN.cancel had
+  // no users, so the token went — the key, the CSS variable and its contrast
+  // registration. Its lesson (a dialog's go-back is slate, not a red) is in
+  // DESIGN.md's "Red means destructive" rule.
+  it("BTN.cancel is gone, key, variable and registration", () => {
+    expect(read("lib/constants.js")).not.toMatch(/cancel:"var\(--btn-cancel\)"/);
+    expect(readFileSync(join(SRC, "index.css"), "utf8")).not.toMatch(/--btn-cancel\s*:/);
+    expect(Contrast).not.toMatch(/fill: "--btn-cancel"/);
+  });
+
   it("says what the second tap does, as People's Remove does", () => {
     expect(Waitlist).toMatch(/>\{arming\?"Confirm — remove":"Remove"\}<\/button>/);
     expect(Waitlist).not.toMatch(/"Confirm\?"/);

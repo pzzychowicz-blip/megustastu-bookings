@@ -165,7 +165,8 @@
   --btn-tables: rgba(0, 116, 244, 0.75);
   --btn-edit: rgba(0, 108, 225, 0.7);
   --btn-del: rgba(211, 58, 58, 0.75);
-  --btn-cancel: rgba(211, 58, 58, 0.75);
+  /* v18.2.0 phase 59 (round 3's T-1): --btn-cancel is gone. It was --btn-del's
+     value under a second name, and phase 41 took its last user. */
   /* v18.2.0 (the design critique, X5): "Clear" empties a table SELECTION —
      the booking form's, the walk-in form's, table assignment's, the preferred
      tables' — and destroys nothing, so it leaves the delete red for the

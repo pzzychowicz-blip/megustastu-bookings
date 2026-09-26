@@ -27603,3 +27603,20 @@ name "Settle Laura Vidal's voucher". Its prompt: "12.3" valid, "12.345" stepMism
 
 **Gate after phase 58:** `122.27 kB` gz main bundle (±0) · **1867 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 59. BTN.cancel is gone (T-1)
+
+`BTN.cancel` / `--btn-cancel` was `--btn-del`'s value under a second name, a red named for cancelling
+a BOOKING that kept being reached for as a dialog's "go back" — `src/CLAUDE.md` carried a gotcha row
+warning against exactly that. Phase 41 moved the waitlist's Remove, its last user, to `mkDangerBtn`.
+The key, the CSS variable, its contrast registration and the gotcha row are removed; the rule the row
+guarded lives on in DESIGN.md's "Red means destructive" (a dialog's go-back is `--app-btn-slate`), and
+three comments that described the token as live now say it was removed. `--wa-btn-cancel`, the
+inbox's own delete red, is a different token and stays.
+
+Live on DEV: `--btn-cancel` resolves to "" on the root, no element references it, and the booking form
+opens as before. `tests/destructive-buttons.test.js` +1 (the key, the variable and the registration
+stay gone); the registry lost the entry's two cases, one per theme (measured: 206 → 204).
+
+**Gate after phase 59:** `122.27 kB` gz main bundle (±0) · **1866 tests** (−1: +1, −2) · 0 lint errors,
+90 warnings (unchanged) · style OK.

@@ -335,8 +335,10 @@ explaining why is usually the one to read.
   delete red, so "Dismiss" on the reshuffle suggestion and every banner row's ✕
   looked like Delete and Cancel beside them. It is now an ALIAS of
   `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
-  every dismiss in the app. The `BTN.cancel is RED` row in `src/CLAUDE.md` is the
-  same rule from the other side. **Phase 36 did the same for `--btn-clear`**
+  every dismiss in the app. Its other side was `BTN.cancel`, a red named for
+  cancelling a BOOKING that kept being reached for as a dialog's "go back"; it
+  had no users after phase 41 and phase 59 removed it. A dialog's go-back is
+  `--app-btn-slate` (`confirmKitchen`'s "Back", "Keep editing"). **Phase 36 did the same for `--btn-clear`**
   (the critique's X5): "Clear" empties a table selection — the booking form's,
   the walk-in form's, table assignment's, the preferred tables' — and was the
   delete red too.

@@ -814,7 +814,7 @@ export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here
 // so component files (atoms.jsx and future B2–B5 extractions) can import it.
-export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",cancel:"var(--btn-cancel)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
+export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
 // Phase B2: shared from here (consumed by TableGrid + App.jsx's Preferred picker).

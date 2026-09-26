@@ -931,7 +931,8 @@ export function BookingFormModal({
         className="mgt-hover-scale"
         /* v17.8.0: was BTN.cancel — the RED one. In this app "cancel" means
            cancel the BOOKING, which is why that token is red; this button closes
-           the FORM. CLAUDE.md names this exact trap and names the fix, and it
+           the FORM. CLAUDE.md named this exact trap and the fix (until v18.2.0
+           removed the token), and it
            was sitting two buttons away from a red-adjacent amber and a blue
            primary, so the footer read as three warnings. --app-btn-slate is the
            documented neutral dialog secondary. */
