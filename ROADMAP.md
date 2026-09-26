@@ -125,8 +125,6 @@ evidence for each.
   sixteen larger fixes into v18.2.0; these six were offered as "ROADMAP unless you say
   otherwise" and he did not take them. Evidence for each is in
   `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`.
-  - Layout → Tables: the zone toggle is a grey "Outdoor" chip that reads as a label,
-    ids are plain text rather than table badges, "cap" is an abbreviation (S9).
   - WhatsApp draft card: the parser's confidence shows as "HIGH" with no explanation
     (W6; its ISO date is covered by the one-date-format fix).
   - Activity log: the range and category chips are 20px tall with 10px text (X4).

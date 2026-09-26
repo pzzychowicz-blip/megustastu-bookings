@@ -23,3 +23,24 @@ describe("S7 — the voucher amount's hint reads as an example", () => {
     expect(V).not.toMatch(/placeholder="50"/);
   });
 });
+
+// S9: Layout → Tables' zone control was one grey "Outdoor" chip that flipped on
+// a tap and read as a label, the ids were plain text where every other surface
+// draws a table badge, and "cap" was an abbreviation. Measured on DEV after
+// (table 7): Outdoor aria-pressed true in a 32px track, the badge teal
+// rgba(26, 94, 107, 0.8); pressing Indoor turned it rgba(124, 58, 157, 0.8)
+// with Indoor pressed; pressing Outdoor put both back.
+describe("S9 — Layout's table rows: a zone segment, badges, and seats", () => {
+  const L = read("components/LayoutSettings.jsx");
+  it("the zone is a two-option segment in the one segmented look, its state said", () => {
+    expect(L).toMatch(/<div role="group" aria-label=\{"Zone of table " \+ t\.id\} style=\{\{ \.\.\.SEG_TRACK, marginLeft: "auto", flexShrink: 0 \}\}>/);
+    expect(L).toMatch(/aria-pressed=\{on\}/);
+    expect(L).toMatch(/style=\{\{ \.\.\.segStyle\(on\), padding: "2px 12px", minHeight: H\.chip \}\}/);
+    expect(L, "the old one-chip toggle is back").not.toMatch(/rgba\(var\(--tbl-ind-rgb\),0\.18\)/);
+  });
+  it("the id is a table badge and the word is seats", () => {
+    expect(L).toMatch(/<TBadge id=\{t\.id\} \/>/);
+    expect(L).toMatch(/fontWeight: FW\.medium \}\}>seats<\/span>/);
+    expect(L).not.toMatch(/>cap<\/span>/);
+  });
+});

@@ -27905,3 +27905,22 @@ new, +1.
 
 **Gate after phase 70:** `122.60 kB` gz main bundle (+0.01) · **1889 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 71. Layout's table rows: a zone segment, table badges, and "seats" (S9)
+
+Round 2's S9: in Settings → Layout → Tables the zone control was one grey chip reading "Outdoor" that
+flipped on a tap, and read as a label of the zone rather than as a control; the ids were plain bold
+text where every other surface draws a table badge; "cap" was an abbreviation. Each row's zone is now
+a two-option segment, Indoor · Outdoor, in the app's one segmented look (`SEG_TRACK` / `segStyle`) with
+`aria-pressed`, each segment named "Indoor (table 3)" as the chip was, since thirteen rows would
+otherwise be thirteen identical buttons; the id is a `TBadge` in a slot of the old width; the word is
+"seats". The "Add a table" row had the same chip and the same "cap", and takes the same fixes (its
+segment named "(new table)"). `tests/a11y.test.js`' Label-in-Name pin moved to the segment's expression.
+
+Live on DEV, table 7: Outdoor pressed in a 32px track, the badge teal rgba(26, 94, 107, 0.8); pressing
+Indoor turned the badge rgba(124, 58, 157, 0.8) with Indoor pressed, and pressing Outdoor put both
+back (DEV's layout ends as it began). The add row reads "seats · − 2 + · Indoor | Outdoor · Add", its
+segment flips, and Cancel closes it. `tests/minor-findings.test.js` +2.
+
+**Gate after phase 71:** `122.62 kB` gz main bundle (+0.02) · **1891 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

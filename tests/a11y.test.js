@@ -1020,7 +1020,9 @@ describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
     // The one control in these two sections that HAS words. Its visible text is
     // "Indoor" or "Outdoor", so a name like "Change zone for table 3" would fix
     // the ambiguity and break voice control in the same stroke.
-    has(src, "zone toggle", /aria-label=\{\(indoor \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
+    // v18.2.0 phase 71 (S9): a two-option segment now, one button per value,
+    // each named the same way.
+    has(src, "zone segment", /aria-label=\{\(z === "indoor" \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
       "the visible word leads and the table only disambiguates");
   });
 

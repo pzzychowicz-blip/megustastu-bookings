@@ -418,7 +418,9 @@ explaining why is usually the one to read.
   **v18.2.0 phase 35: it is the ONE segmented look** — the Week / Month / Stats
   toggle was a third, the chosen mode in solid accent, and it and Settings'
   tabs now also carry `aria-pressed`, so which one is on is said and not
-  only drawn (the design critique's X3 and S3).
+  only drawn (the design critique's X3 and S3). **Phase 71 (S9)** made Layout
+  → Tables' zone its fourth user, Indoor · Outdoor per table: it was one grey
+  chip that flipped on a tap and read as a label.
 - **Every Settings tab is in view (v18.2.0, the design critique's S1).** The
   tab bar was one row that scrolled sideways with its scrollbar hidden, so on
   the tablet three of nine tabs, and on a phone five, were out of sight with
