@@ -9,7 +9,7 @@
 // tap seemed to do nothing.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -42,5 +42,33 @@ describe("V-2 — a voucher on another booking says so, and its refusal is seen"
   it("closes the list on a refusal, and typing opens it again", () => {
     expect(Picker).toMatch(/if \(refusal\) \{ setErr\(refusal\); setFocus\(false\); return; \}/);
     expect(Picker).toMatch(/onChange=\{function \(e\) \{ setTyped\(e\.target\.value\); setErr\(""\); setFocus\(true\); \}\}/);
+  });
+});
+
+// v18.2.0 phase 53 (V-4). Measured on DEV: a guest's voucher suggestion put
+// Attach at the left of its second line on a 375px phone (x 42) and at the
+// right on a 320px one, and the attached voucher's Remove started line 2 at the
+// left on a 320px phone — a zero-basis spacer stays on line 1 whenever line 1
+// has room for it. The placeholder read "Number, or pick from the li".
+describe("V-4 — the row's button keeps to the right edge, and the placeholder fits", () => {
+  it("has no zero-basis spacer: Attach and Remove carry their own auto margin", () => {
+    expect(Picker).not.toMatch(/<span style=\{\{ flex: 1 \}\} \/>/);
+    expect(Picker).toMatch(/aria-label=\{"Attach voucher " \+ formatCode\(s\.code\) \+ " to this booking"\}[\s\S]{0,260}marginLeft: "auto" \}\)\}>/);
+    expect(Picker).toMatch(/aria-label=\{"Remove voucher " \+ formatCode\(code\) \+ " from this booking"\}[\s\S]{0,260}marginLeft: "auto" \}\)\}>/);
+  });
+
+  // DESIGN.md's rule, app-wide: a right-anchored control carries its own auto
+  // margin. There were two spacers, both here; this keeps it at none.
+  it("no component pushes a control right with a self-closing flex: 1 spacer", () => {
+    const hits = [];
+    for (const f of readdirSync(join(SRC, "components"), { recursive: true })) {
+      if (!/\.jsx$/.test(f)) continue;
+      if (/<(span|div) style=\{\{ ?flex: ?1 ?\}\} ?\/>/.test(read("components/" + f))) hits.push(f);
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it("says number-or-pick in words that fit a phone's field", () => {
+    expect(Picker).toMatch(/placeholder="Number, or pick one"/);
   });
 });

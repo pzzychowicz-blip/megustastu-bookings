@@ -464,6 +464,13 @@ explaining why is usually the one to read.
   their own content's width and do not shrink, and the controls, as ONE group,
   wrap to a second line instead. Rule: in a row of "the thing + what you can
   do to it", the thing keeps its width and the controls move.
+- **A control kept to a row's right edge carries its own `marginLeft: auto`
+  (v18.2.0 phase 53, V-4)** — never a `flex: 1` spacer in front of it. The
+  spacer's basis is zero, so in a row that wraps it stays on the first line
+  whenever that line has room for it, and the control starts the next line at
+  the LEFT: the voucher suggestion put Attach at the left on a 375px phone and
+  at the right on a 320px one. An auto margin travels with the control.
+  `tests/voucher-picker.test.js` refuses the spacer in every component.
 - **A control's meaning is on the control, not in its tooltip (v18.2.0, W3).**
   A `title` is an accessible name of last resort and a hover tooltip, and the
   restaurant's tablets never hover. The inbox's Re-check, Edit templates and

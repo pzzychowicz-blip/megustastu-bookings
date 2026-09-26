@@ -116,16 +116,19 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
           {attached ? <OutlineChip tone={STATE_TONE[st]}>{st}</OutlineChip> : null}
           {attached ? <OutlineChip tone="neutral">{money(remainingOf(attached), currency) + " left"}</OutlineChip> : null}
           {settledHere ? <OutlineChip tone="success">redeemed here</OutlineChip> : null}
-          <span style={{ flex: 1 }} />
           {/* A booking that has already redeemed against this voucher keeps its
               link: detaching would orphan a ledger entry that records something
-              that really happened. Settle it from Settings → Vouchers instead. */}
+              that really happened. Settle it from Settings → Vouchers instead.
+              v18.2.0 phase 53 (V-4): Remove keeps to the right edge by its own
+              auto margin, on whichever line it lands. A zero-basis spacer did
+              it before, and where the chips filled line 1 the spacer stayed on
+              line 1 and Remove started line 2 at the LEFT (a 320px phone). */}
           {settledHere ? null : (
             <button type="button"
               onClick={function () { onChange(""); setErr(""); }}
               aria-label={"Remove voucher " + formatCode(code) + " from this booking"}
               className="mgt-hover-scale"
-              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill })}>
+              style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill, marginLeft: "auto" })}>
               Remove
             </button>
           )}
@@ -216,12 +219,16 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                         money the restaurant has not accounted for, and the
                         person who can settle it is the one looking at this. */}
                     {s.unsettled ? <OutlineChip tone="warn">last visit not recorded</OutlineChip> : null}
-                    <span style={{ flex: 1 }} />
+                    {/* Phase 53 (V-4): Attach keeps to the right by its own auto
+                        margin. With a zero-basis spacer it sat at the right on
+                        one row and the left on the next — the spacer stayed on
+                        the sentence's line whenever the sentence left room for
+                        it (measured: x 42 at 375px, the right edge at 320). */}
                     <button type="button"
                       onClick={function () { attach(s.code); }}
                       aria-label={"Attach voucher " + formatCode(s.code) + " to this booking"}
                       className="mgt-hover-scale"
-                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill })}>
+                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, borderRadius: R.pill, marginLeft: "auto" })}>
                       Attach
                     </button>
                   </div>
@@ -239,7 +246,9 @@ export function VoucherPicker({ code, onChange, vouchers, vouchersByCode, bookin
                 onFocus={function () { setFocus(true); }}
                 onBlur={function () { setFocus(false); }}
                 onKeyDown={function (e) { if (e.key === "Enter") { e.preventDefault(); attach(); } }}
-                placeholder="Number, or pick from the list"
+                /* Phase 53 (V-4): it read "Number, or pick from the li" at
+                   375px (221px of text in a 205px box). */
+                placeholder="Number, or pick one"
                 autoCapitalize="characters"
                 autoComplete="off"
                 className="mgt-hover-scale"

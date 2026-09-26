@@ -27454,3 +27454,25 @@ Kingdom +44 on leaving the box, and emptying the box put the picker back to "Cod
 
 **Gate after phase 52:** `122.13 kB` gz main bundle (−0.02) · **1854 tests** (+3) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 53. The voucher rows keep their button right, and the placeholder fits (V-4)
+
+The booking form's suggestion of a guest's own voucher ("This guest has voucher FFBV-JYT7 · 20 € left",
+then Attach) pushed Attach right with a zero-basis `flex: 1` spacer. In a row that wraps, the spacer
+stays on the first line whenever that line has room for it, so Attach started the next line at the
+LEFT: measured at x 42 on a 375px phone, where the sentence left 40px on its line, and at the right
+edge on a 320px phone, where the sentence filled it. The attached state's Remove had the same spacer
+and, on a 320px phone, started line 2 at x 33. Both now carry `marginLeft: auto`, which travels with
+the button to whichever line it lands on; there were no other such spacers in the app, and a test now
+refuses one in any component. The field's placeholder, "Number, or pick from the list", was 221px of
+text in a 205px box on a 375px phone; "Number, or pick one" is 157px. It keeps the field's words and
+fits every phone from about 330px (it is still cut on a 320px screen, whose box is 150px).
+
+Live on DEV, "+34 622 333 444" typed into a new booking (§52 made that possible). Attach at 267–333
+(375px, the row's inner right edge 333) and 212–278 (320px); on the tablet unchanged, one line.
+Attached: Remove at 214–287 on a 320px phone (the right edge), one line at 375px and on the tablet as
+before. `tests/voucher-picker.test.js` +3; the spacer and the missing auto margin fail against the
+source before this phase.
+
+**Gate after phase 53:** `122.12 kB` gz main bundle (−0.01) · **1857 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
