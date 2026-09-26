@@ -97,7 +97,9 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", settle 
         return (
           <input
             id={fid}
-            type="number" min={0} max={max} step={1} inputMode="decimal"
+            // v18.2.0 phase 58 (round 3's V-6): cents. `step={1}` made "12.3" —
+            // a bill share the app takes — `:invalid` (stepMismatch).
+            type="number" min={0} max={max} step={0.01} inputMode="decimal"
             value={amount}
             onChange={function (e) { setAmount(e.target.value); setErr(""); }}
             className="mgt-hover-scale"

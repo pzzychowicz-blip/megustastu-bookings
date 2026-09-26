@@ -27582,3 +27582,24 @@ focus left on `<body>`, no ring; Escape still closes it. `tests/a11y.test.js` +1
 
 **Gate after phase 57:** `122.27 kB` gz main bundle (+0.18) · **1865 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 58. Settle says Settle, and the amount takes cents (V-5 + V-6)
+
+**V-5.** The strip's "Voucher not recorded" row ended in a button reading "Settle Unsettled Probe"
+(163px), where the strip's other rows say "Book" or "No show" — and the sentence beside the button
+already names the party. It reads "Settle"; the party stays in its accessible name, "Settle Laura
+Vidal's voucher", which is what tells two rows apart for a screen reader and still leads with the
+word a voice-control user sees.
+
+**V-6.** The redeem prompt's amount was `step={1}`, so "12.3" — a bill share the app accepts — was
+`:invalid` (stepMismatch). It is `step={0.01}`: cents are valid, a third decimal is flagged. The
+arrow keys now move it by a cent, which only a desktop keyboard can do (the tablet types into a
+decimal keypad); `step="any"` would have kept whole steps and stated no precision. The deposit and
+the voucher-issue amounts keep `step={5}`, which is their spinner's increment.
+
+Live on DEV, tablet, Thu 16.09 (Laura Vidal, 5C7Z-WJ3P, unsettled): the button 62px, text "Settle",
+name "Settle Laura Vidal's voucher". Its prompt: "12.3" valid, "12.345" stepMismatch, ArrowUp from
+12.3 → 12.31; Not now closed it with nothing written. `tests/voucher-settle.test.js` +2.
+
+**Gate after phase 58:** `122.27 kB` gz main bundle (±0) · **1867 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

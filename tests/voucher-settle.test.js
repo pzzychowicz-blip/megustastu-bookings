@@ -39,3 +39,20 @@ describe("Settle opens the redeem prompt, not the edit form", () => {
     expect(Modal).toMatch(/settle \? "'s visit was completed without recording this voucher\. " : "'s booking has this voucher attached\. "/);
   });
 });
+
+// v18.2.0 phase 58 (round 3's V-5 + V-6). Measured on DEV: the row's button
+// read "Settle Unsettled Probe" (163px) where the strip's other rows say
+// "Book" or "No show"; and the prompt's amount was `step={1}`, so "12.3" — a
+// bill share the app takes — was `:invalid` (stepMismatch).
+describe("the Settle row and the amount it asks for", () => {
+  const Banner = read("components/UnsettledBanner.jsx");
+
+  it("shows Settle, and names the party only to a screen reader", () => {
+    expect(Banner).toMatch(/aria-label=\{"Settle " \+ who \+ "'s voucher"\}[\s\S]{0,160}>\s*Settle\s*<\/button>/);
+    expect(Banner).not.toMatch(/\{"Settle " \+ who\}/);
+  });
+
+  it("takes an amount in cents", () => {
+    expect(Modal).toMatch(/type="number" min=\{0\} max=\{max\} step=\{0\.01\} inputMode="decimal"/);
+  });
+});

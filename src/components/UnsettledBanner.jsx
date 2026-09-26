@@ -63,9 +63,13 @@ export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", on
           // The visible text LEADS and the disambiguator follows (v17.15.4):
           // "Settle" is what a voice-control user can say, and the name is what
           // tells sixty rows apart.
+          // v18.2.0 phase 58 (round 3's V-5): the NAME is in the accessible name
+          // only. On screen it read "Settle Unsettled Probe" (163px), where the
+          // strip's other rows say "Book" or "No show" and the sentence beside
+          // the button already names the party.
           aria-label={"Settle " + who + "'s voucher"}
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>
-          {"Settle " + who}
+          Settle
         </button>
       </div>
     );
