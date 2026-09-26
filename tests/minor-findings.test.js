@@ -63,3 +63,17 @@ describe("W6 — the draft card's confidence says what to do", () => {
     expect(D, "the level in capitals is back").not.toMatch(/textTransform: "uppercase"/);
   });
 });
+
+// X4: the Activity log's range and kind chips were OutlineChip's default micro
+// size, 19.5px tall with 10px text. Measured on DEV after, at 991px: all
+// fourteen 28px tall with 11px text and the hover lift; the kind rows wrap at a
+// 32px pitch.
+describe("X4 — the Activity log's chips are the app's chip", () => {
+  const A = read("components/ActivityLogModal.jsx");
+  it("every filter chip is small, H.chip tall and lifts on hover", () => {
+    expect(A).toMatch(/const CHIP_H = \{ minHeight: H\.chip \};/);
+    const chips = A.match(/as="button" size="small" className="mgt-hover-scale" style=\{CHIP_H\} tone=/g) || [];
+    expect(chips.length, "3 range chips, the kind chips' one map, People only").toBe(5);
+    expect(A, "a micro-sized filter chip is back").not.toMatch(/as="button" tone=/);
+  });
+});

@@ -124,9 +124,8 @@ evidence for each.
 - **The minor findings of the v18.2.0 critique, round 2 (2026-09-24).** Patryk took the
   sixteen larger fixes into v18.2.0; these six were offered as "ROADMAP unless you say
   otherwise", and on 2026-09-26 he took them as well. Each bullet leaves this entry in
-  the v18.2.0 phase that ships it (S7, S9 and W6 have). Evidence for each is in
+  the v18.2.0 phase that ships it (S7, S9, W6 and X4 have). Evidence for each is in
   `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`.
-  - Activity log: the range and category chips are 20px tall with 10px text (X4).
   - Stats: the fifth tile sits alone on a full-width row; "Table 1" is listed although
     the layout has no such table; tables are text rather than badges (X6).
   - Find a booking: the pax and phone columns shift with the name's length (X7).

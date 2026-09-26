@@ -65,6 +65,13 @@ const KIND_ORDER = [
   "standing", "settings", "people", "session", "data",
 ];
 
+// v18.2.0 phase 73 (round 2's X4): the range and kind chips are the app's
+// interactive chip, the shape Settings' pinned countries already had —
+// `size="small"` (11px), `H.chip` tall, and the hover lift every control
+// carries. They were OutlineChip's default micro size: 19.5px tall with 10px
+// text, fourteen tap targets smaller than anything else on this screen.
+const CHIP_H = { minHeight: H.chip };
+
 function timeOf(ms) {
   if (!ms) return "";
   const d = new Date(ms);
@@ -232,13 +239,13 @@ export function ActivityLogModal({
 
       <div role="group" aria-label="Quick ranges"
         style={{ display: "flex", gap: SP.tight, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
-        <OutlineChip as="button" tone={oneDay && fromDay === today ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={oneDay && fromDay === today ? "success" : "neutral"}
           aria-pressed={oneDay && fromDay === today}
           onClick={function () { setRange(today, today); }}>Today</OutlineChip>
-        <OutlineChip as="button" tone={fromDay === addDays(today, -6) && toDay === today ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={fromDay === addDays(today, -6) && toDay === today ? "success" : "neutral"}
           aria-pressed={fromDay === addDays(today, -6) && toDay === today}
           onClick={function () { setRange(addDays(today, -6), today); }}>Last 7 days</OutlineChip>
-        <OutlineChip as="button" tone={allTime ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={allTime ? "success" : "neutral"}
           aria-pressed={allTime}
           onClick={function () { setRange("", ""); }}>All time</OutlineChip>
       </div>
@@ -283,7 +290,7 @@ export function ActivityLogModal({
           const on = !!kinds[k];
           return (
             <OutlineChip
-              key={k} as="button" tone={on ? "success" : "neutral"}
+              key={k} as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={on ? "success" : "neutral"}
               aria-pressed={on}
               onClick={function () { toggleKind(k); }}
             >{KIND_LABEL[k]}</OutlineChip>
@@ -293,7 +300,7 @@ export function ActivityLogModal({
             run: every chip to its left narrows WHAT happened, this one narrows
             WHO did it — the same axis as the person dropdown above. */}
         <span aria-hidden="true" style={{ width: SP.wide }} />
-        <OutlineChip as="button" tone={peopleOnly ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={peopleOnly ? "success" : "neutral"}
           aria-pressed={peopleOnly}
           onClick={function () { setPeopleOnly(function (v) { return !v; }); }}
         >People only</OutlineChip>

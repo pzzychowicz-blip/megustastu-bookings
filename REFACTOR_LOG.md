@@ -27944,3 +27944,20 @@ the full card's header at 1180×1000. `tests/wa-inbox-layout.test.js`' W1 pin mo
 
 **Gate after phase 72:** `122.64 kB` gz main bundle (+0.02) · **1893 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 73. The Activity log's chips are the app's chip (X4)
+
+Round 2's X4: the Activity log's three quick-range chips and eleven filter chips (ten kinds and People
+only) were `OutlineChip`'s default micro size, 19.5px tall with 10px text, the smallest targets on a
+screen made of them. They take the shape Settings' pinned-country chips already had: `size="small"`
+(11px), `minHeight: H.chip` (28px) through one `CHIP_H` style, and the hover lift. The lift was also
+missing: `check:style`'s Rule 10 does not see an `OutlineChip as="button"`, so these fourteen had passed
+it without the class every other control carries. The gaps are unchanged (`SP.tight`).
+
+Live on DEV: before, all fourteen 19.5px with 10px text and no class; after, all fourteen 28px with
+11px text and `mgt-hover-scale`. At 991px the kind chips wrap to two rows at a 32px pitch; at 375px to
+three, with no horizontal scroll (the dialog's scrollWidth 375 of 375). `tests/minor-findings.test.js` +1.
+The main bundle does not move, because the modal is its own lazy chunk.
+
+**Gate after phase 73:** `122.64 kB` gz main bundle (unchanged) · **1894 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
