@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   COUNTRIES, countryByIso, splitPhone, joinPhone, dialLabel, cleanPinned,
-  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode,
+  matchesCountry, flagOf, DEFAULT_PINNED, phoneHasCode, withTypedCode, numberCleared,
 } from "../src/lib/phone-countries";
 import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
@@ -218,6 +218,27 @@ describe("withTypedCode — a code typed without the plus (v18.2.0 phase 20)", (
   });
 });
 
+// v18.2.0 phase 52. Measured on DEV, typing "+34 622 333 444" key by key: at
+// "+34" the picker took Spain and the box emptied; the SPACE then arrived in an
+// empty box, "no digits" read as "cleared", the found country was forgotten,
+// and the number went on without its code.
+describe("numberCleared — when a found country is forgotten (v18.2.0 phase 52)", () => {
+  it("is true when an edit takes the last digit out", () => {
+    expect(numberCleared("612 345 678", "")).toBe(true);
+    expect(numberCleared("6", "")).toBe(true);
+    expect(numberCleared("612", "-")).toBe(true);
+  });
+  it("is false for the space after a typed code: there was no number to clear", () => {
+    expect(numberCleared("", " ")).toBe(false);
+    expect(numberCleared("", "")).toBe(false);
+    expect(numberCleared(null, " ")).toBe(false);
+  });
+  it("is false while digits remain", () => {
+    expect(numberCleared("612", "61")).toBe(false);
+    expect(numberCleared("", "6")).toBe(false);
+  });
+});
+
 describe("where the detection runs (v18.2.0 phase 20)", () => {
   const App = read("src", "App.jsx");
   const Field = read("src", "components", "PhoneField.jsx");
@@ -237,7 +258,8 @@ describe("where the detection runs (v18.2.0 phase 20)", () => {
     // French number typed without its code saved as "+44 33 6 12 34 56 78".
     expect(Field).toMatch(/function onPick\(nextIso\) \{\s*setChosen\(nextIso\);\s*foundRef\.current = false;/);
     expect(Field).toMatch(/function forgetFound\(\) \{\s*if \(!foundRef\.current\) return;\s*foundRef\.current = false;\s*setChosen\(null\);/);
-    expect(Field).toMatch(/if \(!\/\\d\/\.test\(s\)\) forgetFound\(\);/);
+    // Phase 52: CLEARED means the box had digits and has none — see below.
+    expect(Field).toMatch(/if \(numberCleared\(national, s\)\) forgetFound\(\);/);
     // Both ways the field finds a country mark it as found.
     expect(Field.match(/foundRef\.current = true;/g) || []).toHaveLength(2);
   });

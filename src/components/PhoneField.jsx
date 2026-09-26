@@ -64,7 +64,7 @@ import { useState, useRef } from "react";
 import { SP } from "../lib/constants";
 import { mkInp } from "./atoms";
 import { CountryPicker } from "./CountryPicker";
-import { splitPhone, joinPhone, dialOf, withTypedCode } from "../lib/phone-countries";
+import { splitPhone, joinPhone, dialOf, withTypedCode, numberCleared } from "../lib/phone-countries";
 
 export function PhoneField({ value, onChange, pinned, inputProps, children, placeholder = "600 000 000" }) {
   const [chosen, setChosen] = useState(null);
@@ -125,7 +125,10 @@ export function PhoneField({ value, onChange, pinned, inputProps, children, plac
     // `iso` here is the one this render derived — possibly the country being
     // forgotten — so the join above already used it; clearing is the only case
     // that forgets, and a cleared box joins to "" whatever the country.
-    if (!/\d/.test(s)) forgetFound();
+    // Phase 52: CLEARING — the box had digits and has none. "No digits now"
+    // alone was also true of the space typed after "+34" (the box is empty once
+    // the picker takes the code), which forgot the country mid-number.
+    if (numberCleared(national, s)) forgetFound();
     onChange(next);
   }
   function onBoxBlur(e) {

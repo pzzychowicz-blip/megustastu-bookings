@@ -27431,3 +27431,26 @@ the sources before this phase.
 
 **Gate after phase 51:** `122.15 kB` gz main bundle (+0.02) · **1851 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 52. A space after the typed code keeps the country (phase 20's clearing)
+
+Found while setting up V-4's live check, which needed a phone typed into a new booking. Typed key by
+key on DEV, "+34 622 333 444" went: "+" and "+3" held in the box; at "4" the picker took Spain and the
+box emptied, as designed; at the SPACE the picker went back to "Code"; the digits then went in with no
+country. Phase 20 forgets a country the field found "when the number is cleared", and tested that as
+"the box has no digits now" — which is also true of a space typed into the box the picker has just
+emptied (or a dash, or a bracket). So a number typed as it is written lost its code at the first
+separator, and phase 19's Save check then refused it or the guest's history did not match.
+
+Cleared now means the box HAD digits and has none: `numberCleared(before, after)` in
+`lib/phone-countries.js`, pure and tested, called with the box's previous national part.
+
+Live on DEV, tablet, after a reload. Key by key: "+" → "+", "+3" → "+3", "+34" → Spain, box empty;
+the space → Spain still; "6" → Spain, "6"; the rest → Spain, "622 333 444". Leaving the box, the
+booking form offered the guest's own voucher ("This guest has voucher FFBV-JYT7 · 20 € left"), which it
+could not while the country was lost. Phase 20's case still holds: "44 7700 900123" became United
+Kingdom +44 on leaving the box, and emptying the box put the picker back to "Code".
+`tests/phone-countries.test.js` +3 (`numberCleared`); phase 20's pin follows the new condition.
+
+**Gate after phase 52:** `122.13 kB` gz main bundle (−0.02) · **1854 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.

@@ -208,6 +208,18 @@ export function joinPhone(iso, national) {
   return c ? dialLabel(c) + " " + n : n;
 }
 
+// ── numberCleared (v18.2.0 phase 52) ─────────────────────────────────────────
+// Did an edit of the number box CLEAR a number — digits before it, none after?
+// `PhoneField` forgets a country it found in the digits only then (phase 20).
+// It used to ask only "are there no digits now", which is also true of the
+// space typed after "+34": once the picker takes the code the box is empty, so
+// the space arrived in an empty box, the country was forgotten, and a number
+// typed as written — "+34 622 333 444" — was saved without its code, or
+// refused by Save (measured on DEV, key by key).
+export function numberCleared(before, after) {
+  return /\d/.test(String(before == null ? "" : before)) && !/\d/.test(String(after == null ? "" : after));
+}
+
 // ── phoneHasCode (v18.2.0 phase 19) ──────────────────────────────────────────
 // Does a phone string name its country? A "+" AHEAD of the digits, or an
 // international "00" — the same reading `normalizePhone` (lib/customers.js)
