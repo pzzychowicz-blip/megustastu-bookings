@@ -27798,3 +27798,34 @@ cannot drive one — and is worth one print on the Mac and the tablet. `tests/da
 
 **Gate after phase 65:** `122.11 kB` gz main bundle (+0.14) · **1872 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 66. British numbers typed the home way
+
+Patryk: a British number is 11 digits with a leading 0 dialled at home and +44 from abroad, and the
+automatic country-code detection must know it. It did not, on purpose: phase 20's `withTypedCode`
+refuses any number led by a 0 ("a trunk prefix, i.e. a national number"), and a test pinned "07700
+900123" as left alone. So "07911 123456" typed with no country stayed as typed and Save asked for the
+code, and a number typed as "+44 07911 …" was stored with the 0, a different customer from
+"+44 7911 …".
+
+Two rules in `withTypedCode`, which the phone field runs when you leave the box and `doSave` runs on a
+save by Enter:
+- a British MOBILE typed the home way (its digits `07` plus nine, not 070 personal numbers or 076
+  pagers) becomes +44 without its 0 when 🇬🇧 is pinned, phase 20's gate. Mobiles only, Patryk's pick:
+  the 01/02/03 landlines share their shape with German landlines (Berlin 030…, Cologne 0221…) and
+  Egyptian mobiles;
+- a home 0 kept after +44 ("+44 07911…", "+44 (0) 7911…", "0044 0…") is dropped whatever the pins,
+  since that code is explicit and nothing is guessed. A Crown dependency written that way lands on its
+  own code ("+44 01481…" → Guernsey).
+
+Every way of typing one British mobile now normalises to ONE customer identity (a test).
+
+Live on DEV, booking form, real keystrokes: "07911 123456" with no country → on leaving the box the
+picker read "United Kingdom +44" and the box "7911 123456"; "+44 07911 123456" → the picker took +44
+while it was typed and the box dropped the 0 on leaving it; "07700 900123" saved by Enter without
+leaving the box stored "+44 7700 900123" (read back from DEV Firebase; booking "UK Probe", 21:30
+today, left in place). `tests/phone-countries.test.js` +5, and phase 20's "07700 900123 is left alone"
+case now pins a German mobile instead.
+
+**Gate after phase 66:** `122.23 kB` gz main bundle (+0.12) · **1877 tests** (+5) · 0 lint errors, 90
+warnings (unchanged) · style OK.

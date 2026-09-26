@@ -193,7 +193,9 @@ describe("withTypedCode — a code typed without the plus (v18.2.0 phase 20)", (
     expect(withTypedCode("612 345 678", P)).toBe("612 345 678");
     // An Italian mobile starts "31", the Netherlands' code, and is 10 digits.
     expect(withTypedCode("3123456789", P)).toBe("3123456789");
-    expect(withTypedCode("07700 900123", P)).toBe("07700 900123");
+    // A German mobile, 11 digits led by its 0. (Phase 66 made the one
+    // exception: a BRITISH mobile, 07…, which this test pinned as untouched.)
+    expect(withTypedCode("0170 1234567", P)).toBe("0170 1234567");
   });
 
   it("only knows the PINNED countries", () => {
@@ -275,5 +277,58 @@ describe("where the detection runs (v18.2.0 phase 20)", () => {
     expect(save.indexOf("withTypedCode(")).toBeLessThan(save.indexOf('setErrorField("phone")'));
     // Not written back to the form: that would clear the error this save may set.
     expect(save.slice(0, save.indexOf('setErrorField("phone")'))).not.toMatch(/setForm\(/);
+  });
+});
+
+// v18.2.0 phase 66 (Patryk): a British number is 11 digits with a leading 0
+// dialled at home and +44 without it from abroad, and the automatic detection
+// must know it. Mobiles only (his call): the 01/02/03 landlines share their
+// shape with German landlines and Egyptian mobiles.
+describe("withTypedCode — the UK's own format (v18.2.0 phase 66)", () => {
+  const P = DEFAULT_PINNED;
+
+  it("gives a British mobile typed the home way its +44, without the 0", () => {
+    expect(withTypedCode("07911 123456", P)).toBe("+44 7911 123456");
+    expect(withTypedCode("07911123456", P)).toBe("+44 7911123456");
+    expect(withTypedCode("07700 900123", P)).toBe("+44 7700 900123");
+    expect(withTypedCode("(0)7911 123456", P)).toBe("+44 7911 123456");
+    expect(withTypedCode("079-1112-3456", P)).toBe("+44 79-1112-3456");
+  });
+
+  it("takes only a mobile's exact shape, and only with 🇬🇧 pinned", () => {
+    expect(withTypedCode("07011 123456", P), "070: personal numbers").toBe("07011 123456");
+    expect(withTypedCode("07611 123456", P), "076: pagers").toBe("07611 123456");
+    expect(withTypedCode("0791 112345", P), "10 digits").toBe("0791 112345");
+    expect(withTypedCode("079111234567", P), "12 digits").toBe("079111234567");
+    expect(withTypedCode("020 7946 0958", P), "a London landline").toBe("020 7946 0958");
+    expect(withTypedCode("030 12345678", P), "Berlin, same shape as a UK 03").toBe("030 12345678");
+    expect(withTypedCode("07911 123456", ["ES", "DE"])).toBe("07911 123456");
+    expect(withTypedCode("07911 123456", undefined)).toBe("07911 123456");
+  });
+
+  it("drops the home 0 kept after +44, whatever is pinned", () => {
+    expect(withTypedCode("+44 07911 123456", P)).toBe("+44 7911 123456");
+    expect(withTypedCode("+44 (0) 7911 123456", P)).toBe("+44 7911 123456");
+    expect(withTypedCode("+4407911123456", [])).toBe("+44 7911123456");
+    expect(withTypedCode("0044 07911 123456", [])).toBe("+44 7911 123456");
+    // A Crown dependency written the same way lands on its own code.
+    expect(withTypedCode("+44 01481 234567", P)).toBe("+44 1481 234567");
+    expect(splitPhone("+44 1481 234567").iso).toBe("GG");
+  });
+
+  it("leaves a number that is already right, or not British, alone", () => {
+    expect(withTypedCode("+44 7911 123456", P)).toBe("+44 7911 123456");
+    expect(withTypedCode("+34 612 345 678", P)).toBe("+34 612 345 678");
+    expect(withTypedCode("+39 06 1234 5678", P), "Italy keeps its 0 after the code").toBe("+39 06 1234 5678");
+  });
+
+  it("files every way of typing one British mobile under ONE customer", () => {
+    const one = normalizePhone("+44 7911 123456");
+    // "0044 …" reaches this function as "+44 …": the phone field's joinPhone
+    // stores an international "00" as "+" while it is typed.
+    expect(joinPhone("GB", "0044 7911 123456")).toBe("+44 7911 123456");
+    for (const typed of ["07911 123456", "+44 07911 123456", "+44 7911 123456", "44 7911 123456"]) {
+      expect(normalizePhone(withTypedCode(typed, P)), typed).toBe(one);
+    }
   });
 });

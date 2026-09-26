@@ -260,10 +260,38 @@ export function phoneHasCode(phone) {
 // The longest matching code wins, as in `splitPhone`, so a pinned Guernsey
 // (44 1481) beats the UK. Returns the number with its code ("+44 7700
 // 900123", via `joinPhone`), or the input unchanged when nothing applies.
+//
+// v18.2.0 phase 66 (Patryk): the UK's own format is recognised. A British
+// number is 11 digits with a leading 0 dialled at home ("07911 123456") and
+// +44 without that 0 from abroad ("+44 7911 123456"). Two rules, and the 0
+// rule above still holds for everything else:
+//   • a British MOBILE typed the home way — 07 and nine more digits, not 070
+//     (personal numbers) or 076 (pagers) — becomes +44 without its 0, when
+//     🇬🇧 is pinned (the phase-20 gate). Mobiles only, Patryk's call: the
+//     01/02/03 landlines share their shape with German landlines (Berlin 030…,
+//     Cologne 0221…) and Egyptian mobiles, so reading them as British would
+//     re-code a German guest's number;
+//   • "+44 07911…" — the home 0 kept after the code, as people write it
+//     ("+44 (0)7911…") — loses that 0. Here the code is explicit, so nothing
+//     is guessed and no pin is asked for. "0044 0…" is the same number.
+// Both return the international form, so a British guest has ONE customer
+// identity (`normalizePhone`) however their number was typed.
+const UK_MOBILE_AT_HOME = /^07[1-57-9]\d{8}$/;
 export function withTypedCode(phone, pinned) {
   const s = phone == null ? "" : String(phone).trim();
-  if (!s || phoneHasCode(s)) return phone;
+  if (!s) return phone;
+  if (phoneHasCode(s)) {
+    if (dialOf(s) !== "44") return phone;
+    const sp = splitPhone(s, "GB");
+    if (sp.iso !== "GB" || sp.national.charAt(0) !== "0") return phone;
+    return joinPhone("GB", sp.national.replace(/^0[\s\-().]*/, ""));
+  }
   const digits = s.replace(/\D/g, "");
+  const gbPinned = (pinned || []).some(function (x) { return String(x).toUpperCase() === "GB"; });
+  if (gbPinned && UK_MOBILE_AT_HOME.test(digits)) {
+    // The trunk 0 is the first digit; the rest keeps its own spacing.
+    return joinPhone("GB", s.slice(s.indexOf("0") + 1).replace(/^[\s\-().]+/, ""));
+  }
   if (digits.length < 11 || digits.charAt(0) === "0") return phone;
   const hit = (pinned || []).map(countryByIso).filter(Boolean)
     .filter(function (c) { return digits.slice(0, c.dial.length) === c.dial; })
