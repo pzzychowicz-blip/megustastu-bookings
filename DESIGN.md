@@ -374,8 +374,11 @@ explaining why is usually the one to read.
   remove button's red × (`X_BTN`); it is the stepper's neutral now (`CANCEL_X`).
 - **A paused item fades its TEXT, never its controls (v18.2.0, S5).** A paused
   reminder drew its whole card at 55%, so Edit and Delete looked disabled while
-  both worked; now the words fade and an outline "Paused" tag says the state,
-  as standing bookings already did.
+  both worked; now the words fade and an outline "Paused" tag says the state.
+  **Phase 55 (L-3) made it ONE look**: standing bookings, one tab over, faded
+  the name alone (to 0.5) and appended "· paused" to the schedule — the
+  sentence above once cited them as the precedent. Both lines now fade to
+  `PAUSED_FADE` (0.55, atoms) and carry the same tag.
 - **A selected SEGMENT is lifted, not filled (v18.2.0).** The header's
   Timeline/List/Plan were three solid pills with the active one solid accent —
   the same blue as "+ New" beside them, so "where I am" and "what I can do"

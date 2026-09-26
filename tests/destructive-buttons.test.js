@@ -183,6 +183,20 @@ describe("a paused reminder fades its text, never its buttons", () => {
     expect(Reminders).toMatch(/<span style=\{\{ opacity: r\.active \? 1 : PAUSED_FADE \}\}>\{r\.text\}<\/span>/);
     expect(Reminders).toMatch(/\{r\.active \? null : <OutlineChip tone="neutral"[^>]*>Paused<\/OutlineChip>\}/);
   });
+
+  // v18.2.0 phase 55 (round 3's L-3): a paused standing booking faded its name
+  // alone (to 0.5) and appended " · paused" — a second look for the same state
+  // one tab away. It takes the reminder's, from ONE constant in atoms.
+  it("a paused standing booking looks the same: both lines faded, and the tag", () => {
+    expect(Atoms).toMatch(/export const PAUSED_FADE = 0\.55;/);
+    expect(Settings).toMatch(/<span style=\{\{ opacity: r\.active !== false \? 1 : PAUSED_FADE \}\}>\{\(r\.name \|\| "\(no name\)"\) \+ " · " \+ guestsLabel\(r\.size\)\}<\/span>/);
+    expect(Settings).toMatch(/\{r\.active !== false \? null : <OutlineChip tone="neutral"[^>]*>Paused<\/OutlineChip>\}/);
+    expect(Settings).toMatch(/opacity: r\.active !== false \? 1 : PAUSED_FADE \}\}>\{"Every " \+ \(RULE_WD\[r\.weekday\] \|\| "\?"\) \+ " at " \+ r\.time\}/);
+    expect(Settings).not.toMatch(/" · paused"/);
+    // Phase 28 had typed the constant between `export` and the card.
+    expect(Reminders).not.toMatch(/const PAUSED_FADE/);
+    expect(Reminders).toMatch(/export function ReminderListItem\(/);
+  });
 });
 
 // v18.2.0 phase 36 (X5): "Clear" empties a table selection and destroys

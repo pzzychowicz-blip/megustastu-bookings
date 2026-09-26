@@ -20,14 +20,14 @@
 // since v18.0.0 session 7's /code-review).
 
 import { BTN, R, T, FW } from "../lib/constants";
-import { Toggle, mkBtn, mkDangerBtn, OutlineChip } from "./atoms";
+import { Toggle, mkBtn, mkDangerBtn, OutlineChip, PAUSED_FADE } from "./atoms";
 import { WEEKDAY_SHORT, formatDay } from "../lib/day";
 
 // ── One reminder card ────────────────────────────────────────────────────────
-export // A paused reminder's text, faded — never its buttons, which still work.
-const PAUSED_FADE = 0.55;
-
-function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
+// v18.2.0 phase 55: PAUSED_FADE moved to atoms (standing bookings share it).
+// Phase 28 had typed it between `export` and this function, which exported
+// the number and quietly un-exported the card.
+export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
   const r = reminder;
   const rec = r.recurrence || {};
   let recText = "";
@@ -65,8 +65,8 @@ function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
       {/* v18.2.0 (the design critique, S5): a paused reminder fades its TEXT
           and says "Paused". The whole card was at 55%, Edit and Delete with
           it, so two buttons that work looked disabled (both measured
-          `disabled` false). Standing bookings in General already did it this
-          way: the name faded, the state in words beside it. */}
+          `disabled` false). Standing bookings in General take the same look
+          since phase 55 (they faded the name only and appended "· paused"). */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 2, wordBreak: "break-word" }}>

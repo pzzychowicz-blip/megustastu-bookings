@@ -27493,9 +27493,31 @@ plain space on both sides, or a typed "Thu 24.09" would have found nothing.
 Live on DEV, tablet. The waitlist panel's title read "Waitlist — Sat<NBSP>26.09", its sizes
 "4<NBSP>guests" and "6<NBSP>guests", and Book's name "Book (Wait Probe Ana, 4<NBSP>guests)". The
 Activity log shows "Thu<NBSP>24.09" (and no plain-space form); searching "24.09" found 4 of 500
-entries, "thu 24.09" typed with a plain space 4, and with a no-break space 4. Twenty-nine expected
-strings across `date-format`, `party-size`, `booking-logic`, `list-card` and `vouchers` now carry the
-escape; +3 tests (no plain space inside either, and the search's fold).
+entries, "thu 24.09" typed with a plain space 4, and with a no-break space 4. Thirty-four expectation
+lines across `date-format`, `party-size`, `booking-logic`, `list-card` and `vouchers` now carry the
+escape (§55 corrects the count first written here); +3 tests (no plain space inside either, and the
+search's fold).
 
 **Gate after phase 54:** `122.12 kB` gz main bundle (±0) · **1860 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 55. A paused standing booking looks like a paused reminder (L-3)
+
+Settings had two looks for "paused", one tab apart. A paused reminder (phase 28) fades its words to
+0.55 and carries an outline "Paused" tag; a paused standing booking faded its name alone, to 0.5, and
+appended "· paused" to its schedule line — the treatment phase 28's own comment had cited as the
+precedent. Standing bookings take the reminder's look: both lines at `PAUSED_FADE` and the same tag,
+with the switch and Delete at full strength. `PAUSED_FADE` moved to atoms so the two share one value.
+
+Moving it found phase 28's slip: the constant had been typed between `export` and `function
+ReminderListItem`, which exported the number and quietly un-exported the card. Nothing imported
+either, so nothing broke; the card is exported again.
+
+Live on DEV, "test standing" (Fri 13:00) paused and then switched back on. Tablet: the name and the
+schedule both at an effective opacity of 0.55, the "Paused" tag at 1, the switch and Delete at 1, and
+no "· paused" in the row's text. Phone, dark: the same, nothing wider than the 309px row, no page
+scroll. `tests/destructive-buttons.test.js` +1. §54's count of changed expectations is corrected here
+(34 lines, not "twenty-nine strings").
+
+**Gate after phase 55:** `122.09 kB` gz main bundle (−0.03) · **1861 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.

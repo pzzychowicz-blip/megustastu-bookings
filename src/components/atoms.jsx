@@ -1795,6 +1795,14 @@ export function TBadge({ id }) {
   );
 }
 
+// ── PAUSED_FADE — a paused thing's TEXT (v18.2.0 phases 28 and 55) ───────────
+// A paused reminder and a paused standing booking fade their words to this and
+// carry an outline "Paused" tag (OutlineChip, neutral) beside the name — never
+// the whole card, whose switch and buttons still work. ONE value, because the
+// two lists sit one tab apart in Settings and were two different looks (the
+// design critique's L-3).
+export const PAUSED_FADE = 0.55;
+
 // ── OutlineChip — the standalone count / disclosure chip (v17.15.0) ─────────
 // DESIGN.md's OUTLINE treatment: no fill, a 2px border in the semantic hue,
 // text in the same family. Customers' "3 visits" / "1 no-show", the booking

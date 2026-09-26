@@ -30,7 +30,7 @@ import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, PAUSED_FADE } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
 // v18.2.0: how TabBar lays its tabs out.
 import { tabColumns } from "../lib/tab-rows";
@@ -1004,9 +1004,16 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 // it in the 600px-and-up card.
                 return (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+                    {/* Phase 55 (round 3's L-3): a paused rule looks like a
+                        paused reminder one tab over — BOTH lines at PAUSED_FADE
+                        and an outline "Paused" tag. It faded the name alone (to
+                        0.5) and appended " · paused" to the schedule. */}
                     <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + guestsLabel(r.size)}</div>
-                      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>
+                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
+                        <span style={{ opacity: r.active !== false ? 1 : PAUSED_FADE }}>{(r.name || "(no name)") + " · " + guestsLabel(r.size)}</span>
+                        {r.active !== false ? null : <OutlineChip tone="neutral" style={{ marginLeft: 8, verticalAlign: "middle" }}>Paused</OutlineChip>}
+                      </div>
+                      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)", opacity: r.active !== false ? 1 : PAUSED_FADE }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0, marginLeft: "auto", minWidth: RULE_ACTIONS_W }}>
                       {/* v17.15.4: the ONE Toggle in the app that repeats. A
