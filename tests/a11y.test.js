@@ -552,6 +552,28 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "on this view the FILL is the state — without a name a screen reader " +
       "meets a room of identical buttons");
   });
+
+  // v18.2.0 phase 57 (round 3's A-2). Measured on DEV: the table popover's
+  // booking rows were <div>s with onClick, and the popover is portalled to the
+  // end of <body> with nothing moving focus into it — a keyboard could open it
+  // (Enter on the table) and do nothing with it.
+  it("the table popover's bookings are buttons, and a keyboard open moves focus in", () => {
+    has(Plan, "row is a button", /<button type="button" key=\{b\.id\} className="mgt-hover-scale"/,
+      "a booking row opens the edit form, so it is a control");
+    has(Plan, "row names its booking, time first", /aria-label=\{b\.time \+ " " \+ \(b\.name \|\| "\(no name\)"\) \+ ", " \+ guestsLabel\(b\.size\) \+ ", " \+ b\.status\}/,
+      "the visible text leads (Label in Name), and the size ring's bare number is said as guests");
+    has(Plan, "focus in, on a KEY open only", /const first = popByKeyRef\.current && popRef\.current && popRef\.current\.querySelector\("button"\);/,
+      "after a tap, script focus drew a ring on the first booking (a table cancels its own mousedown focus)");
+    has(Plan, "a key open is recorded", /popByKeyRef\.current = !!e && \(e\.type === "keydown" \|\| e\.detail === 0\);/,
+      "TableGlyph hands Enter/Space to onClick as the KeyboardEvent");
+    has(Plan, "Escape closes it, before the global handler", /window\.addEventListener\("keydown", onKey, true\);/,
+      "a capture listener, stopped — QuickStatusPopup's click-opened shape");
+    // Leaving for a form refocuses the table IN the handler: the commit that
+    // opens the form makes the page `inert`, where focus() does nothing, and
+    // the form then returned focus to <body> (measured, StrictMode off).
+    expect(count(Plan, /onClick=\{\(\) => \{ leavePop\(\); on(?:Edit\(b\)|Walkin\(id\)); \}\}/g)).toBe(2);
+    expect(Plan).not.toMatch(/<div key=\{b\.id\} className="mgt-hover-scale"\s+onClick/);
+  });
 });
 
 describe("focusable content must not scroll under the finger", () => {

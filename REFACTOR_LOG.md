@@ -27550,3 +27550,35 @@ and the Customers pair); phase 38's tier-stepper pin follows the new attribute.
 
 **Gate after phase 56:** `122.09 kB` gz main bundle (±0) · **1864 tests** (+3) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 57. The Plan view's table popover works from the keyboard (A-2)
+
+A table on the floor plan is a button, and Enter opens its popover — which listed the table's
+bookings as `<div>`s with onClick, no role and no tab stop. The popover is portalled to the end of
+`<body>` and nothing moved focus into it, so a keyboard user could open it and do nothing there; even
+"Walk-in here", a real button, came after every other control on the page.
+
+The rows are `<button>`s now, named with their visible text first — "20:00 Ana, 2 guests, confirmed"
+(the size ring alone would have read as a bare "2"). A popover opened by a KEY takes focus to its
+first row, Escape closes it (a capture listener on window, stopped), and focus returns to the table:
+the List ⋯ popup's click-opened shape. Two findings came out of verifying it:
+
+- **A tap must not move focus in.** A table cancels its own mousedown focus (the `tabIndex` gotcha),
+  so after a tap Chrome counted the script focus as keyboard focus and drew a ring round the first
+  booking on every tap (`:focus-visible` true); the List's ⋯ shows none, because its button took the
+  tap's focus. Focus moves in only on `keydown` or a click with `detail` 0 (assistive technology).
+- **Leaving for a form refocuses the table in the handler.** Picking a row returned focus to `<body>`
+  when the edit form closed — with StrictMode off, so not the CT-2C-02 artefact that looks the same. A
+  focusin log showed why: row → dialog → body. The effect's cleanup does hand focus back, but the
+  commit that mounts the form also marks the page `inert`, where `focus()` does nothing; the form's
+  `useDialog` then recorded `<body>`. `leavePop()` refocuses the table before the state changes. A
+  Gotchas row in `src/CLAUDE.md` records the pair.
+
+Live on DEV, tablet, table 3 (three bookings) with real keys. Enter on the table → the first row
+focused ("18:00 YE seated, 2 guests, seated"); Tab → the second; Escape → closed, focus on table 3.
+Enter on the second row → "Edit booking" for YE confirmed; Escape → focus back on table 3 (StrictMode
+off; with it on, DEV loses the restore as CT-2C-02 records). A real mouse click → the popover open,
+focus left on `<body>`, no ring; Escape still closes it. `tests/a11y.test.js` +1.
+
+**Gate after phase 57:** `122.27 kB` gz main bundle (+0.18) · **1865 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.

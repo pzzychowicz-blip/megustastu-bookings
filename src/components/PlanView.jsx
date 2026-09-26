@@ -40,7 +40,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -248,6 +248,52 @@ export const PlanView = memo(function PlanView({
   const [tablePop, setTablePop] = useState(null);   // table id → booking-list popover
   const [quick, setQuick] = useState(null);         // booking → QuickStatusPopup
 
+  // v18.2.0 phase 57 (round 3's A-2): the table popover, reached from the
+  // keyboard. A table is a button (Enter opens this), but the popover is
+  // portalled to the END of <body> and nothing moved focus into it, so its
+  // booking rows — which were <div>s with onClick, no role and no tab stop —
+  // could not be reached at all, and even "Walk-in here" came after every other
+  // control on the page. QuickStatusPopup's click-opened shape: focus to the
+  // first button, Escape closes (a capture listener on window, stopped), focus
+  // back to what had it. Focus moves in only when a KEY opened it (Enter or
+  // Space on the table, or an assistive technology's click, `detail` 0): a
+  // table cancels its own mousedown focus (the tabIndex gotcha), so after a
+  // tap Chrome counts script focus as keyboard focus and drew a ring round the
+  // first booking on every tap (measured, `:focus-visible` true) — the List's
+  // ⋯ popup shows none, because its button took the tap's focus.
+  const popRef = useRef(null);
+  const popOpenerRef = useRef(null);
+  const popByKeyRef = useRef(false);
+  useEffect(function () {
+    if (!tablePop) return undefined;
+    const opener = document.activeElement;
+    popOpenerRef.current = opener;
+    const first = popByKeyRef.current && popRef.current && popRef.current.querySelector("button");
+    if (first) first.focus({ preventScroll: true });
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      e.preventDefault();
+      setTablePop(null);
+    }
+    window.addEventListener("keydown", onKey, true);
+    return function () {
+      window.removeEventListener("keydown", onKey, true);
+      if (opener && document.contains(opener) && typeof opener.focus === "function") opener.focus({ preventScroll: true });
+    };
+  }, [tablePop]);
+  // Leaving the popover for a FORM (a booking row, "Walk-in here") hands focus
+  // back to the table HERE, in the handler. The cleanup above is too late for
+  // that path: the commit that opens the form marks the page behind it `inert`,
+  // where focus() does nothing, so the form's Overlay found <body> focused — the
+  // picked row had just been removed — and returned focus there on close
+  // (measured with StrictMode off: focus went row → dialog → body).
+  function leavePop() {
+    const o = popOpenerRef.current;
+    if (o && document.contains(o) && typeof o.focus === "function") o.focus({ preventScroll: true });
+    setTablePop(null);
+  }
+
   // ── Zoom / pan (transform on the inner <g>) ─────────────────────────────────
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
   const svgRef = useRef(null);
@@ -407,16 +453,20 @@ export const PlanView = memo(function PlanView({
     return createPortal(
       <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
         style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
-        <div onClick={(e) => e.stopPropagation()} className="mgt-card-in"
+        <div ref={popRef} onClick={(e) => e.stopPropagation()} className="mgt-card-in"
           style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
           {queue.length === 0 ? (
             <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
           ) : queue.map((b) => {
+            // Phase 57: a BUTTON, named by what it shows, time first ("20:00
+            // Ana, 2 guests, confirmed") — its content would have read the
+            // size ring as a bare "2".
             return (
-              <div key={b.id} className="mgt-hover-scale"
-                onClick={() => { setTablePop(null); onEdit(b); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+              <button type="button" key={b.id} className="mgt-hover-scale"
+                onClick={() => { leavePop(); onEdit(b); }}
+                aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
                 <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
                 {/* v18.2.0 phase 43 (C2): the party size as the List card's
@@ -435,13 +485,13 @@ export const PlanView = memo(function PlanView({
                     named a status with a word while the block behind it named
                     the same status with a mark. */}
                 <SBadge status={b.status} />
-              </div>
+              </button>
             );
           })}
           {canWalkin ? (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
               <button className="mgt-hover-scale"
-                onClick={() => { setTablePop(null); onWalkin(id); }}
+                onClick={() => { leavePop(); onWalkin(id); }}
                 style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
             </div>
           ) : null}
@@ -618,7 +668,7 @@ export const PlanView = memo(function PlanView({
                   // passes no shapeStyle. Any inline transition on an element
                   // that also has a class-driven one must name both properties.
                   shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status + ", filter " + M.tap }}
-                  onClick={() => { if (!movedRef.current) setTablePop(t.id); }}
+                  onClick={(e) => { if (!movedRef.current) { popByKeyRef.current = !!e && (e.type === "keydown" || e.detail === 0); setTablePop(t.id); } }}
                   onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
                   onContextMenu={(ev) => {
                     ev.preventDefault(); ev.stopPropagation();
