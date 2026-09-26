@@ -520,6 +520,8 @@ explaining why is usually the one to read.
   line is a record, so it is never re-written; `formatDaysIn` writes its dates
   the house way on the way to the screen, the Activity log's search matches
   what it shows, and the CSV export stays ISO because a spreadsheet sorts it.
+  So does a file's NAME, so a folder sorts by day: `mgt-backup-…`, `mgt-activity-…`
+  and, since phase 65, the printed Day sheet's `mgt-day-sheet-YYYY-MM-DD`.
   Two things stay as they are: the native date input (the browser draws it)
   and the day announcement, "Thursday 24 September", which a screen reader
   says aloud. **A column of dates is as wide as its widest date** (`showsYear`

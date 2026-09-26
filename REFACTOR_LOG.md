@@ -27773,3 +27773,28 @@ nothing moves the switcher.
 
 **Gate after phase 64:** `121.97 kB` gz main bundle (−0.36) · **1870 tests** (−10: −11, +1) · 0 lint
 errors, 90 warnings (unchanged) · style OK.
+
+### 65. The Day sheet prints under its own day
+
+Patryk: the printed Day sheet's file must contain its date, and its "Pax" column must read "Guests".
+The column is phase 38's (C2), which renamed it and the sheet's waitlist lines; `main` still prints
+"Pax", which is what a sheet printed from production shows. Only the header comment still said "Pax",
+and it is corrected.
+
+The file name: a browser names a print-to-PDF after `document.title`, and the title was the app's name,
+so every day's sheet saved as "MGT Bookings". `DaySheet`, which is always mounted, sets the title to
+`mgt-day-sheet-YYYY-MM-DD` on `beforeprint` and restores it on `afterprint` (or in the effect's cleanup,
+should the day change or the sheet unmount mid-print). Both the Summary's "Print day sheet" and the
+browser's own ⌘P fire them, and both print this sheet, since the print stylesheet hides `#root`. ISO,
+Patryk's pick, in the shape of the app's two other files (`mgt-backup-…`, `mgt-activity-…`), so a folder
+of sheets sorts by day; DESIGN.md's one-date-format rule records file names beside the CSV as an ISO
+exception. A date that is not canonical (a booking's stored date can reach `viewDate` verbatim) names
+no day rather than a broken one.
+
+Live on DEV: firing `beforeprint` set "mgt-day-sheet-2026-09-26", `afterprint` restored "MGT Bookings",
+and after stepping to the next day the title read "mgt-day-sheet-2026-09-27"; the sheet's third column
+header reads "Guests". What a real print dialog proposes as the file name was not observed — automation
+cannot drive one — and is worth one print on the Mac and the tablet. `tests/date-format.test.js` +2.
+
+**Gate after phase 65:** `122.11 kB` gz main bundle (+0.14) · **1872 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

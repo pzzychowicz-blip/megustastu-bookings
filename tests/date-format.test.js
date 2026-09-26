@@ -291,3 +291,20 @@ describe("a column of dates is as wide as its widest date", () => {
     expect(read("components/ActivityLogModal.jsx")).toMatch(/const dateCol = showDate && shown\.some\(function \(r\) \{ return showsYear\(localDay\(r\.at\)\); \}\) \? 84 : 54;/);
   });
 });
+
+// v18.2.0 phase 65 (Patryk): the printed Day sheet's file must carry its date.
+// A browser names a print-to-PDF after document.title — "MGT Bookings" for
+// every day. Measured on DEV: firing beforeprint set "mgt-day-sheet-2026-09-26"
+// (the viewed day), afterprint put "MGT Bookings" back, and the next day read
+// "mgt-day-sheet-2026-09-27".
+describe("phase 65 — the Day sheet prints under its own day", () => {
+  const Sheet = read("components/DaySheet.jsx");
+  it("names the file in the shape of the app's other files, ISO so a folder sorts by day", () => {
+    expect(Sheet).toMatch(/return \/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(date \|\| ""\) \? "mgt-day-sheet-" \+ date : "mgt-day-sheet";/);
+  });
+  it("sets the title only while printing, for the button and for ⌘P alike, and puts it back", () => {
+    expect(Sheet).toMatch(/window\.addEventListener\("beforeprint", before\);\s*window\.addEventListener\("afterprint", after\);/);
+    expect(Sheet).toMatch(/function after\(\) \{ if \(prev !== null\) \{ document\.title = prev; prev = null; \} \}/);
+    expect(Sheet).toMatch(/window\.removeEventListener\("afterprint", after\);\s*after\(\);/);
+  });
+});

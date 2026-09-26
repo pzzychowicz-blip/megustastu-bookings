@@ -330,7 +330,7 @@ Admin (*may you*). Customers, App and Shortcuts are always there. (Shortcuts its
 | The Integrations section | **integrations panel** (`AdminSettings.jsx`) | Names the server-side keys (Meta, Gemini, the service account) and where they live: **the deployment's environment variables, never this database**. `.read` is `auth != null` at the root and read permission cascades down, so a key stored here would be readable by every member of staff. **Since v18.0.0 phase 5 it also says WHETHER each is set**, from `/api/wa-config` — a boolean per key, never a value. **THREE states, and the third is the point**: `· set`, `· not set`, and a bare key name meaning *we could not ask*, which is what a local dev server produces since it runs no serverless functions. A panel about secrets must never render "not set" for a key it never enquired about. |
 | "Enforce roles" | **role enforcement** (`settings/admin.enforceRoles`) | Ships **off**, so the app behaves exactly as before until it is switched on. Off is also what makes the rules deploy rolling-safe. |
 | A person who has been invited but never signed in | **pending invitation** (`/invites/{id}`) | Waits on the People list. It grants nothing by itself — an admin applies it in one tap once that person signs in. |
-| Printable sheet | **day sheet** (`DaySheet.jsx`) | Print-only DOM, hard-coded light. |
+| Printable sheet | **day sheet** (`DaySheet.jsx`) | Print-only DOM, hard-coded light. Prints under the name `mgt-day-sheet-YYYY-MM-DD` (v18.2.0 phase 65: the page title while printing, which is what a PDF is saved as). |
 
 ---
 
