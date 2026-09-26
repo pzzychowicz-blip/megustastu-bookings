@@ -22,6 +22,16 @@
 // on a phone and keep to the right edge (`marginLeft: auto`); the tablet's
 // 563px row holds 160px of text beside the armed group, so it is unchanged.
 //
+// v18.2.0 phase 51: the group RESERVES its armed width (`ACTIONS_W`). Phase
+// 41's basis let the line wrap on the group's CURRENT width, and arming widens
+// Remove 77 → 140px, so between about 405 and 468px (a 430px iPhone) the group
+// sat beside the text at rest and wrapped a line down when armed: Remove moved
+// 27px under the finger and the second tap landed on the text. Reserved, the
+// row wraps the same way in both states: under the text on every phone, beside
+// it on the tablet, and arming grows Remove leftwards into space that was
+// already empty. Nothing else moves either — the text keeps its width, where it
+// lost 63px and re-wrapped (Patryk's pick over keeping it 321px at rest).
+//
 // Props:
 //   entries        — the day's waiting entries, sorted createdAt asc (parent)
 //   availability   — { [entryId]: {tables:[…], time:"HH:MM"} | null }
@@ -36,6 +46,16 @@ import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
+
+// The button group's ARMED width: Book (60.3) + the 6px gap + "Confirm —
+// remove" (140.1) = 206.4, measured at T.body in the app's font (San Francisco
+// on the Mac), rounded up. Every pixel above it is a pixel of text on the
+// tablet: 5% of slack cost the first DEV row a fourth line. A system font that
+// sets the label wider takes the difference out of the text when armed; it
+// cannot re-wrap the group on a phone, where a 440px screen leaves 29px before
+// the row would share its line. Re-measure if the labels, T.body or mkBtn's
+// padding change.
+const ACTIONS_W = 207;
 
 function addedLabel(ts){
   if(!ts) return "";
@@ -63,7 +83,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
       <div
         key={w.id}
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
-          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto"}}><button
+          style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{fitChip}</div><div style={{fontSize: T.body,color:S.muted,marginTop:2}}>{(w.phone?formatPhone(w.phone)+"  ·  ":"")+"added "+addedLabel(w.createdAt)+(w.prefTime?"  ·  wants "+w.prefTime:"")}</div>{w.notes?<div style={{fontSize: T.body,color:S.muted,marginTop:2,fontStyle:"italic"}}>{w.notes}</div>:null}</div><div style={{display:"flex",gap:6,flexShrink:0,marginLeft:"auto",justifyContent:"flex-end",minWidth:ACTIONS_W}}><button
             className="mgt-hover-scale"
             aria-label={"Book ("+party+")"}
             style={mkBtn({fontSize: T.body,background:"var(--app-success-solid)",minHeight:36})}

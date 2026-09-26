@@ -45,6 +45,13 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 
+// v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
+// armed width, as the waitlist panel's Book + Remove do (its ACTIONS_W says
+// why): the switch (48) + 8 + "Confirm — delete" (125.5) = 181.5, measured at
+// T.body on the Mac, rounded up. Re-measure if the label, T.body or the
+// button's padding changes.
+const RULE_ACTIONS_W = 182;
+
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
 // can import them WITHOUT pulling this whole (now lazy-loaded) module into the
@@ -984,32 +991,45 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 // v18.2.0 phase 42: the rule's identity, written once — the
                 // switch and the Delete both name it, so they cannot disagree.
                 const ruleWho = (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time;
+                // Phase 51 (round 3's L-2): the text takes a 200px basis — a
+                // typical "Name · 4 guests" line — and the controls wrap under
+                // it as ONE right-anchored group of reserved width. With
+                // `flex: 1` (a zero basis) nothing ever wrapped, so on a 375px
+                // phone the armed "Confirm — delete" took the name down to 97px
+                // and two lines. A basis alone would have moved Delete a line
+                // down on the first tap there (the line held 162px of text
+                // beside the resting 61px Delete, not beside the armed 126); the
+                // reserve makes both states wrap alike: under the text on every
+                // phone (a 440px one is 38px short of sharing the line), beside
+                // it in the 600px-and-up card.
                 return (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + guestsLabel(r.size)}</div>
                       <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>
                     </div>
-                    {/* v17.15.4: the ONE Toggle in the app that repeats. A
-                        static label would give every rule in the list the same
-                        name, which is the defect this version fixes reappearing
-                        one level down — so it carries the rule's own identity,
-                        the two lines to its left. Not " · paused": that is the
-                        state, and aria-checked already says it. */}
-                    <Toggle
-                      label={"Standing booking: " + ruleWho}
-                      on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
-                    {/* v18.2.0 (S6): the rows' shared look — the danger tint,
-                        solid red only once armed — and the armed label says
-                        what the second tap does, as People's Remove does.
-                        Phase 42: and it names its rule, as Templates' Delete
-                        names its template — two rules were two buttons both
-                        called "Delete" (measured on DEV). */}
-                    <button
-                      aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
-                      onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
-                      className="mgt-hover-scale mgt-press"
-                      style={mkDangerBtn(armed, { fontSize: T.body, minHeight: 32, padding: "4px 10px" })}>{armed ? "Confirm — delete" : "Delete"}</button>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0, marginLeft: "auto", minWidth: RULE_ACTIONS_W }}>
+                      {/* v17.15.4: the ONE Toggle in the app that repeats. A
+                          static label would give every rule in the list the same
+                          name, which is the defect this version fixes reappearing
+                          one level down — so it carries the rule's own identity,
+                          the two lines to its left. Not " · paused": that is the
+                          state, and aria-checked already says it. */}
+                      <Toggle
+                        label={"Standing booking: " + ruleWho}
+                        on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
+                      {/* v18.2.0 (S6): the rows' shared look — the danger tint,
+                          solid red only once armed — and the armed label says
+                          what the second tap does, as People's Remove does.
+                          Phase 42: and it names its rule, as Templates' Delete
+                          names its template — two rules were two buttons both
+                          called "Delete" (measured on DEV). */}
+                      <button
+                        aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
+                        onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
+                        className="mgt-hover-scale mgt-press"
+                        style={mkDangerBtn(armed, { fontSize: T.body, minHeight: 32, padding: "4px 10px" })}>{armed ? "Confirm — delete" : "Delete"}</button>
+                    </div>
                   </div>
                 );
               })}

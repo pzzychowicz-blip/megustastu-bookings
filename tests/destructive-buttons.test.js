@@ -37,7 +37,9 @@ describe("mkDangerBtn — quiet until armed", () => {
     expect(fn).not.toMatch(/--danger-border/);
   });
 
-  it("keeps mkBtn's geometry in both states, so arming never resizes it under the finger", () => {
+  // Its height and padding. The LABEL sets the width (Delete 61 → 126px), which
+  // is why a row reserves the armed width (phase 51, below).
+  it("keeps mkBtn's geometry in both states, so arming never changes its height", () => {
     expect(fn).toMatch(/return mkBtn\(Object\.assign\(armed/);
   });
 
@@ -124,6 +126,17 @@ describe("the rows' deletes are quiet, and red only at the confirmation", () => 
     expect(Settings).toMatch(/label=\{"Standing booking: " \+ ruleWho\}/);
     expect(Settings).toMatch(/aria-label=\{\(armed \? "Confirm — delete \(" : "Delete \("\) \+ ruleWho \+ "\)"\}/);
   });
+
+  // Phase 51 (round 3's L-2): the text had a zero basis, so on a 375px phone the
+  // armed "Confirm — delete" took the name down to 97px and two lines. The text
+  // takes a basis and the switch + Delete wrap under it as ONE group reserving
+  // the armed width (the waitlist panel's reason, below).
+  it("Standing bookings: the text has a basis, and the switch + Delete reserve the armed width", () => {
+    expect(Settings).toMatch(/<div style=\{\{ flex: "1 1 200px", minWidth: 0 \}\}>/);
+    expect(Settings).toMatch(/<div style=\{\{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0, marginLeft: "auto", minWidth: RULE_ACTIONS_W \}\}>[\s{}]*<Toggle\s+label=\{"Standing booking: " \+ ruleWho\}/);
+    // The switch 48 + 8 + "Confirm — delete" 125.5, measured.
+    expect(Number((Settings.match(/const RULE_ACTIONS_W = (\d+);/) || [])[1])).toBeGreaterThanOrEqual(182);
+  });
 });
 
 // v18.2.0 phase 41 (S6, reached live at last): the waitlist panel only opens
@@ -152,9 +165,15 @@ describe("the waitlist panel: Remove is quiet until armed", () => {
   // Measured on a 375px phone: with a zero basis the buttons took their width
   // out of the text — 129px of it, 67px once "Confirm — remove" widened the
   // group. With the basis they drop under the text (283px) and stay right.
-  it("gives the row's text a basis, so the buttons wrap under it on a phone", () => {
+  // Phase 51: and the group reserves its ARMED width. With the basis alone a
+  // 430px phone held the resting group beside the text and wrapped the armed
+  // one 27px down (measured), so the second tap missed Remove.
+  it("gives the row's text a basis and the buttons their armed width, so arming moves nothing", () => {
     expect(Waitlist).toMatch(/<div style=\{\{flex:"1 1 160px",minWidth:0\}\}>/);
-    expect(Waitlist).toMatch(/<div style=\{\{display:"flex",gap:6,flexShrink:0,marginLeft:"auto"\}\}>/);
+    expect(Waitlist).toMatch(/<div style=\{\{display:"flex",gap:6,flexShrink:0,marginLeft:"auto",justifyContent:"flex-end",minWidth:ACTIONS_W\}\}>/);
+    // Book 60.3 + 6 + "Confirm — remove" 140.1, measured. Below it, arming
+    // widens the group again and the wrap window reopens.
+    expect(Number((Waitlist.match(/const ACTIONS_W = (\d+);/) || [])[1])).toBeGreaterThanOrEqual(207);
   });
 });
 

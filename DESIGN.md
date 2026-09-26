@@ -342,7 +342,8 @@ explaining why is usually the one to read.
   it ("Confirm — remove", "Confirm — delete"), and where a row's delete opens a
   confirmation instead (a reminder, a table), the red is in THAT. `mkDangerBtn(armed)`
   in atoms, on mkBtn's geometry, so arming changes colour and label and never
-  the size under the finger. **Never a danger border at rest**: tint + a border
+  the height — the label does change the width (Delete 61 → 126px), which the
+  row has to plan for (below). **Never a danger border at rest**: tint + a border
   in the hue + text in a third shade is the banned shape below — phase 27
   shipped exactly that and phase 28 took the border off. The sentence saying
   what the second tap does sits UNDER the row, never above the button. Users:
@@ -352,7 +353,16 @@ explaining why is usually the one to read.
   gives the text a flex BASIS**, or on a phone the buttons take their width
   out of the text instead of wrapping under it — and the armed label is the
   widest state, so that is when it bites (measured on the waitlist: 67px of
-  text beside "Confirm — remove").
+  text beside "Confirm — remove"). **And its button group reserves the ARMED
+  width** (phase 51): a basis alone wraps the line on the group's CURRENT
+  width, so wherever the resting group fits beside the text and the armed one
+  does not, the first tap moves the button a line down and the second misses
+  it — measured on a 430px phone, 27px. Reserved (`minWidth` + `flex-end`), the
+  row wraps alike in both states, and arming grows the button leftwards into
+  space that was already empty, so nothing moves: not the button, not the
+  text, not the rows below. The reserve is the armed width measured and
+  rounded up (`ACTIONS_W`, `RULE_ACTIONS_W`); below it the window reopens,
+  and every pixel above it comes out of the text.
 - **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
   cells were `--bg-input` (half-transparent) over a translucent sheet, so the
   page behind the modal showed through and the timeline's orange blocks

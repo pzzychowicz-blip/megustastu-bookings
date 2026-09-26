@@ -27385,10 +27385,49 @@ new import carries its `.js`, and `tests/wa-sandbox-integrity.test.js`'s walk no
 Live on DEV, the same Thu 24.09. Tablet: the List read "+34 612345678", "+44 33612345678", "+34
 655443322" and five more in that shape; the Day sheet's eleven phone cells likewise. Phone: every
 number on one line (15px), the widest ending at x 254 of 375, no page scroll. The Day sheet's waitlist
-line was not exercised live — no waitlist entry on DEV has a phone — and is pinned in source.
+line could not be reached here — no waitlist entry on DEV had a phone — and was pinned in source; §51
+added one and it read "1. Wait Probe Ana · 4 guests · wants 20:30 · +34 612345678" (stored "+34 612
+345 678").
 `tests/customers.test.js` +2. `tests/phone-format.test.js` (3, new) pins the two sites and fails on
 any component that prints a stored phone raw; against the tree before this phase it flags ListView
 once and DaySheet twice.
 
 **Gate after phase 50:** `122.13 kB` gz main bundle (−0.02) · **1850 tests** (+5) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 51. An armed Delete moves nothing (L-2, and phase 41's waitlist rows)
+
+**L-2.** A standing-booking row's text was `flex: 1`, a zero basis, so its switch and Delete never
+wrapped: on a 375px phone the armed "Confirm — delete" (126px; "Delete" is 61) took the name down to
+97px, "test standing" / "· 2 guests" on two lines. The text now takes a basis.
+
+**The same measurement found phase 41's rows wrong.** A basis alone wraps the line on the button
+group's CURRENT width, and arming widens it. On the waitlist (Remove 77 → 140px), from about 405 to
+468px the resting group fitted beside the text and the armed one did not: on a 430px phone Remove sat
+beside the text at rest and wrapped 27px down when armed, so the second tap landed on the text. The
+standing row would have done the same at 375px, the commonest phone, where the line held 162px of text
+beside the resting Delete and not beside the armed one.
+
+Asked, Patryk chose to have the button group RESERVE its armed width (`minWidth`, `flex-end`) over
+stacking only on phones and keeping the tablet's waitlist text at its resting 321px. Reserved, a row
+wraps alike in both states, and arming grows the button leftwards into space that was already empty:
+the button, the text and the rows below all stay put. The reserves are the armed groups measured and
+rounded up — `ACTIONS_W` 207 (Book 60.3 + 6 + 140.1) and `RULE_ACTIONS_W` 182 (the switch 48 + 8 +
+125.5). A first version added 5% for a wider system font (Arial sets these labels 2% wider than San
+Francisco); those 10px gave the first DEV waitlist row a fourth line on the tablet, more than the cost
+put to Patryk, so the reserves are exact. A font that sets the label wider takes the difference out of
+the text when armed; it cannot re-wrap a group on a phone, where a 440px screen is 29px (waitlist) and
+38px (standing) short of sharing the line. The standing text's basis is 200px, a typical "Name · 4
+guests" line, so every phone stacks it.
+
+Live on DEV, two waitlist entries added for today through the app's write shape (rev +1), at rest and
+armed at 375, 430, 440, 600 and 1280px: identical row height, text width and button position in both
+states at every width, for both rows. Phones: waitlist rows 102px with Remove under the text at its
+right edge (x 344 / 399 / 409); standing rows 86px, text 287 / 342 / 352px. Card: waitlist text 253px
+(600) and 257px (1280), rows 77px; standing one line, 50px, text 284 and 508px. The same entries let
+§50's Day-sheet waitlist line be read. `tests/destructive-buttons.test.js` +1, the phase-41 pin follows
+the new group, and the reserves are floored at the measured widths; the three new patterns fail against
+the sources before this phase.
+
+**Gate after phase 51:** `122.15 kB` gz main bundle (+0.02) · **1851 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
