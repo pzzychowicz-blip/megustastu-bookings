@@ -64,3 +64,18 @@ describe("X3 + S3 — one segmented look, and its state said", () => {
     expect(bar).toMatch(/onClick=\{\(\) => onSelect\(t\.id\)\}\s*aria-pressed=\{active\}/);
   });
 });
+
+// v18.2.0 phase 61 (Patryk): More opens like Settings. Centred, the card's top
+// followed its body's height, so the Week / Month / Stats control moved each
+// time it was used; measured on DEV at 1280×800, hung from the top it holds at
+// 40px through Week (623px tall), Month (552), Stats (684) and a six-week month
+// (610), and only the bottom edge moves.
+describe("phase 61 — More hangs from the top, and its body eases", () => {
+  it("anchors the card to the top, as Settings does", () => {
+    expect(Week).toMatch(/<Overlay onClose=\{onClose\} footer=\{footer\} anchor="top">/);
+  });
+
+  it("re-measures a replaced body before paint (Settings' watch)", () => {
+    expect(Week).toMatch(/<AutoHeight watch=\{mode \+ "\|" \+ ref\}>/);
+  });
+});

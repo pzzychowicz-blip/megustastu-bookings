@@ -200,8 +200,14 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     </div>
   );
 
+  // v18.2.0 phase 61 (Patryk): hung from the top like Settings, not centred.
+  // Centred, the card's top moved every time its body changed height — Week
+  // (7 rows) → Month (4–6 week rows) → Stats — so the Week / Month / Stats
+  // control you had just pressed moved out from under the finger, and a month
+  // with a sixth week moved it again. `anchor="top"` holds the top and only the
+  // bottom edge follows the body (DESIGN.md, "Settings hangs from a fixed top").
   return (
-    <Overlay onClose={onClose} footer={footer}>
+    <Overlay onClose={onClose} footer={footer} anchor="top">
       <div style={{ textAlign: "center", marginBottom: 14 }}>
         <div role="group" aria-label="Show" style={SEG_TRACK}>
           {modeBtn("week", "Week")}
@@ -216,8 +222,11 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       {/* v15.8.0: AutoHeight eases the height when switching Week↔Month. (v17.8.0:
           its `linear` prop is gone — AutoHeight always eases linear now, so this
           call site is byte-identical in behaviour and is the reference the rest
-          of the app's modal bodies were brought in line with.) */}
-      <AutoHeight>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
+          of the app's modal bodies were brought in line with.)
+          Phase 61: `watch`, Settings' own, because every mode switch and every
+          period step REPLACES the body — without it the new body paints once
+          at its full height before the observer clips it to the old one. */}
+      <AutoHeight watch={mode + "|" + ref}>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
       <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats

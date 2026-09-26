@@ -425,6 +425,12 @@ explaining why is usually the one to read.
   tallest tabs do not move and the others stop moving; only the bottom edge
   follows the content. **Any modal whose body swaps while its top holds
   controls wants the same.** The phone sheet is full-screen and unaffected.
+  **More is the second (phase 61, Patryk):** centred, its measured heights
+  (Week 623, Month 552, Stats 684px on the 1280×800 tablet) put its top — and
+  the Week / Month / Stats control on it — at 88, 124 and 58px; hung, the top
+  measures 40 in all three and only the bottom edge moves. Its `AutoHeight`
+  takes Settings' `watch`, because every mode switch and month step replaces
+  the body.
 - **Every Settings tab is drawn on the same cards (v18.2.0, S8).** Shortcuts
   was the one tab on the bare sheet, with blue uppercase headings of its own;
   its sections are `Section` cards now, titled in the Collapsible header's type

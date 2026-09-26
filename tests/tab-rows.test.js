@@ -73,7 +73,9 @@ describe("the tab bar and the card", () => {
   // Hung from the top, it measured 115 on all nine.
   it("hangs Settings from a fixed top, so the tab bar does not move between tabs", () => {
     expect(App).toMatch(/maxWidth=\{SETTINGS_CARD_W\} anchor="top"/);
-    expect((App.match(/anchor="top"/g) || []).length, "Settings is the one caller").toBe(1);
+    // Settings is App's one caller; More (WeekView, phase 61) is the other, and
+    // is pinned in tests/week-view.test.js.
+    expect((App.match(/anchor="top"/g) || []).length, "Settings is App's one caller").toBe(1);
     expect(Atoms).toMatch(/const TOP_ANCHOR = "max\(0px, calc\(5dvh - 12px\)\)";/);
     expect(Atoms).toMatch(/alignItems: top \? "flex-start" : "center"/);
     expect((Atoms.match(/marginTop: top \? TOP_ANCHOR : 0,/g) || []).length, "both card branches").toBe(2);

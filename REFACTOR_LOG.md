@@ -27663,3 +27663,21 @@ in ⋯.
 
 **Gate after phase 60:** `122.37 kB` gz main bundle (+0.10) · **1868 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 61. More hangs from the top, like Settings
+
+Patryk: More (Week / Month / Stats) should open as Settings does, its top fixed and its bottom
+following `AutoHeight`. Centred, the card's top followed the body's height, so the Week / Month /
+Stats control moved every time it was pressed, and again whenever a month had a sixth week. The
+`Overlay` takes `anchor="top"` (phase 26's S2 fix) and its `AutoHeight` Settings' `watch`, here
+`mode + "|" + ref`, because every mode switch and period step REPLACES the body — without it the new
+body paints once at full height before the observer clips it.
+
+Live on DEV at 1280×800, the animations finished before each read: the card's top measures 40px (5dvh)
+for Week (623px tall), Month (552), Stats (684), and stepping month by month into a six-week month
+(552 → 610 → 552). Centred, those heights put the top at 88, 124, 58 and 95px (arithmetic from the
+measured heights). The phone sheet is full-screen and unaffected. `tests/week-view.test.js` +2;
+`tests/tab-rows.test.js`' "one caller" pin now counts App's callers, which it always did.
+
+**Gate after phase 61:** `122.37 kB` gz main bundle (±0; WeekView is in a lazy chunk) · **1870 tests**
+(+2) · 0 lint errors, 90 warnings (unchanged) · style OK.
