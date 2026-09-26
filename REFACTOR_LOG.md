@@ -27961,3 +27961,24 @@ The main bundle does not move, because the modal is its own lazy chunk.
 
 **Gate after phase 73:** `122.64 kB` gz main bundle (unchanged) · **1894 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 74. Stats: a balanced grid of tiles, and tables as badges (X6)
+
+Round 2's X6, two faults in the More popover's Stats. The five tiles were flex items on an 84px basis,
+and a wrapping line is packed greedily: the tablet's 530px card held four of 126.5px and stretched the
+fifth, "no-shows", alone across a 530px row (measured before, 1280×800). They are a grid now, keyed on
+a new `isMobile` prop from App (`winW < 600`, the line where Overlay switches between the sheet and the
+card, so no second breakpoint): five equal columns on the card, and on the phone's sheet six columns
+with the top three tiles spanning two and the bottom two spanning three. And table usage printed
+"Table 1A" as text, including "Table 1" for a table the layout does not have (bookings on DEV from the
+critique's data). Each row now draws the table's `TBadge`, and one the layout lacks is phase 69's
+dashed badge, "Table 1, not in the layout", decided against `TIMELINE_TABLES` read at render, which is
+the predicate `unplacedOf` uses for the List's pills.
+
+Live on DEV, September 2026: at 1280×800, five tiles of 99.6px on one row, all 51px tall; at 600×800
+(the narrowest card, 576px), five of 98.8px with no label overflowing; at 375×812, three of 107.7px over
+two of 165.5px, no horizontal scroll. Table usage: nine solid badges and a dashed "1". The rows grow
+from the text line to the badge's 24px. `tests/minor-findings.test.js` +2.
+
+**Gate after phase 74:** `122.65 kB` gz main bundle (+0.01) · **1896 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

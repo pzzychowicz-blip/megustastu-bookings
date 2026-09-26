@@ -5040,6 +5040,7 @@ function BookingApp({uid}){
   const weekModal=<ModalPresence show={showWeek}>{showWeek?<Suspense fallback={null}><WeekView
     bookings={bookings}
     viewDate={viewDate}
+    isMobile={isMobile}
     onPick={function(d){setViewDate(d);setShowWeek(false);}}
     onClose={function(){setShowWeek(false);}} /></Suspense>:null}</ModalPresence>;
 

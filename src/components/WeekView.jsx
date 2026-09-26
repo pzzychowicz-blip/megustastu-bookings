@@ -24,9 +24,9 @@
 // v14.7.0 (week) · v14.9.0 (month view + W/M switch).
 
 import { useState, useEffect } from "react";
-import { Overlay, mkBtn, AutoHeight, SEG_TRACK, segStyle } from "./atoms";
+import { Overlay, mkBtn, AutoHeight, SEG_TRACK, segStyle, TBadge } from "./atoms";
 import { daySummary, rangeStats } from "../lib/booking-logic";
-import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
+import { S, BTN, R, T, FW, IC, H, TIMELINE_TABLES } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
 import { todayStr, addDays, isReadableDate, formatDay } from "../lib/day";
@@ -101,7 +101,7 @@ const HEAT = 0.3;
 // An out-of-month day's number, faded; the cell stays solid.
 const OUT_OF_MONTH = 0.4;
 
-export function WeekView({ bookings, viewDate, onPick, onClose }){
+export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
   const [mode, setMode] = useState("week");   // "week" | "month"
   // v17.16.11: seed from `viewDate` only when it is a date this view can step
   // FROM. `viewDate` can hold a booking's stored date verbatim (SearchPanel's
@@ -294,17 +294,31 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     const st = rangeStats(bookings, from, to);
     const maxH = st.hours.reduce(function(mx, h){ return Math.max(mx, h.covers); }, 0) || 1;
     const maxT = st.tables.reduce(function(mx, t){ return Math.max(mx, t.bookings); }, 0) || 1;
-    const stat = function(val, label, color){
+    // The LIVE binding, read at render: this body is not memoised, so a table
+    // renamed in Settings is current the next time Stats draws.
+    const inLayout = new Set(TIMELINE_TABLES.map(function(t){ return t.id; }));
+    // v18.2.0 phase 74 (round 2's X6): the five tiles are a GRID, five across
+    // on the card and three over two on the phone's sheet — `isMobile`, the
+    // 600px line where Overlay switches between the two, so no second
+    // breakpoint. They were flex items on an 84px basis, and a wrapping line is
+    // packed greedily: the tablet's 530px card held four and stretched the
+    // fifth, "no-shows", alone across a row of its own. On the sheet's six
+    // columns the top three span two each and the bottom two span three.
+    const stat = function(val, label, color, i){
       return (
-        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: CELL, border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+        <div key={label} style={{ gridColumn: isMobile ? (i < 3 ? "span 2" : "span 3") : "auto", minWidth: 0, padding: "8px 10px", background: CELL, border: "1px solid var(--border-input)", borderRadius: R.inset }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: color || "var(--text-primary)" }}>{val}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{label}</div>
         </div>
       );
     };
-    const bar = function(label, val, max, color){
+    // `label` is a node: an hour's text, or a table's badge. v18.2.0 phase 74
+    // (X6): a table is drawn as a table everywhere else, so here too — and one
+    // the layout does not have is the dashed badge the List card draws
+    // (phase 69), where it read "Table 1" as though the room had one.
+    const bar = function(key, label, val, max, color){
       return (
-        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body, marginBottom: 4 }}>
+        <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body, marginBottom: 4 }}>
           <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: 64, flexShrink: 0 }}>{label}</span>
           <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 30 }}>
             <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
@@ -318,21 +332,21 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     }
     return (
       <div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-          {stat(st.totalCovers, "covers")}
-          {stat(st.totalBookings, "bookings")}
-          {stat(st.avgParty, "avg party")}
-          {stat(st.avgCoversPerDay, "covers / day")}
-          {stat(st.noShows, "no-shows", st.noShows ? "var(--warn-text)" : undefined)}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(6, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 14 }}>
+          {stat(st.totalCovers, "covers", undefined, 0)}
+          {stat(st.totalBookings, "bookings", undefined, 1)}
+          {stat(st.avgParty, "avg party", undefined, 2)}
+          {stat(st.avgCoversPerDay, "covers / day", undefined, 3)}
+          {stat(st.noShows, "no-shows", st.noShows ? "var(--warn-text)" : undefined, 4)}
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
         <div style={{ marginBottom: 14 }}>
-          {st.hours.slice(0, 6).map(function(h){ return bar(hourLabel(h.hour), h.covers, maxH); })}
+          {st.hours.slice(0, 6).map(function(h){ return bar(h.hour, hourLabel(h.hour), h.covers, maxH); })}
           {st.hours.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>
         <div>
-          {st.tables.slice(0, 10).map(function(t){ return bar("Table " + t.id, t.bookings, maxT); })}
+          {st.tables.slice(0, 10).map(function(t){ return bar(t.id, <TBadge id={t.id} missing={!inLayout.has(t.id)} />, t.bookings, maxT); })}
           {st.tables.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
       </div>

@@ -77,3 +77,25 @@ describe("X4 — the Activity log's chips are the app's chip", () => {
     expect(A, "a micro-sized filter chip is back").not.toMatch(/as="button" tone=/);
   });
 });
+
+// X6: Stats' five tiles were flex items on an 84px basis, so the tablet's
+// 530px card held four and stretched "no-shows" alone across a second row;
+// table usage read "Table 1" for a table the layout does not have, in text
+// where every other surface draws a badge. Measured on DEV after: 1280×800,
+// five 99.6px tiles on one row; 600×800 (the narrowest card), five of 98.8px
+// with no label overflowing; 375×812, 107.7px × 3 over 165.5px × 2. Table
+// usage: nine solid badges and table 1 dashed, "Table 1, not in the layout".
+describe("X6 — Stats: a balanced grid of tiles, and tables as badges", () => {
+  const W = read("components/WeekView.jsx");
+  it("five across on the card, three over two on the phone's sheet", () => {
+    expect(W).toMatch(/gridTemplateColumns: isMobile \? "repeat\(6, 1fr\)" : "repeat\(5, 1fr\)"/);
+    expect(W).toMatch(/gridColumn: isMobile \? \(i < 3 \? "span 2" : "span 3"\) : "auto"/);
+    expect(W, "the greedy flex basis is back").not.toMatch(/flex: "1 1 84px"/);
+    expect(read("App.jsx")).toMatch(/<WeekView[\s\S]{0,120}isMobile=\{isMobile\}/);
+  });
+  it("a table is a badge, dashed when the layout does not have it", () => {
+    expect(W).toMatch(/const inLayout = new Set\(TIMELINE_TABLES\.map\(function\(t\)\{ return t\.id; \}\)\);/);
+    expect(W).toMatch(/<TBadge id=\{t\.id\} missing=\{!inLayout\.has\(t\.id\)\} \/>/);
+    expect(W).not.toMatch(/"Table " \+ t\.id/);
+  });
+});
