@@ -235,8 +235,6 @@ import { useWinW } from "./hooks/useWinW";
 // v18.2.0: whether the Summary shares the date controls' flex line — see
 // DATE_CTRL_DROP and the hook's own header.
 import { useSharesLine } from "./hooks/useSharesLine";
-// v18.2.0: the view switcher lines up with the Summary card's left edge.
-import { useAlignLeft } from "./hooks/useAlignLeft";
 
 // ── v14.2.0: Dark-mode theming hook ───────────────────────────────────────
 // `useThemeMode(explicitPref)` -> isDark, writing <html data-theme>. Ported
@@ -4950,16 +4948,10 @@ function BookingApp({uid}){
   const dateNavRef=useRef(null);
   const summarySlotRef=useRef(null);
   const summaryLine=useSharesLine(dateRowRef,dateNavRef,summarySlotRef);
-  // v18.2.0 (Patryk): the view switcher's left edge sits over the Summary
-  // card's, and follows it with a glide when the Summary's width changes (the
-  // Today and waitlist pills, the date field's own width). It never moves
-  // closer to the title block than the header's gap, and never right, where
-  // the actions follow it. On a phone, or wherever the header wraps the
-  // switcher onto a line of its own, it already starts where the Summary does.
-  // The mechanism, and why it writes the transform itself, is in the hook.
-  const titleBlockRef=useRef(null);
-  const viewSwitchRef=useRef(null);
-  useAlignLeft(viewSwitchRef,summarySlotRef,titleBlockRef);
+  // v18.2.0 phase 64 (Patryk): the view switcher no longer glides to stand
+  // over the Summary card's left edge. Phase 23's `useAlignLeft` did that, and
+  // in use the sideways movement did not look good; the switcher keeps its own
+  // place in the header.
   const dateCtrlShift=(summaryLine.same!==true||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
   const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
@@ -5079,7 +5071,7 @@ function BookingApp({uid}){
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
               all three now sits against them instead of across the row in a
-              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div ref={titleBlockRef} style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
+              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
               onClick={function(){setShowSettings(true);}}
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
@@ -5087,11 +5079,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>{/* v18.2.0: one box for the switcher AND its split tools, so
-              the pair moves as one when useAlignLeft lines it up with the
-              Summary. Its style names no transform or transition: the hook
-              writes those two, and a React style that named them would
-              overwrite them on the next render. */}<div ref={viewSwitchRef} style={{display:"flex",gap:6,alignItems:"center"}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -5101,7 +5089,7 @@ function BookingApp({uid}){
               onOpenSplitMenu={setSplitMenuFor}
               onSwapSides={swapSides}
               onToggleDir={toggleSplitDir}
-              onExitSplit={exitSplit} /></div>{/* v18.2.0: on a phone the two CREATE actions leave the header for the
+              onExitSplit={exitSplit} />{/* v18.2.0: on a phone the two CREATE actions leave the header for the
               bottom bar below (MOBILE_BAR). They wrapped "+ New" onto a second
               header row on its own, and the header + date row took ~455 of an
               812px screen before the grid began. The design critique; Patryk

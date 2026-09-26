@@ -27754,3 +27754,22 @@ editor).
 
 **Gate after phase 63:** `122.33 kB` gz main bundle (−0.02) · **1880 tests** (+4) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 64. The view switcher keeps its own place
+
+Patryk: remove phase 23's alignment of the View group with the Summary — he tried it in practice, and
+the horizontal movement does not look good. Phase 23's `useAlignLeft` measured the Summary card's left
+edge and moved Timeline / List / Plan sideways to stand over it, gliding on `M.shift` whenever the
+Summary's width changed (the Today and waitlist pills, the date's own width). The hook, its test, the
+two refs it needed and the wrapping `<div>` that let the switcher and its split tools move as one are
+removed, which is exactly what phase 23 added to App; the switcher is back in its own slot in the
+header's action group. DESIGN.md records the reversal, and the measurement-traps skill keeps the
+ResizeObserver lesson phase 23's measuring taught, since that is about the pane, not the feature.
+
+Live on DEV at 1280×800: the switcher's group at x 739, in the right-hand cluster beside Walk-in,
+"+ New" and WhatsApp; it and every ancestor up to the header compute `transform: none`.
+`tests/align-left.test.js` (11) is deleted with the hook; `tests/segmented.test.js` +1 pins that
+nothing moves the switcher.
+
+**Gate after phase 64:** `121.97 kB` gz main bundle (−0.36) · **1870 tests** (−10: −11, +1) · 0 lint
+errors, 90 warnings (unchanged) · style OK.

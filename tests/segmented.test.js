@@ -3,7 +3,7 @@
 // segStyle, and "+ New" is the only solid accent in the header.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -57,5 +57,17 @@ describe("a modal title is a label, not a button (v18.2.0)", () => {
     expect(fn).toMatch(/background, margin: 0/);
     expect(fn).not.toMatch(/boxShadow/);
     expect(fn).not.toMatch(/RIM_SOLID/);
+  });
+});
+
+// v18.2.0 phase 64 (Patryk): phase 23 glided the switcher sideways to stand
+// over the Summary card's left edge whenever the Summary's width changed;
+// tried in use, the movement did not look good, and it is gone. Measured on DEV
+// at 1280px after: the switcher's group and every ancestor up to the header
+// compute `transform: none`, the group at its own place (x 739).
+describe("phase 64 — the switcher keeps its own place", () => {
+  it("nothing moves it: the hook is gone and App no longer calls it", () => {
+    expect(existsSync(join(SRC, "hooks", "useAlignLeft.js"))).toBe(false);
+    expect(read("App.jsx")).not.toMatch(/useAlignLeft|viewSwitchRef|titleBlockRef/);
   });
 });

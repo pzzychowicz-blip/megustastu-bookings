@@ -473,19 +473,14 @@ explaining why is usually the one to read.
   200px over ~138px of text, so the slot (which measures content) and the
   card's own row (which broke on the basis) disagreed from about 784 to 846px,
   and the two-line card came back there.
-- **The view switcher stands over the Summary's left edge (v18.2.0).** Patryk's
-  call: Timeline / List / Plan sits directly above the Summary card's left edge
-  and follows it with an `M.shift` glide when the Summary's width changes (the
-  Today and waitlist pills appear to its left; the date field is as wide as its
-  date). It is MEASURED (`useAlignLeft`): a transform off the switcher's own
-  slot, never closer to the title than the header's gap and never right, into
-  the action buttons. The glide is for the Summary moving. When the switcher's
-  own slot moves (a resize, the split tools) it jumps in the same frame, so it
-  stays where it is. Where the header wraps it onto a line of its own (a phone,
-  and ~600–775px) both start at the margin. From ~775 to 810px, the tablet in
-  portrait, the switcher starts its wrapped line at the margin while the
-  Summary sits beside the date controls, and Patryk kept that rather than split
-  the header's line.
+- **The view switcher keeps its own place in the header (v18.2.0 phase 64).**
+  Phase 23 measured the Summary card's left edge and glided Timeline / List /
+  Plan sideways to stand over it whenever the Summary's width changed (the
+  Today and waitlist pills, the date's own width). Patryk tried it in use and
+  took it out: a control that slides sideways because something else changed
+  width does not look good in practice. `useAlignLeft` is deleted; the lesson
+  its measurement taught (a ResizeObserver reading in a hidden pane) stays in
+  the measurement-traps skill.
 - **What a decision is about never truncates (v18.2.0, W1).** The WhatsApp
   draft bar on a phone read "2 pax · 202…": its details were `flex: 1;
   min-width: 0` beside the confidence chip, Accept and Dismiss, so the
