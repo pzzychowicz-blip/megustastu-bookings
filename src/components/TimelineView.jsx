@@ -42,7 +42,7 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
@@ -1281,7 +1281,8 @@ export const TimelineView = memo(function TimelineView({
   // may be easing to a new value in this same commit (a day that reaches later
   // widens the grid — constants.js `extendActiveGrid`), and centerNow is the
   // helper that re-derives scrollLeft from the live width for that window.
-  const firstStart = day.reduce((m, b) => Math.min(m, toMins(b.time)), Infinity);
+  // v18.2.0 phase 67: the rule lives in booking-logic, shared with the Plan.
+  const firstStart = firstStartOf(bookings, date);
   useEffect(() => {
     if (!scrollDateRef || !scrollRef.current) return;
     if (scrollDateRef.current === date) return;

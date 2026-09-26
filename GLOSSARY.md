@@ -160,7 +160,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | The colour filling a table | **occupancy fill** | seated · confirmed · pending · free · blocked, at the selected minute. |
 | The small white mark under a table's id | **status mark** (`StatusIcon`, v17.15.7) | The occupant's status as a SHAPE, so the fill is never the only signal. Drawn only where the fill names a status — never on blocked, free or resetting. |
 | Diagonal hatching | **blocked** | A table block covers this minute. |
-| The scrolling ruler under a fixed centre marker | **time axis** (`TimeAxis.jsx`) | Scrub the day. Snaps to 15 min on idle; tap to scroll a time to centre. |
+| The scrolling ruler under a fixed centre marker | **time axis** (`TimeAxis.jsx`) | Scrub the day. Snaps to 15 min on idle; tap to scroll a time to centre. Opens on now today, and on the day's first booking any other day (`firstStartOf`, v18.2.0 phase 67). |
 | The pill in the middle of the header row | **selected-time badge** | The minute the fills are drawn for. Sits exactly on the axis's centre marker. |
 | "Now" button | **now button** | Jumps the selection to the current minute and re-centres the tape. Today only. |
 | seated / confirmed / pending swatches, top right | **legend** | What the fills mean. Each chip carries its status mark, because the room draws one. The three are the complete set a table can show. |

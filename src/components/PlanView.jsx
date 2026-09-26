@@ -40,7 +40,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel } from "../lib/booking-logic";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -107,7 +107,7 @@ export const PlanView = memo(function PlanView({
   // an hour short of the tape it is scrubbing.
   const closeM = (h.closed ? 23 : Math.max(h.gridClose, GRID_CLOSE)) * 60;
 
-  // ── Time scrubber (defaults: now on today, opening time otherwise) ─────────
+  // ── Time scrubber (defaults: now on today, the first booking otherwise) ────
   // Absolute minutes-since-midnight, clamped to the day's span and NOT rounded.
   //
   // v17.6.0: this used to round to the nearest 15, and that rounding is gone.
@@ -121,7 +121,14 @@ export const PlanView = memo(function PlanView({
   // only ever compensated for the follow position being rounded away from the
   // clock, so with an exact follow there is nothing left to compensate for.)
   const clampExact = (m) => Math.max(openM, Math.min(closeM, m));
-  const [slider, setSlider] = useState(() => clampExact(isToday ? nowMins : openM));
+  // v18.2.0 phase 67: a day that is not today opens on its first booking — the
+  // Timeline's rule since phase 4, from the same `firstStartOf`. It opened on
+  // OPEN, so an evening-only future day showed an empty room until you
+  // scrubbed. An empty day, or one whose bookings have not loaded, still opens
+  // at OPEN.
+  const firstStart = firstStartOf(bookings, date);
+  const dayStart = () => clampExact(isToday ? nowMins : (Number.isFinite(firstStart) ? firstStart : openM));
+  const [slider, setSlider] = useState(dayStart);
   const [sliderTouched, setSliderTouched] = useState(false);
   // v17.5.0: bumped ONLY at the programmatic scrub sites (date change, clock
   // follow, the Now button) so TimeAxis re-centres then — and never yanks the
@@ -136,7 +143,12 @@ export const PlanView = memo(function PlanView({
   // Both effects key on ONE trigger on purpose — re-running them on every
   // dependency would yank the selection out from under a hand scrub.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setSlider(clampExact(isToday ? nowMins : openM)); setSliderTouched(false); reCentre(); }, [date]);
+  useEffect(() => { setSlider(dayStart()); setSliderTouched(false); reCentre(); }, [date]);
+  // Phase 67: on a day that is not today, an UNTOUCHED scrubber follows the
+  // first booking as it arrives or moves — the bookings may load after the date
+  // does, or the day's first party change — the way today's follows the clock.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!isToday && !sliderTouched) { setSlider(dayStart()); reCentre(); } }, [firstStart]);
   // Follows per MINUTE now rather than per quarter. `nowMins` only changes value
   // once a minute (the 15s tick re-sets the same number and React bails), and
   // the occupancy pass below is one linear loop over the day — nowhere near the

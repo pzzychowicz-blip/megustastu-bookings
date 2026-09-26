@@ -257,6 +257,14 @@ export function seatingClosed(dateStr,todayS,nowMins){
 // manual seat straight back); Seated → Completed; a finished visit has no next
 // step. Same gates as every other status surface, so it cannot offer what the
 // popup, the form or the S key would refuse.
+// v18.2.0 phase 67: where a day's bookings START — the earliest start of the
+// day's bookings that are not cancelled (completed count: they happened), or
+// Infinity for an empty day. The Timeline opens a non-today day scrolled to it
+// and the Plan's scrubber opens on it, so the two cannot disagree about where
+// a day begins.
+export function firstStartOf(bookings,date){
+  return (bookings||[]).reduce(function(m,b){return b&&b.date===date&&b.status!=="cancelled"?Math.min(m,toMins(b.time)):m;},Infinity);
+}
 export function nextStatusOf(b,todayS,nowMins){
   if(!b) return null;
   if(b.status==="pending") return "confirmed";

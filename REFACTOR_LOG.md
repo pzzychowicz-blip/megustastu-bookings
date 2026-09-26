@@ -27829,3 +27829,19 @@ case now pins a German mobile instead.
 
 **Gate after phase 66:** `122.23 kB` gz main bundle (+0.12) · **1877 tests** (+5) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 67. The Plan opens a day where its bookings start
+
+The ROADMAP follow-up this version wrote: phase 4 opened the Timeline on a non-today day at its first
+booking, while the Plan's scrubber still opened at `OPEN`, so an evening-only future day showed an
+empty room until you scrubbed. `firstStartOf(bookings, date)` (booking-logic) is the rule, the earliest
+start of the day's non-cancelled bookings with completed ones counted, and both views read it: the
+Timeline's `firstStart` was the same fold written inline. The Plan opens today on now, as before, and any
+other day on its first booking (an empty day still at `OPEN`); an untouched scrubber follows that first
+start as the day's bookings load or change, the way today's follows the clock.
+
+Live on DEV, Plan view: today "Now 20:17"; Sun 27.09, whose first booking is 19:00, opened at "19:00";
+Mon 28.09 (first 18:00) at "18:00"; back on today, "Now 20:18". `tests/plan-avail.test.js` +2.
+
+**Gate after phase 67:** `122.30 kB` gz main bundle (+0.07) · **1879 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

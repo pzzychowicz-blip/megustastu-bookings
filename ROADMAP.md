@@ -121,12 +121,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **The Plan view opens a non-today day at opening time (v18.2.0 follow-up).** The
-  timeline now opens a day on its first booking; the Plan's scrubber still defaults to
-  `OPEN`, so an evening-only future day shows an empty room. Same rule, one line in
-  `PlanView`'s slider default, but it was not part of the approved change, so it is a
-  decision for later.
-
 - **The minor findings of the v18.2.0 critique, round 2 (2026-09-24).** Patryk took the
   sixteen larger fixes into v18.2.0; these six were offered as "ROADMAP unless you say
   otherwise" and he did not take them. Evidence for each is in

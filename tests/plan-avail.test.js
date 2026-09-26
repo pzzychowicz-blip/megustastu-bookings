@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nextBusyAt, freeWindow } from "../src/lib/plan-avail.js";
+import { firstStartOf } from "../src/lib/booking-logic.js";
 import { PREF_SPEC, DEFAULT_USER_PREFS, sanitizeUserPrefs, readPrefValue } from "../src/hooks/useUserPrefs.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
@@ -92,5 +93,34 @@ describe("the wiring", () => {
 
   it("the App tab has the switch, named as it reads", () => {
     expect(Settings).toMatch(/<Toggle label="Table availability" on=\{planAvail\} onClick=\{onTogglePlanAvail\} \/>/);
+  });
+});
+
+// v18.2.0 phase 67 (the ROADMAP follow-up): the Plan's scrubber opened a day
+// that is not today at OPEN, so an evening-only future day showed an empty room.
+// It opens on the day's first booking, from the SAME rule the Timeline scrolls
+// to. Measured on DEV: today "Now 20:17", Sun 27.09 (first 19:00) "19:00",
+// Mon 28.09 (first 18:00) "18:00", back on today the clock again.
+describe("phase 67 — a day opens where its bookings start", () => {
+  const D = "2026-10-03";
+  const b = (time, status = "confirmed", date = D) => ({ date, time, status });
+
+  it("firstStartOf is the day's earliest start, cancelled aside and completed counted", () => {
+    expect(firstStartOf([b("20:30"), b("19:00"), b("21:00")], D)).toBe(19 * 60);
+    expect(firstStartOf([b("18:00", "cancelled"), b("19:30")], D)).toBe(19 * 60 + 30);
+    expect(firstStartOf([b("13:00", "completed"), b("19:30")], D)).toBe(13 * 60);
+    expect(firstStartOf([b("12:00", "confirmed", "2026-10-04"), b("19:30")], D)).toBe(19 * 60 + 30);
+    expect(firstStartOf([], D)).toBe(Infinity);
+    expect(firstStartOf(undefined, D)).toBe(Infinity);
+  });
+
+  it("the Plan opens a non-today day on it, and the Timeline scrolls to it, from ONE rule", () => {
+    const Plan = read("src", "components", "PlanView.jsx");
+    const Timeline = read("src", "components", "TimelineView.jsx");
+    expect(Plan).toMatch(/const firstStart = firstStartOf\(bookings, date\);/);
+    expect(Plan).toMatch(/const dayStart = \(\) => clampExact\(isToday \? nowMins : \(Number\.isFinite\(firstStart\) \? firstStart : openM\)\);/);
+    expect(Plan).toMatch(/useState\(dayStart\)/);
+    expect(Plan).toMatch(/useEffect\(\(\) => \{ if \(!isToday && !sliderTouched\) \{ setSlider\(dayStart\(\)\); reCentre\(\); \} \}, \[firstStart\]\);/);
+    expect(Timeline).toMatch(/const firstStart = firstStartOf\(bookings, date\);/);
   });
 });
