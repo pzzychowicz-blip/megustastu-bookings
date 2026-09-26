@@ -28003,3 +28003,39 @@ what the old measure computes for its widest name (170); Settings' tab bar is on
 
 **Gate after phase 75:** `122.61 kB` gz main bundle (−0.04) · **1897 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 76. Find a booking's results are columns (X7)
+
+Round 2's X7: a result's guests, phone and status followed the width of the name in front of them.
+Measured at 1280×800 before: the name took whatever the cells after it left, so guests began anywhere
+from 259 to 265px and at 363 on a row with no phone, and the phone from 318 to 324. The critique's fix,
+fixed columns, did not fit the 580px card: one result from another year widens every date to 104px,
+which had already cut the names to about 68px ("Hugo M…", "WA-SI…"), and fixed guests (57), phone (103)
+and status (98) would have left the name 48px and wrapped every row. Asked with three layouts, Patryk
+took the wider card with one line.
+
+On a tablet the card is `FIND_CARD_W` 720 (`Overlay`'s `maxWidth`, which Settings already used at 800)
+and the row does not wrap. Each cell is a column. The date, guests and phone are the widest of each in
+the results, measured with phase 75's `textWidth` in the font the span is drawn in (`DATE_FONT`,
+`CELL_FONT`, spread into the spans so the two cannot drift), because a width measured in San Francisco
+would not hold Roboto on the Android tablet. The date's 68/104 stay as the fallback with no canvas. The
+name is the widest name in the results, as the List card's is (phase 18), so a list of short names
+leaves no gap; it is capped at `NAME_CAP` 190, the room the card leaves beside a year, "88 guests", a
+15-digit phone and the badge, and it is the one cell that may shrink. The status sits in an `SBADGE_W`
+cell, so every row totals the same and any shrink is the same in every row. On a phone (`isMobile`, a
+new prop from App) the row wraps as it did: the name keeps its 64px basis and fills line one with the
+guests at its end, and the phone (an empty cell when a booking has none) and the status take line two.
+
+Live on DEV, query "a", 30 results including one on Sat 16.01.2027: at 1280×800 the card is 720 and every
+row is one 42px line with each column at one x in all 30 (date 13, time 114, name 168, guests 332, phone
+393, status 507), no name cut (the widest, "WA-SIM Sofía García", in a 154px column) and nothing
+overflowing its cell (the 2027 date 91 of 91px). At 375×812 every row is two lines, 69px: guests at 275
+on line one, the phone at 13 and the status at 127 on line two in every row, including the row with no
+phone; no horizontal scroll. At 600×800, the narrowest card (576px), the columns still line up on one
+line but the names shrink to 62px; that band, between the phone's sheet and a tablet, has no restaurant
+device in it, so it is recorded rather than given a breakpoint. The `date-format` pins on this row moved
+to the new markup; `tests/minor-findings.test.js` +2, and the round-2 minor-findings ROADMAP entry is
+gone with its last bullet.
+
+**Gate after phase 76:** `122.61 kB` gz main bundle (unchanged) · **1899 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

@@ -165,7 +165,7 @@ const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("
 
 describe("every date on screen goes through formatDay", () => {
   const sites = [
-    ["components/SearchPanel.jsx", /minWidth: dateCol \}\}>\{formatDay\(b\.date\)\}<\/span>/],
+    ["components/SearchPanel.jsx", /width: dateCol, flexShrink: 0 \}\}>\{formatDay\(b\.date\)\}<\/span>/],
     ["components/CustomersSettings.jsx", /minWidth: dateCol \}\}>\{formatDay\(b\.date\)\}<\/span>/],
     ["components/VouchersSettings.jsx", /return formatDay\(localDay\(ms\), \{ weekday: false \}\);/],
     ["components/HistoryPopup.jsx", /const dateStr = formatDay\(localDay\(h\.at\)\);/],
@@ -269,16 +269,20 @@ describe("every date on screen goes through formatDay", () => {
 });
 
 describe("a column of dates is as wide as its widest date", () => {
-  it("Find a booking: 68px, or 104 when a date prints its year", () => {
+  // v18.2.0 phase 76: measured, like the columns after it; 68 / 104 (a year)
+  // stay as the fallback with no canvas.
+  it("Find a booking: the widest date the results hold, else 68px or 104 with a year", () => {
     const s = read("components/SearchPanel.jsx");
-    expect(s).toMatch(/const dateCol = results\.some\(function \(b\) \{ return showsYear\(b\.date\); \}\) \? 104 : 68;/);
+    expect(s).toMatch(/const dateCol = widest\(results\.map\(function \(b\) \{ return formatDay\(b\.date\); \}\), DATE_FONT\)\s*\|\| \(results\.some\(function \(b\) \{ return showsYear\(b\.date\); \}\) \? 104 : 68\);/);
   });
 
   // Measured at 375px: the name was squeezed to 21.5px by the old 84px column
   // and to 1.5px by a year's 104; with the basis it is 104 and 140, and the
   // 1280px tablet keeps every row on one line.
+  // Phase 76 keeps that basis on a phone; the wider tablet card sizes the name
+  // to the results' widest (minor-findings, X7).
   it("Find a booking: the name has a basis, so a wrapping row cannot crush it", () => {
-    expect(read("components/SearchPanel.jsx")).toMatch(/<span style=\{\{ flex: "1 1 64px", minWidth: 0, fontSize: T\.lead/);
+    expect(read("components/SearchPanel.jsx")).toMatch(/<span style=\{\{ flex: isMobile \? "1 1 64px" : "0 1 " \+ nameCol \+ "px", minWidth: 0, \.\.\.NAME_FONT/);
   });
 
   it("Customers: 68px or 104, and the visit row wraps rather than overflow", () => {

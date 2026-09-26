@@ -1,4 +1,4 @@
-// tests/minor-findings.test.js — v18.2.0 phases 70–75: the six minor findings
+// tests/minor-findings.test.js — v18.2.0 phases 70–76: the six minor findings
 // of the design critique's round 2 (S7, S9, W6, X4, X6, X7), offered as
 // "ROADMAP unless you say otherwise" in round 2 and taken by Patryk on
 // 2026-09-26. Evidence for each is in
@@ -97,5 +97,31 @@ describe("X6 — Stats: a balanced grid of tiles, and tables as badges", () => {
     expect(W).toMatch(/const inLayout = new Set\(TIMELINE_TABLES\.map\(function\(t\)\{ return t\.id; \}\)\);/);
     expect(W).toMatch(/<TBadge id=\{t\.id\} missing=\{!inLayout\.has\(t\.id\)\} \/>/);
     expect(W).not.toMatch(/"Table " \+ t\.id/);
+  });
+});
+
+// X7: Find a booking's guests, phone and status followed the name's width —
+// measured at 1280×800, guests began anywhere from 259 to 265px, 363 on a row
+// with no phone — and the 580 card had no room to fix them (names were already
+// cut to ~68px beside a year). Patryk's pick: a 720px card, one line, columns.
+// Measured on DEV after: all 30 results share each column's x (13 · 114 · 168 ·
+// 332 · 393 · 507) at 1280×800 with no name cut; at 375 two lines, guests at
+// 275 and the status at 127 on line two in every row.
+describe("X7 — Find a booking's results are columns", () => {
+  const P = read("components/SearchPanel.jsx");
+  it("a 720px card on a tablet, one line per result", () => {
+    expect(P).toMatch(/const FIND_CARD_W = 720;/);
+    expect(P).toMatch(/<Overlay onClose=\{onClose\} footer=\{footerEl\} maxWidth=\{FIND_CARD_W\}>/);
+    expect(P).toMatch(/flexWrap: isMobile \? "wrap" : "nowrap"/);
+    expect(read("App.jsx")).toMatch(/<SearchPanel bookings=\{bookings\} todayStr=\{todayStr\(\)\} isMobile=\{isMobile\}/);
+  });
+  it("each cell is a column sized to the widest in the results, in its own font", () => {
+    expect(P).toMatch(/const nameCol = nameW \? Math\.min\(NAME_CAP, nameW\) : NAME_CAP;/);
+    expect(P).toMatch(/const paxCol = widest\(results\.map\(function \(b\) \{ return guestsLabel\(b\.size\); \}\), CELL_FONT\);/);
+    expect(P).toMatch(/const phoneCol = phones\.length \? widest\(phones, CELL_FONT\) : 0;/);
+    expect(P).toMatch(/\.\.\.CELL_FONT, color: S\.muted, width: paxCol, flexShrink: 0/);
+    expect(P).toMatch(/\.\.\.CELL_FONT, color: S\.muted, width: phoneCol, flexShrink: 0, whiteSpace: "nowrap" \}\}>\{b\.phone \? formatPhone\(b\.phone\) : ""\}/);
+    expect(P).toMatch(/<span style=\{\{ width: SBADGE_W, flexShrink: 0, display: "flex" \}\}><SBadge status=\{b\.status\} \/><\/span>/);
+    expect(P, "the widths must come from the one canvas measure").toMatch(/textWidth\(l, font\.fontWeight, font\.fontSize \+ "px", family\)/);
   });
 });

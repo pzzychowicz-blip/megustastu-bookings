@@ -121,17 +121,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **The minor findings of the v18.2.0 critique, round 2 (2026-09-24).** Patryk took the
-  sixteen larger fixes into v18.2.0; these six were offered as "ROADMAP unless you say
-  otherwise", and on 2026-09-26 he took them as well. Each bullet leaves this entry in
-  the v18.2.0 phase that ships it (S7, S9, W6, X4 and X6 have). Evidence for each is in
-  `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`.
-  - Find a booking: the pax and phone columns shift with the name's length (X7).
-    v18.2.0 phase 37 did the part C1 made worse: the date column is fixed per result
-    list, and the name has a 64px basis, so a phone row no longer squeezes it to
-    nothing (it measured 21.5px at 375px, 1.5px beside a year). The pax, phone and
-    badge still follow the name's width on a wide screen.
-
 - **A booking's seating preference is soft on a day the optimiser runs (found in v18.2.0
   phase 68).** `findFreeSlot` treats "indoor"/"outdoor" as a hard constraint, but the
   optimiser behind `trialFits` falls back to ANY zone when the preferred one is full
