@@ -410,10 +410,12 @@ export function VouchersTabContent({
             every input a real `useId` association. */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 120px", minWidth: 0 }}>
+            {/* v18.2.0 phase 70 (round 2's S7): "e.g. 50", where it read "50" —
+                in a bare number box that looked like an amount already entered. */}
             <Fld label={"Amount (" + currency + ")"} invalid={issueErrField === "value"} describedBy={ISSUE_ERROR_ID}>{function (fid, attrs) {
               return <input id={fid} {...attrs} type="number" min={0} step={5} inputMode="decimal" value={amount}
                 onChange={function (e) { setAmount(e.target.value); }}
-                placeholder="50" className="mgt-hover-scale" style={mkInp()} />;
+                placeholder="e.g. 50" className="mgt-hover-scale" style={mkInp()} />;
             }}</Fld>
           </div>
           <div style={{ flex: "2 1 200px", minWidth: 0 }}>

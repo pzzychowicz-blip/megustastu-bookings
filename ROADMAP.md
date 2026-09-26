@@ -125,7 +125,6 @@ evidence for each.
   sixteen larger fixes into v18.2.0; these six were offered as "ROADMAP unless you say
   otherwise" and he did not take them. Evidence for each is in
   `…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`.
-  - Vouchers: the Amount placeholder "50" reads as a pre-filled amount (S7).
   - Layout → Tables: the zone toggle is a grey "Outdoor" chip that reads as a label,
     ids are plain text rather than table badges, "cap" is an abbreviation (S9).
   - WhatsApp draft card: the parser's confidence shows as "HIGH" with no explanation

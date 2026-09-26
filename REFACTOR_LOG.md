@@ -27892,3 +27892,16 @@ table "2" the solid outdoor teal; Noa Ribera's "13" dashed the same way. `tests/
 
 **Gate after phase 69:** `122.59 kB` gz main bundle (+0.07) · **1888 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 70. The voucher amount's hint reads as an example (S7)
+
+Phases 70–75 are the six minor findings of round 2, which Patryk had left on ROADMAP and took now; the
+pins live together in `tests/minor-findings.test.js`. S7: Settings → Vouchers' Amount field showed the
+placeholder "50" in a bare number box, which read as an amount already typed. It reads "e.g. 50",
+Patryk's pick over no placeholder (the label already carries the currency, "Amount (€)").
+
+Live on DEV: the field labelled "Amount (€)", placeholder "e.g. 50", value empty. `tests/minor-findings.test.js`
+new, +1.
+
+**Gate after phase 70:** `122.60 kB` gz main bundle (+0.01) · **1889 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
