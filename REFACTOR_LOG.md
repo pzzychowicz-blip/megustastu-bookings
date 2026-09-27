@@ -28083,3 +28083,26 @@ finished, since the pane throttles them), and pressing it returns the length and
 
 **Gate after phase 78:** `122.65 kB` gz main bundle (unchanged) · **1904 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 79. The phone header's connection dot ends the title row
+
+The third loose end, from round 2. Measured at 375×812 with WhatsApp on: the header's first row is the
+cog and the restaurant's name (246 of 351px); the second is the view switcher (191), WhatsApp (91), Find
+(36) and the dot (36), which with its gaps is 372px on a 351px line, so the dot wrapped onto a third
+row by itself at y 90 and the header was 126px tall. Without WhatsApp the second row is 275px and
+nothing wraps, which is why the restaurant's shipped configuration never showed it. Asked with two
+fixes, Patryk took the dot on the title row over showing WhatsApp as its mark alone: on a phone the
+dot ends the first row, opposite the cog, in the 105px that row left empty, and every control keeps its
+word. App builds the element once (`connStatus`) and places it by `isMobile`, so the two positions are
+one component with one set of props; the title block takes the whole first row on a phone
+(`flex: "1 1 100%"`) so the dot can end it at every phone width. The popover measures its side when it
+opens (v16.2.0) and needed nothing: from the top-right it grows leftward.
+
+Live on DEV: at 375×812 the dot is at 327–363px on row one, the controls share row two (View 12,
+WhatsApp 209, Find 306) and the header is 84px; the popover opens at 90–350px and a second tap closes
+it. At 599×800, the widest phone, the dot is at 551–587px and the header 84px. At 1280×800 the header
+is one 40px row with the dot ending the controls at 1228–1264px, as before. No horizontal scroll at
+either phone width. `tests/mobile-bar.test.js` +1.
+
+**Gate after phase 79:** `122.68 kB` gz main bundle (+0.03) · **1905 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.

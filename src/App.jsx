@@ -5036,6 +5036,13 @@ function BookingApp({uid}){
     onClose={requestCloseWalkin}
     onAddToWaitlist={addWalkinToWaitlist} />:null}</ModalPresence>;
 
+  // v18.2.0 phase 79 (round 2's loose end): the connection dot, built ONCE and
+  // placed by width. On a phone it ends the TITLE row, opposite the cog: with
+  // WhatsApp on, the controls row was 21px too full at 375px and the dot
+  // wrapped onto a third row by itself (header 126px; 84 now). Patryk's pick
+  // over showing WhatsApp as its mark alone. On a tablet it ends the controls.
+  const connStatus=<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} />;
+
   // v17.1.0: Suspense INSIDE the ModalPresence (fallback null) so the open/close
   // animation contract is untouched — on first open the lazy chunk pops in a
   // frame or two later; every later open is instant (module cached).
@@ -5088,7 +5095,9 @@ function BookingApp({uid}){
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
               all three now sits against them instead of across the row in a
-              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
+              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze.
+              On a phone the block is the whole first row and ends with the
+              connection dot (phase 79). */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
@@ -5096,7 +5105,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -5136,7 +5145,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div>{isMobile?<div
+              wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div>{isMobile?<div
             role="group" aria-label="Add a booking"
             style={MOBILE_BAR}><button
               onClick={openWalkin}

@@ -34,3 +34,19 @@ describe("the phone's bottom bar", () => {
     expect(App).toMatch(/\{isMobile\?<div aria-hidden="true" style=\{MOBILE_BAR_SPACER\} \/>:null\}<\/div><\/main>/);
   });
 });
+
+// v18.2.0 phase 79 (round 2's loose end): with WhatsApp on, the phone's
+// controls row was 21px too full at 375px and the connection dot wrapped onto a
+// third row by itself (header 126px). On a phone it now ends the TITLE row,
+// opposite the cog (Patryk's pick); measured after, 327–363px on row one and a
+// header of 84px, with the tablet's one 40px row unchanged.
+describe("the connection dot on a phone", () => {
+  it("is built once and placed by width: the title row on a phone, the controls on a tablet", () => {
+    expect((App.match(/<ConnectionStatus /g) || []).length, "one element, two places").toBe(1);
+    expect(App).toMatch(/const connStatus=<ConnectionStatus /);
+    expect(App).toMatch(/\{isMobile\?<div style=\{\{marginLeft:"auto",flexShrink:0\}\}>\{connStatus\}<\/div>:null\}<\/div>/);
+    expect(App).toMatch(/\{isMobile\?null:connStatus\}<\/div>/);
+    // The title block takes the whole first row on a phone, so the dot ends it.
+    expect(App).toMatch(/<div style=\{\{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile\?"1 1 100%":undefined\}\}><button/);
+  });
+});
