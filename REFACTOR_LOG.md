@@ -28244,3 +28244,12 @@ fix is a commit of its own:
 
    **Gate after fix 7:** `122.80 kB` gz main bundle (unchanged) · **1914 tests** (unchanged) · 0 lint
    errors, 90 warnings (unchanged) · style OK.
+8. **Fixed** (`two comments in booking-logic.js say what the code does`). Phase 67 inserted
+   `firstStartOf` between `nextStatusOf`'s paragraph and its function, so the note about the List
+   card's one status button read as the head of `firstStartOf`. The two are back in order. And the
+   note justifying the `vouchers.js` import still said that file "imports nothing": since v18.2.0 it
+   imports `formatDay` from `day.js`. The edge is still acyclic because `day.js` imports nothing, and
+   the note now says that, and that an import from here into either file would close a loop.
+
+   **Gate after fix 8:** `122.80 kB` gz main bundle (unchanged; comments are stripped) · **1914
+   tests** · 0 lint errors, 90 warnings (unchanged) · style OK.

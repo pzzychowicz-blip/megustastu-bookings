@@ -30,8 +30,10 @@ import {
 import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
 // v18.0.0: one voucher-code normaliser, the `normalizePhone` precedent — the
 // issue field, every redemption lookup and `sanitize` must agree on what a code
-// IS, or two spellings resolve to two vouchers. `vouchers.js` imports nothing,
-// so this edge cannot close a cycle.
+// IS, or two spellings resolve to two vouchers. `vouchers.js` imports only
+// `formatDay` from `day.js` (v18.2.0), which imports nothing, so this edge
+// cannot close a cycle — keep it that way: an import from here into either
+// of those two files would.
 // v18.0.0 phase 5: ".js" for the same reason as the two above — this file is now
 // reachable from the serverless functions (api/* → whatsapp.js → customers.js →
 // here), and Node's ESM resolver does not add the extension the way Vite does.
@@ -257,6 +259,14 @@ export function pastCloseMins(dateStr,todayS,nowMins){
 export function seatingClosed(dateStr,todayS,nowMins){
   return pastCloseMins(dateStr,todayS,nowMins)!==null;
 }
+// v18.2.0 phase 67: where a day's bookings START — the earliest start of the
+// day's bookings that are not cancelled (completed count: they happened), or
+// Infinity for an empty day. The Timeline opens a non-today day scrolled to it
+// and the Plan's scrubber opens on it, so the two cannot disagree about where
+// a day begins.
+export function firstStartOf(bookings,date){
+  return (bookings||[]).reduce(function(m,b){return b&&b.date===date&&b.status!=="cancelled"?Math.min(m,toMins(b.time)):m;},Infinity);
+}
 // v18.2.0: the ONE status a List card offers as a button — the next step in a
 // visit. Everything else moved behind the card's ⋯ (the quick-status card):
 // six equal-weight buttons on every card fitted four bookings to a tablet
@@ -266,14 +276,6 @@ export function seatingClosed(dateStr,todayS,nowMins){
 // manual seat straight back); Seated → Completed; a finished visit has no next
 // step. Same gates as every other status surface, so it cannot offer what the
 // popup, the form or the S key would refuse.
-// v18.2.0 phase 67: where a day's bookings START — the earliest start of the
-// day's bookings that are not cancelled (completed count: they happened), or
-// Infinity for an empty day. The Timeline opens a non-today day scrolled to it
-// and the Plan's scrubber opens on it, so the two cannot disagree about where
-// a day begins.
-export function firstStartOf(bookings,date){
-  return (bookings||[]).reduce(function(m,b){return b&&b.date===date&&b.status!=="cancelled"?Math.min(m,toMins(b.time)):m;},Infinity);
-}
 export function nextStatusOf(b,todayS,nowMins){
   if(!b) return null;
   if(b.status==="pending") return "confirmed";
