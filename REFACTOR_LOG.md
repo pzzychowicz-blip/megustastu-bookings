@@ -28600,6 +28600,43 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    so a new blurred surface fails until it is counted against the worst stack. The stylesheet
    declares none, and the two view cards stay unblurred. It fails for a card's blur put back, a
    new blur in another file, and a blur in `index.css`.
+12. **The Split View divider is easy to grab by touch (A7).** On the iPad (Simulator, S3) a drag
+   starting a few points off the rule went to a pane: the divider was a 10px target against
+   DESIGN.md's floor of 44. It keeps its 10px of layout (`DIVIDER`) and gains an empty first
+   child reaching `HIT_PAD` = (`H.touch` − 10) / 2 = 17px into each pane. The divider becomes
+   `position: relative; zIndex: 1`, so the overlap wins the hit test over pane B, the later
+   sibling. Pointer events on the child bubble to the divider's handlers. Two departures from
+   the plan, both found by measuring:
+   - **Touch only (Patryk's call, asked).** The strips the child covers stop reaching the panes.
+     Stacked, which is how every split holding the Timeline appears on the tablet
+     (`tlPaneOk`), a timeline block scrolled to the divider and its Assign button sat under the
+     strip (757 and 62 of the sampled points). Side by side it covered only the pane's gutter,
+     except at a 20% split, where 4% of a 250px pane is narrower than 17px and the List card's
+     edge was under it. So the child is `.mgt-split-hit`, `display: none`, shown under the
+     app's touch query `(hover: none), (pointer: coarse)` (the block press dip's). A mouse
+     keeps the 10px divider.
+   - **A press keeps its offset from the rule (`grabRef`).** The divider moved TO the pointer at
+     pointerdown. On 10px that was a snap of 5px at most; on 44 a press at the edge moved the
+     rule up to 22px and saved it with no drag (measured: 14.8px, ratio 0.5 → 0.4767, from a
+     press 15px off the rule). A press now changes nothing, and a drag moves the rule by the
+     drag.
+   `DIVIDER` is App.jsx's `SPLIT_DIVIDER_PX` too. A component file cannot export it
+   (react-refresh), so each names the other.
+   **Measured** in the rig (writes blocked; `mgt-split` seeded, removed afterwards):
+   - **Touch profile** (the query matches, the child shows): `elementFromPoint` at the rule
+     ±20px is the hit child and ±25px is the pane, stacked and side by side. A press 15px off
+     the rule, released, leaves the rule and the stored ratio unchanged; the rule is accent
+     while held. Drags started 15px off it move the rule with the pointer: mouse +60 → +59.1
+     (stacked) and +59.5 (side by side), a CDP touch −60 → back exactly. The rule turns accent
+     during a drag and back after. A tap 30px into pane B moves the focus corners to pane B.
+   - **Mouse profile** (the query does not match): the child is `display: none`, so 15px off the
+     rule is the pane. A drag on the rule itself moves it +59.5.
+   - **Not run:** the plan's Simulator check. The only booted simulator is an iPhone in
+     portrait, Split View needs 600pt, and the simulator tool cannot rotate the device. It is
+     a device row instead.
+   Tests 1930 → 1932 (`stylesheet`): `.mgt-split-hit` joins CRITICAL_SELECTORS, and one test
+   pins both CSS halves (hidden; shown on touch), the class on the child, and the grab offset.
+   Four mutations each fail it.
 
 ### Check on the devices after merge
 
@@ -28613,3 +28650,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed |
 | 08 | Android tablet | Mark a late booking No show from the Running-late strip. The block fades out still wearing its amber border, and it fades all the way out before it goes. Undo fades it back in. Stepping to the next day fades nothing |
 | 10 | Tablet, phone | Tapping a WhatsApp alert header shows the veil tint while pressed |
+| 12 | Tablet, iPad | In Split View, start a drag a fingertip's width to one side of the divider: the panes resize, and the divider does not jump to the finger first. A tap on the divider without moving leaves the split where it was |

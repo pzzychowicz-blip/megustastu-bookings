@@ -206,6 +206,15 @@ explaining why is usually the one to read.
   are reserved for decision surfaces where a mis-tap costs something — modal
   footers and the quick-status popup. Size by what a mistake costs, not by one
   number from a guideline.
+- **A hit area can outgrow what it draws, but it takes what it covers (v18.3.0,
+  A7).** The Split View divider draws a 2px rule in 10px of layout. On touch,
+  an empty child (`.mgt-split-hit`) reaches 17px into each pane, so a finger
+  has `H.touch` to aim at. Those strips stop reaching the panes, and stacked
+  they held a timeline block and its Assign button (measured). So the pad is
+  **touch only** (Patryk); a cursor hits 10px easily. And a bigger target must
+  not jump to the press: the divider used to move TO the pointer, a 5px snap
+  at most on 10px but 22px on 44. It now keeps the press's offset from the
+  rule, so a press alone moves nothing and a drag moves it by the drag.
 - **A literal is invisible to a token audit (v17.8.0).** The contrast pass
   measured every `--token` and still missed four fills carrying white text —
   TableGrid's selected (2.31), blocked (3.13) and swap (~1.4, white on bright

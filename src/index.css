@@ -1351,6 +1351,20 @@ button:active:not(:disabled):not(.mgt-nopress),
   .mgt-blk:active:not(.mgt-nopress) { transform: scale(0.96); }
 }
 
+/* v18.3.0 (A7): the Split View divider's touch hit area. The divider takes
+   10px of the layout; SplitLayout gives it an empty child reaching 17px into
+   each pane, so a finger has H.touch (44px) to aim at — on the iPad a drag
+   starting a few points off the rule went to a pane. On TOUCH only (Patryk):
+   those 17px strips stop reaching the panes, and stacked (every split holding
+   the Timeline on the tablet) they held a timeline block and its Assign
+   button, measured. A cursor hits 10px easily, so a mouse keeps the panes'
+   full reach. The same touch query as the block's press dip above. Both
+   halves fail silently, so both are pinned in tests/stylesheet.test.js. */
+.mgt-split-hit { display: none; }
+@media (hover: none), (pointer: coarse) {
+  .mgt-split-hit { display: block; }
+}
+
 /* ── v17.14.0: the skip link ────────────────────────────────────────────
    v17.12.0 added the landmarks, which are the programmatic bypass and cost
    nothing visually. This is the one a SIGHTED keyboard user can take, in

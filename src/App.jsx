@@ -630,7 +630,7 @@ function readSplit(){
 // A STACKED split is always fine — it halves the height, and fewer visible table
 // rows is what scrolling is for.
 const MIN_TL_PANE=1050;
-const SPLIT_DIVIDER_PX=10;
+const SPLIT_DIVIDER_PX=10;   // SplitLayout's DIVIDER: the two change together
 // `tlPane` is "a" or "b" — which side the Timeline is on. Pure, so the menu, the
 // view-switcher and the repair effect all ask the same question one way.
 function tlPaneOk(appW,dir,ratio,tlPane){
