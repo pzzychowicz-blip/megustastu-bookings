@@ -51,6 +51,8 @@ import { customerIndex } from "../lib/customers";
 // day (v17.16.2).
 import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear } from "../lib/day";
 import { DownloadIcon } from "./Icons";
+// v18.2.0 /code-review: the entry count joins its word like every other count.
+import { countLabel } from "../lib/booking-logic";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -313,7 +315,7 @@ export function ActivityLogModal({
           exist to settle. */}
       <div style={{ fontSize: T.micro, color: S.muted, marginBottom: SP.tight }}>
         {loading ? "" : shown.length === rows.length
-          ? shown.length + (shown.length === 1 ? " entry" : " entries")
+          ? countLabel(shown.length, "entry", "entries")
           : shown.length + " of " + rows.length + " shown"}
       </div>
 

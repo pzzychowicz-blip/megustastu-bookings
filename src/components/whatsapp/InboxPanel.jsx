@@ -32,6 +32,8 @@ import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
 import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal } from "../atoms";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
+// v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
+import { countLabel } from "../../lib/booking-logic";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -510,7 +512,7 @@ export function InboxPanel({
               title={allVisibleSelected ? "Clear selection" : "Select all"}
               style={{ flexShrink: 0, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}
             >{allVisibleSelected ? "Clear" : "Select all"}</button>
-            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>{selected.size + " selected"}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>{countLabel(selected.size, "selected")}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
@@ -545,7 +547,7 @@ export function InboxPanel({
               <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >
-            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>Delete {selected.size} conversation{selected.size !== 1 ? "s" : ""}?</div>
+            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>{"Delete " + countLabel(selected.size, "conversation", "conversations") + "?"}</div>
             <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>This permanently removes the selected conversations and their messages. This can't be undone.</div>
           </Overlay>
         ) : null}</ModalPresence>

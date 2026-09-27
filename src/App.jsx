@@ -1574,7 +1574,7 @@ function BookingApp({uid}){
         // reason `refused` and `truncated` are separate flags rather than a
         // count of zero and a count that looks complete.
         const n=res?res.removed:0;
-        const said=n+(n===1?" entry":" entries");
+        const said=countLabel(n,"entry","entries");
         if(res&&res.refused){
           // /code-review: this used to name ONE cause — "only once the updated
           // database rules are deployed" — which was true of DEV on the day it
@@ -4700,7 +4700,7 @@ function BookingApp({uid}){
     const n=bookingsForAnnounceRef.current.reduce(function(acc,b){
       return acc+((b&&b.date===viewDate&&b.status!=="cancelled")?1:0);
     },0);
-    setDayAnnounce(label+". "+(n===0?"Nothing booked":n+(n===1?" booking":" bookings"))+".");
+    setDayAnnounce(label+". "+(n===0?"Nothing booked":countLabel(n,"booking","bookings"))+".");
   },[viewDate]);
   const notifAnnounce=notifSections.length===0?"":
     (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+

@@ -29,8 +29,17 @@ describe("countLabel", () => {
   });
 });
 
+// The words a count is written with.
+const WORDS = "min|mins|minutes|booking|bookings|cover|covers|visit|visits|no-show|no-shows|reminder|reminders|month|months|year|years|chair|chairs|waiting|day|days|table|tables|seat|seats|message|messages|total|more|guest|guests|entries|entry|waitlist entr|row|rows|conversation|conversations|selected|earlier";
 // A count WORD concatenated with a plain space: `n + " bookings"`, `+ " min"`.
-const COUNT_WORD = /\+ ?" (min|mins|minutes|booking|bookings|cover|covers|visit|visits|no-show|no-shows|reminder|reminders|month|months|year|years|chair|chairs|waiting|day|days|table|tables|seat|seats|message|messages|total|more|guest|guests|entries|entry|waitlist entr)\b/g;
+const COUNT_WORD = new RegExp('\\+ ?" (' + WORDS + ')\\b', "g");
+// …and the same word as the branch of a plural ternary: `n + (n === 1 ? " entry" : " entries")`.
+// v18.2.0 /code-review: the sweep matched only the shape above, so five
+// on-screen counts written this way (the List's "Completed & cancelled"
+// summary, "Collapse banners above", the Activity log's entry count, its clear
+// toast, the day announcement) kept a plain space and this test passed over
+// every one. One match per ternary: the `: " entries"` branch has no `?`.
+const COUNT_TERNARY = new RegExp('\\? ?" (' + WORDS + ')\\b', "g");
 
 // The sites that keep a plain space on purpose, counted, so a new one fails.
 const ALLOWED = {
@@ -41,9 +50,18 @@ const ALLOWED = {
   "components/BookingFormModal.jsx": 1,
   // A console line.
   "hooks/usePersistence.js": 1,
-  // "N bookings re-placed": the text of a STORED activity entry.
-  "lib/activity.js": 1,
+  // "N bookings re-placed" and "cleared the activity log · … · N entries":
+  // the text of STORED activity entries.
+  "lib/activity.js": 2,
 };
+
+describe("the guard sees both shapes", () => {
+  it("a plain concatenation and a plural ternary", () => {
+    expect('n + " bookings"'.match(COUNT_WORD)).toHaveLength(1);
+    expect('n + (n === 1 ? " booking" : " bookings")'.match(COUNT_TERNARY)).toHaveLength(1);
+    expect('(t.length>1?"tables ":"table ")'.match(COUNT_TERNARY), "a word with no count before it").toBeNull();
+  });
+});
 
 describe("no count is typed with a plain space", () => {
   it("every count-word concatenation in src is countLabel's, bar the listed records", () => {
@@ -54,7 +72,8 @@ describe("no count is typed with a plain space", () => {
         const p = join(dir, e.name);
         if (e.isDirectory()) walk(p);
         else if (/\.(js|jsx)$/.test(e.name)) {
-          const n = (stripComments(readFileSync(p, "utf8")).join("\n").match(COUNT_WORD) || []).length;
+          const src = stripComments(readFileSync(p, "utf8")).join("\n");
+          const n = (src.match(COUNT_WORD) || []).length + (src.match(COUNT_TERNARY) || []).length;
           if (n) hits[p.slice(SRC.length + 1)] = n;
         }
       }

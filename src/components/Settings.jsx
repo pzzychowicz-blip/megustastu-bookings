@@ -1099,7 +1099,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             onDec={() => onSaveGeneralSettings({ regularMin: gs.regularMin - 1 })}
             onInc={() => onSaveGeneralSettings({ regularMin: gs.regularMin + 1 })} />
           {/* v17.1.0: one threshold for ALL three rows banners (late / overlap / waitlist). */}
-          <HourStepper label="Collapse banners above" value={gs.lateCollapseMax} fmt={(n) => n + (n === 1 ? " row" : " rows")}
+          <HourStepper label="Collapse banners above" value={gs.lateCollapseMax} fmt={(n) => countLabel(n, "row", "rows")}
             disableDec={gs.lateCollapseMax <= 1} disableInc={gs.lateCollapseMax >= 20}
             onDec={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax - 1 })}
             onInc={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax + 1 })} />

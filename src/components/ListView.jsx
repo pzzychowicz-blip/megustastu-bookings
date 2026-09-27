@@ -1009,7 +1009,7 @@ export const ListView = memo(function ListView({
       {finished.length > 0 ? (
         <Collapsible
           title="Completed & cancelled"
-          summary={finished.length + (finished.length === 1 ? " booking" : " bookings")}
+          summary={countLabel(finished.length, "booking", "bookings")}
           open={showFinished}
           onToggle={onToggleFinished}
           style={{ marginBottom: 0 }}

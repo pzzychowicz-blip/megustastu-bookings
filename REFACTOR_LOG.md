@@ -28211,3 +28211,17 @@ fix is a commit of its own:
 
    **Gate after fix 4:** `122.82 kB` gz main bundle (+0.01) · **1913 tests** (+1) · 0 lint errors, 90
    warnings (unchanged) · style OK.
+5. **Fixed** (`every count keeps its word, the plural ternaries too`). Phase 77's guard matched `n +
+   " word"` and nothing else, so the conditional plural `n + (n === 1 ? " booking" : " bookings")` was
+   invisible to it, and five on-screen counts in its own word list kept a plain space: the List's
+   "Completed & cancelled" summary, Settings' "Collapse banners above" value, the Activity log's entry
+   count, its clear toast and the day announcement. The same scan found three counts whose words the
+   list did not have: the booking form's "+ 3 earlier", the inbox's "3 selected" and its "Delete 3
+   conversations?". All eight go through `countLabel` now. The guard reads both shapes from one word
+   list, with the words added, and checks itself on a sample of each. The one ternary left is a stored
+   activity entry ("cleared the activity log · … · N entries"), a record like the phase-77 one beside
+   it, so `ALLOWED` counts it. Live on DEV, Thu 24.09's "Completed & cancelled" summary reads "4
+   bookings" with U+00A0. `tests/count-label.test.js` +1.
+
+   **Gate after fix 5:** `122.80 kB` gz main bundle (−0.02) · **1914 tests** (+1) · 0 lint errors, 90
+   warnings (unchanged) · style OK.
