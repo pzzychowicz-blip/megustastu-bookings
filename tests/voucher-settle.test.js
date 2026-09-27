@@ -28,6 +28,17 @@ describe("Settle opens the redeem prompt, not the edit form", () => {
     expect(App).toMatch(/const ok=ask\.from==="settle"\?true:withRedeemAsked\(function\(\)\{/);
   });
 
+  // v18.2.0 /code-review: with no booking write to go first, nothing checked the
+  // visit was STILL completed when the prompt was answered — walked back on
+  // another device meanwhile, the redeem left a ledger entry against a booking
+  // that is not completed. The check sits ABOVE the redeem, and refuses aloud.
+  it("refuses a settle whose booking is no longer completed, before anything is written", () => {
+    const fn = App.slice(App.indexOf("function settleVoucher("), App.indexOf("function offerVoucherCarry("));
+    const guard = fn.search(/if\(ask\.from==="settle"\)\{\s*const cur=bookings\.find\(function\(x\)\{return x\.id===ask\.id;\}\);\s*if\(!cur\|\|cur\.status!=="completed"\)\{flashRefusal\(/);
+    expect(guard, "the guard").toBeGreaterThan(-1);
+    expect(guard, "above the redeem").toBeLessThan(fn.indexOf("redeemVoucher(code,ask.id,amount)"));
+  });
+
   it("closes on Not now instead of completing anything", () => {
     expect(App).toMatch(/settle=\{voucherAsk\.from==="settle"\}/);
     expect(App).toMatch(/onSkip=\{function\(\)\{if\(voucherAsk\.from==="settle"\)setVoucherAsk\(null\);else settleVoucher\(0\);\}\}/);

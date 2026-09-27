@@ -28170,3 +28170,19 @@ fix is a commit of its own:
 
    **Gate after fix 1:** `122.75 kB` gz main bundle (−0.01) · **1911 tests** (+2) · 0 lint errors, 90
    warnings (unchanged) · style OK.
+2. **Fixed** (`Settle refuses a booking that is no longer completed`). Phase 48's Settle writes no
+   booking (`ok` is `true` for `from: "settle"`), so it skipped the "booking write first" ordering
+   `settleVoucher`'s own comment exists for, and nothing re-checked the visit instead. The prompt
+   mounts on the voucher alone, whatever the booking's status, so a booking walked back out of
+   Completed on another device while it was open would have been redeemed against: a ledger entry on
+   a booking that is not completed, the one state that comment says nothing in the app looks for. A
+   settle now reads the booking first and refuses with `flashRefusal` ("That booking is no longer
+   completed — nothing was recorded against its voucher."). Verified by the source pin, not live: the
+   race was staged on DEV (a completed booking given voucher 5C7Z-WJ3P, Settle opened, the status
+   written to confirmed through a second path), and the server took the walk-back, but this client
+   still read Completed after five seconds, so pressing Redeem would have tested a stale client rather
+   than the guard. After a reload it agreed with the server. `tests/voucher-settle.test.js` +1: the
+   guard sits in `settleVoucher` above `redeemVoucher`.
+
+   **Gate after fix 2:** `122.81 kB` gz main bundle (+0.06) · **1912 tests** (+1) · 0 lint errors, 90
+   warnings (unchanged) · style OK.

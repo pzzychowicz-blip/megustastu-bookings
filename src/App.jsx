@@ -3950,6 +3950,16 @@ function BookingApp({uid}){
     // order below exists for a completion, and here the voucher is the only
     // write. (Going through updateStatus would have logged a second "status →
     // completed" for a status that did not change.)
+    // v18.2.0 /code-review: …which means nothing here re-checks that the visit
+    // IS still completed, and the prompt stays open whatever the booking's
+    // status (it mounts on the voucher alone). Walked back out of Completed on
+    // another device meanwhile, a redeem would leave a ledger entry against a
+    // booking that is not completed — the state the ordering note above says
+    // nothing in the app looks for. So a settle asks first, and refuses.
+    if(ask.from==="settle"){
+      const cur=bookings.find(function(x){return x.id===ask.id;});
+      if(!cur||cur.status!=="completed"){flashRefusal("That booking is no longer completed — nothing was recorded against its voucher.");return;}
+    }
     const ok=ask.from==="settle"?true:withRedeemAsked(function(){
       if(ask.from!=="form") return updateStatus(ask.id,ask.status);
       // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
