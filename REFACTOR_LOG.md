@@ -28106,3 +28106,24 @@ either phone width. `tests/mobile-bar.test.js` +1.
 
 **Gate after phase 79:** `122.68 kB` gz main bundle (+0.03) · **1905 tests** (+1) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 80. "Add to waitlist" asks for the phone's code, as Save does
+
+The fourth loose end, from round 2. Phase 19 made the booking form's Save refuse a number that names no
+country, and phases 20 and 66 taught it to find a code typed without its plus and a UK mobile typed the
+home way. "Add to waitlist", offered under the form's "No tables available" banner, took the phone as
+typed, so a waiting party could be stored as "600 111 333", and the booking it later becomes is then a
+second customer beside the same guest with "+34" (`normalizePhone`). `addFormToWaitlist` now runs the
+same `withTypedCode` on the form's number (the button is pressed without the number box ever blurring,
+which is where the field runs it) and refuses what still has no code with Save's own sentence, on the
+phone field. The button is offered on a new booking only (`!editId`), so Save's exemption for an
+untouched stored number has nothing to exempt. The walk-in form has no phone field.
+
+Live on DEV, a new booking for 25 guests wanting indoor on Tue 29.09 at 14:00 ("No tables available
+(indoor preference)."): with "600 111 333" in the number box, Add to waitlist left the form open with
+"Choose the country code for this phone number." and the box `aria-invalid`, and wrote nothing; with "34
+600 111 333", pressed the same way, the form closed and the waitlist holds "Wait Probe", "+34 600 111
+333", 25 guests, 14:00, indoor. `tests/phone-countries.test.js` +2.
+
+**Gate after phase 80:** `122.74 kB` gz main bundle (+0.06) · **1907 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

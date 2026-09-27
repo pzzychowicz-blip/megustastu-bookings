@@ -2316,10 +2316,22 @@ function BookingApp({uid}){
   // draft's fields as a waiting entry, close the form, flash the toast.
   function addFormToWaitlist(){
     if(refused("waitlistManage"))return;
-    const f=formRef.current;
+    // v18.2.0 phase 80 (round 2's loose end): the waitlist takes the phone the
+    // way Save does (phase 19 · 20 · 66). A code typed without its plus, or a
+    // UK mobile typed the home way, becomes the code — the button is pressed
+    // without the number box ever blurring — and a number that still names no
+    // country is refused on the phone field, since the entry becomes a booking
+    // and the same guest with and without "+34" is two customers. The button is
+    // offered on a NEW booking only, so Save's untouched-number exemption has
+    // nothing to exempt here.
+    const f0=formRef.current;
+    const typed=withTypedCode(f0.phone,generalSettings.pinnedCountries);
+    const f=typed!==f0.phone?Object.assign({},f0,{phone:typed}):f0;
+    const ph=cleanPhoneOf(f.phone);
+    if(ph&&!phoneHasCode(ph)){setErrorField("phone");setError("Choose the country code for this phone number.");return;}
     addToWaitlist({
       name:f.name||"",
-      phone:cleanPhoneOf(f.phone),
+      phone:ph,
       size:Number(f.size)||2,
       date:f.date||viewDate,
       prefTime:f.time||null,

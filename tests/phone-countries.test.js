@@ -332,3 +332,24 @@ describe("withTypedCode — the UK's own format (v18.2.0 phase 66)", () => {
     }
   });
 });
+
+// v18.2.0 phase 80 (round 2's loose end): "Add to waitlist" took the phone as
+// typed, so phase 19's code check guarded Save and nothing else. Measured on DEV
+// after: "600 111 333" pressed straight from the number box was refused on the
+// phone field ("Choose the country code…", aria-invalid, nothing written);
+// "34 600 111 333", pressed the same way, was stored as "+34 600 111 333".
+describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)", () => {
+  const App = read("src", "App.jsx");
+  const add = App.slice(App.indexOf("function addFormToWaitlist(){"), App.indexOf("function addWalkinToWaitlist(){"));
+  it("finds a code typed without its plus, then refuses a number that still names no country", () => {
+    expect(add).toMatch(/const typed=withTypedCode\(f0\.phone,generalSettings\.pinnedCountries\);/);
+    expect(add).toMatch(/if\(ph&&!phoneHasCode\(ph\)\)\{setErrorField\("phone"\);setError\("Choose the country code for this phone number\."\);return;\}/);
+    // The refusal comes BEFORE the write, and the stored phone is the checked one.
+    expect(add.indexOf("setErrorField(\"phone\")")).toBeLessThan(add.indexOf("addToWaitlist("));
+    expect(add).toMatch(/phone:ph,/);
+  });
+  it("Save's message and this one are the same sentence", () => {
+    const save = App.slice(App.indexOf("function doSave(){"));
+    expect(save).toMatch(/setError\("Choose the country code for this phone number\."\)/);
+  });
+});
