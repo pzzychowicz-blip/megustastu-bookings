@@ -1604,7 +1604,7 @@ input[type="search"]::-webkit-search-cancel-button {
    the spin stopped. */
 @keyframes mgt-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-.mgt-ghost-out { animation: mgt-ghost-out var(--t-move) var(--ease-out) forwards; }
+.mgt-ghost-out { animation: mgt-ghost-out var(--t-move) var(--ease-in) forwards; }
 
 /* Accessibility + weak-hardware opt-out: collapse every animation/transition
    to ~instant when the OS requests reduced motion.

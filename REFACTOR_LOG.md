@@ -28264,3 +28264,36 @@ fix is a commit of its own:
 context-less browser at hand) and 2 (the race could not be staged). Two deferred: the ⋯ card's focus
 (3, after a fix that did not work) and the shared phone helper (9). **Gate after the round:** `122.80 kB` gz main bundle (+0.04 on
 phase 81) · **1914 tests** (+5) · 0 lint errors, 90 warnings (unchanged) · style OK.
+
+## v18.3.0 — motion & touch
+
+**Date:** 2026-09-27 · **Branch:** `feat/v18.3.0-motion-touch` ·
+**Behavioural change:** yes, user-visible in the timeline drag, the popups, the Plan view's
+gestures, the booking form on a touch keyboard, and the shell on iOS.
+
+The build half (S4) of the motion & touch review. S1–S2 audited the app's motion and touch
+behaviour with four skills (improve-animations, find-animation-opportunities, apple-design,
+mobile-native) against a standing brief that protects the decisions DESIGN.md has already
+measured; S3 triaged the 33 findings and Patryk chose what to build in an interview. One minor
+version carries every pick (his call; the recommendation was two versions). Each plan lands as
+its own commit, `v18.3.0 phase N`, and extends this entry. The plans, the triage and the
+decisions live in the context folder (`MGT_Bookings_v18.3.0_Motion_Touch_Plans.md`); the evidence
+for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
+
+### Phases
+
+1. **The waitlist ghost's exit runs on the exit curve (M6).** `.mgt-ghost-out` was the one
+   `*-out` class on `--ease-out`; every other exit takes `--ease-in` (DESIGN.md's direction rule:
+   an exit accelerates away because the eye has already moved on), and nothing recorded a reason
+   for the ghost to differ. One word in `src/index.css`. Phase 8 reuses the class for timeline
+   blocks that leave, so it had to be right first. **Measured** in the rig (tablet, 18.3.0
+   served): a probe carrying the class runs `mgt-ghost-out` for 240ms on
+   `cubic-bezier(0.32, 0, 0.67, 0)`, from the element's own opacity (0.55) to 0.
+
+### Check on the devices after merge
+
+Nothing in this programme can feel these before the deploy. Patryk checks each on the
+restaurant devices during the boot-banner check. A row joins the table when its phase lands.
+
+| Phase | Device | Check |
+|---|---|---|
