@@ -37,11 +37,11 @@
 //     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
 //     colour alone to convey state.
 
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
@@ -66,6 +66,15 @@ import { money } from "../lib/vouchers";
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
 const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
+// v18.3.0 (M4): a RELEASED block travelling home. TL_MOVE's transform runs on
+// M.tap because at rest a transform is the hover lift answering a pointer — but
+// after a drag the same property carries the block back from wherever the
+// finger left it, up to rows away, and anything that TRAVELS takes --t-move or
+// --t-shift (DESIGN.md). Measured before: an 18px release went home in 145ms,
+// and the drag's opacity and shadow switched off on the release frame. So for
+// exitHold("shift") after a release the block uses this, and the lift fades on
+// the same curve as the move. Then TL_MOVE again, so the hover lift stays quick.
+const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", transform " + M.shift + ", opacity " + M.shift + ", box-shadow " + M.shift;
 
 // v17.9.0: the hour-pill look, once. Three places in this file paint a time on
 // --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
@@ -221,7 +230,7 @@ function BlockFlag({ title, children }) {
   );
 }
 
-function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null }) {
   const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -368,6 +377,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
   const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
   const dragRafRef = useRef(0);            // v17.0.0 review fix #4: coalesce moves to one render/frame
+  // v18.3.0 (M4): non-zero for exitHold("shift") after a released drag, while
+  // the block travels home on TL_SETTLE (see there). A COUNT of releases, not a
+  // boolean, so each release restarts the hold, and the hold is timed from the
+  // COMMIT that starts the transition, not from the pointerup: a drop runs
+  // App's dropOnTable synchronously in between (measured on a Mac: 19ms for a
+  // refusal that returns early, ~110ms for one that walks the candidates, more
+  // on the tablet), and a hold counted from the event would cut the fade and
+  // the z-order short by that much. The phase 3 wipe window's lesson, again.
+  const [settling, setSettling] = useState(0);
+  useEffect(() => {
+    if (!settling) return undefined;
+    const t = setTimeout(() => { setSettling(0); }, exitHold("shift"));
+    return () => { clearTimeout(t); };
+  }, [settling]);
 
   function beginDrag(el, pid) {
     dragRef.current = { ...(dragRef.current || {}), active: true };
@@ -455,6 +478,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     const target = d && d.active && commit ? tableAtY(e.clientY) : null;
     setDragDy(null);
     if (setDragHover) setDragHover(null);
+    // v18.3.0 (M4): a block that stays mounted (a same-row release, a refused
+    // drop, a swap that keeps one of its tables) glides home on TL_SETTLE.
+    if (d && d.active) setSettling((n) => n + 1);
+    // v18.3.0 (M1): a drop to another row re-parents the block, and useFlip
+    // would animate it from its row before the drag. Seed the release position
+    // instead. Below the teardown, which stays first, and still exact: the
+    // setStates above reach the DOM only at this event's commit, so the rect
+    // still carries the live translateY, i.e. where the finger left the block.
+    // Only the cell that carries the flip id (a multi-table booking's other
+    // cells carry none, and keep today's flip).
+    if (target && target !== homeTable && seedFlip && flipId === b.id && d.el) {
+      const c = d.el.closest("[data-flip-root]");
+      if (c) seedFlip(b.id, d.el.getBoundingClientRect().top - c.getBoundingClientRect().top);
+    }
     if (target && target !== homeTable) {
       // Swallowed deliberately, and only here: the teardown above has already
       // run, so the block recovers either way, and an uncaught handler error
@@ -627,11 +664,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
         ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
+        // v18.3.0 (M4): and it stays above the grid until it LANDS. z-index cannot
+        // fade, and dropped on the release frame it slid the travelling block
+        // under every later row (measured: a refused drop from i1 passed under the
+        // rows below 5A and under the booking's own 5B cell for most of its trip).
+        ...(dragDy == null && settling ? { zIndex: 30 } : null),
         // v15.8.0: reposition eases (seated-shift / reshuffle). v15.8.1: `transform`
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
-        transition: dragDy != null ? "none" : TL_MOVE
+        // v18.3.0 (M4): TL_SETTLE for a moment after a released drag.
+        transition: dragDy != null ? "none" : settling ? TL_SETTLE : TL_MOVE
       }}
     >
       {animOverlay}
@@ -1420,6 +1463,10 @@ export const TimelineView = memo(function TimelineView({
   // carries data-flip-id — one element per id, no collision, animates only a real move.
   const assignSig = day.map((b) => b.id + "@" + (b.tables || []).join("-")).join(",");
   const flipRef = useFlip([assignSig]);
+  // v18.3.0 (M1): a drop hands useFlip its release position (see useFlip's
+  // `seed`). Reads the method at CALL time: it is attached in an effect, after
+  // the first render.
+  const seedFlip = useCallback(function (id, top) { if (flipRef.seed) flipRef.seed(id, top); }, [flipRef]);
 
   // ── Status-change animations (v15.8.0) ──────────────────────────────────
   // Detection uses MODULE-level maps (__prevStatus / __statusAnims) so a stamp
@@ -1710,7 +1757,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primaryGridTable(b, gridIds) === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primaryGridTable(b, gridIds) === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} />
             </Fragment>
           );
         })}
@@ -1741,7 +1788,7 @@ export const TimelineView = memo(function TimelineView({
       {unplacedLanes.map((lane, li) => (
         <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
           <GridLines />
-          {lane.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+          {lane.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} />)}
         </div>
       ))}
     </div>
@@ -1794,7 +1841,9 @@ export const TimelineView = memo(function TimelineView({
           the new scale. Blocks/gridlines are %-positioned against this width, so
           they re-scale with it for free. (The one layout-bound animation — see
           REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
-      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
+      {/* v18.3.0 (M1): `data-flip-root` lets a dropped block find this
+          container without a second ref, to seed its release position. */}
+      <div ref={flipRef} data-flip-root="" style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
         <div style={{
           position: "relative",
           borderBottom: "2px solid var(--tl-header-border)",

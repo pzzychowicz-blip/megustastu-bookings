@@ -1570,9 +1570,33 @@ export function reduceMotionOn() {
 // A predicate rather than a boolean so it is evaluated HERE, inside the layout
 // effect — the moment the question is actually asked. That also lets a caller
 // answer it from refs without reading them during render.
+//
+// v18.3.0 (M1): `ref.seed(id, top)` — a ONE-SHOT starting point for one id's
+// next pass, used for a timeline DROP. The recorded top of a dragged block is
+// its row from before the drag began; the finger left it somewhere else, so a
+// flip from the record rewound the block to its old row on the first frame
+// after release and slid it down again (measured: released at top 416, drawn
+// at 328 on the next frame, then 385ms back to 416). The drop seeds the
+// release position instead, container-relative like every top here, so the
+// block settles from under the finger.
+// A seed lives ONE FRAME. React flushes a discrete event's commit, and with it
+// this layout effect, inside the event, before any animation frame, so the
+// drop's own pass reads it. A refused drop changes no assignment and runs no
+// pass, and its seed must not survive to poison a later, unrelated reshuffle,
+// so an unconsumed seed is dropped at the next frame. Under reduced motion a
+// seed is consumed like any top, and nothing animates.
+// Attached in an effect, never during render: writing to a ref in render is
+// what the React-Compiler refs rule forbids.
 export function useFlip(deps, isQuiet) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
+  const seeds = useRef(new Map());
+  useEffect(function () {
+    ref.seed = function (id, top) {
+      seeds.current.set(id, top);
+      requestAnimationFrame(function () { seeds.current.delete(id); });
+    };
+  }, []);
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
@@ -1593,7 +1617,7 @@ export function useFlip(deps, isQuiet) {
       // container itself cancels out of every child's offset.
       const top = el.getBoundingClientRect().top - originTop;
       next.set(id, top);
-      const prev = prevTops.current.get(id);
+      const prev = seeds.current.has(id) ? seeds.current.get(id) : prevTops.current.get(id);
       if (!quiet && !reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
@@ -1603,6 +1627,7 @@ export function useFlip(deps, isQuiet) {
       }
     });
     prevTops.current = next;
+    seeds.current.clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return ref;

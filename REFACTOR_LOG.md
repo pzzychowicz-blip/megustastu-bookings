@@ -28331,6 +28331,48 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    `until: now +` left in either.
    Lint warnings 90 → 86: the four removed were two "setState synchronously within an effect"
    and two "impure function during render" (`Date.now()`) on the effect lines this rewrote.
+4. **A drop settles from the release point, and every in-place release travels on `--t-shift`
+   (M1 + M4).** A drop re-parents the block into its new row, so `assignSig` changed and
+   `useFlip` animated it from the top it had recorded before the drag began. On the first frame
+   after release the block was back on its old row, then slid down again. `useFlip` now returns
+   its ref with a `seed(id, top)` method: a seeded id's next pass flips from the seed instead of
+   the record. A seed lives one frame (dropped at the next `requestAnimationFrame`), so a refused
+   drop, which runs no pass, cannot poison a later reshuffle. `endDrag` seeds the dragged cell's
+   release top, relative to the grid (`data-flip-root`), only for a cross-row target and only on
+   the cell that carries the flip id. It seeds after the teardown, which stays first: the
+   setStates reach the DOM only at the event's commit, so the rect still carries the live
+   `translateY`. A block that stays mounted (a same-row release, a refused drop, a swap that
+   keeps one of its tables) now travels home on `TL_SETTLE`, where `--t-shift` carries
+   transform, opacity and shadow. It had used `TL_MOVE`, whose transform is the hover lift's
+   `--t-tap`, and the lift had switched off on the release frame.
+   **Two changes beyond the plan, both from measurements:**
+   - The block keeps `zIndex: 30` until it lands. Dropped on the release frame (the plan's
+     version), a refused drop from i1 slid under every later row and under the booking's own
+     5B cell for most of its 385ms trip.
+   - The hold is timed from the COMMIT, not from the pointerup: a release counter drives an
+     effect's `exitHold("shift")` timer. The drop's synchronous work runs between the event and
+     the commit (on this Mac, 19ms for a refusal that returns early and ~110ms for a drop that
+     walks the candidates; more on the tablet), and a hold counted from the event would cut
+     the fade and the z-order short by that much. This is the phase 3 follow-up's rule.
+   **Measured** in the rig (tablet, writes blocked, real mouse events, per-frame rects):
+   - **Ordering proof:** the drop's own pass saw `seeds.has(id)` true (seed 128.2, recorded
+     top 27).
+   - **Cross-row drops:** released 13px below row 2, the block rose 128.2 → 115, monotonic over
+     385ms on `--ease-out`. Released 13px above it, it went 101.8 → 115. No frame showed the old
+     row. At `Animation.setPlaybackRate(0.1)` the same drop is 231 frames with zero reversals.
+   - **Same-row release (18px):** translateY 18 → 0 and opacity 0.85 → 1 over ~390ms, with the
+     shadow fading on the same curve. The settle state ends at 423ms, 16ms after the move.
+   - **Refusals:** a drop above the grid glides home the same way. So does one App refuses
+     (Sofía onto i1, "would need too many tables"), and it stays on top every frame.
+   - **Stale seed:** after that refused drop, a later drop of OPT B re-measured Sofía with
+     `seeded: false`, and she did not animate.
+   - **Swap (2026-10-03, Ingrid onto Yara's i1):** the dragged block settles from its release
+     (436.2 → 423). Yara, who was not dragged, flips from her old row (423 → 335).
+   - **Reduced motion:** with the OS setting a drop lands in one frame (seed consumed, no
+     animation); a same-row release jumps home and only opacity fades, over 120ms. With the
+     in-app toggle everything lands in one frame.
+   The ~110ms freeze between release and the first frame of the new row is the synchronous
+   drop, untouched here; phase 27 adds it to ROADMAP.
 
 ### Check on the devices after merge
 
@@ -28339,3 +28381,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 
 | Phase | Device | Check |
 |---|---|---|
+| 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home, and the lift fades as it goes. How long the block sits still after release (the drop freeze) is noted, not fixed |

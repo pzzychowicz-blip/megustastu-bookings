@@ -1642,6 +1642,19 @@ relative is also what the hook MEANS: it animates a row change, which is
 movement inside the container; a whole-container move is the page reflowing
 around it, which the browser has already drawn.
 
+**A dropped block settles from where the finger LEFT it** (v18.3.0). A drop
+re-parents the block into its new row, and `useFlip` animated it from the top it
+recorded before the drag began: on the first frame after release the block was
+back on its old row, then slid down again. `endDrag` now hands the hook the
+release position (`ref.seed`, which lives one frame), so the flip runs from
+there. A block that stays mounted (released on its own row, or a refused drop)
+travels home on `TL_SETTLE`: `--t-shift` for transform, opacity and shadow,
+with its z-order held until it lands. It used the hover lift's `--t-tap`, but
+after a drag the same property is travel. That hold counts from the COMMIT that
+starts the transition, not from the pointerup, because the drop's synchronous
+work runs in between. It is the same lesson as the status-wipe window: **time a
+hold from when its animation starts, not from the event that caused it.**
+
 ### Adding motion to something that has none
 
 - **Fading in to an element's own opacity** is `.mgt-appear`, not
