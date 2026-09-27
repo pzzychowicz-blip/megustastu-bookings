@@ -31,8 +31,8 @@
 // with it.
 import { useId, useMemo, useState } from "react";
 import { S, T, FW, SP, R, H, IC, BTN } from "../lib/constants";
-import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkSolidBtn, AutoHeight } from "./atoms";
-import { renderText, activityCsv, activityCsvName } from "../lib/activity";
+import { Overlay, ModalTitle, OutlineChip, DateField, SearchField, mkInp, mkSel, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
+import { rowText, activityCsv, activityCsvName } from "../lib/activity";
 // v18.0.0 session 11: the same index the Customers tab is built from, so "can
 // this row lead anywhere" is answered by the thing that would have to answer it
 // on arrival. Memoised on `bookings` exactly as CustomersSettings does — it
@@ -49,8 +49,10 @@ import { customerIndex } from "../lib/customers";
 // `addDays` rather than hand-rolled date arithmetic for the quick ranges,
 // because `setDate(getDate() - 6)` returns the SAME date on the spring-forward
 // day (v17.16.2).
-import { todayStr, addDays } from "../lib/day";
+import { todayStr, addDays, formatDay, formatDaysIn, localDay, showsYear } from "../lib/day";
 import { DownloadIcon } from "./Icons";
+// v18.2.0 /code-review: the entry count joins its word like every other count.
+import { countLabel } from "../lib/booking-logic";
 
 // The kinds a person would filter by, in the order they matter during service.
 // `session` and `data` are deliberately last: signing in and exporting a backup
@@ -65,6 +67,13 @@ const KIND_ORDER = [
   "standing", "settings", "people", "session", "data",
 ];
 
+// v18.2.0 phase 73 (round 2's X4): the range and kind chips are the app's
+// interactive chip, the shape Settings' pinned countries already had —
+// `size="small"` (11px), `H.chip` tall, and the hover lift every control
+// carries. They were OutlineChip's default micro size: 19.5px tall with 10px
+// text, fourteen tap targets smaller than anything else on this screen.
+const CHIP_H = { minHeight: H.chip };
+
 function timeOf(ms) {
   if (!ms) return "";
   const d = new Date(ms);
@@ -73,12 +82,12 @@ function timeOf(ms) {
 
 // v18.0.0 session 11: the day, for a list that can now span them. `dd.mm`
 // rather than a locale month name — it is the shape the date fields above it
-// already show, it sorts visually, and it stays two fixed-width columns so a
-// list of a hundred rows lines up.
+// already show, it sorts visually, and it stays a fixed-width column so a list
+// of a hundred rows lines up. v18.2.0 (C1): the house date, `formatDay`, which
+// is that shape with the weekday in front and the year when it is not this one.
 function dateOf(ms) {
   if (!ms) return "";
-  const d = new Date(ms);
-  return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0");
+  return formatDay(localDay(ms));
 }
 
 // The author, as a person would say it: the local part of the email, which is
@@ -167,7 +176,9 @@ export function ActivityLogModal({
   const whoActive = who && people.indexOf(who) !== -1 ? who : "";
 
   const shown = useMemo(function () {
-    const needle = q.trim().toLowerCase();
+    // v18.2.0 phase 54: the house date joins its weekday and day with a
+    // no-break space, which a typed space does not match — both sides fold it.
+    const needle = q.trim().toLowerCase().replace(/\u00a0/g, " ");
     return (rows || []).filter(function (r) {
       if (anyKind && !kinds[r.kind]) return false;
       if (whoActive && r.email !== whoActive) return false;
@@ -175,10 +186,18 @@ export function ActivityLogModal({
       if (!needle) return true;
       // Searched against what is ON SCREEN, tokens resolved — otherwise typing
       // a guest's name finds nothing, which is the first thing anybody tries.
-      const text = renderText(r.text, byId, r.subject && r.subject.name);
-      return (text + " " + personOf(r.email)).toLowerCase().includes(needle);
+      // v18.2.0: `rowText`, so the name a booking row now LEADS with (X1) is
+      // searchable too — "created" rows were otherwise unfindable by guest.
+      // Its dates are written the house way (C1), as the row shows them, so
+      // typing "24.09" finds a row that stored "2026-09-24".
+      const text = formatDaysIn(rowText(r, byId));
+      return (text + " " + personOf(r.email)).toLowerCase().replace(/\u00a0/g, " ").includes(needle);
     });
   }, [rows, kinds, anyKind, whoActive, peopleOnly, q, byId]);
+  // v18.2.0 (the design critique, C1): the date column fits the widest date it
+  // holds — "Wed 24.09" is 53px here, "Wed 24.09.2025" 82 (tabular, measured on
+  // DEV). The log keeps a year by default, so a range often crosses one.
+  const dateCol = showDate && shown.some(function (r) { return showsYear(localDay(r.at)); }) ? 84 : 54;
 
   function toggleKind(k) {
     setKinds(function (prev) {
@@ -222,13 +241,13 @@ export function ActivityLogModal({
 
       <div role="group" aria-label="Quick ranges"
         style={{ display: "flex", gap: SP.tight, flexWrap: "wrap", alignItems: "center", marginBottom: SP.base }}>
-        <OutlineChip as="button" tone={oneDay && fromDay === today ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={oneDay && fromDay === today ? "success" : "neutral"}
           aria-pressed={oneDay && fromDay === today}
           onClick={function () { setRange(today, today); }}>Today</OutlineChip>
-        <OutlineChip as="button" tone={fromDay === addDays(today, -6) && toDay === today ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={fromDay === addDays(today, -6) && toDay === today ? "success" : "neutral"}
           aria-pressed={fromDay === addDays(today, -6) && toDay === today}
           onClick={function () { setRange(addDays(today, -6), today); }}>Last 7 days</OutlineChip>
-        <OutlineChip as="button" tone={allTime ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={allTime ? "success" : "neutral"}
           aria-pressed={allTime}
           onClick={function () { setRange("", ""); }}>All time</OutlineChip>
       </div>
@@ -273,7 +292,7 @@ export function ActivityLogModal({
           const on = !!kinds[k];
           return (
             <OutlineChip
-              key={k} as="button" tone={on ? "success" : "neutral"}
+              key={k} as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={on ? "success" : "neutral"}
               aria-pressed={on}
               onClick={function () { toggleKind(k); }}
             >{KIND_LABEL[k]}</OutlineChip>
@@ -283,7 +302,7 @@ export function ActivityLogModal({
             run: every chip to its left narrows WHAT happened, this one narrows
             WHO did it — the same axis as the person dropdown above. */}
         <span aria-hidden="true" style={{ width: SP.wide }} />
-        <OutlineChip as="button" tone={peopleOnly ? "success" : "neutral"}
+        <OutlineChip as="button" size="small" className="mgt-hover-scale" style={CHIP_H} tone={peopleOnly ? "success" : "neutral"}
           aria-pressed={peopleOnly}
           onClick={function () { setPeopleOnly(function (v) { return !v; }); }}
         >People only</OutlineChip>
@@ -296,7 +315,7 @@ export function ActivityLogModal({
           exist to settle. */}
       <div style={{ fontSize: T.micro, color: S.muted, marginBottom: SP.tight }}>
         {loading ? "" : shown.length === rows.length
-          ? shown.length + (shown.length === 1 ? " entry" : " entries")
+          ? countLabel(shown.length, "entry", "entries")
           : shown.length + " of " + rows.length + " shown"}
       </div>
 
@@ -326,7 +345,9 @@ export function ActivityLogModal({
                     : "Nothing was recorded in that range."}
             </div>
           ) : shown.map(function (r) {
-            const text = renderText(r.text, byId, r.subject && r.subject.name);
+            // The stored text keeps the sortable ISO date (and so does the CSV);
+            // the screen writes it the house way (v18.2.0, C1).
+            const text = formatDaysIn(rowText(r, byId));
             // A row naming a booking that still exists can open it.
             //
             // v18.0.0 session 11: and one naming a DELETED booking now leads
@@ -348,7 +369,7 @@ export function ActivityLogModal({
                 borderBottom: "1px solid var(--border-soft)",
               }}>
                 {showDate ? (
-                  <span style={{ fontSize: T.micro, color: S.muted, minWidth: 40, fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontSize: T.micro, color: S.muted, minWidth: dateCol, fontVariantNumeric: "tabular-nums" }}>
                     {dateOf(r.at)}
                   </span>
                 ) : null}
@@ -459,7 +480,7 @@ export function ActivityLogModal({
               onClick={function () {
                 if (armed) { setArmed(false); onClearRange(); } else setArmed(true);
               }}
-              style={mkSolidBtn(BTN.del, {
+              style={mkDangerBtn({
                 fontSize: T.body, minHeight: H.compact, padding: SP.base + "px " + SP.pane + "px",
                 opacity: allTime || clearBusy || badDay || backwards ? 0.5 : 1,
               })}

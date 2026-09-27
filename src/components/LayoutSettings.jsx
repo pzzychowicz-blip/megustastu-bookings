@@ -11,27 +11,39 @@
 //   • Kitchen limit.
 
 import { useState, useEffect } from "react";
-import { Section, Collapsible, Toggle, mkStep, mkBtn, Reveal } from "./atoms";
+import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, mkRemoveX, Reveal, SEG_TRACK, segStyle, TBadge } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
-import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon } from "./Icons";
+import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
+import { countLabel } from "../lib/booking-logic";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
 const STEP_BTN = mkStep(H.compact);
-// Small circular remove (×) button — used by the editable combo rows.
+// Small circular remove (×) button — every table, join group, combo and rule
+// row's remove.
 // v17.8.0: SOLID, not a pale danger wash behind danger-coloured text with a
 // danger-coloured border — the banned three-encodings shape, and on a
-// destructive control it also read as disabled. Every other delete in the app
-// (BTN.del) is a solid red button with white text; this is one of them now.
-const X_BTN = {
-  background: "var(--btn-del)", border: "1px solid var(--border-glass)",
-  borderRadius: R.pill, width: 28, height: 28, fontSize: T.title, fontWeight: FW.bold,
-  color: "var(--text-on-accent)", lineHeight: 1,
-  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  cursor: "pointer", boxShadow: "var(--shadow-btn)"
+// destructive control it also read as disabled.
+// v18.2.0 (the design critique, S6): the danger TINT, without that border.
+// Solid red on every row made removal the loudest thing in the tab — thirteen
+// of them on the tables list alone — for the rarest thing anybody does there.
+// Tint and tone are the tinted-pane shape, not the triple: the rim is the glass
+// one, not a third red. The red is kept for the confirmation, where removing a
+// table asks first — since v18.2.0 phase 62 that is the app's one destructive
+// look (`mkDangerBtn`, solid, with the trash mark), while these small editor
+// ×s stay quiet (Patryk's call). Phase 63 moved this style to atoms as
+// `mkRemoveX`, so the duration tier's × and the reminder editor's share it.
+const X_BTN = mkRemoveX();
+// The same × for CANCEL (a rename, a new table), which is not destructive and
+// so wears no red at all: the stepper's neutral, like the Cancel beside the
+// remove confirmation. They shared X_BTN, so the Cancel was a red × too.
+const CANCEL_X = {
+  ...X_BTN,
+  background: "var(--bg-stepper)", border: "1px solid var(--border-soft)",
+  color: "var(--text-primary)"
 };
 // Editable join-group chip + its micro reorder/remove buttons.
 const GCHIP = {
@@ -442,7 +454,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       <Collapsible
         title="Tables"
         subtitle="Each table's id, capacity and zone. Shared across all devices."
-        summary={tables.length + " tables · " + totalSeats + " seats"}
+        summary={countLabel(tables.length, "table", "tables") + " · " + countLabel(totalSeats, "seat", "seats")}
       >
         <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total
@@ -463,9 +475,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     onChange={function (e) { setEditVal(e.target.value); }}
                     onKeyDown={function (e) { if (e.key === "Enter" && editValid) commitEdit(t.id); if (e.key === "Escape") cancelEdit(); }} />
                 ) : (
-                  <span style={{ width: 44, fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", flexShrink: 0 }}>{t.id}</span>
+                  // v18.2.0 phase 71 (round 2's S9): the table's badge, the
+                  // teal / purple pill every other surface names a table with;
+                  // it was plain bold text here. A slot of the old width keeps
+                  // the rows' steppers in a column; a longer id widens it.
+                  <span style={{ minWidth: 44, display: "inline-flex", flexShrink: 0 }}><TBadge id={t.id} /></span>
                 )}
-                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
+                <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
                 <Stepper value={cap} disableDec={cap <= 1} disableInc={cap >= 20} label={"seats at table " + t.id}
                   onDec={function () { updateTable(t.id, { capacity: cap - 1 }); }} onInc={function () { updateTable(t.id, { capacity: cap + 1 }); }} />
                 {/* v17.15.6: one per table, and it HAS visible text — so it read
@@ -476,21 +492,30 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     what pressing it does: `aria-pressed` is not in play here
                     because this is a two-way toggle between two real values,
                     neither of which is "off". */}
-                <button onClick={function () { updateTable(t.id, { zone: indoor ? "outdoor" : "indoor" }); }} className="mgt-hover-scale"
-                  aria-label={(indoor ? "Indoor" : "Outdoor") + " (table " + t.id + ")"}
-                  style={{
-                    marginLeft: "auto", border: "1px solid var(--border-soft)", borderRadius: R.pill,
-                    padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, cursor: "pointer", flexShrink: 0,
-                    background: indoor ? "rgba(var(--tbl-ind-rgb),0.18)" : "rgba(var(--tbl-out-rgb),0.18)",
-                    color: "var(--text-primary)", boxShadow: "var(--shadow-btn)"
-                  }}>
-                  {indoor ? "Indoor" : "Outdoor"}
-                </button>
+                {/* v18.2.0 phase 71 (round 2's S9): a two-option SEGMENT,
+                    the app's one segmented look (SEG_TRACK / segStyle). It was
+                    ONE grey chip that flipped on a tap and read as a label of
+                    the zone rather than a control; the segment shows both values
+                    and which is on (`aria-pressed`). Each keeps the per-table
+                    name above, the word leading. */}
+                <div role="group" aria-label={"Zone of table " + t.id} style={{ ...SEG_TRACK, marginLeft: "auto", flexShrink: 0 }}>
+                  {["indoor", "outdoor"].map(function (z) {
+                    const on = indoor === (z === "indoor");
+                    return (
+                      <button key={z} onClick={function () { if (!on) updateTable(t.id, { zone: z }); }} className="mgt-hover-scale"
+                        aria-pressed={on}
+                        aria-label={(z === "indoor" ? "Indoor" : "Outdoor") + " (table " + t.id + ")"}
+                        style={{ ...segStyle(on), padding: "2px 12px", minHeight: H.chip }}>
+                        {z === "indoor" ? "Indoor" : "Outdoor"}
+                      </button>
+                    );
+                  })}
+                </div>
                 {editing ? (
                   <>
                     <button onClick={function () { commitEdit(t.id); }} disabled={!editValid} className={editValid ? "mgt-hover-scale" : undefined}
                       title="Save name" style={{ ...ACT_BTN, padding: "4px 10px", opacity: editValid ? 1 : 0.4, cursor: editValid ? "pointer" : "not-allowed" }}><CheckIcon size={IC.control} /></button>
-                    <button onClick={cancelEdit} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={IC.control} /></button>
+                    <button onClick={cancelEdit} className="mgt-hover-scale" title="Cancel" style={CANCEL_X}><CloseIcon size={IC.control} /></button>
                   </>
                 ) : (
                   <>
@@ -562,7 +587,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     <button onClick={function () { setPendingRemove(null); }} className="mgt-hover-scale"
                       style={{ border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, background: "var(--bg-stepper)", color: "var(--text-primary)", cursor: "pointer", boxShadow: "var(--shadow-btn)" }}>Cancel</button>
                     <button onClick={function () { removeTable(t.id); }} className="mgt-hover-scale"
-                      style={mkBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact, background: "var(--btn-del)" })}>{orph > 0 ? "Remove anyway" : "Remove"}</button>
+                      style={mkDangerBtn({ padding: "4px 12px", fontSize: T.body, minHeight: H.compact })}><TrashIcon size={IC.control} />{orph > 0 ? "Remove anyway" : "Remove"}</button>
                   </div>
                 </AlertRow>
                 </AlertPanel>
@@ -577,21 +602,27 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
             <input /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ value={newId} autoFocus placeholder="id" aria-label="New table id" style={{ ...TXT_INP }}
               onChange={function (e) { setNewId(e.target.value); }}
               onKeyDown={function (e) { if (e.key === "Enter" && newIdValid) addTable(); if (e.key === "Escape") { setAdding(false); setNewId(""); } }} />
-            <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>cap</span>
+            <span style={{ fontSize: T.body, color: "var(--text-muted)", fontWeight: FW.medium }}>seats</span>
             <Stepper value={newCap} disableDec={newCap <= 1} disableInc={newCap >= 20} label="seats at the new table"
               onDec={function () { setNewCap(Math.max(1, newCap - 1)); }} onInc={function () { setNewCap(Math.min(20, newCap + 1)); }} />
-            <button onClick={function () { setNewZone(newZone === "indoor" ? "outdoor" : "indoor"); }} className="mgt-hover-scale"
-              style={{
-                border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "4px 12px", fontSize: T.body, fontWeight: FW.bold, cursor: "pointer",
-                background: newZone === "indoor" ? "rgba(var(--tbl-ind-rgb),0.18)" : "rgba(var(--tbl-out-rgb),0.18)",
-                color: "var(--text-primary)", boxShadow: "var(--shadow-btn)"
-              }}>
-              {newZone === "indoor" ? "Indoor" : "Outdoor"}
-            </button>
+            {/* v18.2.0 phase 71: the same two-option segment as every table's row. */}
+            <div role="group" aria-label="Zone of the new table" style={{ ...SEG_TRACK, flexShrink: 0 }}>
+              {["indoor", "outdoor"].map(function (z) {
+                const on = newZone === z;
+                return (
+                  <button key={z} onClick={function () { setNewZone(z); }} className="mgt-hover-scale"
+                    aria-pressed={on}
+                    aria-label={(z === "indoor" ? "Indoor" : "Outdoor") + " (new table)"}
+                    style={{ ...segStyle(on), padding: "2px 12px", minHeight: H.chip }}>
+                    {z === "indoor" ? "Indoor" : "Outdoor"}
+                  </button>
+                );
+              })}
+            </div>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
               <button onClick={addTable} disabled={!newIdValid} className={newIdValid ? "mgt-hover-scale" : undefined}
                 style={{ ...ACT_BTN, opacity: newIdValid ? 1 : 0.4, cursor: newIdValid ? "pointer" : "not-allowed" }}>Add</button>
-              <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={X_BTN}><CloseIcon size={IC.control} /></button>
+              <button onClick={function () { setAdding(false); setNewId(""); }} className="mgt-hover-scale" title="Cancel" style={CANCEL_X}><CloseIcon size={IC.control} /></button>
             </div>
             {/* v17.15.2 /code-review: the ORIGINAL of the pair the rename row
                 mirrors — and the first pass wrapped the mirror and left this.

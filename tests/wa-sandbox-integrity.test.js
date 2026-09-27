@@ -156,7 +156,9 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     expect(read("src/components/whatsapp/DraftCard.jsx")).toMatch(/action=\{/);
     const ib = read("src/components/whatsapp/IntentBanner.jsx");
     expect(ib).toMatch(/action=\{/);
-    expect(ib).toMatch(/onHeaderClick=\{toggle\}/);
+    // v18.2.0 phase 49: the toggle is passed whenever the banner HAS a body to
+    // disclose; a linked cancel request is one line with nothing to open.
+    expect(ib).toMatch(/onHeaderClick=\{hasBody \? toggle : undefined\}/);
   });
 
   it("the WhatsApp settings tab is spliced into the ONE tab list", () => {

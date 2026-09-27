@@ -9,9 +9,16 @@ import { useState } from "react";
 import { Reveal, mkSolidBtn, OutlineChip, InlineAlert } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
 import { clampConfidence } from "../../lib/whatsapp";
+import { formatDay } from "../../lib/day";
+import { guestsLabel } from "../../lib/booking-logic";
 import { R, T, FW, IC, M, H, RIM_SOLID } from "../../lib/constants";
 import { DraftIcon, WarnIcon } from "./WaIcons";
 import { CloseIcon, CheckIcon, ChevronRightIcon } from "../Icons";
+
+// v18.2.0 phase 72 (W6): what each level of the parser's confidence asks of
+// staff. `clampConfidence` caps it by what the draft lacks — a size, date or
+// time the app cannot use, or an ambiguity — so "low" means check it closely.
+const CONF_SAYS = { high: "Looks right", medium: "Check it", low: "Check carefully" };
 
 export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, compact }) {
   // Compact-mode disclosure for the new_booking bar (notes / warning / confidence).
@@ -100,13 +107,18 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
   // INSIDE the draft card, which already has its own fill and 2px rim — a
   // filled chip in a filled container is the card-inside-a-card shape the
   // sweep bans. The border hue carries the confidence on its own.
-  const confLbl = conf;
+  // v18.2.0 phase 72 (round 2's W6): the chip says what to DO with the draft —
+  // it read "HIGH", the parser's level in capitals with nothing saying what a
+  // level means. The level is kept as the tooltip, "High confidence".
+  // `clampConfidence` only ever returns one of the three keys.
+  const confSays = CONF_SAYS[conf];
+  const confTitle = conf.charAt(0).toUpperCase() + conf.slice(1) + " confidence";
   // Seating preference suffix — only shown when the customer stated an area
   // (indoor/outdoor); "auto"/unset adds nothing (it's the default).
   const prefSuffix = (d.preference === "indoor" || d.preference === "outdoor")
     ? " · " + (d.preference === "indoor" ? "Indoor" : "Outdoor")
     : "";
-  const summary = (d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix;
+  const summary = (d.size != null ? guestsLabel(d.size) : "? guests") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix;
   // Confidence is shown inline in the compact bar (always), so only notes /
   // ambiguity are "revealable" content behind the toggle.
   const hasDetail = !!(d.notes || d.ambiguity);
@@ -124,18 +136,30 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
     return (
       <div style={{ borderRadius: R.card, background: "var(--wa-draft-bg)", border: "1px solid var(--border-card)", marginBottom: 12, boxShadow: "var(--shadow-soft)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", flexWrap: "wrap" }}>
-          {/* The draft section itself is the toggle (when there's detail to show). */}
+          {/* The draft section itself is the toggle (when there's detail to show).
+              v18.2.0 (the design critique, W1): it keeps its WHOLE width. It
+              was `flex: 1; min-width: 0`, so on a phone the confidence chip,
+              Accept and Dismiss took the line and squeezed the booking to
+              "2 pax · 202…" — asking staff to accept a date and time they
+              could not see. With a basis of its own content and no shrink,
+              the row wraps instead: the details keep line one and the
+              controls take line two, as ONE group pushed right — wrapping
+              them one by one split Accept and Dismiss across the two lines
+              (measured at 375px). Where everything fits it is still one line.
+              `maxWidth` keeps the ellipsis as the last resort on a screen too
+              narrow for even the details alone. */}
           <div
             onClick={hasDetail ? () => setExpanded((v) => !v) : undefined}
             title={hasDetail ? (expanded ? "Hide details" : "Show details") : undefined}
-            style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0, cursor: hasDetail ? "pointer" : "default" }}
+            style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 0 auto", maxWidth: "100%", minWidth: 0, cursor: hasDetail ? "pointer" : "default" }}
           >
             <span style={{ color: "var(--wa-draft-text)", display: "inline-flex", flexShrink: 0 }}><DraftIcon size={IC.control} /></span>
             <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--wa-draft-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span>
             {hasDetail ? <span style={{ color: "var(--wa-draft-text)", flexShrink: 0, display: "inline-flex", transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.inline} /></span> : null}
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexShrink: 0 }}>
           {/* Confidence level — always shown, immediately left of Accept. */}
-          <OutlineChip title={confLbl + " confidence"} tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl}</OutlineChip>
+          <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
           <button onClick={onAccept} className="mgt-hover-scale mgt-press" style={smallBtn("var(--wa-btn-open)")}>Accept</button>
           {/* Secondary = OUTLINE (see the full card's note): one saturated pill
               per pane, so the eye can find the primary without reading. */}
@@ -148,6 +172,7 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
               local factory, not a `fontWeight:` property, and the gate reads
               properties. A shape hides from it; only reading does not. */}
           <OutlineChip as="button" tone="neutral" onClick={onDismiss} className="mgt-hover-scale mgt-press" style={{ padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, minHeight: H.chrome }}>Dismiss</OutlineChip>
+          </div>
         </div>
         {hasDetail ? (
           <Reveal show={expanded} style={{ padding: "0 10px" }}>
@@ -177,10 +202,10 @@ export function DraftCard({ conv, onAccept, onDismiss, onDismissAcceptedBadge, c
               pairing v17.13.0's pass demoted 46 of. */}
           <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--wa-draft-text)" }}>Draft booking — parsed from message</span>
         </div>
-        <OutlineChip tone={confTone} size="small" style={{ textTransform: "uppercase", letterSpacing: "0.02em" }}>{confLbl + " confidence"}</OutlineChip>
+        <OutlineChip title={confTitle} tone={confTone} size="small">{confSays}</OutlineChip>
       </div>
       <div style={{ fontSize: T.lead, color: "var(--wa-draft-text-dim)", lineHeight: 1.6, marginBottom: d.ambiguity ? 8 : 12 }}>
-        <span style={{ fontWeight: FW.semi }}>{(d.size != null ? d.size + " pax" : "? pax") + " · " + (d.date || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
+        <span style={{ fontWeight: FW.semi }}>{(d.size != null ? guestsLabel(d.size) : "? guests") + " · " + (formatDay(d.date) || "? date") + " · " + (d.time || "? time") + prefSuffix}</span>
         {d.notes ? <div style={{ fontSize: T.body, marginTop: 4 }}>{"Notes: " + d.notes}</div> : null}
       </div>
       {/* v17.15.3: --danger-bg + a MATCHING --danger-border + --danger-text was

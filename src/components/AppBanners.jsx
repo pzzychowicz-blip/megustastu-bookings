@@ -148,8 +148,8 @@ export function appBannerSections({ isOnline, writeWarning, onDismissWarning, pa
         {/* Retry takes the banner-primary orange every other in-flow banner
             uses for its act-on-this control (Reassign, Assign, No show).
             Discard keeps the neutral slate the Dismiss beside it has — and is
-            deliberately NOT BTN.cancel, which in this app is red and means
-            cancel the BOOKING. */}
+            deliberately NOT a red: in this app "cancel" means cancel the
+            BOOKING (BTN.cancel was that red, removed in v18.2.0). */}
         {parked.length ? (
           <button
             className="mgt-hover-scale"

@@ -137,7 +137,17 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
               <Icon size={IC.control} />
             </span>
           ) : null}
-          <span style={{ fontSize: T.body, fontWeight: FW.bold, color: ink, flex: 1, minWidth: 0 }}>{title}</span>
+          {/* v18.2.0 phase 46: in a WRAPPING header the title's basis is its
+              CONTENT. A line wraps on its items' bases, and `flex: 1` is a
+              zero basis, so the actions stayed on the title's line whenever
+              they alone fitted it and took their width out of the title —
+              measured on a 375px phone, the linked-booking card's title was
+              28px wide and "Open booking" was drawn over its label and its
+              status badge ("✓ Co"). With its content as its basis the
+              actions drop under the title instead. A header that does not
+              wrap is left as it was: there the title is the one item that
+              shrinks either way. */}
+          <span style={{ fontSize: T.body, fontWeight: FW.bold, color: ink, flex: onHeaderClick ? "1 1 auto" : 1, minWidth: 0 }}>{title}</span>
           {count > 1 ? (
             <span style={{ fontSize: T.small, fontWeight: FW.bold, color: ink, opacity: 0.75, flexShrink: 0 }}>{count}</span>
           ) : null}

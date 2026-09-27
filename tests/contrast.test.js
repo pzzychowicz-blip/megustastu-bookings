@@ -75,8 +75,31 @@ function block(selector) {
   for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
-const LIGHT_VARS = block(":root {");
-const DARK_VARS = Object.assign({}, LIGHT_VARS, block('[data-theme="dark"] {'));
+// v18.2.0: a token may ALIAS another (`--btn-dismiss: var(--app-btn-slate)`),
+// and the alias must resolve per theme, after the dark block has overridden the
+// target — so resolution runs on each merged map, never on the raw blocks. The
+// alternative was pasting slate's literal into --btn-dismiss in both themes,
+// which is the "a literal duplicate of a token is a token that cannot be fixed"
+// defect DESIGN.md records. Depth-limited, and a cycle or a dangling name
+// THROWS rather than handing parse() a string it would misread.
+function resolveAliases(map) {
+  const out = {};
+  for (const k of Object.keys(map)) {
+    let v = map[k];
+    for (let hop = 0; hop < 5; hop++) {
+      const m = v.match(/^var\((--[a-z0-9-]+)\)$/);
+      if (!m) break;
+      if (!(m[1] in map)) throw new Error(k + " aliases " + m[1] + ", which src/index.css does not declare");
+      v = map[m[1]];
+      if (hop === 4) throw new Error(k + " is an alias chain five deep, or a cycle");
+    }
+    out[k] = v;
+  }
+  return out;
+}
+const RAW_LIGHT = block(":root {");
+const LIGHT_VARS = resolveAliases(RAW_LIGHT);
+const DARK_VARS = resolveAliases(Object.assign({}, RAW_LIGHT, block('[data-theme="dark"] {')));
 
 // ── Colour maths ─────────────────────────────────────────────────────────────
 function parse(v) {
@@ -225,6 +248,11 @@ const FILLS = [
   { fill: "--bg-card-dim", alpha: null, ink: "--warn-text", role: "label", what: "card flag, warn (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--success-text", role: "label", what: "card flag, success (seated/completed/cancelled card)" },
   { fill: "--bg-card-dim", alpha: null, ink: "--danger-text", role: "label", what: "card flag, danger (double-booked, dim card)" },
+  // v18.2.0 phase 21: the Plan view's availability label, drawn on a FREE
+  // table, whose fill is PlanView's FREE_FILL = --bg-card. Secondary ink for
+  // "until 19:30", the warn ink when that window is too short for a walk-in.
+  { fill: "--bg-card", alpha: null, ink: "--text-secondary", role: "label", what: "plan: a free table's 'until 19:30'" },
+  { fill: "--bg-card", alpha: null, ink: "--warn-text", role: "label", what: "plan: a free table too short for a walk-in" },
 
   // v18.0.0 session 8 — the SECTION PANEL as a text-bearing surface, registered
   // for the reason the card fills above were: something finally painted
@@ -251,6 +279,20 @@ const FILLS = [
   { fill: "--bg-soft", alpha: null, ink: "--danger-text", role: "label", what: "panel chip, danger (voucher row: void)" },
   { fill: "--bg-soft", alpha: null, ink: "--text-muted", role: "label", what: "panel secondary text + the voucher row's disclosure chevron" },
   { fill: "--bg-soft", alpha: null, ink: "--text-primary", role: "label", what: "panel body text (redemption rows, customer history)" },
+  // v18.2.0 phase 47: the voucher picker's list names a voucher already on
+  // another live booking in the warn ink, on the autocomplete menu's fill.
+  { fill: "--bg-ac-menu", alpha: null, ink: "--warn-text", role: "label", what: "voucher suggestion: already on another booking" },
+
+  // v18.2.0 — the SEGMENTED CONTROL (atoms' SEG_TRACK / segStyle): Settings'
+  // TabBar since v16.2.0, and now the main view switcher in the header, which
+  // is the app's most-pressed control. Neither pair was registered — `--bg-*`
+  // matches none of the coverage guard's prefixes, the blind spot the two
+  // blocks above already record — so they were unmeasured on the one surface
+  // every shift uses.
+  // The chosen segment's ink was --accent: 4.02:1 light, 2.25:1 dark, measured
+  // by THIS entry the first time it existed. Primary text since v18.2.0.
+  { fill: "--bg-tab-active", alpha: null, ink: "--text-primary", role: "label", what: "segmented control, the chosen segment (view switcher, Settings tabs)" },
+  { fill: "--bg-tabbar", alpha: null, ink: "--text-muted", role: "label", what: "segmented control, an unchosen segment" },
 
   // Solid semantic fills — already correct before this pass; here so they stay so.
   { fill: "--app-success-solid", alpha: null, ink: "--text-on-accent", role: "label", what: "success tag" },
@@ -265,11 +307,21 @@ const FILLS = [
   { fill: "--btn-edit", alpha: null, ink: "--text-on-accent", role: "button", what: "Edit" },
   { fill: "--btn-today", alpha: null, ink: "--text-on-accent", role: "button", what: "Today" },
   { fill: "--btn-del", alpha: null, ink: "--text-on-accent", role: "button", what: "Delete" },
-  { fill: "--btn-cancel", alpha: null, ink: "--text-on-accent", role: "button", what: "Cancel booking" },
   { fill: "--btn-clear", alpha: null, ink: "--text-on-accent", role: "button", what: "Clear" },
   { fill: "--btn-reset", alpha: null, ink: "--text-on-accent", role: "button", what: "Reset" },
   { fill: "--btn-dismiss", alpha: null, ink: "--text-on-accent", role: "button", what: "Dismiss" },
   { fill: "--btn-orange", alpha: null, ink: "--text-on-accent", role: "button", what: "walk-in / count" },
+  // v18.2.0 phase 28: a row's destructive button at rest (mkDangerBtn, the
+  // Layout ×) is the danger pane's pair used as a button; and Layout's Cancel ×
+  // left the red for the stepper's neutral, which the form's ± steppers have
+  // always drawn on and nothing had registered.
+  { fill: "--danger-bg", alpha: null, ink: "--danger-text", role: "button", what: "row delete at rest (mkDangerBtn)" },
+  { fill: "--bg-stepper", alpha: null, ink: "--text-primary", role: "button", what: "stepper ± and Layout's Cancel ×" },
+  // v18.2.0 phase 34: the Week / Month / Stats cells, opaque now. Today's
+  // number in --accent is a pre-existing pair left out here: the accent as
+  // small text measured under 4.5:1 when ViewSwitcher first registered it.
+  { fill: "--bg-cal-cell", alpha: null, ink: "--text-primary", role: "label", what: "calendar cell: the day, the covers" },
+  { fill: "--bg-cal-cell", alpha: null, ink: "--text-secondary", role: "label", what: "calendar cell: a month day's cover count" },
 
   // The --app-btn-* family. These were missed by the first pass of this file
   // because the coverage check below only knew the --btn-* prefix, and the one
@@ -353,7 +405,6 @@ const FILLS = [
   { fill: "--wa-green", alpha: null, ink: "--text-on-accent", role: "label", what: "WA brand / needs-action count" },
   { fill: "--wa-green-dark", alpha: null, ink: "--text-on-accent", role: "button", what: "Send" },
   { fill: "--wa-btn-open", alpha: null, ink: "--text-on-accent", role: "button", what: "Accept & open / Apply changes" },
-  { fill: "--wa-btn-cancel", alpha: null, ink: "--text-on-accent", role: "button", what: "Cancel booking / Delete conversation" },
   { fill: "--wa-btn-handled", alpha: null, ink: "--text-on-accent", role: "button", what: "Mark as handled / Restore" },
   { fill: "--wa-bubble-out", alpha: null, ink: "--text-on-accent", role: "label", what: "outgoing chat bubble" },
   { fill: "--wa-unread-dot", alpha: null, ink: "--text-on-accent", role: "label", what: "unread count badge" },
@@ -1019,4 +1070,17 @@ describe("Save pending outline (--pending-outline)", () => {
       expect(got, `--pending-outline in ${theme}: ${got.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
     });
   }
+});
+
+describe("dismiss is not destructive (v18.2.0)", () => {
+  it("--btn-dismiss ALIASES the dialog secondary's slate — no red, no copied literal", () => {
+    expect(RAW_LIGHT["--btn-dismiss"]).toBe("var(--app-btn-slate)");
+    expect(LIGHT_VARS["--btn-dismiss"]).toBe(LIGHT_VARS["--app-btn-slate"]);
+    expect(DARK_VARS["--btn-dismiss"], "resolved AFTER the dark block overrides slate").toBe(DARK_VARS["--app-btn-slate"]);
+  });
+
+  it("the alias resolver refuses a dangling name instead of passing a string to parse()", () => {
+    expect(() => resolveAliases({ "--a": "var(--nope)" })).toThrow(/does not declare/);
+    expect(() => resolveAliases({ "--a": "var(--b)", "--b": "var(--a)" })).toThrow(/cycle/);
+  });
 });

@@ -30,8 +30,10 @@ import {
 import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
 // v18.0.0: one voucher-code normaliser, the `normalizePhone` precedent — the
 // issue field, every redemption lookup and `sanitize` must agree on what a code
-// IS, or two spellings resolve to two vouchers. `vouchers.js` imports nothing,
-// so this edge cannot close a cycle.
+// IS, or two spellings resolve to two vouchers. `vouchers.js` imports only
+// `formatDay` from `day.js` (v18.2.0), which imports nothing, so this edge
+// cannot close a cycle — keep it that way: an import from here into either
+// of those two files would.
 // v18.0.0 phase 5: ".js" for the same reason as the two above — this file is now
 // reachable from the serverless functions (api/* → whatsapp.js → customers.js →
 // here), and Node's ESM resolver does not add the extension the way Vite does.
@@ -113,9 +115,30 @@ export function freeingSoon(bookings,today,nowMins,windowMin){
 // Callers append their own state clauses (a block adds double-booked /
 // overstaying / running late) — those are properties of how a booking is being
 // DRAWN, not of the booking.
+// v18.2.0 (the design critique, C2): a party's size, as the screen says it —
+// "1 guest", "4 guests". The ONE word for it. Twenty-one lines in fourteen
+// files said "4 pax" (Find a booking, the waitlist, the draft card, the table
+// pickers, the Day sheet…) beside the booking form's "Number of guests", the
+// Settings tiers' "1–2 guests" and every spoken label's "2 guests", and the
+// plural was typed out by hand ten more times. "Covers" stays the word for a day's TOTAL (the Summary,
+// the Day sheet's head), which is what a restaurant means by it.
+// Phase 54 (round 3's C-5): the number and the word are joined by a NO-BREAK
+// space (U+00A0), formatDay's and money()'s reason — a line never ends on "4".
+export function guestsLabel(n){
+  return countLabel(n,"guest","guests");
+}
+// v18.2.0 phase 77 (round 3's loose end): any COUNT and its word, joined by the
+// same no-break space, so no line ends on the number — "2 bookings", "20 min
+// late", "3 visits" were typed at their own sites with a plain space. `many` is
+// the plural; a unit that does not inflect ("min") passes only `one`. Screen
+// text only: a history or activity entry is a stored record, and keeps the plain
+// space it was written with.
+export function countLabel(n,one,many){
+  return n+"\u00a0"+(many===undefined||Number(n)===1?one:many);
+}
 export function describeBooking(b, opts){
   const o=opts||{};
-  const out=[b.name, b.time, b.size+(b.size===1?" guest":" guests")];
+  const out=[b.name, b.time, guestsLabel(b.size)];
   // `tables: false` drops the clause entirely rather than saying "no table
   // assigned" — on the floor plan the table is already the subject.
   if(o.tables!==false){
@@ -235,6 +258,30 @@ export function pastCloseMins(dateStr,todayS,nowMins){
 // one the app takes back.
 export function seatingClosed(dateStr,todayS,nowMins){
   return pastCloseMins(dateStr,todayS,nowMins)!==null;
+}
+// v18.2.0 phase 67: where a day's bookings START — the earliest start of the
+// day's bookings that are not cancelled (completed count: they happened), or
+// Infinity for an empty day. The Timeline opens a non-today day scrolled to it
+// and the Plan's scrubber opens on it, so the two cannot disagree about where
+// a day begins.
+export function firstStartOf(bookings,date){
+  return (bookings||[]).reduce(function(m,b){return b&&b.date===date&&b.status!=="cancelled"?Math.min(m,toMins(b.time)):m;},Infinity);
+}
+// v18.2.0: the ONE status a List card offers as a button — the next step in a
+// visit. Everything else moved behind the card's ⋯ (the quick-status card):
+// six equal-weight buttons on every card fitted four bookings to a tablet
+// screen and gave "Delete" the same weight as "Seated". Pending → Confirmed
+// (its only forward status); Confirmed → Seated, or → Completed once the day's
+// close has passed (`seatingClosed`: the close-time auto-complete would take a
+// manual seat straight back); Seated → Completed; a finished visit has no next
+// step. Same gates as every other status surface, so it cannot offer what the
+// popup, the form or the S key would refuse.
+export function nextStatusOf(b,todayS,nowMins){
+  if(!b) return null;
+  if(b.status==="pending") return "confirmed";
+  if(b.status==="confirmed") return seatingClosed(b.date,todayS,nowMins)?"completed":"seated";
+  if(b.status==="seated") return "completed";
+  return null;
 }
 export function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
 // ── Turnaround buffer (v17.6.0) ───────────────────────────────────────────────
@@ -905,6 +952,19 @@ export function getKitchenLoad(bookings,date,time,dur,excludeId){
   var tblCount=0;var guests=0;
   starting.forEach(function(b){guests+=b.size||2;tblCount+=(b.tables||[]).length||1;});
   return {tables:tblCount,guests:guests,starts:starting.length};
+}
+// v18.2.0: what the forms' "Starting at this time:" line SAYS — the OTHER
+// bookings starting then, from `getKitchenLoad`. Both forms printed
+// starts + 1 and guests + this party's size, the same inclusive figure their
+// kitchen-busy threshold uses, so on an empty 13:00 slot the line read "1
+// booking · 2 guests" about a booking that did not exist yet (the design
+// critique). The THRESHOLD still counts the draft — "with this one there would
+// be N" is the right question for the kitchen — only the sentence changed.
+export function startingPhrase(load){
+  var n=(load&&load.starts)||0;
+  if(!n) return "none yet";
+  var g=(load&&load.guests)||0;
+  return countLabel(n,"booking","bookings")+" · "+guestsLabel(g);
 }
 export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date

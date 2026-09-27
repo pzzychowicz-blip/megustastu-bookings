@@ -35,8 +35,10 @@ import {
   MANUAL_CODE_MIN, MANUAL_CODE_MAX, expiryFrom, money,
 } from "../lib/vouchers";
 import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
-import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn } from "./atoms";
+import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn, mkDangerBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
+import { formatDay, localDay } from "../lib/day";
+import { countLabel } from "../lib/booking-logic";
 
 // The four states, and the chip tone each reads as. `open` is the only one that
 // can still be spent, so it is the only one in success green.
@@ -62,10 +64,12 @@ const STATE_LABEL = { open: "open", spent: "spent", expired: "expired", void: "v
 // read is the one thing this panel must not ship.
 const CODE_COL = 204;
 
+// v18.2.0 (the design critique, C1): the house date, "24.09.2027" — without
+// the weekday, because a voucher's dates say when it is valid, not which
+// service it was. Same width as the ISO it replaces, so `CODE_COL` holds.
 function dateLabel(ms) {
   if (!ms) return "—";
-  const d = new Date(ms);
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return formatDay(localDay(ms), { weekday: false });
 }
 
 // ── Copy the number ─────────────────────────────────────────────────────────
@@ -242,7 +246,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
                   <div key={bid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}>
                     <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{money(e.amount, currency)}</span>
                     <span style={{ fontSize: T.body, color: S.muted }}>
-                      {b ? (b.date + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + bid}
+                      {b ? (formatDay(b.date) + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + bid}
                     </span>
                   </div>
                 );
@@ -264,7 +268,7 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
                   <div key={rid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, border: "1px dashed var(--border-soft)", marginBottom: 4 }}>
                     <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.muted, minWidth: 84 }}>{"Reversed " + money(e.amount, currency)}</span>
                     <span style={{ fontSize: T.body, color: S.muted }}>
-                      {(b ? (b.date + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + e.bookingId)
+                      {(b ? (formatDay(b.date) + " · " + (b.scheduledTime || b.time) + " · " + (b.name || "(no name)")) : "booking " + e.bookingId)
                         + (e.reversedBy ? "  ·  by " + e.reversedBy : "")
                         + (e.reversedAt ? "  ·  " + dateLabel(e.reversedAt) : "")}
                     </span>
@@ -274,14 +278,16 @@ function VoucherRow({ v, bookings, currency, now, open, onToggle, onVoid }) {
             </div>
           ) : null}
 
-          {/* Void / un-void. The only destructive-looking action there is, and
-              it is not destructive: the record and its number both stay. */}
+          {/* Void / un-void. The record and its number both stay, so voiding is
+              undoable, but it ends what a voucher is for — v18.2.0 phase 62 gives
+              it the app's one destructive look (Patryk), without the trash mark,
+              which is for a Delete or a Remove. */}
           <button
             type="button"
             onClick={function (e) { e.stopPropagation(); onVoid(v.code, state !== "void"); }}
             aria-label={(state === "void" ? "Reinstate" : "Void") + " voucher " + formatCode(v.code)}
             className="mgt-hover-scale"
-            style={mkBtn({ fontSize: T.body, minHeight: 36, background: state === "void" ? BTN.nav : BTN.del })}>
+            style={state === "void" ? mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.nav }) : mkDangerBtn({ fontSize: T.body, minHeight: 36 })}>
             {state === "void" ? "Reinstate voucher" : "Void voucher"}
           </button>
           <div style={{ fontSize: T.micro, color: S.muted, marginTop: 6 }}>
@@ -405,10 +411,12 @@ export function VouchersTabContent({
             every input a real `useId` association. */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 120px", minWidth: 0 }}>
+            {/* v18.2.0 phase 70 (round 2's S7): "e.g. 50", where it read "50" —
+                in a bare number box that looked like an amount already entered. */}
             <Fld label={"Amount (" + currency + ")"} invalid={issueErrField === "value"} describedBy={ISSUE_ERROR_ID}>{function (fid, attrs) {
               return <input id={fid} {...attrs} type="number" min={0} step={5} inputMode="decimal" value={amount}
                 onChange={function (e) { setAmount(e.target.value); }}
-                placeholder="50" className="mgt-hover-scale" style={mkInp()} />;
+                placeholder="e.g. 50" className="mgt-hover-scale" style={mkInp()} />;
             }}</Fld>
           </div>
           <div style={{ flex: "2 1 200px", minWidth: 0 }}>
@@ -472,7 +480,7 @@ export function VouchersTabContent({
             style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: atMin ? 0.4 : 1, cursor: atMin ? "not-allowed" : "pointer" })}>−</button>
           <span style={{ fontSize: T.body, color: S.text, minWidth: 96, textAlign: "center" }}>
             {voucherDefaults && voucherDefaults.expiryMonths > 0
-              ? voucherDefaults.expiryMonths + " month" + (voucherDefaults.expiryMonths !== 1 ? "s" : "")
+              ? countLabel(voucherDefaults.expiryMonths, "month", "months")
               : "Never expires"}
           </span>
           <button type="button"
@@ -488,7 +496,7 @@ export function VouchersTabContent({
       <Section>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, flex: 1 }}>Vouchers</div>
-          <OutlineChip tone="neutral">{totals.count + " total"}</OutlineChip>
+          <OutlineChip tone="neutral">{countLabel(totals.count, "total")}</OutlineChip>
           <OutlineChip tone="success">{money(totals.outstanding, currency) + " outstanding"}</OutlineChip>
         </div>
 

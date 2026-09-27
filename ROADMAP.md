@@ -105,7 +105,25 @@ evidence for each.
   `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version.
+  first. This is a data-touching patch version. The phone rule goes with it (v18.2.0's
+  `/code-review`): `doSave` and `addFormToWaitlist` each run `withTypedCode`, then refuse a
+  number with no code in the same words, which should be one helper.
+
+- **A trunk 0 kept after a non-UK code (found in v18.2.0's `/code-review`).** Phase 66 drops
+  the home 0 after +44 only, so "+33 06 12 34 56 78", "+49 030 …" and "+31 06 …" keep
+  theirs, and the same French, German or Dutch guest typed with and without it is two
+  customers (`normalizePhone`, measured). Italy is the exception: its 0 belongs to the
+  number ("+39 06 …", pinned in `tests/phone-countries.test.js`). Which countries get the
+  rule is a decision, as phase 66's was.
+
+- **Focus after a ⋯ card action that opens a dialog (v18.2.0's `/code-review`).** In the List,
+  ⋯ → Delete (or Cancelled, or the voucher and seat prompts) leaves focus on `<body>` when the
+  dialog closes. `useDialog` reads `document.activeElement` in a passive effect, after the commit
+  that makes the page `inert`, and a rendering update's focus fixup can blur the opener first.
+  Handing focus back in the handler (phase 57's `leavePop`) did not change it. Capture the
+  restore target before the commit (at the Overlay's first render or in a layout effect), check
+  it across every modal, and re-check `leavePop`. Needs a device, because focus events do not
+  fire in the Browser pane.
 
 - **In-range dependency updates, and whether to automate them (#14).** firebase 12.12 →
   12.19 needs a tablet check first (the `forceWebSockets`/JSONP history). react 19.3 and
@@ -120,6 +138,16 @@ evidence for each.
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
+
+- **A booking's seating preference is soft on a day the optimiser runs (found in v18.2.0
+  phase 68).** `findFreeSlot` treats "indoor"/"outdoor" as a hard constraint, but the
+  optimiser behind `trialFits` falls back to ANY zone when the preferred one is full
+  (`_runGreedy`'s `findBestAny`). So the booking form accepts or refuses the same party
+  depending on the day: measured on DEV, 11 guests wanting indoor (the indoor combination
+  seats 10) were offered outdoor 1A · 1B · 3 · 4 · 7 for tomorrow 20:00, and refused ("No
+  tables available (indoor preference)") for today 21:30, after the 15:00 cutoff. The
+  waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
+  a rule, and make both paths say the same.
 
 ## Designed, not implemented
 

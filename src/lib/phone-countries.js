@@ -111,8 +111,10 @@ const PRIMARY = { "1": "US", "7": "RU", "44": "GB", "47": "NO", "61": "AU",
 
 // The restaurant's default when nothing has been chosen — the countries its
 // guests most often come from. Only a SEED: Settings → General edits the list.
+// v18.2.0 phase 19: there is no default COUNTRY any more (`DEFAULT_COUNTRY`
+// was "ES", and the phone field fell back to it). The picker starts empty and
+// a number is saved only once it names its code — see `splitPhone`.
 export const DEFAULT_PINNED = ["ES", "GB", "DE", "FR", "IT", "NL"];
-export const DEFAULT_COUNTRY = "ES";
 export const MAX_PINNED = 12;
 
 // The flag as an emoji: two regional-indicator letters. Kosovo's "XK" is not
@@ -161,12 +163,17 @@ export function dialOf(phone) {
 // ── splitPhone ───────────────────────────────────────────────────────────────
 // "+34 600 123 456" → { iso: "ES", national: "600 123 456" }. The number keeps
 // whatever spacing was typed; only the "+" and the code's own digits are
-// consumed. `preferIso` settles shared codes (the country the user picked, or
-// the restaurant's default) and is the answer when the string names no
-// country at all — empty, a lone "+", or a legacy number stored without one,
-// which is shown as-is and NOT rewritten unless somebody edits it.
+// consumed. `preferIso` settles shared codes (the country the user picked) and
+// is the answer when the string names no country at all — empty, a lone "+",
+// or a number typed or stored without one, which is shown as-is and NOT
+// rewritten unless somebody edits it.
+//
+// v18.2.0 phase 19: with no preference either, `iso` is NULL — the picker shows
+// no country. It used to fall back to Spain (`DEFAULT_COUNTRY`), then to the
+// restaurant's Settings default, so every new form opened on "+34" and a
+// foreign number typed without its code was saved as a Spanish one.
 export function splitPhone(phone, preferIso) {
-  const fallback = countryByIso(preferIso) ? countryByIso(preferIso).iso : DEFAULT_COUNTRY;
+  const fallback = countryByIso(preferIso) ? countryByIso(preferIso).iso : null;
   // LEADING space only: this runs on every keystroke of the number box, and
   // trimming the END would eat the space you just typed between "600" and
   // "123". The save path trims (`enteredPhone`), as it always has.
@@ -189,13 +196,124 @@ export function splitPhone(phone, preferIso) {
 // without one stays without one (the `enteredPhone` rule, now at the source).
 // A number typed or pasted in international form ("+44 7700…", "0044 …")
 // is taken whole: it already says its own country, and the field re-reads it.
+// v18.2.0 phase 19: with no country, the number is kept exactly as typed —
+// no code is invented for it. The booking form refuses to SAVE it that way
+// (`phoneHasCode`, App's `doSave`), which is where the choice is asked for.
 export function joinPhone(iso, national) {
   const n = national == null ? "" : String(national).replace(/^\s+/, "");
   if (!/\d/.test(n)) return "";
   if (n.charAt(0) === "+") return n;
   if (n.slice(0, 2) === "00") return "+" + n.slice(2);
-  const c = countryByIso(iso) || countryByIso(DEFAULT_COUNTRY);
-  return dialLabel(c) + " " + n;
+  const c = countryByIso(iso);
+  return c ? dialLabel(c) + " " + n : n;
+}
+
+// ── numberCleared (v18.2.0 phase 52) ─────────────────────────────────────────
+// Did an edit of the number box CLEAR a number — digits before it, none after?
+// `PhoneField` forgets a country it found in the digits only then (phase 20).
+// It used to ask only "are there no digits now", which is also true of the
+// space typed after "+34": once the picker takes the code the box is empty, so
+// the space arrived in an empty box, the country was forgotten, and a number
+// typed as written — "+34 622 333 444" — was saved without its code, or
+// refused by Save (measured on DEV, key by key).
+export function numberCleared(before, after) {
+  return /\d/.test(String(before == null ? "" : before)) && !/\d/.test(String(after == null ? "" : after));
+}
+
+// ── phoneHasCode (v18.2.0 phase 19) ──────────────────────────────────────────
+// Does a phone string name its country? A "+" AHEAD of the digits, or an
+// international "00" — the same reading `normalizePhone` (lib/customers.js)
+// uses for its own "+", so a string this calls coded is one that normalises to
+// an international key. An empty string has nothing to name, so it is `true`:
+// the question is only ever asked about a number somebody typed.
+export function phoneHasCode(phone) {
+  const s = phone == null ? "" : String(phone).trim();
+  const firstDigit = s.search(/\d/);
+  if (firstDigit === -1) return true;
+  const plusAt = s.indexOf("+");
+  if (plusAt !== -1 && plusAt < firstDigit) return true;
+  return s.replace(/\D/g, "").slice(0, 2) === "00";
+}
+
+// ── withTypedCode (v18.2.0 phase 20) ─────────────────────────────────────────
+// Patryk: after typing a number WITH its country code, the code should be
+// detected and put in the picker. "+44 …" and "0044 …" already were (the
+// number box reads them as they are typed); this is the same number typed
+// without the plus — "44 7700 900123", "34612345678" — which used to be
+// saved behind whatever country the picker held ("+34 44 7700 900123").
+//
+// Digits alone do not say whether a code is there: "612 345 678" is a Spanish
+// mobile, and read as a code it is Australia (+61). So it is deliberately
+// narrow, and every limit is there for a case it would otherwise get wrong:
+//   • only a string that names NO code yet — a picked country, a "+" or "00"
+//     already answered the question;
+//   • only the restaurant's PINNED countries — the codes its guests actually
+//     give, which keeps +1 (a Chinese or Brazilian national number starts with
+//     1) and the rest of the world's short codes out of it;
+//   • only at 11+ digits — a pinned country's code plus a national number of 9
+//     or more. Without their trunk 0, Spanish, French and Dutch numbers are 9
+//     digits and British ones 10, so none of them reaches 11 alone. A German
+//     number can (it runs to 11), but it is written with its 0 at home, and
+//     without it every German mobile starts with 1, which no default pin has;
+//   • never with a leading 0 — that is a trunk prefix, i.e. a NATIONAL number
+//     ("07700 900123"), and no country code starts with 0.
+// The longest matching code wins, as in `splitPhone`, so a pinned Guernsey
+// (44 1481) beats the UK. Returns the number with its code ("+44 7700
+// 900123", via `joinPhone`), or the input unchanged when nothing applies.
+//
+// v18.2.0 phase 66 (Patryk): the UK's own format is recognised. A British
+// number is 11 digits with a leading 0 dialled at home ("07911 123456") and
+// +44 without that 0 from abroad ("+44 7911 123456"). Two rules, and the 0
+// rule above still holds for everything else:
+//   • a British MOBILE typed the home way — 07 and nine more digits, not 070
+//     (personal numbers) or 076 (pagers) — becomes +44 without its 0, when
+//     🇬🇧 is pinned (the phase-20 gate). Mobiles only, Patryk's call: the
+//     01/02/03 landlines share their shape with German landlines (Berlin 030…,
+//     Cologne 0221…) and Egyptian mobiles, so reading them as British would
+//     re-code a German guest's number;
+//   • "+44 07911…" — the home 0 kept after the code, as people write it
+//     ("+44 (0)7911…") — loses that 0. Here the code is explicit, so nothing
+//     is guessed and no pin is asked for. "0044 0…" is the same number.
+// Both return the international form, so a British guest has ONE customer
+// identity (`normalizePhone`) however their number was typed.
+//
+// v18.2.0 /code-review: the second rule is `ukWithoutHomeZero`, and the
+// pinned-code path below runs it too. "44 (0)7911 123456" — the code typed
+// without its plus, the home 0 kept — came out of that path as "+44
+// 0)7911 123456", a second customer (+4407911123456), and only a SECOND pass
+// dropped the 0. PhoneField's blur and then Save made two passes; a save by
+// Enter from the number box makes one, and stored it (measured on DEV).
+// Now one pass and two agree.
+const UK_MOBILE_AT_HOME = /^07[1-57-9]\d{8}$/;
+function ukWithoutHomeZero(s) {
+  if (dialOf(s) !== "44") return s;
+  const sp = splitPhone(s, "GB");
+  if (sp.iso !== "GB" || sp.national.charAt(0) !== "0") return s;
+  return joinPhone("GB", sp.national.replace(/^0[\s\-().]*/, ""));
+}
+export function withTypedCode(phone, pinned) {
+  const s = phone == null ? "" : String(phone).trim();
+  if (!s) return phone;
+  if (phoneHasCode(s)) {
+    const t = ukWithoutHomeZero(s);
+    return t === s ? phone : t;
+  }
+  const digits = s.replace(/\D/g, "");
+  const gbPinned = (pinned || []).some(function (x) { return String(x).toUpperCase() === "GB"; });
+  if (gbPinned && UK_MOBILE_AT_HOME.test(digits)) {
+    // The trunk 0 is the first digit; the rest keeps its own spacing.
+    return joinPhone("GB", s.slice(s.indexOf("0") + 1).replace(/^[\s\-().]+/, ""));
+  }
+  if (digits.length < 11 || digits.charAt(0) === "0") return phone;
+  const hit = (pinned || []).map(countryByIso).filter(Boolean)
+    .filter(function (c) { return digits.slice(0, c.dial.length) === c.dial; })
+    .sort(function (a, b) { return b.dial.length - a.dial.length; })[0];
+  if (!hit) return phone;
+  // Consume the code's digits from the typed string, so the rest keeps its
+  // own spacing (the same walk `splitPhone` does).
+  let used = 0, i = 0;
+  while (i < s.length && used < hit.dial.length) { if (/\d/.test(s[i])) used++; i++; }
+  return ukWithoutHomeZero(joinPhone(hit.iso, s.slice(i).replace(/^[\s\-().]+/, "")));
 }
 
 // The pinned list as stored: known ISO codes, upper-case, no repeats, capped.

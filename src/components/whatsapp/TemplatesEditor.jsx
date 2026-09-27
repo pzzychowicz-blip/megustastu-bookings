@@ -5,16 +5,21 @@
 // stay reachable on tall lists.
 
 import { useState } from "react";
-import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, AutoHeight } from "../atoms";
-import { S, BTN, R, T, FW } from "../../lib/constants";
+import { Overlay, ModalTitle, Fld, mkInp, mkArea, mkBtn, mkDangerBtn, AutoHeight } from "../atoms";
+import { S, BTN, R, T, FW, IC } from "../../lib/constants";
+import { TrashIcon } from "../Icons";
 
 export function TemplatesEditor({ templates, onSave, onClose }) {
   const [list, setList] = useState(() => templates.slice().map((t) => Object.assign({}, t)));
   const [editing, setEditing] = useState(null); // template id, or "__new__"
   const [form, setForm] = useState({ key: "", labelEn: "", labelEs: "", textEn: "", textEs: "" });
+  // v18.2.0 (the design critique, S6): whose Delete is armed. It removed the
+  // row on ONE tap, from a solid red button on every row; it now asks first,
+  // and any other action here disarms it.
+  const [armedId, setArmedId] = useState(null);
 
-  function openEdit(t) { setEditing(t.id); setForm({ key: t.key, labelEn: t.labelEn, labelEs: t.labelEs, textEn: t.textEn, textEs: t.textEs }); }
-  function openNew() { setEditing("__new__"); setForm({ key: "", labelEn: "", labelEs: "", textEn: "", textEs: "" }); }
+  function openEdit(t) { setArmedId(null); setEditing(t.id); setForm({ key: t.key, labelEn: t.labelEn, labelEs: t.labelEs, textEn: t.textEn, textEs: t.textEs }); }
+  function openNew() { setArmedId(null); setEditing("__new__"); setForm({ key: "", labelEn: "", labelEs: "", textEn: "", textEs: "" }); }
   function saveEdit() {
     const f = form;
     if (!f.labelEn.trim() && !f.labelEs.trim()) return;
@@ -29,7 +34,10 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
   }
   function removeT(id) { setList(list.filter((t) => t.id !== id)); }
 
-  const rows = list.map((t) => (
+  const rows = list.map((t) => {
+    const armed = armedId === t.id;
+    const name = t.labelEn + " / " + t.labelEs;
+    return (
     <div key={t.id} style={{ padding: "10px 12px", borderRadius: R.card, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -38,12 +46,19 @@ export function TemplatesEditor({ templates, onSave, onClose }) {
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{"ES: " + t.textEs}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-          <button className="mgt-hover-scale" style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
-          <button className="mgt-hover-scale" style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.del })} onClick={() => removeT(t.id)}>Delete</button>
+          {/* v18.2.0: each names its template, the visible word leading,
+              for the reason the reminder rows' do (tests/a11y.test.js). */}
+          <button className="mgt-hover-scale" aria-label={"Edit (" + name + ")"} style={mkBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", background: BTN.edit })} onClick={() => openEdit(t)}>Edit</button>
+          <button className="mgt-hover-scale"
+            aria-label={(armed ? "Confirm — delete (" : "Delete (") + name + ")"}
+            style={mkDangerBtn({ fontSize: T.small, minHeight: 36, padding: "6px 12px", gap: 4 })}
+            onClick={() => { if (armed) { setArmedId(null); removeT(t.id); } else setArmedId(t.id); }}
+          ><TrashIcon size={IC.inline} />{armed ? "Confirm — delete" : "Delete"}</button>
         </div>
       </div>
     </div>
-  ));
+    );
+  });
 
   const editFooter = (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>

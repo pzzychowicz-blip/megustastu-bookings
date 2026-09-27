@@ -40,7 +40,7 @@ import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOO
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes,
+  getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
   optimizerActiveFor, seatingClosed,
   // v18.0.0 session 10: the predicate `applyOpt` itself branches on, so the
   // preview asks "will the optimiser choose these tables?" with the optimiser's
@@ -53,16 +53,21 @@ import {
   // preview has to ask the SAME question with the SAME helper.
   tablesFreeFor,
   // v18.0.0 session 8 (C7): the Time field's max is the last START, not close.
-  lastStartMins
+  lastStartMins,
+  // v18.2.0 (C2): "4 guests", never "4 pax".
+  guestsLabel,
+  // v18.2.0 phase 77: any other count and its word, joined the same way.
+  countLabel
 } from "../lib/booking-logic";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
-import { WEEKDAY_LONG } from "../lib/day";
+import { WEEKDAY_LONG, formatDay } from "../lib/day";
+import { stepPress } from "../lib/keyboard";
 import { normalizePhone, formatPhone, hasRealPhone, customerIndex, searchCustomers, searchGuestsByName, matchCustomerFor, identityKey, findPhoneOverlaps, regularChipLabel, DEFAULT_REGULAR_MIN } from "../lib/customers";
-import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence } from "./atoms";
+import { Overlay, ModalTitle, Fld, DateField, InlineAlert, OutlineChip, Section, TBadge, Toggle, mkInp, mkArea, mkSel, mkBtn, mkSolidBtn, mkDangerBtn, AutoHeight, Reveal, Presence } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
-import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon } from "./Icons";
+import { AssignIcon, ChevronDownIcon, ChevronRightIcon, StarIcon, WaitIcon, StatusIcon, NoShowIcon, DoubleCheckIcon, ClashIcon, ClosedIcon, AlertIcon, HistoryIcon, TrashIcon } from "./Icons";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { useAcRow, AC_MENU, AC_ROW } from "../hooks/useAcRow";
 import { VoucherPicker } from "./VoucherPicker";
@@ -83,6 +88,9 @@ import { matchesIdentity } from "../lib/customers";
 // cannot collide; useId() would be the answer if that stopped being true.
 const FORM_ERROR_ID = "mgt-form-error";
 
+// v18.2.0: the − / + press handlers are `stepPress` in lib/keyboard.js, shared
+// with the walk-in form's steppers, which had the same pointer-only defect.
+
 export function BookingFormModal({
   form, setForm, editId, error, errorField,
   bookings, liveBookings, tableBlocks,
@@ -91,7 +99,7 @@ export function BookingFormModal({
   onOpenPrefPicker, onOpenManualAssign, onOpenHistory, onRequestCancel, onRequestDelete,
   onAddToWaitlist, standingEnabled,
   currency = "€", regularMin = DEFAULT_REGULAR_MIN, // v17.0.0: settings/general
-  phoneCountry, pinnedCountries,  // v18.1.0: settings/general — the phone field's default + pinned codes
+  pinnedCountries,  // v18.1.0: settings/general — the codes pinned to the top of the phone field's list (v18.2.0: no default country any more)
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
@@ -287,8 +295,8 @@ export function BookingFormModal({
       title={noshow?"No-shows":"Past bookings"}
       count={histList.length}
       style={{marginTop:8}}>
-      {histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.date||"?")+" · "+(b.scheduledTime||b.time)+" · "+b.size+" pax · "+b.status}</AlertRow>;})}
-      {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+(histList.length-5)+" earlier"}</AlertRow>:null}
+      {/* v18.2.0 phase 49 (W-3): "Past bookings" are completed visits only, so the status said nothing there; a legacy no-show can carry any status, so that list keeps it. */}{histList.slice(0,5).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(formatDay(b.date)||"?")+" · "+(b.scheduledTime||b.time)+" · "+guestsLabel(b.size)+(noshow?" · "+b.status:"")}</AlertRow>;})}
+      {histList.length>5?<AlertRow style={{color:S.muted}}>{"+ "+countLabel(histList.length-5,"earlier")}</AlertRow>:null}
     </AlertPanel>;
   }
   // v17.8.0: ONE Reveal PER PANEL, not one Reveal shared by both. Switching
@@ -321,9 +329,9 @@ export function BookingFormModal({
   // double-booking the strip's own Double-booked section reports, seen from
   // inside the form that is about to create one.
   const dupWarn=dupPhone.length?<AlertPanel role="warn" icon={ClashIcon} style={{marginTop:8}}
-    title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+form.date+":"}>
-    {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+b.size+" pax"+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
-    {dupPhone.length>3?<AlertRow>{"+ "+(dupPhone.length-3)+" more"}</AlertRow>:null}
+    title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+formatDay(form.date)+":"}>
+    {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+guestsLabel(b.size)+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
+    {dupPhone.length>3?<AlertRow>{"+ "+countLabel(dupPhone.length-3,"more")}</AlertRow>:null}
   </AlertPanel>:null;
   // The container stays mounted while ANY of the three can render, so the
   // dupWarn Reveal below can animate its collapse instead of being torn out
@@ -345,7 +353,7 @@ export function BookingFormModal({
       style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
               border in the matching hue PLUS bold text in a third shade. They are
               the same counts as the Customers tab's chips, so they are now the
-              same chip. */}{c.visits>0?<OutlineChip tone="success">{c.visits+" visit"+(c.visits!==1?"s":"")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</OutlineChip>:null}</div></div>
+              same chip. */}{c.visits>0?<OutlineChip tone="success">{countLabel(c.visits,"visit","visits")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{countLabel(c.noShowCount,"no-show","no-shows")}</OutlineChip>:null}</div></div>
   );})}</div>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
@@ -355,7 +363,7 @@ export function BookingFormModal({
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+r.latestDate:"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+formatDay(r.latestDate):"")+(r.count>1?"  ·  "+countLabel(r.count,"booking","bookings"):"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -435,8 +443,8 @@ export function BookingFormModal({
     if(!form.voucherCode||!form.returnOf) return null;
     const src=bookings.find(function(b){return b.id===form.returnOf;});
     if(!src||normalizeCode(src.voucherCode)!==normalizeCode(form.voucherCode)) return null;
-    const d=/^\d{4}-\d{2}-\d{2}$/.test(src.date||"")?src.date.slice(8,10)+"/"+src.date.slice(5,7):src.date;
-    return "Carried from the "+d+" visit"+(isUnsettled(src,vouchersByCode)?" — that visit was never recorded against it.":".");
+    // v18.2.0 (C1): the house date — this was a sixth shape of its own, "24/09".
+    return "Carried from the "+formatDay(src.date)+" visit"+(isUnsettled(src,vouchersByCode)?" — that visit was never recorded against it.":".");
   })();
 
   // v18.0.0 session 8 (item 3): a seated party cannot be moved to another day —
@@ -643,7 +651,6 @@ export function BookingFormModal({
   // Pre-E1's showForm guard is dropped — component is only mounted when showForm=true.
   const kitchenLoad=form.time?getKitchenLoad(bookings,form.date,form.time,form.customDur||getDur(Number(form.size)||2),editId):null;
   const kitchenStarts=kitchenLoad?kitchenLoad.starts+1:1;
-  const kitchenGuests=kitchenLoad?kitchenLoad.guests+(Number(form.size)||2):Number(form.size)||2;
   const kitchenBusy=kitchenLoad&&kitchenStarts>=KITCHEN_TABLE_LIMIT;
   // v16.3.0 perf: deferred like formAvail — a per-quarter-slot day scan that must
   // not run at mount-paint time nor on unrelated keystrokes (name/notes/phone).
@@ -721,7 +728,7 @@ export function BookingFormModal({
     {/* Indented under the title only when there IS one; the calm state has no
         mark to line up under, so it takes the pane's own padding. */}
     <div style={{padding:kitchenBusy?"4px "+NOTIF_PAD_X+"px 4px "+NOTIF_GUTTER+"px":"0 "+NOTIF_PAD_X+"px",fontSize: T.body,color:kitchenBusy?"var(--text-primary)":S.muted}}><div
-      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{kitchenStarts+" booking"+(kitchenStarts!==1?"s":"")+" · "+kitchenGuests+" guest"+(kitchenGuests!==1?"s":"")}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>
+      style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><span><span style={{fontWeight: FW.bold}}>Starting at this time: </span>{startingPhrase(kitchenLoad)}</span>{kitchenBusy?<OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip>:null}</div><Reveal show={!!kitchenSugBlock}>{kitchenSugBlock}</Reveal></div>
   </AlertPanel>:null;
 
   // v17.6.0: which statuses the edit form offers.
@@ -804,7 +811,7 @@ export function BookingFormModal({
     <button
       onClick={function(){onRequestDelete(editId);}}
       className="mgt-hover-scale mgt-press"
-      style={mkBtn({fontSize: T.body,background:BTN.del,padding:"8px 16px",minHeight:36})}>Delete</button>
+      style={mkDangerBtn({fontSize: T.body,padding:"8px 16px",minHeight:36})}><TrashIcon size={IC.control} />Delete</button>
   ):null;
   const bookAgainBtn=(function(){
     if(!editId) return null;
@@ -843,7 +850,7 @@ export function BookingFormModal({
            left-aligns, because the banner is a sibling of the title's centred
            wrapper rather than inside it — so it needs `width:fit-content` plus
            auto side margins to shrink-wrap AND centre. */
-        style={{display:"flex",width:"fit-content",margin:"0 auto 10px",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+src.date+" "+srcTime+" — set a date"}</div>
+        style={{display:"flex",width:"fit-content",margin:"0 auto 10px",alignItems:"center",border:"2px solid var(--suggest-border)",borderRadius:R.pill,padding:"2px 10px",fontSize: T.small,fontWeight: FW.bold,color:"var(--success-text)"}}>{"Return guest · "+src.name+" · "+formatDay(src.date)+" "+srcTime+" — set a date"}</div>
     );
   })();
 
@@ -882,7 +889,9 @@ export function BookingFormModal({
     key="rd"
     className="mgt-hover-scale mgt-press"
     style={mkBtn({fontSize: T.body,background:BTN.reset})}
-    onPointerDown={function(){setForm(function(f){return Object.assign({},f,{customDur:null});})}}>Reset</button>:null;
+    /* v18.2.0: pointer-only like the steppers beside it — Enter and Space did
+       nothing — so it takes the same stepPress. */
+    {...stepPress(function(){setForm(function(f){return Object.assign({},f,{customDur:null});});})}>Reset</button>:null;
   const endTime=form.time?toTime(toMins(form.time)+dur):"--";
 
   // v14.4.1: action row pinned to the modal bottom via Overlay's `footer` slot.
@@ -924,7 +933,8 @@ export function BookingFormModal({
         className="mgt-hover-scale"
         /* v17.8.0: was BTN.cancel — the RED one. In this app "cancel" means
            cancel the BOOKING, which is why that token is red; this button closes
-           the FORM. CLAUDE.md names this exact trap and names the fix, and it
+           the FORM. CLAUDE.md named this exact trap and the fix (until v18.2.0
+           removed the token), and it
            was sitting two buttons away from a red-adjacent amber and a blue
            primary, so the footer read as three warnings. --app-btn-slate is the
            documented neutral dialog secondary. */
@@ -972,25 +982,29 @@ export function BookingFormModal({
             onBlur={function(){setNameFocus(false);}}
             placeholder="Full name"
             className="mgt-hover-scale"
-            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number">{function(fid){return <PhoneField
+            style={inp()} />{nameDropdown}</div>;}}</Fld><Fld label="Phone number" invalid={invalidField("phone")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <PhoneField
             /* v18.1.0: the country code is its own control (PhoneField,
                CountryPicker). `form.phone` is still ONE string, so every
                consumer below — the suggestion list, the chips, the duplicate
                warning — reads exactly what it read before. The old "+" typed
                on focus is gone: the code lives in the picker now. The label
-               names the NUMBER box, which is where the typing happens. */
+               names the NUMBER box, which is where the typing happens.
+               v18.2.0 phase 19: no default country — the picker starts empty,
+               and Save refuses a number without a code ("phone" is its
+               errorField, so the state attrs land on the number box). */
             value={form.phone}
             /* /code-review: only TYPING opens the suggestion list. A country
                pick left it open with focus on the picker, where no blur of the
-               number box can ever arrive to close it. */
-            onChange={function(v,src){if(src!=="picker") setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
-            defaultIso={phoneCountry}
+               number box can ever arrive to close it. v18.2.0 phase 20: typing
+               is the change with NO source — a code detected on blur ("detect")
+               happens as the box closes the list, and must not reopen it. */
+            onChange={function(v,src){if(!src) setPhoneFocus(true);setForm(function(f){return Object.assign({},f,{phone:v});});}}
             pinned={pinnedCountries}
-            inputProps={{id:fid,
+            inputProps={Object.assign({id:fid},attrs,{
               /* Same reopen fix as the name field above. */
               onFocus:function(){setPhoneFocus(true);},
               onClick:function(){setPhoneFocus(true);},
-              onBlur:function(){setPhoneFocus(false);}}}
+              onBlur:function(){setPhoneFocus(false);}})}
           >{phoneDropdown}</PhoneField>;}}</Fld></div><Reveal show={!!custChips}>{custChips}</Reveal></Section><Section><div style={{display:"grid",gridTemplateColumns:formCols,gap:12}}><Fld label="Date" invalid={invalidField("date")} describedBy={FORM_ERROR_ID}>{function(fid,attrs){return <><DateField
             /* v18.0.0 session 7: the weekday inside the pill. Fld's id and
                state attrs name the INPUT, so they ride in inputProps. */
@@ -1018,18 +1032,22 @@ export function BookingFormModal({
             style={mkSel()}><option value="auto">Auto (recommended)</option>{INDOOR.length>0?<option value="indoor">Indoor</option>:null}{OUTDOOR.length>0?<option value="outdoor">Outdoor</option>:null}</select>;}}</Fld><Fld label="Number of guests"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});}}>-</button><span
+              aria-label="Decrease number of guests"
+              {...stepPress(function(){const v=Math.max(1,(Number(form.size)||2)-1);setForm(function(f){return Object.assign({},f,{size:v});});})}>−</button><span
               style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{String(Number(form.size)||2)}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});}}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
+              aria-label="Increase number of guests"
+              {...stepPress(function(){const v=Math.min(25,(Number(form.size)||2)+1);setForm(function(f){return Object.assign({},f,{size:v});});})}>+</button></div></Fld><Fld label="Duration"><div style={{display:"flex",alignItems:"center",gap:6}}><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>-</button><span
-              style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{dur+" min"}</span><button
+              aria-label="Decrease duration"
+              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>−</button><span
+              style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{countLabel(dur,"min")}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
-              onPointerDown={function(e){e.preventDefault();const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});}}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
+              aria-label="Increase duration"
+              {...stepPress(function(){const v=Math.max(15,Math.min(480,dur+15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>+</button><span style={{fontSize: T.body,color:S.text,marginLeft:4}}>{"End: "+endTime}</span>{resetDurBtn}</div></Fld></div></Section><Reveal show={!!kitchenLoad}>{kitchenSection}</Reveal>{tablesBtn}<Reveal show={availChecking}>{checkingRow}</Reveal><Reveal show={!!(formAvail&&!formAvail.ok)}>{availBanner}</Reveal>{quickStatusBtns}<Section><Fld label="Notes">{function(fid){return <textarea
           id={fid}
           value={form.notes}
           onChange={function(e){setForm(function(f){return Object.assign({},f,{notes:e.target.value});});}}

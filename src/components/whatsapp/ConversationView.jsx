@@ -6,16 +6,18 @@
 
 import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, formatPhone, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
-import { Reveal, mkSolidBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
+import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
-import { RecheckIcon, TrashIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "../Icons";
+import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
 import { ReplyComposer } from "./ReplyComposer";
 import { LinkedBookingCard } from "./LinkedBookingCard";
 import { IntentBanner } from "./IntentBanner";
 import { R, T, FW, IC, H } from "../../lib/constants";
+import { formatDay } from "../../lib/day";
+import { guestsLabel } from "../../lib/booking-logic";
 
 export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
@@ -32,8 +34,12 @@ export function ConversationView({
   // pending/confirmed it isn't `completed`, so it never counted anyway — the
   // argument could only ever subtract a real past visit.
   const match = matchCustomerByPhone(conv.phoneKey, bookings);
-  const displayName = match ? match.name : (conv.phone || conv.phoneKey);
-  const phoneDisplay = formatPhone(conv.phone || conv.phoneKey);
+  // v18.2.0 (W4): the number ONCE. An unknown sender's title was the raw key
+  // "+447811223344" followed by "+44 7811223344"; now the title is the
+  // formatted number and the grey number beside it appears only under a name.
+  const named = !!(match && match.name);
+  const displayName = named ? match.name : formatPhone(conv.phone || conv.phoneKey);
+  const phoneDisplay = named ? formatPhone(conv.phone || conv.phoneKey) : null;
   const [histOpen, setHistOpen] = useState(false);
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
@@ -169,7 +175,9 @@ export function ConversationView({
     // section shape carries no border at all, the tint carries the semantics.
     <AlertPanel role="success" icon={CheckIcon} title="Past bookings" style={{ marginBottom: 10 }}>
       {pastList.slice(0, 5).map((b, i) => (
-        <AlertRow key={b.id} first={i === 0}>{(b.date || "?") + " · " + b.time + " · " + b.size + " pax · " + b.status}</AlertRow>
+        // v18.2.0 phase 49 (round 3's W-3): no status. `regularBookings` holds
+        // completed visits only, so " · completed" ended every row and said nothing.
+        <AlertRow key={b.id} first={i === 0}>{(formatDay(b.date) || "?") + " · " + b.time + " · " + guestsLabel(b.size)}</AlertRow>
       ))}
     </AlertPanel>
   ) : null;
@@ -179,8 +187,11 @@ export function ConversationView({
 
   // Manual LLM re-check — leftmost of the header actions in BOTH states (an
   // archived thread can be re-checked too; that's often exactly why you opened
-  // it). Icon-only to match the panel header's Templates / simulator buttons, and it
-  // spins while the round-trip is in flight.
+  // it). It spins while the round-trip is in flight.
+  // v18.2.0 (the design critique, W3): icon AND word, like Archive beside it.
+  // It was icon-only, named by its `title` alone — an accessible name, but a
+  // tooltip the tablets never show, so a finger never learned what the
+  // circular arrow does. The title stays, as the longer description.
   const running = recheck === "running";
   const recheckBtn = onRecheck ? (
     <button
@@ -188,14 +199,15 @@ export function ConversationView({
       disabled={running}
       title={running ? "Checking…" : "Re-check this conversation for requested changes"}
       className={running ? undefined : "mgt-hover-scale mgt-press"}
-      style={mkSolidBtn("var(--btn-default)", { width: H.chrome, height: H.chrome, minHeight: H.chrome, padding: 0, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", display: "flex", alignItems: "center", justifyContent: "center", opacity: running ? 0.6 : 1 })}
+      style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, cursor: running ? "default" : "pointer", flexShrink: 0, boxShadow: "var(--shadow-btn)", opacity: running ? 0.6 : 1 })}
     >
       {/* The spin is a LOOP — nothing arrives and nothing leaves, so neither
           direction curve describes it and it keeps `linear`. Documented
           exception, alongside .mgt-shimmer and .mgt-dot-pulse — and marked as
           one, so `check:style`'s motion rule reads it as a decision rather than
           as the sweep having missed a file (17.15.0-wa-sandbox). */}
-      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.control} /></span>
+      <span style={running ? { display: "block", animation: "mgt-spin 900ms linear infinite" /* @motion */ } : { display: "block" }}><RecheckIcon size={IC.inline} /></span>
+      {running ? "Checking…" : "Re-check"}
     </button>
   ) : null;
 
@@ -205,7 +217,7 @@ export function ConversationView({
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
         {recheckBtn}
         <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-cancel)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)" })} ><TrashIcon size={IC.inline} />Delete</button>
+        <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkDangerBtn({ gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small })} ><TrashIcon size={IC.inline} />Delete</button>
       </div>
     );
   } else {
@@ -240,7 +252,7 @@ export function ConversationView({
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         {showBack ? <button onClick={onBack} className="mgt-hover-scale mgt-press" style={{ background: "var(--btn-default)", border: "1px solid var(--border-glass)", borderRadius: R.pill, width: 36, height: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-on-accent)", flexShrink: 0, lineHeight: 1 }} title="Back" aria-label="Back to the conversation list"><ChevronLeftIcon size={IC.chrome} /></button> : null}
         <span style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", minWidth: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
-        <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span>
+        {phoneDisplay ? <span style={{ fontSize: T.body, color: "var(--text-muted)", fontFamily: "-apple-system, BlinkMacSystemFont, monospace" }}>{phoneDisplay}</span> : null}
         {regularChip}
         {acceptedBadge}
         {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}

@@ -228,6 +228,78 @@ export function weekdayShort(dateStr) {
   return WEEKDAY_SHORT[new Date(dateStr).getUTCDay()];
 }
 
+// ── v18.2.0 (the design critique, C1): ONE way to write a day ────────────────
+// "Thu 24.09", and "Thu 24.09.2027" when it is not this year. The critique
+// found five shapes on screen and no rule: ISO "2026-09-24" in Customers,
+// Vouchers, Find a booking and the draft card, "24.09" in the Activity log,
+// "Sep 21 – 27, 2026" in the Week view, "24 Sept 2026" in a booking's history
+// and "Thu 24.09.2026" in the date field. The date field is the one staff read
+// every shift, so its shape is the one kept, with the year dropped where it
+// says nothing: a restaurant's dates are almost all this year's.
+//
+// The weekday leads because staff think in service days — "Friday's twelve"
+// — and it is the part a bare "24.09" makes them work out.
+//
+// Two options, and only two, because each is a considered exception:
+//   · `weekday: false` — where a weekday is already beside it (the Day sheet
+//     prints the long one) or would be noise (a voucher's expiry);
+//   · `year: "always"` — a record read after the year it describes ends (the
+//     printed Day sheet, which gets filed).
+// `today` is the test seam, as `now` is for `todayStr`.
+//
+// Anything that is not a CANONICAL date comes back as it was, never as "".
+// `sanitize` guarantees `date` is a string and never that it is well-formed,
+// and a booking with a broken date is exactly the one somebody needs to SEE in
+// order to repair (the v17.16.6 BlockModal rule) — hiding it would make it
+// unfindable. Canonical is `weekdayShort`'s test, for the same reason.
+//
+// v18.2.0 phase 54 (round 3's C-5): the weekday and the day are joined by a
+// NO-BREAK space (U+00A0), as `money()` joins an amount and its symbol (phase
+// 45), so a wrapping line never ends on "Thu" and starts the next on "24.09".
+// Anything that SEARCHES text holding this must fold it to a plain space (the
+// Activity log does); nothing stores it — records keep ISO.
+export function formatDay(dateStr, opts) {
+  const o = opts || {};
+  if (typeof dateStr !== "string" || stepUTC(dateStr, 0) !== dateStr) return dateStr == null ? "" : String(dateStr);
+  const withYear = o.year === "always" || showsYear(dateStr, o.today);
+  const dm = dateStr.slice(8, 10) + "." + dateStr.slice(5, 7) + (withYear ? "." + dateStr.slice(0, 4) : "");
+  return o.weekday === false ? dm : WEEKDAY_SHORT[new Date(dateStr).getUTCDay()] + "\u00a0" + dm;
+}
+
+// Does `formatDay` print this day's year? The one place that decides it, and
+// exported because a COLUMN of dates has to know too: "Wed 24.09" is 66px in
+// Find a booking's bold and "Wed 24.09.2025" 103, so a list sizes its date
+// column once, to the widest date it holds, rather than letting one row with a
+// year push the rest of its row out of line.
+export function showsYear(dateStr, today) {
+  return typeof dateStr === "string" && stepUTC(dateStr, 0) === dateStr &&
+    dateStr.slice(0, 4) !== String(today || todayStr()).slice(0, 4);
+}
+
+// The LOCAL day an instant fell on — a timestamp (ms, or an ISO date-time
+// string) in, "YYYY-MM-DD" out, so a stamp can be written by `formatDay`.
+// `todayStr` does exactly this for NOW; it is the same function under the name
+// its callers mean, and it answers "" for an instant that is not one.
+//
+// NOT for a date-only string: "2026-09-24" parses as UTC midnight, which is the
+// previous local day anywhere west of UTC — `todayStr`'s own warning.
+export function localDay(at) {
+  const d = new Date(at);
+  return at != null && at !== "" && Number.isFinite(d.getTime()) ? todayStr(d) : "";
+}
+
+// Every canonical date inside a line of STORED text, written the house way.
+// The texts were composed before this rule and are records, so they are never
+// re-written — "date 2026-09-24→2026-09-25" in a booking's history, "deleted
+// … · 2026-09-24 20:00" in the Activity log. Displaying them through this keeps
+// one shape on screen while the data keeps the sortable one.
+//
+// `\b` on both sides, and `_` counts as a word character: a recurring
+// occurrence's id ends in "_2026-09-24" and must never be touched.
+export function formatDaysIn(text, opts) {
+  return String(text == null ? "" : text).replace(/\b\d{4}-\d{2}-\d{2}\b/g, function (iso) { return formatDay(iso, opts); });
+}
+
 // NOW, expressed in minutes since midnight of `dateStr` — the one axis on which
 // `nowOn(b.date, today, nowMins)` and `toMins(b.time)` may be compared.
 //

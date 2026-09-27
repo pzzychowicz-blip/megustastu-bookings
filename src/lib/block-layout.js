@@ -28,12 +28,21 @@
 //                a party sat down early is a different class of defect from
 //                losing a marker)
 // dropped 2nd    the party-size ring
-// dropped 1st    the flags, one at a time, INFORMATIONAL FIRST
+// dropped 1st    the flags, one at a time, lowest priority first
 //
-// `keep` is the drop priority: lowest survives longest. Deposit and preferred
-// tables are facts about a booking; locked, repeat-no-show and overstaying are
-// the exception states — which is v17.9.0's own argument for moving those flags
-// out of the truncating label string, applied to width instead of to text.
+// `keep` is the drop priority: lowest survives longest. v17.9.1 dropped the
+// INFORMATIONAL flags first (deposit, preferred tables) and kept the exception
+// states (locked, repeat no-show, overstaying) — v17.9.0's argument for moving
+// those flags out of the truncating label string, applied to width instead of
+// to text.
+//
+// v18.2.0 phase 22 changed the order, and it was Patryk's call: deposit and the
+// indoor/outdoor preference should be visible on booking blocks, so they are
+// the LAST flags to go — only the ring and the overstaying mark outlast them.
+// Then repeat no-show, locked, and the preferred-tables star, first to drop.
+// Overstaying stays on top: it is the one mark a host acts on during service,
+// and the red border says it too. The numbers live in TimelineView's
+// `railFlagsOf`; tests/block-layout.test.js pins its fixture to them.
 
 /**
  * Decide what fits on a block of `blockPx`, given the fixed cost of the parts

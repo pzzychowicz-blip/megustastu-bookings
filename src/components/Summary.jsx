@@ -20,35 +20,42 @@
 // v14.6.0.
 
 import { useMemo, memo } from "react";
-import { daySummary } from "../lib/booking-logic";
-import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC } from "../lib/constants";
-import { mkBtn, Reveal } from "./atoms";
+import { daySummary, countLabel } from "../lib/booking-logic";
+import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP } from "../lib/constants";
+import { mkBtn, Reveal, TBadge } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
 import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
-function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
-function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
+function coversLabel(n){ return countLabel(n, "cover", "covers"); }
+function bookingsLabel(n){ return countLabel(n, "booking", "bookings"); }
 
-// v16.3.0: "freeing soon" entries from the freeing list ([{tables,inMin}]).
-// Tables joined with + (a multi-table booking), cap at 3 entries + a "+N" tail.
-// Returns an ARRAY so each entry can render as its own no-wrap span — the line
-// wraps BETWEEN entries (never mid-token) when several tables are freeing at
-// once, instead of overflowing the card (v16.3.0-correction).
-function freeingParts(freeing){
-  if(!freeing || !freeing.length) return [];
-  const parts = freeing.slice(0, 3).map(function(f){
-    const t = (f.tables && f.tables.length) ? f.tables.join("+") : "?";
-    return t + " (~" + f.inMin + "m)";
-  });
-  if(freeing.length > 3) parts.push("+" + (freeing.length - 3));
-  return parts;
+// v16.3.0: "freeing soon" entries from the freeing list ([{id,tables,inMin}]),
+// capped at 3 entries + a "+N" tail. Each entry is its own no-wrap unit, so the
+// line wraps BETWEEN entries (never mid-token) when several tables are freeing
+// at once, instead of overflowing the card (v16.3.0-correction).
+//
+// v18.2.0 (Patryk): each table is a TABLE BADGE (`TBadge`), the one the List
+// card and the booking form print, rather than its id as text ("5A+5B
+// (~6m)"). The badge's indoor/outdoor fill is the same cue it is everywhere
+// else, and a multi-table booking reads as its badges side by side, as it
+// does on the card. A booking with no table keeps the "?" it always had, as
+// TEXT: a badge would give it an outdoor fill it has no claim to.
+const FREEING_SHOWN = 3;
+function FreeingEntry({ f }) {
+  const tables = f.tables && f.tables.length ? f.tables : null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: SP.tight, whiteSpace: "nowrap", verticalAlign: "middle" }}>
+      {tables ? tables.map(function(t){ return <TBadge key={t} id={t} />; }) : "?"}
+      <span>{"~" + f.inMin + "m"}</span>
+    </span>
+  );
 }
 
 // v17.1.0 perf: React.memo — Summary sits in the always-visible date-nav row,
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, onToggle, onOpenWeek, onPrint }) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, onToggle, onOpenWeek, onPrint }) {
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
@@ -95,7 +102,15 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           onClick={onToggle}
           aria-expanded={open}
           style={{
-            flex: "1 1 200px", minWidth: 0, boxSizing: "border-box", padding: 0,
+            // v18.2.0: basis "auto" (its own content), where it was 200px over
+            // ~138px of "14 covers  7 bookings". The date row decides whether
+            // this panel fits beside the date controls from its ONE-LINE width
+            // (App's summary slot, flexBasis "auto"), and that width counts the
+            // headline's content; this row broke its line on the 200px basis.
+            // Between the two (about 784–846px wide, the tablet in portrait
+            // included) the panel sat beside the controls as the two-line card
+            // the slot's own rule exists to prevent. It still grows to fill.
+            flex: "1 1 auto", minWidth: 0, boxSizing: "border-box", padding: 0,
             // v17.8.0: the box was only as tall as its text line — 17px — even
             // though it is the whole "tap to see the day" target. Wide enough
             // to hit horizontally, but 17px is thin for a thumb. 36 to match the
@@ -108,6 +123,16 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         >
           <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--accent)" }}>{coversLabel(s.totalCovers)}</span>
           <span style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>{bookingsLabel(s.totalBookings)}</span>
+          {/* v18.2.0: said only when it differs. The headline counted 12
+              bookings while the grid drew 4 and nothing reconciled the two;
+              "on the grid" is lib/unplaced.js's definition (not in the
+              timeline's Unplaced row), and App passes the count so this panel
+              and the strip read ONE derivation. */}
+          {unplacedCount > 0 ? (
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--danger-text)" }}>
+              {Math.max(s.totalBookings - unplacedCount, 0) + " of " + s.totalBookings + " on the grid"}
+            </span>
+          ) : null}
         </button>
         {/* Right cluster — the live status bar (today only) + Week + chevron, right-aligned
             via marginLeft:auto; wraps below the headline as a unit on narrow widths. */}
@@ -128,11 +153,12 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 <span style={{ color: "var(--success-text)", fontWeight: FW.semi }}>
                   <span style={{ margin: "0 4px", color: "var(--text-faint)", fontWeight: FW.regular }}>·</span>
                   <span style={{ whiteSpace: "nowrap" }}>freeing soon:</span>{" "}
-                  {freeingParts(freeing).map(function(p, i){
+                  {freeing.slice(0, FREEING_SHOWN).map(function(f, i){
                     return (
-                      <span key={i}>{i > 0 ? ", " : ""}<span style={{ whiteSpace: "nowrap" }}>{p}</span></span>
+                      <span key={f.id}>{i > 0 ? ", " : ""}<FreeingEntry f={f} /></span>
                     );
                   })}
+                  {freeing.length > FREEING_SHOWN ? ", +" + (freeing.length - FREEING_SHOWN) : null}
                 </span>
               ) : null}
             </div>
@@ -164,8 +190,17 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
 
       {/* Expanded body — shift chips + hourly bars. Wrapped in Reveal (v15.8.0)
           so the panel eases open/closed instead of snapping the column below
-          it (the outer panel is overflow:hidden, so the collapse won't spill). */}
-      <Reveal show={open}>
+          it (the outer panel is overflow:hidden, so the collapse won't spill).
+
+          v18.2.0: `contain: inline-size` keeps the body out of the panel's
+          INTRINSIC width. App's date-nav row sizes this panel by its one-line
+          width (flexBasis "auto") to decide whether it fits beside the date
+          controls, and that width must be the HEADER's: the body only exists
+          while open, and it is the wider of the two on a day that is not
+          today (measured: ~388px against a ~270px header), so counting it
+          would move the panel onto the next line the moment it opened. Laid
+          out, the body still takes the panel's full width. */}
+      <Reveal show={open} style={{ contain: "inline-size" }}>
         <div style={{ padding: "2px 14px 14px" }}>
           {hasData ? (
             <div>
@@ -233,8 +268,8 @@ function ShiftChip({ label, covers, count }) {
       background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
       <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
-      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{coversLabel(covers)}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{bookingsLabel(count)}</div>
     </div>
   );
 }

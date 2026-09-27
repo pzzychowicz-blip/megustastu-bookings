@@ -27,19 +27,27 @@
 //     all gated on `gesturesEnabled` (v17.1.2 per-device Settings toggle).
 //   • seated tables show the v16.3.0 freeing-soon countdown ("~Nm") when the
 //     slider sits at NOW (predictions are a "right now" read).
+//   • v18.2.0 phase 21 — AVAILABILITY (Settings → App, per person, on by
+//     default): a free table says how long it stays free ("until 19:30" under
+//     its number, nothing when it is free to closing), and one whose window is
+//     shorter than a default-size walk-in's visit plus the turnaround wears a
+//     dashed amber rim and amber label — the walk-in form's "busy". The answer
+//     is `lib/plan-avail.js`'s `freeWindow`, the same one the "Walk-in here"
+//     gate reads, so the rim and the offer cannot disagree.
 //
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking } from "../lib/booking-logic";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
+import { freeWindow } from "../lib/plan-avail";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn, Reveal, SBadge } from "./atoms";
+import { mkBtn, Reveal, SBadge, SizeRing } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
 import { todayStr } from "../lib/day";
 
@@ -75,7 +83,12 @@ export const PlanView = memo(function PlanView({
   // v17.6.0: separation between bookings, in minutes (0 = off). Scalar from App
   // rather than the TURN_BUFFER live binding — React.memo can't see a live
   // binding (same reason hoursSig exists).
-  turnBuffer = 0
+  turnBuffer = 0,
+  // v18.2.0 phase 21: the availability overlay (the per-person Settings → App
+  // switch, on by default) and the walk-in party size it measures a visit for
+  // (settings/general.defaultWalkinSize — the size the walk-in form opens on).
+  // Both scalars, for the React.memo reason above.
+  showAvail = true, walkinSize = 2
 }) {
   const fp = (layout && layout.floorPlan) || { room: { w: 900, h: 600 }, tables: {}, walls: [], doors: [] };
   const tables = (layout && Array.isArray(layout.tables)) ? layout.tables : [];
@@ -87,9 +100,14 @@ export const PlanView = memo(function PlanView({
   // CLOSE — matching the Timeline axis exactly, which is what lets TimeAxis
   // reuse pct()/QUARTER_HOURS unchanged. It also lets you scrub into the tail
   // where a late booking actually runs out, which the old slider couldn't reach.
-  const closeM = (h.closed ? 23 : h.gridClose) * 60;
+  // v18.2.0: the LIVE `GRID_CLOSE`, which is the viewed day's gridClose
+  // stretched to its latest booking (constants.js `extendActiveGrid`) — the
+  // bound TimeAxis and the Timeline already read, so the scrubber reaches a
+  // 23:45 finish too. `hoursFor(date).gridClose` would clamp the selection
+  // an hour short of the tape it is scrubbing.
+  const closeM = (h.closed ? 23 : Math.max(h.gridClose, GRID_CLOSE)) * 60;
 
-  // ── Time scrubber (defaults: now on today, opening time otherwise) ─────────
+  // ── Time scrubber (defaults: now on today, the first booking otherwise) ────
   // Absolute minutes-since-midnight, clamped to the day's span and NOT rounded.
   //
   // v17.6.0: this used to round to the nearest 15, and that rounding is gone.
@@ -103,7 +121,14 @@ export const PlanView = memo(function PlanView({
   // only ever compensated for the follow position being rounded away from the
   // clock, so with an exact follow there is nothing left to compensate for.)
   const clampExact = (m) => Math.max(openM, Math.min(closeM, m));
-  const [slider, setSlider] = useState(() => clampExact(isToday ? nowMins : openM));
+  // v18.2.0 phase 67: a day that is not today opens on its first booking — the
+  // Timeline's rule since phase 4, from the same `firstStartOf`. It opened on
+  // OPEN, so an evening-only future day showed an empty room until you
+  // scrubbed. An empty day, or one whose bookings have not loaded, still opens
+  // at OPEN.
+  const firstStart = firstStartOf(bookings, date);
+  const dayStart = () => clampExact(isToday ? nowMins : (Number.isFinite(firstStart) ? firstStart : openM));
+  const [slider, setSlider] = useState(dayStart);
   const [sliderTouched, setSliderTouched] = useState(false);
   // v17.5.0: bumped ONLY at the programmatic scrub sites (date change, clock
   // follow, the Now button) so TimeAxis re-centres then — and never yanks the
@@ -118,7 +143,12 @@ export const PlanView = memo(function PlanView({
   // Both effects key on ONE trigger on purpose — re-running them on every
   // dependency would yank the selection out from under a hand scrub.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setSlider(clampExact(isToday ? nowMins : openM)); setSliderTouched(false); reCentre(); }, [date]);
+  useEffect(() => { setSlider(dayStart()); setSliderTouched(false); reCentre(); }, [date]);
+  // Phase 67: on a day that is not today, an UNTOUCHED scrubber follows the
+  // first booking as it arrives or moves — the bookings may load after the date
+  // does, or the day's first party change — the way today's follows the clock.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!isToday && !sliderTouched) { setSlider(dayStart()); reCentre(); } }, [firstStart]);
   // Follows per MINUTE now rather than per quarter. `nowMins` only changes value
   // once a minute (the 15s tick re-sets the same number and React bails), and
   // the occupancy pass below is one linear loop over the day — nowhere near the
@@ -201,6 +231,16 @@ export const PlanView = memo(function PlanView({
   const blockSlots = getBlockSlots(blocks, date);
   const isBlocked = (id) => blockSlots.some((sl) => sl.tables.indexOf(id) >= 0 && slider >= sl.s && slider < sl.e);
 
+  // v18.2.0 phase 21: how long a table FREE at the slider stays free, and
+  // whether a walk-in fits in that. The visit is a default-size walk-in's
+  // duration plus the turnaround — what the walk-in form opens on and checks.
+  // NB getDur reads the DUR_TIERS live binding, the staleness `canWalkin`
+  // below has always accepted (/code-review #5): at most one minute after a
+  // Settings duration edit, until the next nowMins tick busts the memo.
+  const needMins = getDur(walkinSize) + turnBuffer;
+  const freeAt = (id) => !occupying[id] && !isBlocked(id) && !resetting[id];
+  const windowOf = (id) => freeWindow(id, slider, day, blockSlots, closeM, needMins);
+
   // freeing-soon: {bookingId: inMin} → tableId → inMin (only meaningful at NOW).
   const freeSoonOf = {};
   if (atNow) {
@@ -219,6 +259,52 @@ export const PlanView = memo(function PlanView({
   // ── Popups ───────────────────────────────────────────────────────────────────
   const [tablePop, setTablePop] = useState(null);   // table id → booking-list popover
   const [quick, setQuick] = useState(null);         // booking → QuickStatusPopup
+
+  // v18.2.0 phase 57 (round 3's A-2): the table popover, reached from the
+  // keyboard. A table is a button (Enter opens this), but the popover is
+  // portalled to the END of <body> and nothing moved focus into it, so its
+  // booking rows — which were <div>s with onClick, no role and no tab stop —
+  // could not be reached at all, and even "Walk-in here" came after every other
+  // control on the page. QuickStatusPopup's click-opened shape: focus to the
+  // first button, Escape closes (a capture listener on window, stopped), focus
+  // back to what had it. Focus moves in only when a KEY opened it (Enter or
+  // Space on the table, or an assistive technology's click, `detail` 0): a
+  // table cancels its own mousedown focus (the tabIndex gotcha), so after a
+  // tap Chrome counts script focus as keyboard focus and drew a ring round the
+  // first booking on every tap (measured, `:focus-visible` true) — the List's
+  // ⋯ popup shows none, because its button took the tap's focus.
+  const popRef = useRef(null);
+  const popOpenerRef = useRef(null);
+  const popByKeyRef = useRef(false);
+  useEffect(function () {
+    if (!tablePop) return undefined;
+    const opener = document.activeElement;
+    popOpenerRef.current = opener;
+    const first = popByKeyRef.current && popRef.current && popRef.current.querySelector("button");
+    if (first) first.focus({ preventScroll: true });
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      e.preventDefault();
+      setTablePop(null);
+    }
+    window.addEventListener("keydown", onKey, true);
+    return function () {
+      window.removeEventListener("keydown", onKey, true);
+      if (opener && document.contains(opener) && typeof opener.focus === "function") opener.focus({ preventScroll: true });
+    };
+  }, [tablePop]);
+  // Leaving the popover for a FORM (a booking row, "Walk-in here") hands focus
+  // back to the table HERE, in the handler. The cleanup above is too late for
+  // that path: the commit that opens the form marks the page behind it `inert`,
+  // where focus() does nothing, so the form's Overlay found <body> focused — the
+  // picked row had just been removed — and returned focus there on close
+  // (measured with StrictMode off: focus went row → dialog → body).
+  function leavePop() {
+    const o = popOpenerRef.current;
+    if (o && document.contains(o) && typeof o.focus === "function") o.focus({ preventScroll: true });
+    setTablePop(null);
+  }
 
   // ── Zoom / pan (transform on the inner <g>) ─────────────────────────────────
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
@@ -347,22 +433,18 @@ export const PlanView = memo(function PlanView({
     const queue = day
       .filter((b) => (b.tables || []).indexOf(id) >= 0)
       .sort((a, b) => toMins(a.time) - toMins(b.time));
-    const occ = occupying[id];
     // v17.1.2 (Patryk): a table with ANY current occupant — including a seated
     // party — never offers "Walk-in here" (the v17.1.1 "seated-takeover" was
     // removed: an occupied table must not take another walk-in at that time).
     // v17.6.0: a table inside its turnaround tail is not free for a walk-in —
     // the optimizer would refuse the placement, so Plan must not offer it.
-    const freeNow = !occ && !isBlocked(id) && !resetting[id];
+    // v18.2.0 phase 21: both clauses are `freeAt`, which the availability
+    // overlay reads too — one definition of "free" for the rim and the offer.
+    const freeNow = freeAt(id);
     // v17.0.0 correction round 6: only OFFER a walk-in when the table can
     // actually seat one now — free at the slider AND a real window before the
     // next booking/block/close (≥ a minimal walk-in duration). A table free now
     // but booked in 10 min used to still show "Walk-in here" → dead-end form.
-    const nextBusy = Math.min(
-      closeM,
-      ...day.filter((b) => (b.status === "confirmed" || b.status === "pending") && (b.tables || []).indexOf(id) >= 0 && toMins(b.time) > slider).map((b) => toMins(b.time)),
-      ...blockSlots.filter((sl) => sl.tables.indexOf(id) >= 0 && sl.s > slider).map((sl) => sl.s)
-    );
     // NB getDur reads the DUR_TIERS live binding, which neither `layout` nor
     // `hoursSig` covers — after a Settings duration-tier edit this gate can be
     // stale for up to ONE MINUTE (the next nowMins tick busts the memo).
@@ -370,25 +452,43 @@ export const PlanView = memo(function PlanView({
     // sig prop.
     // v17.6.0: …and must still fit the separation BEFORE the next booking, or
     // the walk-in form would open on a slot the placement check then refuses.
-    const canWalkin = freeNow && isToday && (nextBusy - slider) >= getDur(2) + turnBuffer;
+    // v18.2.0 phase 21: the window is `freeWindow`'s, the one the availability
+    // rim draws, and the visit is the DEFAULT walk-in size's (`walkinSize`) —
+    // it was `getDur(2)`, the seed of that setting, so a restaurant whose
+    // walk-ins default to 4 was offered tables its own walk-in form then called
+    // busy. A later SEATED booking now counts as well as confirmed/pending:
+    // scrubbed back before a party sat down, their table is not free for them.
+    const canWalkin = freeNow && isToday && windowOf(id).fits;
     // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
     // SlideView's transform makes an in-tree position:fixed scrim center on
     // the container, not the viewport.
     return createPortal(
       <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
         style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
-        <div onClick={(e) => e.stopPropagation()} className="mgt-card-in"
+        <div ref={popRef} onClick={(e) => e.stopPropagation()} className="mgt-card-in"
           style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
           {queue.length === 0 ? (
             <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
           ) : queue.map((b) => {
+            // Phase 57: a BUTTON, named by what it shows, time first ("20:00
+            // Ana, 2 guests, confirmed") — its content would have read the
+            // size ring as a bare "2".
             return (
-              <div key={b.id} className="mgt-hover-scale"
-                onClick={() => { setTablePop(null); onEdit(b); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+              <button type="button" key={b.id} className="mgt-hover-scale"
+                onClick={() => { leavePop(); onEdit(b); }}
+                aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name + " (" + b.size + ")"}</span>
+                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+                {/* v18.2.0 phase 43 (C2): the party size as the List card's
+                    ring — this row IS a small List card (time · name · size ·
+                    status). It was "Name (2)", inside the name, so the ellipsis
+                    took the size first. Measured on a 375px phone, "2 guests"
+                    as text left a name 71px once the card fits the screen
+                    ("Unsettled Pr…"); the 18px ring leaves 102. Its title
+                    says "2 guests". */}
+                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
                 {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
                     pointed at `SBadge`. That comment ("solid, like every other
                     status label") was true about the fill and silently false
@@ -397,13 +497,13 @@ export const PlanView = memo(function PlanView({
                     named a status with a word while the block behind it named
                     the same status with a mark. */}
                 <SBadge status={b.status} />
-              </div>
+              </button>
             );
           })}
           {canWalkin ? (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
               <button className="mgt-hover-scale"
-                onClick={() => { setTablePop(null); onWalkin(id); }}
+                onClick={() => { leavePop(); onWalkin(id); }}
                 style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
             </div>
           ) : null}
@@ -552,15 +652,23 @@ export const PlanView = memo(function PlanView({
               // table dropped — the table is already the subject of this
               // sentence. Same source as the List card and the timeline block,
               // so the three cannot word a booking differently.
+              // v18.2.0 phase 21: a free table's window, when the overlay is on.
+              const avail = showAvail && freeAt(t.id) ? windowOf(t.id) : null;
               const a11yLabel = "Table " + t.id + ", " + (
                 blocked ? "blocked"
                   : occ ? describeBooking(occ, { tables: false })
                     : resetting[t.id] ? "free after turnaround"
                       : "free"
-              ) + (soon != null ? ", free in about " + soon + " minutes" : "");
+              ) + (soon != null ? ", free in about " + countLabel(soon, "minute", "minutes") : "")
+                + (avail && avail.until != null ? " until " + toTime(avail.until) : "")
+                + (avail && !avail.fits ? ", too short for a walk-in" : "");
+              // The short window's rim: dashed like `resetting` (not offerable
+              // now) but in the warn ink, and with the label below, so the two
+              // dashed states are told apart by colour AND text.
+              const rim = avail && !avail.fits ? { stroke: "var(--warn-text)", dash: "6 4" } : null;
               return (
                 <TableGlyph key={t.id} id={t.id} entry={e} ariaLabel={a11yLabel}
-                  fill={f.fill} stroke={f.stroke} strokeWidth={2} strokeDasharray={f.dash}
+                  fill={f.fill} stroke={rim ? rim.stroke : f.stroke} strokeWidth={2} strokeDasharray={rim ? rim.dash : f.dash}
                   // v17.1.1: occupancy colour changes fade with the timeline's
                   // Seated→Completed timing (.mgt-fade-overlay). CSS can't
                   // interpolate the blocked url(#pv-blocked) pattern fill, so
@@ -572,7 +680,7 @@ export const PlanView = memo(function PlanView({
                   // passes no shapeStyle. Any inline transition on an element
                   // that also has a class-driven one must name both properties.
                   shapeStyle={{ transition: "fill " + M.status + ", stroke " + M.status + ", filter " + M.tap }}
-                  onClick={() => { if (!movedRef.current) setTablePop(t.id); }}
+                  onClick={(e) => { if (!movedRef.current) { popByKeyRef.current = !!e && (e.type === "keydown" || e.detail === 0); setTablePop(t.id); } }}
                   onPointerDown={(ev) => { if (ev.pointerType === "touch") startPress(t.id); }}
                   onContextMenu={(ev) => {
                     ev.preventDefault(); ev.stopPropagation();
@@ -625,6 +733,20 @@ export const PlanView = memo(function PlanView({
                       style={{ color: BLOCK_INK[markStatus] || "var(--text-on-accent)", pointerEvents: "none" }}>
                       <StatusIcon status={markStatus} size={IC.control} />
                     </g>
+                  ) : null}
+                  {/* v18.2.0 phase 21: "until 19:30" in the status mark's place
+                      — a free table draws no mark, so the centre column under
+                      the id is empty, and it is the one place a rotated table
+                      cannot move (see the mark's note above). Secondary ink on
+                      the free fill; the warn ink when the window is too short
+                      for a walk-in. Both pairs are registered in
+                      tests/contrast.test.js. It mounts and unmounts with the
+                      scrub, like the mark: no transition, for the mark's reason. */}
+                  {avail && avail.until != null ? (
+                    <text x={0} y={MARK_TOP + 9} textAnchor="middle" fontSize={10} fontWeight={600}
+                      fill={avail.fits ? "var(--text-secondary)" : "var(--warn-text)"} style={{ pointerEvents: "none" }}>
+                      {"until " + toTime(avail.until)}
+                    </text>
                   ) : null}
                   {soon != null ? (
                     <g transform="translate(0,-22)">

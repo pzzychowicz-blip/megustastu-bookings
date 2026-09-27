@@ -9,7 +9,9 @@
 //   currency       — the deposit currency symbol (was "€" in the form label,
 //                    ListView chip, timeline marker, day sheet).
 //   phonePrefix    — the phone field's seed (was the bare "+"); a typing
-//                    convenience, e.g. "+34".
+//                    convenience, e.g. "+34". v18.2.0 phase 19: it seeds
+//                    nothing any more (the picker starts empty) and survives
+//                    only as `enteredPhone`'s "this is no phone" guard.
 //   regularMin     — visits needed for the "Regular" label (was 2): the form's
 //                    Regular chip AND the Customers-tab Regulars filter initial.
 //   lateCollapseMax— a rows banner (Running-late, Overlap warnings, Waitlist
@@ -70,6 +72,9 @@ export const DEFAULT_GENERAL_SETTINGS = {
   // `enteredPhone` compares against — Settings writes the two together.
   // Absent on every restaurant's node until someone saves, so both DERIVE:
   // the country from the prefix, the list from the seed.
+  // v18.2.0 phase 19: Settings no longer offers a default country and the form
+  // seeds neither field. Both stay in the model and the sanitizer because a
+  // version still rolling out reads them; `pinnedCountries` is the live one.
   phoneCountry: null,
   pinnedCountries: DEFAULT_PINNED
 };

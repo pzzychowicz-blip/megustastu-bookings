@@ -56,7 +56,7 @@ import {
 function withId(v) { return Object.assign({}, v, { id: v.code }); }
 function stripId(v) { const c = Object.assign({}, v); delete c.id; return c; }
 
-export function useVouchers({ setWriteWarning, userEmail }) {
+export function useVouchers({ setWriteWarning, userEmail, currency }) {
   const [vouchers, setVouchers] = useState([]);
   const vouchersRef = useRef([]);          // mirror — see the updater-side-write gotcha
   const vouchersLoaded = useRef(false);
@@ -132,13 +132,14 @@ export function useVouchers({ setWriteWarning, userEmail }) {
     // scope: the mirror was reassigned above, so `prev` is the value captured
     // before it, never `vouchersRef.current` read again here.
     update(ref(db, "vouchers"), patch).then(function () {
-      emitActivity(voucherWriteEntries(prev, computed, { auto: isSilent === true }));
+      // v18.2.0 phase 81: with the currency, so a redemption reads "20 €".
+      emitActivity(voucherWriteEntries(prev, computed, { auto: isSilent === true, currency: currency }));
     }).catch(function (err) {
       console.warn(describeWriteError("vouchers", err));
       if (!isSilent) setWriteWarning("Couldn't save the voucher — this device's data was out of date. It has been refreshed; please redo the change.");
     });
     return true;
-  }, [setWriteWarning]);
+  }, [setWriteWarning, currency]);
 
   // ── The listener ────────────────────────────────────────────────────────────
   useEffect(function () {

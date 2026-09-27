@@ -35,14 +35,15 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
+import { stepPress } from "../lib/keyboard";
 import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
 import {
   toMins, toTime, getDur,
   getBlockSlots, getBusy, occupancyEnd, padEnd,
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
-  getKitchenLoad, findKitchenFriendlyTimes,
-  comboCapBest, nowTime
+  getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
+  comboCapBest, nowTime, guestsLabel, countLabel
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -165,7 +166,7 @@ export function WalkinForm({
   const wSummaryColor = wOk ? "var(--success-text)" : "var(--warn-text)";
   const wSummaryText = wSel.length === 0
     ? "Select tables below."
-    : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + wSize + " pax)" : " — need " + wSize + " pax");
+    : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + guestsLabel(wSize) + ")" : " — need " + guestsLabel(wSize));
   // v17.15.2: slides in and out. It appears the moment you tap a table and
   // vanishes the moment you clear — always under the eye of the person who
   // caused it — and it was doing both by hard cut. `Presence` with the
@@ -191,7 +192,6 @@ export function WalkinForm({
   // a full search every render.
   const wKitchenLoad = getKitchenLoad(bookings, wDate, wTime, wDur, null);
   const wKitchenStarts = wKitchenLoad.starts + 1;
-  const wKitchenGuests = wKitchenLoad.guests + wSize;
   const wKitchenBusy = wKitchenStarts >= KITCHEN_TABLE_LIMIT;
   const wKitchenSugg = wKitchenBusy
     ? findKitchenFriendlyTimes(bookings, wDate, wSize, "auto", wDur, wTime, null, tableBlocks)
@@ -301,8 +301,8 @@ export function WalkinForm({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <span>
             <span style={{ fontWeight: FW.bold }}>Starting at this time: </span>
-            {wKitchenStarts + " booking" + (wKitchenStarts !== 1 ? "s" : "")
-              + " · " + wKitchenGuests + " guest" + (wKitchenGuests !== 1 ? "s" : "")}
+            {/* v18.2.0: the OTHER parties starting then — lib's startingPhrase. */}
+            {startingPhrase(wKitchenLoad)}
           </span>
           {wKitchenBusy ? <OutlineChip tone="danger" size="small">Kitchen busy</OutlineChip> : null}
         </div>
@@ -406,8 +406,8 @@ export function WalkinForm({
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Decrease number of guests"
+                {...stepPress(() => {
                   setDraft({
                     ...wf,
                     size: Math.max(1, (Number(wf.size) || 2) - 1),
@@ -416,22 +416,22 @@ export function WalkinForm({
                     // Walk-in-button path still resets so auto-fit re-runs.
                     tables: wf._pre ? (wf.tables || []) : []
                   });
-                }}
+                })}
               >
-                -
+                −
               </button>
               <span style={stepperValueStyle}>{String(wSize)}</span>
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Increase number of guests"
+                {...stepPress(() => {
                   setDraft({
                     ...wf,
                     size: Math.min(25, (Number(wf.size) || 2) + 1),
                     tables: wf._pre ? (wf.tables || []) : [] // v17.1.1: see the − stepper
                   });
-                }}
+                })}
               >
                 +
               </button>
@@ -442,23 +442,23 @@ export function WalkinForm({
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Decrease duration"
+                {...stepPress(() => {
                   const cd = wf.customDur || getDur(Number(wf.size) || 2);
                   setDraft({ ...wf, customDur: Math.max(15, cd - 15) });
-                }}
+                })}
               >
-                -
+                −
               </button>
-              <span style={stepperValueStyle}>{wDur + " min"}</span>
+              <span style={stepperValueStyle}>{countLabel(wDur, "min")}</span>
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}
-                onPointerDown={(e) => {
-                  e.preventDefault();
+                aria-label="Increase duration"
+                {...stepPress(() => {
                   const cd = wf.customDur || getDur(Number(wf.size) || 2);
                   setDraft({ ...wf, customDur: Math.min(480, cd + 15) });
-                }}
+                })}
               >
                 +
               </button>
@@ -469,10 +469,8 @@ export function WalkinForm({
                 <button
                   className="mgt-hover-scale mgt-press"
                   style={mkBtn({ fontSize: T.body, background: BTN.reset })}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    setDraft({ ...wf, customDur: null });
-                  }}
+                  // v18.2.0: pointer-only like the steppers beside it; same fix.
+                  {...stepPress(() => setDraft({ ...wf, customDur: null }))}
                 >
                   Reset
                 </button>

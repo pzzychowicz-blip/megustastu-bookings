@@ -18,19 +18,69 @@
 //   onNoShow(id)   — App's doCancelBooking(id, true)
 //   onClose()      — clear the parent's popup state
 
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, BTN, R, T, FW, IC } from "../lib/constants";
 import { seatingClosed } from "../lib/booking-logic";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
-import { NoShowIcon, StatusIcon } from "./Icons";
+import { NoShowIcon, StatusIcon, TrashIcon } from "./Icons";
+import { mkDangerBtn } from "./atoms";
 
-export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose }) {
+// v18.2.0: two optional props, both for the List card's ⋯ — the first surface
+// to open this card with a CLICK rather than a hold.
+//   onDelete   — adds Delete as the last button. The List card had it inline;
+//                it moved in here with the other rarely-used actions. It goes
+//                through the caller's `onDelete`, i.e. App's confirm, as before.
+//   startArmed — the opening press has ALREADY been released (it was a click),
+//                so there is nothing for useArmAfterRelease to wait for. Without
+//                it a keyboard user who opened this with Enter could not press
+//                anything for the hook's 10s backstop. It also makes the card
+//                behave like the dialog a click-opened surface is expected to
+//                be: focus moves to the first button, Escape closes, and focus
+//                returns to whatever opened it. The hold-opened path is
+//                untouched — its finger is still down, which is the whole
+//                reason the arming exists.
+// v18.2.0 phase 60: two more, also the List card's — what the opener ALREADY
+// offers, so this card does not offer it a second time (Patryk: the ⋯ card
+// repeated the next-step button beside it).
+//   omitStatus — the status its own button moves the booking to (the card's
+//                `nextStatusOf`), left out of the status row.
+//   omitNoShow — the opener shows No show itself, so this card does not.
+// The timeline and the plan pass neither: their block and table carry no
+// status buttons, so this card is the only place those actions live.
+export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, onStatus, onNoShow, onClose, onDelete = null, startArmed = false, omitStatus = null, omitNoShow = false }) {
   // v17.16.12: this popup opens at 400ms INTO a hold, centred on the viewport,
   // so the finger that opened it is sitting on the card it just conjured. Until
   // that finger lifts, every control here is inert — see useArmAfterRelease for
   // the measurements. Hooks run before the early return below, which is why
   // this line is above it and not beside the other consts.
-  const armed = useArmAfterRelease();
+  const armedByRelease = useArmAfterRelease();
+  const armed = startArmed || armedByRelease;
+  const cardRef = useRef(null);
+  // Refs, not deps: onClose is usually an inline arrow, and re-running this on
+  // every render would restore and re-steal focus each time.
+  const onCloseRef = useRef(onClose);
+  useEffect(function () { onCloseRef.current = onClose; });
+  const open = !!booking;
+  useEffect(function () {
+    if (!startArmed || !open) return undefined;
+    const opener = document.activeElement;
+    const first = cardRef.current && cardRef.current.querySelector("button");
+    if (first) first.focus({ preventScroll: true });
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      // Capture phase on window, and stopped: the global Escape handler
+      // (useKeyboardShortcuts) would otherwise ALSO drop the List selection.
+      e.stopPropagation();
+      e.preventDefault();
+      onCloseRef.current();
+    }
+    window.addEventListener("keydown", onKey, true);
+    return function () {
+      window.removeEventListener("keydown", onKey, true);
+      if (opener && document.contains(opener) && typeof opener.focus === "function") opener.focus({ preventScroll: true });
+    };
+  }, [startArmed, open]);
   if (!booking) return null;
   // v17.0.0 correction: portalled to <body>. The popup mounts inside SlideView,
   // whose transform (while a view-slide runs/settles) turns this position:fixed
@@ -51,6 +101,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
       }}
     >
       <div
+        ref={cardRef}
         onClick={(e) => e.stopPropagation()}
         className="mgt-card-in"
         style={{
@@ -75,6 +126,8 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             ? ["confirmed", "cancelled"]
             : ["confirmed", "seated", "completed", "cancelled"])
             .filter((st) => st !== booking.status)
+            // v18.2.0 phase 60: not the one the opener's own button offers.
+            .filter((st) => st !== omitStatus)
             // v17.16.12: never offer a status the app will take straight back.
             // On a day whose close has passed, the close-time auto-complete
             // flips a manual "seated" to "completed" on the next 15s tick — so
@@ -107,7 +160,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
                 <StatusIcon status={st} size={IC.control} />{st}
               </button>
             ))}
-          {(booking.status === "confirmed" || booking.status === "pending") && late[booking.id] === "noshow" ? (
+          {!omitNoShow && (booking.status === "confirmed" || booking.status === "pending") && late[booking.id] === "noshow" ? (
             <button
               className="mgt-hover-scale"
               style={{
@@ -125,6 +178,21 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
               }}
             >
               <NoShowIcon size={IC.control} />No show
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              className="mgt-hover-scale"
+              // v18.2.0 phase 62: the app's one destructive look, on this
+              // card's own pill geometry.
+              style={mkDangerBtn({ fontSize: T.lead, fontWeight: FW.bold, padding: "10px 18px", minHeight: 44, flex: "1 1 auto" })}
+              onClick={() => {
+                if (!armed) return;
+                onDelete(booking.id);
+                onClose();
+              }}
+            >
+              <TrashIcon size={IC.control} />Delete
             </button>
           ) : null}
         </div>

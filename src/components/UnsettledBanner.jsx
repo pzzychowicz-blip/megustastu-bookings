@@ -34,7 +34,7 @@
 
 import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
-import { formatCode, normalizeCode, remainingOf } from "../lib/vouchers";
+import { formatCode, normalizeCode, remainingOf, money } from "../lib/vouchers";
 import { BTN, T, FW, H } from "../lib/constants";
 
 export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", onOpen, swapKey }) {
@@ -55,7 +55,7 @@ export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", on
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
         <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>
           {who + " (" + b.time + ") completed with voucher " + formatCode(code)
-            + " still unrecorded — " + left + " " + currency + " on it."}
+            + " still unrecorded — " + money(left, currency) + " on it."}
         </span>
         <button
           onClick={function () { onOpen(b.id); }}
@@ -63,9 +63,13 @@ export function UnsettledBanner({ bookings, vouchersByCode, currency = "€", on
           // The visible text LEADS and the disambiguator follows (v17.15.4):
           // "Settle" is what a voice-control user can say, and the name is what
           // tells sixty rows apart.
+          // v18.2.0 phase 58 (round 3's V-5): the NAME is in the accessible name
+          // only. On screen it read "Settle Unsettled Probe" (163px), where the
+          // strip's other rows say "Book" or "No show" and the sentence beside
+          // the button already names the party.
           aria-label={"Settle " + who + "'s voucher"}
           style={mkBtn({ fontSize: T.body, minHeight: H.chrome, padding: "4px 12px", background: BTN.orange })}>
-          {"Settle " + who}
+          Settle
         </button>
       </div>
     );

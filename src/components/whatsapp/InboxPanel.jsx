@@ -28,10 +28,12 @@ import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, mat
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
-import { TemplatesIcon, SelectIcon, FlaskIcon, TrashIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
-import { CloseIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, ModalPresence, Overlay, Reveal } from "../atoms";
+import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
+import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal } from "../atoms";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
+// v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
+import { countLabel } from "../../lib/booking-logic";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -88,6 +90,10 @@ function resolveInitialKey(convs) {
   }
   return topKeyOfTab(convs, "inbox");
 }
+
+// v18.2.0 (W3): the header's icon-AND-word buttons (Edit templates, the
+// sandbox's Simulator), the shape of the conversation header's Archive.
+const HEAD_TEXT_BTN = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, lineHeight: 1 };
 
 export function InboxPanel({
   conversations, messages, templates, bookings, initialActiveKey,
@@ -411,20 +417,37 @@ export function InboxPanel({
               {tabBtn("archived", "Archived", archivedCount)}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
+          {/* v18.2.0 (the design critique, W5): on a phone this row wrapped and
+              Close landed on the second line at the LEFT, under the badge. Close
+              is now its own item: last on a tablet's one line, and on a phone
+              second in `order`, pushed into the top corner, while the text
+              buttons take a line of their own beneath. */}
+          <div style={{ display: "flex", gap: 6, marginLeft: "auto", order: twoPane ? 0 : 2, flexBasis: twoPane ? "auto" : "100%" }}>
             {/* Simulator opener (sandbox builds only) — lives next to the
                 quick-reply Templates button per Patryk (2026-07-16); the sim
                 opens on top of this window. */}
             {onOpenSim ? (
-              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><FlaskIcon size={IC.chrome} /></button>
+              <button onClick={onOpenSim} title="WhatsApp simulator (X)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><FlaskIcon size={IC.inline} />Simulator</button>
             ) : null}
-            <button onClick={() => setShowTpl(true)} title="Templates" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 })}><TemplatesIcon size={IC.chrome} /></button>
-            <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1 })}><CloseIcon size={IC.chrome} /></button>
+            {/* v18.2.0 (the design critique, W2): "Edit templates", with the
+                app's edit pencil. It was "Templates" with the same document
+                icon as the composer's "Templates", which does a different job
+                (it shows the chips that INSERT one into the reply), so two
+                controls with one name and one mark did two things.
+                W3: and it SAYS so, as does the simulator's — icon-only, their
+                meaning lived in a tooltip the tablets never show. Close stays
+                a bare ✕, the one mark everybody reads. */}
+            <button onClick={() => setShowTpl(true)} title="Edit templates (T)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ background: "var(--btn-default)" }), HEAD_TEXT_BTN)}><EditIcon size={IC.inline} />Edit templates</button>
           </div>
+          <button onClick={onClose} title="Close (Esc)" className="mgt-hover-scale mgt-press" style={Object.assign({}, mkBtn({ fontSize: T.title, background: "var(--btn-default)" }), { width: 36, height: 36, minHeight: 36, minWidth: 36, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, lineHeight: 1, order: twoPane ? 0 : 1, marginLeft: twoPane ? 0 : "auto" })}><CloseIcon size={IC.chrome} /></button>
         </div>
         {/* Search + Needs-action filter toolbar — filters the list + ↑/↓ nav.
             Order (Patryk, 2026-07-16): Select, then Needs action, then the
-            search box (search sits on the right). */}
+            search box (search sits on the right).
+            v18.2.0 (W5): it belongs to the LIST, so on a phone, where an open
+            conversation replaces the list, it goes with it — it stood above
+            the conversation taking ~140px of a phone's height. */}
+        {twoPane || !activeKey ? (
         <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {/* v17.15.6's aria-pressed rule, reaching the module at the 17.16.12
               sync: on these three controls selection is carried by an accent
@@ -468,12 +491,15 @@ export function InboxPanel({
               aria-label="Search conversations"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, number or message…"
+              // v18.2.0 (W5): a phone cut the long one to "Search name, number
+              // or". The field is named either way (aria-label above).
+              placeholder={twoPane ? "Search name, number or message…" : "Search…"}
               style={Object.assign({}, mkInp(), { fontSize: T.body, padding: "8px 12px", paddingRight: query ? 30 : 12 })}
             />
             {query ? <button /* @no-lift transparent, radius-less and absolutely positioned INSIDE the input: the class supplies an opaque --bg-hover-card and no radius (v17.7.0), which is the hard-edged rectangle ConnectionStatus's dot hit — and its scale would be out-specified by this element's own inline translateY(-50%) anyway */ onClick={() => setQuery("")} title="Clear search" className="mgt-press" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: "var(--text-muted)", padding: "2px 6px", lineHeight: 1 }}><CloseIcon size={IC.inline} /></button> : null}
           </div>
         </div>
+        ) : null}
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one
             confirm). Select all / Cancel are always present. Eased open/closed
@@ -486,12 +512,12 @@ export function InboxPanel({
               title={allVisibleSelected ? "Clear selection" : "Select all"}
               style={{ flexShrink: 0, background: "transparent", color: "var(--text-primary)", border: "1px solid var(--border-soft)", borderRadius: R.pill, padding: "6px 12px", fontSize: T.body, fontWeight: FW.semi, cursor: "pointer", whiteSpace: "nowrap" }}
             >{allVisibleSelected ? "Clear" : "Select all"}</button>
-            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>{selected.size + " selected"}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)" }}>{countLabel(selected.size, "selected")}</span>
             <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexShrink: 0 }}>
               {tab === "archived" ? (
                 <>
                   <button onClick={() => runBulk("unarchive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-handled)" : "var(--btn-default)", { padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
-                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-btn-cancel)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
+                  <button onClick={() => { if (selected.size) setConfirmBulkDelete(true); }} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={selected.size ? mkDangerBtn({ gap: 4, padding: "6px 12px", minHeight: H.compact, fontSize: T.body, whiteSpace: "nowrap" }) : mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: 0.6 })} ><TrashIcon size={IC.inline} />Delete</button>
                 </>
               ) : (
                 <button onClick={() => runBulk("archive")} disabled={selected.size === 0} className="mgt-hover-scale mgt-press" style={mkSolidBtn(selected.size ? "var(--wa-green-dark)" : "var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", minHeight: H.compact, cursor: selected.size ? "pointer" : "not-allowed", fontSize: T.body, whiteSpace: "nowrap", opacity: selected.size ? 1 : 0.6 })} ><ArchiveIcon size={IC.inline} />Archive</button>
@@ -518,10 +544,10 @@ export function InboxPanel({
             onClose={() => setConfirmBulkDelete(false)}
             footer={<div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => setConfirmBulkDelete(false)} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--btn-default)" })}>Cancel</button>
-              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkBtn({ background: "var(--wa-btn-cancel)" })}>Delete {selected.size}</button>
+              <button onClick={() => { setConfirmBulkDelete(false); runBulk("delete"); }} className="mgt-hover-scale mgt-press" style={mkDangerBtn()}><TrashIcon size={IC.control} />Delete {selected.size}</button>
             </div>}
           >
-            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>Delete {selected.size} conversation{selected.size !== 1 ? "s" : ""}?</div>
+            <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 8 }}>{"Delete " + countLabel(selected.size, "conversation", "conversations") + "?"}</div>
             <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>This permanently removes the selected conversations and their messages. This can't be undone.</div>
           </Overlay>
         ) : null}</ModalPresence>

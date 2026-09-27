@@ -7,7 +7,11 @@
 // the shared setWriteWarning banner, like every other collection.
 //
 // Entry shape: { id, name, phone, size, date, prefTime|null, notes,
-//                createdAt, status:"waiting" }
+//                createdAt, status:"waiting", preference? }
+// v18.2.0 phase 68 (L-1): `preference` — "indoor" or "outdoor", the zone the
+// party asked for — is kept when one was stated and OMITTED otherwise (Firebase
+// throws on an undefined property; an absent key reads as "auto"), so the match
+// can honour it (`placeWaitlist`) and the row can say it.
 // Ordering is first-come-first-served (createdAt asc) — the panel sorts.
 // `available` (does a table fit right now?) is DERIVED in BookingApp via
 // trialFits, never persisted.
@@ -89,7 +93,7 @@ export function useWaitlist({ setWriteWarning }){
   // ── CRUD ────────────────────────────────────────────────────────────────────
   // addToWaitlist accepts the raw fields (typically the booking/walk-in form's
   // current draft) and stamps id/createdAt/status.
-  function addToWaitlist({name,phone,size,date,prefTime,notes}){
+  function addToWaitlist({name,phone,size,date,prefTime,notes,preference}){
     const entry={
       id:genId(),
       name:name||"",
@@ -101,6 +105,7 @@ export function useWaitlist({ setWriteWarning }){
       createdAt:Date.now(),
       status:"waiting"
     };
+    if(preference==="indoor"||preference==="outdoor") entry.preference=preference;
     saveWaitlist(function(prev){return prev.concat([entry]);});
     return entry;
   }

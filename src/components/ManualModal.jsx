@@ -29,10 +29,10 @@
 // source. The duplicate in WalkinForm has been replaced with the same import.
 
 import { useState, useEffect, useRef } from "react";
-import { S, BTN, R, M, T, FW } from "../lib/constants";
+import { S, BTN, R, M, T, FW, ALL_TABLES } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
-  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd
+  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd, guestsLabel
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
@@ -41,7 +41,15 @@ import { TableGrid } from "./TableGrid";
 import { sameDraft } from "../lib/drafts";
 
 export function ManualModal({ booking, bookings, onSave, onClose, onDirty, titleText, blocks = [] }) {
-  const [selected, setSelected] = useState(booking && booking.tables ? booking.tables.slice() : []);
+  // v18.2.0: seeded with the tables the layout HAS. A booking reaching this
+  // picker from the strip's "Not on the grid" row can hold a table id that no
+  // longer exists, and seeding it verbatim pre-selected a phantom the grid below
+  // cannot draw or deselect: "Selected: 1 · Capacity: 0". `ALL_TABLES` is a live
+  // binding, read here at mount, which is the call time it needs.
+  const [selected, setSelected] = useState(function () {
+    const known = new Set(ALL_TABLES.map(function (t) { return t.id; }));
+    return booking && booking.tables ? booking.tables.filter(function (t) { return known.has(t); }) : [];
+  });
   const [swapBusy, setSwapBusy] = useState(false);
 
   // v17.5.0 (unsaved-changes guard): the table picks live HERE, not in App, so
@@ -147,7 +155,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     ? "Select tables below."
     : conflict
       ? "Conflict: cannot use these tables together."
-      : "Capacity: " + cap + (cap >= needed ? " (fits " + needed + " pax)" : " — need " + needed + " pax");
+      : "Capacity: " + cap + (cap >= needed ? " (fits " + guestsLabel(needed) + ")" : " — need " + guestsLabel(needed));
   const isSwapping = affectedBookings.length > 0;
   const assignLabel = isSwapping ? "Swap & Assign" : "Assign";
   // v16.4.0 (Patryk): active swap-busy panel was pale peach + warn-text — low
@@ -246,7 +254,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
       <AutoHeight>
       <ModalTitle marginBottom={4} background="var(--accent)">{titleText || "Manual table assignment"}</ModalTitle>
       <div style={{ fontSize: T.body, color: S.text, marginBottom: 4, marginTop: 6, textAlign: "center" }}>
-        {booking.name + " · " + booking.size + " pax · " + booking.time + "–" + toTime(e)}
+        {booking.name + " · " + guestsLabel(booking.size) + " · " + booking.time + "–" + toTime(e)}
       </div>
       <div style={{
         marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between",

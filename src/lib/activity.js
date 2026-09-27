@@ -42,6 +42,11 @@
 // `booking-logic.js`, so this is a one-way edge and no cycle.
 import { dayRangeMs } from "./day";
 import { identityKey } from "./customers.js";
+// v18.2.0 phase 77: the retention labels are screen text (the Admin select, the
+// log's footnote), so their count and word are joined like every other.
+import { countLabel } from "./booking-logic.js";
+// v18.2.0 phase 81: a voucher entry's amount is money, in the app's one shape.
+import { money } from "./vouchers.js";
 
 export const ACTIVITY_KINDS = [
   "booking", "voucher", "table", "waitlist", "reminder", "standing",
@@ -69,11 +74,11 @@ export const DEFAULT_RETENTION_DAYS = 365;
 export const RETENTION_MIN_DAYS = 30;
 export const RETENTION_MAX_DAYS = 3650;
 export const RETENTION_CHOICES = [
-  { days: 90, label: "3 months" },
-  { days: 180, label: "6 months" },
-  { days: 365, label: "12 months" },
-  { days: 730, label: "2 years" },
-  { days: 1825, label: "5 years" },
+  { days: 90, label: countLabel(3, "month", "months") },
+  { days: 180, label: countLabel(6, "month", "months") },
+  { days: 365, label: countLabel(12, "month", "months") },
+  { days: 730, label: countLabel(2, "year", "years") },
+  { days: 1825, label: countLabel(5, "year", "years") },
 ];
 
 /**
@@ -113,7 +118,7 @@ export function retentionMs(days) {
 /** The label for a stored value, so the screen and the log say the same thing. */
 export function retentionLabel(days) {
   const hit = RETENTION_CHOICES.find(function (c) { return c.days === Number(days); });
-  return hit ? hit.label : (Number(days) || DEFAULT_RETENTION_DAYS) + " days";
+  return hit ? hit.label : countLabel(Number(days) || DEFAULT_RETENTION_DAYS, "day", "days");
 }
 
 // ── Tokens ───────────────────────────────────────────────────────────────────
@@ -152,6 +157,26 @@ export function renderText(text, byId, fallback) {
     if (b && b.name) return b.name;
     return fallback || "a deleted booking";
   });
+}
+
+// A row's text as the log SHOWS it (v18.2.0, the design critique's X1): a row
+// about ONE booking leads with that booking's current name. The entries written
+// from a booking's own history carry only the action — "created", "edited: pref
+// outdoor→indoor" — so every row had to be opened to learn whose it was. The
+// name comes from `bookings`, which every such entry has always carried, so it
+// names entries written before this as well; nothing is re-written. A row whose
+// text already names its booking (a delete, or an action that mentioned the
+// guest and was tokenised) is left alone, and a row with no name to give is
+// left as it was rather than led by "a deleted booking".
+export function rowText(r, byId) {
+  const text = renderText(r && r.text, byId, r && r.subject && r.subject.name);
+  if (!r || r.kind !== "booking" || !r.bookings) return text;
+  const ids = Object.keys(r.bookings);
+  if (ids.length !== 1) return text;
+  if (String(r.text || "").indexOf(bookingToken(ids[0])) !== -1) return text;
+  const b = byId && byId[ids[0]];
+  const name = (b && b.name) || (r.subject && r.subject.name) || "";
+  return name ? name + " · " + text : text;
 }
 
 // ── Bookings ─────────────────────────────────────────────────────────────────
@@ -329,7 +354,7 @@ export function voucherWriteEntries(prev, computed, ctx) {
       const r = v.redemptions[bid];
       entries.push(clean({
         kind: "voucher", auto: mark,
-        text: "redeemed " + amount(r && r.amount) + " of voucher " + v.code + " against " + bookingToken(bid),
+        text: "redeemed " + amount(r && r.amount, opts.currency) + " of voucher " + v.code + " against " + bookingToken(bid),
         bookings: keyed([bid]),
       }));
     });
@@ -338,7 +363,7 @@ export function voucherWriteEntries(prev, computed, ctx) {
       const bid = r && r.bookingId;
       entries.push(clean({
         kind: "voucher", auto: mark,
-        text: "restored " + amount(r && r.amount) + " to voucher " + v.code +
+        text: "restored " + amount(r && r.amount, opts.currency) + " to voucher " + v.code +
           (bid ? " from " + bookingToken(bid) : ""),
         bookings: bid ? keyed([bid]) : undefined,
       }));
@@ -347,9 +372,16 @@ export function voucherWriteEntries(prev, computed, ctx) {
   return entries;
 }
 
-function amount(n) {
+// v18.2.0 phase 81 (round 2's loose end): the amount with its currency —
+// `money()`, "20 €" — where the entry said "redeemed 20 of voucher …" and left
+// the reader to know which currency. `useVouchers` passes the restaurant's
+// (`settings/general.currency`). Entries already stored keep the text they were
+// written with: a log is a record, and nothing rewrites it. No currency (a caller
+// that has none) prints the bare number, as before.
+function amount(n, currency) {
   const v = Number(n);
-  return (isFinite(v) ? v : 0) + "";
+  const x = isFinite(v) ? v : 0;
+  return currency ? money(x, currency) : x + "";
 }
 
 function newKeys(was, now) {
@@ -625,7 +657,7 @@ export function activityCsv(rows, byId) {
     lines.push([
       at.date, at.time, r.email || "",
       r.kind || "",
-      renderText(r.text, byId || {}, r.subject && r.subject.name),
+      rowText(r, byId || {}),
       r.auto ? "yes" : "",
     ].map(csvCell).join(","));
   });

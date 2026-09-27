@@ -15,6 +15,8 @@ import { useCollapseState } from "../../hooks/useCollapseState";
 import { R, T, FW, M, IC, H, EXIT_MS } from "../../lib/constants";
 import { WarnIcon, PencilIcon } from "./WaIcons";
 import { CheckIcon, ChevronRightIcon } from "../Icons";
+import { formatDay } from "../../lib/day";
+import { guestsLabel } from "../../lib/booking-logic";
 
 export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges }) {
   const [collapsed, toggle] = useCollapseState(phoneKey, "intent", false);
@@ -26,8 +28,8 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   // so the staff can apply them in one click (onApplyChanges).
   const reqParts = [];
   if (isModify && draftData) {
-    if (draftData.size != null) reqParts.push(draftData.size + " pax");
-    if (draftData.date) reqParts.push(draftData.date);
+    if (draftData.size != null) reqParts.push(guestsLabel(draftData.size));
+    if (draftData.date) reqParts.push(formatDay(draftData.date));
     if (draftData.time) reqParts.push(draftData.time);
     if (draftData.preference === "indoor" || draftData.preference === "outdoor") reqParts.push(draftData.preference === "indoor" ? "Indoor" : "Outdoor");
   }
@@ -44,7 +46,15 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   const color = isCancel ? "var(--danger-text)" : "var(--warn-text)";
   const Icon = isCancel ? WarnIcon : PencilIcon;
   const title = isCancel ? "Customer is requesting to cancel" : "Customer is requesting changes";
-  const subtitle = linkedBooking ? ("Linked to: " + (linkedBooking.date || "?") + " · " + linkedBooking.time + " · " + linkedBooking.size + " pax") : "No linked booking found";
+  // v18.2.0 phase 49 (round 3's W-2): no "Linked to: Sun 27.09 · 20:30 · 4
+  // guests" line. The linked-booking card renders directly above this banner
+  // whenever there IS a linked booking, and says exactly that, collapsed or
+  // open — so the line was the card read out twice. Without a link it still
+  // says so. A banner left with nothing to disclose (a linked cancel request,
+  // or a change the parser found nothing in) has no body, so it is not a
+  // toggle and has no chevron: a disclosure that opens onto nothing is noise.
+  const subtitle = linkedBooking ? null : "No linked booking found";
+  const hasBody = !!subtitle || !!showApply;
 
   // v15.8.2-wa-sandbox: action buttons moved up onto the header row (between the
   // title and the chevron) to reclaim the vertical space they took as their own
@@ -105,19 +115,21 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
       tint={bg}
       icon={Icon}
       title={title}
-      onHeaderClick={toggle}
+      onHeaderClick={hasBody ? toggle : undefined}
       style={{ marginBottom: 10, boxShadow: "var(--shadow-soft)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}
       action={<>
         {actionBtns}
-        <span style={{ color, flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>
+        {hasBody ? <span style={{ color, flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span> : null}
       </>}
     >
-      <Reveal show={!collapsed}>
-        <AlertRow first>
-          <div style={{ color, opacity: 0.85 }}>{subtitle}</div>
-          {showApply ? <div style={{ color, fontWeight: FW.semi, marginTop: 4 }}>{"Requested: " + reqParts.join(" · ")}</div> : null}
-        </AlertRow>
-      </Reveal>
+      {hasBody ? (
+        <Reveal show={!collapsed}>
+          <AlertRow first>
+            {subtitle ? <div style={{ color, opacity: 0.85 }}>{subtitle}</div> : null}
+            {showApply ? <div style={{ color, fontWeight: FW.semi }}>{"Requested: " + reqParts.join(" · ")}</div> : null}
+          </AlertRow>
+        </Reveal>
+      ) : null}
     </AlertPanel>
   );
 }

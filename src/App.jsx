@@ -28,7 +28,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, INDOOR, OUTDOOR, ALL_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
 
 import {
   getDur, toMins, genId, sanitizeBlock,
@@ -71,13 +71,20 @@ import {
   lastStartMins, toTime,
   // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
   // `sanitize` already applies on the way IN. See the guard below.
-  isReadableTime
+  isReadableTime,
+  // v18.2.0 (C2): the one word for a party's size.
+  guestsLabel,
+  // v18.2.0 phase 77: any other count and its word, joined the same way.
+  countLabel
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
+// v18.2.0 phase 19: Save refuses a typed number that names no country code;
+// phase 20: a number typed WITH its code but no "+" gets that code first.
+import { phoneHasCode, withTypedCode } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -93,7 +100,7 @@ import { buildBackup } from "./lib/backup";
 // First component file in the codebase using JSX syntax. App.jsx now also
 // uses JSX (Phase C3b) so the original B1 note about RC()-vs-JSX
 // compatibility no longer applies — both files share a single style.
-import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
+import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
 import { appBannerSections } from "./components/AppBanners";
@@ -181,17 +188,21 @@ import { Summary }      from "./components/Summary";
 // re-export. The re-export exists to keep the LAZY-Settings boundary intact for
 // importers that predate the move; App has no reason to go the long way round,
 // and Icons.jsx has no imports of its own to drag into the startup chunk.
-import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, VoucherIcon, WaitIcon } from "./components/Icons";
+import { BellIcon, BellRingIcon, ChevronLeftIcon, ChevronRightIcon, ClashIcon, CogIcon, LateIcon, NoShowIcon, OverlapIcon, SearchIcon, TrashIcon, UnplacedIcon, VoucherIcon, WaitIcon } from "./components/Icons";
 // v17.5.0: Split View — the T/L/P buttons + their long-press/RMB gesture and
 // split toolbar (ViewSwitcher), the two-pane container (SplitLayout) and the
 // three-step setup popup (SplitMenu).
 import { ViewSwitcher }  from "./components/ViewSwitcher";
+// v18.2.0: the Settings card's tablet width, from the eager chunk (Settings is lazy).
+import { SETTINGS_CARD_W } from "./components/SettingsChrome";
 import { SplitLayout }   from "./components/SplitLayout";
 import { SplitMenu }     from "./components/SplitMenu";
 const WeekView = lazyChunk(function(){return import("./components/WeekView").then(function(m){return {default:m.WeekView};});},"WeekView"); // v17.1.0: lazy (opened on demand)
 import { LateBanner }   from "./components/LateBanner";
 import { OverlapBanner } from "./components/OverlapBanner";
 import { ClashBanner } from "./components/ClashBanner";
+import { UnplacedBanner } from "./components/UnplacedBanner";
+import { unplacedOf } from "./lib/unplaced";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 
 // ── Phase B5 (v15-refactor): Final modal & screen extraction ──────────────
@@ -223,6 +234,9 @@ import { BookingFormModal } from "./components/BookingFormModal";
 // App.jsx. One hook per file in src/hooks/, mirroring the components/
 // pattern. No barrel index — explicit imports keep dependencies visible.
 import { useWinW } from "./hooks/useWinW";
+// v18.2.0: whether the Summary shares the date controls' flex line — see
+// DATE_CTRL_DROP and the hook's own header.
+import { useSharesLine } from "./hooks/useSharesLine";
 
 // ── v14.2.0: Dark-mode theming hook ───────────────────────────────────────
 // `useThemeMode(explicitPref)` -> isDark, writing <html data-theme>. Ported
@@ -341,7 +355,7 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
-import { todayStr, stepDate, WEEKDAY_LONG } from "./lib/day";
+import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
@@ -382,7 +396,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.1.1",
+  version:"18.2.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -487,6 +501,27 @@ const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 // A module const in App.jsx rather than an atom or a surviving ViewTools.jsx:
 // both call sites are in this file, and exporting a style that nothing else
 // reads is distance, not sharing (the lib/time-grid.js lesson).
+// ── v18.2.0: the phone's bottom bar ──────────────────────────────────────────
+// Walk-in and "+ New" on a phone, thumb-reachable, instead of wrapping onto a
+// second header row. Rendered INSIDE <header>, so the header's `inert` (while a
+// modal is open) reaches it too; `position: fixed` takes it out of the header's
+// layout, not out of its subtree. z 100: over the page and the toast layer
+// (60), under every modal (200). No backdrop blur — the ≤4 simultaneous blur
+// budget (CLAUDE.md) — so the MOBILE sheet token (0.98 in both themes: the one
+// sheet fill opaque enough that a timeline row scrolling beneath does not show
+// through, measured with `--bg-sheet` at 0.72), with a hairline and the soft
+// shadow to separate it from what scrolls beneath. The safe-area inset keeps
+// both buttons clear of an iPhone's home indicator.
+const MOBILE_BAR={
+  position:"fixed",left:0,right:0,bottom:0,zIndex:100,
+  display:"flex",gap:8,padding:"8px 12px",
+  paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))",
+  background:"var(--bg-sheet-mobile)",borderTop:"1px solid var(--border-soft)",boxShadow:"var(--shadow-soft)"
+};
+// The same height, as empty space at the end of <main>: H.touch (mkSolidBtn's
+// minHeight) + the bar's 8px padding top and bottom + its 1px top hairline +
+// the safe area. Measured: the bar stands 61px on a phone with no inset.
+const MOBILE_BAR_SPACER={flexShrink:0,height:"calc("+(H.touch+16+1)+"px + env(safe-area-inset-bottom, 0px))"};
 const CHROME_BTN={
   background:"var(--cog-bg)",
   border:"1px solid var(--cog-border)",
@@ -517,6 +552,15 @@ const CHROME_BTN={
 // compositor-only, so this eases without reflowing a row whose sibling is the
 // timeline. Reduce-motion needs nothing: index.html's data-motion="reduce" block
 // zeroes transition-duration with !important, which beats an inline transition.
+//
+// v18.2.0: every sentence above assumes the Summary is BESIDE the controls, and
+// it is not always. The row wraps, and the Summary took a 360px basis, so from
+// 600 to ~680px it wrapped onto its own line while the controls still dropped
+// 9px — into the gap and 1px INTO the Summary card (Patryk's screenshot, 668px).
+// Two changes: the drop applies only while `useSharesLine` MEASURES the Summary
+// on the controls' line, and the Summary's basis is its own one-line width, so
+// it sits beside the controls only when its collapsed card is one line — the
+// 58px this constant is centred against — and drops below them otherwise.
 const DATE_CTRL_DROP=9;
 function readAppWidth(){
   try{
@@ -531,7 +575,7 @@ function readAppWidth(){
 // survives a reload/redeploy — losing your layout on every refresh would make
 // the feature not worth setting up.
 const SPLIT_KEY="mgt-split";   // also PREF_SPEC.splitEnabled.clears — keep in step
-// v17.14.0: read one of the four boolean prefs off this device, per its
+// v17.14.0: read one of the boolean prefs off this device, per its
 // PREF_SPEC convention. The try/catch is the same one the four initializers
 // each carried; the default on a throw is the pref's own default, which is
 // exactly what an absent key means.
@@ -879,6 +923,8 @@ function BookingApp({uid}){
     setTimelineZoom(z);
   }
   const timelineScrollRef=useRef(0);
+  // v18.2.0: the date TimelineView last auto-placed its scroll for (see there).
+  const timelineScrollDateRef=useRef(null);
   const [followNow, setFollowNow] = useState(false);
   // ── v17.14.0: the modal stack ───────────────────────────────────────────────
   // ONE ordered stack (src/hooks/useModalStack.js) replacing eighteen
@@ -1110,7 +1156,9 @@ function BookingApp({uid}){
   // `aria-describedby` pointing at that message for the whole time it is being
   // corrected, which is the one field where "required" is the only thing that
   // can be wrong.
-  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.time,form.size,form.date,form.preference,form.customDur]);
+  // v18.2.0 phase 19: form.phone joins the list — Save can now refuse a number
+  // without a country code, and picking one has to clear that message.
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
@@ -1153,6 +1201,9 @@ function BookingApp({uid}){
   // so `diffBooking` can apply the SAME one. This stays as the name the save
   // path has used since v17.0.0, and supplies the setting the pure module
   // cannot read.
+  // v18.2.0 phase 19: the form no longer SEEDS the prefix — it opens with an
+  // empty phone and an empty country-code picker — so the prefix clause is now
+  // only a guard for a value an older version put in the form.
   function cleanPhoneOf(p){ return enteredPhone(p,generalSettings.phonePrefix); }
   const { autoOptimizer, setAutoOptimizer } = useAutoOptimizer({ nowMins, cutoffMins: optimizerSettings.cutoff*60, autoSwitch: optimizerSettings.autoSwitch });
   // ── Persistence hook ────────────────────────────────────────────────────────
@@ -1234,6 +1285,22 @@ function BookingApp({uid}){
   // the re-render that repaints the timeline + form time limits. saveDayHours /
   // saveAllDays are wired to the Settings General-tab 7-day editor below.
   const { weekHours, saveDayHours, saveAllDays } = useOperatingHours(viewDate);
+  // v18.2.0: then stretch the viewed day's grid to its latest booking's end
+  // (constants.js `extendActiveGrid` — display only, never shorter). Same
+  // render-time module mutation as the line above, and it must come AFTER it,
+  // which resets the bindings to the day's hours. The scheduled end
+  // (time + duration); a seated party's live overstay is written back into
+  // `duration` by syncLiveDurations, so this follows it.
+  const viewLatestEnd=useMemo(function(){
+    let end=-Infinity;
+    bookings.forEach(function(b){
+      if(!b||b.date!==viewDate||b.status==="cancelled") return;
+      const e=toMins(b.time)+(Number(b.duration)||0);
+      if(Number.isFinite(e)&&e>end) end=e;
+    });
+    return end;
+  },[bookings,viewDate]);
+  extendActiveGrid(viewLatestEnd);
   // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
@@ -1338,6 +1405,8 @@ function BookingApp({uid}){
   const { vouchers, vouchersByCode, issueVoucher, redeemVoucher, unredeemVoucher, voidVoucher } = useVouchers({
     setWriteWarning,
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
+    // v18.2.0 phase 81: the activity log's redemptions carry it ("20 €").
+    currency: generalSettings.currency,
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
@@ -1505,7 +1574,7 @@ function BookingApp({uid}){
         // reason `refused` and `truncated` are separate flags rather than a
         // count of zero and a count that looks complete.
         const n=res?res.removed:0;
-        const said=n+(n===1?" entry":" entries");
+        const said=countLabel(n,"entry","entries");
         if(res&&res.refused){
           // /code-review: this used to name ONE cause — "only once the updated
           // database rules are deployed" — which was true of DEV on the day it
@@ -1702,6 +1771,11 @@ function BookingApp({uid}){
   // default) — gates PlanView's wheel/pinch zoom, drag pan and double-tap reset.
   const [planGestures,setPlanGestures]=useState(function(){return readPrefLS("planGestures");});
   function onTogglePlanGestures(){togglePref("planGestures",planGestures,setPlanGestures);}
+  // v18.2.0 phase 21: "Table availability" on the Plan view (Settings → App,
+  // beside Plan zoom & pan). Default ON, so the planGestures shape: only "0"
+  // is ever stored. Per person, synced — Patryk's choice over restaurant-wide.
+  const [planAvail,setPlanAvail]=useState(function(){return readPrefLS("planAvail");});
+  function onTogglePlanAvail(){togglePref("planAvail",planAvail,setPlanAvail);}
   // v17.5.0: per-device "Lock navigation" (Settings → General). Theme pattern,
   // but INVERTED vs planGestures because the default is OFF — only the non-
   // default value is ever stored, so localStorage["mgt-nav-lock"]="1" means on
@@ -1725,8 +1799,8 @@ function BookingApp({uid}){
   // The active split, or null for a single view. Restored per-device.
   const [split,setSplit]=useState(readSplit);
   // ── v17.6.0: apply the signed-in user's preferences, or seed them ──────────
-  // Runs once the account's node has loaded. For each of the five synced
-  // settings: a value the user HAS saved overrides this device; a value they
+  // Runs once the account's node has loaded. For each of the synced settings
+  // (theme and the PREF_SPEC booleans): a value the user HAS saved overrides this device; a value they
   // have never saved is seeded from whatever this device is currently using and
   // written up, so logging in on a configured device adopts its setup instead
   // of resetting it. localStorage is written alongside, because it is what
@@ -1736,14 +1810,16 @@ function BookingApp({uid}){
   // hook resets it when the path changes), and re-running on every later
   // snapshot would fight the user's own toggles. Reading the current local
   // values here without depending on them is the point, not an oversight.
-  // The current value + setter for each of the four, so the seeding loop below
-  // can read "what is this device using" and "how do I change it" by name.
+  // The current value + setter for each boolean (five since v18.2.0 phase 21),
+  // so the seeding loop below can read "what is this device using" and "how
+  // do I change it" by name.
   // Rebuilt per render and read only inside the once-per-uid effect.
   const prefState={
     reduceMotion:{value:reduceMotion,set:setReduceMotion},
     planGestures:{value:planGestures,set:setPlanGestures},
     navLocked:{value:navLocked,set:setNavLocked},
     splitEnabled:{value:splitEnabled,set:setSplitEnabled},
+    planAvail:{value:planAvail,set:setPlanAvail},
   };
   const seededPrefsRef=useRef(false);
   useEffect(function(){
@@ -1770,7 +1846,7 @@ function BookingApp({uid}){
       // freeze the user to whatever the OS happened to say at first login.
       seed.theme=themePref?"dark":"light";
     }
-    // v17.14.0: the four booleans, one loop over PREF_SPEC. The TRI-STATE
+    // v17.14.0: the booleans, one loop over PREF_SPEC. The TRI-STATE
     // semantics are untouched and are the reason this cannot be simplified
     // further: `null` means "this user has never chosen", and a sanitize that
     // returned `false` for an absent field would reset every configured device
@@ -2225,11 +2301,13 @@ function BookingApp({uid}){
     const avail=waitAvail[w.id];
     openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
-      phone:w.phone||generalSettings.phonePrefix,
+      phone:w.phone||"",
       date:w.date,
       time:(avail&&avail.time)||w.prefTime||"",
       size:w.size||2,
-      notes:w.notes||""
+      notes:w.notes||"",
+      // v18.2.0 phase 68: the party's zone comes back with it.
+      preference:w.preference==="indoor"||w.preference==="outdoor"?w.preference:"auto"
     }));
     setEditId(null);setError("");setSwapAffected(null);
     pendingWaitlistRef.current=w.id;
@@ -2240,14 +2318,29 @@ function BookingApp({uid}){
   // draft's fields as a waiting entry, close the form, flash the toast.
   function addFormToWaitlist(){
     if(refused("waitlistManage"))return;
-    const f=formRef.current;
+    // v18.2.0 phase 80 (round 2's loose end): the waitlist takes the phone the
+    // way Save does (phase 19 · 20 · 66). A code typed without its plus, or a
+    // UK mobile typed the home way, becomes the code — the button is pressed
+    // without the number box ever blurring — and a number that still names no
+    // country is refused on the phone field, since the entry becomes a booking
+    // and the same guest with and without "+34" is two customers. The button is
+    // offered on a NEW booking only, so Save's untouched-number exemption has
+    // nothing to exempt here.
+    const f0=formRef.current;
+    const typed=withTypedCode(f0.phone,generalSettings.pinnedCountries);
+    const f=typed!==f0.phone?Object.assign({},f0,{phone:typed}):f0;
+    const ph=cleanPhoneOf(f.phone);
+    if(ph&&!phoneHasCode(ph)){setErrorField("phone");setError("Choose the country code for this phone number.");return;}
     addToWaitlist({
       name:f.name||"",
-      phone:cleanPhoneOf(f.phone),
+      phone:ph,
       size:Number(f.size)||2,
       date:f.date||viewDate,
       prefTime:f.time||null,
-      notes:f.notes||""
+      notes:f.notes||"",
+      // v18.2.0 phase 68 (L-1): the zone the party was refused for, so the
+      // match offers only that zone and the row says it.
+      preference:f.preference
     });
     setShowForm(false);
     setWaitAddedShown(true);
@@ -2369,8 +2462,8 @@ function BookingApp({uid}){
   // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
-  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:generalSettings.phonePrefix,size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||generalSettings.phonePrefix,date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||"",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -2418,7 +2511,7 @@ function BookingApp({uid}){
     })();
     openForm(Object.assign({},EMPTY_FORM,{
       name:sourceBooking.name||"",
-      phone:sourceBooking.phone||generalSettings.phonePrefix,
+      phone:sourceBooking.phone||"",
       date:"",
       time:schedTime,
       size:againSize,
@@ -2966,12 +3059,34 @@ function BookingApp({uid}){
     // so every downstream read (status write, diffBooking history, completed-
     // duration gate, flash condition) sees the effective status uniformly.
     const so=statusOverrideRef.current;
-    const f=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    const fIn=so?Object.assign({},formRef.current,{status:so}):formRef.current;
+    // v18.2.0 phase 20: a number typed WITH its country code but no "+"
+    // ("44 7700 900123") gets that code here as well as when the number box
+    // loses focus (PhoneField), because a save by Enter never blurs the box.
+    // It goes into `f` itself, so every read below — the code check, the
+    // stored phone, the history diff, the WhatsApp link — sees one number.
+    // Not into the form state: a `setForm` here would change `form.phone` and
+    // the stale-error effect would then clear any error this same save sets.
+    // An edit that leaves the stored number untouched is never rewritten —
+    // phase 19's exemption, one test for both.
+    const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
+    const phoneUntouched=!!origB&&cleanPhoneOf(origB.phone)===cleanPhoneOf(fIn.phone);
+    const typedPhone=phoneUntouched?fIn.phone:withTypedCode(fIn.phone,generalSettings.pinnedCountries);
+    const f=typedPhone!==fIn.phone?Object.assign({},fIn,{phone:typedPhone}):fIn;
     // v17.12.0: cleared here, set only by the field-specific branches below, so
     // the form-level errors further down leave it null without having to say so.
     setErrorField(null);
     try{
       if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
+      // v18.2.0 phase 19 (Patryk): a number is saved only once it names its
+      // country. The picker starts empty now, so a number typed without a code
+      // would otherwise be stored without one — and the same guest with and
+      // without "+34" is two customers (`normalizePhone`), whom WhatsApp cannot
+      // link either. Checked right after the name, the field beside it.
+      // An EDIT that leaves an old code-less number untouched still saves: the
+      // rule is about numbers typed now, not a sweep of the stored ones.
+      {const ph=cleanPhoneOf(f.phone);
+        if(ph&&!phoneHasCode(ph)&&!phoneUntouched){setErrorField("phone");setError("Choose the country code for this phone number.");return;}}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setErrorField("date");setError("Please set a date.");return;}
@@ -3830,7 +3945,22 @@ function BookingApp({uid}){
     // Escape was the only exit and it abandoned the status change silently.
     setVoucherAsk(null);
     if(refused("voucherRedeem")) return;
-    const ok=withRedeemAsked(function(){
+    // v18.2.0 phase 48: a SETTLE is the missing ledger entry of a booking that
+    // is ALREADY completed, so there is no booking write to go first — the
+    // order below exists for a completion, and here the voucher is the only
+    // write. (Going through updateStatus would have logged a second "status →
+    // completed" for a status that did not change.)
+    // v18.2.0 /code-review: …which means nothing here re-checks that the visit
+    // IS still completed, and the prompt stays open whatever the booking's
+    // status (it mounts on the voucher alone). Walked back out of Completed on
+    // another device meanwhile, a redeem would leave a ledger entry against a
+    // booking that is not completed — the state the ordering note above says
+    // nothing in the app looks for. So a settle asks first, and refuses.
+    if(ask.from==="settle"){
+      const cur=bookings.find(function(x){return x.id===ask.id;});
+      if(!cur||cur.status!=="completed"){flashRefusal("That booking is no longer completed — nothing was recorded against its voucher.");return;}
+    }
+    const ok=ask.from==="settle"?true:withRedeemAsked(function(){
       if(ask.from!=="form") return updateStatus(ask.id,ask.status);
       // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
       // NOTHING — so the form path redeemed the voucher whether or not the
@@ -3889,7 +4019,11 @@ function BookingApp({uid}){
     setVoucherCarry(null);
     if(refused("bookingEdit")) return;
     const user=getUser();
-    const fromLabel=/^\d{4}-\d{2}-\d{2}$/.test(c.from||"")?c.from.slice(8,10)+"/"+c.from.slice(5,7):(c.from||"");
+    // v18.2.0 (the design critique, C1): the history entry stores the ISO day,
+    // as every other history text does ("date 2026-09-24→…"), and the screen
+    // writes it the house way (`formatDaysIn`, HistoryPopup and the Activity
+    // log). It stored its own "24/09", which nothing could re-write.
+    const fromLabel=c.from||"";
     const ok=saveBookings(function(prev){
       // v18.0.0 session 10 (/code-review): the OTHER half of the same race.
       // The line below guards the target booking against having acquired a
@@ -4307,9 +4441,20 @@ function BookingApp({uid}){
   // cancelled bookings while Timeline's and Plan's exclude them — so a day whose
   // bookings had all been cancelled showed the prompt in two views and a nearly
   // blank card list in the third. A cancelled booking is not a booked table.
+  //
+  // v18.2.0: and "empty" needs the first snapshot. Before it lands `bookings`
+  // is `[]` whatever the database holds, so this answered TRUE on every cold
+  // start — "Nothing booked for this day yet." with New booking / Walk-in
+  // buttons, drawn beside the "Loading bookings…" pill that contradicted it,
+  // for as long as the first read took (seconds on the restaurant's wifi).
+  // A host who believed it could seat a walk-in on a taken table.
+  // `bookingsReady` is the RENDER signal (state); `firstLoadCount` is a ref and
+  // would not repaint when it flips. A load that never finishes leaves this
+  // false, and the strip's "Couldn't load bookings" is the answer for that.
   const isEmptyDay=useMemo(function(){
+    if(!bookingsReady) return false;
     return !bookings.some(function(b){return b&&b.date===viewDate&&b.status!=="cancelled";});
-  },[bookings,viewDate]);
+  },[bookings,viewDate,bookingsReady]);
   const viewGridMins=(viewHours.gridClose-viewHours.open)*60;
   useEffect(function(){
     if(zoomTouchedRef.current) return;
@@ -4388,6 +4533,27 @@ function BookingApp({uid}){
     if(!vouchersOn) return EMPTY_ARR;
     return bookings.filter(function(b){return b.date===viewDate&&isUnsettled(b,vouchersByCode);});
   },[bookings,viewDate,vouchersByCode,vouchersOn]);
+  // v18.2.0: the viewed day's bookings that are not properly on the timeline
+  // grid — no tables, a table the layout does not have, or an optimiser
+  // conflict (lib/unplaced.js, the ONE rule the timeline's Unplaced row reads
+  // too). Feeds the strip's "Not on the grid" section, `notifAnnounce` through
+  // it, and the Summary's "N of M on the grid". `layout` is in the deps
+  // because the grid's rows are the `TIMELINE_TABLES` LIVE BINDING, which a
+  // memo cannot see (the hoursSig/layoutSig rule) — renaming a table in
+  // Settings must re-derive this.
+  const unplacedItems=useMemo(function(){
+    const gridIds=new Set(TIMELINE_TABLES.map(function(t){return t.id;}));
+    return unplacedOf(bookings.filter(function(b){return b&&b.date===viewDate;}),gridIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `layout` stands in for the TIMELINE_TABLES live binding
+  },[bookings,viewDate,layout]);
+  // v18.2.0 phase 69: a booking's tables the layout does not have, by id — for
+  // the List card's pills, from the SAME list the strip and the Summary read,
+  // so a pill cannot call a table real that the Unplaced row calls missing.
+  const missingTables=useMemo(function(){
+    const out={};
+    unplacedItems.forEach(function(u){if(u.reason==="missing") out[u.b.id]=u.missing;});
+    return out;
+  },[unplacedItems]);
   const notifSections=[].concat(
     appBannerSections({
       isOnline:isOnline,
@@ -4417,6 +4583,11 @@ function BookingApp({uid}){
     hasClash?[{id:"clash",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:ClashIcon,
       title:clashBannerPairs.length===1?"Double-booked":"Double-bookings",count:clashBannerPairs.length,
       node:<ClashBanner pairs={clashBannerPairs} bookings={bookings} onAssign={setManualTarget} onDismiss={dismissClashRow} swapKey={viewDate} />}]:[],
+    // v18.2.0: right after the double-bookings — both are faults of ASSIGNMENT,
+    // and a booking drawn nowhere is as wrong as two drawn in one place.
+    unplacedItems.length?[{id:"unplaced",tone:"var(--danger-text)",tint:"var(--danger-bg)",icon:UnplacedIcon,
+      title:"Not on the grid",count:unplacedItems.length,
+      node:<UnplacedBanner items={unplacedItems} onAssign={setManualTarget} swapKey={viewDate} />}]:[],
     hasOverlap?[{id:"overlap",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:OverlapIcon,
       title:"Overlap warnings",count:Object.keys(overlapBannerMap).length,
       node:<OverlapBanner warnings={overlapBannerMap} bookings={bookings} onReassign={reassignBooking} onDismiss={dismissOverlapRow} />}]:[],
@@ -4430,7 +4601,12 @@ function BookingApp({uid}){
       node:<WaitAvailBanner entries={waitBannerEntries} availability={waitAvail} onBook={bookFromWaitlist} onDismiss={dismissWaitRow} />}]:[],
     unsettledBookings.length?[{id:"unsettled",tone:"var(--warn-text)",tint:"var(--app-overlap-bg)",icon:VoucherIcon,
       title:"Voucher not recorded",count:unsettledBookings.length,
-      node:<UnsettledBanner bookings={unsettledBookings} vouchersByCode={vouchersByCode} currency={generalSettings.currency} onOpen={function(id){const b=bookings.find(function(x){return x.id===id;});if(b) openEdit(b);}} swapKey={viewDate} />}]:[]
+      // v18.2.0 phase 48 (round 3's V-3): Settle opens the redeem prompt
+      // itself. It opened the whole edit form, whose voucher line promised a
+      // question "when this booking is completed" about a booking already
+      // completed; what settled it was Save, and nothing said so. `from:
+      // "settle"` tells settleVoucher there is no status to write.
+      node:<UnsettledBanner bookings={unsettledBookings} vouchersByCode={vouchersByCode} currency={generalSettings.currency} onOpen={function(id){if(refused("voucherRedeem"))return;setVoucherAsk({id:id,status:"completed",from:"settle"});}} swapKey={viewDate} />}]:[]
   );
   // v17.12.0: what a screen reader is TOLD when the strip changes.
   //
@@ -4524,7 +4700,7 @@ function BookingApp({uid}){
     const n=bookingsForAnnounceRef.current.reduce(function(acc,b){
       return acc+((b&&b.date===viewDate&&b.status!=="cancelled")?1:0);
     },0);
-    setDayAnnounce(label+". "+(n===0?"Nothing booked":n+(n===1?" booking":" bookings"))+".");
+    setDayAnnounce(label+". "+(n===0?"Nothing booked":countLabel(n,"booking","bookings"))+".");
   },[viewDate]);
   const notifAnnounce=notifSections.length===0?"":
     (notifSections.length===1?"Notification: ":notifSections.length+" notifications: ")+
@@ -4632,6 +4808,8 @@ function BookingApp({uid}){
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
     turnBuffer={turnBuffer}
+    showAvail={planAvail}
+    walkinSize={generalSettings.defaultWalkinSize}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
@@ -4669,6 +4847,7 @@ function BookingApp({uid}){
     followLeadMins={tlSettings.followLead}
     maxZoom={tlSettings.maxZoom}
     scrollPosRef={timelineScrollRef}
+    scrollDateRef={timelineScrollDateRef}
     followNow={followNow}
     setFollowNow={setFollowNow}
     autoOptimizer={autoOptimizer}
@@ -4692,6 +4871,7 @@ function BookingApp({uid}){
   // dismissing a strip row quiets the row, it does not make the double-booking
   // stop being true.
   const listEl=<ListView
+    missingTables={missingTables}
     vouchersByCode={vouchersByCode}
     vouchersOn={vouchersOn}
     bookings={bookings}
@@ -4787,6 +4967,7 @@ function BookingApp({uid}){
     freeing={freeingList}
     hoursSig={weekHours}
     layoutSig={layout}
+    unplacedCount={unplacedItems.length}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint} />;
@@ -4794,13 +4975,25 @@ function BookingApp({uid}){
   // DATE_CTRL_DROP. Applied to BOTH groups so the arrows/date field and the
   // Today/waitlist pills stay on one line as they move.
   //
-  // Guarded on !isMobile: below 600px the Summary's flexBasis is "100%", so it
-  // wraps onto its own flex line and the controls' line is exactly control
-  // height. There is nothing to centre in there, and an unguarded offset would
-  // push them down into the row gap instead. At >=600 the Summary is
-  // flexShrink:1 with minWidth:0, so it shrinks rather than wrapping and the
-  // single-line assumption this offset depends on holds.
-  const dateCtrlShift=(isMobile||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
+  // v18.2.0: gated on the Summary being MEASURED on the controls' line. This
+  // was `!isMobile`, on the belief that at >=600 the Summary "shrinks rather
+  // than wrapping" — false: in a wrapping row an item breaks onto a new line
+  // on its flex BASIS before any shrinking is considered, so it wrapped from
+  // 600 to ~680px and the offset pushed the controls 1px into the Summary card
+  // (Patryk's screenshot). On its own line there is nothing to centre against,
+  // exactly as the phone case always said. `same` is null until measured, and
+  // the transition switches on only once `settled`, so the first paint never
+  // slides 9px in from a guess — see the hook's header.
+  const dateRowRef=useRef(null);
+  const dateNavRef=useRef(null);
+  const summarySlotRef=useRef(null);
+  const summaryLine=useSharesLine(dateRowRef,dateNavRef,summarySlotRef);
+  // v18.2.0 phase 64 (Patryk): the view switcher no longer glides to stand
+  // over the Summary card's left edge. Phase 23's `useAlignLeft` did that, and
+  // in use the sideways movement did not look good; the switcher keeps its own
+  // place in the header.
+  const dateCtrlShift=(summaryLine.same!==true||summaryOpen)?"none":"translateY("+DATE_CTRL_DROP+"px)";
+  const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
@@ -4811,7 +5004,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDel(null);}}>Back</button><button
         onClick={function(){delBooking(confirmDel);}}
         className="mgt-hover-scale"
-        style={mkSolidBtn("var(--app-danger-solid)")}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
+        style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete booking?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This can't be undone. Tables will be re-optimised afterwards.</div></Overlay>:null}</ModalPresence>;
 
   // v17.5.0: the ONE discard confirm, shared by the booking form, the walk-in
   // form and ManualModal (requestClose* raise it; doDiscard commits).
@@ -4820,8 +5013,8 @@ function BookingApp({uid}){
   // anchors to the viewport inside a plain relative/z-index ancestor (only
   // transform/filter/perspective would break that). Order-proof by construction.
   //
-  // "Keep editing" uses --app-btn-slate, NOT BTN.cancel: in this app's
-  // vocabulary "cancel" means cancel the BOOKING, so --btn-cancel is RED. The
+  // "Keep editing" uses --app-btn-slate, NOT a red: in this app's vocabulary
+  // "cancel" means cancel the BOOKING (BTN.cancel, red, removed v18.2.0). The
   // delModal footer this is otherwise modelled on can afford that (its safe
   // option is literally called Cancel); here the safe option sitting next to a
   // red Discard would read as two danger buttons — the exact mis-tap this
@@ -4841,7 +5034,7 @@ function BookingApp({uid}){
         onClick={function(){setConfirmDiscard(null);}}>Keep editing</button><button
         onClick={doDiscard}
         className="mgt-hover-scale"
-        style={mkSolidBtn("var(--app-danger-solid)")}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
+        style={mkDangerConfirm()}>Discard</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Discard unsaved changes?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{DISCARD_BODY[confirmDiscard]||"Your changes haven't been saved yet."}</div></Overlay>:null}</ModalPresence></div>;
 
   const manualModal=<ModalPresence show={!!manualBooking}>{manualBooking?<ManualModal
     booking={manualBooking}
@@ -4867,12 +5060,20 @@ function BookingApp({uid}){
     onClose={requestCloseWalkin}
     onAddToWaitlist={addWalkinToWaitlist} />:null}</ModalPresence>;
 
+  // v18.2.0 phase 79 (round 2's loose end): the connection dot, built ONCE and
+  // placed by width. On a phone it ends the TITLE row, opposite the cog: with
+  // WhatsApp on, the controls row was 21px too full at 375px and the dot
+  // wrapped onto a third row by itself (header 126px; 84 now). Patryk's pick
+  // over showing WhatsApp as its mark alone. On a tablet it ends the controls.
+  const connStatus=<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} />;
+
   // v17.1.0: Suspense INSIDE the ModalPresence (fallback null) so the open/close
   // animation contract is untouched — on first open the lazy chunk pops in a
   // frame or two later; every later open is instant (module cached).
   const weekModal=<ModalPresence show={showWeek}>{showWeek?<Suspense fallback={null}><WeekView
     bookings={bookings}
     viewDate={viewDate}
+    isMobile={isMobile}
     onPick={function(d){setViewDate(d);setShowWeek(false);}}
     onClose={function(){setShowWeek(false);}} /></Suspense>:null}</ModalPresence>;
 
@@ -4918,12 +5119,17 @@ function BookingApp({uid}){
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
               all three now sits against them instead of across the row in a
-              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze. */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><button
+              toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze.
+              On a phone the block is the whole first row and ends with the
+              connection dot (phase 79). */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
               className="mgt-hover-scale"
-              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{INDOOR.length+" indoor  "+OUTDOOR.length+" outdoor  "+(dayClosed?"Closed":hourLabel(OPEN)+" - "+hourLabel(CLOSE))}</div></div></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+              style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
+                collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
+                22:00" — one run of numbers (the design critique). A middle dot
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -4933,13 +5139,17 @@ function BookingApp({uid}){
               onOpenSplitMenu={setSplitMenuFor}
               onSwapSides={swapSides}
               onToggleDir={toggleSplitDir}
-              onExitSplit={exitSplit} /><button
+              onExitSplit={exitSplit} />{/* v18.2.0: on a phone the two CREATE actions leave the header for the
+              bottom bar below (MOBILE_BAR). They wrapped "+ New" onto a second
+              header row on its own, and the header + date row took ~455 of an
+              812px screen before the grid began. The design critique; Patryk
+              chose the bar. Tablet and desktop are unchanged. */}{isMobile?null:<><button
               onClick={openWalkin}
               className="mgt-hover-scale"
               style={mkSolidBtn("var(--app-walkin)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>Walk-in</button><button
               onClick={openNew}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button>{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
+              style={mkSolidBtn("var(--app-new)",{padding:"8px 14px",fontSize: T.body,minHeight:H.control})}>+ New</button></>}{/* v18.0.0 phase 5: the WA entry point is gated on the MODULE, not on
               WA_SANDBOX. Same guarantee — the module ships off, so a build on PROD
               Firebase (including a main-project Vercel preview of this branch) reads
               `settings/admin.modules`, finds WhatsApp disabled and shows no WA UI —
@@ -4959,7 +5169,15 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}<ConnectionStatus connected={isOnline} hasConnected={hasConnected} userEmail={auth.currentUser&&auth.currentUser.email} devices={presenceDevices} myKey={presenceKey} offset={presenceOffset} onReconnect={forceReconnect} onLogout={function(){signOut(auth);}} /></div></header><div
+              wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div>{isMobile?<div
+            role="group" aria-label="Add a booking"
+            style={MOBILE_BAR}><button
+              onClick={openWalkin}
+              className="mgt-hover-scale"
+              style={mkSolidBtn("var(--app-walkin)",{flex:1,fontSize: T.body})}>Walk-in</button><button
+              onClick={openNew}
+              className="mgt-hover-scale"
+              style={mkSolidBtn("var(--app-new)",{flex:1,fontSize: T.body})}>+ New</button></div>:null}</header><div
           /* v17.9.0 (Patryk): the date controls are 40px and the collapsed
              Summary card beside them is 58, so `flex-start` left them sitting
              flush against the top of the row with 18px of dead space beneath —
@@ -4978,7 +5196,8 @@ function BookingApp({uid}){
              row happened to have in that one frame — which, on collapse, was
              still the open height. See DATE_CTRL_DROP for the numbers. */
           inert={anyModal}
-          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><button
+          ref={dateRowRef}
+          style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap",flexShrink:0}}><nav aria-label="Date" ref={dateNavRef} style={{display:"flex",gap:4,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><button
               onClick={function(){goToDate(stepDate(viewDate,-1));}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,minWidth:40,padding:"6px 10px",fontSize: T.title,background:BTN.nav})}
@@ -4997,7 +5216,7 @@ function BookingApp({uid}){
               inputProps={{"aria-label":"Viewed date"}}
               value={viewDate}
               onChange={function(e){goToDate(e.target.value);}}
-              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:"transform "+M.shift}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
+              style={{fontSize: T.lead,padding:"8px 10px",borderRadius:R.pill,border:"1px solid var(--app-date-border)",background:"var(--app-date-bg)",color:S.text,fontWeight: FW.semi,minWidth:130,minHeight:40,boxSizing:"border-box",boxShadow:"var(--shadow-input)"}} /></nav><div style={{display:"flex",gap:6,alignItems:"center",transform:dateCtrlShift,transition:dateCtrlMotion}}><Presence show={viewDate!==todayStr()} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){goToDate(todayStr());}}
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"6px 14px",background:BTN.today})}>Today</button></Presence>{/* v16.0.0: waitlist badge — lives in the Today slot (to Today's right when
@@ -5005,8 +5224,8 @@ function BookingApp({uid}){
               Orange = a table currently fits someone waiting; slate = just waiting. */}
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
-              aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
-              title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
+              aria-label={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
+              title={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
               /* v17.10.0: the waitlist wears the PENDING amber, not the burnt
                  orange it shared with No show / Reassign / Reshuffle / the swap
@@ -5016,7 +5235,18 @@ function BookingApp({uid}){
                  white text is a recorded exemption, extended to this chrome by
                  Patryk after seeing all three candidate treatments side by side
                  in both themes. */
-              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div><div style={{flexGrow:1,flexShrink:1,flexBasis:isMobile?"100%":360,minWidth:0,transition:"flex-basis "+M.shift}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
+              style={mkBtn({minHeight:40,padding:"6px 14px",background:dayWaitAvail?BLOCK_BG.pending:BTN.nav,display:"inline-flex",alignItems:"center",gap:6})}><WaitIcon size={IC.control} />{dayWaiting.length}</button></Presence></div>{/* v18.2.0: the basis is "auto" — the Summary's own ONE-LINE width — where it
+              was 360 (and "100%" on a phone). A wrapping row breaks on the basis,
+              so at 360 the Summary stayed beside the controls from ~680px up even
+              when its numbers needed ~600, and its collapsed card went to two
+              lines half empty, with the controls' 9px drop no longer centring
+              anything (measured at 720px: 22px off). Now it sits beside them only
+              when it fits on one line and takes its own full-width line
+              otherwise (Patryk's choice). A phone needs no case of its own: the
+              one-line width never fits beside the controls there, and alone on
+              its line the card shrinks (minWidth 0) and wraps inside, as before.
+              The opened body is kept out of that width (`contain`, Summary.jsx),
+              or opening the Summary could bounce it onto the next line. */}<div ref={summarySlotRef} style={{flexGrow:1,flexShrink:1,flexBasis:"auto",minWidth:0}}>{summaryPanel}</div>{/* v17.9.0: the 🔍/⚙ pair that lived here since v17.0.0 round 8 is
               gone — both buttons moved up into the header row above, each to the
               thing it acts on (see CHROME_BTN). The pair was created to give all
               three views ONE copy of these controls, and that still holds: the
@@ -5069,7 +5299,7 @@ function BookingApp({uid}){
                 reshuffled={reshuffled}
                 reshuffledMsg={reshuffledMsg}
                 loadShown={loadBannerShown}
-                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
+                loadMsg={"Connected to the server — "+countLabel(firstLoadCount.current||0,"booking","bookings")+" loaded."} /><div
                 /* v17.12.0 (review fix): the view — the actual "page behind the
                    dialog" — is what goes inert, not <main>. See the note on the
                    strip wrapper above for why the toast layer above this div
@@ -5087,7 +5317,10 @@ function BookingApp({uid}){
                 focused={focusedPane}
                 onFocus={setFocusedPane}
                 paneA={viewEl[split.a]}
-                paneB={viewEl[split.b]} />:mainView}</SlideView></div></div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
+                paneB={viewEl[split.b]} />:mainView}</SlideView></div>{/* v18.2.0: room for the phone's bottom bar, so it never covers
+                the last card or row. Inside <main>, because in the fixed
+                shell <main> is the scroll container; a plain block at the end
+                of the page otherwise. */}{isMobile?<div aria-hidden="true" style={MOBILE_BAR_SPACER} />:null}</div></main>{/* v17.12.0: the notification announcer sits OUTSIDE <main>, and that
         is not tidiness. `inert` removes a subtree from the accessibility tree as
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection
@@ -5116,7 +5349,6 @@ function BookingApp({uid}){
               vouchersByCode={vouchersByCode}
               vouchersOn={vouchersOn}
               regularMin={generalSettings.regularMin}
-              phoneCountry={generalSettings.phoneCountry}
               pinnedCountries={generalSettings.pinnedCountries}
               today={today}
               nowMins={nowMins}
@@ -5132,7 +5364,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}
@@ -5154,12 +5386,13 @@ function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+l.guests+" guest"+(l.guests!==1?"s":"");})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
               booking={bookings.find(function(x){return x.id===voucherAsk.id;})}
               currency={generalSettings.currency}
+              settle={voucherAsk.from==="settle"}
               onRedeem={function(amount){settleVoucher(amount);}}
-              onSkip={function(){settleVoucher(0);}}
+              onSkip={function(){if(voucherAsk.from==="settle")setVoucherAsk(null);else settleVoucher(0);}}
               onClose={function(){setVoucherAsk(null);}} />:null}</ModalPresence><ModalPresence show={!!voucherBack}>{voucherBack&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherBack.id;})||{}).voucherCode)]?<Overlay /* @static-height two fixed sentences and two buttons */ onClose={function(){setVoucherBack(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
@@ -5182,7 +5415,7 @@ function BookingApp({uid}){
         // legend row or by pressing `?` anywhere no modal is open.
         // v14 preview 7: now tabbed (General / Reminders / Shortcuts). Tab state
         // resets to 'general' on close so reopens feel fresh.
-        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
+        showSettings?<Overlay /* @static-height the tab body eases inside SettingsContent's own AutoHeight watch={cur} */ onClose={requestCloseSettings} maxWidth={SETTINGS_CARD_W} anchor="top" footer={<div style={{display:"flex",justifyContent:"flex-end"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:40,padding:"8px 18px",background:"var(--app-btn-slate)"})}
               onClick={requestCloseSettings}>Close</button></div>}><ModalTitle background="var(--app-btn-grey-strong)">Settings</ModalTitle><Suspense fallback={null}><SettingsContent
@@ -5203,6 +5436,8 @@ function BookingApp({uid}){
             splitEnabled={splitEnabled}
             onToggleSplitEnabled={onToggleSplitEnabled}
             planGestures={planGestures}
+            planAvail={planAvail}
+            onTogglePlanAvail={onTogglePlanAvail}
             onTogglePlanGestures={onTogglePlanGestures}
             tlSettings={tlSettings}
             onSetTlSetting={onSetTlSetting}
@@ -5273,7 +5508,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmReminderDel(null);}}>Back</button><button
               onClick={function(){doDeleteReminder(confirmReminderDel);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.del)}>Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
+              style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:S.text}}>Delete reminder?</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This reminder will be permanently removed.</div></Overlay>:null}</ModalPresence><ModalPresence show={!!reminderEditor}>{// v14 p7: Reminder editor modal — sits on top of Settings (z=250 vs 200).
         reminderEditor?<ReminderEditor
           draft={reminderEditor.draft}
           setDraft={function(d){setReminderEditor(function(prev){return prev?Object.assign({},prev,{draft:d}):null;});}}
@@ -5321,14 +5556,14 @@ function BookingApp({uid}){
               onClick={function(){setConfirmArchive(null);}}>Back</button><button
               onClick={function(){wa.doArchive(confirmArchive);setConfirmArchive(null);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+bk.date+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
+              style={mkSolidBtn(BTN.orange,{minHeight:H.touch})}>Archive anyway</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Archive conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>{bk?("This conversation is linked to a booking on "+formatDay(bk.date)+" at "+bk.time+". Archiving won't cancel the booking."):"Archive this conversation?"}</div></Overlay>;
         })():null}{confirmDeleteConv?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDeleteConv(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap"}}><button
               className="mgt-hover-scale"
               style={mkBtn({minHeight:44,padding:"10px 18px",background:"var(--app-btn-slate)"})}
               onClick={function(){setConfirmDeleteConv(null);}}>Back</button><button
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
-              style={mkSolidBtn(BTN.del,{minHeight:H.touch})}>Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
+              style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
           onClose={function(){setShowSim(false);}} /></Suspense>:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:

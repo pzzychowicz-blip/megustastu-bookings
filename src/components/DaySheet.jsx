@@ -11,18 +11,19 @@
 //
 // Content for `date`: header (restaurant, date + weekday, covers + shift totals
 // via daySummary), a time-sorted table of the day's NON-cancelled bookings
-// (Time · Name · Pax · Tables · Phone · Deposit/voucher · Notes), any table blocks, and
+// (Time · Name · Guests · Tables · Phone · Deposit/voucher · Notes), any table blocks, and
 // the day's waitlist entries.
 //
 // Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
 
-import { useMemo, memo } from "react";
+import { useEffect, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW, APP_NAME } from "../lib/constants";
-import { daySummary } from "../lib/booking-logic";
-import { normalizeCode, formatCode } from "../lib/vouchers";
+import { daySummary, guestsLabel, countLabel } from "../lib/booking-logic";
+import { formatPhone } from "../lib/customers";
+import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
-import { WEEKDAY_LONG } from "../lib/day";
+import { WEEKDAY_LONG, formatDay } from "../lib/day";
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
 // it returns the day NUMBER (0–6). Two functions, one name, incompatible return
 // types, one of them on the shared module. That is worse than a duplicate: it is
@@ -32,6 +33,16 @@ function weekdayName(dateStr) {
   const d = new Date(dateStr);
   return isNaN(d) ? "" : WEEKDAY_LONG[d.getUTCDay()] || "";
 }
+// v18.2.0 phase 65 (Patryk): the saved file is named for its day. A browser
+// names a print-to-PDF after `document.title`, which is the app's name, so
+// every day's sheet saved as "MGT Bookings.pdf". ISO, like the app's two
+// other files (mgt-backup-…, mgt-activity-…), so a folder of them sorts by day;
+// a date that is not canonical (a booking's stored date can reach `viewDate`
+// verbatim) names no day rather than a broken one.
+function sheetFileName(date) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? "mgt-day-sheet-" + date : "mgt-day-sheet";
+}
+
 // Inline light-only styles (no tokens — print stays light).
 const cell = { border: "1px solid #999", /* @fixed-fill */ padding: "4px 6px", fontSize: T.body, textAlign: "left", verticalAlign: "top", color: "#000" };
 const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" /* @fixed-fill */ });
@@ -61,13 +72,30 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
       .sort(function (a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
   }, [waitlist, date]);
 
+  // The title carries the sheet's name only while it prints: `beforeprint` and
+  // `afterprint` fire for the Summary's "Print day sheet" AND for the browser's
+  // own ⌘P, and both print this sheet (index.css hides #root in print). The
+  // cleanup restores it too, should the day change or the sheet unmount mid-print.
+  useEffect(function () {
+    let prev = null;
+    function before() { if (prev === null) prev = document.title; document.title = sheetFileName(date); }
+    function after() { if (prev !== null) { document.title = prev; prev = null; } }
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return function () {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+      after();
+    };
+  }, [date]);
+
   return createPortal(
     <div className="mgt-print-sheet" style={{ color: "#000", /* @fixed-fill */ background: "#fff", padding: 24, fontFamily: "-apple-system, system-ui, sans-serif" }}>
       <div style={{ borderBottom: "2px solid #000", /* @fixed-fill */ paddingBottom: 8, marginBottom: 12 }}>
         <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || APP_NAME) + " — Day sheet"}</div>
-        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + date}</div>
+        <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + formatDay(date, { weekday: false, year: "always" })}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
-          {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
+          {countLabel(s.totalBookings, "booking", "bookings") + " · " + countLabel(s.totalCovers, "cover", "covers")
             + " · Afternoon " + s.afternoon.covers + " / Evening " + s.evening.covers}
         </div>
       </div>
@@ -78,7 +106,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
             <tr>
               <th style={th}>Time</th>
               <th style={th}>Name</th>
-              <th style={th}>Pax</th>
+              <th style={th}>Guests</th>
               <th style={th}>Tables</th>
               <th style={th}>Phone</th>
               {/* v18.0.0 phase 4: the column is SHARED, so with the vouchers
@@ -98,13 +126,14 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                   <td style={Object.assign({}, cell, { fontWeight: FW.bold })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
-                  <td style={cell}>{b.phone || "—"}</td>
+                  {/* v18.2.0 phase 50 (C-4): the one phone shape, as on screen. */}
+                  <td style={cell}>{b.phone ? formatPhone(b.phone) : "—"}</td>
                   {/* v18.0.0: deposit and voucher share one money column. A
                       separate column would widen a sheet that is printed on
                       A4 and read at the table, and the two are the same
                       question — has this guest already paid something. */}
                   <td style={cell}>{[
-                    (Number(b.deposit) || 0) > 0 ? (currency || "€") + b.deposit : null,
+                    (Number(b.deposit) || 0) > 0 ? money(Number(b.deposit), currency || "€") : null,
                     vouchersOn && normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
                   ].filter(Boolean).join("  ·  ") || "—"}</td>
                   <td style={cell}>{b.notes || ""}</td>
@@ -128,7 +157,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         <div style={{ fontSize: T.body }}>
           <div style={{ fontWeight: FW.bold, marginBottom: 4 }}>Waitlist</div>
           {dayWait.map(function (w, i) {
-            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + w.size + " pax" + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + w.phone : "")}</div>;
+            return <div key={w.id}>{(i + 1) + ". " + (w.name || "—") + " · " + guestsLabel(w.size) + (w.preference === "indoor" ? " · indoor" : w.preference === "outdoor" ? " · outdoor" : "") + (w.prefTime ? " · wants " + w.prefTime : "") + (w.phone ? " · " + formatPhone(w.phone) : "")}</div>;
           })}
         </div>
       ) : null}

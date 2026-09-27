@@ -19,17 +19,22 @@
 // was co-located here as a module-level `const` (lib/day.js's WEEKDAY_SHORT
 // since v18.0.0 session 7's /code-review).
 
-import { BTN, R, T, FW } from "../lib/constants";
-import { Toggle, mkBtn } from "./atoms";
-import { WEEKDAY_SHORT } from "../lib/day";
+import { BTN, R, T, FW, IC } from "../lib/constants";
+import { Toggle, mkBtn, mkDangerBtn, OutlineChip, PAUSED_FADE } from "./atoms";
+import { TrashIcon } from "./Icons";
+import { WEEKDAY_SHORT, formatDay } from "../lib/day";
+import { countLabel } from "../lib/booking-logic";
 
 // ── One reminder card ────────────────────────────────────────────────────────
+// v18.2.0 phase 55: PAUSED_FADE moved to atoms (standing bookings share it).
+// Phase 28 had typed it between `export` and this function, which exported
+// the number and quietly un-exported the card.
 export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
   const r = reminder;
   const rec = r.recurrence || {};
   let recText = "";
   if (rec.type === "once") {
-    recText = "Once on " + rec.date;
+    recText = "Once on " + formatDay(rec.date);
   } else if (rec.type === "weekly") {
     const ds = (rec.days || []).slice().sort((a, b) => a - b).map((i) => WEEKDAY_SHORT[i]);
     recText = "Weekly: " + ds.join(", ");
@@ -57,15 +62,20 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
       borderRadius: R.card,
       padding: "12px 14px",
       marginBottom: 8,
-      opacity: r.active ? 1 : 0.55,
       boxShadow: "var(--shadow-card)"
     }}>
+      {/* v18.2.0 (the design critique, S5): a paused reminder fades its TEXT
+          and says "Paused". The whole card was at 55%, Edit and Delete with
+          it, so two buttons that work looked disabled (both measured
+          `disabled` false). Standing bookings in General take the same look
+          since phase 55 (they faded the name only and appended "· paused"). */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)", marginBottom: 2, wordBreak: "break-word" }}>
-            {r.text}
+            <span style={{ opacity: r.active ? 1 : PAUSED_FADE }}>{r.text}</span>
+            {r.active ? null : <OutlineChip tone="neutral" style={{ marginLeft: 8, verticalAlign: "middle" }}>Paused</OutlineChip>}
           </div>
-          <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
+          <div style={{ fontSize: T.body, color: "var(--text-muted)", opacity: r.active ? 1 : PAUSED_FADE }}>
             {timesText + "  ·  " + recText}
           </div>
         </div>
@@ -91,13 +101,16 @@ export function ReminderListItem({ reminder, onEdit, onDelete, onToggle }) {
         >
           Edit
         </button>
+        {/* v18.2.0 phase 62: the app's one destructive look (mkDangerBtn),
+            solid red with the trash mark — Patryk's call over the quiet tint
+            phase 28 gave it. It opens the in-app confirmation, as before. */}
         <button
           onClick={() => onDelete(r.id)}
           aria-label={"Delete (" + rname + ")"}
           className="mgt-hover-scale"
-          style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.del })}
+          style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}
         >
-          Delete
+          <TrashIcon size={IC.control} />Delete
         </button>
       </div>
     </div>
@@ -139,7 +152,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
-          {list.length + " reminder" + (list.length !== 1 ? "s" : "")}
+          {countLabel(list.length, "reminder", "reminders")}
         </div>
         <button
           onClick={onAdd}

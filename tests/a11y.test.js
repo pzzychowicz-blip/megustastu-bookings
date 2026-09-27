@@ -552,6 +552,28 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "on this view the FILL is the state — without a name a screen reader " +
       "meets a room of identical buttons");
   });
+
+  // v18.2.0 phase 57 (round 3's A-2). Measured on DEV: the table popover's
+  // booking rows were <div>s with onClick, and the popover is portalled to the
+  // end of <body> with nothing moving focus into it — a keyboard could open it
+  // (Enter on the table) and do nothing with it.
+  it("the table popover's bookings are buttons, and a keyboard open moves focus in", () => {
+    has(Plan, "row is a button", /<button type="button" key=\{b\.id\} className="mgt-hover-scale"/,
+      "a booking row opens the edit form, so it is a control");
+    has(Plan, "row names its booking, time first", /aria-label=\{b\.time \+ " " \+ \(b\.name \|\| "\(no name\)"\) \+ ", " \+ guestsLabel\(b\.size\) \+ ", " \+ b\.status\}/,
+      "the visible text leads (Label in Name), and the size ring's bare number is said as guests");
+    has(Plan, "focus in, on a KEY open only", /const first = popByKeyRef\.current && popRef\.current && popRef\.current\.querySelector\("button"\);/,
+      "after a tap, script focus drew a ring on the first booking (a table cancels its own mousedown focus)");
+    has(Plan, "a key open is recorded", /popByKeyRef\.current = !!e && \(e\.type === "keydown" \|\| e\.detail === 0\);/,
+      "TableGlyph hands Enter/Space to onClick as the KeyboardEvent");
+    has(Plan, "Escape closes it, before the global handler", /window\.addEventListener\("keydown", onKey, true\);/,
+      "a capture listener, stopped — QuickStatusPopup's click-opened shape");
+    // Leaving for a form refocuses the table IN the handler: the commit that
+    // opens the form makes the page `inert`, where focus() does nothing, and
+    // the form then returned focus to <body> (measured, StrictMode off).
+    expect(count(Plan, /onClick=\{\(\) => \{ leavePop\(\); on(?:Edit\(b\)|Walkin\(id\)); \}\}/g)).toBe(2);
+    expect(Plan).not.toMatch(/<div key=\{b\.id\} className="mgt-hover-scale"\s+onClick/);
+  });
 });
 
 describe("focusable content must not scroll under the finger", () => {
@@ -802,6 +824,51 @@ describe("the Toggle atom is a switch, and every one of them is named (WCAG 1.3.
       .toEqual([]);
   });
 
+  it("every MiniStepper in Settings names what it steps (v18.2.0 phase 56)", () => {
+    // Round 3's A-1: nine call sites, eighteen buttons announcing "−" and "+".
+    // The same rule as the Stepper above: `label` has no default, so this
+    // guards the CALL SITES; the weekday rows repeat seven times and carry the
+    // day.
+    const src = read("components/Settings.jsx");
+    const tags = openingTagsOf(src, "MiniStepper");
+    expect(tags.length, "Settings should still render nine mini-steppers").toBeGreaterThanOrEqual(9);
+    expect(tags.filter((t) => !/\blabel=/.test(t)), "a MiniStepper with no `label` announces as \u2212 and +")
+      .toEqual([]);
+    expect(count(src, /label=\{label \+ " (?:opening|closing) time"\}/g), "the weekday rows name their day").toBe(2);
+    expect(count(src, /aria-label=\{"(?:Decrease|Increase) " \+ label\}/g), "both buttons take the label").toBe(2);
+  });
+
+  it("every HourStepper in Settings names its buttons, and a repeated one its row (v18.2.0 phase 56)", () => {
+    // The report counted nine; measured on DEV, General held sixteen MORE
+    // unnamed steppers — this component, whose `label` was only the visible
+    // heading above the buttons. The duration tiers repeat per tier.
+    const src = read("components/Settings.jsx");
+    const tags = openingTagsOf(src, "HourStepper");
+    expect(tags.length, "Settings should still render ~14 hour steppers").toBeGreaterThanOrEqual(14);
+    expect(tags.filter((t) => !/\blabel=/.test(t))).toEqual([]);
+    expect(count(src, /aria-label=\{"(?:Decrease|Increase) " \+ name\}/g), "both buttons take the name").toBe(2);
+    expect(src).toMatch(/const name = \(who \? who \+ ": " : ""\) \+ label;/);
+    expect(count(src, /who=\{"Tier " \+ \(i \+ 1\)\}/g), "each tier's two steppers carry its number").toBe(2);
+    expect(src).toMatch(/label="stay for" who=\{tiers\.length \? "Larger parties" : "All parties"\}/);
+  });
+
+  // v18.2.0 phase 56: the rule the three tests above apply per component, for
+  // every component — a button whose whole content is − or + carries an
+  // aria-label. Against the sources before the phase it finds ten: Settings'
+  // two stepper components, the floor-plan editor's stepper and zoom, and the
+  // Customers tab's Regulars stepper.
+  it("no button anywhere is named by a − or + alone", () => {
+    const hits = [];
+    for (const f of readdirSync(join(SRC, "components"), { recursive: true })) {
+      if (!/\.jsx$/.test(f)) continue;
+      const src = read("components/" + f);
+      const re = /<button\b([^>]*(?:\{[^}]*\}[^>]*)*)>\s*([\u2212+])\s*<\/button>/g;
+      let m;
+      while ((m = re.exec(src)) !== null) if (!/aria-label=/.test(m[1])) hits.push(f + ": " + m[2]);
+    }
+    expect(hits).toEqual([]);
+  });
+
   it("a Stepper rendered from a list names the ITEM", () => {
     // Same rule as the list-rendered Toggle above, and the same reason a regex
     // cannot decide "inside a .map": these are pinned by name. Each of the four
@@ -953,7 +1020,9 @@ describe("LayoutSettings' Tables and Combos name their rows (v17.15.6)", () => {
     // The one control in these two sections that HAS words. Its visible text is
     // "Indoor" or "Outdoor", so a name like "Change zone for table 3" would fix
     // the ambiguity and break voice control in the same stroke.
-    has(src, "zone toggle", /aria-label=\{\(indoor \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
+    // v18.2.0 phase 71 (S9): a two-option segment now, one button per value,
+    // each named the same way.
+    has(src, "zone segment", /aria-label=\{\(z === "indoor" \? "Indoor" : "Outdoor"\) \+ " \(table " \+ t\.id \+ "\)"\}/,
       "the visible word leads and the table only disambiguates");
   });
 
@@ -1091,7 +1160,7 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
     // /code-review made against "copy → all".
     has(Late, "No show", /aria-label=\{"No show \(" \+ who \+ "\)"\}/,
       "the visible text leads; the guest follows in parentheses");
-    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ w\.size \+ " pax\)"\}/,
+    has(Wait, "Book", /aria-label=\{"Book \(" \+ who \+ ", " \+ guestsLabel\(w\.size\) \+ "\)"\}/,
       "the visible text leads; the party follows in parentheses");
     // Overlap's Reassign and Clash's Assign are deliberately untouched: their
     // visible text already contains a name, so it differs per row on its own.
@@ -1137,7 +1206,8 @@ describe("a banner row's controls carry their row (v17.15.6)", () => {
       has(src, what + " who", /const who = \w+\.name \|\| "\(no name\)";/,
         "derive the display name once per row and read it everywhere in that row");
     }
-    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ w\.size \+ " pax/,
+    // v18.2.0 (C2): the party's size is `guestsLabel`, as on every other surface.
+    has(Wait, "the row sentence reads `who` too", /\{who \+ " · " \+ guestsLabel\(w\.size\) \+ " — table free"/,
       "the visible sentence must read the same expression the button's name does");
   });
 });
@@ -1220,12 +1290,24 @@ describe("the List card's actions stay named by their ancestor (v17.15.6)", () =
     // that none of them carries an `aria-label` at all. No spelling to guess,
     // and it catches all four candidates plus any phrasing nobody has thought
     // of yet.
+    //
+    // v18.2.0 narrowed it by ONE shape, deliberately. The card's actions became
+    // Assign · No show · the next step · ⋯ (the rest moved into the
+    // quick-status card), and ⋯ is ICON-ONLY — a control with no text has no
+    // name at all, so it MUST carry a label. What v17.15.6 decided against is
+    // repeating the BOOKING on every control, and a static "More actions"
+    // repeats nothing. So the pin is now: no label built from an expression
+    // (`aria-label={…}`, which is where a guest name would have to come in),
+    // and a static label only on a button with no text of its own.
     const actions = openingTagsOf(List, "button")
       .filter((t) => /\bonClick=\{stopped\(/.test(t));
-    expect(actions.length, "the card's action row should still hold ~5 buttons " +
+    expect(actions.length, "the card's action row should still hold ~4 buttons " +
       "wrapped in `stopped()` — if this drops to 0 the guard has stopped " +
       "looking at anything").toBeGreaterThanOrEqual(4);
-    const named = actions.filter((t) => /\baria-label=/.test(t));
+    const named = actions.filter((t) => /\baria-label=\{/.test(t));
+    const staticNamed = actions.filter((t) => /\baria-label="/.test(t));
+    expect(staticNamed.map((t) => (t.match(/aria-label="([^"]*)"/) || [])[1]),
+      "only the icon-only ⋯ carries a static label").toEqual(["More actions"]);
     expect(named, "DECIDED in v17.15.6, not overlooked: the card is a named " +
       "listitem carrying describeBooking, so these inherit the booking. " +
       "Renaming all sixty repeats the guest on every control and is measurably " +
@@ -1492,5 +1574,52 @@ describe("the gate proves itself", () => {
   it("count() distinguishes one heading from two", () => {
     expect(count("<h1>a</h1><h1>b</h1>", /<h1\b/g)).toBe(2);
     expect(count("<h2>a</h2>", /<h1\b/g)).toBe(0);
+  });
+});
+
+describe("the booking form's steppers and the timeline zoom work from the keyboard (WCAG 2.1.1, 4.1.2)", () => {
+  // v18.2.0. The four − / + buttons in the booking form stepped on
+  // `pointerdown` only, so Enter / Space (which fire `click`) did nothing, and
+  // their names were the glyphs. The timeline's − / + zoom buttons had the same
+  // names. Measured live before the fix: `.click()` on "+" left guests at 2.
+  it("every form stepper goes through stepPress, which also answers a keyboard click", () => {
+    // v18.2.0: the helper moved to lib/keyboard.js when the walk-in form's
+    // steppers — the same pointer-only defect — took it too.
+    const Keyboard = read("lib/keyboard.js");
+    has(Keyboard, "lib/keyboard.js", /export function stepPress\(apply\)[\s\S]*?onClick:\s*function\s*\(e\)\s*\{\s*if\s*\(e\.detail === 0\) apply\(\);/,
+      "stepPress must act on a click with detail 0 — the keyboard's — or Enter/Space step nothing");
+    for (const [name, src] of [["BookingFormModal", BookingForm], ["WalkinForm", Walkin]]) {
+      expect(count(src, /\{\.\.\.stepPress\(/g), name + ": four steppers (guests − +, duration − +) and the duration Reset").toBe(5);
+      hasnt(src, name, /onPointerDown=/,
+        "a control acting on pointerdown alone is back — Enter and Space fire click, never a pointer event");
+    }
+  });
+
+  it("each form stepper is named for what it steps", () => {
+    for (const [what, src] of [["BookingFormModal", BookingForm], ["WalkinForm", Walkin]]) {
+      for (const name of ["Decrease number of guests", "Increase number of guests", "Decrease duration", "Increase duration"]) {
+        expect(count(src, new RegExp('aria-label="' + name + '"', "g")), what + ": " + name).toBe(1);
+      }
+    }
+  });
+
+  it("the zoom buttons are named, and the reset button's name LEADS with its text", () => {
+    expect(count(Timeline, /aria-label="Zoom out"/g)).toBe(1);
+    expect(count(Timeline, /aria-label="Zoom in"/g)).toBe(1);
+    // Label in Name: the visible "1x" (or "2x → 1x") comes first.
+    has(Timeline, "TimelineView", /aria-label=\{\(zoom !== 1 \? zoom \+ "x → " : ""\) \+ "1x \(reset zoom\)"\}/,
+      "the reset button shows text, so its accessible name must start with that text");
+  });
+});
+
+describe("a minus control is drawn with U+2212, never a hyphen (v18.2.0)", () => {
+  // The design critique: the − of every stepper and the zoom sat visibly
+  // smaller than the + beside it. Measured in the app font at 17px 600: hyphen
+  // 7.7px wide, U+2212 10.7px, "+" 10.7px. LayoutSettings and Settings already
+  // drew U+2212; the booking form, the walk-in form and the zoom did not.
+  it("no button in src/ has a bare hyphen as its whole content", () => {
+    const offenders = srcFilesMatching(/>\s*-\s*<\/button>/)
+      .map(([f]) => f);
+    expect(offenders).toEqual([]);
   });
 });

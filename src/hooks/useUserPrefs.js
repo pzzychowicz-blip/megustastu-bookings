@@ -15,7 +15,10 @@
 //
 // ── What syncs, and what deliberately does NOT ───────────────────────────────
 // Syncs (Patryk's call): theme · reduceMotion · planGestures · navLocked ·
-// splitEnabled — all judgements about how the app should behave.
+// splitEnabled — all judgements about how the app should behave. v18.2.0
+// phase 21 adds planAvail (the Plan view's table availability, on by default),
+// per person like planGestures beside it — Patryk's call over a
+// restaurant-wide switch.
 //
 // Stays per-device in localStorage: **app width** (a property of the monitor —
 // a value that fits a 27" desktop overflows a tablet, and App already
@@ -64,10 +67,14 @@ export const DEFAULT_USER_PREFS = {
   reduceMotion: null,   // boolean | null
   planGestures: null,   // boolean | null
   navLocked: null,      // boolean | null
-  splitEnabled: null    // boolean | null
+  splitEnabled: null,   // boolean | null
+  planAvail: null       // boolean | null (v18.2.0 phase 21)
 };
 
-// ── v17.14.0: the four boolean prefs, described once ────────────────────────
+// ── v17.14.0: the boolean prefs, described once ─────────────────────────────
+// (Four when this was written; v18.2.0 phase 21's planAvail is the fifth, and
+// joining this table is ALL it took — the initializer, the toggle and the
+// seeding branch below it are shared, which is the point of the table.)
 // App had these written out three times each — a `useState` initializer reading
 // localStorage, a toggle handler writing it, and a branch of the seeding effect
 // doing both again — twelve near-identical blocks differing only in a key name
@@ -90,6 +97,7 @@ export const PREF_SPEC = {
   planGestures: { ls: "mgt-plan-gestures",  store: "whenOff" },
   navLocked:    { ls: "mgt-nav-lock",       store: "whenOn"  },
   splitEnabled: { ls: "mgt-split-enabled",  store: "whenOff", clears: "mgt-split" },
+  planAvail:    { ls: "mgt-plan-avail",     store: "whenOff" },
 };
 export const PREF_NAMES = Object.keys(PREF_SPEC);
 
@@ -120,7 +128,8 @@ export function sanitizeUserPrefs(raw){
     reduceMotion: triBool(src.reduceMotion),
     planGestures: triBool(src.planGestures),
     navLocked: triBool(src.navLocked),
-    splitEnabled: triBool(src.splitEnabled)
+    splitEnabled: triBool(src.splitEnabled),
+    planAvail: triBool(src.planAvail)
   };
 }
 

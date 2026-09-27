@@ -313,6 +313,287 @@ explaining why is usually the one to read.
   again, ~8 L\* is the bar.** A backdrop either commits to being seen or commits
   to being a surface.
 - **One app font (v16.0.0):** the stack lives in `src/index.css` as `--font-app` (body sets it; App.jsx/LoginScreen wrappers read the token). `input, textarea, select, button { font-family: inherit }` is load-bearing — form controls do NOT inherit font per the CSS spec (the Notes textarea used to render monospace). Never re-introduce an inline font-family literal; the only deliberate exception is the `Kbd` keycap atom (monospace).
+- **A modal title is a flat label (v18.2.0).** `ModalTitle` wore
+  `--shadow-btn` and the solid buttons' white rim — a button's dress, in a
+  button's colour, above a form of buttons — so "New booking" read as something
+  to press (the design critique). Both are gone from the atom, for all seven
+  titles; the colour stays, because it is information (it matches the button
+  that opened the modal).
+- **A minus is U+2212, never a hyphen (v18.2.0).** The booking form's and the
+  walk-in form's steppers and the timeline's zoom drew "−" as `-`, 7.7px wide
+  against the "+" beside it at 10.7px in the app font at 17px — the pair looked
+  mismatched (the design critique). U+2212 measures 10.7px, the same as "+".
+  Settings and LayoutSettings already used it; `tests/a11y.test.js` now refuses
+  a button whose whole content is a hyphen. **And a − or + is named for what it steps
+  (phase 56, A-1)**: "Decrease Daily cutoff", "Increase Tier 2: stay for".
+  Settings' two stepper components, the floor-plan editor's and the Customers
+  tab's Regulars stepper announced the glyph alone — all 66 on the General
+  tab, with two names between them. A stepper repeated per row carries the row
+  (`who`); `tests/a11y.test.js` refuses a − or + button without an aria-label
+  in any component.
+- **Red means destructive, and only that (v18.2.0).** `--btn-dismiss` was the
+  delete red, so "Dismiss" on the reshuffle suggestion and every banner row's ✕
+  looked like Delete and Cancel beside them. It is now an ALIAS of
+  `--app-btn-slate`, the dialog secondary ("Back", "Keep editing") — one change,
+  every dismiss in the app. Its other side was `BTN.cancel`, a red named for
+  cancelling a BOOKING that kept being reached for as a dialog's "go back"; it
+  had no users after phase 41 and phase 59 removed it. A dialog's go-back is
+  `--app-btn-slate` (`confirmKitchen`'s "Back", "Keep editing"). **Phase 36 did the same for `--btn-clear`**
+  (the critique's X5): "Clear" empties a table selection — the booking form's,
+  the walk-in form's, table assignment's, the preferred tables' — and was the
+  delete red too. **Phase 78 did it for `--btn-reset`**, the booking and walk-in
+  forms' duration "Reset", which puts the length back to the party's default.
+- **A destructive button is ONE solid red, at rest and armed (v18.2.0 phase 62,
+  Patryk).** Everything that deletes, removes, voids, unblocks or clears is
+  `mkDangerBtn` (atoms): solid `--app-danger-solid` with the solid rim, on
+  mkBtn's geometry; arming a two-tap confirm changes the LABEL ("Confirm —
+  remove") and nothing else, not the colour and not the size under the finger.
+  **A Delete or a Remove carries `TrashIcon` before its word**; Void voucher,
+  Unblock and Clear this range do not, because they are not deletions of a
+  thing. A confirm dialog's red button is `mkDangerConfirm`, the same red on
+  `mkSolidBtn`'s geometry beside the dialog's 44px Back. Before, one job had
+  three looks and four reds: phases 27, 28 and 41 had made a row's delete the
+  danger TINT until armed (thirteen solid table ×s had been the loudest thing
+  in Layout), the booking form, Customers, the Activity log, Vouchers and the
+  floor plan kept the translucent `--btn-del`, the dialogs were split between
+  `--app-danger-solid` and `BTN.del`, and the inbox had its own
+  `--wa-btn-cancel` (removed). Patryk saw the options drawn by the real atoms in
+  both themes and chose solid. **The editors' small icon-only × removers are the
+  exception and stay quiet**: ONE look, atoms' `mkRemoveX` (phase 63) — Layout's
+  table, group, combo and rule ×s, a duration tier's × and the reminder
+  editor's remove-time ×, each NAMED for the item it removes ("Remove Tier 2",
+  "Remove time 2"). An armed tier × becomes "Confirm — remove" in the red, in a
+  slot reserving that width (`TIER_ARMED_W`). **Never a danger
+  border on the tint**: tint + a border in the hue + text in a third shade is
+  the banned shape below; phase 27 shipped it and phase 28 took it off. The
+  sentence saying what the second tap does sits UNDER the button, never above
+  it or in front of it (Customers had it in front, in the same wrapping row,
+  until phase 62). **A row whose buttons sit beside its text gives the text a
+  flex BASIS**, or on a phone the buttons take their width out of the text
+  instead of wrapping under it, and the armed label is usually the widest
+  state, so that is when it bites (measured on the waitlist: 67px of text
+  beside "Confirm — remove"). **And its button group reserves the ARMED width**
+  (phase 51): a basis alone wraps the line on the group's CURRENT width, so
+  wherever the resting group fits beside the text and the armed one does not,
+  the first tap moves the button a line down and the second misses it,
+  measured on a 430px phone at 27px. Reserved (`minWidth` + `flex-end`), the
+  row wraps alike in both states and arming grows the button leftwards into
+  space that was already empty, so nothing moves. The reserve is the armed
+  width measured and rounded up (`ACTIONS_W` 227, `RULE_ACTIONS_W` 202 since
+  the trash mark joined the label); below it the window reopens, and every
+  pixel above it comes out of the text. **Where the armed label is the SHORTER
+  one, the button keeps its resting width** (Customers' `DELETE_W`, phase 62):
+  right-aligned, it otherwise shrank from its left edge (209 → 154px) and a
+  first tap there missed on the second.
+- **A surface that carries data is OPAQUE (v18.2.0, X2).** The Week / Month
+  cells were `--bg-input` (half-transparent) over a translucent sheet, so the
+  page behind the modal showed through and the timeline's orange blocks
+  tinted some days amber — colour that reads as data and is not. They are
+  `--bg-cal-cell` now, the solid colour a cell had over a plain page. Glass is
+  for chrome; anything whose colour MEANS something sits on a solid fill. The
+  busyness shading got the key it never had, drawn from the same `HEAT` scale.
+- **A Cancel is never red.** Layout's rename and add-table Cancel shared the
+  remove button's red × (`X_BTN`); it is the stepper's neutral now (`CANCEL_X`).
+- **A paused item fades its TEXT, never its controls (v18.2.0, S5).** A paused
+  reminder drew its whole card at 55%, so Edit and Delete looked disabled while
+  both worked; now the words fade and an outline "Paused" tag says the state.
+  **Phase 55 (L-3) made it ONE look**: standing bookings, one tab over, faded
+  the name alone (to 0.5) and appended "· paused" to the schedule — the
+  sentence above once cited them as the precedent. Both lines now fade to
+  `PAUSED_FADE` (0.55, atoms) and carry the same tag.
+- **A selected SEGMENT is lifted, not filled (v18.2.0).** The header's
+  Timeline/List/Plan were three solid pills with the active one solid accent —
+  the same blue as "+ New" beside them, so "where I am" and "what I can do"
+  read as one thing (the design critique). They are now one segmented control
+  in Settings' TabBar treatment: a `--bg-tabbar` track, the chosen segment a
+  `--bg-tab-active` pill with `--shadow-btn`, shared as STYLE through atoms'
+  `SEG_TRACK` / `segStyle` (the two cannot share behaviour — the switcher
+  carries the split-view gestures). **The rule: the solid accent in the header
+  is reserved for the primary ACTION ("+ New"); a selection is shown by lift.**
+  The chosen segment's ink is `--text-primary`, not `--accent`: registering the
+  pair for the first time measured the accent at 4.02:1 light and 2.25:1 dark,
+  under a small bold label's 4.5:1, and that had been Settings' tab bar since
+  v16.2.0. The lift, the weight and the shadow say "chosen"; the colour does
+  not have to. The track's hairline is an inset shadow so the control stands
+  exactly `H.control` tall beside the header's buttons.
+  **v18.2.0 phase 35: it is the ONE segmented look** — the Week / Month / Stats
+  toggle was a third, the chosen mode in solid accent, and it and Settings'
+  tabs now also carry `aria-pressed`, so which one is on is said and not
+  only drawn (the design critique's X3 and S3). **Phase 71 (S9)** made Layout
+  → Tables' zone its fourth user, Indoor · Outdoor per table: it was one grey
+  chip that flipped on a tap and read as a label.
+- **Every Settings tab is in view (v18.2.0, the design critique's S1).** The
+  tab bar was one row that scrolled sideways with its scrollbar hidden, so on
+  the tablet three of nine tabs, and on a phone five, were out of sight with
+  nothing saying so. On a tablet the Settings card is 800px (`SETTINGS_CARD_W`,
+  `Overlay`'s `maxWidth`) and the nine sit on one row. Where one row does not
+  fit, the tabs become a BALANCED grid: the fewest rows whose equal cells hold
+  the widest label (`tabColumns`), so 3 × 3 on a phone (Patryk's choice) and
+  5 + 4 in a narrow window, never a lonely last tab stretched across the bar.
+  Measured from the labels in the platform's font, not by breakpoint. A grid is
+  rounded rectangles in a rounded rectangle, `R.inset` inside `R.card` with the
+  4px padding between, so the corners are concentric; pills stay for one row.
+- **Settings hangs from a fixed top (v18.2.0, S2).** A centred card that
+  changes height moves its top, and Settings' tab bar sat at 120, 205, 120,
+  120, 186 and 280px for six tabs in a row, so after one click the next tab had
+  moved from under the finger. `Overlay`'s `anchor="top"` hangs the desktop
+  card at 5dvh, where a centred card already sits at its 90dvh ceiling: the
+  tallest tabs do not move and the others stop moving; only the bottom edge
+  follows the content. **Any modal whose body swaps while its top holds
+  controls wants the same.** The phone sheet is full-screen and unaffected.
+  **More is the second (phase 61, Patryk):** centred, its measured heights
+  (Week 623, Month 552, Stats 684px on the 1280×800 tablet) put its top — and
+  the Week / Month / Stats control on it — at 88, 124 and 58px; hung, the top
+  measures 40 in all three and only the bottom edge moves. Its `AutoHeight`
+  takes Settings' `watch`, because every mode switch and month step replaces
+  the body.
+- **Every Settings tab is drawn on the same cards (v18.2.0, S8).** Shortcuts
+  was the one tab on the bare sheet, with blue uppercase headings of its own;
+  its sections are `Section` cards now, titled in the Collapsible header's type
+  (14px, semibold, primary ink). And **a cheat sheet lists a key only where
+  the key works**, through the gate the key handler itself checks: the
+  simulator's X only in the sandbox, the inbox's keys only with the WhatsApp
+  module on.
+- **On a phone, the create actions live in a bottom bar (v18.2.0).** Walk-in
+  and "+ New" wrapped onto a second header row of their own, and the header and
+  date row took ~455 of an 812px screen before the grid began. Below 600px they
+  are `MOBILE_BAR` (App.jsx): fixed to the bottom, two equal thumb-width
+  buttons, the OPAQUE `--bg-sheet-mobile` (0.98 — `--bg-sheet` at 0.72 let a
+  timeline row show through) with a hairline and `--shadow-soft`, NO blur (the
+  ≤4 budget), z 100 — over the page and the toasts, under every modal. A spacer
+  of the same height ends `<main>` so the last row is never under it.
+- **The Summary sits beside the date controls only on one line (v18.2.0).** The
+  controls are centred on the 58px collapsed card beside them (`DATE_CTRL_DROP`,
+  9px). That centring applies only while the Summary is MEASURED on their line
+  (`useSharesLine`). Its basis is its own one-line width, so where it cannot
+  fit beside them on one line it takes its own full-width line underneath: 12px
+  under the header, 8px under the controls. The old 360px basis gave two wrong
+  states: from 600 to ~680px the Summary wrapped while the controls still
+  dropped, 1px into its card (Patryk's screenshot); from ~680 to ~1000px it
+  stayed beside them as a half-empty two-line card with the controls 22px off
+  centre.
+  **The card's headline takes its content as its basis** (phase 24). It was
+  200px over ~138px of text, so the slot (which measures content) and the
+  card's own row (which broke on the basis) disagreed from about 784 to 846px,
+  and the two-line card came back there.
+- **The view switcher keeps its own place in the header (v18.2.0 phase 64).**
+  Phase 23 measured the Summary card's left edge and glided Timeline / List /
+  Plan sideways to stand over it whenever the Summary's width changed (the
+  Today and waitlist pills, the date's own width). Patryk tried it in use and
+  took it out: a control that slides sideways because something else changed
+  width does not look good in practice. `useAlignLeft` is deleted; the lesson
+  its measurement taught (a ResizeObserver reading in a hidden pane) stays in
+  the measurement-traps skill.
+- **What a decision is about never truncates (v18.2.0, W1).** The WhatsApp
+  draft bar on a phone read "2 pax · 202…": its details were `flex: 1;
+  min-width: 0` beside the confidence chip, Accept and Dismiss, so the
+  controls kept their width and the date and time went into the ellipsis —
+  staff were asked to accept what they could not see. The details now take
+  their own content's width and do not shrink, and the controls, as ONE group,
+  wrap to a second line instead. Rule: in a row of "the thing + what you can
+  do to it", the thing keeps its width and the controls move.
+- **A control kept to a row's right edge carries its own `marginLeft: auto`
+  (v18.2.0 phase 53, V-4)** — never a `flex: 1` spacer in front of it. The
+  spacer's basis is zero, so in a row that wraps it stays on the first line
+  whenever that line has room for it, and the control starts the next line at
+  the LEFT: the voucher suggestion put Attach at the left on a 375px phone and
+  at the right on a 320px one. An auto margin travels with the control.
+  `tests/voucher-picker.test.js` refuses the spacer in every component.
+- **A control's meaning is on the control, not in its tooltip (v18.2.0, W3).**
+  A `title` is an accessible name of last resort and a hover tooltip, and the
+  restaurant's tablets never hover. The inbox's Re-check, Edit templates and
+  Simulator were icon-only; each now carries its word beside the mark (the
+  shape Archive already had), and the title stays as the longer description.
+  A bare ✕ for Close is the one exception: everybody reads it.
+- **A day is written ONE way: "Thu 24.09" (v18.2.0, C1).** Weekday, day and
+  month, and the year only when it is not this year: "Fri 15.01.2027". It is
+  `formatDay` in `lib/day.js`, and nothing else writes a date on screen. The
+  critique found seven shapes and no rule: ISO "2026-09-24" in Customers,
+  Vouchers, Find a booking, the draft card, the block modal, a waitlist's
+  title and a reminder; "24.09" in the Activity log; "Sep 21 – 27, 2026" in the
+  Week view; "24 Sept 2026" in a booking's history; and two home-made
+  "Fri 18/09" and "24/09" in the voucher-carry wording. The date field is what
+  staff read every shift, so its shape won. The weekday leads because staff
+  think in service days. Two exceptions, each an option of `formatDay` and
+  nothing else: **no weekday** where one would be noise or is already there
+  (a voucher's dates, which say when it is valid; the Week view's range, whose
+  ends are always Monday and Sunday; the Day sheet, which prints the long
+  weekday beside it), and **the year always** on the printed Day sheet, which
+  gets filed. **Stored text keeps ISO**: a history entry or an Activity log
+  line is a record, so it is never re-written; `formatDaysIn` writes its dates
+  the house way on the way to the screen, the Activity log's search matches
+  what it shows, and the CSV export stays ISO because a spreadsheet sorts it.
+  So does a file's NAME, so a folder sorts by day: `mgt-backup-…`, `mgt-activity-…`
+  and, since phase 65, the printed Day sheet's `mgt-day-sheet-YYYY-MM-DD`.
+  Two things stay as they are: the native date input (the browser draws it)
+  and the day announcement, "Thursday 24 September", which a screen reader
+  says aloud. **A column of dates is as wide as its widest date** (`showsYear`
+  decides the year): 68px, or 104 when a date prints its year, in Find a
+  booking and Customers, and 54 or 84 in the Activity log. So a year never
+  pushes one row's times out of line. **The weekday and the day are joined by a
+  NO-BREAK space** (U+00A0, phase 54, C-5), as money's amount and symbol are
+  (below), and so are a size's number and word (`guestsLabel`, "4 guests"): a
+  wrapping line never ends on "Thu" or on "4". **Since phase 77 every count on
+  screen is joined the same way**, through `countLabel(n, one, many)`
+  (booking-logic.js, which `guestsLabel` now calls): "2 bookings", "20 min late",
+  "3 visits", "12 months". A count typed as `n + " word"` fails
+  `tests/count-label.test.js`, except the listed records: a booking's stored
+  history and a stored activity entry keep the plain space they were written
+  with. Nothing stores it — records keep
+  ISO — but anything that SEARCHES the text as shown must fold it to a plain
+  space, or a typed "Thu 24.09" finds nothing (the Activity log's search does).
+- **Money is written ONE way: "20 €" (v18.2.0, C3).** The amount, a NO-BREAK
+  space (U+00A0, phase 45 — on a phone the redeem prompt broke "20" and "€ left
+  on it." onto two lines), then
+  the restaurant's currency symbol (`settings/general.currency`), through
+  `money()` in `lib/vouchers.js`, which also rounds to the cent. The List
+  card's deposit flag, its timeline block's title and the printed Day sheet
+  read "€20" while Vouchers beside them read "80 € left", and seven more sites
+  typed the right shape by hand without the rounding: a 20 € voucher with 12.30
+  used left `7.699999999999999`, and the redeem prompt printed it. A field's
+  label keeps the bare unit, "Deposit (€)".
+- **A phone is written ONE way: "+34 612345678" (v18.2.0 phase 50, C-4).** The
+  country's calling code, one space, the digits, through `formatPhone` in
+  `lib/customers.js`, which finds the code in the country picker's own table
+  (`dialOf`). Round 3 found two shapes, one of them wrong: the List card and the
+  printed Day sheet printed the stored text as typed ("+34 612 345 678",
+  "+44 33 6 12 34 56 78" and "+34655443322" on one screen), and everything else
+  split after two digits whatever the code, so "+1 212 555 0123" read
+  "+12 125550123", a country that is not the guest's. The digits are not
+  grouped: groupings differ by country and the app has no table of them, and a
+  made-up grouping is the same defect as a made-up split. A code the table does
+  not know is shown whole. The stored string keeps what was typed; the phone
+  field is how a number is typed, this is how one is read.
+- **A table the layout does not have is DASHED, never a real pill (v18.2.0
+  phase 69).** `TBadge`'s `missing` state: no zone fill, a 1px dashed border and
+  the id in `--text-secondary`, named "Table 9, not in the layout". Dashes are
+  this app's word for "not really there" (the Unplaced mark, a resetting
+  table), and before this the List card gave such an id the outdoor teal of
+  any table it did not know, while the Unplaced row and the strip called it
+  missing. The card asks the SAME rule they read (App's `missingTables`, from
+  `unplacedItems`).
+- **A List card is a table row: every badge and button keeps its column
+  (v18.2.0).** Each width that varied from card to card takes a fixed one, the
+  way Settings → Vouchers' Copy column does (`CODE_COL`): the status badge's
+  cell 98 (the widest badge), the next-step button 116 (the widest label), the
+  flags a 104 basis (the widest chip). So the size ring, the status, the first
+  flag, Assign, the next step and ⋯ land at one x on every card. Two rules came
+  with it. An OPTIONAL control goes at the far end of a right-anchored group
+  (No show left of Assign), so it moves nothing when it appears. A thicker
+  border is paid for out of the padding, never out of the content's x.
+  Measured before at 668px: the badge at x 175 · 185 · 194, Assign at 359 ·
+  384. After: one value each, at 375, 668 and 1024px.
+  **The name column is the one exception, sized to the DAY (phase 18).** It
+  was fixed at 180px too, and under three short names that read as a gap
+  "too big" before the status (Patryk's screenshot). It is now the widest of
+  the day's names, capped at 180 (a longer name wraps inside it, never
+  clipped), so the columns still line up within a day and move between days.
+  Patryk chose that over a narrower fixed column and over no column. The order
+  is **name → covers (the size ring) → status → flags**: the party size is read
+  with the name. The flags sit INSIDE the covers + status box, not beside it:
+  as a third item on the row, a card's flags could wrap alone to the next
+  line on a phone and leave the name to take that line's slack, which moved
+  that card's covers 14px (x 222 against 208, measured).
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
 - ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
@@ -372,6 +653,19 @@ explaining why is usually the one to read.
   awaiting-confirmation is) and `NoShowIcon`; only **seated** and **completed**
   needed new shapes. Sizing: `IC.control`, not `IC.inline` — these are marks ON
   a control, and `Assign` sat in the same List row at `IC.control` already.
+- **A free floor-plan table can say how long it stays free (v18.2.0 phase 21,
+  Settings → App → Table availability, per person, on by default).** "until
+  19:30" sits in the status mark's place — the centre column under the id,
+  which a free table leaves empty and rotation cannot move — at the
+  freeing-soon pill's 10-unit size, in `--text-secondary` on the free fill
+  (`--bg-card`). Nothing is drawn when the table is free to closing. When the
+  window is shorter than a default-size walk-in's visit plus the turnaround —
+  the walk-in form's "busy" — the label takes `--warn-text` and the rim goes
+  DASHED in the same ink (`6 4`). Resetting was already a dashed rim, muted and
+  `4 3`, so the two dashed states differ by colour AND by the label, never by
+  colour alone. Both pairs are registered in `tests/contrast.test.js`. The
+  label mounts with the scrub like the mark, with no transition, for the
+  mark's reason.
 - **A control's LABEL is not selectable text (v17.10.1).** One rule in
   `src/index.css` — `button, [role="button"] { user-select: none;
   -webkit-touch-callout: none }` — because a long-press is TWO gestures at once:
@@ -416,6 +710,21 @@ explaining why is usually the one to read.
   the glyph does**, and **check for a reuse before drawing** — three of the
   block's markers needed only two new icons, because one of them renders the
   same data the notification strip already had a mark for.
+- **The seating preference is a flag, and the block drops it LAST with the
+  deposit (v18.2.0 phase 22).** A booking's indoor/outdoor preference had no
+  mark anywhere. Patryk drew it in words — a house with an arrow drawn inside
+  for Indoor, a house with an arrow outside for Outdoor — and `Icons.jsx`
+  records how that survived 14px (an arrow from the roof down the full height of
+  the widest house; the short arrow and a bare chevron both closed up). The
+  block shows the mark alone and the List card mark plus word, the card's rule
+  for all its flags. The rail's drop order changed with it, his call: the
+  overstaying mark survives longest, then the deposit and the preference, then
+  repeat no-show, locked and the preferred-tables star. It used to drop every
+  "informational" flag before any exception state. On a 1280px tablet a
+  90-minute block has no room for ANY flag at 1× (126px against 114 of fixed
+  parts), so what this buys is which flag appears FIRST as a block widens.
+  Measured in a 1010px window: at 1.5× a block carrying both showed the
+  deposit, at 2.5× both.
 
 - **Chrome sits with what it acts on, not with other chrome (v17.9.0).**
   `ViewTools.jsx` is **gone**. v17.0.0 round 8 created it to give all three views
@@ -931,9 +1240,9 @@ rule puts the booking form's `role="alert"` wrapper permanently in the tree with
 only its child conditional.
 
 **`role="button"` makes its children PRESENTATIONAL — never put it on a container
-of controls.** The List card holds Assign, four status changers and Delete;
-labelling it a button would have hidden all six, trading one unreachable card for
-six unreachable controls. It is a `role="listitem"` in a `role="list"`, focusable
+of controls.** The List card holds Assign, four status changers and Delete (since v18.2.0:
+No show when due, Assign, the next status and ⋯); labelling it a button would have
+hidden all six, trading one unreachable card for six unreachable controls. It is a `role="listitem"` in a `role="list"`, focusable
 and operable. A timeline block is a **leaf**, so `role="button"` is right there
 and its flags' meaning goes into the name. `role="grid"`/`row` is the pattern
 built for rows-with-controls and was the first choice for List — it fails because

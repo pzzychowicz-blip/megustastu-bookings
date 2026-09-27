@@ -445,6 +445,25 @@ export function setActiveDayHours(dateStr){
   OPEN=h.open;CLOSE=h.close;GRID_CLOSE=h.gridClose;
   QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
 }
+// v18.2.0: stretch the ACTIVE view-day's grid to reach its latest booking.
+// The grid ran OPEN…GRID_CLOSE (close + 1h) whatever was booked, so a 21:45
+// party of six booked for two hours ran off the right edge at 23:00 and the
+// last 45 minutes of it were drawn nowhere — found by the design critique on a
+// DEV day with bookings to 23:45. Display only, and only ever LONGER: called
+// during render right AFTER `setActiveDayHours` (useOperatingHours), so every
+// reader of the live bindings — the timeline, pct(), the Plan's TimeAxis, the
+// now-line — widens together, while `hoursFor(date)`, which the placement
+// logic reads, is untouched. Rounded UP to the hour, because the grid is drawn
+// in whole hours. Capped at 26 (02:00), GRID_CLOSE's documented ceiling since
+// v14.5.0, so one absurd duration cannot stretch a service across a night.
+var GRID_CLOSE_MAX=26;
+export function extendActiveGrid(endMins){
+  if(!Number.isFinite(endMins)) return;
+  var want=Math.min(GRID_CLOSE_MAX,Math.ceil(endMins/60));
+  if(want<=GRID_CLOSE) return;
+  GRID_CLOSE=want;
+  QUARTER_HOURS=Array.from({length:(GRID_CLOSE-OPEN)*4},function(_,i){return OPEN*60+i*15;});
+}
 // Stable min-open … max-close across the OPEN weekdays — for global settings
 // (shift split, optimizer cutoff) that must not follow the volatile active-day
 // bindings. Falls back to the default window if every day is closed.
@@ -795,7 +814,7 @@ export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here
 // so component files (atoms.jsx and future B2–B5 extractions) can import it.
-export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",cancel:"var(--btn-cancel)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
+export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn-del)",clear:"var(--btn-clear)",reset:"var(--btn-reset)",today:"var(--btn-today)",nav:"var(--btn-nav)",dismiss:"var(--btn-dismiss)",orange:"var(--btn-orange)"};
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
 // Phase B2: shared from here (consumed by TableGrid + App.jsx's Preferred picker).

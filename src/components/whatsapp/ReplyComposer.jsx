@@ -70,6 +70,10 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
 // re-wired: making scrollLang conditional again would change the layout, which
 // a lint pass must not do. If the pinned-right language switch is wanted back
 // at laptop widths, that's a deliberate UI change — see scrollLang's comment.
+// v18.2.0 (W5): a touch screen, by the stylesheet's own test. Read once — a
+// device does not stop being a touch screen while the inbox is open.
+const TOUCH = typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
 export function ReplyComposer({ onSend, disabled, templates, convLang }) {
   const [txt, setTxt] = useState("");
   const [tplOpen, setTplOpen] = useState(false);
@@ -126,7 +130,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
         <button
           onClick={() => setTplOpen((v) => !v)}
           aria-pressed={tplOpen}
-          title="Templates"
+          // v18.2.0 (W2): "Insert template" — it shows the chips that put one
+          // into this reply. The header's button, which EDITS them, had the
+          // same name and icon.
+          aria-label="Insert template"
+          title="Insert template (E)"
           className="mgt-hover-scale mgt-press"
           style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: tplOpen ? "var(--accent)" : "var(--wa-row-bg)", border: "1px solid " + (tplOpen ? "var(--accent)" : "var(--wa-bubble-in-border)"), borderRadius: R.pill, padding: "10px", cursor: "pointer", color: tplOpen ? "var(--text-on-accent)" : "var(--text-primary)", minHeight: 44, minWidth: 44, boxShadow: "var(--shadow-btn)", transition: "background-color " + M.tap + ", color " + M.tap + ", transform " + M.tap }}
         ><TemplatesIcon size={IC.chrome} /></button>
@@ -138,7 +146,11 @@ export function ReplyComposer({ onSend, disabled, templates, convLang }) {
           value={txt}
           onChange={(e) => setTxt(e.target.value)}
           onKeyDown={onKey}
-          placeholder={disabled ? "Conversation closed" : "Type a reply... (Enter to send, Shift+Enter for new line)"}
+          // v18.2.0 (W5): the Enter / Shift+Enter hint only where there is a
+          // keyboard to press them on — on a touch screen it spent two lines of
+          // a phone's composer on keys the on-screen keyboard does not have.
+          // index.css's own touch query (`hover: none`, `pointer: coarse`).
+          placeholder={disabled ? "Conversation closed" : (TOUCH ? "Type a reply…" : "Type a reply... (Enter to send, Shift+Enter for new line)")}
           disabled={disabled}
           rows={2}
           // NOT a pill, deliberately — R.inset instead (v17.7.0 sweep).

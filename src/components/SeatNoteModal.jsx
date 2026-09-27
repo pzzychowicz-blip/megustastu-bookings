@@ -22,11 +22,12 @@
 // it (the waitlist, search and roles panels). Escape and the backdrop do the same.
 
 import { S, R, T, FW, SP } from "../lib/constants";
+import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, TBadge, mkBtn } from "./atoms";
 
 export function SeatNoteModal({ note, onClose }) {
   if (!note) return null;
-  const guests = note.size + (note.size === 1 ? " guest" : " guests");
+  const guests = guestsLabel(note.size);
   const footer = (
     <div style={{ display: "flex", justifyContent: "flex-end" }}>
       <button

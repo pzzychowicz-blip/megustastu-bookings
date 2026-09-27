@@ -22,8 +22,10 @@
 // only positions what exists (a new table gets an auto slot via sanitize).
 
 import { useState, useRef, useEffect } from "react";
-import { S, R, T, FW } from "../lib/constants";
-import { mkBtn } from "./atoms";
+import { S, R, T, FW, IC } from "../lib/constants";
+import { mkBtn, mkDangerBtn } from "./atoms";
+import { TrashIcon } from "./Icons";
+import { countLabel } from "../lib/booking-logic";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
 // so PlanView (main chunk) no longer pulls this whole editor in. Re-exported
 // here for back-compat with any older import path.
@@ -34,7 +36,12 @@ const SNAP = 10;
 function snap(n){ return Math.round(n / SNAP) * SNAP; }
 
 // Tiny labelled stepper (local — Settings' HourStepper isn't exported).
-function Step({ label, value, fmt, onDec, onInc, disableDec, disableInc }){
+// v18.2.0 phase 56 (round 3's A-1): its buttons are named for what they step
+// ("Decrease Room width"), as HourStepper's are — they announced "−" and "+".
+// `who` prefixes a group the visible label leaves implicit: the chair steppers
+// read "Top", "Right"… under a "Chairs per side" heading ("Chairs: Top").
+function Step({ label, who, value, fmt, onDec, onInc, disableDec, disableInc }){
+  const name = (who ? who + ": " : "") + label;
   const btn = {
     background: "var(--bg-stepper)", border: "1px solid var(--border-soft)", borderRadius: R.pill,
     width: 28, height: 28, fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)",
@@ -45,9 +52,11 @@ function Step({ label, value, fmt, onDec, onInc, disableDec, disableInc }){
       <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
+          aria-label={"Decrease " + name}
           style={{ ...btn, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
         <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmt ? fmt(value) : value}</span>
         <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
+          aria-label={"Increase " + name}
           style={{ ...btn, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
       </div>
     </div>
@@ -232,7 +241,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
     const totalChairs = (chairs.top || 0) + (chairs.right || 0) + (chairs.bottom || 0) + (chairs.left || 0);
     const cap = capOf[id] || 0;
     const chairStep = function(side, lbl){
-      return <Step key={side} label={lbl} value={chairs[side] || 0}
+      return <Step key={side} label={lbl} who={lbl === "Chairs" ? undefined : "Chairs"} value={chairs[side] || 0}
         disableDec={(chairs[side] || 0) <= 0} disableInc={(chairs[side] || 0) >= 12}
         onDec={function(){ patchTable(id, { chairs: { ...chairs, [side]: (chairs[side] || 0) - 1 } }); }}
         onInc={function(){ patchTable(id, { chairs: { ...chairs, [side]: (chairs[side] || 0) + 1 } }); }} />;
@@ -270,7 +279,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         </div>
         {totalChairs !== cap ? (
           <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 8 }}>
-            {totalChairs + " chair" + (totalChairs !== 1 ? "s" : "") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
+            {countLabel(totalChairs, "chair", "chairs") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
           </div>
         ) : null}
       </div>
@@ -298,7 +307,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
             </div>
           </div>
           <button onClick={function(){ commitFp({ ...fp, doors: fp.doors.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
-            className="mgt-hover-scale" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete door</button>
+            className="mgt-hover-scale" style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}><TrashIcon size={IC.control} />Delete door</button>
         </div>
       </div>
     );
@@ -309,7 +318,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text }}>{"Wall · " + len + " cm"}</div>
         <button onClick={function(){ commitFp({ ...fp, walls: fp.walls.filter(function(_, j){ return j !== i; }) }); setSel(null); }}
-          className="mgt-hover-scale" style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: "var(--btn-del)" })}>Delete wall</button>
+          className="mgt-hover-scale" style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px" })}><TrashIcon size={IC.control} />Delete wall</button>
         <span style={{ fontSize: T.body, color: S.muted }}>Drag the wall to move it, or drag its endpoint handles to reshape it.</span>
       </div>
     );
@@ -330,9 +339,11 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         {/* v17.0.0 correction round 6: zoom controls */}
         <div style={{ display: "flex", gap: 4, marginLeft: 6, alignItems: "center" }}>
           <button onClick={function(){ zoomBy(1 / 1.25); }} disabled={zoom.k <= 1} className={zoom.k <= 1 ? undefined : "mgt-hover-scale"}
+            aria-label="Zoom out"
             style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k <= 1 ? 0.4 : 1 })}>−</button>
           <span style={{ fontSize: T.small, color: S.muted, minWidth: 30, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom.k * 100) + "%"}</span>
           <button onClick={function(){ zoomBy(1.25); }} disabled={zoom.k >= 4} className={zoom.k >= 4 ? undefined : "mgt-hover-scale"}
+            aria-label="Zoom in"
             style={mkBtn({ fontSize: T.lead, fontWeight: FW.bold, minHeight: 32, width: 34, padding: 0, background: "var(--app-btn-grey)", opacity: zoom.k >= 4 ? 0.4 : 1 })}>+</button>
           <button onClick={resetZoom} disabled={zoom.k === 1 && zoom.x === 0 && zoom.y === 0} className={zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? undefined : "mgt-hover-scale"}
             style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: "var(--app-btn-grey)", opacity: zoom.k === 1 && zoom.x === 0 && zoom.y === 0 ? 0.4 : 1 })}>Reset</button>

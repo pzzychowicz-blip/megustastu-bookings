@@ -25810,3 +25810,2457 @@ Gate after the review fix: `138.20 kB` gz (+0.44 on 137.74) · **1520 tests** ·
 errors (89 warnings) · style OK. Re-checked live on DEV: the served code has no
 backstop, and the captured file leads with `_backup` (18.1.1), holds 17 vouchers, and
 has no `presence` or `reminderFires`. No file was saved.
+
+## v18.2.0 — the design-critique fixes
+
+**Date:** 2026-09-23 · **Branch:** `feat/v18.2.0-design-critique` ·
+**Behavioural change:** yes, user-visible across the timeline, plan, list, booking
+form and header.
+
+A `/design:design-critique` pass over the running DEV app (tablet 1280×800, phone
+375×812, both themes) produced a list of findings, and Patryk chose what to fix in an
+interview: 13 changes, one version. Each lands as its own commit and extends this
+entry. What was deliberately NOT taken: raising the 34–40px controls to 44px, and the
+amber blocks' white-ink contrast (already a recorded exemption in `DESIGN.md`).
+
+### 1. The empty-day prompt waits for the first snapshot
+
+`isEmptyDay` (App.jsx) answered TRUE on every cold start: before the first bookings
+snapshot `bookings` is `[]` whatever the database holds, so all three views drew
+"Nothing booked for this day yet." with New booking / Walk-in buttons — beside the
+"Loading bookings…" pill that contradicted it, for the whole first read. Seen in the
+critique's first screenshot on DEV, on a day that had two bookings. A host who
+believed it could seat a walk-in on a taken table.
+
+The gate is `bookingsReady` (usePersistence's STATE), not `firstLoadCount` — that one
+is a ref and would not repaint when it flips. A load that never finishes leaves the
+prompt hidden, and the strip's "Couldn't load bookings" is the answer for that case.
+One derivation, so all three views change together.
+
+**Verified live on DEV** (18.2.0 served): 1.2s into a reload the page showed the
+loading pill and no prompt; after load, an empty day (28 Sep) still showed it.
+`tests/empty-day.test.js` (3 tests) reads the memo stripped; removing the guard fails
+it.
+
+### 2. The steppers and zoom buttons work from the keyboard, and have names
+
+The booking form's four − / + buttons (guests, duration) stepped on `pointerdown`
+with `preventDefault()` and had no `onClick`. Enter and Space fire `click` only, so
+the party size and duration could not be changed from the keyboard at all (WCAG
+2.1.1). Measured in the critique: `.click()` left guests at 2, a dispatched
+pointerdown moved it to 3. All four, and the timeline's zoom − / +, announced as the
+glyph.
+
+- **`stepPress(apply)`** (BookingFormModal, module scope) returns both handlers. The
+  pointerdown half is unchanged — no focus on a tap, one step per touch. `onClick`
+  acts only on `detail === 0`, the keyboard's click; a pointer click has already
+  stepped, so acting on it too would step twice. Verified live: keyboard click 2 → 3,
+  pointerdown + a `detail: 1` click 3 → 4 (once), duration 90 → 105.
+- **Names** follow LayoutSettings' `Stepper` convention: "Decrease / Increase number of
+  guests", "… duration", and "Zoom out" / "Zoom in". Label in Name does not bind a
+  glyph (v17.15.5's reasoning). The zoom RESET button shows text, so its name leads
+  with it: "1x (reset zoom)", or "2x → 1x (reset zoom)" while zoomed.
+- **The Enter chain, Patryk's call in this session.** Making the steppers keyboard-
+  operable exposed that `useKeyboardShortcuts` mapped Enter to the booking form's Save
+  whatever held focus, `preventDefault()`ing the key — so Enter on a focused Back,
+  Assign, Preferred or − / + saved the booking. `activatesItself(el)` (`lib/keyboard.js`,
+  beside `isTyping`) is true for a `<button>`, an `<a href>` and the roles this app
+  wires to Enter itself; the Enter branch returns before the modal loop when it holds.
+  A freshly opened modal is unchanged: `Overlay` focuses the dialog container, so
+  Enter still does the primary action until you Tab onto a control, and Enter in a
+  text field still saves. Verified after a full reload (the first check ran against a
+  window listener hot reload had left in place, and read as a failure): Enter on Back
+  and on + was not prevented and saved nothing; Enter on the dialog raised "Customer
+  name is required."
+
+Tests: 3 in `tests/a11y.test.js` (stepPress on all four, names, zoom names) and
+`tests/keyboard.test.js` (4: the helper, and that the guard sits before the loop).
+
+### 3. The Unplaced row, and "Not on the grid"
+
+The critique's critical finding. On 3 Oct in DEV, 8 of 12 bookings held table ids the
+layout does not have (`1`, `5`, `8`–`13` against `1A/1B`, `2`–`4`, `5A/5B`, `6`, `7`,
+`i1`–`i4`). The header said 12 bookings and 37 covers, the grid drew 4, and nothing
+said why. The timeline drew a booking once per table on that table's ROW, and a
+missing table has no row. Emil Kovacs ("tables 1 and 2") appeared on 2 only. The DEV
+data was a stale seed, but a LOCKED booking (every walk-in, drag and manual assign)
+keeps its stored tables through `applyOpt`, so renaming or removing a table in
+Settings → Layout does the same to real bookings.
+
+Patryk's calls in this session: one row at the TOP, called Unplaced, merging the old
+bottom "unassigned" row (no tables, `_conflict`) with the new case; a half-placed
+booking shows on its real rows AND in the row; blocks there are tappable and
+draggable; a strip section listing everything in the row, naming the missing tables;
+"N of M on the grid" in the Summary when the two differ.
+
+- **`lib/unplaced.js`** (new, pure): `unplacedReason` / `unplacedOf` (reasons
+  `none` → `missing` → `conflict`; cancelled and completed never unplaced),
+  `primaryGridTable`, `unplacedPhrase`, `packLanes`.
+- **TimelineView.** The row moved to the top. Two problems surfaced by running it,
+  each fixed and measured:
+  - **Lanes.** One lane painted nine blocks over each other, so the invisibility moved
+    up a level. `packLanes` (greedy by start, then id) gives 7 lanes on 3 Oct; every
+    block is readable.
+  - **The drop maths.** `tableForClientY` adds `unplacedH`, or every drop would land
+    rows low. The first cut was 1px out: the dashed border added a pixel the label
+    column did not. The container height is now pinned border-box. Measured after:
+    the first table row, the 1A label and the computed offset all at 336px.
+  - The FLIP id keys on `primaryGridTable` (the first table with a row), not
+    `tables[0]`. Before, a half-placed booking carried no FLIP id at all.
+- **`UnplacedBanner`** (new strip section, "Not on the grid") has a row per booking with
+  the reason ("tables 11, 12 aren't in the layout") and **Assign** → the manual picker.
+  It is scoped to the viewed date, sits after the clash section, and has no ✕ (it
+  clears itself). Its mark, **`UnplacedIcon`**, is a dashed square, rasterised at 14px
+  beside Clash / Closed / Overlap and distinct from all three.
+- **Summary** takes `unplacedCount` from the same App memo: "3 of 12 on the grid" in
+  `--danger-text`, 7.88:1 light and about 8:1 dark (a first dark reading of 1.65 was
+  taken mid theme-transition; re-read settled).
+- **ManualModal** seeds its selection with tables the layout HAS. Reached from the new
+  Assign button, it had pre-selected the missing "1" as "Selected: 1 · Capacity: 0".
+
+**Verified live on DEV (3 Oct):** all 12 bookings are on screen (9 in the Unplaced
+row, Emil there and on 2); the strip lists the 9 with their reasons; the summary
+reads "3 of 12 on the grid"; Assign opens the picker with only real tables
+selected and closes clean. **Not verifiable here: a real drag out of the row.**
+TimelineBlock coalesces moves per animation frame and automation finishes a drag
+inside one frame (the `mgt-measurement-traps` row), so the geometry was measured
+instead. The finger test on the tablet is Patryk's before merging.
+
+Tests: `tests/unplaced.test.js` (19) — the reasons, the 3 Oct day, lanes never
+overlapping and deterministic, and source scans that the three surfaces read the one
+rule, the row is above the table rows, and the drop offset is in.
+
+### 4. The grid reaches the last booking, and a day opens where its bookings are
+
+- **`extendActiveGrid(endMins)`** (`constants.js`) stretches the active day's
+  `GRID_CLOSE` / `QUARTER_HOURS` to the viewed day's latest booking end. It rounds up
+  to the hour, never shortens, and caps at 26. App calls it during render, right after
+  `useOperatingHours(viewDate)` resets the bindings; `viewLatestEnd` is a memo over
+  `bookings` / `viewDate` of time + duration.
+  - Display only: every live-binding reader widens together (timeline, `pct()`,
+    TimeAxis, now-line, BlockModal's From/To bound and default "to"). `hoursFor()`,
+    which placement reads, is unchanged.
+  - Measured on 3 Oct (Emil Kovacs 21:45 → 23:45): the axis ran to 24:00, and the Plan
+    scrubber's labels went to 23:00 instead of 22:00.
+  - `PlanView`'s own scrub bound (`closeM`) read `hoursFor().gridClose`, which would
+    have clamped the selection an hour short of the tape. It now takes the larger of
+    that and the live `GRID_CLOSE`.
+- **Once-per-date scroll** in TimelineView. Today opens on the now-line; any other day
+  opens on its first booking, `followLeadMins` early. Both go through `centerNow`.
+  - App's `timelineScrollDateRef` guards it, so a remount restores instead of jumping.
+  - It also writes `scrollPosRef`, as Follow does. The first cut did not, and in DEV
+    the restore effect put the previous day's 200px back every time. Found by tracing
+    both effects: StrictMode's re-run reads the ref before the scroll event lands.
+    Production has the same race, on the 15s tick and on width changes.
+- **Measured at 375px:** today (14:51) opens with 14:00 in view; 3 Oct opens with
+  20:00 in view (19:30 lead). A view switch after a scroll to 100 comes back at 100.
+- **A trap hit while verifying**, now in the `mgt-measurement-traps` skill: a scripted
+  `scrollLeft` write fires no `scroll` event in the Browser pane. The first view-switch
+  check therefore "restored" 468 over a 100 the app never heard about, and read as a
+  regression. Dispatching the event showed the app was right.
+
+Not done, and worth a word: the Plan view still opens a non-today day at opening time
+rather than at its first booking. The approved change was the timeline's scroll, and
+the Plan's default is a separate decision.
+
+Lint went 89 → 91 warnings, 0 errors. Both new ones are React Compiler advisories on the effect writing `scrollDateRef.current`, a ref it receives as a prop. That is the same shape as the existing `scrollPosRef` writes, and kept as warnings for the house reason.
+
+Tests: `tests/grid-extend.test.js` (10) — the extension's bounds, that it never
+touches `hoursFor`, that the next render resets it, the call order in App, the Plan
+bound, and the scroll guard writing `scrollPosRef`.
+
+### 5. The List card: time first, the next step, and ⋯
+
+The critique counted up to six equal-weight buttons on every card (Assign, Seated,
+Completed, Cancelled, Delete, and No show when due), with the time at the far right
+of a wrapping header. Four of twelve bookings fitted a 1280×800 screen. Patryk chose
+the time as a leading column, the next step visible, and the rest behind ⋯, which
+opens the existing quick-status card rather than a new menu.
+
+- **`nextStatusOf(b, today, nowMins)`** (booking-logic, pure) is the one status the
+  card offers. It uses the same gates as every other status surface, so it never
+  offers Seated past close.
+- **Card layout.** The time is a fixed left column (start over end). Assign, No show
+  (when due; too urgent to hide), the next step and ⋯ share the line with the tables
+  and phone. Measured on 3 Oct at 1280px: cards went from about 133px to **98px**.
+- **⋯ → `QuickStatusPopup`**, the card a hold opens on the timeline and plan, so one
+  status picker serves the whole app. It gained `onDelete` (Delete last, through
+  App's confirm) and `startArmed`. Without `startArmed`, a click-opened card waits for
+  a release that has already happened, and a keyboard user could press nothing for
+  the 10s backstop. With it, focus moves in, Escape closes (captured and stopped, or
+  the global Escape would also drop the List selection), and focus returns to ⋯.
+- **Verified live:** ⋯ opened the card (seated, completed, cancelled, Delete) without
+  also opening the edit form. Focus landed on its first button; Escape closed it and
+  returned focus to ⋯. Delete raised the existing "Delete booking?" confirm, and Back
+  cancelled it.
+- **A decision pin narrowed:** `tests/a11y.test.js` pinned v17.15.6's "the card's
+  buttons are not renamed". ⋯ is icon-only, so it must carry a name. The pin now
+  forbids a label built from an expression (where a guest name would come in) and
+  allows one static label, on ⋯ only. The reasoning is rewritten in place, as that
+  test asks.
+
+Tests: `tests/list-card.test.js` (8).
+
+### 6. The view switcher becomes a segmented control
+
+The critique found the active view (solid accent) and "+ New" (the same blue) side by
+side in the header, so where-you-are and what-you-can-do read alike. Patryk chose the
+Timeline/List/Plan buttons as one segmented control, with the chosen view lifted and
+"+ New" left as the only solid blue.
+
+- **`SEG_TRACK` / `segStyle(active)`** (atoms.jsx). Settings' TabBar has drawn this
+  look since v16.2.0; it is now shared as style, and TabBar reads `segStyle` with the
+  same values, moved rather than copied. The two cannot share a component: the
+  switcher carries the split-view hold and right-click. The track's hairline is an
+  inset shadow, so the control measures exactly 40px (`H.control`).
+- **ViewSwitcher** is a `role="group" aria-label="View"` of the three buttons. Each
+  keeps `aria-pressed` and its split gestures. The focused pane's underline is now
+  accent on the lifted pill.
+- **A contrast defect found by registering the pair**, fixed with Patryk's say-so.
+  Neither segment pair was in `tests/contrast.test.js` (`--bg-*` matches none of the
+  coverage guard's prefixes). Registering them measured the chosen segment's
+  `--accent` ink at **4.02:1 light / 2.25:1 dark**, under 4.5:1. That had been
+  Settings' tab bar since v16.2.0. The ink is `--text-primary` in both places now.
+  Measured live in the header: chosen 10.8:1 light / 16.8:1 dark, the others 7.5 /
+  5.3.
+
+Tests: `tests/segmented.test.js` (5) and two new contrast registry entries.
+
+### 7. The phone's bottom bar
+
+At 375×812 the header wrapped "+ New" onto a second row of its own, and the header
+plus the date row took about 455px before the grid began. Patryk chose a bottom bar
+for the two create actions, on phones only.
+
+- **`MOBILE_BAR`** (App.jsx): fixed to the bottom, with two equal `mkSolidBtn`s
+  (Walk-in, "+ New") and a safe-area inset.
+  - It is rendered inside `<header>`, so the header's `inert` reaches it under a
+    modal. Measured: inert while the form was open, and the dialog is the element at
+    its position.
+  - z 100: over the page and the toast layer (60), under `Overlay` (200). No blur,
+    for the ≤4 budget.
+  - The background is the opaque `--bg-sheet-mobile`. The first cut used
+    `--bg-sheet` (0.72) and a timeline row showed through.
+- **`MOBILE_BAR_SPACER`** ends `<main>` at the bar's exact height (H.touch + 16 +
+  the 1px hairline, and measured: both 61px). After scrolling to the bottom, the last
+  table row ends at 601 against the bar's 751.
+- Tablet and desktop are unchanged: the header buttons render as before whenever
+  `!isMobile`.
+- Measured at 375px: the grid starts at 411 (was about 455). The rest is the WhatsApp
+  button, on in DEV, sharing the second header row with the view switcher.
+
+Tests: `tests/mobile-bar.test.js` (4).
+
+### 8. Dismiss stops looking like Delete
+
+`--btn-dismiss` was `rgba(211, 58, 58, 0.7)`, the red of Delete and Cancel. It fills
+the reshuffle suggestion's Dismiss and the ✕ on every banner row (Double-booked,
+Running late, Overlap, Waitlist), plus the split view's Leave ✕. None of those is
+destructive. With Patryk's say-so the token itself changed, so every dismiss follows:
+it is now **`var(--app-btn-slate)`**, the dialog secondary.
+
+An alias rather than slate's literal, so it follows slate in both themes.
+`tests/contrast.test.js` could not read a `var()` (its parser takes hex and rgba), so
+it gained `resolveAliases`. It runs per MERGED theme map, after the dark block
+overrides the target, and throws on a dangling name or a cycle rather than handing
+`parse()` a string it would misread. The existing `--btn-dismiss` registry entry now
+measures the slate. Live: the reshuffle Dismiss computes `rgb(100, 116, 139)` in
+light.
+
+Tests: 2 in `tests/contrast.test.js` (the alias, and the resolver refusing bad
+input).
+
+### 9. The walk-in form's steppers, the same fix
+
+The walk-in form had phase 2's defect exactly: four pointer-only − / + buttons named
+"-" / "+". Checking every pointer-down handler in both forms turned up one more
+control in each, the duration **Reset**. With Patryk's say-so:
+
+- `stepPress` moved from BookingFormModal to **`lib/keyboard.js`**, and both forms
+  import it. Its pointer half is unchanged.
+- The walk-in form's four steppers and both forms' Reset go through it. The steppers
+  carry the booking form's names.
+- Verified live in the walk-in form: a keyboard click stepped guests 2 → 3; a pointer
+  press plus its `detail: 1` click stepped once (3 → 4); the four names were present;
+  a keyboard-activated Reset took duration 105 → 90.
+
+Tests: the a11y stepper check now covers both forms, counts 5 `stepPress` uses each,
+and forbids any `onPointerDown=` left in either. `tests/keyboard.test.js` adds 2 unit
+tests for `stepPress`.
+
+### 10. A true minus
+
+The critique: every stepper's and the zoom's "−" sat visibly smaller than its "+".
+Five buttons drew it as a hyphen (the booking form's two, the walk-in form's two, the
+zoom). They are U+2212 now, which Settings and LayoutSettings already used. Measured
+in the app font at 17px 600: hyphen 7.7px, U+2212 10.7px, "+" 10.7px. A test refuses
+a button whose whole content is a hyphen, anywhere in `src/`.
+
+### 11. Separators in the header subtitle
+
+`INDOOR.length+" indoor  "+…+" - "+…`: HTML collapsed the double spaces, so it read
+"4 indoor 9 outdoor 13:00 - 22:00", one run of numbers. It is now "4 indoor ·
+9 outdoor · 13:00–22:00", read back from the live DOM. One test in
+`tests/segmented.test.js`. (That file's count in §6 is corrected there to 5: this
+entry's recount found §6 had said 7.)
+
+### 12. The hour label steps aside for the now-pill
+
+"15:17" drawn over the "15:00" hour label read as one smudged pill (the critique's
+first screenshot). Both are the same shape on the same baseline. Measured: the hour
+pill is 38.2px wide and the now-pill 34.2px, so they touch when their centres are
+within about 36px. A label whose centre is within `NOW_PILL_CLEAR` (38px) of now
+fades to 0 on `M.tap` and is `aria-hidden`. Because it is an opacity transition and
+not an unmount, it fades back in once the clock moves on (the in-and-out rule). The
+distance uses `pxPerMin`, gridW's lower bound, so any error hides a label slightly
+early, never leaves it under the pill. Live at 15:18, only 15:00 hides (centre 14px
+away); 14:00 at 58px and 16:00 at 86px stay. 2 tests in `tests/grid-extend.test.js`.
+
+### 13. Modal titles are flat labels
+
+The critique: the booking form's "New booking" title, a blue raised pill, read as a
+button. `ModalTitle` is the atom behind every modal title, and its colour matches the
+button that opened the modal. Patryk's call was to keep the pill and its colour
+everywhere but drop what made it look pressable: `--shadow-btn` and the solid
+buttons' white rim (`RIM_SOLID`). Live: the title computes `box-shadow: none`,
+`border: 0px none`, and keeps `rgba(0, 116, 243, 0.75)`. 1 test in
+`tests/segmented.test.js`.
+
+### 14. "Starting at this time" counts the others
+
+Both forms printed `starts + 1` and `guests + this party`, the same inclusive figure
+the kitchen-busy threshold uses. On an empty 13:00 slot the line said "1 booking ·
+2 guests" about a booking not yet made (the critique). **`startingPhrase(load)`**
+(booking-logic) prints the OTHER bookings starting then, or "none yet", in both
+forms. The threshold still counts the draft, because "with this one there would be
+N" is the kitchen's question. Only the sentence changed. The inclusive guest sums
+were then unused and are gone. Live, today: 13:00 read "none yet"; 18:00 read "2
+bookings · 4 guests" (the day's two, 4 covers). 2 tests in `tests/list-card.test.js`.
+
+### Closing the entry
+
+**Files:** new `src/lib/unplaced.js`, `src/components/UnplacedBanner.jsx`, and seven
+test files (`empty-day`, `keyboard`, `unplaced`, `grid-extend`, `list-card`,
+`mobile-bar`, `segmented`). Changed: `App.jsx`, `atoms.jsx`, `BookingFormModal`,
+`Icons`, `ListView`, `ManualModal`, `PlanView`, `QuickStatusPopup`, `Settings`,
+`Summary`, `TimelineView`, `ViewSwitcher`, `WalkinForm`, `useKeyboardShortcuts`,
+`index.css`, `booking-logic`, `constants`, `keyboard`, `a11y` and `contrast` tests,
+the four living docs, the three per-directory notes and the `mgt-measurement-traps`
+skill. 37 files, +1926 / −221 before this paragraph, in 15 commits.
+
+**Beyond the interview's 13 items, each put to Patryk as it surfaced:**
+- Enter on a focused button now presses that button (phase 2).
+- The two rows merge into one Unplaced row, and the ⋯ opens the quick-status card
+  (phases 3, 5).
+- Primary text on the lifted segment, which also fixes Settings' tabs (phase 6).
+- Dismiss changes at the token (phase 8).
+- The walk-in form's steppers get the same fix (phase 9).
+- Modal titles go flat in every modal (phase 13).
+
+**Gate after phase 14:** `119.90 kB` gz main bundle (118.16 after phase 1, which
+already carried the version bump) · **1600 tests** (1529 on `main`: phase 1's run measured 1532 with exactly its 3 new tests) · 0 lint errors,
+91 warnings (89 at phase 1; the two new ones are React Compiler advisories on the
+timeline's `scrollDateRef` write, §4) · style OK.
+
+**Not verified here, and needed before merge:** a real finger dragging a booking out
+of the Unplaced row onto a table on the tablet. Automation cannot hold a drag across
+frames (`mgt-measurement-traps`), so only the drop geometry was measured (§3).
+
+### Follow-up round — three requests after the entry closed
+
+Patryk, looking over the branch before the ship run, asked for three more changes
+(same version, same entry). He chose the two layout forks from previews:
+**fixed columns** on the List card over columns sized to each day, and **the
+Summary drops below** the date controls over keeping it beside them on two lines.
+
+### 15. The date controls stop dropping into the Summary
+
+Patryk's screenshot at 668px: the date controls touched the Summary card, 21px
+under the header and 1px into the card (measured: controls' bottom 165, card top
+164). Two faults in the date-nav row, both found by measuring it.
+
+- **The 9px drop assumed a shared line.** `DATE_CTRL_DROP` centres the 40px
+  controls on the 58px collapsed Summary BESIDE them, gated on `!isMobile` with the
+  comment "at >=600 the Summary … shrinks rather than wrapping". In a wrapping
+  row an item breaks onto a new line on its flex BASIS before any shrinking, so
+  with a 360px basis the Summary wrapped from 600 to ~680px (wider with the Today
+  or waitlist pill), and the controls dropped into the gap. **`useSharesLine`**
+  (new, `src/hooks/`) measures it instead: `sharesLine(a, b)` compares offsetTops
+  (transform-blind, so the drop never feeds back into its own gate), one
+  ResizeObserver on the ROW (a line break always changes its height), a layout
+  effect so the first answer is there before paint. Its `settled` flag holds the
+  transition at "none" for that first answer: a style that changes in the same
+  recalc as its `transition` takes the new transition, so enabling both at once
+  would slide the controls 9px on every load where they sit beside the Summary.
+- **The 360px basis also put a two-line Summary beside the controls** from ~680 to
+  ~1000px: its card half empty and the controls 22px off-centre (measured at
+  720). The basis is now `"auto"`, the Summary's own one-line width (~605px on
+  today with the status numbers), so it is beside the controls only when it fits
+  there on one line and on its own line otherwise (Patryk's choice). A phone needs
+  no case of its own, as the one-line width never fits beside the controls there.
+  The Summary's opened body is kept out of that width with
+  `contain: inline-size` on its Reveal: it is the wider half on a day that is not
+  today (~388 vs ~270px), so opening the Summary moved it onto the next line.
+  Measured with the property removed live (the panel went to 688px wide on its
+  own line) and with it back (it stayed beside at 331).
+
+Live, after a full reload: 668px → no drop, 12px under the header, 8px above the
+Summary. 600 and 375 are the same. 720 → the Summary on its own line and ONE line
+tall (58px). 1024 and 1300 → beside it, the controls centred exactly (midlines 0px
+apart), transition on. 720 on a non-today date → beside at 331px; opening leaves it
+there with the controls at the top, and closing re-centres them. 10 tests in the new
+`tests/date-row.test.js`.
+
+The first live check after the edit was wrong. The hot-reloaded page ran the new
+render code (the transition read `none`) but the new layout effect never answered,
+and resizing to 1300 left the drop off. A full reload fixed it. Recorded in
+`mgt-measurement-traps`.
+
+### 16. The List card lines up in columns
+
+Patryk: every status badge, flag and button on the List should stay in one column,
+the way the Copy button does in Settings → Vouchers. Measured at 668px on three
+cards: the status badge at x = 175 · 185 · 194 (after names of 76–97px), the
+size ring at 260 · 288 · 298, Assign at 359 · 384 (after a next-step button of 116
+or 92px). The seated card's contents also sat 2px right of the confirmed ones
+(time at 19 vs 17, ⋯ at 577 vs 579), because a 3px border ate into them.
+
+Each width that varied now takes a fixed one, measured in the app font like
+`CODE_COL`: `NAME_COL` 180 (fits "María José Fernández"; a longer name wraps
+inside it), `STATUS_COL` 98 (the "Completed" badge), `NEXT_COL` 116 (the
+"Completed" button), `FLAGS_MIN` 104 (the "double-booked" chip),
+`NAME_LINE` 20 (the name's line box: the cells beside it centre their content
+on it, so a wrapped name keeps its badges on its first line). Times use tabular
+figures. A 3px border is paid for out of the padding (`12px 14px` against
+`14px 16px`). No show moves to the left end of the right-anchored action group,
+so an optional button moves nothing (it had sat between Assign and the next step).
+
+Two layout details were found by measuring, not planned.
+
+- **The phone.** The first version kept the actions inside the column beside
+  the time. That column is 245px on a 375px phone, and Assign + the fixed next
+  step + ⋯ is 258.5, so ⋯ fell to a third line and every card grew to 222px.
+  The pre-change heights were 128–199, measured by swapping the old file in from
+  `HEAD` (backup in the scratchpad). The card body is now a two-column grid: the
+  time spans rows 1–2, and the actions row spans BOTH columns with its tables
+  indented past the time. A wide card is unchanged, still one line. On a narrow
+  card (a phone, or a List in a split pane, which is why this cannot be an
+  `isMobile` switch) the actions wrap to the card's full width and fit in one
+  row. Phone cards are 152px, all alike.
+- **The flags box is always rendered.** The name grows 1 against the flags' 1000,
+  so it keeps its 180 where it shares a line and takes the whole line on a
+  phone. That share depends on every basis on the line, so a card with no flags
+  and no box would give its name all the slack and move its badge. Its 104 basis
+  also means an empty box fits beside the status on a phone and costs no line.
+
+Live after a full reload, every active card lines up: at 668px the time at 17,
+the name 89, the badge 277.1, the ring 383.1, the first flag 409.1, Assign 360.5,
+the next step 457 and ⋯ 579, at the same 98px height as before. The same holds at
+1024px (badge 277.5, ⋯ 935) and on a 375px phone (badge 89, Assign 75.5, ⋯ 294,
+one action row). A name edited in the DOM to "Christopher Montgomery-Smith" wraps
+to two lines, and its badge stays at 277.1 on the first line. The finished cards
+sit inside the Collapsible's 15px inset, so they line up with each other and not
+with the active cards (they also have no next-step button). That is left as it
+was. 9 tests in the new `tests/list-columns.test.js`.
+
+### 17. The Summary's freeing-soon list shows table badges
+
+Patryk: the "freeing soon" entries in the Summary should show the table badge
+from the List card. It printed the ids as text, "5A+5B (~6m)". It is
+**`TBadge`** (`atoms.jsx`), the table badge, which `GLOSSARY.md` had no row for;
+it has one now, along with a row for the Summary itself and one for this list.
+Each entry is now its tables' badges and "~6m", in a module-scope
+`FreeingEntry` that never breaks between them. Three entries, then ", +N", as
+before. A booking with no table keeps its "?" as text, because a badge would
+give it an outdoor fill it has no claim to.
+
+Verified live without writing to DEV. The only seated party then was 57 minutes
+from its end, and the window is 15, so raising the Settings stepper to 60 would
+have meant nine writes up, nine down and eighteen activity-log entries. Instead
+App.jsx's window was set to 60 for one reload and then restored from a
+scratchpad backup, confirmed identical with `cmp`. The Summary read "freeing
+soon: [5B] ~5m, [5A] ~14m, [4] ~57m": three 24px badges in the outdoor fill,
+one line at 1024px (58px card, on its own line under the date controls because
+the longer line no longer fits beside them, §15), two lines at 668px. 6 tests
+in the new `tests/summary-freeing.test.js`.
+
+**Gate after phase 17:** `120.42 kB` gz main bundle (119.90 after phase 14:
++0.25 for §15's hook, +0.23 for §16's grid, +0.04 here) · **1625 tests** (1600
+after phase 14: +10, +9, +6) · 0 lint errors, 91 warnings (unchanged) · style
+OK. The follow-up round adds three commits to this version and changes no
+persisted data, so no Firebase console step is needed.
+
+### Second follow-up round — six requests on 2026-09-24
+
+Patryk, on the unpushed branch, asked for six more changes (same version, same
+entry): the List card's name gap and column order (§18), a `/design:design-critique`
+pass over the modules the first one skipped (Settings' tabs, the WhatsApp inbox),
+the phone field detecting a typed country code, the country-code picker starting
+empty, table availability on the Plan view behind a Settings toggle, and deposit
+and indoor/outdoor flags on the timeline block. The forks went to him first. He
+took every recommendation, and chose the indoor/outdoor mark himself: a house with
+an arrow drawn inside it for indoor, and outside it for outdoor.
+
+### 18. The List card: name, covers, status — and a name column sized to the day
+
+Patryk's screenshot of "Miki", "YD revived" and "YD squatter": the space between
+the name and the status badge was too big, and after the name should come the
+number of guests, then the status, then the rest. The gap was not padding. It was
+§16's fixed 180px name column (sized for "María José Fernández") under names of
+34–97px.
+
+- **The name column is the day's widest name, capped at 180** (`nameColFor`,
+  `ListView.jsx`). Measured on a canvas in the name's own font (bold, `T.title`,
+  the font stack read from `<body>`) during render, so no card is painted at one
+  width and corrected after. Cached per name, +1px for the fraction a canvas and a
+  laid-out text run disagree by. The finished cards count too, so opening
+  "Completed & cancelled" moves nothing. He chose this over a narrower fixed
+  column (names wrapping from ~14 characters) and over no column (the badges
+  would stop lining up). The column moves between days and holds within one.
+- **Order: name → covers → status → flags.** The size ring moved in front of the
+  status inside the unit they already formed.
+- **The flags moved INSIDE the unit's box, found by measuring the phone.** The
+  first version kept three items on the row (name, unit, flags). With a narrow
+  name column the unit fits on the name's line at 375px, so a card's flags wrapped
+  alone to the next line, and the name, now sharing its line only with the unit,
+  took that line's slack: the covers sat at x 222 on the one card with a flag
+  against 208 on the two without. The row now holds two items, the name and one
+  box whose basis is the unit (`UNIT_W` = ring 18 + 8 + `STATUS_COL`), and the
+  flags wrap inside that box, under the unit. Because the box is always there, the
+  flags can be conditional; §16's "the flags box is always rendered" rule is gone
+  with the problem it solved.
+
+Live after a full reload. At 1024px on 23 Sep: the column 99.3px (the widest name,
+"YD squatter", lays out at 97.4), the ring at x 212.3 and the badge at 238.3 on all
+three cards, every name on one line. On 31 Aug, whose names run past the cap: the
+column 180, "Second Deliberate Booking" wrapping to two lines inside it, the unit
+at 293.6 on every active card, and the finished cards at 308.5 with each other (the
+fold's 15px inset, §16). At 375px on 23 Sep: the unit at x 208 on all three cards,
+the lock flag under it on the card that has one; cards without flags are 128px
+tall (152 in §16, when the status always took a second line), the one with a flag
+152. On 31 Aug at 375px every name takes its own full line and the unit sits at
+x 101 on the next. `tests/list-columns.test.js` follows the new structure (11
+tests, +2).
+
+**Gate after phase 18:** `120.68 kB` gz main bundle (+0.26) · **1627 tests** (+2) ·
+0 lint errors, 91 warnings (unchanged) · style OK.
+
+**Phase 18 follow-up — found by the next phase's gate.** Phase 19 removes Settings'
+"Default country" label, one `FW.medium`, and `tests/style-check.test.js`'s weight
+ratchet then failed: regular + medium 128 of 429 references, 29.8% against its 30%
+floor. Two of this branch's own changes had used up the margin, and both are fixed
+at their source rather than by lowering the floor:
+- Phase 18's canvas font wrote the name's weight a second time (`FW.bold` in the
+  span and again in `ctx.font`). One `NAME_FONT` object now feeds both, which also
+  means the width the column is sized for and the font laid out in it cannot drift.
+- Phase 5 split the card's time range and gave its muted half, the end time,
+  `FW.semi`: muted ink at a primary weight, the pairing v17.13.0 demoted 46 of. It
+  is `FW.medium` now. On `main` the range was one bold span, so no shipped text
+  changed weight.
+The commit before phase 19 measures 130 of 429 (30.3%).
+
+### 19. The country-code picker starts empty, and Save asks for the code
+
+Patryk: the country-code picker should show no country code before one is chosen.
+Until now it opened on the restaurant's Settings default, and the form seeded that
+prefix ("+34") into the phone itself, so a foreign number typed without its code
+was saved as a Spanish one and nothing on screen had asked. Put to him with the
+consequence spelled out, he chose **Save asks for the code** over quietly applying
+the default once a number is typed, and over saving numbers without a code (the
+same guest with and without "+34" is two customers to `normalizePhone`, and
+WhatsApp cannot link either).
+
+- **No default country anywhere.** `splitPhone` answers `iso: null` when neither the
+  string nor the user's pick names a country (it fell back to Spain), and
+  `joinPhone(null, …)` keeps the number exactly as typed. `DEFAULT_COUNTRY` is gone.
+  `PhoneField` lost `defaultIso`; the four form openers (new, edit, Book Again,
+  waitlist) seed `phone: ""` instead of `generalSettings.phonePrefix`.
+- **The pill reads a muted "Code"** (`CountryPicker`), named "Country code: none".
+  It read "+", which no caller could show while the form always passed a default.
+  Opened empty, the list starts on its first row, so Enter picks the first pinned
+  country.
+- **Save refuses a typed number without a code**: "Choose the country code for this
+  phone number.", errorField `phone`, checked right after the name (the field beside
+  it). `phoneHasCode` (`lib/phone-countries.js`) reads a code exactly where
+  `normalizePhone` reads its "+": ahead of the digits, or an international "00". An
+  edit that leaves an old code-less number untouched still saves; the rule is about
+  numbers typed now. `form.phone` joined the effect that clears a stale error, so
+  picking the code clears the message.
+- **Settings → General → Restaurant loses "Default country".** `phonePrefix` and
+  `phoneCountry` stay in the node and the sanitizer, unwritten, because a version
+  still rolling out reads them. "Add to waitlist" still takes the number as typed:
+  it validates nothing today (not even the name), and the number meets this check
+  when the entry is booked.
+
+Live after a full reload (values set through React's input events; typing through
+the pane had sent the keys to the app's shortcuts once focus moved): a new form's
+picker read "Code" and the phone was empty. Save with "612 345 678" was refused with
+the message above, the number box carrying `aria-invalid` and `aria-describedby`
+pointing at it. Enter on the opened list picked 🇪🇸 Spain (+34), the invalid state
+cleared, and Save stored `"+34 612 345 678"`. Settings → Restaurant showed name,
+currency and pinned countries only. **Not exercised live:** the untouched code-less
+edit, because none of DEV's 599 bookings has a phone without a code; it is pinned by
+a source test. `tests/phone-countries.test.js` 24 tests (+8).
+
+**Gate after phase 19:** `120.46 kB` gz main bundle (−0.21 against the follow-up's
+120.67) · **1636 tests** (+9) · 0 lint errors, 91 warnings (unchanged) · style OK.
+
+### 20. A country code typed without the plus is detected
+
+Patryk: after typing a phone number with its country code, the code should be
+detected and put in the picker. Measured first: "+34 612 345 678" and
+"0049 151 2345 6789" already were, key by key. "33 6 12 34 56 78" was not: it stayed
+behind the picker's country and would have saved as "+49 33 6 12 34 56 78".
+
+- **`withTypedCode(phone, pinned)`** (`lib/phone-countries.js`) gives such a number
+  its code. Digits alone do not say a code is there ("612 345 678" read as one is
+  Australia, +61), so it is narrow, as proposed to him: only a string that names no
+  code yet, only the restaurant's PINNED countries (which keeps +1 out: Chinese and
+  Brazilian national numbers start with 1), only at 11+ digits, never with a
+  leading 0 (a trunk prefix, i.e. a national number). The longest pinned code wins,
+  so a pinned Guernsey beats the UK.
+- **When:** as the number box loses focus, and only if it was typed in during that
+  focus, so tabbing through an old booking never rewrites its number. Not per
+  keystroke: the rule can only answer at the eleventh digit, which would strip the
+  code out from under the cursor. **Also at Save**, for a save by Enter that never
+  blurs the box, into `f` itself (so the check, the stored number, the history diff
+  and the WhatsApp link see one string) and never into the form state, where it
+  would let the stale-error effect clear an error that same save sets. An untouched
+  edit is never rewritten (phase 19's `phoneUntouched`, one test for both).
+- **A country the field found is forgotten with its number.** Found by measuring:
+  "44 7700 900123" detected 🇬🇧, the box was cleared, and a French number typed
+  without its code saved as "+44 33 6 12 34 56 78". `foundRef` marks a country the
+  field set (a typed "+44", "0044", or this detection); clearing the box forgets it
+  and the picker reads "Code" again. A PICKED country stays: that was a choice about
+  the guest, not a reading of the digits.
+- The form opens its suggestion list only for a change with no source (typing), so
+  the blur's "detect" change does not reopen it as the box closes it. `src/lib`'s
+  note on the file also catches up with phase 19, which missed it.
+
+Live, after a full reload (values through React's input events; one early run read
+"no detection" because the pane's document did not have focus, so `blur()` fired no
+event — re-run with `document.hasFocus()` true and the native focus/blur events
+recorded): "44 7700 900123", then leaving the box → 🇬🇧 +44 and "7700 900123".
+Clearing the box → "Code". "39 312 345 6789" typed with focus still in the box and
+Save clicked → stored "+39 312 345 6789" at 16:30, the Save path on its own (a first
+attempt at 13:00 raised the kitchen-busy confirm, whose focus change ran the blur
+path instead, so it proved nothing about Save). `tests/phone-countries.test.js` 33
+tests (+9).
+
+**Gate after phase 20:** `120.76 kB` gz main bundle (+0.30) · **1645 tests** (+9) ·
+0 lint errors, 91 warnings (unchanged) · style OK.
+
+### 21. Table availability on the Plan view
+
+Patryk: the Plan view needs an option, a Settings toggle that is on by default, to
+see the availability of tables the way the walk-in form's preview does. The plan's
+fill answers who is at a table at the selected minute; the walk-in grid answers
+whether a party could sit there for a whole visit. They differed on a table free now
+and booked soon: white on the plan, "busy" in the walk-in form. He took the
+recommended reading, **free-until plus fit**, and the per-person switch.
+
+- **`lib/plan-avail.js`** (new, pure): `nextBusyAt` — the first later start that
+  claims a table (any booking but a completed one, or a table block), else the day's
+  end — and `freeWindow` → `{until, fits}`. A visit is a default-size walk-in's
+  duration plus the turnaround, which is what the walk-in form opens on and checks.
+- **What the plan draws**, only for a table free at the selected minute: "until
+  19:30" in the status mark's place under the id, nothing when it is free to
+  closing. A window too short for that visit gets a dashed `--warn-text` rim and
+  label. Resetting was already dashed (muted, `4 3`); this one is `6 4` and carries
+  the label, so the two are never told apart by colour alone. Both label pairs are
+  registered in `tests/contrast.test.js`. The spoken label gains "until HH:MM" and
+  "too short for a walk-in" while the overlay is on.
+- **One answer for the rim and the offer.** The "Walk-in here" gate now reads the
+  same `freeWindow(...).fits`. It used `getDur(2)`, the SEED of
+  `defaultWalkinSize`, so a restaurant whose walk-ins default to 4 was offered
+  tables its own walk-in form would call busy; and it counted only confirmed and
+  pending starts, so a later seated booking (scrubbed back to before the party sat)
+  now counts too.
+- **The switch:** Settings → App → **Table availability**, beside Plan zoom & pan,
+  per person and synced (`planAvail` in `PREF_SPEC`, `whenOff`, key
+  `mgt-plan-avail`). Joining the table was all the preference machinery needed: the
+  initializer, the toggle and the seeding branch are shared. No rules change, since
+  the prefs node takes any key under its rev pair.
+
+Live after a full reload, on DEV with one booking added at 14:00 today on table 2:
+at 13:00 table 2 wore the dashed rim and "until 14:00" in the warn ink ("Table 2,
+free until 14:00, too short for a walk-in"), the occupied 1A and 1B kept their fill,
+the rest drew nothing. On 23 Sep at 13:00, "until 15:45" on 1A and "until 18:00" on
+6, in secondary ink. Switch off: no label drawn or spoken, `mgt-plan-avail` = "0";
+back on: both labels back and the key removed. Tapping table 2 offered no Walk-in
+here; tapping table 3 did. Light theme checked through `?theme=light`, which by
+design writes nothing to the account. `tests/plan-avail.test.js` (10 tests).
+
+**Gate after phase 21:** `121.07 kB` gz main bundle (+0.31) · **1659 tests** (+14:
+10 in the new file, 4 for the two contrast pairs in both themes) · 0 lint errors,
+91 warnings (unchanged) · style OK.
+
+### 22. Deposit and indoor/outdoor flags on the booking block
+
+Patryk: deposit, and an indoor or outdoor preference where there is one, should be
+visible on booking blocks. Measured first: the block already had a deposit flag, but
+it was the FIRST flag the rail dropped, and a 90-minute block at 1× on a 1280px
+tablet is 126px wide against 114 of fixed parts (name floor, status mark, assign
+handle), so no flag and no size ring fits there at all. No indoor/outdoor mark
+existed anywhere. He chose to make the two the **last flags to drop** (only the size
+ring and the overstaying mark outlast them), over squeezing the name for them or
+moving them off the rail, and drew the new mark himself: a house with an arrow drawn
+inside it for Indoor, outside it for Outdoor.
+
+- **`IndoorIcon` / `OutdoorIcon`** (`Icons.jsx`), judged rasterised at the shipped
+  14px and magnified 8×, the `DepositIcon` method. The indoor mark took three
+  rounds: a short arrow in the body filled into a blob, and a bare chevron read as an
+  envelope, so the arrow now runs from the roof down the full height of the widest
+  house the box allows. The outdoor house is smaller, on the left, with the arrow
+  leaving it. The two differ in silhouette, and neither shares an outline with the
+  banknote, lock, star or no-show mark.
+- **The rail's flags are built once** (`railFlagsOf`, module scope in
+  `TimelineView.jsx`), for the block that draws them and for `chipRoomFor`, which
+  counts them to decide the day's start-time chips. That count was a second
+  hand-kept list of the same conditions, and adding a flag to one and not the other
+  would have let the chips claim room a block does not have.
+- **New drop order:** overstaying (1), deposit (2), preference (3), repeat no-show
+  (4), locked (5), the preferred-tables star (6). It used to drop every
+  informational flag before any exception state. The rail's left-to-right order is
+  deposit, preference, star, locked, no-show, overstaying.
+  `tests/block-layout.test.js` follows it and now reads `railFlagsOf`, so its
+  fixture cannot drift from the component again.
+- **The List card** carries the mark plus "Indoor" / "Outdoor" after the deposit and
+  voucher, the card's rule for its flags.
+
+Live on DEV, two bookings added today (19:00 indoor with a €20 deposit on i1, 20:00
+outdoor on 1A). List cards: "€20 · Indoor" and "Outdoor", spoken as "Deposit €20"
+and "Prefers indoor/outdoor". Timeline in a 1010px window: at 1× (86px blocks) the
+status mark only; at 1.5× (116px) one flag each, the deposit winning on the booking
+that has both; at 2.5× (224px) the ring, the deposit and the indoor mark together.
+The zoom was reset to 1× afterwards (it is a per-device setting). A third booking
+also read "Indoor" and was correct: its history shows two preference edits at
+01:40–01:41 that were not made by this session, so Patryk was trying the pane at
+the same time. `tests/block-layout.test.js` 13 tests (+2).
+
+**Gate after phase 22:** `121.17 kB` gz main bundle (+0.10) · **1661 tests** (+2) ·
+0 lint errors, 91 warnings (unchanged) · style OK.
+
+### Third round — the critique of the modules round 1 skipped
+
+Request 2 of the six (2026-09-24): run `/design:design-critique` over every module the first
+pass had not covered. It covered every Settings tab, the WhatsApp inbox, Find a booking,
+Week / Month / Stats, the Activity log and the table-assignment dialog, at 1280×800 and
+375×812 in both themes; the report, with the measurement behind each finding, is
+`…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round2.md`. The Waitlist
+panel was not reached (it opens only while a party waits, and with the optimiser on, even
+25 guests at 13:00 were placed by reshuffling) and the printed day sheet was not reviewed.
+Patryk took **all sixteen** offered fixes, one phase each from §25. §23 is a request he made
+first, and §24 a defect that measuring it turned up. The six minor findings
+he did not take are in ROADMAP.
+
+### 23. The view switcher lines up with the Summary
+
+Patryk selected the Timeline / List / Plan control in the header and asked for it to be aligned
+to the left edge of the Summary, to follow that edge when the Summary's width changes, and to
+move there smoothly and gently. Measured at 1280px: the switcher sat right-aligned beside
+Walk-in at 738.6, over a Summary card starting at 306.8. The edge moves more often than it
+looks: the Today pill (on any other day) and the waitlist pill appear to its left, and the date
+field is as wide as the date in it.
+
+- **`useAlignLeft`** (new, `src/hooks/`) measures the Summary's slot and the switcher's own slot
+  and moves the switcher by a transform: never closer to the title block than the header's 8px
+  gap, and never right, where the action buttons follow it. A transform, because a measured
+  margin would feed back into where the header wraps. Written inside the ResizeObserver
+  callback, which runs after layout and before paint, not through React state, which would
+  paint a frame late on every resize and re-render the app to do it.
+- **The glide (`M.shift`, 385ms cubic-out, the geometry token) plays only when the Summary moved
+  and the switcher's own slot did not.** A resize, or the split tools appearing, moves the slot:
+  the switcher jumps in the same frame, so it stays put over the Summary. A resize that wraps
+  the header moves both, and the first version glided there, sliding in from 36px off the left
+  edge of the screen (900 → 700px); that is a jump now too. A running glide is never cancelled:
+  nothing is written unless the destination changed, because `transition: none` ends a running
+  transition at its end value.
+- **The switcher and its split tools move as one box** (`viewSwitchRef`), whose React style
+  names neither property the hook writes.
+- **Portrait stays as it was, Patryk's call.** From about 750 to 810px (the tablet in portrait)
+  the header wraps the switcher onto a line of its own at the left edge, packed with Walk-in,
+  + New and WhatsApp, while the Summary still sits beside the date controls at 307px. Lining
+  the two up there means splitting that line; the switcher moving up beside the title, with the
+  actions alone on the second line, was offered and declined.
+
+Live on DEV. At 1280px: 306.797 against 306.797. On the next day, with Today showing: 372.750
+against 372.750, reached by one 385ms transform transition (`cubic-bezier(0.33, 1, 0.68, 1)`,
+recorded by a MutationObserver on the box). Resizing to 1100 wrote once, with no transition,
+and stayed on the edge. In a split (list and plan) the tools sat at 569–701 with Walk-in at 935
+and the switcher unmoved. At 700 and 375 both start at the margin (16 and 12). The first
+reading after a reload said 97px off, and it was the hidden Browser pane: a ResizeObserver
+notification is delivered in the rendering steps, which a hidden pane does not run, so the
+WhatsApp button's arrival (with the settings, after the first measurement) never reached the
+observer until a screenshot forced a frame — the missing 97px was that button and its gap. A
+new row in `mgt-measurement-traps`. `tests/align-left.test.js` 11 tests (new).
+
+**Gate after phase 23:** `121.54 kB` gz main bundle (+0.37) · **1672 tests** (+11) · 0 lint
+errors, 91 warnings (unchanged) · style OK.
+
+### 24. The Summary breaks its line where the date row expects it to
+
+Found while measuring §23: at 800px (the tablet in portrait) the Summary sat beside the date
+controls as a two-line card, "14 covers 7 bookings" over the live status line. That is the
+state §15 set out to remove: the panel's slot takes its own one-line width as its basis, so it
+sits beside the controls only when it fits there on one line. The slot and the card disagreed
+about that width. The slot's intrinsic width counts the headline button's CONTENT (137.6px), but
+the card's own row broke its line on the button's `flex: "1 1 200px"`. So the slot decided the
+panel fitted (452px of content against 477 free), and the card then needed 514 to stay on one
+line. In between, from about 784 to 846px wide, it went to two lines beside the controls. The
+basis had no recorded reason.
+
+Patryk chose to fix it, and the headline's basis is now its content (`flex: "1 1 auto"`). It still
+grows to fill its line, so the tap target is as wide as before. Live on DEV: at 800px the panel
+sits beside the controls on one line (58px, both halves at y=127, the controls centred on it);
+at 770px it takes its own line, still one line; at 1280px and 375px nothing changed (the
+headline grows to 643px; the phone card keeps its two lines). With the panel beside the
+controls from about 775px up, §23's portrait band, where the header has wrapped the switcher
+onto its own line but the Summary is still beside the controls, now runs from about 775 to
+810px. `tests/date-row.test.js` +1.
+
+**Gate after phase 24:** `121.54 kB` gz main bundle (±0) · **1673 tests** (+1) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 25. Every Settings tab in view (S1)
+
+The critique's first finding. The tab bar was one row that scrolled sideways with its scrollbar
+hidden, and nine tabs need about 700px: on the 1280px tablet the bar was 530 (App, Shortcuts and
+Admin out of sight, "Ap" cut at the edge) and on a phone 337 (five of nine). Nothing said there
+were more, and choosing a hidden tab with ←/→ did not scroll it into view (`scrollLeft` stayed 0).
+
+- **The Settings card is 800px on a tablet** (`SETTINGS_CARD_W`, through a new optional `maxWidth`
+  on `Overlay`; every other modal keeps 580). The bar is 750 there and the nine sit on one row, and
+  in portrait (776 card, 726 bar) as well.
+- **Where one row does not fit, a balanced grid** (`tabColumns`, new `lib/tab-rows.js`): the fewest
+  rows whose equal cells hold the widest label. On a phone that is 3 × 3, Patryk's choice over two
+  tight rows (4 + 5 needed 6px side padding and still broke into three rows on a 360px phone). In a
+  narrow window it is 5 + 4. A plain wrap had given 4 + 4 + a lonely Admin on the phone and 7 + 2 at
+  700px, with Shortcuts and Admin stretched to 306px each (measured, then replaced).
+- **Measured, not by breakpoint**: canvas text metrics of the labels in the button's own computed
+  font (the ListView name column's method), re-measured on the bar's ResizeObserver. Watching the
+  row wrap could not do it: a grid cannot say whether a row would fit. The one-row test adds the
+  most any one label gains in bold (the chosen tab's weight), so choosing a tab cannot flip the
+  layout; measured, the row asks 712px and the portrait bar holds 716.
+- **A grid is rounded rectangles in a rounded rectangle**: `R.inset` tabs inside an `R.card` bar,
+  concentric with the 4px padding between (10 + 4 = 14). Pills stay for one row.
+
+Live on DEV. At 1280: one row, 9 in a 750px bar, with General or Customers chosen. At 800
+(portrait): one row. At 780 and 700: 5 + 4 in 136 and 120px cells. At 375: 3 × 3 in 107px cells.
+At 320: 3 × 3 in 88.7px cells. Every tab inside the bar and every label unclipped at each width.
+Settings' `TabBar` test in `tests/segmented.test.js` still pins the `segStyle(active)` spread.
+`tests/tab-rows.test.js` 8 tests (new), fed the label widths read on DEV with the component's
+own measure.
+
+**Gate after phase 25:** `121.60 kB` gz main bundle (+0.06) · **1681 tests** (+8) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 26. The tab bar stays put (S2)
+
+The critique measured Settings' tab bar at 120, 205, 120, 120, 186 and 280px for General,
+Layout, Customers, Vouchers, Reminders and WhatsApp at 1280×800. The card is centred and its
+height follows the tab, so its top moved with every click, and the next tab was no longer under
+the finger.
+
+`Overlay` takes `anchor="top"`: the desktop scrim aligns the card to the top and the card hangs
+from `TOP_ANCHOR`, `max(0px, calc(5dvh - 12px))`, i.e. 5dvh once the scrim's 12px padding is
+counted. That is where a centred card already sat at its 90dvh ceiling, so the tall tabs do not
+move at all and the short ones stop moving; only the bottom edge follows the content, eased by
+the body's `AutoHeight` as before. Settings is the one caller. The phone sheet is full-screen and
+has no top to move.
+
+Live on DEV, 1280×800, clicking through all nine tabs: the bar's top read 115 on every one, and
+the card ran from 40 down to 426 (WhatsApp) through 590 (Layout) and 629 (Reminders) to 760.
+`tests/tab-rows.test.js` +1.
+
+**Gate after phase 26:** `121.61 kB` gz main bundle (+0.01) · **1682 tests** (+1) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 27. Confirm removing a person (S4)
+
+Admin → People's **Remove** acted on one tap, in the same grey as the Capabilities button beside
+it, and on your own row it could only fail ("You can't remove your own admin access — ask another
+admin to do it"). Reading `removeUser` before writing the confirm settled what the sentence has to
+say: it deletes the person's `/roles` row — their level, extras and denies — and nothing else. It
+does not sign them out. The self-registration stub (`useRoles`) writes a fresh no-level row the next
+time they open the app, which counts as staff while roles are enforced. A confirm that said "loses
+access" would have promised something the button does not do.
+
+- **Two taps.** The first arms the row: the button turns solid red, reads "Confirm — remove"
+  (named "Confirm — remove Marta", the visible label leading), and a sentence under the row says
+  what the second tap does. Any other action in People (the level, Capabilities, applying or
+  withdrawing an invitation) disarms it, and so does arming another row, so a second tap can only
+  confirm the row it was armed on.
+- **Not on your own row**, where it could only fail.
+- **`mkDangerBtn(armed)`** (atoms): the danger tint at rest (`--danger-bg` / `--danger-text` and
+  its hairline, the danger pane's registered pair) and solid `--app-danger-solid` once armed, both
+  on mkBtn's geometry, so arming changes colour and label and never the size under the finger. The
+  next phase gives the other rows' deletes the same look.
+
+Live on DEV (nothing was removed): your own row has no Remove; Marta's and Rubén's read Remove in
+the tint (`rgba(254, 226, 226, 0.7)`, ink `rgb(153, 27, 27)`), 40px tall. The first tap on Marta's
+made it `rgb(220, 38, 38)` with white text and the sentence linked by `aria-describedby`. Arming
+Rubén's disarmed Marta's. Opening Rubén's Capabilities disarmed it, and closing that modal left
+Settings open. The armed button grows to the right from a fixed left edge (77 → 140px), so a
+second tap in the same place lands on it. `tests/destructive-buttons.test.js` 8 tests (new).
+
+**Gate after phase 27:** `121.62 kB` gz main bundle (+0.01) · **1690 tests** (+8) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 28. Quieter row deletes, and a paused reminder that still looks usable (S5 + S6)
+
+**S6.** Reminders, Templates and Layout → Tables drew a solid red Delete or remove on every row,
+thirteen of them in Tables, so the rarest action was the loudest thing on screen. Each now wears
+`mkDangerBtn`'s rest state, and the red comes where the decision is made:
+
+- **Reminders**: Delete opens the in-app confirmation, which keeps its red; the row's button is
+  the tint.
+- **Templates**: Delete removed the row from the staged list on ONE tap. It is two-tap now ("Confirm
+  — delete", solid red), disarmed by Edit and "+ Add template", and Edit and Delete name their
+  template ("Delete (Confirm / Confirmar)"), since six rows of bare "Delete" are six identical names.
+- **Layout**: `X_BTN`, the × on every table, join-group, combo and rule row, is the tint. Removing a
+  table still asks inline, with the red Remove there. The two **Cancel** ×s (a rename, a new
+  table) shared `X_BTN`, so a Cancel was a red × too; they take `CANCEL_X`, the stepper's neutral.
+- **Standing bookings** (General) already armed; they take the same look, and "Confirm?" became
+  "Confirm — delete".
+
+**`mkDangerBtn` corrected.** Before touching `X_BTN` I read why v17.8.0 had made it solid: a pale
+danger wash + a danger border + danger text is the shape DESIGN.md bans, one signal encoded three
+times. Phase 27's `mkDangerBtn` rest state was exactly that (`--danger-border`), shipped one commit
+earlier. The border is gone: tint and tone on mkBtn's ordinary glass rim is the tinted-pane shape
+(InlineAlert, AlertPanel), which is allowed. The pair is registered as a button in
+`tests/contrast.test.js`, beside `--bg-stepper` / `--text-primary`, which the form's ± steppers have
+always drawn and nothing had registered; both pass in both themes.
+
+**S5.** A paused reminder drew its whole card at 55%, Edit and Delete included, while both work.
+Now only its text fades (`PAUSED_FADE`) and an outline "Paused" tag says the state, the way standing
+bookings already showed a paused rule.
+
+Live on DEV, dark theme. Reminders: three Deletes in the tint (`rgba(117, 30, 20, 0.32)`, ink
+`rgb(252, 165, 165)`, rim `rgba(255, 255, 255, 0.14)`), 32px as before; the paused reminder's text
+at 0.55 and its tag, Edit and card at 1. Layout: 13 table ×s in the tint, the rename Cancel ×
+neutral. People's Remove lost its red border. Templates: 6 Deletes; the first armed read
+"Confirm — delete", named "Confirm — delete (Confirm / Confirmar)", `rgb(220, 38, 38)` once its
+background-color transition was settled (read unsettled, the hidden pane showed it frozen at the
+tint), and Edit and "+ Add template" each disarmed it. Nothing was deleted, and the editor was closed
+without saving. Standing bookings are off on DEV with no rules, so their Delete was not shown live.
+`tests/destructive-buttons.test.js` +9, `tests/contrast.test.js` +2 pairs.
+
+**Gate after phase 28:** `121.69 kB` gz main bundle (+0.07) · **1700 tests** (+10) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 29. The phone's draft card shows what it proposes (W1)
+
+On a phone the inbox uses the compact draft bar (`compact` is `winH < INBOX_COMPACT_HEIGHT`, 820, so
+the 800px tablet uses it too), and the bar read "2 pax · 202…": the details were `flex: 1;
+min-width: 0` on one wrapping row with the confidence chip, Accept and Dismiss, so the controls
+kept their width and the date and time went into the ellipsis. Staff were asked to accept a
+booking they could not see.
+
+The details now take a basis of their own content and do not shrink (`flex: "1 0 auto"`, with
+`maxWidth: 100%` so the ellipsis survives only as a last resort). The first version let the row
+wrap item by item, and at 375px Accept stayed on line one while Dismiss dropped alone to the left
+of line two, so the three controls are now ONE group with an auto left margin and wrap together.
+
+Live on DEV (Anna Priks, "¿tienen mesa para 2 mañana a las 14:00?"). At 375×812: line one
+"2 pax · 2026-09-25 · 14:00", whole; line two HIGH, Accept and Dismiss, right-aligned at one top.
+At 1280×800 the bar is 847px and everything sits on one line, as before.
+`tests/wa-inbox-layout.test.js` 2 tests (new).
+
+**Gate after phase 29:** `121.71 kB` gz main bundle (+0.02) · **1702 tests** (+2) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 30. Two "Templates" buttons become Edit templates and Insert template (W2)
+
+The inbox had two buttons named "Templates" (by `title`, since both are icon-only) with the same
+document icon. The header's opens the templates editor; the composer's shows the chips that insert
+one into the reply. One name and one mark for two jobs.
+
+- The header's is **Edit templates** (`aria-label`, title "Edit templates (T)") with the app's edit
+  pencil, `EditIcon`, already the rename mark in Layout. Reusing it rather than drawing a sixth
+  document variant keeps "edit" one shape across the app.
+- The composer's is **Insert template** (title "Insert template (E)"), keeping the document with
+  text lines, which is what it inserts. It keeps its `aria-pressed`.
+- Shortcuts reads "T · Edit templates" and "E · Insert a template (show or hide)".
+
+Live on DEV: the two buttons are named "Edit templates" and "Insert template", with the pencil and
+document paths respectively, the second `aria-pressed="false"` until opened.
+`tests/wa-inbox-layout.test.js` +3.
+
+**Gate after phase 30:** `121.75 kB` gz main bundle (+0.04) · **1705 tests** (+3) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 31. Words on the inbox's icon buttons (W3)
+
+The simulator flask, Templates and "Re-check this conversation" were icon-only, named by their
+`title` alone. That is an accessible name, but a hover tooltip the restaurant's tablets never show,
+so a finger never learned what the circular arrow does. Each now carries its word beside the mark,
+in the shape Archive already had (icon at `IC.inline`, `T.small`, 8/12 padding, `H.chrome` tall):
+**Re-check** ("Checking…" while it spins) in the conversation header, and **Edit templates** and the
+sandbox's **Simulator** in the inbox header (`HEAD_TEXT_BTN`). The titles stay, as the longer
+descriptions. Close stays a bare ✕, the one mark everybody reads. The W2 test now pins the header
+button's visible text, which is where its name comes from; the `aria-label` phase 30 gave it is
+gone, since a name written twice can drift apart.
+
+Live on DEV at 1280×800: Simulator 96px and Edit templates 123px in the header, Re-check 94px beside
+Archive 83px, all 36px tall. The phone's header, which already wrapped, is the next phase's (W5).
+`tests/wa-inbox-layout.test.js` +2.
+
+**Gate after phase 31:** `121.74 kB` gz main bundle (−0.01) · **1707 tests** (+2) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 32. The inbox on a phone, and an unknown sender named once (W4 + W5)
+
+**W4.** An unknown sender's conversation was titled by the raw key, "+447811223344", with the
+formatted "+44 7811223344" beside it, and the list row showed only the raw key. The row, the
+conversation title and `describeConversation` now use `formatPhone` for an unnamed sender, and the grey
+number beside the title appears only under a name. The row also falls through to the number when the
+matched booking has no name (a walk-in), which rendered an empty title before; `describeConversation`
+already had that rule, and the row now shares it. Two assertions in `tests/whatsapp-describe.test.js`
+had pinned the raw title and now pin the formatted one.
+
+**W5.** On a phone (single-pane, below `INBOX_TWO_PANE_BREAKPOINT`):
+- **Close is in the top corner.** The header wrapped and Close landed on the second line at the left,
+  under the badge. It is its own item now: last on the tablet's one line, and on a phone second in
+  `order` with an auto margin, beside the badge, while Simulator and Edit templates take line two.
+- **The list's toolbar goes with the list.** Select, Needs action and the search stood above an open
+  conversation, about 140px of a phone's height; they render only while the list is on screen.
+- **"Search…"** where the long placeholder was cut to "Search name, number or". The field keeps its
+  `aria-label`.
+- **No Enter / Shift+Enter hint on a touch screen** (`hover: none` / `pointer: coarse`, index.css's
+  own touch query), where it spent two lines of the composer on keys the on-screen keyboard lacks.
+
+Live on DEV with the mobile preset (375×812, touch): the badge at top 28 and Close at 320–356, top 18;
+Edit templates on line two at top 65; "Search…"; the list's first row "+44 7811223344"; that
+conversation titled "+44 7811223344" once, no toolbar above it, composer "Type a reply…". At
+1280×800: the header on one line (Simulator, Edit templates and Close at top 58) and the long
+placeholder. `tests/wa-inbox-layout.test.js` +6.
+
+**Gate after phase 32:** `121.89 kB` gz main bundle (+0.15) · **1713 tests** (+6) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+### 33. The Activity log says which booking (X1)
+
+Rows read "patrykmgtbooking · created" and "edited: pref outdoor→indoor". The entries written from
+a booking's own history carry only the action, and although each carries the booking's id (`bookings`)
+and the row is a button that opens it, you had to open each row to find out whose it was.
+
+`rowText(r, byId)` (lib/activity.js) is what a row shows: a row about ONE booking leads with that
+booking's current name ("Anna Priks · created"), else the entry's own `subject.name` for a deleted
+one, else nothing. Resolved at display from an id every such entry has always had, so the old
+entries gain their names with nothing re-written, and a renamed or anonymised guest reads by their
+current name, the log's existing rule. A row already naming its booking through a token (a delete) is
+left alone, as is a row about several bookings or none. The search and the CSV read the same function,
+so a guest's name now finds their "created" rows. The log itself is unchanged: still no names stored.
+
+Live on DEV, 1280×800: "Marco Rossi · moved to 1B (drag)", "Phase22 Outdoor · created", "Phase20 Save B
+· edited: pref outdoor→indoor". While checking it, the log showed four settings entries at 09:46
+("changed the reminders" and "changed people and roles", two each, a second apart) under the same
+account. Read from DEV, they post-date this session's last browser interaction for phase 28, and the
+same account had dragged two bookings at 09:15 while code was being written, so they are the pane
+being used by hand, not this session's automation. `tests/activity.test.js` +5.
+
+**Gate after phase 33:** `121.95 kB` gz main bundle (+0.06) · **1718 tests** (+5) · 0 lint errors, 91
+warnings (unchanged) · style OK.
+
+
+### 34. The Month view's cells are opaque, and its shading has a key (X2)
+
+The Week / Month / Stats popover's cells were `--bg-input`, `rgba(255,255,255,0.5)`, over a sheet that
+is itself translucent, so the page behind the modal coloured the calendar. The critique measured it by
+putting the List behind instead of the Timeline: days 18–20 and 25–27 were amber over the Timeline's
+orange blocks and grey over the List. That colour reads as data. The blue busyness shading had no key.
+
+- **`--bg-cal-cell`** (new token, both themes): the colour a cell had over a plain page (the input white
+  over the sheet over `--bg-app`, `#fbfcfd`; dark `#3c3c40`), made solid. The month's days, the week's
+  rows and the Stats tiles all take it, and so does the mode toggle's track, which the next phase
+  restyles. Registered in `tests/contrast.test.js` under `--text-primary` and `--text-secondary`.
+  Today's number in `--accent` stays unregistered: the accent as small text measured under 4.5:1 when
+  ViewSwitcher first registered it, and a change to how today is marked is a separate question.
+- **Out-of-month days fade their NUMBER**, not the cell. At 40% the whole button was see-through again.
+- **A key**, "Fewer covers ▭ More", whose swatch runs from the cell to the accent at `HEAT` (30%), the
+  constant the cells' shading reads, so the key cannot describe a different scale.
+
+Live on DEV (light), September 2026 over the Timeline: 35 cells, every one `rgb(251, 252, 253)` at
+opacity 1; 31 August's content at 0.4; no amber anywhere; the key under the grid.
+`tests/week-view.test.js` 4 tests (new), `tests/contrast.test.js` +2 pairs.
+
+**Gate after phase 34:** `121.95 kB` gz main bundle (±0; WeekView is a lazy chunk) · **1726 tests** (+8) ·
+0 lint errors, 91 warnings (unchanged) · style OK.
+
+### 35. One segmented look, and its state said (X3 + S3)
+
+The Week / Month / Stats toggle marked the chosen mode with a solid accent fill, `rgb(0, 122, 255)`: a
+third segmented style beside the view switcher and Settings' tab bar, which lift a white segment. And it
+said which mode was on by colour alone. So did Settings' nine tabs: `aria-pressed` was null on all of
+them, while the view switcher's buttons have always carried it.
+
+- The toggle is atoms' `SEG_TRACK` with `segStyle(active)` buttons, as a `role="group"` named "Show",
+  each with `aria-pressed`. It keeps its own 6/18 padding and `H.compact` height; the look has one
+  source now.
+- `TabBar`'s buttons carry `aria-pressed`.
+
+Live on DEV (light): Week chosen reads `rgba(255, 255, 255, 0.95)` with ink `rgb(26, 29, 36)` and
+`aria-pressed="true"`, Month and Stats transparent and `"false"`; choosing Stats moves all three. The
+track is `--bg-tabbar`. Settings: General `true`, the other eight `false`. `tests/week-view.test.js` +2.
+
+**Gate after phase 35:** `121.95 kB` gz main bundle (±0) · **1728 tests** (+2) · 0 lint errors, 91 warnings
+(unchanged) · style OK.
+
+### 36. Clear is not red (X5)
+
+"Clear" empties a table SELECTION (the booking form's manual tables, twice, the walk-in form's, table
+assignment's and the preferred-tables picker's) and destroys nothing, but `--btn-clear` was
+`rgba(211, 58, 58, 0.7)`, the delete red. Phase 8 moved Dismiss off red for exactly this reason. It is
+now an alias of `--app-btn-slate`, as `--btn-dismiss` is: one token, all five buttons, both themes, and
+the contrast registry resolves the alias per theme and passes. (`--btn-reset`, the duration Reset, is
+also red and also destroys nothing; the critique did not raise it, so it stays for now and is named
+here so it is not rediscovered.)
+
+Live on DEV: in the walk-in form, table 3 picked, Clear read `rgb(100, 116, 139)`, exactly
+`--app-btn-slate`, with white text. The form was closed without seating anyone.
+`tests/destructive-buttons.test.js` +1.
+
+**Gate after phase 36:** `121.95 kB` gz main bundle (±0) · **1729 tests** (+1) · 0 lint errors, 91 warnings
+(unchanged) · style OK.
+
+### 37. One date format (C1)
+
+Every date on screen now goes through `formatDay` (`lib/day.js`): "Thu 24.09", and "Fri 15.01.2027"
+when it is not this year. The critique counted five shapes; reading every site found seven. ISO
+"2026-09-24" appeared in Customers, Vouchers, Find a booking, the draft card, the linked booking
+card, the block modal (both branches), a waitlist's title, a reminder's "Once on", the booking
+form's past visits, duplicate warning, return-guest pill and name suggestions, the Archive prompt
+and a voucher refusal. The Activity log had "24.09", the Week view "Sep 21 – 27, 2026" and a
+booking's history "24 Sept 2026" (measured: Chrome's en-GB short month is "Sept"). The WhatsApp
+list had "17 Sept" past a week, and there were two home-made shapes: "Fri 18/09" in the voucher
+carry prompt and "24/09" in the carried-voucher note. The date field's shape won, because staff
+read it every shift.
+
+- **Exceptions.** Each is an option of `formatDay`, never a second formatter. No weekday on a
+  voucher's dates (they say when it is valid, and the expiry keeps the ISO's width, so `CODE_COL`
+  holds) or on the Week range (always Monday to Sunday). The printed Day sheet reads "Thursday ·
+  24.09.2026", with the year always, because it gets filed.
+- **Stored text keeps ISO.** A history entry and an Activity log line are records. `formatDaysIn`
+  writes their dates the house way on the way to the screen. The log's search matches what it shows,
+  and the CSV stays ISO. The carried-voucher history entry now STORES the ISO day, where it stored
+  its own "24/09", which nothing could have re-written.
+- **Unchanged:** the native date input, and the spoken day announcement ("Thursday 24 September"),
+  which is for the ear.
+- **A broken date shows as stored.** DEV's "31/08/2026" probe reads "31/08/2026", never "" or a
+  plausible day, because it is the one somebody needs to find and repair.
+
+**Columns, and what measuring them turned up.** A date is no longer one width: "Wed 24.09" measures
+66px in Find a booking's bold and "Wed 24.09.2025" 103. `showsYear` is the one decision about the
+year, and a list sizes its date column once from it:
+
+| List | Width, this year | Width, with a year |
+|---|---|---|
+| Find a booking | 68px | 104px |
+| Customers | 68px | 104px |
+| Activity log | 54px | 84px |
+
+Two defects came out of the measuring. On a 375px phone, Find a booking's name is `flex: 1`, a zero
+basis. A wrapping line is packed by basis, so the name got whatever the phone and the badge left:
+21.5px at the old 84px column, and 1.5px beside a year. It now takes a 64px basis. 96 was tried
+first and wrapped a row on the 1280px tablet (a year, a phone and a badge leave 88px); 64 wraps
+nothing there. The other was Customers' visit row, which does not wrap: with a year's column it put
+the badge 6px past its edge on a phone, and it wraps now.
+
+Live on DEV:
+
+- **Find a booking:** "Thu 24.09" at 68px. With a 2027 booking among the results, every row is 104px
+  and every time starts at x 215. At 375px the names are 104px and 140px, and at 1280px every row is
+  one line.
+- **Customers:** "Thu 24.09" at 68px, times aligned at x 135.
+- **Vouchers:** "expires 17.03.2027" on one line (14px tall), "Issued 17.09", redemptions
+  "Mon 07.09 · 13:00 · …".
+- **Activity log:** 500 date cells, all 54px, none overflowing. "deleted Rosa Linares · Thu 24.09
+  20:30". Searching "16.01" finds the row that stored "2027-01-16".
+- **History:** "C1 Year Probe — Sat 16.01.2027 20:00", and "edited: date Fri 15.01.2027→Sat
+  16.01.2027" over a stored "2027-01-15→2027-01-16".
+- **Elsewhere:** the Week view "21.09 – 27.09" (and "11.01.2027 – 17.01.2027"), a reminder "21:00 ·
+  Once on Fri 02.10", the draft card "2 pax · Fri 25.09 · 14:00", the block modal "Block table 2 ·
+  Thu 24.09", the printed sheet "Thursday · 24.09.2026".
+- **Not shown live:** the waitlist's title (DEV had nobody waiting within 40 days, and a 25-guest party
+  still found tables), the linked booking card (no linked conversation) and the WhatsApp list past a
+  week (both conversations 9 hours old). The last is pinned by a unit test.
+- **DEV data from testing:** the C1 Year Probe booking (2027-01-16) and a one-off reminder for
+  2026-10-02.
+
+`tests/date-format.test.js` 48 tests (new). `tests/vouchers.test.js`: the refusal's date reads
+"on Mon 01.06".
+
+**Gate after phase 37:** `121.81 kB` gz main bundle (−0.14; the hand-built shapes went) ·
+**1777 tests** (+48) · 0 lint errors, 91 warnings (unchanged) · style OK.
+
+**Follow-up: two dates the sweep missed.** Phase 38's search for "pax" read two lines that also held a raw
+date: the conversation's "Past bookings" rows and the intent banner's "Linked to:". Both had the shape
+`(x.date || "?")`, which phase 37's sweep patterns did not cover. Both go through `formatDay` now, and a
+test fails on that shape anywhere in `src/components`. Neither could be shown live: no DEV conversation
+has past bookings or a linked booking. `tests/date-format.test.js` +2. A third sweep, for a date PUSHED
+into a line rather than concatenated, found one more in its own commit: the modify banner's requested
+changes (`reqParts.push(draftData.date)`). It is the last: every remaining hit is data, not text.
+`tests/date-format.test.js` +1.
+
+**Gate after the follow-up:** `121.80 kB` gz main bundle (−0.01) · **1779 tests** (+2) · 0 lint errors,
+91 warnings (unchanged) · style OK.
+
+**Gate after the second follow-up:** `121.81 kB` gz main bundle (+0.01) · **1780 tests** (+1) · 0 lint
+errors, 91 warnings (unchanged) · style OK.
+
+### 38. One word for a party's size (C2)
+
+"4 pax" appeared on twenty-one lines in fourteen files: Find a booking, the waitlist and its
+"table free" banner, the draft card, the linked booking card, the conversation's past bookings, the
+intent banner, both table pickers' capacity lines, the preferred-tables picker, the booking form's
+past visits and duplicate-phone warning, the standing rules and the Day sheet's "Pax" column. Beside
+them, the booking form asks for the "Number of guests", the Settings tiers read "1–2 guests" and
+every spoken label says "2 guests", with the plural typed out by hand ten more times.
+
+`guestsLabel(n)` (`booking-logic.js`) is now the one way to write it: "1 guest", "4 guests". It
+replaced the twenty-one "pax" lines and the ten hand-typed plurals, `describeBooking` and
+`startingPhrase` included. The Day sheet's column is "Guests". Two things stay: **covers** is the word
+for a day's total (the Summary, the Month view, the Day sheet's head), and "Party of N" stays in
+sentences, where it is the noun rather than the label. Both are recorded in GLOSSARY, with "pax"
+under Terms to avoid.
+
+- **Tiers.** A tier covering parties of one printed "1 guests"; DEV has one, so it was on screen. It
+  reads "1 guest" now, and the catch-all says what it counts: "6+ guests → 120 min".
+- **Customers.** The visit row's size column was 40px, which "2 pax" fitted. It is 58, the widest
+  label a party can have: the form stops at 25, and "25 guests" measures 56px. So the badge after it
+  lines up whatever the size.
+
+**Found live, not by a test.** Settings' durations section had its own `const guestsLabel = (n) =>
+"≤ " + n` for the "Parties up to" stepper. Once the real one was imported into that file, the local
+shadowed it across the whole component: the tiers line read "≤ 1 → 90 min" and both size steppers
+"≤ 2". Build, lint and 1801 tests were green. It is `upToLabel` now, and a test fails on any second
+definition of the name.
+
+Live on DEV:
+
+- **Find a booking** "2 guests", every row still one line at 1280px (CTWA's name 69px, above its
+  64px basis).
+- **Customers** "2 guests" in the 58px column, badge at x 253.
+- **Draft card** "2 guests · Fri 25.09 · 14:00".
+- **Table picker** "Phase19 Test · 2 guests · 13:00–14:30" and "Capacity: 2 (fits 2 guests)",
+  closed without assigning.
+- **Day sheet** "Time · Name · Guests · Tables · Phone · Deposit".
+- **Settings** "1 guest → 90 min · 2–4 guests → 90 min · 5 guests → 90 min · 6+ guests", the steppers
+  "2 guests", and "Parties up to ≤ 1 / ≤ 4 / ≤ 5" unchanged.
+- **Not shown live:** the waitlist rows, its banner and the timeline's waiting row (nobody waiting
+  on DEV), the standing rules (off on DEV), and the linked booking card and intent banner (no linked
+  conversation).
+
+Lint went from 91 warnings to 90. The React Compiler's `react-hooks/refs` advisory at
+`TimelineView.jsx:981` now reports 17 occurrences where it reported 18, in the render function whose
+waiting-row label changed; no other file's warnings moved (compared per file against the last
+commit). `tests/party-size.test.js` 21 tests (new); `tests/a11y.test.js`'s two waitlist-banner pins
+now read `guestsLabel`.
+
+**Gate after phase 38:** `121.81 kB` gz main bundle (±0) · **1801 tests** (+21) · 0 lint errors, 90 warnings
+(−1, above) · style OK.
+
+### 39. One money format (C3)
+
+Money is written one way now: the amount, a space, then the restaurant's currency symbol. It goes
+through `money()` (`lib/vouchers.js`), which also rounds to the cent. Three sites put the symbol first:
+the List card's deposit flag, its timeline block's title and the printed Day sheet's deposit column,
+which read "€20" while Vouchers beside them read "80 € left". Seven more built "N €" by hand without
+the rounding: the voucher picker's three balances, the unsettled-voucher banner, the redeem prompt's
+three amounts and the carry prompt. That was a real defect, not a tidy-up: a 20 € voucher with 12.30
+used leaves `20 − 12.3 = 7.699999999999999`, and the redeem prompt printed it. A field's label keeps
+the bare unit, "Deposit (€)". The Activity log's "redeemed 20 of voucher …" is stored text and is left
+as it was.
+
+Live on DEV:
+
+- **List card** Phase22 Indoor's flag "20 €", titled "Deposit 20 €".
+- **Timeline block** at 1280px: "Deposit 20 €" (zoomed to 2.5× to find it, then reset to 1×).
+- **Day sheet** "20 €" in the Deposit / voucher column.
+- **Not shown live:** the voucher picker's suggestions (a scripted focus does not open them), the
+  unsettled banner (nothing unsettled today) and the redeem and carry prompts (no completion was run
+  on DEV for this). All of them already had the "N €" shape; what changed there is the rounding, which
+  the unit test pins.
+
+DESIGN.md records the rule. `tests/money-format.test.js` has 12 tests (new).
+
+**Gate after phase 39:** `121.82 kB` gz main bundle (+0.01) · **1813 tests** (+12) · 0 lint errors,
+90 warnings (unchanged) · style OK.
+
+### 40. The Shortcuts tab: cards, and only keys that work (S8)
+
+Shortcuts was the one Settings tab drawn on the bare sheet, with blue uppercase headings of its own.
+Its ten sections are `Section` cards now, titled in the Collapsible header's type (14px, semibold,
+primary ink), and a card's last row draws no hairline under itself.
+
+It also listed keys that do nothing. "X · Open WhatsApp simulator" appeared in production, where
+`useKeyboardShortcuts` gates X on `WA_SANDBOX`: that was the critique's finding. Reading the handler
+beside it found the same thing twice more, both gated on the WhatsApp module, which ships off: "I ·
+Open WhatsApp inbox" and the eleven-row inbox section. That is beyond the finding as written, and
+taken with it because it is the same defect behind the next gate over. A row or section now carries
+`when`, and the sheet lists it through the handler's own gate. Settings passes `whatsappOn`.
+
+Live on DEV (a dev build, with the module on): ten cards, titles `14px 600 rgb(26, 29, 36)` with no
+transform, cards on `--bg-soft` with a 14px radius, the last row borderless, and I and X both listed,
+which is correct there. The other paths cannot be shown on DEV without switching its WhatsApp module
+off under whoever else is using it. `tests/shortcuts-tab.test.js` (6, new) calls `ShortcutsContent`
+with `WA_SANDBOX` mocked off and reads its element tree, the way the error-boundary test reads its
+boundary, for the module off and on. Breaking the sandbox gate fails three of its tests.
+
+**Gate after phase 40:** `121.82 kB` gz main bundle (±0; Settings is a lazy chunk) · **1819 tests** (+6) ·
+0 lint errors, 90 warnings (unchanged) · style OK.
+
+### Fourth round — the live pass over what round 2 could not reach
+
+Planned work from the round-2 handoff (2026-09-24): make the DEV data each unreached surface needs, run
+`/design:design-critique` over them, and check the v18.2.0 rules on each — dates (C1), party size (C2),
+money (C3), quiet row deletes (S4/S6) and Shortcuts (S8) — at 1280×800 and 375×812 in both themes. The
+surfaces: the Waitlist panel, its "table free" banner, the timeline's waiting row and the Day sheet's
+waitlist lines; Settings → General → Standing bookings; the WhatsApp linked-booking card, intent
+banner and past bookings; the gift-voucher picker, the redeem and carry prompts and the unsettled
+section; Shortcuts with the WhatsApp module off. The report is
+`…/megustastu-bookings context/MGT_Bookings_v18.2.0_Design_Critique_Round3.md`.
+
+**How it was measured.** The Browser pane is 354px wide, so a 1280×800 viewport renders there at 28%
+and cannot be judged, and its screenshots ran a frame behind the DOM (a modal open and settled in the
+DOM, absent from three consecutive captures). The critique used a headless Playwright Chromium on a
+copy of the manual rig's DEV profile, against this worktree served on :5179 (the port that profile is
+signed in to): 1280×800 at DPR 1, and 375×812 at DPR 2 with touch. Its `locale` does not reach a native
+date or time input, which rendered "09/24/2026" and "03:00 PM" there; the pane showed "24.09.2026", so
+those are the tool's, not the app's.
+
+**What the rules found.** Six misses in this version's own sweeps, fixed below in five phases from
+41: the waitlist panel's Remove (S6), standing bookings' unnamed Deletes (S6), two "(4)" sizes in one
+phase (C2), a raw date in Customers (C1), and money breaking across a line (C3). Everything the
+critique found that no v18.2.0 rule covers is Patryk's call and is in the report, not built.
+
+**DEV data from this round** (DEV is scratch; nothing was tidied): waitlist "Waitlist Probe" (25) and
+"Indoor Probe" (11); vouchers JA98-KPHZ and HK48-KKNZ (20 € each, partly redeemed); bookings "Voucher
+Probe" (today, completed; Fri 25.09 carrying JA98-KPHZ), "Unsettled Probe" (today, completed with
+FFBV-JYT7 unrecorded) and "Dark Probe" (today, completed; Sat 26.09); the WA-SIM seed and three
+scenario conversations; a standing rule created and deleted ("Standing Probe", its two
+occurrences left in place). Standing bookings and the pre-existing "test standing" rule were restored
+to off / active, and the WhatsApp module to on.
+
+### 41. The waitlist panel's Remove is quiet until armed (S6)
+
+Reached live for the first time (DEV had never had a party waiting): every row carried a solid red
+Remove, `rgba(211, 58, 58, 0.75)`, and arming it changed only the word to "Confirm?". The row used
+`BTN.cancel` at rest and `BTN.del` armed — two tokens with one value, so there was no rest state to
+leave. It takes `mkDangerBtn`, as phase 28 gave standing bookings and Templates: the danger tint at
+rest, solid red once armed, and "Confirm — remove", People's word for the same act. Book and Remove
+name their party, "Book (Waitlist Probe, 25 guests)", in the shape the "table free" banner's Book
+already used, because two rows of bare "Book" are two identical names.
+
+**The fix made the phone worse before it made it better.** The armed label is 140px where "Confirm?"
+was 85, and the row's text was `flex: 1` — a zero basis, so on a 375px phone the buttons never
+wrapped and took their width out of the text instead: 129px at rest, and 67px once armed, with the
+phone line broken into five pieces and "Table free · 18:30" drawn under Book. The text now has a
+160px basis and the button group `marginLeft: auto`, so on a phone the buttons wrap under the text
+at the right edge. DESIGN.md's quiet-delete rule records it: a row whose buttons sit beside its text
+gives the text a basis.
+
+`BTN.cancel` has no users left after this. It stays, with its `src/CLAUDE.md` gotcha row, until it
+is removed on its own.
+
+Live on DEV, headless Chromium. Tablet, light: Remove in the tint `rgba(254, 226, 226, 0.7)`, ink
+`rgb(153, 27, 27)`, 36px; armed, "Confirm — remove" in `rgb(220, 38, 38)`, still 36px, its right edge
+fixed at 892 as it grew 77 → 140px; names "Remove (Waitlist Probe, 25 guests)" and "Confirm — remove
+(Indoor Probe, 11 guests)". Rows stay one line at rest (58px); arming grows that row to 77px as its
+phone line wraps, which moves the armed button about 9px down, still under the first tap. Phone,
+dark: text 283px (was 129), buttons under it 13px from the row's edge, rows 102px at rest and armed
+(armed was 192). Nothing was removed. `tests/destructive-buttons.test.js` +4.
+
+**Gate after phase 41:** `121.86 kB` gz main bundle (+0.04) · **1823 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 42. A standing booking's Delete names its rule (S6)
+
+Phase 28 gave Templates' Delete its template's name, because six rows of bare "Delete" are six
+identical names. Standing bookings took phase 28's look but not that half: with two rules on DEV,
+both Deletes were named "Delete" (read from the accessibility tree; nothing on screen shows it). The
+switch beside each already carried the rule's identity, "Standing booking: test standing, every Fri
+at 13:00". Both now read ONE expression, `ruleWho`, so the switch and the Delete cannot name different
+rules: "Delete (test standing, every Fri at 13:00)", and "Confirm — delete (…)" once armed.
+
+Live on DEV (standing bookings switched on for the check and off again, nothing deleted): the switch
+"Standing booking: test standing, every Fri at 13:00", the Delete "Delete (test standing, every Fri
+at 13:00)", armed "Confirm — delete (test standing, every Fri at 13:00)". `tests/destructive-buttons.test.js`
++1; `tests/a11y.test.js`'s pin on the switch's label still holds.
+
+**Gate after phase 42:** `121.86 kB` gz main bundle (±0; Settings is a lazy chunk) · **1824 tests** (+1) ·
+0 lint errors, 90 warnings (unchanged) · style OK.
+
+### 43. Two sizes phase 38 could not see (C2)
+
+Phase 38 found "4 pax" on twenty-one lines by searching for the word. Two sizes had no word at all,
+only brackets, and both were on surfaces round 2 did not reach:
+
+- **The waitlist ghost's hover title** read "Waiting: Waitlist Probe (25) at 20:00 — fits after
+  re-optimising. Tap to book.", beside a spoken label that already said "25 guests". It reads
+  "Waiting: Indoor Probe, 11 guests, at 18:30. Tap to book." now.
+- **The Plan view's table popover** listed "Phase19 Test (2)", with the size inside the ellipsised
+  name, so a long name lost the size first. It takes the List card's `SizeRing`, with the card's
+  rim. Text "2 guests" was tried first and measured: on a 375px phone it pushed the card edge to edge
+  (1–374px), and bounded to the screen it left a name 71px ("Unsettled Pr…"). The ring leaves 102px
+  and a 343px card on both screens. The row is a small List card (time · name · size · status), and
+  GLOSSARY now says where the ring is the size: a booking's row.
+
+`tests/party-size.test.js` refuses a size in brackets anywhere in `src`. It matches a closing string
+that STARTS with ")", because the ghost's was `") at "` and a pattern for exactly `")"` would have
+missed it (checked against both old lines).
+
+Live on DEV: the ghost's title "Waiting: Indoor Probe, 11 guests, at 18:30. Tap to book."; table
+1A's popover, six rows, each ring "2" titled "2 guests", no name clipped, the card 343px wide on the
+tablet and on the phone (16px from each edge). `tests/party-size.test.js` +3.
+
+**Gate after phase 43:** `121.87 kB` gz main bundle (+0.01) · **1827 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 44. The Customers list's last visit (C1)
+
+Settings → Customers still printed "+34 612345678 · last 2026-09-24" on every customer row. Phase 37
+converted the visit rows under each customer, and the booking form's name suggestions print the same
+sentence as "· last Thu 24.09", but this line survived all three of C1's sweeps: its field is
+`latestDate` rather than `.date`, and its fallback an em dash rather than "?". It reads "last Thu
+24.09" now, "last Fri 15.01.2027" in another year, and still "—" with no visit.
+
+`tests/date-format.test.js` gains the wider scan the three sweeps lacked: any `…Date` field with a
+NON-EMPTY text fallback, in any component, fails the build (the sorts' `|| ""` are data and do not
+match; checked that the old line would have).
+
+Live on DEV: 50 customer rows carry "last …", none of them ISO ("+34 612345678 · last Thu 24.09",
+"+34 600111222 · last Fri 02.10"). `tests/date-format.test.js` +2.
+
+**Gate after phase 44:** `121.87 kB` gz main bundle (±0; Settings is a lazy chunk) · **1829 tests** (+2) ·
+0 lint errors, 90 warnings (unchanged) · style OK.
+
+### 45. An amount and its symbol never part (C3)
+
+`money()` joined the amount and the currency symbol with an ordinary space, so a line could break
+between them. Measured on a 375px phone, the redeem prompt's sentence ended one line with "…this
+voucher attached. 20" and began the next with "€ left on it." Phase 39 made money read "20 €"
+everywhere; a wrap that splits it does not. The space is U+00A0 now, a no-break space, so the
+breaker treats "20 €" as one unit. Every caller is on-screen or printed text (the day sheet), and
+nothing stores or exports what `money()` returns, so no record changes shape. The same class exists
+for "Thu 24.09" and "4 guests"; no break was observed there, and it is listed for Patryk in the
+report rather than done unasked.
+
+Live on DEV, phone, dark: the same guest and voucher (15 € left) — the sentence now wraps as
+"…has this voucher attached." then "15 € left on it.", the amount and the symbol together; the
+string holds U+00A0. `tests/money-format.test.js`: the three shape tests expect the no-break space,
+and a fourth refuses a breaking one.
+
+**Gate after phase 45:** `121.87 kB` gz main bundle (±0) · **1830 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### Patryk's picks from the round-3 report
+
+The report offered twelve fixes beyond the rules; Patryk took **all twelve**, one phase each from §46,
+and sent the thirteenth finding, L-1 (the waitlist forgets a party's seating preference and offers
+outdoor tables to a party refused indoor), to ROADMAP, because it changes matching behaviour rather
+than design.
+
+How they landed: W-1 §46 · V-1 + V-2 §47 · V-3 §48 · W-2 + W-3 §49 · C-4 §50 · L-2 §51 · V-4 §53 · C-5
+§54 · L-3 §55 · A-1 §56 · A-2 §57 · V-5 + V-6 §58 · T-1 §59. "L-2 + V-4" was offered as one phase and
+became two commits, §51 and §53, because measuring L-2 found the same fault in phase 41's waitlist
+rows, and that went into §51 as one rule for both. §52 is a regression in this version's own phase
+20, found while setting up V-4's check. A-1 and A-2 each came out wider than the report said; their
+sections say how.
+
+### 46. The linked-booking card's header on a phone (W-1)
+
+On a 375px phone "Open booking" was drawn over the linked card's "LINKED BOOKING" label and its status
+badge, which read "✓ Co" behind the button. Measured: the title was 28px wide and its content — the
+103px label and the 96px badge — spilled under the button group. `AlertPanel`'s title was `flex: 1`, a
+zero basis, and a wrapping line wraps on its items' bases, so the actions stayed on the title's line
+whenever they alone fitted it (Open booking + Cancel booking + the chevron, 259 of 345px) and took
+their width out of the title. The intent banner below wrapped only because its buttons are wider.
+
+A wrapping header's title now takes its content as its basis, so the actions drop under it. Only the
+two headers that wrap (`onHeaderClick`: the linked card and the intent banner) take it; every other
+pane keeps `flex: 1`, where the title is the one item that shrinks either way and nothing moves.
+
+Live on DEV: phone, Sofía's conversation — the label [51–154] and badge [162–258] on line one (y 235–
+255), Open booking from y 263, no overlap; the intent banner's buttons under its title as before.
+Tablet — both headers still one line (Open booking at x 952 on the title's line).
+`tests/wa-inbox-layout.test.js` +2.
+
+**Gate after phase 46:** `121.88 kB` gz main bundle (+0.01) · **1832 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 47. The voucher picker's list is seen, and says what cannot be picked (V-1 + V-2)
+
+**V-1.** The Gift voucher field is the booking form's last, so its suggestion list opened below the
+fold and dropped into the pinned Save pending · Back · Save booking bar: on the tablet half of the
+first of 15 rows showed (menu top 647, scroll port bottom 682) until you thought to scroll the form.
+The list now scrolls itself into view when it opens — `block: "nearest"`, so a list already in view
+does not move, and no glide under Reduce animations (`reduceMotionOn()`, WAAPI and `scrollIntoView`
+being out of the CSS kill-switch's reach). `matches` moved above the attached-state early return,
+because the effect reads it and a hook cannot sit behind a return.
+
+**V-2.** The list offered a voucher already attached to another live booking (JA98-KPHZ, carried to
+Friday's), and picking it put the refusal UNDER the still-open list: `useAcRow` prevents the row's
+mousedown blur, so the input kept focus and the list stayed open over the error it had just caused.
+Such a voucher is marked in the list — "Already on Voucher Probe · Fri 25.09", in the warn ink, from
+`attachedElsewhere`, the refusal's own predicate, so the mark and the refusal cannot disagree. It stays
+pickable; a refusal now closes the list, and typing opens it again. `--warn-text` on `--bg-ac-menu` is a
+new text pairing and is registered in `tests/contrast.test.js` (passes in both themes).
+
+Live on DEV, a fresh load each time. Tablet: a real click on the field scrolled the form 189 → 420 and
+the 15-row list [416–682] lay inside the port [41–682]; the JA98 row read "JA98-KPHZ · Live pass carry
+probe · Already on Voucher Probe · Fri 25.09 · 7.7 € left"; picking it closed the list and showed "That
+voucher is already on Voucher Probe on Fri 25.09." with the input still focused; typing "Q" reopened
+it. Phone, dark: 298 → 537, the list [477–743] inside the port [0–743]. `tests/voucher-picker.test.js`
+(4, new), `tests/contrast.test.js` +2.
+
+**Gate after phase 47:** `122.00 kB` gz main bundle (+0.12) · **1838 tests** (+6) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 48. Settle opens the redeem prompt (V-3)
+
+The strip's "Voucher not recorded" row offered "Settle <name>", which opened the whole edit form. Its
+voucher line said "You will be asked how much of it the bill used when this booking is completed" —
+of a booking already completed — and what actually settled it was pressing Save booking, which raised
+the redeem prompt through `voucherToAsk`. Nothing on screen said so; Back left it unsettled.
+
+Settle now opens that prompt itself, behind `voucherRedeem`, as `from: "settle"`. Three things follow
+from the booking already being completed:
+
+- **No status write.** `settleVoucher`'s order — booking first, voucher only if that dispatched —
+  exists for a completion. A settle has no booking write, so the voucher is the only one. Going through
+  `updateStatus` would have logged a second "status → completed" for a status that did not change.
+- **"Not now" and "Redeem"**, not "Complete without using it" and "Redeem & complete", and "Not now"
+  only closes: the booking stays unsettled and in the strip. The sentence reads "Unsettled Probe's
+  visit was completed without recording this voucher. 30 € left on it."
+- The carry offer still follows a partial redemption, as after a completion.
+
+Live on DEV (Unsettled Probe, FFBV-JYT7, 30 €): Settle opened the prompt in its settle wording; Not now
+closed it and the row stayed. Settle again, 10 → "20 € stays on the voucher for a later visit",
+Redeem: the row cleared; the voucher's `redemptions` gained the booking's entry (amount 10, remaining
+20); the booking's history is unchanged. `tests/voucher-settle.test.js` (4, new).
+
+**Gate after phase 48:** `122.14 kB` gz main bundle (+0.14) · **1842 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 49. The conversation says each thing once (W-2 + W-3)
+
+**W-2.** The intent banner printed "Linked to: Sun 27.09 · 20:30 · 4 guests" directly under the
+linked-booking card, which renders whenever there is a linked booking and says exactly that, open
+or collapsed. The banner's body now holds only what is not already on screen: the requested changes
+("Requested: 6 guests"), or "No linked booking found". A banner left with nothing to disclose — a
+linked cancel request, or a change the parser found nothing in — has no body, so it is not a toggle
+and has no chevron: a disclosure that opens onto nothing is noise.
+
+**W-3.** Every "Past bookings" row ended "· completed", because `regularBookings` holds completed
+visits only. The status is gone from both lists that show them, the conversation's and the booking
+form's (the same data under the same title). The booking form's "No-shows" list keeps its status: a
+legacy no-show, found by a history entry rather than the flag, can carry any status.
+
+Live on DEV, tablet: Sofía's banner "Customer is requesting changes · Apply changes · Mark as
+handled · Requested: 6 guests", still a toggle; Tom's "Customer is requesting to cancel · Mark as
+handled", one line, cursor `auto`, no chevron; Juan's past bookings "Thu 03.09 · 20:30 · 4 guests",
+in the conversation and in the booking form. `tests/wa-inbox-layout.test.js` +3; the phase-46 pin,
+`tests/wa-sandbox-integrity.test.js`, `tests/party-size.test.js` and `tests/date-format.test.js`
+follow the new shapes (the last now asserts "Linked to:" is gone).
+
+**Gate after phase 49:** `122.15 kB` gz main bundle (+0.01) · **1845 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 50. One phone format (C-4)
+
+A phone was written two ways, and one of them was wrong for some countries. The List card and the
+printed Day sheet printed the stored text as typed: one List screen (Thu 24.09 on DEV) read "+34 612
+345 678", "+44 33 6 12 34 56 78" and "+34655443322". Everything else — the waitlist, Customers, Find a
+booking, WhatsApp — printed `formatPhone`, which put its space after two digits whatever the code, so
+"+1 212 555 0123" read "+12 125550123" and "+353 87 123 4567" read "+35 3871234567": a country code
+that is not the guest's.
+
+`formatPhone` now finds the code in the country picker's own table (`dialOf`, `lib/phone-countries.js`,
+longest code first) and writes the code, one space, the digits: "+1 2125550123", "+353 871234567",
+"+34 612345678". A code the table does not know is shown whole rather than cut in a made-up place, and
+a number stored without a code is its digits. The digits are not grouped: groupings differ by country,
+there is no table of them, and a made-up grouping is the same defect as a made-up split. The List and
+the Day sheet (its bookings and its waitlist lines) go through it. Nothing stored changes — 141 of
+DEV's 274 stored phones carry spaces, and `normalizePhone` ignores them for the phone key.
+
+`customers.js` is in the Node chain the WhatsApp backend loads (`whatsapp.js` re-exports it), so the
+new import carries its `.js`, and `tests/wa-sandbox-integrity.test.js`'s walk now reaches
+`phone-countries.js`; Node imports `customers.js` and formats "+1 212 555 0123" as "+1 2125550123".
+
+Live on DEV, the same Thu 24.09. Tablet: the List read "+34 612345678", "+44 33612345678", "+34
+655443322" and five more in that shape; the Day sheet's eleven phone cells likewise. Phone: every
+number on one line (15px), the widest ending at x 254 of 375, no page scroll. The Day sheet's waitlist
+line could not be reached here — no waitlist entry on DEV had a phone — and was pinned in source; §51
+added one and it read "1. Wait Probe Ana · 4 guests · wants 20:30 · +34 612345678" (stored "+34 612
+345 678").
+`tests/customers.test.js` +2. `tests/phone-format.test.js` (3, new) pins the two sites and fails on
+any component that prints a stored phone raw; against the tree before this phase it flags ListView
+once and DaySheet twice.
+
+**Gate after phase 50:** `122.13 kB` gz main bundle (−0.02) · **1850 tests** (+5) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 51. An armed Delete moves nothing (L-2, and phase 41's waitlist rows)
+
+**L-2.** A standing-booking row's text was `flex: 1`, a zero basis, so its switch and Delete never
+wrapped: on a 375px phone the armed "Confirm — delete" (126px; "Delete" is 61) took the name down to
+97px, "test standing" / "· 2 guests" on two lines. The text now takes a basis.
+
+**The same measurement found phase 41's rows wrong.** A basis alone wraps the line on the button
+group's CURRENT width, and arming widens it. On the waitlist (Remove 77 → 140px), from about 405 to
+468px the resting group fitted beside the text and the armed one did not: on a 430px phone Remove sat
+beside the text at rest and wrapped 27px down when armed, so the second tap landed on the text. The
+standing row would have done the same at 375px, the commonest phone, where the line held 162px of text
+beside the resting Delete and not beside the armed one.
+
+Asked, Patryk chose to have the button group RESERVE its armed width (`minWidth`, `flex-end`) over
+stacking only on phones and keeping the tablet's waitlist text at its resting 321px. Reserved, a row
+wraps alike in both states, and arming grows the button leftwards into space that was already empty:
+the button, the text and the rows below all stay put. The reserves are the armed groups measured and
+rounded up — `ACTIONS_W` 207 (Book 60.3 + 6 + 140.1) and `RULE_ACTIONS_W` 182 (the switch 48 + 8 +
+125.5). A first version added 5% for a wider system font (Arial sets these labels 2% wider than San
+Francisco); those 10px gave the first DEV waitlist row a fourth line on the tablet, more than the cost
+put to Patryk, so the reserves are exact. A font that sets the label wider takes the difference out of
+the text when armed; it cannot re-wrap a group on a phone, where a 440px screen is 29px (waitlist) and
+38px (standing) short of sharing the line. The standing text's basis is 200px, a typical "Name · 4
+guests" line, so every phone stacks it.
+
+Live on DEV, two waitlist entries added for today through the app's write shape (rev +1), at rest and
+armed at 375, 430, 440, 600 and 1280px: identical row height, text width and button position in both
+states at every width, for both rows. Phones: waitlist rows 102px with Remove under the text at its
+right edge (x 344 / 399 / 409); standing rows 86px, text 287 / 342 / 352px. Card: waitlist text 253px
+(600) and 257px (1280), rows 77px; standing one line, 50px, text 284 and 508px. The same entries let
+§50's Day-sheet waitlist line be read. `tests/destructive-buttons.test.js` +1, the phase-41 pin follows
+the new group, and the reserves are floored at the measured widths; the three new patterns fail against
+the sources before this phase.
+
+**Gate after phase 51:** `122.15 kB` gz main bundle (+0.02) · **1851 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 52. A space after the typed code keeps the country (phase 20's clearing)
+
+Found while setting up V-4's live check, which needed a phone typed into a new booking. Typed key by
+key on DEV, "+34 622 333 444" went: "+" and "+3" held in the box; at "4" the picker took Spain and the
+box emptied, as designed; at the SPACE the picker went back to "Code"; the digits then went in with no
+country. Phase 20 forgets a country the field found "when the number is cleared", and tested that as
+"the box has no digits now" — which is also true of a space typed into the box the picker has just
+emptied (or a dash, or a bracket). So a number typed as it is written lost its code at the first
+separator, and phase 19's Save check then refused it or the guest's history did not match.
+
+Cleared now means the box HAD digits and has none: `numberCleared(before, after)` in
+`lib/phone-countries.js`, pure and tested, called with the box's previous national part.
+
+Live on DEV, tablet, after a reload. Key by key: "+" → "+", "+3" → "+3", "+34" → Spain, box empty;
+the space → Spain still; "6" → Spain, "6"; the rest → Spain, "622 333 444". Leaving the box, the
+booking form offered the guest's own voucher ("This guest has voucher FFBV-JYT7 · 20 € left"), which it
+could not while the country was lost. Phase 20's case still holds: "44 7700 900123" became United
+Kingdom +44 on leaving the box, and emptying the box put the picker back to "Code".
+`tests/phone-countries.test.js` +3 (`numberCleared`); phase 20's pin follows the new condition.
+
+**Gate after phase 52:** `122.13 kB` gz main bundle (−0.02) · **1854 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 53. The voucher rows keep their button right, and the placeholder fits (V-4)
+
+The booking form's suggestion of a guest's own voucher ("This guest has voucher FFBV-JYT7 · 20 € left",
+then Attach) pushed Attach right with a zero-basis `flex: 1` spacer. In a row that wraps, the spacer
+stays on the first line whenever that line has room for it, so Attach started the next line at the
+LEFT: measured at x 42 on a 375px phone, where the sentence left 40px on its line, and at the right
+edge on a 320px phone, where the sentence filled it. The attached state's Remove had the same spacer
+and, on a 320px phone, started line 2 at x 33. Both now carry `marginLeft: auto`, which travels with
+the button to whichever line it lands on; there were no other such spacers in the app, and a test now
+refuses one in any component. The field's placeholder, "Number, or pick from the list", was 221px of
+text in a 205px box on a 375px phone; "Number, or pick one" is 157px. It keeps the field's words and
+fits every phone from about 330px (it is still cut on a 320px screen, whose box is 150px).
+
+Live on DEV, "+34 622 333 444" typed into a new booking (§52 made that possible). Attach at 267–333
+(375px, the row's inner right edge 333) and 212–278 (320px); on the tablet unchanged, one line.
+Attached: Remove at 214–287 on a 320px phone (the right edge), one line at 375px and on the tablet as
+before. `tests/voucher-picker.test.js` +3; the spacer and the missing auto margin fail against the
+source before this phase.
+
+**Gate after phase 53:** `122.12 kB` gz main bundle (−0.01) · **1857 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 54. A day and a size never break across lines (C-5)
+
+Phase 45 joined money's amount and symbol with a no-break space; the report listed the same class for
+the other two house formatters, where no break had been seen yet. `formatDay` now joins the weekday
+and the day with U+00A0 ("Thu 24.09", "Fri 15.01.2027"), and `guestsLabel` the number and the word
+("4 guests"), so a wrapping line never ends on "Thu" or on "4". Other number-and-word pairs — "2
+bookings", "20 min late" — are typed at their own sites and were left.
+
+Nothing stores either: history and the Activity log keep ISO, the CSV exports the raw text, and no
+outbound WhatsApp text uses them (the templates are fixed sentences). The one consumer that had to
+change is the Activity log's search, which matches the text as it is shown: it now folds U+00A0 to a
+plain space on both sides, or a typed "Thu 24.09" would have found nothing.
+
+Live on DEV, tablet. The waitlist panel's title read "Waitlist — Sat<NBSP>26.09", its sizes
+"4<NBSP>guests" and "6<NBSP>guests", and Book's name "Book (Wait Probe Ana, 4<NBSP>guests)". The
+Activity log shows "Thu<NBSP>24.09" (and no plain-space form); searching "24.09" found 4 of 500
+entries, "thu 24.09" typed with a plain space 4, and with a no-break space 4. Thirty-four expectation
+lines across `date-format`, `party-size`, `booking-logic`, `list-card` and `vouchers` now carry the
+escape (§55 corrects the count first written here); +3 tests (no plain space inside either, and the
+search's fold).
+
+**Gate after phase 54:** `122.12 kB` gz main bundle (±0) · **1860 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 55. A paused standing booking looks like a paused reminder (L-3)
+
+Settings had two looks for "paused", one tab apart. A paused reminder (phase 28) fades its words to
+0.55 and carries an outline "Paused" tag; a paused standing booking faded its name alone, to 0.5, and
+appended "· paused" to its schedule line — the treatment phase 28's own comment had cited as the
+precedent. Standing bookings take the reminder's look: both lines at `PAUSED_FADE` and the same tag,
+with the switch and Delete at full strength. `PAUSED_FADE` moved to atoms so the two share one value.
+
+Moving it found phase 28's slip: the constant had been typed between `export` and `function
+ReminderListItem`, which exported the number and quietly un-exported the card. Nothing imported
+either, so nothing broke; the card is exported again.
+
+Live on DEV, "test standing" (Fri 13:00) paused and then switched back on. Tablet: the name and the
+schedule both at an effective opacity of 0.55, the "Paused" tag at 1, the switch and Delete at 1, and
+no "· paused" in the row's text. Phone, dark: the same, nothing wider than the 309px row, no page
+scroll. `tests/destructive-buttons.test.js` +1. §54's count of changed expectations is corrected here
+(34 lines, not "twenty-nine strings").
+
+**Gate after phase 55:** `122.09 kB` gz main bundle (−0.03) · **1861 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 56. Every − and + says what it steps (A-1)
+
+The report said Settings' nine mini-steppers named their buttons by the glyph alone. Measured on DEV
+the class was wider: `MiniStepper`'s nine call sites render 21 steppers (the opening and closing
+hours once per weekday), and `HourStepper` — whose `label` was only the heading above its buttons —
+another 17 on the General tab with three duration tiers. All 66 stepper buttons there, and the ten on
+the App tab, announced "−" or "+". So did the floor-plan editor's steppers and zoom, and the Customers
+tab's Regulars threshold. The report's "durations" were HourSteppers, which is how the count came out
+at nine.
+
+Each is now named for what it steps, LayoutSettings' `Stepper` shape: "Decrease " / "Increase " +
+what. `MiniStepper` takes a `label` (no default); `HourStepper` and the editor's `Step` use their
+visible label, with a `who` prefix where the visible text leaves the row implicit — "Tier 2: stay
+for" in the duration tiers, whose rows show only "Parties up to" and "stay for"; "Larger parties" for
+the rest row; "Chairs: Top" for the chair sides. The weekday rows carry their day, as the row's Open
+pill does ("Mon opening time"). The editor's zoom reads "Zoom out" / "Zoom in", as the timeline's.
+
+Live on DEV, tablet, every Settings tab swept with every collapsible open: 0 unnamed − or + buttons
+(General 66 and all unique, App 10, Layout 237, Vouchers 2); the Customers stepper, which renders only
+under the Regulars filter, reads "Decrease visits for a regular"; the editor's room steppers "Decrease
+Room width" / "Room height", and selecting table 1A (a real click) gave "Decrease Size", "Decrease
+Rotation" and "Decrease Chairs: Top" through "Chairs: Left". `tests/a11y.test.js` +3, one of them a scan
+of every component for a − or + button with no aria-label — against the sources before this phase it
+finds all ten such buttons in the source (the three stepper components' pairs, the editor's zoom pair
+and the Customers pair); phase 38's tier-stepper pin follows the new attribute.
+
+**Gate after phase 56:** `122.09 kB` gz main bundle (±0) · **1864 tests** (+3) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 57. The Plan view's table popover works from the keyboard (A-2)
+
+A table on the floor plan is a button, and Enter opens its popover — which listed the table's
+bookings as `<div>`s with onClick, no role and no tab stop. The popover is portalled to the end of
+`<body>` and nothing moved focus into it, so a keyboard user could open it and do nothing there; even
+"Walk-in here", a real button, came after every other control on the page.
+
+The rows are `<button>`s now, named with their visible text first — "20:00 Ana, 2 guests, confirmed"
+(the size ring alone would have read as a bare "2"). A popover opened by a KEY takes focus to its
+first row, Escape closes it (a capture listener on window, stopped), and focus returns to the table:
+the List ⋯ popup's click-opened shape. Two findings came out of verifying it:
+
+- **A tap must not move focus in.** A table cancels its own mousedown focus (the `tabIndex` gotcha),
+  so after a tap Chrome counted the script focus as keyboard focus and drew a ring round the first
+  booking on every tap (`:focus-visible` true); the List's ⋯ shows none, because its button took the
+  tap's focus. Focus moves in only on `keydown` or a click with `detail` 0 (assistive technology).
+- **Leaving for a form refocuses the table in the handler.** Picking a row returned focus to `<body>`
+  when the edit form closed — with StrictMode off, so not the CT-2C-02 artefact that looks the same. A
+  focusin log showed why: row → dialog → body. The effect's cleanup does hand focus back, but the
+  commit that mounts the form also marks the page `inert`, where `focus()` does nothing; the form's
+  `useDialog` then recorded `<body>`. `leavePop()` refocuses the table before the state changes. A
+  Gotchas row in `src/CLAUDE.md` records the pair.
+
+Live on DEV, tablet, table 3 (three bookings) with real keys. Enter on the table → the first row
+focused ("18:00 YE seated, 2 guests, seated"); Tab → the second; Escape → closed, focus on table 3.
+Enter on the second row → "Edit booking" for YE confirmed; Escape → focus back on table 3 (StrictMode
+off; with it on, DEV loses the restore as CT-2C-02 records). A real mouse click → the popover open,
+focus left on `<body>`, no ring; Escape still closes it. `tests/a11y.test.js` +1.
+
+**Gate after phase 57:** `122.27 kB` gz main bundle (+0.18) · **1865 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 58. Settle says Settle, and the amount takes cents (V-5 + V-6)
+
+**V-5.** The strip's "Voucher not recorded" row ended in a button reading "Settle Unsettled Probe"
+(163px), where the strip's other rows say "Book" or "No show" — and the sentence beside the button
+already names the party. It reads "Settle"; the party stays in its accessible name, "Settle Laura
+Vidal's voucher", which is what tells two rows apart for a screen reader and still leads with the
+word a voice-control user sees.
+
+**V-6.** The redeem prompt's amount was `step={1}`, so "12.3" — a bill share the app accepts — was
+`:invalid` (stepMismatch). It is `step={0.01}`: cents are valid, a third decimal is flagged. The
+arrow keys now move it by a cent, which only a desktop keyboard can do (the tablet types into a
+decimal keypad); `step="any"` would have kept whole steps and stated no precision. The deposit and
+the voucher-issue amounts keep `step={5}`, which is their spinner's increment.
+
+Live on DEV, tablet, Thu 16.09 (Laura Vidal, 5C7Z-WJ3P, unsettled): the button 62px, text "Settle",
+name "Settle Laura Vidal's voucher". Its prompt: "12.3" valid, "12.345" stepMismatch, ArrowUp from
+12.3 → 12.31; Not now closed it with nothing written. `tests/voucher-settle.test.js` +2.
+
+**Gate after phase 58:** `122.27 kB` gz main bundle (±0) · **1867 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 59. BTN.cancel is gone (T-1)
+
+`BTN.cancel` / `--btn-cancel` was `--btn-del`'s value under a second name, a red named for cancelling
+a BOOKING that kept being reached for as a dialog's "go back" — `src/CLAUDE.md` carried a gotcha row
+warning against exactly that. Phase 41 moved the waitlist's Remove, its last user, to `mkDangerBtn`.
+The key, the CSS variable, its contrast registration and the gotcha row are removed; the rule the row
+guarded lives on in DESIGN.md's "Red means destructive" (a dialog's go-back is `--app-btn-slate`), and
+three comments that described the token as live now say it was removed. `--wa-btn-cancel`, the
+inbox's own delete red, is a different token and stays.
+
+Live on DEV: `--btn-cancel` resolves to "" on the root, no element references it, and the booking form
+opens as before. `tests/destructive-buttons.test.js` +1 (the key, the variable and the registration
+stay gone); the registry lost the entry's two cases, one per theme (measured: 206 → 204).
+
+**Gate after phase 59:** `122.27 kB` gz main bundle (±0) · **1866 tests** (−1: +1, −2) · 0 lint errors,
+90 warnings (unchanged) · style OK.
+
+### Fifth round — Patryk's changes, and the ROADMAP entries this version wrote (2026-09-26)
+
+Patryk brought six changes of his own and asked for the five ROADMAP entries v18.2.0 had added: the
+Plan view's opening time, the six minor round-2 findings, L-1 (the waitlist's seating preference), the
+List card's missing-table pill and the critique's loose ends. Every fork went to him first, each with a
+recommendation, and all but one took it. **The exception is the destructive button**: shown the app's
+own atoms side by side in both themes (today · quiet until armed · solid at rest · quiet + trash icon),
+he chose SOLID red at rest plus a trash icon on Delete and Remove, which reverses the quiet rows phases
+27, 28 and 41 built; the editors' small × removers stay quiet, his call too. The rest: the ⋯ card drops
+both of its duplicates, UK numbers means mobiles, the Day sheet saves as `mgt-day-sheet-YYYY-MM-DD`, the
+waitlist offers only the preferred zone, the voucher amount's hint is "e.g. 50", and the draft card's
+confidence says what to do.
+
+Half of one request was already on the branch: "Pax" → "Guests" on the printed Day sheet is phase 38's
+(its column and its waitlist line both read `guestsLabel`). `main` still prints "Pax", which is what a
+sheet printed from production shows.
+
+### 60. The ⋯ card leaves out what the card offers
+
+Patryk: the List card's ⋯ repeated the button beside it. The quick-status card offered every status
+but the current one, so on a confirmed card it led with "seated", the card's own next step, and at the
+no-show stage it offered No show a second time too. `QuickStatusPopup` takes `omitStatus` and
+`omitNoShow`, and `ListView` fills both from ONE module-scope `cardActionsOf(b, late, today, nowMins)`
+that the card's own buttons now read as well, so what the card shows and what ⋯ leaves out cannot
+drift apart. The timeline and the plan open the card on a hold and pass neither: their block and table
+carry no status buttons, so the card is the only place those actions live.
+
+Live on DEV, Sat 26.09, List: the four confirmed cards show "Assign · seated" and their ⋯ card
+"completed · cancelled · Delete". "Late Probe" (a confirmed 18:30, made for the check and past the
+no-show threshold) shows "No show · Assign · seated" on the card and "completed · cancelled · Delete"
+in ⋯.
+`tests/list-card.test.js` +2 (the one source, and the popup's two filters with their defaults).
+
+**Gate after phase 60:** `122.37 kB` gz main bundle (+0.10) · **1868 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 61. More hangs from the top, like Settings
+
+Patryk: More (Week / Month / Stats) should open as Settings does, its top fixed and its bottom
+following `AutoHeight`. Centred, the card's top followed the body's height, so the Week / Month /
+Stats control moved every time it was pressed, and again whenever a month had a sixth week. The
+`Overlay` takes `anchor="top"` (phase 26's S2 fix) and its `AutoHeight` Settings' `watch`, here
+`mode + "|" + ref`, because every mode switch and period step REPLACES the body — without it the new
+body paints once at full height before the observer clips it.
+
+Live on DEV at 1280×800, the animations finished before each read: the card's top measures 40px (5dvh)
+for Week (623px tall), Month (552), Stats (684), and stepping month by month into a six-week month
+(552 → 610 → 552). Centred, those heights put the top at 88, 124, 58 and 95px (arithmetic from the
+measured heights). The phone sheet is full-screen and unaffected. `tests/week-view.test.js` +2;
+`tests/tab-rows.test.js`' "one caller" pin now counts App's callers, which it always did.
+
+**Gate after phase 61:** `122.37 kB` gz main bundle (±0; WeekView is in a lazy chunk) · **1870 tests**
+(+2) · 0 lint errors, 90 warnings (unchanged) · style OK.
+
+### 62. One red for every destructive button, and the trash mark
+
+Patryk: Delete in the templates editor, Remove in Admin → People, "Delete customer & all data",
+Delete in Reminders, Void voucher, Clear this range and the booking form's Delete do one job and
+looked three ways — scan the app and unify them. The scan found them in four reds: the tint that
+turned solid when armed (People, Templates, Reminders, the waitlist, standing bookings), the
+translucent `--btn-del` (the booking form, the ⋯ card, Customers, the Activity log, Vouchers,
+Unblock, the floor plan's Delete door / wall, Layout's remove-table confirmation), `--app-danger-solid`
+(the "Delete booking?" and Discard dialogs) with `BTN.del` beside it in the reminder and conversation
+dialogs, and the inbox's own `--wa-btn-cancel`. He asked to see the options first: a scratch page drew
+today's buttons and three candidates with the app's own atoms, in both themes, and he chose solid red
+at rest plus a trash mark on a Delete or a Remove — reversing the quiet rows of phases 27, 28 and 41.
+Asked separately, he kept the editors' small icon-only × removers quiet (phase 63).
+
+`mkDangerBtn(extra)` is now one solid `--app-danger-solid` with the solid rim, at rest and armed, on
+mkBtn's geometry; the `armed` parameter is gone, since arming changes only the label.
+`mkDangerConfirm(extra)` is the same red on `mkSolidBtn`'s geometry for the three delete dialogs and
+Discard. `TrashIcon` moved from `whatsapp/WaIcons.jsx` to `Icons.jsx`, unchanged, so the inbox's
+Delete and the booking form's are one drawing (the inbox's now takes this set's 2.2 stroke below
+18px, where WaIcons drew 2). It leads every Delete and Remove; Void voucher, Unblock and Clear this
+range take the red without it, being no deletion of a thing. `--wa-btn-cancel` lost its last users and
+went, with its contrast registration. What stays on an old red, and is allow-listed by count in the new
+sweep: a blocked table's fill in `TableGrid` (a status, not a button), the sandbox simulator's "Make
+next staff reply fail" (destroys nothing), and the reminder editor's remove-time × (phase 63).
+
+**Found by measuring the change, and fixed in it.** The trash mark widened both armed-width reserves
+past their values: the waitlist's Book + armed Remove measures 226.4px (`ACTIONS_W` 207 → 227) and a
+standing booking's switch + armed Delete 201.5 (`RULE_ACTIONS_W` 182 → 202), so without the update the
+first tap would again have moved the button. And the Customers delete had two faults of its own: its
+armed sentence sat IN FRONT of the button in the same wrapping row, and its armed label is the SHORTER
+one, so the right-aligned button shrank from its left edge (209 → 154px) and a first tap there missed on
+the second. The sentence now sits under the button, tied by `aria-describedby` while it exists, the
+label reads "Confirm — delete", and the button keeps its resting width (`DELETE_W` 210; the label
+alone measures 208.8).
+
+Live on DEV at 1280×800: rgb(220, 38, 38) with the mark on the ⋯ card's Delete (44px), the booking
+form's (36px, beside Save booking's accent), the waitlist's Remove at rest and armed, a standing
+booking's Delete at rest and armed (Standing bookings switched on to measure, and back off), and the
+Customers delete, which measures x 792, 210px wide in both states with its warning below it; Void
+voucher the same red without the mark. `tests/destructive-buttons.test.js` rewritten for the new rule
+and extended (+8: the dialog helper, a sweep of every component for the old reds, the mark at every
+Delete and Remove, the dialogs, the three non-deletions, the Customers sentence and width, the one
+drawing); the contrast registry lost `--wa-btn-cancel`'s two cases.
+
+**Gate after phase 62:** `122.35 kB` gz main bundle (−0.02) · **1876 tests** (+6) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 63. The editors' × removers: one quiet look, and named
+
+The other half of item 3, Patryk's call when asked alongside it: the small icon-only × that takes one
+item out of a list being edited stays quiet rather than turning solid, or Layout → Tables alone would
+carry thirteen red buttons. The app had three of them. Layout's `X_BTN` (the danger tint with the glass
+rim) moves to atoms as `mkRemoveX(size)` and becomes the one look. A duration tier's × was a stepper
+circle with a red glyph, named only by a `title` that read "Remove this tier" on every tier, and armed
+as "Remove?" in the tint WITH a danger border — the banned three-encodings shape, and the ROADMAP loose
+end this closes. The reminder editor's remove-time × was a solid `BTN.del` square with no accessible
+name at all.
+
+Now the tier's × is `mkRemoveX(H.compact)` named "Remove Tier N", and armed it is the destructive look
+of phase 62, "Confirm — remove" with the trash mark, in a slot reserving that width
+(`TIER_ARMED_W` 153: the armed button measures 152.1), with the × at the slot's left so arming grows
+the button rightwards from under the finger. The reminder editor's × is `mkRemoveX(H.control)`, the time
+field's height, named "Remove time N", still one tap: it edits a draft the editor's Cancel discards.
+
+Live on DEV (Settings → General → Booking durations, a 991px window): the tier × 32×32 at x 467.5,
+y 759, tint rgba(254, 226, 226, 0.7) with ink rgb(153, 27, 27) and the glass rim; armed, rgb(220, 38,
+38) "Confirm — remove" at the same x and y, the row 56px in both states; left alone it disarmed after
+3s, as before. `tests/destructive-buttons.test.js` +4 (and the sweep's allow-list lost the reminder
+editor).
+
+**Gate after phase 63:** `122.33 kB` gz main bundle (−0.02) · **1880 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 64. The view switcher keeps its own place
+
+Patryk: remove phase 23's alignment of the View group with the Summary — he tried it in practice, and
+the horizontal movement does not look good. Phase 23's `useAlignLeft` measured the Summary card's left
+edge and moved Timeline / List / Plan sideways to stand over it, gliding on `M.shift` whenever the
+Summary's width changed (the Today and waitlist pills, the date's own width). The hook, its test, the
+two refs it needed and the wrapping `<div>` that let the switcher and its split tools move as one are
+removed, which is exactly what phase 23 added to App; the switcher is back in its own slot in the
+header's action group. DESIGN.md records the reversal, and the measurement-traps skill keeps the
+ResizeObserver lesson phase 23's measuring taught, since that is about the pane, not the feature.
+
+Live on DEV at 1280×800: the switcher's group at x 739, in the right-hand cluster beside Walk-in,
+"+ New" and WhatsApp; it and every ancestor up to the header compute `transform: none`.
+`tests/align-left.test.js` (11) is deleted with the hook; `tests/segmented.test.js` +1 pins that
+nothing moves the switcher.
+
+**Gate after phase 64:** `121.97 kB` gz main bundle (−0.36) · **1870 tests** (−10: −11, +1) · 0 lint
+errors, 90 warnings (unchanged) · style OK.
+
+### 65. The Day sheet prints under its own day
+
+Patryk: the printed Day sheet's file must contain its date, and its "Pax" column must read "Guests".
+The column is phase 38's (C2), which renamed it and the sheet's waitlist lines; `main` still prints
+"Pax", which is what a sheet printed from production shows. Only the header comment still said "Pax",
+and it is corrected.
+
+The file name: a browser names a print-to-PDF after `document.title`, and the title was the app's name,
+so every day's sheet saved as "MGT Bookings". `DaySheet`, which is always mounted, sets the title to
+`mgt-day-sheet-YYYY-MM-DD` on `beforeprint` and restores it on `afterprint` (or in the effect's cleanup,
+should the day change or the sheet unmount mid-print). Both the Summary's "Print day sheet" and the
+browser's own ⌘P fire them, and both print this sheet, since the print stylesheet hides `#root`. ISO,
+Patryk's pick, in the shape of the app's two other files (`mgt-backup-…`, `mgt-activity-…`), so a folder
+of sheets sorts by day; DESIGN.md's one-date-format rule records file names beside the CSV as an ISO
+exception. A date that is not canonical (a booking's stored date can reach `viewDate` verbatim) names
+no day rather than a broken one.
+
+Live on DEV: firing `beforeprint` set "mgt-day-sheet-2026-09-26", `afterprint` restored "MGT Bookings",
+and after stepping to the next day the title read "mgt-day-sheet-2026-09-27"; the sheet's third column
+header reads "Guests". What a real print dialog proposes as the file name was not observed — automation
+cannot drive one — and is worth one print on the Mac and the tablet. `tests/date-format.test.js` +2.
+
+**Gate after phase 65:** `122.11 kB` gz main bundle (+0.14) · **1872 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 66. British numbers typed the home way
+
+Patryk: a British number is 11 digits with a leading 0 dialled at home and +44 from abroad, and the
+automatic country-code detection must know it. It did not, on purpose: phase 20's `withTypedCode`
+refuses any number led by a 0 ("a trunk prefix, i.e. a national number"), and a test pinned "07700
+900123" as left alone. So "07911 123456" typed with no country stayed as typed and Save asked for the
+code, and a number typed as "+44 07911 …" was stored with the 0, a different customer from
+"+44 7911 …".
+
+Two rules in `withTypedCode`, which the phone field runs when you leave the box and `doSave` runs on a
+save by Enter:
+- a British MOBILE typed the home way (its digits `07` plus nine, not 070 personal numbers or 076
+  pagers) becomes +44 without its 0 when 🇬🇧 is pinned, phase 20's gate. Mobiles only, Patryk's pick:
+  the 01/02/03 landlines share their shape with German landlines (Berlin 030…, Cologne 0221…) and
+  Egyptian mobiles;
+- a home 0 kept after +44 ("+44 07911…", "+44 (0) 7911…", "0044 0…") is dropped whatever the pins,
+  since that code is explicit and nothing is guessed. A Crown dependency written that way lands on its
+  own code ("+44 01481…" → Guernsey).
+
+Every way of typing one British mobile now normalises to ONE customer identity (a test).
+
+Live on DEV, booking form, real keystrokes: "07911 123456" with no country → on leaving the box the
+picker read "United Kingdom +44" and the box "7911 123456"; "+44 07911 123456" → the picker took +44
+while it was typed and the box dropped the 0 on leaving it; "07700 900123" saved by Enter without
+leaving the box stored "+44 7700 900123" (read back from DEV Firebase; booking "UK Probe", 21:30
+today, left in place). `tests/phone-countries.test.js` +5, and phase 20's "07700 900123 is left alone"
+case now pins a German mobile instead.
+
+**Gate after phase 66:** `122.23 kB` gz main bundle (+0.12) · **1877 tests** (+5) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 67. The Plan opens a day where its bookings start
+
+The ROADMAP follow-up this version wrote: phase 4 opened the Timeline on a non-today day at its first
+booking, while the Plan's scrubber still opened at `OPEN`, so an evening-only future day showed an
+empty room until you scrubbed. `firstStartOf(bookings, date)` (booking-logic) is the rule, the earliest
+start of the day's non-cancelled bookings with completed ones counted, and both views read it: the
+Timeline's `firstStart` was the same fold written inline. The Plan opens today on now, as before, and any
+other day on its first booking (an empty day still at `OPEN`); an untouched scrubber follows that first
+start as the day's bookings load or change, the way today's follows the clock.
+
+Live on DEV, Plan view: today "Now 20:17"; Sun 27.09, whose first booking is 19:00, opened at "19:00";
+Mon 28.09 (first 18:00) at "18:00"; back on today, "Now 20:18". `tests/plan-avail.test.js` +2.
+
+**Gate after phase 67:** `122.30 kB` gz main bundle (+0.07) · **1879 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 68. The waitlist keeps a party's seating preference (L-1)
+
+Round 3's L-1, which Patryk had sent to ROADMAP as a matching change: `addFormToWaitlist` stored no
+`preference`, so a party refused because INDOOR was full was matched to anything — measured then,
+"Indoor Probe", 11 guests (the indoor combination seats 10), offered outdoor tables 2, 3, 4, 5A and 5B
+as "table free". The entry now keeps the zone (`preference`: "indoor"/"outdoor", omitted otherwise,
+since Firebase throws on an undefined property and absence reads as "auto"; the node's rules validate
+no fields, so no console step), the booking form's Add to waitlist passes it, Book hands it back to the
+form, the waitlist row shows it in the List card's flag look ("Indoor" with the house mark) and the
+printed Day sheet's waitlist line says it.
+
+**Strict, Patryk's pick.** `placeWaitlist` passes the zone to `findFreeSlot` and `trialFits` and refuses
+a `trialFits` answer outside it. That second check matters because the two disagree, which this phase
+found by running them: `findFreeSlot` treats a preference as hard, while the optimiser behind
+`trialFits` falls back to ANY zone when the preferred one is full. Measured through the booking form on
+DEV, 11 guests wanting indoor are offered outdoor 1A · 1B · 3 · 4 · 7 for tomorrow at 20:00 and refused
+("No tables available (indoor preference)") for today at 21:30, after the 15:00 cutoff. The waitlist is
+now strict on both; whether the form should be is a decision about what a preference MEANS, so it is a
+new ROADMAP entry rather than part of this phase.
+
+Live on DEV: the refused party (today 21:30) added from the form's "Add to waitlist" was stored with
+`preference: "indoor"`, size 11; its row reads "Indoor Probe 2 · 11 guests · Indoor · waiting", with no
+"Table free"; Book opened "New booking" with the name and Indoor filled in. `tests/waitlist-match.test.js`
++7 (L-1's case, each zone, a full zone with the other free, "auto" and an unknown value unchanged, and
+the carriage from storage to the row).
+
+**Gate after phase 68:** `122.52 kB` gz main bundle (+0.22) · **1886 tests** (+7) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 69. A List card's table pill says the table is missing
+
+The last ROADMAP follow-up of the Unplaced work: the timeline's Unplaced row and the strip's "Not on
+the grid" name a table the layout does not have, while the List card still drew it as a real pill —
+in the outdoor teal `TBadge` gives any id it does not know. `TBadge` takes `missing`: no zone fill, a
+1px DASHED border and the id in `--text-secondary` (the flags' ink, registered on both card fills),
+named "Table 9, not in the layout". Dashes are this app's word for "not really there", the ROADMAP's
+own choice between dashed and struck. The card asks the same rule as the other two surfaces: App
+builds `missingTables` from `unplacedItems`, the memo the strip and the Summary already read, and
+passes it as a stable object for `React.memo`.
+
+Live on DEV, List, Sat 03.10 (a day with bookings on tables 8 to 13 from the critique's DEV data): Emil
+Kovacs's table "1" dashed rgb(74, 85, 104) with no fill, named "Table 1, not in the layout", and his real
+table "2" the solid outdoor teal; Noa Ribera's "13" dashed the same way. `tests/unplaced.test.js` +2.
+
+**Gate after phase 69:** `122.59 kB` gz main bundle (+0.07) · **1888 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 70. The voucher amount's hint reads as an example (S7)
+
+Phases 70–75 are the six minor findings of round 2, which Patryk had left on ROADMAP and took now; the
+pins live together in `tests/minor-findings.test.js`. S7: Settings → Vouchers' Amount field showed the
+placeholder "50" in a bare number box, which read as an amount already typed. It reads "e.g. 50",
+Patryk's pick over no placeholder (the label already carries the currency, "Amount (€)").
+
+Live on DEV: the field labelled "Amount (€)", placeholder "e.g. 50", value empty. `tests/minor-findings.test.js`
+new, +1.
+
+**Gate after phase 70:** `122.60 kB` gz main bundle (+0.01) · **1889 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 71. Layout's table rows: a zone segment, table badges, and "seats" (S9)
+
+Round 2's S9: in Settings → Layout → Tables the zone control was one grey chip reading "Outdoor" that
+flipped on a tap, and read as a label of the zone rather than as a control; the ids were plain bold
+text where every other surface draws a table badge; "cap" was an abbreviation. Each row's zone is now
+a two-option segment, Indoor · Outdoor, in the app's one segmented look (`SEG_TRACK` / `segStyle`) with
+`aria-pressed`, each segment named "Indoor (table 3)" as the chip was, since thirteen rows would
+otherwise be thirteen identical buttons; the id is a `TBadge` in a slot of the old width; the word is
+"seats". The "Add a table" row had the same chip and the same "cap", and takes the same fixes (its
+segment named "(new table)"). `tests/a11y.test.js`' Label-in-Name pin moved to the segment's expression.
+
+Live on DEV, table 7: Outdoor pressed in a 32px track, the badge teal rgba(26, 94, 107, 0.8); pressing
+Indoor turned the badge rgba(124, 58, 157, 0.8) with Indoor pressed, and pressing Outdoor put both
+back (DEV's layout ends as it began). The add row reads "seats · − 2 + · Indoor | Outdoor · Add", its
+segment flips, and Cancel closes it. `tests/minor-findings.test.js` +2.
+
+**Gate after phase 71:** `122.62 kB` gz main bundle (+0.02) · **1891 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 72. The draft card's confidence says what to do (W6)
+
+Round 2's W6: the WhatsApp draft card's confidence chip read "HIGH" on the one-line bar and "HIGH
+CONFIDENCE" on the full card, the parser's level set in capitals with nothing saying what a level asks
+of staff. The chip now says what to do with the draft, Patryk's pick of three: "Looks right" (high),
+"Check it" (medium), "Check carefully" (low), in sentence case and in the tones it already had
+(success, warn, danger). The level is not lost: each chip is titled "High confidence" etc., and the
+tone still carries it. `clampConfidence` only ever returns the three levels, so the map needs no
+fallback, and the `confLbl` alias went with the chip that used it. The round-2 note that the card's
+ISO date was covered by the one-date-format fix still holds ("Fri 25.09").
+
+Live on DEV, Anna Priks' draft, its stored confidence set to each level in turn and put back to "high":
+"Looks right" rgb(22, 101, 52), titled "High confidence", `text-transform: none`; "Check it", titled
+"Medium confidence"; "Check carefully" in red — on the one-line bar at 800×654, left of Accept, and in
+the full card's header at 1180×1000. `tests/wa-inbox-layout.test.js`' W1 pin moved to the new chip,
+`tests/minor-findings.test.js` +2.
+
+**Gate after phase 72:** `122.64 kB` gz main bundle (+0.02) · **1893 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 73. The Activity log's chips are the app's chip (X4)
+
+Round 2's X4: the Activity log's three quick-range chips and eleven filter chips (ten kinds and People
+only) were `OutlineChip`'s default micro size, 19.5px tall with 10px text, the smallest targets on a
+screen made of them. They take the shape Settings' pinned-country chips already had: `size="small"`
+(11px), `minHeight: H.chip` (28px) through one `CHIP_H` style, and the hover lift. The lift was also
+missing: `check:style`'s Rule 10 does not see an `OutlineChip as="button"`, so these fourteen had passed
+it without the class every other control carries. The gaps are unchanged (`SP.tight`).
+
+Live on DEV: before, all fourteen 19.5px with 10px text and no class; after, all fourteen 28px with
+11px text and `mgt-hover-scale`. At 991px the kind chips wrap to two rows at a 32px pitch; at 375px to
+three, with no horizontal scroll (the dialog's scrollWidth 375 of 375). `tests/minor-findings.test.js` +1.
+The main bundle does not move, because the modal is its own lazy chunk.
+
+**Gate after phase 73:** `122.64 kB` gz main bundle (unchanged) · **1894 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 74. Stats: a balanced grid of tiles, and tables as badges (X6)
+
+Round 2's X6, two faults in the More popover's Stats. The five tiles were flex items on an 84px basis,
+and a wrapping line is packed greedily: the tablet's 530px card held four of 126.5px and stretched the
+fifth, "no-shows", alone across a 530px row (measured before, 1280×800). They are a grid now, keyed on
+a new `isMobile` prop from App (`winW < 600`, the line where Overlay switches between the sheet and the
+card, so no second breakpoint): five equal columns on the card, and on the phone's sheet six columns
+with the top three tiles spanning two and the bottom two spanning three. And table usage printed
+"Table 1A" as text, including "Table 1" for a table the layout does not have (bookings on DEV from the
+critique's data). Each row now draws the table's `TBadge`, and one the layout lacks is phase 69's
+dashed badge, "Table 1, not in the layout", decided against `TIMELINE_TABLES` read at render, which is
+the predicate `unplacedOf` uses for the List's pills.
+
+Live on DEV, September 2026: at 1280×800, five tiles of 99.6px on one row, all 51px tall; at 600×800
+(the narrowest card, 576px), five of 98.8px with no label overflowing; at 375×812, three of 107.7px over
+two of 165.5px, no horizontal scroll. Table usage: nine solid badges and a dashed "1". The rows grow
+from the text line to the badge's 24px. `tests/minor-findings.test.js` +2.
+
+**Gate after phase 74:** `122.65 kB` gz main bundle (+0.01) · **1896 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 75. One canvas text measure, and the widest badge beside the badge
+
+A refactor ahead of X7, with no visible change. Find a booking's fixed columns (phase 76, Patryk's pick
+of a wider card with one line) size the name column to the widest name in the results, the way the
+List card does, which needs a text width measured on a canvas. The app had two copies of that already:
+Settings' tab bar (`tabTextWidth`, generic, keyed by font and string) and ListView's name column
+(`nameWidth`, its own context and cache). A third would have been the third copy of one fact, so the
+generic one moved to `atoms.jsx` as `textWidth(label, weight, size, family)`; the tab bar calls it, and
+`nameWidth` is a wrapper that keeps the List's font and its `NAME_COL` fallback. The List's widest status
+badge moved the same way: ListView's `STATUS_COL` (98, "Completed" 97.8px) is `SBADGE_W` beside
+`SBadge`, which Find a booking's status column will read. `tests/list-columns.test.js` reads the number
+there now, and fails on a `measureText` or a `getContext` anywhere in `src/` but `atoms.jsx`.
+
+Live on DEV, both readers unchanged: the List's name column for today rendered `1 0 170px`, which is
+what the old measure computes for its widest name (170); Settings' tab bar is one row at 1280×800 and
+3 × 3 in 107px cells at 375×812, the figures phase 25's entry recorded. No console errors.
+`tests/list-columns.test.js` +1.
+
+**Gate after phase 75:** `122.61 kB` gz main bundle (−0.04) · **1897 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 76. Find a booking's results are columns (X7)
+
+Round 2's X7: a result's guests, phone and status followed the width of the name in front of them.
+Measured at 1280×800 before: the name took whatever the cells after it left, so guests began anywhere
+from 259 to 265px and at 363 on a row with no phone, and the phone from 318 to 324. The critique's fix,
+fixed columns, did not fit the 580px card: one result from another year widens every date to 104px,
+which had already cut the names to about 68px ("Hugo M…", "WA-SI…"), and fixed guests (57), phone (103)
+and status (98) would have left the name 48px and wrapped every row. Asked with three layouts, Patryk
+took the wider card with one line.
+
+On a tablet the card is `FIND_CARD_W` 720 (`Overlay`'s `maxWidth`, which Settings already used at 800)
+and the row does not wrap. Each cell is a column. The date, guests and phone are the widest of each in
+the results, measured with phase 75's `textWidth` in the font the span is drawn in (`DATE_FONT`,
+`CELL_FONT`, spread into the spans so the two cannot drift), because a width measured in San Francisco
+would not hold Roboto on the Android tablet. The date's 68/104 stay as the fallback with no canvas. The
+name is the widest name in the results, as the List card's is (phase 18), so a list of short names
+leaves no gap; it is capped at `NAME_CAP` 190, the room the card leaves beside a year, "88 guests", a
+15-digit phone and the badge, and it is the one cell that may shrink. The status sits in an `SBADGE_W`
+cell, so every row totals the same and any shrink is the same in every row. On a phone (`isMobile`, a
+new prop from App) the row wraps as it did: the name keeps its 64px basis and fills line one with the
+guests at its end, and the phone (an empty cell when a booking has none) and the status take line two.
+
+Live on DEV, query "a", 30 results including one on Sat 16.01.2027: at 1280×800 the card is 720 and every
+row is one 42px line with each column at one x in all 30 (date 13, time 114, name 168, guests 332, phone
+393, status 507), no name cut (the widest, "WA-SIM Sofía García", in a 154px column) and nothing
+overflowing its cell (the 2027 date 91 of 91px). At 375×812 every row is two lines, 69px: guests at 275
+on line one, the phone at 13 and the status at 127 on line two in every row, including the row with no
+phone; no horizontal scroll. At 600×800, the narrowest card (576px), the columns still line up on one
+line but the names shrink to 62px; that band, between the phone's sheet and a tablet, has no restaurant
+device in it, so it is recorded rather than given a breakpoint. The `date-format` pins on this row moved
+to the new markup; `tests/minor-findings.test.js` +2, and the round-2 minor-findings ROADMAP entry is
+gone with its last bullet.
+
+**Gate after phase 76:** `122.61 kB` gz main bundle (unchanged) · **1899 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 77. Every count on screen keeps its word
+
+The first of the five loose ends the critique's rounds 2 and 3 left on ROADMAP. Phase 54 joined the
+weekday to its day (`formatDay`) and a party's size to "guests" (`guestsLabel`) with a no-break space,
+so a wrapping line never ends on "Thu" or on "4". Every other count was still typed at its own site
+with a plain space, so "2 bookings", "20 min late", "3 visits" and "12 months" could still part across
+lines. `countLabel(n, one, many)` (booking-logic.js, beside `guestsLabel`, which now calls it) is the
+one way to print a count: the number, U+00A0, and the word, with `many` left out for a unit that does
+not inflect ("min"). It replaced the hand-typed plurals at about forty sites in twenty files: the List
+card's minutes and no-show title, the late banner, the overlap banner, the Summary, the Month view,
+the Day sheet, the kitchen confirm, the waitlist badge, the booking and walk-in forms' steppers,
+Customers, Vouchers, Layout's table count (which read "1 tables"), the floor-plan editor, Settings'
+duration summaries, the inbox's "5 min ago", the log's retention labels and the simulator's status.
+Four texts keep their plain space on purpose, and the new `tests/count-label.test.js` lists them by
+file and count: a booking's stored `history` (two lines), a stored activity entry ("N bookings
+re-placed"), a console line, and two phrases naming a visit by its date ("the Fri 25.09 visit"), which
+are not counts. The sweep fails on any other `n + " word"` in `src/`. Five existing pins moved to the
+joined strings.
+
+Live on DEV: after a reload, the Summary's headline and shift figures ("2 bookings · 6 covers", "4
+covers") and the load toast's "634 bookings loaded" all carry U+00A0, and no text node or accessible
+name in the view prints a count with a plain space. `tests/count-label.test.js` new, +4.
+
+**Gate after phase 77:** `122.65 kB` gz main bundle (+0.04) · **1903 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 78. The duration Reset is not red
+
+The second loose end, from round 2. The booking and walk-in forms' duration "Reset" puts a booking's
+length back to its party's default and destroys nothing, but `--btn-reset` was the delete red
+(rgba(211, 58, 58, 0.7)); phase 36 had named it when it moved Clear, which had the same fault, to the
+dialog slate. It takes the same treatment: `--btn-reset: var(--app-btn-slate)`, an alias rather than
+a copy of the value, so it follows slate in both themes, and the contrast registry resolves it through
+the alias as it does Clear and Dismiss. `tests/destructive-buttons.test.js`' X5 block pins it and that
+no theme block overrides it back.
+
+Live on DEV, a new booking with its duration stepped up: Reset reads rgb(100, 116, 139) in light and
+rgba(100, 116, 139, 0.7) in dark, which is `--app-btn-slate` in each (read with the transitions
+finished, since the pane throttles them), and pressing it returns the length and removes the button.
+`tests/destructive-buttons.test.js` +1.
+
+**Gate after phase 78:** `122.65 kB` gz main bundle (unchanged) · **1904 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 79. The phone header's connection dot ends the title row
+
+The third loose end, from round 2. Measured at 375×812 with WhatsApp on: the header's first row is the
+cog and the restaurant's name (246 of 351px); the second is the view switcher (191), WhatsApp (91), Find
+(36) and the dot (36), which with its gaps is 372px on a 351px line, so the dot wrapped onto a third
+row by itself at y 90 and the header was 126px tall. Without WhatsApp the second row is 275px and
+nothing wraps, which is why the restaurant's shipped configuration never showed it. Asked with two
+fixes, Patryk took the dot on the title row over showing WhatsApp as its mark alone: on a phone the
+dot ends the first row, opposite the cog, in the 105px that row left empty, and every control keeps its
+word. App builds the element once (`connStatus`) and places it by `isMobile`, so the two positions are
+one component with one set of props; the title block takes the whole first row on a phone
+(`flex: "1 1 100%"`) so the dot can end it at every phone width. The popover measures its side when it
+opens (v16.2.0) and needed nothing: from the top-right it grows leftward.
+
+Live on DEV: at 375×812 the dot is at 327–363px on row one, the controls share row two (View 12,
+WhatsApp 209, Find 306) and the header is 84px; the popover opens at 90–350px and a second tap closes
+it. At 599×800, the widest phone, the dot is at 551–587px and the header 84px. At 1280×800 the header
+is one 40px row with the dot ending the controls at 1228–1264px, as before. No horizontal scroll at
+either phone width. `tests/mobile-bar.test.js` +1.
+
+**Gate after phase 79:** `122.68 kB` gz main bundle (+0.03) · **1905 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 80. "Add to waitlist" asks for the phone's code, as Save does
+
+The fourth loose end, from round 2. Phase 19 made the booking form's Save refuse a number that names no
+country, and phases 20 and 66 taught it to find a code typed without its plus and a UK mobile typed the
+home way. "Add to waitlist", offered under the form's "No tables available" banner, took the phone as
+typed, so a waiting party could be stored as "600 111 333", and the booking it later becomes is then a
+second customer beside the same guest with "+34" (`normalizePhone`). `addFormToWaitlist` now runs the
+same `withTypedCode` on the form's number (the button is pressed without the number box ever blurring,
+which is where the field runs it) and refuses what still has no code with Save's own sentence, on the
+phone field. The button is offered on a new booking only (`!editId`), so Save's exemption for an
+untouched stored number has nothing to exempt. The walk-in form has no phone field.
+
+Live on DEV, a new booking for 25 guests wanting indoor on Tue 29.09 at 14:00 ("No tables available
+(indoor preference)."): with "600 111 333" in the number box, Add to waitlist left the form open with
+"Choose the country code for this phone number." and the box `aria-invalid`, and wrote nothing; with "34
+600 111 333", pressed the same way, the form closed and the waitlist holds "Wait Probe", "+34 600 111
+333", 25 guests, 14:00, indoor. `tests/phone-countries.test.js` +2.
+
+**Gate after phase 80:** `122.74 kB` gz main bundle (+0.06) · **1907 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### 81. A redemption in the Activity log names its currency
+
+The last loose end, from round 2, and with it the whole "Loose ends" ROADMAP entry. The Activity log
+stored a redemption as "redeemed 20 of voucher …" and a reversal as "restored 20 to voucher …", with
+no currency, where every other amount in the app is `money()`'s "20 €". `voucherWriteEntries` takes
+the currency in its context and formats both amounts with `money()`, so they round to the cent and
+keep U+00A0 between the number and the symbol; `useVouchers` takes `currency` from App
+(`generalSettings.currency`) and passes it on, with the value in `saveVouchers`' deps. Entries already
+stored keep the text they were written with: a log is a record, and nothing rewrites it. With no
+currency the bare number is printed, as before, so the builder's existing callers and tests are
+unchanged. `money()`'s header said nothing stores what it returns; it now names this one, whose text is
+what the log shows (the log's search folds U+00A0, and its CSV carries the text as written).
+
+Live on DEV: Wed 16.09's strip offered "Settle Laura Vidal's voucher" (voucher 5C7Z-WJ3P, 80 € on it);
+settling 12.30 wrote the redemption (the voucher now 67.7) and the entry "redeemed 12.3 € of voucher
+5C7ZWJ3P against {b:…}", with U+00A0 before the €. In the log it reads "redeemed 12.3 € of voucher
+5C7ZWJ3P against Laura Vidal", above older rows still reading "redeemed 10 of voucher FFBVJYT7 against
+Unsettled Probe". The carry-forward prompt that followed ("Move the rest of this voucher?") was
+answered Not now, so nothing moved. `tests/activity.test.js` +2.
+
+**Gate after phase 81:** `122.76 kB` gz main bundle (+0.02) · **1909 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.
+
+### `/code-review` round (2026-09-27)
+
+The ship run reviewed all 93 commits of the version at `max` effort, with the review's angles run
+inline rather than through subagents (the standing rule). Ten findings survived verification, and each
+fix is a commit of its own:
+
+1. **Fixed** (`a British number drops its home 0 in one pass, however the code was typed`).
+   `withTypedCode`'s pinned-code path (phase 20) never ran phase 66's home-0 rule, so it was not
+   idempotent: "44 (0)7911 123456" (the code typed without its plus, the home 0 kept, as British
+   numbers are written) came out as "+44 0)7911 123456" and "44 07911 123456" as "+44 07911 123456",
+   both normalising to +4407911123456, a second customer beside +447911123456. Only a SECOND pass
+   dropped the 0. PhoneField's blur and then Save supplied two; a save by Enter from the number box
+   supplies one. Measured on DEV before the fix: the Enter save stored "+44 0)7911 123456". The rule
+   is now one function, `ukWithoutHomeZero`, which both paths run, and the same Enter save stores
+   "+44 7911 123456". `tests/phone-countries.test.js` +2: those two inputs, and one pass = two over
+   twelve shapes.
+
+   **Gate after fix 1:** `122.75 kB` gz main bundle (−0.01) · **1911 tests** (+2) · 0 lint errors, 90
+   warnings (unchanged) · style OK.
+2. **Fixed** (`Settle refuses a booking that is no longer completed`). Phase 48's Settle writes no
+   booking (`ok` is `true` for `from: "settle"`), so it skipped the "booking write first" ordering
+   `settleVoucher`'s own comment exists for, and nothing re-checked the visit instead. The prompt
+   mounts on the voucher alone, whatever the booking's status, so a booking walked back out of
+   Completed on another device while it was open would have been redeemed against: a ledger entry on
+   a booking that is not completed, the one state that comment says nothing in the app looks for. A
+   settle now reads the booking first and refuses with `flashRefusal` ("That booking is no longer
+   completed — nothing was recorded against its voucher."). Verified by the source pin, not live: the
+   race was staged on DEV (a completed booking given voucher 5C7Z-WJ3P, Settle opened, the status
+   written to confirmed through a second path), and the server took the walk-back, but this client
+   still read Completed after five seconds, so pressing Redeem would have tested a stale client rather
+   than the guard. After a reload it agreed with the server. `tests/voucher-settle.test.js` +1: the
+   guard sits in `settleVoucher` above `redeemVoucher`.
+
+   **Gate after fix 2:** `122.81 kB` gz main bundle (+0.06) · **1912 tests** (+1) · 0 lint errors, 90
+   warnings (unchanged) · style OK.
+3. **Deferred to ROADMAP, after a fix that did not work** (the ⋯ card's focus). The List card's ⋯
+   card returns focus to the ⋯ in its effect cleanup, and when the chosen action opens a modal
+   (Delete, Cancelled, the voucher and seat prompts) that modal restored focus to `<body>` on close.
+   Measured on DEV with a `focus()` log: ⋯ → Delete, and "Delete booking?" recorded `<body>`. The
+   first fix copied phase 57's `leavePop` (hand focus back in the handler) and also stopped the
+   cleanup focusing an opener that had gone inert, and neither changed the recording. The ⋯ kept
+   focus through the click, the same DOM node, and still lost it before the modal's `useDialog` read
+   `document.activeElement`: that read runs in a passive effect, after the commit that makes the List
+   `inert`, and a rendering update's focus fixup can blur the focused element first. A control run
+   (Assign → "Manual table assignment") recorded Assign, so it is a race the ⋯ path loses. The fix
+   belongs in `useDialog` (capture the restore target before the commit), which every modal uses, so
+   it was reverted rather than shipped half-working. Phase 57's `leavePop` may be exposed to the same
+   race. Focus events do not fire in the Browser pane, so this wants a device check too.
+4. **Fixed** (`the table-block form's default To is the day's own close`). BlockModal seeded its To
+   time from the live `GRID_CLOSE`, which `extendActiveGrid` now stretches to the viewed day's latest
+   booking: on a day with a booking ending after 23:00 it was "24:00", which an `<input type="time">`
+   cannot show, so the field opened blank. Measured on DEV on 3 Oct (a booking ending 23:45,
+   `GRID_CLOSE` 24): From 13:00, To blank, where it had read 23:00. The default and the dirty check
+   now read `hoursFor(date).gridClose`, the day's own hours, and the same form opens on 23:00 and
+   closes without the unsaved-changes prompt. The live binding still sets the fields' `max`, which is
+   display. `src/CLAUDE.md`'s "display only" paragraph says a stored default must not read it.
+   `tests/grid-extend.test.js` +1.
+
+   **Gate after fix 4:** `122.82 kB` gz main bundle (+0.01) · **1913 tests** (+1) · 0 lint errors, 90
+   warnings (unchanged) · style OK.
+5. **Fixed** (`every count keeps its word, the plural ternaries too`). Phase 77's guard matched `n +
+   " word"` and nothing else, so the conditional plural `n + (n === 1 ? " booking" : " bookings")` was
+   invisible to it, and five on-screen counts in its own word list kept a plain space: the List's
+   "Completed & cancelled" summary, Settings' "Collapse banners above" value, the Activity log's entry
+   count, its clear toast and the day announcement. The same scan found three counts whose words the
+   list did not have: the booking form's "+ 3 earlier", the inbox's "3 selected" and its "Delete 3
+   conversations?". All eight go through `countLabel` now. The guard reads both shapes from one word
+   list, with the words added, and checks itself on a sample of each. The one ternary left is a stored
+   activity entry ("cleared the activity log · … · N entries"), a record like the phase-77 one beside
+   it, so `ALLOWED` counts it. Live on DEV, Thu 24.09's "Completed & cancelled" summary reads "4
+   bookings" with U+00A0. `tests/count-label.test.js` +1.
+
+   **Gate after fix 5:** `122.80 kB` gz main bundle (−0.02) · **1914 tests** (+1) · 0 lint errors, 90
+   warnings (unchanged) · style OK.
+6. **Fixed** (`the ⋯ button claims no dialog`). It carried `aria-haspopup="dialog"`, and the
+   quick-status card it opens has no dialog role and no focus trap. GLOSSARY records that this card
+   "must not claim `role="dialog"`" ("claiming a guarantee you don't provide is the defect"), and the
+   button was claiming the dialog on the card's behalf. It keeps `aria-expanded`, which says whether
+   it is open. Live on DEV: `aria-haspopup` is absent and `aria-expanded` reads "false".
+   `tests/list-card.test.js` now asserts `aria-expanded` and no `aria-haspopup`.
+
+   **Gate after fix 6:** `122.80 kB` gz main bundle (unchanged) · **1914 tests** (unchanged) · 0 lint
+   errors, 90 warnings (unchanged) · style OK.
+7. **Fixed, from reading** (`Find a booking keeps its phone column when text cannot be measured`).
+   `phoneCol` was `widest(phones)`, which is undefined when no 2D canvas context exists, and the render
+   tests `phoneCol` to decide whether the column is drawn at all, so "cannot measure" read as "no
+   phones" and every number disappeared. It falls back to `"auto"`, the other cells' natural-width
+   fallback. No context-less browser was at hand, so the failing case is established by reading the
+   code. Live on DEV the measured path is unchanged: "PhoneProbe" finds two results, each with its
+   phone in a 104px column. `tests/minor-findings.test.js` pins the fallback.
+
+   **Gate after fix 7:** `122.80 kB` gz main bundle (unchanged) · **1914 tests** (unchanged) · 0 lint
+   errors, 90 warnings (unchanged) · style OK.
+8. **Fixed** (`two comments in booking-logic.js say what the code does`). Phase 67 inserted
+   `firstStartOf` between `nextStatusOf`'s paragraph and its function, so the note about the List
+   card's one status button read as the head of `firstStartOf`. The two are back in order. And the
+   note justifying the `vouchers.js` import still said that file "imports nothing": since v18.2.0 it
+   imports `formatDay` from `day.js`. The edge is still acyclic because `day.js` imports nothing, and
+   the note now says that, and that an import from here into either file would close a loop.
+
+   **Gate after fix 8:** `122.80 kB` gz main bundle (unchanged; comments are stripped) · **1914
+   tests** · 0 lint errors, 90 warnings (unchanged) · style OK.
+9. **Deferred to ROADMAP** (committed with item 3): `doSave` and `addFormToWaitlist` (phase 80) each
+   run `withTypedCode`, then refuse a number with no code in the same sentence. Two copies of one
+   rule is the shape `src/CLAUDE.md` records, but merging them means touching `doSave`, so it joined
+   the save-path entry (#13), where `doSave` is being taken apart anyway. Fix 1 changed the shared
+   function, so the two copies do not drift today.
+
+**The round:** ten findings, counting the two comment fixes in 8 as two. Eight fixed: 1, 2, 4, 5, 6,
+7 and the two in 8. Two of those rest on reading and a source pin rather than a live run: 7 (no
+context-less browser at hand) and 2 (the race could not be staged). Two deferred: the ⋯ card's focus
+(3, after a fix that did not work) and the shared phone helper (9). **Gate after the round:** `122.80 kB` gz main bundle (+0.04 on
+phase 81) · **1914 tests** (+5) · 0 lint errors, 90 warnings (unchanged) · style OK.

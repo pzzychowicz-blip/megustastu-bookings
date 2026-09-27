@@ -18,3 +18,54 @@ export function isTyping(el) {
   const t = el.tagName;
   return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
 }
+
+// v18.2.0 — `activatesItself(el)`: does Enter on this element already DO
+// something of its own, so a global Enter handler must leave the key alone?
+//
+// The Enter chain in `useKeyboardShortcuts.js` maps Enter to the topmost
+// modal's primary action — the booking form's Save — whatever held focus, and
+// it `preventDefault()`s the keydown, which also cancels the focused button's
+// own activation. So Enter on a focused Back, Assign or − / + saved the booking
+// instead of pressing the button under the keyboard. A focused control wins now.
+//
+// It does not change what Enter does on a freshly opened modal: `Overlay`
+// focuses the dialog CONTAINER, not a control, precisely so a destructive
+// button is never one Enter away — the chain still owns that case, and Enter
+// from a text field still saves.
+//
+// Only elements the browser (or the app's own `role` wiring) ACTIVATES on
+// Enter: a <button>, a link with an href, and the widget roles this app gives a
+// key handler of their own (the timeline block and the plan table are
+// `role="button"`, the Toggle atom is `role="switch"`). Checkbox and radio
+// inputs are deliberately not in it — Enter does not toggle them natively.
+const SELF_ACTIVATING_ROLES = ["button", "switch", "link", "menuitem", "option", "tab"];
+export function activatesItself(el) {
+  if (!el || !el.tagName) return false;
+  if (el.tagName === "BUTTON") return true;
+  if (el.tagName === "A" && el.hasAttribute && el.hasAttribute("href")) return true;
+  const role = el.getAttribute ? el.getAttribute("role") : null;
+  return !!role && SELF_ACTIVATING_ROLES.includes(role);
+}
+
+// ── stepPress ────────────────────────────────────────────────────────────────
+// v18.2.0: the press handlers for a − / + stepper button (the booking form's
+// and the walk-in form's guests and duration).
+//
+// They stepped on `pointerdown` with `preventDefault()` — which keeps a tap from
+// focusing the button (and so from scrolling it under the finger, the Gotchas
+// row in src/CLAUDE.md) and makes a quick run of taps step once per touch. But
+// the KEYBOARD never fires a pointer event: Enter and Space on a focused button
+// fire `click` and nothing else, so the party size and the duration could not be
+// changed from the keyboard at all (WCAG 2.1.1). Measured in the critique:
+// `.click()` left guests at 2, a dispatched pointerdown moved it to 3.
+//
+// `onClick` acts only when `detail === 0`, i.e. a click no pointer produced
+// (a key, or assistive tech activating the control). A pointer click carries
+// `detail >= 1` and has ALREADY stepped on its pointerdown, so acting on it too
+// would step twice per tap.
+export function stepPress(apply) {
+  return {
+    onPointerDown: function (e) { e.preventDefault(); apply(); },
+    onClick: function (e) { if (e.detail === 0) apply(); },
+  };
+}

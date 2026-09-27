@@ -24,14 +24,16 @@
 // __APP_SIGNATURE__ edit in App.jsx; this file no longer needs touching
 // for version changes.
 
-import { useState, useEffect, useRef, useCallback, useId } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useId } from "react";
 import { RemindersTabContent } from "./Reminders";
 import { ShortcutsContent } from "./Shortcuts";
 import { LayoutTabContent } from "./LayoutSettings";
 import { CustomersTabContent } from "./CustomersSettings";
 import { VouchersTabContent } from "./VouchersSettings";
-import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll } from "./atoms";
+import { Toggle, Section, Collapsible, AutoHeight, Reveal, OutlineChip, mkBtn, mkInp, mkStep, useOverlayScroll, segStyle, mkDangerBtn, mkRemoveX, PAUSED_FADE, textWidth } from "./atoms";
 import { BTN, R, M, T, FW, H, IC, SP, APP_NAME } from "../lib/constants";
+// v18.2.0: how TabBar lays its tabs out.
+import { tabColumns } from "../lib/tab-rows";
 import { CountryPicker } from "./CountryPicker";
 import { countryByIso, flagOf, dialLabel, MAX_PINNED } from "../lib/phone-countries";
 // v18.0.0 phase 2 /code-review: the seed itself, not a hand-typed copy of it.
@@ -41,6 +43,22 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 // order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
 // which this line used to copy byte for byte.
 import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
+import { guestsLabel, countLabel } from "../lib/booking-logic";
+
+// v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
+// armed width, as the waitlist panel's Book + Remove do (its ACTIONS_W says
+// why): the switch (48) + 8 + "Confirm — delete" with its trash mark (145.5;
+// 125.5 before phase 62 gave it the mark) = 201.5, measured at T.body on the
+// Mac, rounded up. Re-measure if the label, the mark, T.body or the button's
+// padding changes.
+const RULE_ACTIONS_W = 202;
+
+// v18.2.0 phase 63: a duration tier's remove slot reserves its ARMED width —
+// "Confirm — remove" with its trash mark at T.body and 10px padding, 152.1
+// measured on the Mac (San Francisco), rounded up — so the row wraps alike at
+// rest and armed. Re-measure if the label, the mark, T.body or the padding
+// change.
+const TIER_ARMED_W = 153;
 
 // ── SETTINGS_TABS — the ONE tab list (v16.0.0 follow-up) ────────────────────
 // v17.1.0: the list (and CogIcon) moved to SettingsChrome.jsx so App/ViewTools
@@ -49,31 +67,78 @@ import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
 import { SETTINGS_TABS, visibleTabs } from "./SettingsChrome";
 import { AdminTabContent } from "./AdminSettings";
 import { hourLabel } from "../lib/time-grid";
-import { CloseIcon, DownloadIcon } from "./Icons";
+import { CloseIcon, DownloadIcon, TrashIcon } from "./Icons";
 export { SETTINGS_TABS, CogIcon } from "./SettingsChrome";
 
 // ── Tab bar — pill-shaped tabs with active tab lifted in white ──────────────
 // Reusable enough for future modals to import; lives here for now because
 // only the Settings modal uses it. If a second consumer appears later, this
 // could move to atoms.jsx painlessly.
+//
+// v18.2.0 (the design critique, S1): EVERY tab in view. The bar used to be a
+// one-row horizontal scroller with its scrollbar hidden, and nine tabs need
+// ~700px, so on the 1280px tablet's 530px bar App, Shortcuts and Admin sat out
+// of sight, on a phone five of the nine did, nothing said there were more, and
+// choosing one with ←/→ left it scrolled away (scrollLeft stayed 0). Now the
+// card is 800px on a tablet (SETTINGS_CARD_W), which takes the nine on one row,
+// and where one row does not fit — a phone, a narrow window, a wider system
+// font — the tabs become a balanced grid (`tabColumns`, lib/tab-rows.js): 3 × 3
+// on a phone, Patryk's choice.
+//
+// The question is MEASURED, from the labels' own widths in the platform's font
+// (canvas text metrics, the ListView name column's method), not a breakpoint,
+// and not by watching the row wrap — a grid cannot say whether a row would fit.
+//
+// A grid is a rounded rectangle of rounded-rectangle tabs: R.card around
+// R.inset with the bar's 4px padding between, so the corners stay concentric
+// (10 + 4 = 14). Pills stacked in rows inside one pill read as a stadium with
+// the corner tabs poking at its curve.
+const TAB_GAP = 4;
+const TAB_ROW_PAD = 12;     // a tab's side padding in the natural row
+const TAB_CELL_PAD = 6;     // the same in a grid cell, where the cell sets the width
+// The labels' widths come from `textWidth` (atoms.jsx): this bar's own
+// measure until v18.2.0 phase 75 made it the app's one.
 export function TabBar({ tabs, current, onSelect }) {
+  const barRef = useRef(null);
+  const [cols, setCols] = useState(0);   // 0 = one natural row
+  // The labels as one string, so the effect re-measures when the SET of tabs
+  // changes (a module or a capability toggled) and not on every render.
+  const labelKey = tabs.map(function (t) { return t.label; }).join("\n");
+  // Layout effect, so the first paint already has the right shape; the
+  // observer answers a resize.
+  useLayoutEffect(function () {
+    const bar = barRef.current;
+    if (!bar) return undefined;
+    const labels = labelKey.split("\n");
+    function measure() {
+      const b = bar.firstElementChild;
+      if (!b) return;
+      const cs = getComputedStyle(b);
+      const semi = labels.map(function (l) { return textWidth(l, FW.semi, cs.fontSize, cs.fontFamily); });
+      const bold = labels.map(function (l) { return textWidth(l, FW.bold, cs.fontSize, cs.fontFamily); });
+      const next = tabColumns(semi, bold, bar.clientWidth - 2 * TAB_GAP, TAB_GAP, 2 * TAB_ROW_PAD, 2 * TAB_CELL_PAD);
+      setCols(function (prev) { return prev === next ? prev : next; });
+    }
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(bar);
+    return function () { ro.disconnect(); };
+  }, [labelKey]);
+  const grid = cols > 0;
   return (
-    <div style={{
-      display: "flex", gap: 4, padding: 4,
-      borderRadius: R.pill,
+    <div ref={barRef} style={Object.assign({
+      gap: TAB_GAP, padding: TAB_GAP,
+      borderRadius: grid ? R.card : R.pill,
       background: "var(--bg-tabbar)",
       marginBottom: 16,
-      border: "1px solid var(--border-soft)",
-      // v16.2.0: on a narrow screen (iPhone 12 mini, 375px) the 5 tabs' combined
-      // min-content width used to force the whole modal wider than the viewport
-      // (content cut off on both edges). Making the tab row its own horizontal
-      // scroller gives it min-width:0, so the modal collapses back to viewport
-      // width and the tabs scroll independently instead. Buttons don't shrink
-      // (flex-shrink 0) — they keep full-label width and overflow to scroll.
-      overflowX: "auto",
-      WebkitOverflowScrolling: "touch",
-      scrollbarWidth: "none"
-    }}>
+      border: "1px solid var(--border-soft)"
+    }, grid
+      ? { display: "grid", gridTemplateColumns: "repeat(" + cols + ", minmax(0, 1fr))" }
+      // `wrap` on the one-row branch is a safety net, not a layout: should
+      // the canvas and the page ever disagree by a pixel, a tab wraps into
+      // view instead of overflowing the bar.
+      : { display: "flex", flexWrap: "wrap" })}>
       {tabs.map((t) => {
         const active = t.id === current;
         return (
@@ -81,30 +146,20 @@ export function TabBar({ tabs, current, onSelect }) {
             key={t.id}
             className="mgt-hover-scale"
             onClick={() => onSelect(t.id)}
+            // v18.2.0 (the design critique, S3): which tab is showing, said —
+            // not only lifted. `aria-pressed`, as the view switcher's buttons.
+            aria-pressed={active}
+            // v18.2.0: the segment's look is `segStyle` (atoms.jsx), shared
+            // with the main view switcher — the SAME values this button carried
+            // inline, moved rather than changed. What stays here is what is
+            // TabBar's own: it stretches, it never wraps its label, and it
+            // takes the grid's shape with the bar.
             style={{
-              flex: "1 0 0%",
+              ...segStyle(active),
               whiteSpace: "nowrap",
-              padding: "8px 12px",
-              borderRadius: R.pill,
-              border: "none",
-              background: active ? "var(--bg-tab-active)" : "transparent",
-              color: active ? "var(--accent)" : "var(--text-muted)",
-              fontWeight: active ? FW.bold : FW.semi,
-              fontSize: T.body,
-              cursor: "pointer",
-              boxShadow: active ? "var(--shadow-btn)" : "none",
-              // Not `all`: `all` animates layout properties too (this button's
-              // font-weight jumps 600->700 on activation, and `all` would have
-              // tried to tween it), and it is the transition equivalent of a
-              // wildcard import — you cannot tell what moves by reading it.
-              // `transform` IS in the list, and has to be: this button carries
-              // .mgt-hover-scale, an inline shorthand REPLACES the class's
-              // declaration (and `button {}`'s), and naming three properties
-              // here silently dropped the fourth — so the tab's hover lift and
-              // its press dip both snapped. Exactly the collision documented at
-              // index.html's .mgt-hover-scale rule, one layer up: an inline
-              // transition on a hover-scale element must list transform.
-              transition: "transform " + M.tap + ", background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
+              padding: "8px " + (grid ? TAB_CELL_PAD : TAB_ROW_PAD) + "px",
+              borderRadius: grid ? R.inset : R.pill,
+              ...(grid ? null : { flex: "1 0 0%" })
             }}
           >
             {t.label}
@@ -130,8 +185,15 @@ const HOUR_STEP_BTN = mkStep(H.chrome);
 // `fmt` (v15.0.0): optional value→label formatter. Defaults to the modulo-24
 // clock label; the optimizer cutoff passes its own so it can show "24:00" (the
 // full-day endpoint) distinctly from "00:00".
-function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }) {
+//
+// v18.2.0 phase 56 (round 3's A-1): its buttons are named for what they step —
+// "Decrease Daily cutoff" — where they announced "−" and "+". `label` is the
+// visible heading above them and already required; `who` prefixes the row's
+// identity where the stepper repeats (the duration tiers: "Tier 2: stay for"),
+// LayoutSettings' `bandName(b, i) + ": …"` shape.
+function HourStepper({ label, who, value, onDec, onInc, disableDec, disableInc, fmt }) {
   const display = fmt ? fmt(value) : hourLabel(value);
+  const name = (who ? who + ": " : "") + label;
   return (
     <div>
       <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</div>
@@ -139,6 +201,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
         <button
           onClick={onDec} disabled={disableDec}
           className={disableDec ? undefined : "mgt-hover-scale"}
+          aria-label={"Decrease " + name}
           style={{ ...HOUR_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}
         >
           −
@@ -149,6 +212,7 @@ function HourStepper({ label, value, onDec, onInc, disableDec, disableInc, fmt }
         <button
           onClick={onInc} disabled={disableInc}
           className={disableInc ? undefined : "mgt-hover-scale"}
+          aria-label={"Increase " + name}
           style={{ ...HOUR_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}
         >
           +
@@ -187,22 +251,15 @@ function GsTextField({ label, value, onCommit, width, onDirty, dirtyId }) {
   );
 }
 
-// ── v18.1.0: the phone field's two restaurant settings ───────────────────────
-// Both commit on the pick, like the steppers — there is no draft to guard, so
-// neither registers with the unsaved-changes aggregator. The pickers need a
+// ── v18.1.0: the phone field's restaurant setting ────────────────────────────
+// It commits on the pick, like the steppers — there is no draft to guard, so it
+// does not register with the unsaved-changes aggregator. The picker needs a
 // POSITIONED wrapper: CountryPicker's list is drawn against it (see there).
-function PhoneCountrySetting({ gs, onSave }) {
-  return (
-    <div>
-      <div id="gs-country-label" style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)", marginBottom: SP.snug }}>Default country</div>
-      <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
-        <CountryPicker iso={gs.phoneCountry} pinned={gs.pinnedCountries} ariaLabel="Default country"
-          onPick={(iso) => { const c = countryByIso(iso); if (c) onSave({ phoneCountry: c.iso, phonePrefix: "+" + c.dial }); }} />
-      </div>
-    </div>
-  );
-}
-
+// v18.2.0 phase 19: "Default country" beside it is gone. Patryk: the phone
+// field's picker shows no country until one is chosen, so there is nothing
+// left for a default to seed. `phoneCountry` / `phonePrefix` stay in the node
+// (an older version still reads them while a new one rolls out) and nothing
+// here writes them any more.
 function PinnedCountriesSetting({ gs, onSave }) {
   const list = gs.pinnedCountries || [];
   const full = list.length >= MAX_PINNED;
@@ -225,7 +282,7 @@ function PinnedCountriesSetting({ gs, onSave }) {
         })}
         {/* The list of countries to ADD leaves out the ones already pinned —
             offering Spain twice would let the second tap do nothing. */}
-        <div style={{ position: "relative", width: 280 /* @canvas as PhoneCountrySetting */ }}>
+        <div style={{ position: "relative", width: 280 /* @canvas wide enough for a country name in the list */ }}>
           <CountryPicker label={full ? "Up to " + MAX_PINNED + " countries" : "+ Add country"} disabled={full} exclude={list}
             onPick={(iso) => { if (list.indexOf(iso) < 0) onSave({ pinnedCountries: list.concat(iso) }); }}
             style={{ height: H.chip, padding: "0 12px", fontSize: T.body }} />
@@ -241,16 +298,23 @@ function PinnedCountriesSetting({ gs, onSave }) {
 // v15.0.0: compact stepper for the per-weekday hours editor (no label row, so 7
 // rows stay scannable). Same disabled / hover-scale contract as HourStepper.
 const MINI_STEP_BTN = mkStep(H.compact);
-function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt }) {
+// v18.2.0 phase 56 (round 3's A-1): `label` names what it steps, and has no
+// default — LayoutSettings' Stepper's rule. Its nine call sites render 21
+// steppers (the opening and closing hours once per weekday), and all 42
+// buttons announced "−" and "+" and nothing else. A stepper rendered per ROW
+// carries the row's identity ("Mon opening time").
+function MiniStepper({ value, onDec, onInc, disableDec, disableInc, fmt, label }) {
   // v16.3.0: fmt is now optional (defaults to the HH:00 time format used by the
   // Opening-hours editor); the Standing-bookings horizon passes a plain number.
   const fmtFn = fmt || hourLabel;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <button onClick={onDec} disabled={disableDec} className={disableDec ? undefined : "mgt-hover-scale"}
+        aria-label={"Decrease " + label}
         style={{ ...MINI_STEP_BTN, opacity: disableDec ? 0.4 : 1, cursor: disableDec ? "not-allowed" : "pointer" }}>−</button>
       <span style={{ minWidth: 46, textAlign: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>{fmtFn(value)}</span>
       <button onClick={onInc} disabled={disableInc} className={disableInc ? undefined : "mgt-hover-scale"}
+        aria-label={"Increase " + label}
         style={{ ...MINI_STEP_BTN, opacity: disableInc ? 0.4 : 1, cursor: disableInc ? "not-allowed" : "pointer" }}>+</button>
     </div>
   );
@@ -290,10 +354,10 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
         <span style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No service this day</span>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <MiniStepper value={o} disableDec={o <= 6} disableInc={o >= c - 1}
+          <MiniStepper label={label + " opening time"} value={o} disableDec={o <= 6} disableInc={o >= c - 1}
             onDec={() => onChange({ open: o - 1 })} onInc={() => onChange({ open: o + 1 })} />
           <span style={{ color: "var(--text-faint)", fontWeight: FW.medium }}>–</span>
-          <MiniStepper value={c} disableDec={c <= o + 1} disableInc={c >= 25}
+          <MiniStepper label={label + " closing time"} value={c} disableDec={c <= o + 1} disableInc={c >= 25}
             onDec={() => onChange({ close: c - 1 })} onInc={() => onChange({ close: c + 1 })} />
         </div>
       )}
@@ -342,7 +406,7 @@ function DayHoursRow({ label, day, onChange, onCopyAll }) {
 // where noted" is a statement about exactly these controls (the two marked
 // "This device only" are the exceptions it names). Left behind in General it
 // would have been a rule with nothing to govern.
-export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
+export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggleAutoTheme = () => {}, appWidth = 1600, onSetAppWidth = () => {}, reduceMotion = false, onToggleReduceMotion = () => {}, swEnabled = true, onToggleSw = () => {}, planGestures = true, onTogglePlanGestures = () => {}, planAvail = true, onTogglePlanAvail = () => {}, navLocked = false, onToggleNavLock = () => {}, splitEnabled = false, onToggleSplitEnabled = () => {}, tlSettings = null, onSetTlSetting = () => {} }) {
   const tl = tlSettings && typeof tlSettings === "object"
     ? tlSettings : { followZoom: 4, defaultZoom: 1, followLead: 30, maxZoom: 5 };
   return (
@@ -397,7 +461,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
               This device only. Lower it if the app overflows your screen.
             </div>
           </div>
-          <MiniStepper value={appWidth} fmt={(v) => v + " px"}
+          <MiniStepper label="app width" value={appWidth} fmt={(v) => v + " px"}
             disableDec={appWidth <= 900} disableInc={appWidth >= 2400}
             onDec={() => onSetAppWidth(appWidth - 50)} onInc={() => onSetAppWidth(appWidth + 50)} />
         </div>
@@ -440,6 +504,18 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
           </div>
           <Toggle label="Plan zoom and pan" on={planGestures} onClick={onTogglePlanGestures} />
         </div>
+        {/* v18.2.0 phase 21: the Plan view's table availability — per person
+            like the row above (Patryk's choice), ON by default, so only "0" is
+            ever stored (PREF_SPEC.planAvail). */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>Table availability</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>
+              In the Plan view, a free table shows how long it stays free. One too short for a walk-in gets a dashed amber outline.
+            </div>
+          </div>
+          <Toggle label="Table availability" on={planAvail} onClick={onTogglePlanAvail} />
+        </div>
         {/* v17.5.0: per-device navigation lock (localStorage, theme pattern —
             but default OFF, so only the "1" is stored). Turns the app shell
             into a fixed-height flex column whose content region scrolls. */}
@@ -478,28 +554,28 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when opening the app</div>
-              <MiniStepper value={tl.defaultZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="zoom when opening the app" value={tl.defaultZoom} fmt={(v) => v + "×"}
                 disableDec={tl.defaultZoom <= 1} disableInc={tl.defaultZoom >= tl.maxZoom}
                 onDec={() => onSetTlSetting("defaultZoom", tl.defaultZoom - 0.5)}
                 onInc={() => onSetTlSetting("defaultZoom", tl.defaultZoom + 0.5)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Zoom when Follow turns on</div>
-              <MiniStepper value={tl.followZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="zoom when Follow turns on" value={tl.followZoom} fmt={(v) => v + "×"}
                 disableDec={tl.followZoom <= 1} disableInc={tl.followZoom >= tl.maxZoom}
                 onDec={() => onSetTlSetting("followZoom", tl.followZoom - 0.5)}
                 onInc={() => onSetTlSetting("followZoom", tl.followZoom + 0.5)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Time shown behind the now-line</div>
-              <MiniStepper value={tl.followLead} fmt={(v) => v + " min"}
+              <MiniStepper label="time shown behind the now-line" value={tl.followLead} fmt={(v) => countLabel(v, "min")}
                 disableDec={tl.followLead <= 0} disableInc={tl.followLead >= 120}
                 onDec={() => onSetTlSetting("followLead", tl.followLead - 15)}
                 onInc={() => onSetTlSetting("followLead", tl.followLead + 15)} />
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Maximum zoom (+ button)</div>
-              <MiniStepper value={tl.maxZoom} fmt={(v) => v + "×"}
+              <MiniStepper label="maximum zoom" value={tl.maxZoom} fmt={(v) => v + "×"}
                 disableDec={tl.maxZoom <= 2} disableInc={tl.maxZoom >= 10}
                 onDec={() => onSetTlSetting("maxZoom", tl.maxZoom - 0.5)}
                 onInc={() => onSetTlSetting("maxZoom", tl.maxZoom + 0.5)} />
@@ -558,8 +634,10 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
     ? generalSettings
     : DEFAULT_GENERAL_SETTINGS;
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
-  const minsLabel = (n) => n + " min";
-  const guestsLabel = (n) => "≤ " + n;
+  const minsLabel = (n) => countLabel(n, "min");
+  // v18.2.0: named for what it says, "≤ 4". It was `guestsLabel`, and phase 38
+  // (C2) imported the real one into this file, which it then shadowed.
+  const upToLabel = (n) => "≤ " + n;
   // Tier-list edits: the hook's sanitizer re-sorts/dedupes/clamps, so these
   // just describe intent. Stepper bounds keep each `max` strictly between its
   // neighbours (1…19 at the edges), matching the sanitizer's invariants.
@@ -595,7 +673,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
   };
   const canAddTier = tiers.length < 6 && (tiers.length === 0 || tiers[tiers.length - 1].max < 19);
   const restFrom = (tiers.length ? tiers[tiers.length - 1].max : 0) + 1;
-  const durSummary = tiers.map((t) => t.dur).concat([bd.restDur]).join(" / ") + " min";
+  const durSummary = tiers.map((t) => t.dur).concat([bd.restDur]).join(" / ") + "\u00a0min";
   const cutoffNote =
     oc >= 24 ? "Optimiser keeps reshuffling all day, then resets at the start of the next day."
     : oc <= 0 ? "Optimiser stays off all day; resume it manually (timeline control or the “o” key)."
@@ -643,18 +721,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
           <GsTextField label="Restaurant name" value={gs.restaurantName} width={260} onDirty={onDirty} dirtyId="gs-name"
             onCommit={(v) => onSaveGeneralSettings({ restaurantName: v })} />
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
-            <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
-              onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
-            {/* v18.1.0: the prefix is CHOSEN from the country list, not typed.
-                Both fields are written together — `phoneCountry` because
-                "+1" names no single country, `phonePrefix` because it is what
-                seeds the phone field and what `enteredPhone` compares against. */}
-            <PhoneCountrySetting gs={gs} onSave={onSaveGeneralSettings} />
-          </div>
+          <GsTextField label="Currency symbol" value={gs.currency} width={80} onDirty={onDirty} dirtyId="gs-currency"
+            onCommit={(v) => onSaveGeneralSettings({ currency: v })} />
           <PinnedCountriesSetting gs={gs} onSave={onSaveGeneralSettings} />
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
-            The name shows in the header and on the printed day sheet; the currency on deposits; the default country seeds the phone field on new bookings, and the pinned countries sit at the top of its code list.
+            The name shows in the header and on the printed day sheet; the currency on deposits; the pinned countries sit at the top of the phone field&rsquo;s code list.
           </div>
         </div>
       </Collapsible>
@@ -755,20 +826,40 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             return (
               <div key={i} style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <div style={{ width: 150 }}>
-                  <HourStepper label="Parties up to" value={t.max} fmt={guestsLabel}
+                  <HourStepper label="Parties up to" who={"Tier " + (i + 1)} value={t.max} fmt={upToLabel}
                     disableDec={t.max <= minMax} disableInc={t.max >= maxMax}
                     onDec={() => updateTier(i, { max: t.max - 1 })} onInc={() => updateTier(i, { max: t.max + 1 })} />
                 </div>
-                <HourStepper label="stay for" value={t.dur} fmt={minsLabel}
+                <HourStepper label="stay for" who={"Tier " + (i + 1)} value={t.dur} fmt={minsLabel}
                   disableDec={t.dur <= 15} disableInc={t.dur >= 360}
                   onDec={() => updateTier(i, { dur: t.dur - 15 })} onInc={() => updateTier(i, { dur: t.dur + 15 })} />
-                <button
-                  onClick={() => armTierRemove(i)}
-                  className="mgt-hover-scale"
-                  title={armedTier === i ? "Tap again to remove" : "Remove this tier"}
-                  style={{ ...HOUR_STEP_BTN, height: 32, marginBottom: 2, ...(armedTier === i
-                    ? { width: "auto", padding: "0 10px", fontSize: T.body, fontWeight: FW.bold, background: "var(--danger-bg)", color: "var(--danger-text)", border: "1px solid var(--danger-border)" }
-                    : { width: 32, fontSize: T.lead, color: "var(--danger-text)" }) }}>{armedTier === i ? "Remove?" : <CloseIcon size={IC.control} />}</button>
+                {/* v18.2.0 phase 63: the editors' quiet × (`mkRemoveX`),
+                    named for its tier — it was a stepper circle with a red
+                    glyph, named only by a `title` that read "Remove this tier"
+                    on every tier. Armed it is the app's destructive look,
+                    "Confirm — remove" with the trash mark, where it read
+                    "Remove?" in the tint WITH a danger border: the banned
+                    three-encodings shape. The slot reserves the armed width
+                    (TIER_ARMED_W) and holds the × at its left, so arming grows
+                    the button rightwards from under the finger and wraps the
+                    row exactly as it wrapped at rest. */}
+                <div style={{ minWidth: TIER_ARMED_W, display: "flex", marginBottom: 2 }}>
+                  {armedTier === i ? (
+                    <button
+                      onClick={() => armTierRemove(i)}
+                      className="mgt-hover-scale mgt-press"
+                      aria-label={"Confirm — remove Tier " + (i + 1)}
+                      title="Tap again to remove"
+                      style={mkDangerBtn({ fontSize: T.body, minHeight: H.compact, padding: "4px 10px" })}><TrashIcon size={IC.control} />Confirm — remove</button>
+                  ) : (
+                    <button
+                      onClick={() => armTierRemove(i)}
+                      className="mgt-hover-scale"
+                      aria-label={"Remove Tier " + (i + 1)}
+                      title="Remove this tier"
+                      style={mkRemoveX(H.compact)}><CloseIcon size={IC.control} /></button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -776,7 +867,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             <div style={{ width: 150, height: H.chrome, display: "flex", alignItems: "center", fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
               {tiers.length ? "Larger parties (" + restFrom + "+)" : "All parties"}
             </div>
-            <HourStepper label="stay for" value={bd.restDur} fmt={minsLabel}
+            <HourStepper label="stay for" who={tiers.length ? "Larger parties" : "All parties"} value={bd.restDur} fmt={minsLabel}
               disableDec={bd.restDur <= 15} disableInc={bd.restDur >= 360}
               onDec={() => onSaveBookingDefaults({ restDur: bd.restDur - 15 })} onInc={() => onSaveBookingDefaults({ restDur: bd.restDur + 15 })} />
           </div>
@@ -793,7 +884,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               }}>+ Add tier</button>
           </div>
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
-            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? String(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max) + " guests → " + t.dur + " min").concat([restFrom + "+ → " + bd.restDur + " min"]).join(" · ") + ". Applies to new bookings only."}
+            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? guestsLabel(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max + "\u00a0guests") + " → " + countLabel(t.dur, "min")).concat([restFrom + "+\u00a0guests → " + countLabel(bd.restDur, "min")]).join(" · ") + ". Applies to new bookings only."}
           </div>
         </div>
       </Collapsible>
@@ -898,7 +989,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <AutoHeight>{bd.freeSoonEnabled !== false ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Predict up to</span>
-            <MiniStepper value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
+            <MiniStepper label="how far ahead to predict" value={(bd.freeSoonWindow || 15)} fmt={(n) => countLabel(n, "min")}
               disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
               onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
               onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
@@ -927,31 +1018,62 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
                 <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>No standing bookings yet.</div>
               ) : (recurring.rules || []).map(function (r) {
                 const armed = armedRule === r.id;
+                // v18.2.0 phase 42: the rule's identity, written once — the
+                // switch and the Delete both name it, so they cannot disagree.
+                const ruleWho = (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time;
+                // Phase 51 (round 3's L-2): the text takes a 200px basis — a
+                // typical "Name · 4 guests" line — and the controls wrap under
+                // it as ONE right-anchored group of reserved width. With
+                // `flex: 1` (a zero basis) nothing ever wrapped, so on a 375px
+                // phone the armed "Confirm — delete" took the name down to 97px
+                // and two lines. A basis alone would have moved Delete a line
+                // down on the first tap there (the line held 162px of text
+                // beside the resting 61px Delete, not beside the armed 126); the
+                // reserve makes both states wrap alike: under the text on every
+                // phone (a 440px one is 38px short of sharing the line), beside
+                // it in the 600px-and-up card.
                 return (
                   <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 10px", marginBottom: 6, borderRadius: R.inset, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)", opacity: r.active !== false ? 1 : 0.5 }}>{(r.name || "(no name)") + " · " + r.size + " pax"}</div>
-                      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time + (r.active === false ? " · paused" : "")}</div>
+                    {/* Phase 55 (round 3's L-3): a paused rule looks like a
+                        paused reminder one tab over — BOTH lines at PAUSED_FADE
+                        and an outline "Paused" tag. It faded the name alone (to
+                        0.5) and appended " · paused" to the schedule. */}
+                    <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                      <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-primary)" }}>
+                        <span style={{ opacity: r.active !== false ? 1 : PAUSED_FADE }}>{(r.name || "(no name)") + " · " + guestsLabel(r.size)}</span>
+                        {r.active !== false ? null : <OutlineChip tone="neutral" style={{ marginLeft: 8, verticalAlign: "middle" }}>Paused</OutlineChip>}
+                      </div>
+                      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)", opacity: r.active !== false ? 1 : PAUSED_FADE }}>{"Every " + (RULE_WD[r.weekday] || "?") + " at " + r.time}</div>
                     </div>
-                    {/* v17.15.4: the ONE Toggle in the app that repeats. A
-                        static label would give every rule in the list the same
-                        name, which is the defect this version fixes reappearing
-                        one level down — so it carries the rule's own identity,
-                        the two lines to its left. Not " · paused": that is the
-                        state, and aria-checked already says it. */}
-                    <Toggle
-                      label={"Standing booking: " + (r.name || "(no name)") + ", every " + (RULE_WD[r.weekday] || "?") + " at " + r.time}
-                      on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
-                    <button
-                      onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
-                      className="mgt-hover-scale mgt-press"
-                      style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px", background: BTN.del, opacity: armed ? 1 : 0.85 })}>{armed ? "Confirm?" : "Delete"}</button>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0, marginLeft: "auto", minWidth: RULE_ACTIONS_W }}>
+                      {/* v17.15.4: the ONE Toggle in the app that repeats. A
+                          static label would give every rule in the list the same
+                          name, which is the defect this version fixes reappearing
+                          one level down — so it carries the rule's own identity,
+                          the two lines to its left. Not " · paused": that is the
+                          state, and aria-checked already says it. */}
+                      <Toggle
+                        label={"Standing booking: " + ruleWho}
+                        on={r.active !== false} onClick={() => onUpdateRule(r.id, { active: r.active === false })} />
+                      {/* v18.2.0 (S6): the rows' shared look — since phase 62
+                          the app's one destructive look, solid red with the
+                          trash mark (Patryk) — and the armed label says what
+                          the second tap does, as People's Remove does.
+                          Phase 42: and it names its rule, as Templates' Delete
+                          names its template — two rules were two buttons both
+                          called "Delete" (measured on DEV). */}
+                      <button
+                        aria-label={(armed ? "Confirm — delete (" : "Delete (") + ruleWho + ")"}
+                        onClick={() => { if (armed) { onRemoveRule(r.id); setArmedRule(null); } else setArmedRule(r.id); }}
+                        className="mgt-hover-scale mgt-press"
+                        style={mkDangerBtn({ fontSize: T.body, minHeight: 32, padding: "4px 10px" })}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete"}</button>
+                    </div>
                   </div>
                 );
               })}
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Generate ahead</span>
-                <MiniStepper value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
+                <MiniStepper label="weeks generated ahead" value={(recurring.horizonWeeks || 4)} fmt={(n) => String(n)}
                   disableDec={(recurring.horizonWeeks || 4) <= 1} disableInc={(recurring.horizonWeeks || 4) >= 12}
                   onDec={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) - 1)} onInc={() => onSetRecurringHorizon((recurring.horizonWeeks || 4) + 1)} />
                 <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>{"week" + ((recurring.horizonWeeks || 4) !== 1 ? "s" : "")}</span>
@@ -977,11 +1099,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             onDec={() => onSaveGeneralSettings({ regularMin: gs.regularMin - 1 })}
             onInc={() => onSaveGeneralSettings({ regularMin: gs.regularMin + 1 })} />
           {/* v17.1.0: one threshold for ALL three rows banners (late / overlap / waitlist). */}
-          <HourStepper label="Collapse banners above" value={gs.lateCollapseMax} fmt={(n) => n + (n === 1 ? " row" : " rows")}
+          <HourStepper label="Collapse banners above" value={gs.lateCollapseMax} fmt={(n) => countLabel(n, "row", "rows")}
             disableDec={gs.lateCollapseMax <= 1} disableInc={gs.lateCollapseMax >= 20}
             onDec={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax - 1 })}
             onInc={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax + 1 })} />
-          <HourStepper label="Waitlist match window (± wanted time)" value={gs.waitMatchWin} fmt={(n) => "±" + n + " min"}
+          <HourStepper label="Waitlist match window (± wanted time)" value={gs.waitMatchWin} fmt={(n) => "±" + countLabel(n, "min")}
             disableDec={gs.waitMatchWin <= 15} disableInc={gs.waitMatchWin >= 240}
             onDec={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin - 15 })}
             onInc={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin + 15 })} />
@@ -992,11 +1114,11 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
           {/* v17.2.0: starting party sizes of the new-booking / walk-in forms
               (were hard-coded 2). Only the form's INITIAL value — steppers in
               the forms still adjust per booking. */}
-          <HourStepper label="New booking starts at" value={gs.defaultBookingSize} fmt={(n) => n + (n === 1 ? " guest" : " guests")}
+          <HourStepper label="New booking starts at" value={gs.defaultBookingSize} fmt={guestsLabel}
             disableDec={gs.defaultBookingSize <= 1} disableInc={gs.defaultBookingSize >= 20}
             onDec={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize - 1 })}
             onInc={() => onSaveGeneralSettings({ defaultBookingSize: gs.defaultBookingSize + 1 })} />
-          <HourStepper label="Walk-in starts at" value={gs.defaultWalkinSize} fmt={(n) => n + (n === 1 ? " guest" : " guests")}
+          <HourStepper label="Walk-in starts at" value={gs.defaultWalkinSize} fmt={guestsLabel}
             disableDec={gs.defaultWalkinSize <= 1} disableInc={gs.defaultWalkinSize >= 20}
             onDec={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize - 1 })}
             onInc={() => onSaveGeneralSettings({ defaultWalkinSize: gs.defaultWalkinSize + 1 })} />
@@ -1106,6 +1228,8 @@ export function SettingsContent({
   onToggleSw,
   onToggleReduceMotion,
   planGestures,
+  planAvail,
+  onTogglePlanAvail,
   navLocked,
   splitEnabled,
   onToggleSplitEnabled,
@@ -1234,7 +1358,7 @@ export function SettingsContent({
       onWithdrawInvite={onWithdrawInvite} onApplyInvite={onApplyInvite}
       onOpenCapabilities={onOpenCapabilities} onOpenActivity={onOpenActivity} retentionDays={activityRetentionDays} onSetRetention={onSetActivityRetention} />;
   } else if (cur === "app") {
-    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
+    content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {
     content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {
@@ -1265,7 +1389,9 @@ export function SettingsContent({
       />
     );
   } else {
-    content = <ShortcutsContent />;
+    // v18.2.0 (S8): the sheet lists a key only where it works — the inbox keys
+    // follow the WhatsApp module, as `useKeyboardShortcuts` does.
+    content = <ShortcutsContent whatsappOn={typeof hasModule === "function" && hasModule("whatsapp")} />;
   }
   return (
     <div>

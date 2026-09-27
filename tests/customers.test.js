@@ -66,6 +66,18 @@ describe("normalizePhone / formatPhone / hasRealPhone", () => {
     expect(formatPhone("+34600123456")).toBe("+34 600123456");
     expect(formatPhone("")).toBe("");
   });
+  // v18.2.0 phase 50 (round 3's C-4). Measured before: it split after TWO
+  // digits whatever the code, so the screen showed the wrong country.
+  it("splits at the country's real calling code, one, two or three digits", () => {
+    expect(formatPhone("+1 212 555 0123")).toBe("+1 2125550123");      // was "+12 125550123"
+    expect(formatPhone("+353 87 123 4567")).toBe("+353 871234567");   // was "+35 3871234567"
+    expect(formatPhone("+44 7700 900222")).toBe("+44 7700900222");
+    expect(formatPhone("+34 612 345 678")).toBe("+34 612345678");
+  });
+  it("shows a number with no code, or a code it does not know, whole", () => {
+    expect(formatPhone("612 345 678")).toBe("612345678");
+    expect(formatPhone("+999 123 456")).toBe("+999123456");
+  });
   it("hasRealPhone needs ≥3 digits (not empty, not a lone +)", () => {
     expect(hasRealPhone("+34600123456")).toBe(true);
     expect(hasRealPhone("+")).toBe(false);

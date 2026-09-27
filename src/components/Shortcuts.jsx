@@ -19,13 +19,14 @@
 // so the dual-use claim has been removed.
 
 import { Fragment } from "react";
-import { Kbd } from "./atoms";
+import { Kbd, Section } from "./atoms";
 import { T, FW } from "../lib/constants";
+import { WA_SANDBOX } from "../lib/waSandbox";
 
 // ── One row: keycap(s) + label ────────────────────────────────────────────────
-export function ShortcutRow({ keys, label }) {
+export function ShortcutRow({ keys, label, last }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", borderBottom: "1px solid var(--border-soft)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", borderBottom: last ? "none" : "1px solid var(--border-soft)" }}>
       <div style={{ minWidth: 108, display: "flex", gap: 2, alignItems: "center", flexShrink: 0 }}>
         {keys.map((k, i) => (
           <Fragment key={i}>
@@ -45,6 +46,13 @@ export function ShortcutRow({ keys, label }) {
 // Sections array is module-local (this file owns the canonical list). Adding
 // a new shortcut = adding a row here AND wiring the key in BookingApp's
 // keyboard handler. Both must be kept in sync manually for now.
+//
+// v18.2.0 (the design critique, S8): a row or section whose key only works
+// behind a gate carries `when`, and is listed only where the key works — the
+// SAME gate `useKeyboardShortcuts` checks. "X · Open WhatsApp simulator" was
+// listed in production, where X does nothing (the simulator is `WA_SANDBOX`
+// only), and so were "I · Open WhatsApp inbox" and the whole inbox section for
+// a restaurant whose WhatsApp module is off, which is how it ships.
 const SHORTCUT_SECTIONS = [
   { title: "Navigation", rows: [
     { keys: ["T"],       label: "Timeline view" },
@@ -59,8 +67,8 @@ const SHORTCUT_SECTIONS = [
     { keys: ["/"],       label: "Find a booking (any date)" },
     { keys: ["⇧D"], label: "Toggle dark / light mode" },
     { keys: ["⇧+", "⇧−"], label: "Adjust app width (±50 px)" },
-    { keys: ["I"],       label: "Open WhatsApp inbox" },
-    { keys: ["X"],       label: "Open WhatsApp simulator" },
+    { keys: ["I"],       label: "Open WhatsApp inbox", when: "whatsapp" },
+    { keys: ["X"],       label: "Open WhatsApp simulator", when: "sandbox" },
     { keys: ["?"],       label: "Show this help" },
   ]},
   { title: "Timeline", rows: [
@@ -80,12 +88,12 @@ const SHORTCUT_SECTIONS = [
     { keys: ["⇧C"], label: "Cancel booking" },
     { keys: ["D"],       label: "Delete booking" },
   ]},
-  { title: "WhatsApp Inbox", rows: [
+  { title: "WhatsApp Inbox", when: "whatsapp", rows: [
     { keys: ["←", "→"],   label: "Switch Inbox / Archived" },
     { keys: ["↑", "↓"],   label: "Select previous / next conversation" },
     { keys: ["S"],        label: "Toggle multi-select" },
-    { keys: ["T"],        label: "Open templates editor" },
-    { keys: ["E"],        label: "Toggle quick-reply templates" },
+    { keys: ["T"],        label: "Edit templates" },
+    { keys: ["E"],        label: "Insert a template (show or hide)" },
     { keys: ["A"],        label: "Accept draft, else toggle Needs action" },
     { keys: ["D"],        label: "Dismiss draft" },
     { keys: ["C"],        label: "Focus the reply box" },
@@ -124,20 +132,35 @@ const SHORTCUT_SECTIONS = [
   ]},
 ];
 
-export function ShortcutsContent() {
+// Is the key behind this `when` live here? Module-private: a component file
+// that also exports a plain function is a hard lint error
+// (`react-refresh/only-export-components`), so the test reads the source.
+function shortcutShown(when, whatsappOn) {
+  if (when === "sandbox") return WA_SANDBOX;
+  if (when === "whatsapp") return whatsappOn === true;
+  return true;
+}
+
+// v18.2.0 (S8): each section is a `Section` card with a title in the
+// Collapsible header's type — the shape of every other Settings tab. This was
+// the one tab drawn on the bare sheet, with blue uppercase headings of its own.
+export function ShortcutsContent({ whatsappOn = false }) {
+  const sections = SHORTCUT_SECTIONS
+    .filter(function (sec) { return shortcutShown(sec.when, whatsappOn); })
+    .map(function (sec) { return { title: sec.title, rows: sec.rows.filter(function (r) { return shortcutShown(r.when, whatsappOn); }) }; });
   return (
     <div>
-      {SHORTCUT_SECTIONS.map((sec, si) => (
-        <div key={si} style={{ marginBottom: si < SHORTCUT_SECTIONS.length - 1 ? 14 : 0 }}>
-          <div style={{ fontSize: T.small, fontWeight: FW.bold, color: "var(--accent)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+      {sections.map((sec, si) => (
+        <Section key={sec.title} style={si === sections.length - 1 ? { marginBottom: 0 } : null}>
+          <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)", marginBottom: 6 }}>
             {sec.title}
           </div>
           <div>
             {sec.rows.map((r, ri) => (
-              <ShortcutRow key={ri} keys={r.keys} label={r.label} />
+              <ShortcutRow key={ri} keys={r.keys} label={r.label} last={ri === sec.rows.length - 1} />
             ))}
           </div>
-        </div>
+        </Section>
       ))}
     </div>
   );

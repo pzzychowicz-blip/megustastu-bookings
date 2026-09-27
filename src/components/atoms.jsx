@@ -13,7 +13,7 @@
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
-import { isIn } from "../lib/booking-logic";
+import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
@@ -204,6 +204,99 @@ export function mkSolidBtn(background, extra) {
   };
 }
 
+// ── A DESTRUCTIVE button: one solid red, at rest and armed (v18.2.0) ─────────
+// Every button that deletes, removes, voids, unblocks or clears something is
+// this: solid `--app-danger-solid` with the solid rim, on mkBtn's geometry.
+// Arming a two-tap confirm changes the LABEL ("Confirm — remove") and nothing
+// else — not the colour, not the size under the finger. A Delete or Remove
+// also carries `TrashIcon` before its word (the call site draws it, since Void
+// voucher, Unblock and Clear this range are not deletions of a thing).
+//
+// Phase 62, Patryk's call, after seeing the app's own buttons side by side in
+// both themes: the same job had four reds and three looks (a tint that turned
+// solid when armed on six surfaces, a translucent `--btn-del` on others, the
+// inbox's own `--wa-btn-cancel`), and he chose SOLID at rest over the quiet
+// tint phases 27, 28 and 41 had built. The small icon-only × removers inside
+// the editors are the one exception, and they stay quiet (phase 63).
+// `inline-flex` so the icon and the word sit on one centred line.
+export function mkDangerBtn(extra) {
+  return mkBtn(Object.assign({
+    background: "var(--app-danger-solid)", color: "var(--text-on-accent)", border: RIM_SOLID, boxShadow: "var(--shadow-btn-solid)",
+    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
+  }, extra));
+}
+
+// The same red on a confirm DIALOG's button ("Delete booking?" · Delete,
+// "Discard unsaved changes?" · Discard): mkSolidBtn's geometry, T.lead at
+// H.touch, because it stands beside the dialog's 44px Back. Before phase 62
+// those buttons were three reds: `--app-danger-solid`, the translucent
+// `BTN.del` (reminders, conversations) and the inbox's `--wa-btn-cancel`.
+export function mkDangerConfirm(extra) {
+  return mkSolidBtn("var(--app-danger-solid)", Object.assign({
+    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6
+  }, extra));
+}
+
+// ── An editor's small × remover: the ONE quiet exception (v18.2.0 phase 63) ──
+// The icon-only × that takes one item out of a list being edited — a table, a
+// join group, a combo, a priority rule (Layout), a duration tier (Settings →
+// General), a reminder's extra time (the reminder editor). Patryk kept these
+// quiet when every other destructive button became solid (phase 62): thirteen
+// solid ×s down Layout → Tables was the loudest thing in the tab. The danger
+// TINT with the glass rim, never a danger border (the banned triple). This was
+// Layout's `X_BTN`; the tier × was a stepper circle with a red glyph and the
+// reminder editor's a solid `BTN.del` square, so three ×s for one job. Each
+// call site names its × for the item it removes: an icon has no name of its own.
+export function mkRemoveX(size) {
+  const d = size || H.chip;
+  return {
+    background: ALERT_TONES.danger.tint, border: "1px solid var(--border-glass)",
+    borderRadius: R.pill, width: d, height: d, fontSize: T.title, fontWeight: FW.bold,
+    color: ALERT_TONES.danger.tone, lineHeight: 1,
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+    cursor: "pointer", boxShadow: "var(--shadow-btn)"
+  };
+}
+
+// ── Segmented control: the track and a segment (v18.2.0) ─────────────────────
+// Settings' TabBar has drawn this since v16.2.0 — a pill track, the chosen tab
+// LIFTED as a white pill with accent text — and the main view switcher became
+// its second user in v18.2.0. It was three solid pills there (the active one
+// solid blue), sitting beside "+ New" in the same blue, so the eye could not
+// tell "where I am" from "what I can do". Shared as STYLE rather than a
+// component because the two cannot share behaviour: the view buttons carry the
+// split-view hold and right-click, TabBar a scroller. A second hand-typed copy
+// of the shape is the defect `src/CLAUDE.md` records for OutlineChip.
+//
+// The track's hairline is an INSET shadow, not a border: a border adds 2px to
+// the height, and the header's switcher has to stand exactly H.control tall
+// beside the buttons next to it (a H.chrome segment + 2px of track padding).
+//
+// The pairs are registered in tests/contrast.test.js: --text-primary on
+// --bg-tab-active (the lifted segment), --text-muted on --bg-tabbar (the rest).
+// The lifted segment's ink was --accent until v18.2.0 — TabBar's since v16.2.0,
+// never registered — and registering it measured 4.02:1 light and 2.25:1 dark
+// against the 4.5:1 a small bold label takes. Primary text, Patryk's call: the
+// LIFT, the weight and the shadow say "chosen", the colour does not have to.
+export const SEG_TRACK = {
+  display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill,
+  background: "var(--bg-tabbar)", boxShadow: "inset 0 0 0 1px var(--border-soft)"
+};
+export function segStyle(active) {
+  return {
+    borderRadius: R.pill, border: "none", cursor: "pointer",
+    background: active ? "var(--bg-tab-active)" : "transparent",
+    color: active ? "var(--text-primary)" : "var(--text-muted)",
+    fontWeight: active ? FW.bold : FW.semi,
+    fontSize: T.body,
+    boxShadow: active ? "var(--shadow-btn)" : "none",
+    // `transform` MUST be listed: these carry .mgt-hover-scale, and an inline
+    // `transition` REPLACES the class's, so a list without it snaps the lift
+    // (the collision TabBar's own comment recorded when it lost it).
+    transition: "transform " + M.tap + ", background-color " + M.tap + ", color " + M.tap + ", box-shadow " + M.tap
+  };
+}
+
 // ── Modal overlay (mobile = full-screen sheet, desktop = centered card) ──────
 // Optional `footer` (v14.4.1): when provided, the action buttons render PINNED
 // to the modal bottom while `children` scroll above them — so Save/Cancel stay
@@ -318,6 +411,10 @@ function onKeyDown(e) {
   return { role: "dialog", "aria-modal": "true", tabIndex: -1, onKeyDown };
 }
 
+// Where an `anchor="top"` card's top edge sits: 5dvh, the top of a centred card
+// at its 90dvh ceiling, less the scrim's 12px padding, never negative.
+const TOP_ANCHOR = "max(0px, calc(5dvh - 12px))";
+
 // `panel` (17.15.0-wa-sandbox) — a dialog that brings its OWN body.
 //
 // Every branch below gives you a padded, scrolling card at maxWidth 580 on
@@ -340,7 +437,21 @@ function onKeyDown(e) {
 // It deliberately does NOT accept arbitrary style. A caller that needs more
 // than a size and a surface is describing a different component, and the next
 // person should have to say so out loud rather than reach for a fifth key.
-export function Overlay({ onClose, children, footer, panel }) {
+//
+// `maxWidth` (v18.2.0) — the desktop card's cap, 580 when omitted. Settings is
+// the one caller: its nine tabs need ~720px on one row, and at 580 the last
+// three sat out of sight (the design critique, S1). A number, not a style, for
+// the same reason as `panel`; the phone sheet is full-width either way.
+//
+// `anchor="top"` (v18.2.0) — the desktop card hangs from a fixed top instead of
+// being centred. A centred card that changes height moves its TOP, and with it
+// everything along the top: Settings' tab bar sat at 120 · 205 · 120 · 120 ·
+// 186 · 280px for six tabs in a row (the design critique, S2), so after one
+// click the next tab was no longer under the finger. The top is 5dvh, where a
+// centred card already sits at its 90dvh ceiling, so the tallest tabs do not
+// move at all and the shorter ones stop moving; only the bottom edge follows
+// the content. The phone sheet is full-screen and has no top to move.
+export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const lockRef = useRef(false);
   const scrollRef = useRef(null);
@@ -444,15 +555,16 @@ export function Overlay({ onClose, children, footer, panel }) {
 
   // Desktop centered card. With a footer, the card is a flex column: body
   // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
-  // (exactly as before).
+  // (exactly as before). `top`: hung from TOP_ANCHOR instead — see `anchor`.
+  const top = anchor === "top";
   return wrap(
     <div
       className={scrimCls}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 12 }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: 12 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: 580, maxHeight: "90dvh", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -461,7 +573,7 @@ export function Overlay({ onClose, children, footer, panel }) {
           </div>
         </div>
       ) : (
-        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: 580, maxHeight: "90dvh", overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
@@ -530,15 +642,20 @@ export function Overlay({ onClose, children, footer, panel }) {
 // in front and holding focus. Overlay assigns a unique id per instance instead.
 export const MODAL_TITLE_ATTR = "data-mgt-modal-title";
 
+// v18.2.0: FLAT. The pill carried `--shadow-btn` and the solid buttons' white
+// rim (RIM_SOLID), i.e. exactly what a button wears, in a button's blue, above
+// a form full of buttons — so "New booking" read as something to press (the
+// design critique). A heading is not a control: the shadow and the rim are
+// gone, and the colour stays, because it is information (it matches the
+// button that opened the modal — see above). Patryk's call, for every modal
+// at once, since all seven titles come through here.
 export function ModalTitle({ background, marginBottom = 14, children }) {
   return (
     <div style={{ textAlign: "center", marginBottom }}>
       <h2 {...{ [MODAL_TITLE_ATTR]: "" }} style={{
         fontSize: T.title, fontWeight: FW.bold, color: "var(--text-on-accent)",
         display: "inline-block", padding: "8px 16px", borderRadius: R.pill,
-        background, margin: 0,
-        border: RIM_SOLID,
-        boxShadow: "var(--shadow-btn)"
+        background, margin: 0
       }}>{children}</h2>
     </div>
   );
@@ -1615,7 +1732,7 @@ const SIZE_RING = {
 export function SizeRing({ n, rim, style }) {
   return (
     <span
-      title={n + " guest" + (n === 1 ? "" : "s")}
+      title={guestsLabel(n)}
       style={{
         ...SIZE_RING,
         ...(rim ? { border: "1px solid " + rim } : null),
@@ -1672,6 +1789,40 @@ export function SizeRing({ n, rim, style }) {
 //     stay one size across the row and only the pill comes down. Taking the
 //     icon to `IC.inline` would have shrunk the wrong half.
 //
+// ── SBADGE_W — the widest status badge (v18.2.0) ───────────────────────────
+// "Completed" measures 97.8px in the app's font; "Seated" is 76. A column that
+// holds any status reserves this, so whatever follows it lines up card to card.
+// It was ListView's STATUS_COL; phase 75 moved it here, beside the badge it
+// measures, for Find a booking's status column (phase 76). Re-measure if the
+// badge's font, padding or icon changes.
+export const SBADGE_W = 98;
+
+// ── textWidth — a string's width in a font, measured on a canvas ─────────────
+// A canvas measures without layout, so a column can be sized in the render that
+// draws it: nothing is painted at one width and corrected after. v18.2.0 phase
+// 75: ONE copy, where Settings' tab bar and the List's name column each had
+// their own, and Find a booking was about to be the third. `size` is a CSS
+// length ("14px"), `family` a computed font-family. Cached per font and string;
+// +1px, because a canvas and a laid-out run can disagree by a fraction, and a
+// column 0.4px too narrow wraps its widest entry. 0 with no `document` (a test
+// importing the file) or no 2D context: each caller picks its own fallback.
+const textWidths = new Map();
+let textCtx = null;
+export function textWidth(label, weight, size, family) {
+  const key = weight + "|" + size + "|" + family + "|" + label;
+  const hit = textWidths.get(key);
+  if (hit !== undefined) return hit;
+  if (!textCtx) {
+    if (typeof document === "undefined") return 0;
+    textCtx = document.createElement("canvas").getContext("2d");
+    if (!textCtx) return 0;
+  }
+  textCtx.font = weight + " " + size + " " + family;
+  const w = Math.ceil(textCtx.measureText(label).width) + 1;
+  textWidths.set(key, w);
+  return w;
+}
+
 // The rule, for the next label that feels loud: TREATMENT and SCALE are two
 // separate answers to "match your neighbours", and settling the first does not
 // settle the second.
@@ -1691,7 +1842,24 @@ export function SBadge({ status }) {
 }
 
 // ── Table badge (id, indoor/outdoor coloured) ────────────────────────────────
-export function TBadge({ id }) {
+// v18.2.0 phase 69: `missing` — the layout has no such table (`unplacedReason`
+// says "missing"), so the pill must not look like a real one. It had the
+// outdoor teal of any unknown id. Dashed, no fill, in the flags' secondary ink:
+// dashes are this app's word for "not really there" (the Unplaced mark, a
+// resetting table), and the name says it for anyone not seeing the border.
+export function TBadge({ id, missing = false }) {
+  if (missing) {
+    return (
+      <span role="img" aria-label={"Table " + id + ", not in the layout"} title={"Table " + id + " is not in the layout"} style={{
+        fontSize: T.body, padding: "4px 10px", borderRadius: R.pill,
+        background: "transparent", color: "var(--text-secondary)",
+        border: "1px dashed var(--text-secondary)",
+        fontWeight: FW.semi, display: "inline-block"
+      }}>
+        {id}
+      </span>
+    );
+  }
   const indoor = isIn(id);
   const t = indoor ? TBL.ind : TBL.out;
   return (
@@ -1706,6 +1874,14 @@ export function TBadge({ id }) {
     </span>
   );
 }
+
+// ── PAUSED_FADE — a paused thing's TEXT (v18.2.0 phases 28 and 55) ───────────
+// A paused reminder and a paused standing booking fade their words to this and
+// carry an outline "Paused" tag (OutlineChip, neutral) beside the name — never
+// the whole card, whose switch and buttons still work. ONE value, because the
+// two lists sit one tab apart in Settings and were two different looks (the
+// design critique's L-3).
+export const PAUSED_FADE = 0.55;
 
 // ── OutlineChip — the standalone count / disclosure chip (v17.15.0) ─────────
 // DESIGN.md's OUTLINE treatment: no fill, a 2px border in the semantic hue,

@@ -4,8 +4,10 @@
 // extra tokens. pointerEvents:none so the parent button owns all clicks.
 //
 // TemplatesIcon — a document (folded top-right corner) with three text lines.
-//   Used for: the panel-header "Templates" button (replaces "⚙ Templates") and
-//   the composer "Templates" toggle (replaces the text "Templates ▸" button).
+//   Used for: the composer's "Insert template" toggle (replaces the text
+//   "Templates ▸" button). v18.2.0: the panel header's button, which EDITS the
+//   templates, took the app's edit pencil (EditIcon) and the name "Edit
+//   templates" — the two had one mark and one name and did two jobs.
 // SelectIcon — a checkbox with a tick. Toggles multi-select mode in the inbox.
 
 import { IC } from "../../lib/constants";
@@ -108,18 +110,8 @@ export function ArchiveIcon({ size = IC.chrome, color = "currentColor" }) {
   );
 }
 
-// TrashIcon (was 🗑) — a bin with a lid and two staves.
-export function TrashIcon({ size = IC.chrome, color = "currentColor" }) {
-  return (
-    <Svg size={size} color={color}>
-      <line x1="4" y1="6.5" x2="20" y2="6.5" />
-      <path d="M9 6.5V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5v2" />
-      <path d="M6.5 6.5l1 13a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-13" />
-      <line x1="10.5" y1="10.5" x2="10.8" y2="17" />
-      <line x1="13.5" y1="10.5" x2="13.2" y2="17" />
-    </Svg>
-  );
-}
+// TrashIcon moved to ../Icons.jsx in v18.2.0 phase 62, when it became the
+// mark on every Delete and Remove in the app; the inbox imports it from there.
 
 // LinkIcon (was 🔗) — two chain links. Heads the "linked booking" card.
 export function LinkIcon({ size = IC.chrome, color = "currentColor" }) {

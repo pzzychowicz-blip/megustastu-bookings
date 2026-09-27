@@ -122,8 +122,8 @@ import { formatPhone as _formatPhone, matchCustomerByPhone as _matchByPhone, nor
 // The two "can a consumer take this apart" predicates, reused rather than
 // re-expressed — see sanitizeParse below. Both files carry their explicit .js
 // extension because api/_lib imports this module under Node ESM.
-import { isReadableTime } from "./booking-logic.js";
-import { isReadableDate } from "./day.js";
+import { isReadableTime, countLabel } from "./booking-logic.js";
+import { isReadableDate, formatDay, localDay } from "./day.js";
 
 // Human-readable relative time ("2 min ago", "yesterday", "3 days ago").
 export function formatRelativeTime(ts) {
@@ -131,14 +131,15 @@ export function formatRelativeTime(ts) {
   const diff = Date.now() - ts;
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
-  if (m < 60) return m + " min ago";
+  if (m < 60) return countLabel(m, "min") + " ago";
   const h = Math.floor(m / 60);
   if (h < 24) return h + "h ago";
   const d = Math.floor(h / 24);
   if (d === 1) return "yesterday";
-  if (d < 7) return d + " days ago";
-  const dt = new Date(ts);
-  return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  if (d < 7) return countLabel(d, "day", "days") + " ago";
+  // v18.2.0 (the design critique, C1): past a week, the house date — "Thu
+  // 17.09" — where this wrote the locale's "17 Sept".
+  return formatDay(localDay(ts));
 }
 
 // Format a timestamp as an inline bubble caption ("14:32").
@@ -395,7 +396,9 @@ export function describeConversation(conv, opts) {
   // the number keeps the label a name rather than opening it with an empty
   // segment ("…, 34600111222, hola"), which is what `join(", ")` produces from
   // an empty first part.
-  const title = (match && match.name) || conv.phone || conv.phoneKey || "";
+  // v18.2.0 (W4): an unmatched conversation is titled by its FORMATTED number,
+  // as the row and the conversation header now show it.
+  const title = (match && match.name) || _formatPhone(conv.phone || conv.phoneKey || "") || "";
   if (title) parts.push(title);
   // The number is spoken only when it is not already the name — an unmatched
   // conversation is titled by its number, and saying it twice is noise.

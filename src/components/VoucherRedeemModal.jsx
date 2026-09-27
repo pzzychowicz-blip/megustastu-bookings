@@ -33,13 +33,18 @@
 //   onRedeem(amount) — redeem this much, then complete
 //   onSkip()         — complete, redeem nothing (the unsettled path)
 //   onClose()        — cancel the whole action
+//   settle           — v18.2.0 phase 48: the booking is ALREADY completed and
+//                      this is its missing ledger entry, opened by the strip's
+//                      Settle. Nothing is completed here, so the buttons say
+//                      "Not now" and "Redeem" rather than "Complete without
+//                      using it" and "Redeem & complete".
 
 import { useState } from "react";
 import { S, R, T, FW } from "../lib/constants";
-import { formatCode, remainingOf, redeemableAmount, clampMoney } from "../lib/vouchers";
+import { formatCode, remainingOf, redeemableAmount, clampMoney, money } from "../lib/vouchers";
 import { Overlay, ModalTitle, InlineAlert, Reveal, Fld, mkInp, mkBtn, mkSolidBtn } from "./atoms";
 
-export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedeem, onSkip, onClose }) {
+export function VoucherRedeemModal({ voucher, booking, currency = "€", settle = false, onRedeem, onSkip, onClose }) {
   const max = remainingOf(voucher);
   // The field starts at the whole balance, which is what makes "fully" the
   // default action rather than a separate button.
@@ -48,8 +53,8 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
 
   function commit() {
     const n = clampMoney(amount);
-    if (n <= 0) { setErr("Enter an amount above zero, or complete without using the voucher."); return; }
-    if (n > max) { setErr("That is more than the voucher has left (" + max + " " + currency + ")."); return; }
+    if (n <= 0) { setErr(settle ? "Enter an amount above zero, or choose Not now." : "Enter an amount above zero, or complete without using the voucher."); return; }
+    if (n > max) { setErr("That is more than the voucher has left (" + money(max, currency) + ")."); return; }
     onRedeem(redeemableAmount(voucher, n));
   }
 
@@ -61,10 +66,10 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
           <button type="button" onClick={onSkip} className="mgt-hover-scale" style={mkBtn({ background: "var(--app-btn-slate)" })}>
-            Complete without using it
+            {settle ? "Not now" : "Complete without using it"}
           </button>
           <button type="button" onClick={commit} className="mgt-hover-scale" style={mkSolidBtn("var(--accent)")}>
-            Redeem &amp; complete
+            {settle ? "Redeem" : "Redeem & complete"}
           </button>
         </div>
       }>
@@ -75,8 +80,10 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
         {formatCode(voucher.code)}
       </h2>
       <div style={{ fontSize: T.lead, color: S.text, marginBottom: 14 }}>
-        {(booking && booking.name ? booking.name + "'s booking has this voucher attached. " : "")
-          + max + " " + currency + " left on it."}
+        {(booking && booking.name
+          ? booking.name + (settle ? "'s visit was completed without recording this voucher. " : "'s booking has this voucher attached. ")
+          : "")
+          + money(max, currency) + " left on it."}
       </div>
 
       {/* `Fld`, not a hand-written label — /code-review v18.0.0, the same
@@ -90,7 +97,9 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
         return (
           <input
             id={fid}
-            type="number" min={0} max={max} step={1} inputMode="decimal"
+            // v18.2.0 phase 58 (round 3's V-6): cents. `step={1}` made "12.3" —
+            // a bill share the app takes — `:invalid` (stepMismatch).
+            type="number" min={0} max={max} step={0.01} inputMode="decimal"
             value={amount}
             onChange={function (e) { setAmount(e.target.value); setErr(""); }}
             className="mgt-hover-scale"
@@ -100,7 +109,7 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
 
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 10 }}>
         {left > 0
-          ? left + " " + currency + " stays on the voucher for a later visit."
+          ? money(left, currency) + " stays on the voucher for a later visit."
           : "This uses the whole voucher."}
       </div>
 
@@ -111,7 +120,9 @@ export function VoucherRedeemModal({ voucher, booking, currency = "€", onRedee
       </div>
 
       <div style={{ fontSize: T.micro, color: S.muted, marginTop: 10, borderTop: "1px solid var(--border-soft)", paddingTop: 8, borderRadius: R.inset }}>
-        Completing without using it leaves the voucher open — the booking will show as unsettled until someone records it.
+        {settle
+          ? "Not now leaves it unrecorded — the booking stays in the notifications until someone records it."
+          : "Completing without using it leaves the voucher open — the booking will show as unsettled until someone records it."}
       </div>
     </Overlay>
   );

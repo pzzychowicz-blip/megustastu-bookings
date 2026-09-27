@@ -24,16 +24,15 @@
 // v14.7.0 (week) · v14.9.0 (month view + W/M switch).
 
 import { useState, useEffect } from "react";
-import { Overlay, mkBtn, AutoHeight } from "./atoms";
-import { daySummary, rangeStats } from "../lib/booking-logic";
-import { S, BTN, R, T, FW, IC } from "../lib/constants";
+import { Overlay, mkBtn, AutoHeight, SEG_TRACK, segStyle, TBadge } from "./atoms";
+import { daySummary, rangeStats, countLabel } from "../lib/booking-logic";
+import { S, BTN, R, T, FW, IC, H, TIMELINE_TABLES } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
-import { todayStr, addDays, isReadableDate } from "../lib/day";
+import { todayStr, addDays, isReadableDate, formatDay } from "../lib/day";
 
 const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];   // week-list rows
 const WDS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];          // month-grid header
-const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONF = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 // 7 ISO date strings (Mon→Sun) for the week containing `dateStr`.
@@ -76,12 +75,12 @@ function monthGrid(dateStr){
   return weeks;
 }
 
+// v18.2.0 (the design critique, C1): the house date at both ends, "21.09 –
+// 27.09", where it was "Sep 21 – 27, 2026". No weekdays — a week here always
+// runs Monday to Sunday, and the columns under it say so. The year appears
+// where `formatDay` puts it, on an end that is not this year.
 function weekRangeLabel(days){
-  const a = new Date(days[0]);
-  const b = new Date(days[6]);
-  const aL = MON[a.getUTCMonth()] + " " + a.getUTCDate();
-  const bL = (a.getUTCMonth() === b.getUTCMonth() ? "" : MON[b.getUTCMonth()] + " ") + b.getUTCDate();
-  return aL + " – " + bL + ", " + b.getUTCFullYear();
+  return formatDay(days[0], { weekday: false }) + " – " + formatDay(days[6], { weekday: false });
 }
 function monthLabel(dateStr){
   const d = new Date(dateStr);
@@ -91,7 +90,18 @@ function sameMonth(a, b){
   const x = new Date(a), y = new Date(b);
   return x.getUTCMonth() === y.getUTCMonth() && x.getUTCFullYear() === y.getUTCFullYear();
 }
-export function WeekView({ bookings, viewDate, onPick, onClose }){
+// v18.2.0 (the design critique, X2): the popover's cells are OPAQUE. They were
+// --bg-input, half-transparent over a translucent sheet, so the page behind the
+// modal showed through and the timeline's orange blocks tinted days amber —
+// measured, days 18–20 and 25–27 amber over the Timeline, grey over the List.
+const CELL = "var(--bg-cal-cell)";
+// The busiest in-month day's shading (the accent at up to 30%), shared by the
+// cells and the key under them so the key cannot describe a different scale.
+const HEAT = 0.3;
+// An out-of-month day's number, faded; the cell stays solid.
+const OUT_OF_MONTH = 0.4;
+
+export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
   const [mode, setMode] = useState("week");   // "week" | "month"
   // v17.16.11: seed from `viewDate` only when it is a date this view can step
   // FROM. `viewDate` can hold a booking's stored date verbatim (SearchPanel's
@@ -159,19 +169,19 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
   }, [mode, ref, focus]);
 
   // ── Header: Week/Month segmented control + period label ──
+  // v18.2.0 (the design critique, X3): the app's ONE segmented look — atoms'
+  // SEG_TRACK / segStyle, the view switcher's and Settings' tab bar's. This was
+  // a third style, the chosen mode in solid accent blue where the other two
+  // lift a white segment, and it said which mode was on by colour alone:
+  // `aria-pressed` now, as ViewSwitcher's buttons.
   function modeBtn(m, label){
     const active = mode === m;
     return (
       <button
         onClick={function(){ switchMode(m); }}
         className="mgt-hover-scale"
-        style={{
-          border: "none", borderRadius: R.pill, padding: "6px 18px", cursor: "pointer",
-          fontSize: T.body, fontWeight: FW.bold, minHeight: 32,
-          background: active ? S.accent : "transparent",
-          color: active ? "var(--text-on-accent)" : "var(--text-secondary)",
-          boxShadow: active ? "var(--shadow-btn-solid)" : "none"
-        }}
+        aria-pressed={active}
+        style={{ ...segStyle(active), padding: "6px 18px", minHeight: H.compact }}
       >
         {label}
       </button>
@@ -190,10 +200,16 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     </div>
   );
 
+  // v18.2.0 phase 61 (Patryk): hung from the top like Settings, not centred.
+  // Centred, the card's top moved every time its body changed height — Week
+  // (7 rows) → Month (4–6 week rows) → Stats — so the Week / Month / Stats
+  // control you had just pressed moved out from under the finger, and a month
+  // with a sixth week moved it again. `anchor="top"` holds the top and only the
+  // bottom edge follows the body (DESIGN.md, "Settings hangs from a fixed top").
   return (
-    <Overlay onClose={onClose} footer={footer}>
+    <Overlay onClose={onClose} footer={footer} anchor="top">
       <div style={{ textAlign: "center", marginBottom: 14 }}>
-        <div style={{ display: "inline-flex", gap: 2, padding: 2, borderRadius: R.pill, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+        <div role="group" aria-label="Show" style={SEG_TRACK}>
           {modeBtn("week", "Week")}
           {modeBtn("month", "Month")}
           {modeBtn("stats", "Stats")}
@@ -206,8 +222,11 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
       {/* v15.8.0: AutoHeight eases the height when switching Week↔Month. (v17.8.0:
           its `linear` prop is gone — AutoHeight always eases linear now, so this
           call site is byte-identical in behaviour and is the reference the rest
-          of the app's modal bodies were brought in line with.) */}
-      <AutoHeight>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
+          of the app's modal bodies were brought in line with.)
+          Phase 61: `watch`, Settings' own, because every mode switch and every
+          period step REPLACES the body — without it the new body paints once
+          at its full height before the observer clips it to the old one. */}
+      <AutoHeight watch={mode + "|" + ref}>{isStats ? statsBody() : isWeek ? weekBody() : monthBody()}</AutoHeight>
 
       <div style={{ marginTop: 18, fontSize: T.small, color: "var(--text-faint)", textAlign: "center" }}>
         {isStats
@@ -243,7 +262,7 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                 display: "flex", alignItems: "center", gap: 10,
                 padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
-                background: "var(--bg-input)",
+                background: CELL,
                 border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
                 boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
               }}
@@ -256,8 +275,8 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                 <div style={{ width: ((r.covers / maxCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: r.covers ? 0.8 : 0, borderRadius: 4,   /* @canvas */ }} />
               </div>
               <div style={{ minWidth: 86, textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{r.covers + " cover" + (r.covers !== 1 ? "s" : "")}</div>
-                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{r.bookings + " booking" + (r.bookings !== 1 ? "s" : "")}</div>
+                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{countLabel(r.covers, "cover", "covers")}</div>
+                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{countLabel(r.bookings, "booking", "bookings")}</div>
               </div>
             </button>
           );
@@ -275,17 +294,31 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     const st = rangeStats(bookings, from, to);
     const maxH = st.hours.reduce(function(mx, h){ return Math.max(mx, h.covers); }, 0) || 1;
     const maxT = st.tables.reduce(function(mx, t){ return Math.max(mx, t.bookings); }, 0) || 1;
-    const stat = function(val, label, color){
+    // The LIVE binding, read at render: this body is not memoised, so a table
+    // renamed in Settings is current the next time Stats draws.
+    const inLayout = new Set(TIMELINE_TABLES.map(function(t){ return t.id; }));
+    // v18.2.0 phase 74 (round 2's X6): the five tiles are a GRID, five across
+    // on the card and three over two on the phone's sheet — `isMobile`, the
+    // 600px line where Overlay switches between the two, so no second
+    // breakpoint. They were flex items on an 84px basis, and a wrapping line is
+    // packed greedily: the tablet's 530px card held four and stretched the
+    // fifth, "no-shows", alone across a row of its own. On the sheet's six
+    // columns the top three span two each and the bottom two span three.
+    const stat = function(val, label, color, i){
       return (
-        <div style={{ flex: "1 1 84px", padding: "8px 10px", background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset }}>
+        <div key={label} style={{ gridColumn: isMobile ? (i < 3 ? "span 2" : "span 3") : "auto", minWidth: 0, padding: "8px 10px", background: CELL, border: "1px solid var(--border-input)", borderRadius: R.inset }}>
           <div style={{ fontSize: T.title, fontWeight: FW.bold, color: color || "var(--text-primary)" }}>{val}</div>
           <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-muted)" }}>{label}</div>
         </div>
       );
     };
-    const bar = function(label, val, max, color){
+    // `label` is a node: an hour's text, or a table's badge. v18.2.0 phase 74
+    // (X6): a table is drawn as a table everywhere else, so here too — and one
+    // the layout does not have is the dashed badge the List card draws
+    // (phase 69), where it read "Table 1" as though the room had one.
+    const bar = function(key, label, val, max, color){
       return (
-        <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body, marginBottom: 4 }}>
+        <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body, marginBottom: 4 }}>
           <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: 64, flexShrink: 0 }}>{label}</span>
           <div style={{ flex: 1, height: 8, background: "var(--bg-stepper)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 30 }}>
             <div style={{ width: ((val / max) * 100) + "%", height: "100%", background: color || "var(--accent)", opacity: 0.8, borderRadius: 4,   /* @canvas */ }} />
@@ -299,21 +332,21 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
     }
     return (
       <div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-          {stat(st.totalCovers, "covers")}
-          {stat(st.totalBookings, "bookings")}
-          {stat(st.avgParty, "avg party")}
-          {stat(st.avgCoversPerDay, "covers / day")}
-          {stat(st.noShows, "no-shows", st.noShows ? "var(--warn-text)" : undefined)}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(6, 1fr)" : "repeat(5, 1fr)", gap: 8, marginBottom: 14 }}>
+          {stat(st.totalCovers, "covers", undefined, 0)}
+          {stat(st.totalBookings, "bookings", undefined, 1)}
+          {stat(st.avgParty, "avg party", undefined, 2)}
+          {stat(st.avgCoversPerDay, "covers / day", undefined, 3)}
+          {stat(st.noShows, "no-shows", st.noShows ? "var(--warn-text)" : undefined, 4)}
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Busiest hours</div>
         <div style={{ marginBottom: 14 }}>
-          {st.hours.slice(0, 6).map(function(h){ return bar(hourLabel(h.hour), h.covers, maxH); })}
+          {st.hours.slice(0, 6).map(function(h){ return bar(h.hour, hourLabel(h.hour), h.covers, maxH); })}
           {st.hours.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
         <div style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-muted)", margin: "0 0 6px" }}>Table usage</div>
         <div>
-          {st.tables.slice(0, 10).map(function(t){ return bar("Table " + t.id, t.bookings, maxT); })}
+          {st.tables.slice(0, 10).map(function(t){ return bar(t.id, <TBadge id={t.id} missing={!inLayout.has(t.id)} />, t.bookings, maxT); })}
           {st.tables.length === 0 ? <div style={{ fontSize: T.body, color: "var(--text-faint)" }}>—</div> : null}
         </div>
       </div>
@@ -356,14 +389,17 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
                       position: "relative", overflow: "hidden",
                       minHeight: 54,   /* @canvas */ padding: "6px 4px 4px", borderRadius: R.inset, cursor: "pointer",
                       boxSizing: "border-box", textAlign: "center",
-                      background: "var(--bg-input)",
-                      opacity: c.inMonth ? 1 : 0.4,
+                      background: CELL,
                       border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
                       boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
                     }}
                   >
-                    <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * 0.3, pointerEvents: "none" }} />
-                    <div style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", inset: 0, background: "var(--accent)", opacity: intensity * HEAT, pointerEvents: "none" }} />
+                    {/* v18.2.0: an out-of-month day fades its NUMBER, not the
+                        cell — at 40% the whole button was see-through again,
+                        the defect this phase fixes (and the paused reminder's
+                        rule: fade the content, keep the surface). */}
+                    <div style={{ position: "relative", opacity: c.inMonth ? 1 : OUT_OF_MONTH }}>
                       <div style={{ fontSize: T.body, fontWeight: FW.bold, color: isToday ? "var(--accent)" : "var(--text-primary)" }}>{dnum}</div>
                       <div style={{ fontSize: T.micro, fontWeight: FW.medium, color: cov ? "var(--text-secondary)" : "var(--text-faint)", marginTop: 2 }}>
                         {c.inMonth ? cov : ""}
@@ -374,6 +410,14 @@ export function WeekView({ bookings, viewDate, onPick, onClose }){
               })}
             </div>
           ); })}
+        </div>
+        {/* v18.2.0 (X2): the key the blue shading never had. The swatch runs
+            from an empty day to the fullest one, which is exactly what the
+            cells draw: the accent at up to HEAT (30%) over the cell. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, fontSize: T.small, color: "var(--text-muted)" }}>
+          <span>Fewer covers</span>
+          <span aria-hidden="true" style={{ width: 64, height: 8, borderRadius: 4,   /* @canvas */ border: "1px solid var(--border-input)", background: "linear-gradient(to right, " + CELL + ", color-mix(in srgb, var(--accent) " + (HEAT * 100) + "%, " + CELL + "))" }} />
+          <span>More</span>
         </div>
       </div>
     );

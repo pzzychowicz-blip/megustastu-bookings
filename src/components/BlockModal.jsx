@@ -16,13 +16,14 @@
 // original.
 
 import { useState, useEffect } from "react";
-import { S, BTN, TBL, OPEN, GRID_CLOSE, R, T, FW } from "../lib/constants";
+import { S, TBL, OPEN, GRID_CLOSE, hoursFor, R, T, FW } from "../lib/constants";
 import { toMins, isIn } from "../lib/booking-logic";
 import { hourLabel } from "../lib/time-grid";
-import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkInp, Reveal, AutoHeight } from "./atoms";
+import { Overlay, Section, Fld, mkBtn, mkSolidBtn, mkDangerBtn, mkInp, Reveal, AutoHeight } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
 import { ClosedIcon } from "./Icons";
 import { useRevealRows } from "../hooks/useRevealRows";
+import { formatDay } from "../lib/day";
 
 export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClose, onDirty }) {
   const existing = blocks.filter((bl) => bl.tableId === tableId && bl.date === date);
@@ -30,7 +31,15 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   const tc = indoor ? TBL.ind : TBL.out;
   const [mode, setMode] = useState(existing.length > 0 ? "view" : "add");
   const [from, setFrom] = useState(OPEN + ":00");
-  const [to, setTo] = useState(GRID_CLOSE + ":00");
+  // v18.2.0 /code-review: the DAY's own grid close, not the live GRID_CLOSE —
+  // `extendActiveGrid` stretches that to the day's latest booking, for DRAWING
+  // only. A booking ending after 23:00 made it 24, and "24:00" is not a time an
+  // <input type="time"> can show: the To field opened BLANK (measured on DEV,
+  // 3 Oct, where it had read 23:00). The dirty check below reads the same
+  // value, or a late booking arriving while the form is open would make an
+  // untouched form dirty.
+  const dayEnd = hoursFor(date).gridClose + ":00";
+  const [to, setTo] = useState(dayEnd);
 
   // v17.15.2: per-row ease-in/out for the blocked list, keyed on the block's own
   // id since v17.15.3 — before that a block had none, and this list identified a
@@ -56,7 +65,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
   // contract ManualModal uses. Dirty only in "add" mode with a time actually
   // changed from the default full-service window: merely opening the add form,
   // or browsing the existing-blocks list, must close silently.
-  const dirty = mode === "add" && (from !== OPEN + ":00" || to !== GRID_CLOSE + ":00");
+  const dirty = mode === "add" && (from !== OPEN + ":00" || to !== dayEnd);
   useEffect(() => { if (onDirty) onDirty(dirty); }, [dirty, onDirty]);
   // Unmount-only reset. Without it a closed modal leaves the flag — and so
   // `beforeunload` — armed for the rest of the session (the ManualModal trap).
@@ -114,7 +123,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
             {tableId}
           </span>
           <span style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text }}>
-            {"Table " + tableId + " — " + date}
+            {"Table " + tableId + " — " + formatDay(date)}
           </span>
         </div>
         {/* v17.15.2: ONE pane with N rows, where this drew N CARDS — each with
@@ -160,7 +169,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
                     <button
                       onClick={() => onRemove(bl)}
                       className="mgt-hover-scale"
-                      style={mkBtn({ background: BTN.del, fontSize: T.body, flexShrink: 0 })}
+                      style={mkDangerBtn({ fontSize: T.body, flexShrink: 0 })}
                     >
                       Unblock
                     </button>
@@ -210,7 +219,7 @@ export function BlockModal({ tableId, date, blocks = [], onSave, onRemove, onClo
           {"Block table " + tableId}
         </span>
       </div>
-      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{date}</div>
+      <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16 }}>{formatDay(date)}</div>
       <Section>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Fld label="From">{(fid) => (

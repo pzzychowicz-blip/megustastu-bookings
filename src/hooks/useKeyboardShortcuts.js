@@ -14,7 +14,7 @@
 // ctx object at the call site AND use it here via `K.<name>`.
 
 import { useRef, useEffect } from "react";
-import { isTyping } from "../lib/keyboard";
+import { isTyping, activatesItself } from "../lib/keyboard";
 import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
@@ -212,6 +212,9 @@ export function useKeyboardShortcuts(ctx){
       if(k==="Enter"){
         // In a textarea Enter always inserts a newline — never save.
         if(typing&&e.target.tagName==="TEXTAREA") return;
+        // v18.2.0: a focused control keeps its own Enter — Back goes back, − / +
+        // steps — instead of the modal's primary action (lib/keyboard.js).
+        if(activatesItself(e.target)) return;
         for(let i=0;i<MODAL_ENTER_ORDER.length;i++){
           const id=MODAL_ENTER_ORDER[i];
           if(!K.modalOpen[id]) continue;

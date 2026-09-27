@@ -145,6 +145,22 @@ export function DownloadIcon(props) {
   );
 }
 
+// v18.2.0 phase 62: the mark on every Delete and Remove — a bin with a lid and
+// two staves. It was the WhatsApp inbox's own (WaIcons.jsx, drawn for its two
+// Deletes) and moved here, unchanged, when Patryk made it the app's: one
+// drawing, so the inbox's Delete and the booking form's cannot drift.
+export function TrashIcon(props) {
+  return (
+    <Svg {...props}>
+      <line x1="4" y1="6.5" x2="20" y2="6.5" />
+      <path d="M9 6.5V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5v2" />
+      <path d="M6.5 6.5l1 13a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-13" />
+      <line x1="10.5" y1="10.5" x2="10.8" y2="17" />
+      <line x1="13.5" y1="10.5" x2="13.2" y2="17" />
+    </Svg>
+  );
+}
+
 // Rename / edit. A pencil on a baseline rather than a bare nib — at 14px a
 // lone diagonal reads as a slash, which is what the ex-✎ looked like next to
 // the ✓ it sits beside.
@@ -324,6 +340,38 @@ export function ClashIcon(props) {
     <Svg {...props}>
       <rect x="2.5" y="7.5" width="12" height="12" rx="2.5" />
       <rect x="9.5" y="4.5" width="12" height="12" rx="2.5" />
+    </Svg>
+  );
+}
+
+// More actions (v18.2.0) — the List card's ⋯, which opens the quick-status
+// card. Three FILLED dots: a zero-length round-capped stroke is exactly the
+// stroke width, which at the 14px this ships at is ~1.3px — a dot you cannot
+// aim at or see. r 1.4 plus the house stroke gives ~2.5px dots at 14px.
+export function MoreIcon(props) {
+  return (
+    <Svg {...props}>
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" />
+    </Svg>
+  );
+}
+
+// Not on the grid (v18.2.0) — the notification strip's section for bookings the
+// timeline's Unplaced row holds. A DASHED table: dashes are already this app's
+// word for "not really there" — the Unplaced row's own border, the seated
+// ghost's original-duration outline, the resh waitlist ghost's edge — so the
+// mark reuses a vocabulary instead of inventing one. It is an IDENTITY in the
+// strip's collapsed tally (see ClashIcon above), so it must not read as any
+// neighbour there: ClashIcon is two SOLID squares, ClosedIcon a slashed circle,
+// OverlapIcon two bars. One square, broken. Dash length is chosen for the 14px
+// it ships at (IC.control): four dashes a side read as a broken edge there,
+// where eight blur back into a solid square.
+export function UnplacedIcon(props) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="3" strokeDasharray="3.2 2.8" />
     </Svg>
   );
 }
@@ -581,6 +629,47 @@ export function VoucherIcon(props) {
       <rect x="2" y="7.5" width="20" height="13" rx="2.5" />
       <path d="M12 7.5v13" />
       <path d="M8 3.5 12 7.5 16 3.5" />
+    </Svg>
+  );
+}
+
+// v18.2.0 phase 22 — the seating preference, Patryk's own marks: "a house with
+// an arrow drawn inside the house for Indoor, and a house with an arrow drawn
+// outside the house for Outdoor". A booking's `preference` ("indoor" /
+// "outdoor"; "auto" draws nothing) on the timeline block's rail and the List
+// card.
+//
+// Judged rasterised at the 14px they ship at and magnified 8×, the
+// `DepositIcon` method, and the indoor mark needed three rounds for the reason
+// that note records — an interior shape closes up under a 2.2 stroke:
+//   • a SHORT arrow in the body (shaft 7 units) filled into a blob at 14px;
+//   • a bare chevron read as an envelope, not as "in";
+//   • so the arrow starts up in the ROOF and runs the house's full height, in
+//     the widest house the box allows (walls 4→20), which leaves the gaps
+//     either side of it open. It still reads as a house with an arrow in it.
+// The outdoor house is SMALLER, on the left, so its arrow has room to be
+// outside it. The two differ in silhouette before any detail resolves — a
+// full-width house against a narrow one with a tail — which is what tells them
+// apart at a glance, and neither shares an outline with the rail's banknote,
+// lock, star or no-show mark. The arrows also point the way they mean: down
+// into the house, and out of it.
+export function IndoorIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M1.5 11.5 12 2.5l10.5 9" />
+      <path d="M4 9.5V21.5h16V9.5" />
+      <path d="M12 7.5v10.5" />
+      <path d="M8 14l4 4 4-4" />
+    </Svg>
+  );
+}
+export function OutdoorIcon(props) {
+  return (
+    <Svg {...props}>
+      <path d="M2 12 8.5 5.5 15 12" />
+      <path d="M4 10.5V20h9v-9.5" />
+      <path d="M16 15.5h6" />
+      <path d="M19.5 12.5l3 3-3 3" />
     </Svg>
   );
 }

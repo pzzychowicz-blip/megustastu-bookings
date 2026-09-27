@@ -21,8 +21,26 @@
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
-import { Section, OutlineChip, Reveal, mkInp, mkBtn, SBadge } from "./atoms";
-import { ChevronDownIcon, ChevronRightIcon, WaitIcon } from "./Icons";
+import { Section, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
+import { formatDay, showsYear } from "../lib/day";
+import { guestsLabel, countLabel } from "../lib/booking-logic";
+import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
+
+// v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
+// by aria-describedby only while it is on screen. One row is armed at a time.
+const DELETE_WARN_ID = "customer-delete-warning";
+// Its RESTING width, which the button keeps once armed: "Confirm — delete" is
+// the SHORTER label, so without it the right-aligned button shrank from its left
+// edge and a first tap there missed on the second (209 → 154px, measured). The
+// resting label with its trash mark at T.body, measured on the Mac (San
+// Francisco), rounded up. Re-measure if the label, the mark or T.body change.
+const DELETE_W = 210;
+
+// v18.2.0 (the design critique, C2): a visit row's size column holds the widest
+// "N guests" a party can be — the form stops at 25, and "25 guests" measures
+// 56px in this font (DEV) — so the status badge after it lines up whatever the
+// size. It was 40, which "2 pax" fitted.
+const GUESTS_COL = 58;
 
 // v18.0.0 session 11: `seekQuery` seeds the search box. The activity log can
 // send you here for a guest whose booking has been deleted, which is exactly
@@ -102,9 +120,15 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const open = openKey === c.key;
     const armed = armedKey === c.key;
     const wlCount = c.phone ? waitCountOf(c.phone) : 0;
+    // v18.2.0 (C1): the visits' date column fits the widest date among them —
+    // 65px for "Wed 24.09" in this weight, 101 with a year (measured on DEV) —
+    // so the times line up when a guest's visits span years, as a regular's do.
+    // The row WRAPS since: on a 375px phone the year's column pushed the status
+    // badge 6px past the row's edge (it had fit, just, at the old 84px).
+    const dateCol = open && c.bookings.some(function (b) { return showsYear(b.date); }) ? 104 : 68;
     const historyRows = open ? c.bookings.map(function (b) {
       return (
-        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: 84 }}>{b.date}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 40 }}>{b.size + " pax"}</span>{/* v17.15.6: `SBadge`, not a copy of it — see the atom. */}<SBadge status={b.status} />{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? <OutlineChip tone="warn">no-show</OutlineChip> : null}</div>
+        <div key={b.id} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, padding: "6px 8px", borderRadius: R.inset, background: "var(--bg-soft)", border: "1px solid var(--border-soft)", marginBottom: 4 }}><span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, minWidth: dateCol }}>{formatDay(b.date)}</span><span style={{ fontSize: T.body, color: S.text, minWidth: 44 }}>{b.scheduledTime || b.time}</span><span style={{ fontSize: T.body, color: S.text, minWidth: GUESTS_COL }}>{guestsLabel(b.size)}</span>{/* v17.15.6: `SBadge`, not a copy of it — see the atom. */}<SBadge status={b.status} />{b.noShow || (b.history || []).some(function (h) { return h && h.action === "no show"; }) ? <OutlineChip tone="warn">no-show</OutlineChip> : null}</div>
       );
     }) : null;
     return (
@@ -136,10 +160,10 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             delete control is NOT inside it; that lives in the `Reveal` below, a
             sibling, so this stays a leaf rather than the container-of-controls
             defect `tests/a11y.test.js` exists for. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate || "\u2014")}</div></div><button
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate ? formatDay(c.latestDate) : "\u2014")}</div></div><button
           type="button"
           aria-expanded={open}
-          aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + c.visits + " visit" + (c.visits !== 1 ? "s" : "") + (c.noShowCount > 0 ? ", " + c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") : "") + (wlCount > 0 ? ", " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}
+          aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + countLabel(c.visits, "visit", "visits") + (c.noShowCount > 0 ? ", " + countLabel(c.noShowCount, "no-show", "no-shows") : "") + (wlCount > 0 ? ", " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}
           // Making an element focusable makes the browser scroll it into view on
           // MOUSEDOWN, so it moves out from under the finger between press and
           // release and the click is lost. preventDefault suppresses only focus.
@@ -150,21 +174,28 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // v17.7.0 the hover rule no longer supplies one but still paints an
           // opaque --bg-hover-card, so a radius-less element would render that
           // fill as a hard-edged rectangle inside its own rounded card.
-          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{c.visits + " visit" + (c.visits !== 1 ? "s" : "")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
-            <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{countLabel(c.bookings.length, "booking", "bookings") + (wlCount ? " · " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}</div>
             {historyRows}
+            {/* v18.2.0 phase 62: the app's one destructive look, and the armed
+                sentence UNDER the button. It was in FRONT of it in a wrapping
+                right-aligned row, so arming added text on the button's line
+                and could push the button along or down under the second tap —
+                the armed-confirm trap `src/CLAUDE.md` records. Only one row is
+                armed at a time, so one id serves. */}
             <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {armed ? <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)" }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</span> : null}
               <button
                 className="mgt-hover-scale mgt-press"
-                style={mkBtn({ fontSize: T.body, minHeight: 36, background: BTN.del, opacity: armed ? 1 : 0.85 })}
+                aria-describedby={armed ? DELETE_WARN_ID : undefined}
+                style={mkDangerBtn({ fontSize: T.body, minHeight: 36, minWidth: DELETE_W })}
                 onClick={function () {
                   if (armed) { onDeleteCustomer({ phone: c.phone, guestIds: c.guestIds }); setArmedKey(null); setOpenKey(null); }
                   else setArmedKey(c.key);
-                }}>{armed ? "Confirm delete" : "Delete customer & all data"}</button>
+                }}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete customer & all data"}</button>
             </div>
+            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</div> : null}
           </div>
         </Reveal>
       </div>
@@ -221,17 +252,21 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {filterChip("regulars", "Regulars")}
           {filterChip("noshows", "No-shows")}
           {/* v16.3.0 follow-up: Regulars visit-threshold stepper — visible while
-              the Regulars filter is active (and not overridden by a search). */}
+              the Regulars filter is active (and not overridden by a search).
+              v18.2.0 phase 56 (A-1): its buttons are named, as Settings'
+              steppers are — they announced "−" and "+". */}
           {filter === "regulars" && !searching ? (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: 4 }}>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.max(1, m - 1); }); }}
+                aria-label="Decrease visits for a regular"
                 disabled={regularMin <= 1}
                 className={regularMin <= 1 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin <= 1 ? 0.4 : 1, cursor: regularMin <= 1 ? "not-allowed" : "pointer" })}>−</button>
               <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, minWidth: 62, textAlign: "center" }}>{regularMin + "+ visit" + (regularMin !== 1 ? "s" : "")}</span>
               <button
                 onClick={function () { setRegularMin(function (m) { return Math.min(50, m + 1); }); }}
+                aria-label="Increase visits for a regular"
                 disabled={regularMin >= 50}
                 className={regularMin >= 50 ? undefined : "mgt-hover-scale"}
                 style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: regularMin >= 50 ? 0.4 : 1, cursor: regularMin >= 50 ? "not-allowed" : "pointer" })}>+</button>

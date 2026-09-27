@@ -13,7 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText,
+  ACTIVITY_KINDS, PRUNE_AFTER_MS, bookingToken, tokenizeNames, renderText, rowText,
   bookingWriteEntries, voucherWriteEntries, settingsWriteEntry, changedKeys,
   isPrunable, activityWindow, activityCsv, activityCsvName, clearedEntry,
   retentionMs, retentionLabel, RETENTION_CHOICES, DEFAULT_RETENTION_DAYS,
@@ -344,6 +344,30 @@ describe("voucherWriteEntries", () => {
 
   it("emits nothing for an untouched voucher", () => {
     expect(voucherWriteEntries([vc()], [vc()])).toEqual([]);
+  });
+
+  // v18.2.0 phase 81 (round 2's loose end): the amount carries the restaurant's
+  // currency, in money()'s shape. Measured on DEV: settling Laura Vidal's
+  // voucher for 12.30 logged "redeemed 12.3 € of voucher 5C7ZWJ3P against Laura
+  // Vidal" (U+00A0 before the €), beside older entries still reading "redeemed
+  // 10 of voucher …" as they were stored.
+  it("says the amount in the restaurant's currency when it is given one", () => {
+    const next = vc({ remaining: 37.7, redemptions: { b1: { amount: 12.3, at: 1, by: "x" } } });
+    expect(voucherWriteEntries([vc()], [next], { currency: "€" })[0].text)
+      .toBe("redeemed 12.3\u00a0€ of voucher ABCD2345 against " + bookingToken("b1"));
+    const was = vc({ redemptions: { b1: { amount: 20 } } });
+    const back = vc({ reversals: { b1_2000: { bookingId: "b1", amount: 20 } } });
+    expect(voucherWriteEntries([was], [back], { currency: "£" }).some(function (e) {
+      return e.text === "restored 20\u00a0£ to voucher ABCD2345 from " + bookingToken("b1");
+    })).toBe(true);
+  });
+
+  it("useVouchers hands it the currency, and App hands useVouchers the setting", () => {
+    const hook = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "hooks", "useVouchers.js"), "utf8")).join("\n");
+    expect(hook).toMatch(/voucherWriteEntries\(prev, computed, \{ auto: isSilent === true, currency: currency \}\)/);
+    expect(hook).toMatch(/\}, \[setWriteWarning, currency\]\);/);
+    const app = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).join("\n");
+    expect(app).toMatch(/useVouchers\(\{[\s\S]{0,160}currency: generalSettings\.currency,/);
   });
 });
 
@@ -920,10 +944,43 @@ describe("retention", () => {
   });
 
   it("labels a stored value, including one no longer offered", () => {
-    expect(retentionLabel(365)).toBe("12 months");
-    expect(retentionLabel(90)).toBe("3 months");
+    // v18.2.0 phase 77: the count and its word are joined by a no-break space.
+    expect(retentionLabel(365)).toBe("12\u00a0months");
+    expect(retentionLabel(90)).toBe("3\u00a0months");
     // A value written by an older build, or by hand in the console, still reads
     // as something rather than as blank.
-    expect(retentionLabel(400)).toBe("400 days");
+    expect(retentionLabel(400)).toBe("400\u00a0days");
+  });
+});
+
+// v18.2.0 (the design critique, X1): a booking row leads with the booking's
+// CURRENT name. Measured on DEV: rows read "created" and "edited: pref
+// outdoor→indoor" with nothing saying whose; after, "Phase20 Save B · edited:
+// pref outdoor→indoor", "Marco Rossi · moved to 1B (drag)".
+describe("rowText — a booking row says whose it is", () => {
+  const byId = { b1: { id: "b1", name: "Anna Priks" }, b2: { id: "b2", name: "Tom" } };
+
+  it("leads a history row with the booking's current name", () => {
+    expect(rowText({ kind: "booking", text: "created", bookings: { b1: true } }, byId)).toBe("Anna Priks · created");
+  });
+
+  it("names entries written before it existed — nothing is re-written, the id was always there", () => {
+    expect(rowText({ kind: "booking", text: "edited: pref outdoor→indoor", bookings: { b1: true } }, byId))
+      .toBe("Anna Priks · edited: pref outdoor→indoor");
+  });
+
+  it("leaves a row alone that already names its booking through a token", () => {
+    const r = { kind: "booking", text: "deleted " + bookingToken("b1") + " · 2026-09-24", bookings: { b1: true } };
+    expect(rowText(r, byId)).toBe("deleted Anna Priks · 2026-09-24");
+  });
+
+  it("falls back to the entry's own subject for a deleted booking, and adds nothing when there is no name", () => {
+    expect(rowText({ kind: "booking", text: "created", bookings: { gone: true }, subject: { name: "Old Guest" } }, byId)).toBe("Old Guest · created");
+    expect(rowText({ kind: "booking", text: "created", bookings: { gone: true } }, byId)).toBe("created");
+  });
+
+  it("does not lead a row about several bookings, or one that is not about a booking", () => {
+    expect(rowText({ kind: "booking", text: "2 bookings re-placed", bookings: { b1: true, b2: true } }, byId)).toBe("2 bookings re-placed");
+    expect(rowText({ kind: "reminder", text: "changed the reminders" }, byId)).toBe("changed the reminders");
   });
 });

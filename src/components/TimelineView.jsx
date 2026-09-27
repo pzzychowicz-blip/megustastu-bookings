@@ -42,18 +42,20 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
-import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
+import { unplacedOf, primaryGridTable, packLanes } from "../lib/unplaced";
+import { money } from "../lib/vouchers";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -104,12 +106,52 @@ const CLASH_PX = 18;     // the double-booked marker + its margin (v17.11.0)
 const STATUS_PX = 18;    // the status mark + its margin (v17.11.0) — on EVERY block
 const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 
+// v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
+// survive" are two questions with two separate answers.
+//
+// TWO ORDERS, ONE LIST. The ARRAY order is the RAIL order (left to right on the
+// block). `keep` is the DROP priority (lowest survives longest); see
+// block-layout.js. They are one literal on purpose: held apart, they drift.
+//
+// v18.2.0 phase 22 — built HERE, once, for both readers. TimelineBlock draws
+// these and `chipRoomFor` counts them, and the count was a second hand-kept
+// list of the same five conditions: a flag added to the rail and not to it
+// would let the day's start-time chips claim room a block does not have. The
+// same phase added a flag, which is when that would have happened.
+//
+// Also phase 22, Patryk: deposit and the NEW indoor/outdoor preference should
+// be visible on booking blocks. At 1× on a 1280px tablet a 90-minute block is
+// 126px and its fixed parts take 114, so no flag fits there at all; he chose
+// to make these two the LAST flags to drop — only the size ring and the
+// overstaying mark outlast them — over squeezing the name for them or moving
+// them off the rail. So the ladder is no longer "informational first, then the
+// exception states": deposit and the preference now outrank locked and repeat
+// no-show, which still outrank the preferred-tables star. Overstaying stays on
+// top — a party sitting in the next booking's table, the one mark a host acts on
+// before anything else.
+function railFlagsOf(b, noShows, warn, currency) {
+  const depositAmt = Number(b.deposit) || 0;
+  const zone = b.preference === "indoor" || b.preference === "outdoor" ? b.preference : null;
+  const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
+  return [
+    depositAmt > 0
+      ? { k: "dep", keep: 2, title: "Deposit " + money(depositAmt, currency), icon: <DepositIcon size={IC.control} /> } : null,
+    zone
+      ? { k: "zone", keep: 3, title: zone === "indoor" ? "Prefers indoor" : "Prefers outdoor",
+          icon: zone === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} /> } : null,
+    hasPrefT
+      ? { k: "pref", keep: 6, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
+    isLocked(b)
+      ? { k: "lock", keep: 5, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
+    noShows >= 2
+      ? { k: "ns", keep: 4, title: countLabel(noShows, "past no-show", "past no-shows") + " on this number", icon: <NoShowIcon size={IC.control} /> } : null,
+    warn && warn.overdue
+      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
+  ].filter(Boolean);
+}
+
 function chipRoomFor(b, noShows, warn, clash) {
-  const flags = ((Number(b.deposit) || 0) > 0 ? 1 : 0)
-    + ((b.preferredTables && b.preferredTables.length) ? 1 : 0)
-    + (isLocked(b) ? 1 : 0)
-    + (noShows >= 2 ? 1 : 0)
-    + (warn && warn.overdue ? 1 : 0);
+  const flags = railFlagsOf(b, noShows, warn, "").length;
   return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + STATUS_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;
 }
 
@@ -203,7 +245,6 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     : warn
       ? (warn.overdue ? "3px solid var(--tl-block-warn)" : "3px solid var(--tl-block-warn-soon)")
       : (late ? "3px solid var(--tl-block-late)" : "none");
-  const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
   const hasNote = b.notes && b.notes.trim();
@@ -233,26 +274,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // never showed anyway — is in the hover title.
   // …and then the label stopped being a string at all: `name + " (size)"` is
   // now a name span and a size ring, so nothing is concatenated here.
-  const depositAmt = Number(b.deposit) || 0;
-  // v17.9.1: the rail's flags as DATA, so "how many fit" and "which ones
-  // survive" are two questions with two separate answers.
-  //
-  // TWO ORDERS, ONE LIST. The ARRAY order is the RAIL order — unchanged from
-  // v17.9.0, so a block wide enough for everything looks exactly as it did.
-  // `keep` is the DROP priority (lowest survives longest); see block-layout.js.
-  // They are one literal on purpose: held apart, they drift.
-  const allFlags = [
-    depositAmt > 0
-      ? { k: "dep", keep: 5, title: "Deposit " + currency + depositAmt, icon: <DepositIcon size={IC.control} /> } : null,
-    hasPrefT
-      ? { k: "pref", keep: 4, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
-    isLocked(b)
-      ? { k: "lock", keep: 3, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
-    noShows >= 2
-      ? { k: "ns", keep: 2, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={IC.control} /> } : null,
-    warn && warn.overdue
-      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
-  ].filter(Boolean);
+  // The rail's flags — `railFlagsOf` (module scope) builds them, because
+  // `chipRoomFor` has to count the same list. v17.9.1's notes on the two
+  // orders, and phase 22's new drop order, are there.
+  const allFlags = railFlagsOf(b, noShows, warn, currency);
   // v17.9.1 review fix: the freeing-soon pill is part of the FIXED cost when it
   // is showing. It is `flexShrink: 0` like everything else on the rail, and the
   // comment at its render site — "the seated block is near full width this late,
@@ -1045,7 +1070,7 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       tabIndex={leaving ? -1 : 0}
       aria-hidden={leaving ? true : undefined}
       aria-label={leaving ? undefined
-        : "Waiting: " + g.name + ", " + g.size + (g.size === 1 ? " guest" : " guests")
+        : "Waiting: " + g.name + ", " + guestsLabel(g.size)
         + ", " + g.time + (g.resh ? ", fits after re-optimising" : "") + ". Book this table."}
       onKeyDown={leaving ? undefined : (e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
@@ -1057,7 +1082,10 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
       onMouseEnter={leaving ? undefined : () => setGroupHover(true)}
       onMouseLeave={leaving ? undefined : () => setGroupHover(false)}
       onClick={leaving ? undefined : () => onBook(g.id)}
-      title={"Waiting: " + g.name + " (" + g.size + ") at " + g.time
+      /* v18.2.0 phase 43 (C2): the hover title says "25 guests", as the
+         spoken label above it does — it said "(25)", which phase 38's sweep
+         for "pax" could not see. */
+      title={"Waiting: " + g.name + ", " + guestsLabel(g.size) + ", at " + g.time
         + (g.resh ? " — fits after re-optimising" : "") + ". Tap to book."}
       style={{
         // Geometry, radius, border, shadow: TimelineBlock's, verbatim.
@@ -1150,6 +1178,11 @@ export const TimelineView = memo(function TimelineView({
   maxZoom = 5,         // the + button's ceiling (was hard-coded 5)
   followNow, setFollowNow,
   scrollPosRef,
+  // v18.2.0: which DATE the grid was last placed for (a ref owned by BookingApp,
+  // like scrollPosRef). The once-per-date scroll to the first booking checks
+  // it, so a remount — switching to List and back — restores your position
+  // instead of jumping away from it.
+  scrollDateRef = null,
   autoOptimizer = true,
   setAutoOptimizer = () => {},
   currency = "€", // v17.0.0: settings/general deposit marker
@@ -1233,6 +1266,43 @@ export const TimelineView = memo(function TimelineView({
   }
 
   const day = bookings.filter((b) => b.date === date && b.status !== "cancelled");
+
+  // ── v18.2.0: open the day where its bookings are ─────────────────────────
+  // A day opened wherever the LAST day was scrolled — for a future evening
+  // service at 13:00, so on a phone the first screen held nothing, and on the
+  // tablet the eye started at the empty half. Now, once per viewed date: today
+  // opens on the now-line, any other day on its first booking, each with the
+  // same lead Follow uses (`followLeadMins`) so the start is not flush against
+  // the edge. Not while Following (that owns the scroll), and not again after
+  // a remount for the same date (`scrollDateRef`). An EMPTY non-today day does
+  // not mark itself done: its bookings may simply not have loaded yet.
+  //
+  // Through `centerNow`, not a plain scrollLeft write, because the grid WIDTH
+  // may be easing to a new value in this same commit (a day that reaches later
+  // widens the grid — constants.js `extendActiveGrid`), and centerNow is the
+  // helper that re-derives scrollLeft from the live width for that window.
+  // v18.2.0 phase 67: the rule lives in booking-logic, shared with the Plan.
+  const firstStart = firstStartOf(bookings, date);
+  useEffect(() => {
+    if (!scrollDateRef || !scrollRef.current) return;
+    if (scrollDateRef.current === date) return;
+    if (followNow && isToday) { scrollDateRef.current = date; return; }
+    let target = null;
+    if (isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60) target = nowMins - followLeadMins;
+    else if (Number.isFinite(firstStart)) target = firstStart - followLeadMins;
+    if (target == null) return;
+    scrollDateRef.current = date;
+    const fraction = Math.max(0, (target - OPEN * 60) / totalMins);
+    centerNow(fraction);
+    // …and record it where the RESTORE effect above reads, as Follow does. That
+    // effect re-applies `scrollPosRef` whenever its deps change, and it reads
+    // the ref synchronously — before the scroll event that would have updated
+    // it. Measured in DEV: StrictMode's re-run put the old day's 200px back
+    // over this placement every time. Production runs it on the 15s tick and
+    // on a width change, which is the same race with a longer fuse.
+    if (scrollPosRef) scrollPosRef.current = fraction * gridW;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per date: nowMins / totalMins are read, not watched
+  }, [date, firstStart, isToday, followNow]);
   // v17.16.6 (/code-review): filtered through the SAME predicate getBlockSlots
   // uses, because BlockBar below calls toMins(bl.from) itself. Guarding only the
   // placement path left an unreadable block throwing during RENDER, where the
@@ -1283,9 +1353,25 @@ export const TimelineView = memo(function TimelineView({
   const ghostKeysFor = (tableId) => ghostRenderIds.filter(
     (k) => k.slice(k.indexOf(GHOST_SEP) + 1) === tableId
   );
-  const unassigned = day.filter((b) =>
-    b.status !== "completed" && (!(b.tables || []).length || b._conflict)
-  );
+  // v18.2.0: the Unplaced row — every booking not properly drawn on the grid
+  // (no tables, a table the layout does not have, or an optimiser conflict),
+  // decided by lib/unplaced.js so the strip and the summary agree with it. It
+  // was the "unassigned" row, which missed the middle case entirely: a booking
+  // on a table with no row was drawn NOWHERE.
+  const gridIds = new Set(TIMELINE_TABLES.map((t) => t.id));
+  const unplaced = unplacedOf(day, gridIds).map((u) => u.b);
+  // One LANE per overlapping booking (lib/unplaced.js `packLanes`): a table
+  // row holds one party at a time, this row holds everything unplaced, and in
+  // one lane nine of them painted over each other. Lanes use the same width
+  // the block is drawn at (`liveBarDur`), so two blocks in a lane never touch.
+  const unplacedLanes = packLanes(unplaced.map((b) => {
+    const s = toMins(b.time);
+    return { id: b.id, s: s, e: s + Math.max(liveBarDur(b, nowMins, today), 1), b: b };
+  })).map((lane) => lane.map((it) => it.b));
+  // Rows sit below the header strip AND, when it is there, below the Unplaced
+  // row — `tableForClientY` needs the offset, or every drop lands rows low.
+  const UNPLACED_GAP = 4;
+  const unplacedH = unplacedLanes.length > 0 ? unplacedLanes.length * ROW_H + UNPLACED_GAP : 0;
 
   // v16.0.0 follow-up: start-time chips are CONFIRMED-ONLY (a seated/completed
   // party has arrived — the start time is no longer at-a-glance info, so those
@@ -1325,7 +1411,8 @@ export const TimelineView = memo(function TimelineView({
   // cont.4 fix: a booking on N tables renders N cells — tagging every cell with the
   // same b.id made useFlip's id→top map collide (last cell wins), so on EVERY change
   // (open/date/view switch, add/edit) the booking spuriously animated. So only the
-  // booking's PRIMARY cell (its first table, or the unassigned cell when it has none)
+  // booking's PRIMARY cell (its first table ON THE GRID — `primaryGridTable` —
+  // or the Unplaced row's cell when none of its tables has a row)
   // carries data-flip-id — one element per id, no collision, animates only a real move.
   const assignSig = day.map((b) => b.id + "@" + (b.tables || []).join("-")).join(",");
   const flipRef = useFlip([assignSig]);
@@ -1386,17 +1473,32 @@ export const TimelineView = memo(function TimelineView({
     );
   });
 
+  // v18.2.0: an hour label the now-pill is sitting on steps aside. The two are
+  // the same shape on the same baseline, so "15:17" drawn over "15:00" read as
+  // one smudged pill (the design critique). Measured: hour pill 38.2px wide,
+  // now-pill 34.2px, so they touch when their centres are within ~36px; 38
+  // leaves a hair of air. `pxPerMin` is gridW's LOWER bound (the grid can
+  // stretch wider), so the error is towards hiding a label a little early,
+  // never towards leaving it under the pill. It fades both ways on M.tap, so
+  // the label that comes back as the clock moves on eases in, not snaps.
+  // (`nowInRange` is declared further down; this reads the same condition
+  // inline rather than a const above its declaration — the TDZ gotcha.)
+  const NOW_PILL_CLEAR = 38;
+  const nowShown = isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60;
   const headerLabels = QUARTER_HOURS
     .filter((m) => isHourMark(m) && m < GRID_CLOSE * 60)
     .map((m) => {
       const center = ((m + 30 - OPEN * 60) / totalMins) * 100;
+      const covered = nowShown && Math.abs(m + 30 - nowMins) * pxPerMin < NOW_PILL_CLEAR;
       return (
         <span
           key={"h" + m}
+          aria-hidden={covered ? "true" : undefined}
           style={{
             ...HOUR_PILL,
             position: "absolute", top: 3, left: center + "%", transform: "translateX(-50%)",
-            pointerEvents: "none", zIndex: 1
+            pointerEvents: "none", zIndex: 1,
+            opacity: covered ? 0 : 1, transition: "opacity " + M.tap
           }}
         >
           {hourLabelAt(m)}
@@ -1404,7 +1506,7 @@ export const TimelineView = memo(function TimelineView({
       );
     });
 
-  // ── Labels column (left) — sticky table IDs + optional "unassigned" row ──
+  // ── Labels column (left) — sticky table IDs + optional Unplaced row ──────
   const labelCol = (
     // v14.3.1 (Fix 3): paddingTop mirrors the grid scroller's padding so the
     // 24px header + ROW_H rows line up with the grid column after the pad.
@@ -1415,6 +1517,22 @@ export const TimelineView = memo(function TimelineView({
         borderBottom: "2px solid var(--tl-header-border)",
         boxSizing: "border-box"
       }} />
+      {/* v18.2.0: the Unplaced row leads, directly under the header — it holds
+          the bookings the rows below cannot show, so it is the first thing to
+          read rather than the last thing below eleven rows of tables. */}
+      {unplaced.length > 0 ? (
+        <div style={{
+          height: (unplacedLanes.length * ROW_H) + "px",
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          paddingRight: 6,
+          borderBottom: "1px dashed var(--tl-unassigned-border)",
+          marginBottom: UNPLACED_GAP, boxSizing: "border-box"
+        }}>
+          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
+            Unplaced
+          </span>
+        </div>
+      ) : null}
       {TIMELINE_TABLES.map((tbl) => {
         const id = tbl.id;
         const indoor = isIn(id);
@@ -1450,19 +1568,6 @@ export const TimelineView = memo(function TimelineView({
           </div>
         );
       })}
-      {unassigned.length > 0 ? (
-        <div style={{
-          height: ROW_H + "px",
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          paddingRight: 6,
-          borderTop: "1px dashed var(--tl-unassigned-border)",
-          marginTop: 4, boxSizing: "border-box"
-        }}>
-          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
-            unassigned
-          </span>
-        </div>
-      ) : null}
     </div>
   );
 
@@ -1473,12 +1578,13 @@ export const TimelineView = memo(function TimelineView({
   // how long they've actually stayed), and the actual booking blocks.
   // v17.0.0 correction: map a pointer's clientY to the table row under it —
   // rows are exactly ROW_H tall inside the grid body (flipRef.current), after
-  // the 24px header strip. Returns null outside the table rows (header /
-  // unassigned row / off-grid) so a drop there is a no-op snap-back.
+  // the 24px header strip and (v18.2.0) the Unplaced row when it is shown.
+  // Returns null outside the table rows (header / Unplaced row / off-grid) so a
+  // drop there is a no-op snap-back.
   function tableForClientY(clientY) {
     const el = flipRef.current;
     if (!el) return null;
-    const top = el.getBoundingClientRect().top + 24;
+    const top = el.getBoundingClientRect().top + 24 + unplacedH;
     const idx = Math.floor((clientY - top) / ROW_H);
     return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
   }
@@ -1580,7 +1686,7 @@ export const TimelineView = memo(function TimelineView({
             ghost = (
               <div
                 className="mgt-tlghost"
-                data-flip-id={(b.tables || [])[0] === id ? b.id + "__ghost" : undefined}
+                data-flip-id={primaryGridTable(b, gridIds) === id ? b.id + "__ghost" : undefined}
                 style={{
                   position: "absolute", top: 3, height: (ROW_H - 8) + "px",
                   left: gLeft, width: gW,
@@ -1596,7 +1702,7 @@ export const TimelineView = memo(function TimelineView({
             <Fragment key={b.id}>
               {tail}
               {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || [])[0] === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={(b.tables || [])[0] === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
+              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primaryGridTable(b, gridIds) === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
             </Fragment>
           );
         })}
@@ -1609,15 +1715,27 @@ export const TimelineView = memo(function TimelineView({
     );
   });
 
-  // ── Unassigned grid row (parallels the unassigned label row in labelCol) ─
-  const unassignedGrid = unassigned.length > 0 ? (
+  // ── Unplaced grid row (parallels the Unplaced label row in labelCol) ─────
+  // v18.2.0: at the TOP, and holding the missing-table case as well. A block
+  // here is a normal block — tap to edit, the assign handle, the quick-status
+  // hold — and drags onto a table row like any other: `homeTable={null}` makes
+  // every row a move target, and `tableForClientY` skips this row's height.
+  const unplacedGrid = unplaced.length > 0 ? (
+    // The HEIGHT is pinned, border-box: the dashed border then sits inside the
+    // last lane instead of adding 1px, so this, the label cell and
+    // `unplacedH` agree to the pixel (measured: unpinned, the rows below sat
+    // 1px lower than `tableForClientY` and the label column believed).
     <div style={{
-      height: ROW_H + "px", position: "relative",
-      borderTop: "1px dashed var(--tl-unassigned-border)",
-      marginTop: 4, boxSizing: "border-box"
+      height: (unplacedLanes.length * ROW_H) + "px",
+      borderBottom: "1px dashed var(--tl-unassigned-border)",
+      marginBottom: UNPLACED_GAP, boxSizing: "border-box"
     }}>
-      <GridLines />
-      {unassigned.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={(b.tables || []).length ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+      {unplacedLanes.map((lane, li) => (
+        <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
+          <GridLines />
+          {lane.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+        </div>
+      ))}
     </div>
   ) : null;
 
@@ -1680,8 +1798,8 @@ export const TimelineView = memo(function TimelineView({
           <div style={{ position: "absolute", top: 0, bottom: 0, right: 0, borderLeft: "2px solid var(--tl-gridline-hour)" }} />
           {headerLabels}
         </div>
+        {unplacedGrid}
         {gridRows}
-        {unassignedGrid}
         {nowLine}
       </div>
     </div>
@@ -1722,12 +1840,18 @@ export const TimelineView = memo(function TimelineView({
   const zoomBtns = (
     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
       {followBtn}
+      {/* v18.2.0: named. Their whole content is a glyph, so they announced as
+          "-" and "+" — the LayoutSettings `Stepper` defect (v17.15.5), and the
+          same reasoning: a glyph doing an icon's job carries no word a voice-
+          control user could say, so a name in words takes nothing away. The
+          reset button below DOES carry text, so its name leads with it. */}
       <button
         onClick={() => setZoom((z) => Math.max(1, z - 0.5))}
+        aria-label="Zoom out"
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
-        -
+        −
       </button>
       {/* v17.2.0 follow-up: the reset label grows "1x" → "Nx → 1x" when zoomed —
           the widening used to SNAP and shove the whole toolbar group sideways.
@@ -1736,6 +1860,7 @@ export const TimelineView = memo(function TimelineView({
           constant "1x" tail keeps the button's identity while collapsed. */}
       <button
         onClick={() => { setZoom(1); setFollowNow(false); }}
+        aria-label={(zoom !== 1 ? zoom + "x → " : "") + "1x (reset zoom)"}
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, padding: "4px 10px", fontSize: T.small, background: zoom === 1 ? "var(--btn-default)" : BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center" })}
       >
@@ -1750,6 +1875,7 @@ export const TimelineView = memo(function TimelineView({
       </button>
       <button
         onClick={() => setZoom((z) => Math.min(maxZoom, z + 0.5))}
+        aria-label="Zoom in"
         className="mgt-hover-scale mgt-press"
         style={mkBtn({ minHeight: 36, minWidth: 36, padding: "4px 10px", fontSize: T.title, background: BTN.nav })}
       >
