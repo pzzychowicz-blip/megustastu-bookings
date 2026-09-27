@@ -368,8 +368,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // ── v17.0.0 correction: drag & drop to another table row ──────────────────
   // Mouse: vertical movement > 6px starts the drag (below it, click→edit wins).
   // Touch: the 400ms long-press opens quick-status as before; KEEP HOLDING to
-  // ~800ms (unmoved) and the popup is dismissed — the block lifts and follows
-  // the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
+  // ~800ms (unmoved) and the popup is dismissed and the block lifts at once,
+  // then follows the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
   // decides move vs swap. Vertical offset lives in local state (translateY);
   // the horizontal position (time) never changes.
   const dragRef = useRef(null);            // {y0, pid, el, active, lastY}
@@ -425,6 +425,14 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         if (!d || d.active) return;
         setQuickStatus(null);              // the 400ms popup opened — drag wins
         beginDrag(d.el, d.pid);
+        // v18.3.0 (A4): the lift at ARM time, so a still finger sees the drag
+        // take over from the vanished card. The lift keyed on `dragDy`, which
+        // only the first MOVE set, so for a finger holding still the card
+        // disappeared at 800ms and nothing else changed. Transition is "none"
+        // while dragDy is set, so it lifts in one frame, as on a first move; a
+        // release without moving lands on the home row (no drop) and the
+        // phase 4 settle lowers it again.
+        setDragDy(0);
         // React 17+ roots attach touchmove passively — a native non-passive
         // listener is the only way to stop the page scrolling mid-drag.
         const prevent = (ev) => { ev.preventDefault(); };

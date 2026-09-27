@@ -28373,6 +28373,19 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
      in-app toggle everything lands in one frame.
    The ~110ms freeze between release and the first frame of the new row is the synchronous
    drop, untouched here; phase 27 adds it to ROADMAP.
+5. **The block lifts the moment the touch drag arms (A4).** The lifted look (drag shadow,
+   `zIndex: 30`, 0.85) keys on `dragDy`, which only the first MOVE set. A finger holding still
+   saw the quick-status card appear at 400ms and vanish at 800ms, and nothing else change until
+   it moved: the drag was armed with nothing on screen saying so. The 800ms timer now sets
+   `dragDy` to 0 right after `beginDrag`, so the block lifts in place in one frame (transition is
+   `"none"` while `dragDy` is set, as on a first move). Released without moving, the touch goes
+   through `endDrag` with `target` = the home row, so `target !== homeTable` dispatches nothing,
+   and phase 4's settle lowers the block again. The 400/800ms timings, the mouse path and
+   `touchAction: "pan-x"` are unchanged. **Measured** in the rig, although the plan expected it
+   could not arm a touch drag: CDP `Input.dispatchTouchEvent` delivers real `pointerType: touch`
+   events. Held still, the block is at rest at 200 and 550ms and lifted at 950ms (0.85,
+   `zIndex` 30, the drag shadow, `translateY(0)`). Released unmoved, it is mid-fade 100ms later
+   (0.95) and at rest by 600ms, with no drop.
 
 ### Check on the devices after merge
 
@@ -28382,3 +28395,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | Phase | Device | Check |
 |---|---|---|
 | 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home, and the lift fades as it goes. How long the block sits still after release (the drop freeze) is noted, not fixed |
+| 05 | Tablet, iPad | Hold a block still. At about 800ms the card disappears and the block visibly lifts at once. Move, and it follows |
