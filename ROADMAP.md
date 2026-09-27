@@ -105,7 +105,18 @@ evidence for each.
   `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version.
+  first. This is a data-touching patch version. The phone rule goes with it (v18.2.0's
+  `/code-review`): `doSave` and `addFormToWaitlist` each run `withTypedCode`, then refuse a
+  number with no code in the same words, which should be one helper.
+
+- **Focus after a ⋯ card action that opens a dialog (v18.2.0's `/code-review`).** In the List,
+  ⋯ → Delete (or Cancelled, or the voucher and seat prompts) leaves focus on `<body>` when the
+  dialog closes. `useDialog` reads `document.activeElement` in a passive effect, after the commit
+  that makes the page `inert`, and a rendering update's focus fixup can blur the opener first.
+  Handing focus back in the handler (phase 57's `leavePop`) did not change it. Capture the
+  restore target before the commit (at the Overlay's first render or in a layout effect), check
+  it across every modal, and re-check `leavePop`. Needs a device, because focus events do not
+  fire in the Browser pane.
 
 - **In-range dependency updates, and whether to automate them (#14).** firebase 12.12 →
   12.19 needs a tablet check first (the `forceWebSockets`/JSONP history). react 19.3 and

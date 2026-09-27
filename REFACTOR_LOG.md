@@ -28186,3 +28186,16 @@ fix is a commit of its own:
 
    **Gate after fix 2:** `122.81 kB` gz main bundle (+0.06) · **1912 tests** (+1) · 0 lint errors, 90
    warnings (unchanged) · style OK.
+3. **Deferred to ROADMAP, after a fix that did not work** (the ⋯ card's focus). The List card's ⋯
+   card returns focus to the ⋯ in its effect cleanup, and when the chosen action opens a modal
+   (Delete, Cancelled, the voucher and seat prompts) that modal restored focus to `<body>` on close.
+   Measured on DEV with a `focus()` log: ⋯ → Delete, and "Delete booking?" recorded `<body>`. The
+   first fix copied phase 57's `leavePop` (hand focus back in the handler) and also stopped the
+   cleanup focusing an opener that had gone inert, and neither changed the recording. The ⋯ kept
+   focus through the click, the same DOM node, and still lost it before the modal's `useDialog` read
+   `document.activeElement`: that read runs in a passive effect, after the commit that makes the List
+   `inert`, and a rendering update's focus fixup can blur the focused element first. A control run
+   (Assign → "Manual table assignment") recorded Assign, so it is a race the ⋯ path loses. The fix
+   belongs in `useDialog` (capture the restore target before the commit), which every modal uses, so
+   it was reverted rather than shipped half-working. Phase 57's `leavePop` may be exposed to the same
+   race. Focus events do not fire in the Browser pane, so this wants a device check too.
