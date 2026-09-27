@@ -1677,6 +1677,20 @@ describe("the AlertPanel header toggle is a real button (v18.3.0 phase 9, O2b)",
       "the chevron in `action` is outside the button; only the row's handler reaches it");
   });
 
+  it("the toggle takes the strip lid's tint, with no inline background to beat it (phase 10)", () => {
+    // `.mgt-ac-row` paints through `background-color`; an inline `background`
+    // outranks any stylesheet rule, so the class would sit there and the tint
+    // would never show — the trap DESIGN.md records from the Collapsible
+    // header, which read `rgba(0, 0, 0, 0)` while hovered.
+    const tag = openingTagsOf(Panel, "button")[0];
+    has(tag, "the toggle", /className="mgt-ac-row mgt-nopress"/,
+      "the lid's two classes: the tint on hover and press, and no press dip on a header-wide item");
+    has(tag, "the toggle", /"--row-bg-hover": "var\(--bg-veil\)"/,
+      "unset, the hover falls back to the accent wash and recolours the pane's severity tint");
+    hasnt(tag, "the toggle", /\bbackground(Color)?\s*:/,
+      "an inline background beats `.mgt-ac-row`'s background-color, so hover and press would tint nothing");
+  });
+
   it("both collapsible callers pass their open state beside onHeaderClick", () => {
     for (const [name, src] of [["IntentBanner", Intent], ["LinkedBookingCard", Linked]]) {
       has(src, name, /onHeaderClick=\{[^}]*\}\s*expanded=\{!collapsed\}/,

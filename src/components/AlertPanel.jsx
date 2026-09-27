@@ -176,18 +176,37 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
           ...(onHeaderClick ? { cursor: "pointer", flexWrap: "wrap" } : null)
         }}>
           {onHeaderClick ? (
-            // Stripped to the row's own look, so this commit changes nothing
-            // on screen: no UA padding, border, fill, font or centring, and
-            // `mgt-nopress` against the universal press dip, which on an item
-            // this wide slides the controls beside it. It WRAPS as the row
-            // does, so where the title cannot fit beside the mark (the linked
-            // card on a 375px phone) the mark keeps its own line above it,
-            // exactly as when both were the row's items — measured, rect for
-            // rect, at 375 and 1280.
-            <button /* @no-lift a header-wide item — a 1.08 lift runs into the action buttons beside it, the strip lid's reason */ type="button" aria-expanded={!!expanded} className="mgt-nopress" style={{
+            // Stripped to the row's own look: no UA padding, border, font or
+            // centring, and `mgt-nopress` against the universal press dip,
+            // which on an item this wide slides the controls beside it. It
+            // WRAPS as the row does, so where the title cannot fit beside the
+            // mark (the linked card on a 375px phone) the mark keeps its own
+            // line above it, exactly as when both were the row's items —
+            // measured, rect for rect, at 375 and 1280 (phase 9).
+            //
+            // v18.3.0 phase 10 (O2): it answers hover and press with the
+            // notification strip lid's treatment — `.mgt-ac-row`'s tint, no
+            // transform. Three pieces, copied from the lid: the class; NO
+            // inline `background`, because an inline one beats the class's
+            // `background-color` and the tint would silently never show (the
+            // resting fill is the class's transparent `--row-bg`); and
+            // `--row-bg-hover: var(--bg-veil)`, a neutral veil that lightens
+            // the pane's severity tint rather than replacing it with the
+            // class's accent wash. `R.inset` gives the tint a shape.
+            <button /* @no-lift a header-wide item — a 1.08 lift runs into the action buttons beside it, the strip lid's reason */ type="button" aria-expanded={!!expanded} className="mgt-ac-row mgt-nopress" style={{
+              "--row-bg-hover": "var(--bg-veil)", borderRadius: R.inset,
               flex: "1 1 auto", minWidth: 0,
               display: "flex", alignItems: "center", flexWrap: "wrap", gap: SP.base,
-              background: "none", border: "none", padding: 0, color: "inherit",
+              // The tint's room: SP.snug of padding, cancelled by the same
+              // negative margin, so the band reaches past the text without
+              // moving anything (an item's outer size is unchanged). Padded
+              // to the text's edge it was a 15–20px strip flush against the
+              // mark and the title (measured). SP.snug is the widest step
+              // that clears everything round it: 8px of row gap to the
+              // actions (on the line beside it, or wrapped under it on a
+              // phone) and 10px of the pane's top padding.
+              padding: SP.snug, margin: -SP.snug,
+              border: "none", color: "inherit",
               font: "inherit", textAlign: "left", cursor: "pointer"
             }}>{heading}</button>
           ) : heading}

@@ -1109,8 +1109,9 @@ explaining why is usually the one to read.
   the cursor between aiming and clicking (measured: Edit −24px, Delete +31px) so
   clicks landed on the card instead. Any surface that HOLDS click targets gets
   **`.mgt-ac-row`** instead: a background tint, no transform. One class covers
-  autocomplete rows, the List card, the Summary panel and the notification
-  strip's lid; both colours arrive as custom properties (`--row-bg`,
+  autocomplete rows, the List card, the Summary panel, the notification
+  strip's lid and (v18.3.0) a collapsible `AlertPanel`'s header toggle, whose
+  row holds the pane's action buttons beside it; both colours arrive as custom properties (`--row-bg`,
   `--row-bg-hover`) **because every one of those surfaces sets its resting fill
   INLINE and an inline `background` beats a stylesheet `background-color`** — a
   plain rule silently never applies. Symptom to recognise: "I have to move the
@@ -1531,7 +1532,7 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   the only feedback the two non-`<button>` tap targets had, so both gained the
   app's own language, and **which one they get is the v17.9.1 rule again**:
   `.mgt-ac-row:active` gives a **tint** to containers of controls (List card,
-  Summary, autocomplete rows, the strip's lid) — a scale there would shrink the
+  Summary, autocomplete rows, the strip's lid, the `AlertPanel` toggle) — a scale there would shrink the
   card under the button you were aiming at, because **`:active` matches
   ANCESTORS of the pressed element**; `.mgt-blk:active` gives the **dip** to the
   timeline block and waitlist ghost, which are leaf controls. Target `.mgt-blk`

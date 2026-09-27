@@ -28546,6 +28546,32 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    pass `expanded`. Each fails when its code is broken on purpose (four mutations, including
    `{action}` moved inside the button). Gate: 124.09 kB gz (+0.09), 0 errors / 90 warnings (the
    three files: 0 → 0), style OK.
+10. **The AlertPanel header answers hover and press (O2).** Phase 9's button gave no feedback
+   of its own; only the chevron turned, after the toggle. It now takes the notification strip
+   lid's treatment, with the same three pieces: `mgt-ac-row` (joining phase 9's `mgt-nopress`),
+   `--row-bg-hover: var(--bg-veil)` and a radius, `R.inset`, since this is an inset item inside
+   the pane's padding. Phase 9's inline `background: "none"` came OUT. An inline background
+   beats the class's `background-color`, so the tint would never have shown; it is the trap
+   DESIGN.md records from the Collapsible header. **Padded, as the plan allowed:** at the text's
+   edge the tint was a 15–20px strip flush against the mark and the title (screenshot). So the
+   button takes `SP.snug` of padding, cancelled by `margin: -SP.snug`. That is the widest step
+   that clears the 8px row gap to the actions and the pane's 10px top padding. The band is now
+   32px (linked card) and 27px (banner).
+   **Measured** in the rig (desktop profile, where hover is not gated off; writes blocked; the
+   page's clock at 19:20 so the Running-late strip's lid is up as the control):
+   - **Hover** (a real mouse): transparent at rest, `rgba(0,0,0,0.05)` in light and
+     `rgba(255,255,255,0.07)` in dark, the lid's own values in each theme. It eases in on
+     `--t-tap` (145ms: 0.016 at 58ms, 0.05 by 119ms) with `transform: none` throughout.
+   - **Press:** `:active`, forced with `CSS.forcePseudoState`, gives the same value on the header
+     and on the lid in both themes. It is outside the hover query, so touch gets it too.
+   - **Nothing moved:** against phase 9's baseline, every shared element keeps its box
+     (0 of 84, at 1280 and 375), and the resting render differs by at most 1/255.
+   - **Contrast** of the title over the composited tint: light 6.54 → 5.86 (linked) and
+     6.47 → 5.79 (banner) when hovered; dark 7.97 → 6.46 and 7.95 → 6.40. All above 4.5.
+   The chevron sits outside the button (phase 9), so it still toggles but does not tint.
+   Tests 1926 → 1927 (a11y): the toggle carries the lid's classes and veil and has no inline
+   background. It fails for each of the three when broken on purpose. Gate: 124.10 kB gz
+   (+0.01), 0 errors / 90 warnings, style OK.
 
 ### Check on the devices after merge
 
@@ -28558,3 +28584,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 05 | Tablet, iPad | Hold a block still. At about 800ms the card disappears and the block visibly lifts at once. Move, and it follows |
 | 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed |
 | 08 | Android tablet | Mark a late booking No show from the Running-late strip. The block fades out still wearing its amber border, and it fades all the way out before it goes. Undo fades it back in. Stepping to the next day fades nothing |
+| 10 | Tablet, phone | Tapping a WhatsApp alert header shows the veil tint while pressed |
