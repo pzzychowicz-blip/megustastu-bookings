@@ -697,11 +697,14 @@ export const ListView = memo(function ListView({
         // (`describeBooking`), so a static "More actions" leans on it — the
         // v17.15.6 rule for repeated controls, the same call the other card
         // buttons make.
+        // v18.2.0 /code-review: `aria-expanded` and no `aria-haspopup`. It
+        // said "dialog", and the quick-status card it opens is not one — no
+        // role, no trap — which is exactly the claim the popups are kept from
+        // making (the connection popover's missing aria-modal, the same rule).
         const moreBtn = (
           <button
             className="mgt-hover-scale"
             aria-label="More actions"
-            aria-haspopup="dialog"
             aria-expanded={menuFor === b.id}
             title="More actions"
             style={mkBtn({ background: BTN.nav, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "4px 12px" })}

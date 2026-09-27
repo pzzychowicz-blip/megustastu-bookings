@@ -50,9 +50,13 @@ describe("the card and the popup", () => {
     expect(List, "Delete is back on the card").not.toMatch(/onClick=\{stopped\(\(\) => onDelete\(b\.id\)\)\}/);
   });
 
-  it("⋯ is named, says it opens something, and goes through stopped()", () => {
+  // v18.2.0 /code-review: `aria-haspopup="dialog"` claimed a dialog, and the
+  // quick-status card is not one (no role, no focus trap) — a popup must not
+  // claim to be a dialog (CLAUDE.md). `aria-expanded` says it opens something.
+  it("⋯ is named, says it is open or closed, claims no dialog, and goes through stopped()", () => {
     expect(List).toMatch(/aria-label="More actions"/);
-    expect(List).toMatch(/aria-haspopup="dialog"/);
+    expect(List).toMatch(/aria-expanded=\{menuFor === b\.id\}/);
+    expect(List).not.toMatch(/aria-haspopup/);
     expect(List).toMatch(/onClick=\{stopped\(\(\) => setMenuFor\(b\.id\)\)\}/);
   });
 

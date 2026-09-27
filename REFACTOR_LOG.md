@@ -28225,3 +28225,12 @@ fix is a commit of its own:
 
    **Gate after fix 5:** `122.80 kB` gz main bundle (−0.02) · **1914 tests** (+1) · 0 lint errors, 90
    warnings (unchanged) · style OK.
+6. **Fixed** (`the ⋯ button claims no dialog`). It carried `aria-haspopup="dialog"`, and the
+   quick-status card it opens has no dialog role and no focus trap. GLOSSARY records that this card
+   "must not claim `role="dialog"`" ("claiming a guarantee you don't provide is the defect"), and the
+   button was claiming the dialog on the card's behalf. It keeps `aria-expanded`, which says whether
+   it is open. Live on DEV: `aria-haspopup` is absent and `aria-expanded` reads "false".
+   `tests/list-card.test.js` now asserts `aria-expanded` and no `aria-haspopup`.
+
+   **Gate after fix 6:** `122.80 kB` gz main bundle (unchanged) · **1914 tests** (unchanged) · 0 lint
+   errors, 90 warnings (unchanged) · style OK.
