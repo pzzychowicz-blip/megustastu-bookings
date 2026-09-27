@@ -25,7 +25,7 @@
 
 import { useState, useEffect } from "react";
 import { Overlay, mkBtn, AutoHeight, SEG_TRACK, segStyle, TBadge } from "./atoms";
-import { daySummary, rangeStats } from "../lib/booking-logic";
+import { daySummary, rangeStats, countLabel } from "../lib/booking-logic";
 import { S, BTN, R, T, FW, IC, H, TIMELINE_TABLES } from "../lib/constants";
 import { hourLabel } from "../lib/time-grid";
 import { ChevronLeftIcon, ChevronRightIcon } from "./Icons";
@@ -275,8 +275,8 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
                 <div style={{ width: ((r.covers / maxCovers) * 100) + "%", height: "100%", background: "var(--accent)", opacity: r.covers ? 0.8 : 0, borderRadius: 4,   /* @canvas */ }} />
               </div>
               <div style={{ minWidth: 86, textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{r.covers + " cover" + (r.covers !== 1 ? "s" : "")}</div>
-                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{r.bookings + " booking" + (r.bookings !== 1 ? "s" : "")}</div>
+                <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)" }}>{countLabel(r.covers, "cover", "covers")}</div>
+                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{countLabel(r.bookings, "booking", "bookings")}</div>
               </div>
             </button>
           );

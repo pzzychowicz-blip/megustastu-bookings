@@ -102,8 +102,8 @@ describe("startingPhrase — the forms' 'Starting at this time:' line (v18.2.0)"
     const { startingPhrase } = await import("../src/lib/booking-logic.js");
     expect(startingPhrase({ starts: 0, guests: 0 })).toBe("none yet");
     expect(startingPhrase(null)).toBe("none yet");
-    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1 booking · 1\u00a0guest");
-    expect(startingPhrase({ starts: 2, guests: 4 })).toBe("2 bookings · 4\u00a0guests");
+    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1\u00a0booking · 1\u00a0guest");
+    expect(startingPhrase({ starts: 2, guests: 4 })).toBe("2\u00a0bookings · 4\u00a0guests");
   });
 
   it("both forms print it; neither prints the draft-inclusive count any more", () => {

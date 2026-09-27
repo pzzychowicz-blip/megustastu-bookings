@@ -21,7 +21,7 @@
 
 import { BannerRows } from "./BannerRows";
 import { Presence, mkBtn } from "./atoms";
-import { lateMins } from "../lib/booking-logic";
+import { lateMins, countLabel } from "../lib/booking-logic";
 import { BTN, T, FW, IC, H } from "../lib/constants";
 import { CloseIcon, NoShowIcon } from "./Icons";
 
@@ -51,7 +51,7 @@ export function LateBanner({ lateMap, bookings, nowMins, today = "", onNoShow, o
     const who = b.name || "(no name)";
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0" }}>
-        <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + lateMins(b, nowMins, today) + " min late"}</span>
+        <span style={{ fontSize: T.body, color: "var(--warn-text)", fontWeight: FW.semi, flex: "1 1 auto", minWidth: 0 }}>{b.name + " (" + b.time + ") — " + countLabel(lateMins(b, nowMins, today), "min") + " late"}</span>
         <Presence show={offerNoShow} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span">
           <button
             onClick={function () { onNoShow(id); }}

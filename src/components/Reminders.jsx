@@ -23,6 +23,7 @@ import { BTN, R, T, FW, IC } from "../lib/constants";
 import { Toggle, mkBtn, mkDangerBtn, OutlineChip, PAUSED_FADE } from "./atoms";
 import { TrashIcon } from "./Icons";
 import { WEEKDAY_SHORT, formatDay } from "../lib/day";
+import { countLabel } from "../lib/booking-logic";
 
 // ── One reminder card ────────────────────────────────────────────────────────
 // v18.2.0 phase 55: PAUSED_FADE moved to atoms (standing bookings share it).
@@ -151,7 +152,7 @@ export function RemindersTabContent({ reminders, onAdd, onEdit, onDelete, onTogg
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
         <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>
-          {list.length + " reminder" + (list.length !== 1 ? "s" : "")}
+          {countLabel(list.length, "reminder", "reminders")}
         </div>
         <button
           onClick={onAdd}

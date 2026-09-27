@@ -21,6 +21,7 @@ import { BannerRows } from "./BannerRows";
 import { mkBtn } from "./atoms";
 import { BTN, T, FW, IC, H } from "../lib/constants";
 import { CloseIcon } from "./Icons";
+import { countLabel } from "../lib/booking-logic";
 
 export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
   const byId = new Map(bookings.map(function (b) { return [b.id, b]; }));
@@ -30,7 +31,7 @@ export function OverlapBanner({ warnings, bookings, onReassign, onDismiss, }) {
     const sb = byId.get(id);
     if (!sb || !w) return null;
     const rowTxt = w.overdue ? "var(--danger-text)" : "var(--warn-text)";
-    const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + w.gap + " min");
+    const msg = sb.name + " (overstaying) → " + w.next + " at " + w.nextTime + (w.overdue ? " — overdue" : " — in " + countLabel(w.gap, "min"));
     // v17.15.6: the ✕ names its booking (see LateBanner for the rule and why a
     // banner row, unlike a List card, has no ancestor to inherit from). The
     // Reassign button below needs nothing — `w.next` is the incoming party's

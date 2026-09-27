@@ -43,7 +43,7 @@ import {
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
-  comboCapBest, nowTime, guestsLabel
+  comboCapBest, nowTime, guestsLabel, countLabel
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -450,7 +450,7 @@ export function WalkinForm({
               >
                 −
               </button>
-              <span style={stepperValueStyle}>{wDur + " min"}</span>
+              <span style={stepperValueStyle}>{countLabel(wDur, "min")}</span>
               <button
                 className="mgt-hover-scale"
                 style={stepperBtnStyle}

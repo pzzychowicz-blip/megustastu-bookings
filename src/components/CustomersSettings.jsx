@@ -23,7 +23,7 @@ import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
 import { customerIndex, searchCustomers, normalizePhone, formatPhone, identityKey, isNoShow } from "../lib/customers";
 import { Section, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, SBadge } from "./atoms";
 import { formatDay, showsYear } from "../lib/day";
-import { guestsLabel } from "../lib/booking-logic";
+import { guestsLabel, countLabel } from "../lib/booking-logic";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
 
 // v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
@@ -163,7 +163,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate ? formatDay(c.latestDate) : "\u2014")}</div></div><button
           type="button"
           aria-expanded={open}
-          aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + c.visits + " visit" + (c.visits !== 1 ? "s" : "") + (c.noShowCount > 0 ? ", " + c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") : "") + (wlCount > 0 ? ", " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}
+          aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + countLabel(c.visits, "visit", "visits") + (c.noShowCount > 0 ? ", " + countLabel(c.noShowCount, "no-show", "no-shows") : "") + (wlCount > 0 ? ", " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}
           // Making an element focusable makes the browser scroll it into view on
           // MOUSEDOWN, so it moves out from under the finger between press and
           // release and the click is lost. preventDefault suppresses only focus.
@@ -174,10 +174,10 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           // v17.7.0 the hover rule no longer supplies one but still paints an
           // opaque --bg-hover-card, so a radius-less element would render that
           // fill as a hard-edged rectangle inside its own rounded card.
-          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{c.visits + " visit" + (c.visits !== 1 ? "s" : "")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{c.noShowCount + " no-show" + (c.noShowCount !== 1 ? "s" : "") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
+          style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
-            <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{c.bookings.length + " booking" + (c.bookings.length !== 1 ? "s" : "") + (wlCount ? " · " + wlCount + " waitlist entr" + (wlCount !== 1 ? "ies" : "y") : "")}</div>
+            <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{countLabel(c.bookings.length, "booking", "bookings") + (wlCount ? " · " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}</div>
             {historyRows}
             {/* v18.2.0 phase 62: the app's one destructive look, and the armed
                 sentence UNDER the button. It was in FRONT of it in a wrapping

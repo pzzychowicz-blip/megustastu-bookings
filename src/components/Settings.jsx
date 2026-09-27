@@ -43,7 +43,7 @@ import { DEFAULT_GENERAL_SETTINGS } from "../hooks/useGeneralSettings";
 // order) — since v18.0.0 session 7's /code-review, lib/day.js's WEEKDAY_SHORT,
 // which this line used to copy byte for byte.
 import { WEEKDAY_SHORT as RULE_WD } from "../lib/day";
-import { guestsLabel } from "../lib/booking-logic";
+import { guestsLabel, countLabel } from "../lib/booking-logic";
 
 // v18.2.0 phase 51: a standing-booking row's switch + Delete RESERVE their
 // armed width, as the waitlist panel's Book + Remove do (its ACTIONS_W says
@@ -568,7 +568,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-secondary)", textAlign: "left" }}>Time shown behind the now-line</div>
-              <MiniStepper label="time shown behind the now-line" value={tl.followLead} fmt={(v) => v + " min"}
+              <MiniStepper label="time shown behind the now-line" value={tl.followLead} fmt={(v) => countLabel(v, "min")}
                 disableDec={tl.followLead <= 0} disableInc={tl.followLead >= 120}
                 onDec={() => onSetTlSetting("followLead", tl.followLead - 15)}
                 onInc={() => onSetTlSetting("followLead", tl.followLead + 15)} />
@@ -634,7 +634,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
     ? generalSettings
     : DEFAULT_GENERAL_SETTINGS;
   // v17.2.0: per-device Timeline zoom/follow settings (App's tlSettings).
-  const minsLabel = (n) => n + " min";
+  const minsLabel = (n) => countLabel(n, "min");
   // v18.2.0: named for what it says, "≤ 4". It was `guestsLabel`, and phase 38
   // (C2) imported the real one into this file, which it then shadowed.
   const upToLabel = (n) => "≤ " + n;
@@ -673,7 +673,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
   };
   const canAddTier = tiers.length < 6 && (tiers.length === 0 || tiers[tiers.length - 1].max < 19);
   const restFrom = (tiers.length ? tiers[tiers.length - 1].max : 0) + 1;
-  const durSummary = tiers.map((t) => t.dur).concat([bd.restDur]).join(" / ") + " min";
+  const durSummary = tiers.map((t) => t.dur).concat([bd.restDur]).join(" / ") + "\u00a0min";
   const cutoffNote =
     oc >= 24 ? "Optimiser keeps reshuffling all day, then resets at the start of the next day."
     : oc <= 0 ? "Optimiser stays off all day; resume it manually (timeline control or the “o” key)."
@@ -884,7 +884,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
               }}>+ Add tier</button>
           </div>
           <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-muted)" }}>
-            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? guestsLabel(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max + " guests") + " → " + t.dur + " min").concat([restFrom + "+ guests → " + bd.restDur + " min"]).join(" · ") + ". Applies to new bookings only."}
+            {tiers.map((t, i) => ((i > 0 ? tiers[i - 1].max + 1 : 1) === t.max ? guestsLabel(t.max) : (i > 0 ? tiers[i - 1].max + 1 : 1) + "–" + t.max + "\u00a0guests") + " → " + countLabel(t.dur, "min")).concat([restFrom + "+\u00a0guests → " + countLabel(bd.restDur, "min")]).join(" · ") + ". Applies to new bookings only."}
           </div>
         </div>
       </Collapsible>
@@ -989,7 +989,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
         <AutoHeight>{bd.freeSoonEnabled !== false ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-secondary)" }}>Predict up to</span>
-            <MiniStepper label="how far ahead to predict" value={(bd.freeSoonWindow || 15)} fmt={(n) => n + " min"}
+            <MiniStepper label="how far ahead to predict" value={(bd.freeSoonWindow || 15)} fmt={(n) => countLabel(n, "min")}
               disableDec={(bd.freeSoonWindow || 15) <= 5} disableInc={(bd.freeSoonWindow || 15) >= 60}
               onDec={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) - 5 })}
               onInc={() => onSaveBookingDefaults({ freeSoonWindow: (bd.freeSoonWindow || 15) + 5 })} />
@@ -1103,7 +1103,7 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             disableDec={gs.lateCollapseMax <= 1} disableInc={gs.lateCollapseMax >= 20}
             onDec={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax - 1 })}
             onInc={() => onSaveGeneralSettings({ lateCollapseMax: gs.lateCollapseMax + 1 })} />
-          <HourStepper label="Waitlist match window (± wanted time)" value={gs.waitMatchWin} fmt={(n) => "±" + n + " min"}
+          <HourStepper label="Waitlist match window (± wanted time)" value={gs.waitMatchWin} fmt={(n) => "±" + countLabel(n, "min")}
             disableDec={gs.waitMatchWin <= 15} disableInc={gs.waitMatchWin >= 240}
             onDec={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin - 15 })}
             onInc={() => onSaveGeneralSettings({ waitMatchWin: gs.waitMatchWin + 15 })} />

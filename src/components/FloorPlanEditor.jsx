@@ -25,6 +25,7 @@ import { useState, useRef, useEffect } from "react";
 import { S, R, T, FW, IC } from "../lib/constants";
 import { mkBtn, mkDangerBtn } from "./atoms";
 import { TrashIcon } from "./Icons";
+import { countLabel } from "../lib/booking-logic";
 // v17.1.0 (Tier 3 code-splitting): the shared geometry moved to FloorGlyphs.jsx
 // so PlanView (main chunk) no longer pulls this whole editor in. Re-exported
 // here for back-compat with any older import path.
@@ -278,7 +279,7 @@ export function FloorPlanEditor({ layout, onSaveLayout = () => {} }){
         </div>
         {totalChairs !== cap ? (
           <div style={{ fontSize: T.body, fontWeight: FW.semi, color: "var(--warn-text)", marginTop: 8 }}>
-            {totalChairs + " chair" + (totalChairs !== 1 ? "s" : "") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
+            {countLabel(totalChairs, "chair", "chairs") + " drawn, but the table seats " + cap + " (capacity is set in the Tables editor above)."}
           </div>
         ) : null}
       </div>

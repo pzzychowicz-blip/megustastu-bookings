@@ -31,7 +31,7 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
-import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone } from "../lib/customers";
@@ -531,9 +531,9 @@ export const ListView = memo(function ListView({
         // number here that is still MOVING, and that was what the green fill
         // said. The settled stay goes neutral, as its muted slate did.
         const durationTag = b.status === "seated" ? (
-          <TextFlag ink={FLAG_SUCCESS}>{elapsedMin + " min"}</TextFlag>
+          <TextFlag ink={FLAG_SUCCESS}>{countLabel(elapsedMin, "min")}</TextFlag>
         ) : stayed != null ? (
-          <TextFlag ink={FLAG_NEUTRAL}>{"stayed " + stayed + " min"}</TextFlag>
+          <TextFlag ink={FLAG_NEUTRAL}>{"stayed " + countLabel(stayed, "min")}</TextFlag>
         ) : null;
 
         // v17.15.2 (follow-up): the eleventh and twelfth banned triples. Both
@@ -554,7 +554,7 @@ export const ListView = memo(function ListView({
             style={{ marginBottom: 8, padding: "6px 10px" }}>
             {warn.overdue
               ? "Overdue — next booking (" + warn.next + ") at " + warn.nextTime + " is waiting"
-              : "Next booking (" + warn.next + ") at " + warn.nextTime + " in " + warn.gap + " min"}
+              : "Next booking (" + warn.next + ") at " + warn.nextTime + " in " + countLabel(warn.gap, "min")}
           </InlineAlert>
         ) : null;
 
@@ -594,13 +594,13 @@ export const ListView = memo(function ListView({
         // v16.0.0: repeat no-show offender flag (same threshold as the block's).
         const noShowCt = nsMap[identityKey(b)] || 0;
         const noShowTag = noShowCt >= 2 ? (
-          <CardFlag ink={FLAG_WARN} title={noShowCt + " past no-shows on this number"}>
+          <CardFlag ink={FLAG_WARN} title={countLabel(noShowCt, "past no-show", "past no-shows") + " on this number"}>
             <NoShowIcon size={IC.control} />{"×" + noShowCt}
           </CardFlag>
         ) : null;
         // v16.1.0: running-late flag (minutes past the booked time).
         const lateTag = lateSt ? (
-          <TextFlag ink={FLAG_WARN}>{lateMins(b, nowMins, today) + " min late"}</TextFlag>
+          <TextFlag ink={FLAG_WARN}>{countLabel(lateMins(b, nowMins, today), "min") + " late"}</TextFlag>
         ) : null;
         // v16.3.0: deposit — a prepaid booking. The AMOUNT stays visible here;
         // on the block it fits only in the title. v17.9.0's lesson holds: the

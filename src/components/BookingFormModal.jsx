@@ -55,7 +55,9 @@ import {
   // v18.0.0 session 8 (C7): the Time field's max is the last START, not close.
   lastStartMins,
   // v18.2.0 (C2): "4 guests", never "4 pax".
-  guestsLabel
+  guestsLabel,
+  // v18.2.0 phase 77: any other count and its word, joined the same way.
+  countLabel
 } from "../lib/booking-logic";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
@@ -329,7 +331,7 @@ export function BookingFormModal({
   const dupWarn=dupPhone.length?<AlertPanel role="warn" icon={ClashIcon} style={{marginTop:8}}
     title={"This phone already has "+(dupPhone.length>1?dupPhone.length+" overlapping bookings":"an overlapping booking")+" on "+formatDay(form.date)+":"}>
     {dupPhone.slice(0,3).map(function(b,i){return <AlertRow key={b.id} first={i===0}>{(b.time||"?")+"–"+toTime(toMins(b.time)+(b.duration||90))+" · "+guestsLabel(b.size)+((b.tables||[]).length?" · "+b.tables.join("+"):"")}</AlertRow>;})}
-    {dupPhone.length>3?<AlertRow>{"+ "+(dupPhone.length-3)+" more"}</AlertRow>:null}
+    {dupPhone.length>3?<AlertRow>{"+ "+countLabel(dupPhone.length-3,"more")}</AlertRow>:null}
   </AlertPanel>:null;
   // The container stays mounted while ANY of the three can render, so the
   // dupWarn Reveal below can animate its collapse instead of being torn out
@@ -351,7 +353,7 @@ export function BookingFormModal({
       style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{formatPhone(c.phone)}</div></div><div style={{display:"flex",gap:4,flexShrink:0}}>{/* v17.15.0: these were the banned shape in full — pale semantic fill PLUS a
               border in the matching hue PLUS bold text in a third shade. They are
               the same counts as the Customers tab's chips, so they are now the
-              same chip. */}{c.visits>0?<OutlineChip tone="success">{c.visits+" visit"+(c.visits!==1?"s":"")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{c.noShowCount+" no-show"+(c.noShowCount!==1?"s":"")}</OutlineChip>:null}</div></div>
+              same chip. */}{c.visits>0?<OutlineChip tone="success">{countLabel(c.visits,"visit","visits")}</OutlineChip>:null}{c.noShowCount>0?<OutlineChip tone="warn">{countLabel(c.noShowCount,"no-show","no-shows")}</OutlineChip>:null}</div></div>
   );})}</div>:null;
   // v16.4.0: name-search dropdown — same opaque-sheet chrome as phoneDropdown.
   // Each row shows the phone (or "no phone") + last date so two same-name
@@ -361,7 +363,7 @@ export function BookingFormModal({
       key={r.key}
       className="mgt-ac-row"
       {...acRowHandlers(function(){pickGuest(r);})}
-      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+formatDay(r.latestDate):"")+(r.count>1?"  ·  "+r.count+" bookings":"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
+      style={AC_ROW}><div style={{flex:1,minWidth:0}}><div style={{fontSize: T.body,fontWeight: FW.semi,color:S.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name||"(no name)"}</div><div style={{fontSize: T.small,color:S.muted}}>{(r.isPhoneless?"no phone":formatPhone(r.phone))+(r.latestDate?"  ·  last "+formatDay(r.latestDate):"")+(r.count>1?"  ·  "+countLabel(r.count,"booking","bookings"):"")}</div></div>{r.isPhoneless?<span style={{fontSize: T.micro,fontWeight: FW.bold,color:"var(--text-secondary)",background:"var(--bg-input)",border:"1px solid var(--border-soft)",borderRadius:R.pill,padding:"2px 6px",flexShrink:0}}>no phone</span>:null}</div>
   );})}</div>:null;
 
   const formCols=isMobile?"1fr":"1fr 1fr";
@@ -1041,7 +1043,7 @@ export function BookingFormModal({
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Decrease duration"
               {...stepPress(function(){const v=Math.max(15,Math.min(480,dur-15));setForm(function(f){return Object.assign({},f,{customDur:v===auto?null:v});});})}>−</button><span
-              style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{dur+" min"}</span><button
+              style={{minWidth:56,textAlign:"center",fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{countLabel(dur,"min")}</span><button
               className="mgt-hover-scale"
               style={{background:"var(--bg-stepper)",border:"1px solid var(--border-soft)",borderRadius:R.pill,width:H.control,height:H.control,fontSize: T.display,cursor:"pointer",color:S.text,fontWeight: FW.semi,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"var(--shadow-input)"}}
               aria-label="Increase duration"

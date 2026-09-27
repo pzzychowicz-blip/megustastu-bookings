@@ -40,7 +40,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf } from "../lib/booking-logic";
+import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -659,7 +659,7 @@ export const PlanView = memo(function PlanView({
                   : occ ? describeBooking(occ, { tables: false })
                     : resetting[t.id] ? "free after turnaround"
                       : "free"
-              ) + (soon != null ? ", free in about " + soon + " minutes" : "")
+              ) + (soon != null ? ", free in about " + countLabel(soon, "minute", "minutes") : "")
                 + (avail && avail.until != null ? " until " + toTime(avail.until) : "")
                 + (avail && !avail.fits ? ", too short for a walk-in" : "");
               // The short window's rim: dashed like `resetting` (not offerable

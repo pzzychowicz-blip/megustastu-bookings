@@ -532,7 +532,13 @@ explaining why is usually the one to read.
   pushes one row's times out of line. **The weekday and the day are joined by a
   NO-BREAK space** (U+00A0, phase 54, C-5), as money's amount and symbol are
   (below), and so are a size's number and word (`guestsLabel`, "4 guests"): a
-  wrapping line never ends on "Thu" or on "4". Nothing stores it — records keep
+  wrapping line never ends on "Thu" or on "4". **Since phase 77 every count on
+  screen is joined the same way**, through `countLabel(n, one, many)`
+  (booking-logic.js, which `guestsLabel` now calls): "2 bookings", "20 min late",
+  "3 visits", "12 months". A count typed as `n + " word"` fails
+  `tests/count-label.test.js`, except the listed records: a booking's stored
+  history and a stored activity entry keep the plain space they were written
+  with. Nothing stores it — records keep
   ISO — but anything that SEARCHES the text as shown must fold it to a plain
   space, or a typed "Thu 24.09" finds nothing (the Activity log's search does).
 - **Money is written ONE way: "20 €" (v18.2.0, C3).** The amount, a NO-BREAK

@@ -42,7 +42,7 @@ import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
@@ -144,7 +144,7 @@ function railFlagsOf(b, noShows, warn, currency) {
     isLocked(b)
       ? { k: "lock", keep: 5, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
     noShows >= 2
-      ? { k: "ns", keep: 4, title: noShows + " past no-shows on this number", icon: <NoShowIcon size={IC.control} /> } : null,
+      ? { k: "ns", keep: 4, title: countLabel(noShows, "past no-show", "past no-shows") + " on this number", icon: <NoShowIcon size={IC.control} /> } : null,
     warn && warn.overdue
       ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
   ].filter(Boolean);

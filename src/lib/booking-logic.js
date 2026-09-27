@@ -123,7 +123,16 @@ export function freeingSoon(bookings,today,nowMins,windowMin){
 // Phase 54 (round 3's C-5): the number and the word are joined by a NO-BREAK
 // space (U+00A0), formatDay's and money()'s reason — a line never ends on "4".
 export function guestsLabel(n){
-  return n+(Number(n)===1?"\u00a0guest":"\u00a0guests");
+  return countLabel(n,"guest","guests");
+}
+// v18.2.0 phase 77 (round 3's loose end): any COUNT and its word, joined by the
+// same no-break space, so no line ends on the number — "2 bookings", "20 min
+// late", "3 visits" were typed at their own sites with a plain space. `many` is
+// the plural; a unit that does not inflect ("min") passes only `one`. Screen
+// text only: a history or activity entry is a stored record, and keeps the plain
+// space it was written with.
+export function countLabel(n,one,many){
+  return n+"\u00a0"+(many===undefined||Number(n)===1?one:many);
 }
 export function describeBooking(b, opts){
   const o=opts||{};
@@ -953,7 +962,7 @@ export function startingPhrase(load){
   var n=(load&&load.starts)||0;
   if(!n) return "none yet";
   var g=(load&&load.guests)||0;
-  return n+" booking"+(n!==1?"s":"")+" · "+guestsLabel(g);
+  return countLabel(n,"booking","bookings")+" · "+guestsLabel(g);
 }
 export function findKitchenFriendlyTimes(bookings,date,size,pref,dur,around,excludeId,blocks){
   var h=hoursFor(date); // v15.0.0: per-weekday hours for THIS date

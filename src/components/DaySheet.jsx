@@ -19,7 +19,7 @@
 import { useEffect, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW, APP_NAME } from "../lib/constants";
-import { daySummary, guestsLabel } from "../lib/booking-logic";
+import { daySummary, guestsLabel, countLabel } from "../lib/booking-logic";
 import { formatPhone } from "../lib/customers";
 import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
@@ -95,7 +95,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
         <div style={{ fontSize: T.display, fontWeight: FW.bold }}>{(restaurantName || APP_NAME) + " — Day sheet"}</div>
         <div style={{ fontSize: T.lead, marginTop: 2 }}>{weekdayName(date) + " · " + formatDay(date, { weekday: false, year: "always" })}</div>
         <div style={{ fontSize: T.body, marginTop: 4 }}>
-          {s.totalBookings + " booking" + (s.totalBookings !== 1 ? "s" : "") + " · " + s.totalCovers + " cover" + (s.totalCovers !== 1 ? "s" : "")
+          {countLabel(s.totalBookings, "booking", "bookings") + " · " + countLabel(s.totalCovers, "cover", "covers")
             + " · Afternoon " + s.afternoon.covers + " / Evening " + s.evening.covers}
         </div>
       </div>

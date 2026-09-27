@@ -73,7 +73,9 @@ import {
   // `sanitize` already applies on the way IN. See the guard below.
   isReadableTime,
   // v18.2.0 (C2): the one word for a party's size.
-  guestsLabel
+  guestsLabel,
+  // v18.2.0 phase 77: any other count and its word, joined the same way.
+  countLabel
 } from "./lib/booking-logic";
 
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
@@ -5189,8 +5191,8 @@ function BookingApp({uid}){
               Orange = a table currently fits someone waiting; slate = just waiting. */}
             <Presence show={dayWaiting.length>0} inClass="mgt-slide-in" outClass="mgt-slide-out" tag="span"><button
               onClick={function(){setShowWaitlist(true);}}
-              aria-label={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
-              title={"Waitlist — "+dayWaiting.length+" waiting"+(dayWaitAvail?", a table is free now":"")}
+              aria-label={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
+              title={"Waitlist — "+countLabel(dayWaiting.length,"waiting")+(dayWaitAvail?", a table is free now":"")}
               className="mgt-hover-scale"
               /* v17.10.0: the waitlist wears the PENDING amber, not the burnt
                  orange it shared with No show / Reassign / Reshuffle / the swap
@@ -5264,7 +5266,7 @@ function BookingApp({uid}){
                 reshuffled={reshuffled}
                 reshuffledMsg={reshuffledMsg}
                 loadShown={loadBannerShown}
-                loadMsg={"Connected to the server — "+(firstLoadCount.current||0)+" booking"+(firstLoadCount.current===1?"":"s")+" loaded."} /><div
+                loadMsg={"Connected to the server — "+countLabel(firstLoadCount.current||0,"booking","bookings")+" loaded."} /><div
                 /* v17.12.0 (review fix): the view — the actual "page behind the
                    dialog" — is what goes inert, not <main>. See the note on the
                    strip wrapper above for why the toast layer above this div
@@ -5351,7 +5353,7 @@ function BookingApp({uid}){
               onClick={function(){setConfirmKitchen(null);}}>Back</button><button
               onClick={function(){const isW=confirmKitchen==="walkin";setConfirmKitchen(null);if(isW) doSaveWalkin();else doSave();}}
               className="mgt-hover-scale"
-              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return l.starts+" booking"+(l.starts!==1?"s":"")+" with "+guestsLabel(l.guests);})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
+              style={mkSolidBtn("var(--app-warn-solid)")}>Confirm</button></div>}><h2 style={{fontSize: T.title,fontWeight: FW.bold,margin:0,marginBottom:8,color:"var(--warn-text)"}}>Kitchen may be busy</h2><div style={{fontSize: T.lead,color:S.text,marginBottom:12}}>{"There are already "+(confirmKitchen==="walkin"?(function(){const wf=walkinForm;const t=wf.time||nowTime();const d=wf.customDur||getDur(Number(wf.size)||2);const l=getKitchenLoad(bookings,todayStr(),t,d,null);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})():(function(){const f=formRef.current;const d=f.customDur||getDur(Number(f.size)||2);const l=getKitchenLoad(bookings,f.date,f.time,d,editId);return countLabel(l.starts,"booking","bookings")+" with "+guestsLabel(l.guests);})())+" starting at this time. Check the suggested alternatives below, or confirm to proceed anyway."}</div></Overlay>:null}</ModalPresence><ModalPresence show={!!voucherAsk}>{voucherAsk&&vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]?<VoucherRedeemModal
               voucher={vouchersByCode[normalizeCode((bookings.find(function(x){return x.id===voucherAsk.id;})||{}).voucherCode)]}
               booking={bookings.find(function(x){return x.id===voucherAsk.id;})}
               currency={generalSettings.currency}

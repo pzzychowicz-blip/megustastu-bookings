@@ -20,14 +20,14 @@
 // v14.6.0.
 
 import { useMemo, memo } from "react";
-import { daySummary } from "../lib/booking-logic";
+import { daySummary, countLabel } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP } from "../lib/constants";
 import { mkBtn, Reveal, TBadge } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
 import { hourLabel as hh } from "../lib/time-grid";
 import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
-function coversLabel(n){ return n + " cover" + (n !== 1 ? "s" : ""); }
-function bookingsLabel(n){ return n + " booking" + (n !== 1 ? "s" : ""); }
+function coversLabel(n){ return countLabel(n, "cover", "covers"); }
+function bookingsLabel(n){ return countLabel(n, "booking", "bookings"); }
 
 // v16.3.0: "freeing soon" entries from the freeing list ([{id,tables,inMin}]),
 // capped at 3 entries + a "+N" tail. Each entry is its own no-wrap unit, so the
@@ -268,8 +268,8 @@ function ShiftChip({ label, covers, count }) {
       background: "var(--bg-input)", border: "1px solid var(--border-input)", borderRadius: R.inset
     }}>
       <div style={{ fontSize: T.small, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{covers + " cover" + (covers !== 1 ? "s" : "")}</div>
-      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{count + " booking" + (count !== 1 ? "s" : "")}</div>
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: "var(--text-primary)" }}>{coversLabel(covers)}</div>
+      <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)" }}>{bookingsLabel(count)}</div>
     </div>
   );
 }

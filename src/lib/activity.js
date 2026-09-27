@@ -42,6 +42,9 @@
 // `booking-logic.js`, so this is a one-way edge and no cycle.
 import { dayRangeMs } from "./day";
 import { identityKey } from "./customers.js";
+// v18.2.0 phase 77: the retention labels are screen text (the Admin select, the
+// log's footnote), so their count and word are joined like every other.
+import { countLabel } from "./booking-logic.js";
 
 export const ACTIVITY_KINDS = [
   "booking", "voucher", "table", "waitlist", "reminder", "standing",
@@ -69,11 +72,11 @@ export const DEFAULT_RETENTION_DAYS = 365;
 export const RETENTION_MIN_DAYS = 30;
 export const RETENTION_MAX_DAYS = 3650;
 export const RETENTION_CHOICES = [
-  { days: 90, label: "3 months" },
-  { days: 180, label: "6 months" },
-  { days: 365, label: "12 months" },
-  { days: 730, label: "2 years" },
-  { days: 1825, label: "5 years" },
+  { days: 90, label: countLabel(3, "month", "months") },
+  { days: 180, label: countLabel(6, "month", "months") },
+  { days: 365, label: countLabel(12, "month", "months") },
+  { days: 730, label: countLabel(2, "year", "years") },
+  { days: 1825, label: countLabel(5, "year", "years") },
 ];
 
 /**
@@ -113,7 +116,7 @@ export function retentionMs(days) {
 /** The label for a stored value, so the screen and the log say the same thing. */
 export function retentionLabel(days) {
   const hit = RETENTION_CHOICES.find(function (c) { return c.days === Number(days); });
-  return hit ? hit.label : (Number(days) || DEFAULT_RETENTION_DAYS) + " days";
+  return hit ? hit.label : countLabel(Number(days) || DEFAULT_RETENTION_DAYS, "day", "days");
 }
 
 // ── Tokens ───────────────────────────────────────────────────────────────────

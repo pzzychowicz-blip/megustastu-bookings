@@ -920,11 +920,12 @@ describe("retention", () => {
   });
 
   it("labels a stored value, including one no longer offered", () => {
-    expect(retentionLabel(365)).toBe("12 months");
-    expect(retentionLabel(90)).toBe("3 months");
+    // v18.2.0 phase 77: the count and its word are joined by a no-break space.
+    expect(retentionLabel(365)).toBe("12\u00a0months");
+    expect(retentionLabel(90)).toBe("3\u00a0months");
     // A value written by an older build, or by hand in the console, still reads
     // as something rather than as blank.
-    expect(retentionLabel(400)).toBe("400 days");
+    expect(retentionLabel(400)).toBe("400\u00a0days");
   });
 });
 

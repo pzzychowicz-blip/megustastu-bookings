@@ -16,6 +16,7 @@ import { useState, useEffect } from "react";
 import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn, mkDangerBtn, DateField } from "../atoms";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
+import { countLabel } from "../../lib/booking-logic";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
@@ -139,7 +140,7 @@ export function WaSimulator({ ctx, onClose }) {
   function onSeed() { const n = seedSampleBookings(ctx); setStatus(n > 0 ? "Seeded " + n + " WA-SIM booking(s)." : "Sample bookings already present."); }
   function onClearBookings() { clearWaSimBookings(ctx); setStatus("Cleared WA-SIM bookings."); }
   function onClearConvos() { ctx.clearAllWaData(); setStatus("Cleared all conversations + messages."); }
-  function onBurst() { const n = simulateBurst(ctx); setStatus("Burst: " + n + " messages (ongoing follow-ups + new)."); }
+  function onBurst() { const n = simulateBurst(ctx); setStatus("Burst: " + countLabel(n, "message", "messages") + " (ongoing follow-ups + new)."); }
 
   const upd = (k) => (e) => setForm(Object.assign({}, form, { [k]: e.target.value }));
   const groups = SCENARIOS.reduce((acc, s) => { (acc[s.group] = acc[s.group] || []).push(s); return acc; }, {});

@@ -138,7 +138,8 @@ describe("formatRelativeTime — past a week, the house date", () => {
   });
 
   it("keeps the relative words inside the week", () => {
-    expect(formatRelativeTime(Date.now() - 3 * 86400000)).toBe("3 days ago");
+    // v18.2.0 phase 77: the count and its word are joined.
+    expect(formatRelativeTime(Date.now() - 3 * 86400000)).toBe("3\u00a0days ago");
   });
 });
 

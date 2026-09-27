@@ -28039,3 +28039,29 @@ gone with its last bullet.
 
 **Gate after phase 76:** `122.61 kB` gz main bundle (unchanged) · **1899 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 77. Every count on screen keeps its word
+
+The first of the five loose ends the critique's rounds 2 and 3 left on ROADMAP. Phase 54 joined the
+weekday to its day (`formatDay`) and a party's size to "guests" (`guestsLabel`) with a no-break space,
+so a wrapping line never ends on "Thu" or on "4". Every other count was still typed at its own site
+with a plain space, so "2 bookings", "20 min late", "3 visits" and "12 months" could still part across
+lines. `countLabel(n, one, many)` (booking-logic.js, beside `guestsLabel`, which now calls it) is the
+one way to print a count: the number, U+00A0, and the word, with `many` left out for a unit that does
+not inflect ("min"). It replaced the hand-typed plurals at about forty sites in twenty files: the List
+card's minutes and no-show title, the late banner, the overlap banner, the Summary, the Month view,
+the Day sheet, the kitchen confirm, the waitlist badge, the booking and walk-in forms' steppers,
+Customers, Vouchers, Layout's table count (which read "1 tables"), the floor-plan editor, Settings'
+duration summaries, the inbox's "5 min ago", the log's retention labels and the simulator's status.
+Four texts keep their plain space on purpose, and the new `tests/count-label.test.js` lists them by
+file and count: a booking's stored `history` (two lines), a stored activity entry ("N bookings
+re-placed"), a console line, and two phrases naming a visit by its date ("the Fri 25.09 visit"), which
+are not counts. The sweep fails on any other `n + " word"` in `src/`. Five existing pins moved to the
+joined strings.
+
+Live on DEV: after a reload, the Summary's "6 covers" and "2 bookings", the List's day line and the
+connection popover's "634 bookings loaded" all carry U+00A0, and no text node or accessible name in the
+view prints a count with a plain space. `tests/count-label.test.js` new, +4.
+
+**Gate after phase 77:** `122.65 kB` gz main bundle (+0.04) · **1903 tests** (+4) · 0 lint errors, 90
+warnings (unchanged) · style OK.

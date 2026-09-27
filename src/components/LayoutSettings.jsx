@@ -17,6 +17,7 @@ import { AlertPanel, AlertRow } from "./AlertPanel";
 import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
 import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
+import { countLabel } from "../lib/booking-logic";
 
 // Compact ±1 stepper (no label) — mirrors Settings.jsx's MiniStepper contract.
 // v17.8.0: was a private copy of the byte-identical style in Settings.jsx.
@@ -453,7 +454,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
       <Collapsible
         title="Tables"
         subtitle="Each table's id, capacity and zone. Shared across all devices."
-        summary={tables.length + " tables · " + totalSeats + " seats"}
+        summary={countLabel(tables.length, "table", "tables") + " · " + countLabel(totalSeats, "seat", "seats")}
       >
         <div style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", marginBottom: 2 }}>
           {outdoorCount} outdoor · {indoorCount} indoor · {totalSeats} seats total

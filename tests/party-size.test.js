@@ -36,8 +36,8 @@ describe("guestsLabel — the one word", () => {
   it("is what the spoken labels and the forms' starting line say", () => {
     expect(describeBooking({ name: "Ana", time: "20:00", size: 1, tables: ["3"], status: "confirmed" }))
       .toContain("1\u00a0guest,");
-    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1 booking · 1\u00a0guest");
-    expect(startingPhrase({ starts: 2, guests: 6 })).toBe("2 bookings · 6\u00a0guests");
+    expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1\u00a0booking · 1\u00a0guest");
+    expect(startingPhrase({ starts: 2, guests: 6 })).toBe("2\u00a0bookings · 6\u00a0guests");
   });
 
   // v18.2.0 phase 54 (round 3's C-5): phase 45's no-break space, for the size.
@@ -123,16 +123,19 @@ describe("no surface says pax", () => {
 
   // A tier covering parties of one printed "1 guests → 60 min".
   it("a one-size duration tier takes guestsLabel, a range stays plural", () => {
-    expect(read("components/Settings.jsx")).toMatch(/=== t\.max \? guestsLabel\(t\.max\) : \(i > 0 \? tiers\[i - 1\]\.max \+ 1 : 1\) \+ "–" \+ t\.max \+ " guests"\) \+ " → "/);
+    // v18.2.0 phase 77: the range's "guests" and each "min" are joined to their
+    // numbers by a no-break space.
+    expect(read("components/Settings.jsx")).toMatch(/=== t\.max \? guestsLabel\(t\.max\) : \(i > 0 \? tiers\[i - 1\]\.max \+ 1 : 1\) \+ "–" \+ t\.max \+ "\\u00a0guests"\) \+ " → " \+ countLabel\(t\.dur, "min"\)/);
     // …and the catch-all tier after them says what it counts: "6+ guests".
-    expect(read("components/Settings.jsx")).toMatch(/restFrom \+ "\+ guests → " \+ bd\.restDur \+ " min"/);
+    expect(read("components/Settings.jsx")).toMatch(/restFrom \+ "\+\\u00a0guests → " \+ countLabel\(bd\.restDur, "min"\)/);
   });
 });
 
 describe("covers stays the word for a day's total", () => {
   it("the Summary, the Month view and the Day sheet count covers", () => {
-    expect(read("components/Summary.jsx")).toMatch(/" cover" \+ \(/);
-    expect(read("components/WeekView.jsx")).toMatch(/r\.covers \+ " cover"/);
-    expect(read("components/DaySheet.jsx")).toMatch(/s\.totalCovers \+ " cover"/);
+    // v18.2.0 phase 77: through countLabel, which joins the count and the word.
+    expect(read("components/Summary.jsx")).toMatch(/countLabel\(n, "cover", "covers"\)/);
+    expect(read("components/WeekView.jsx")).toMatch(/countLabel\(r\.covers, "cover", "covers"\)/);
+    expect(read("components/DaySheet.jsx")).toMatch(/countLabel\(s\.totalCovers, "cover", "covers"\)/);
   });
 });

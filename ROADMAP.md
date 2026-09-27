@@ -133,9 +133,6 @@ evidence for each.
 
 - **Loose ends from the v18.2.0 critique, rounds 2 and 3 (2026-09-24 and 26).** Seen
   while fixing other findings; none was in a report, so none was offered or built.
-  - Number-and-word pairs typed at their own sites ("2 bookings", "20 min late") can
-    still break across lines; phase 54 joined only `formatDay` and `guestsLabel`.
-    Round 3.
   - `--btn-reset`, the duration Reset, is still red although it destroys nothing (named
     in phase 36, which moved Clear to slate). Round 2.
   - Phone header: at 375px the connection dot wraps onto a line of its own. Round 2.

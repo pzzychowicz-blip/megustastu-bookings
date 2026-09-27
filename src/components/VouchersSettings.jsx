@@ -38,6 +38,7 @@ import { EXPIRY_MIN, EXPIRY_MAX } from "../hooks/useVoucherDefaults";
 import { Section, OutlineChip, Reveal, InlineAlert, Fld, SearchField, mkInp, mkBtn, mkDangerBtn } from "./atoms";
 import { ChevronDownIcon, ChevronRightIcon, CopyIcon, CheckIcon } from "./Icons";
 import { formatDay, localDay } from "../lib/day";
+import { countLabel } from "../lib/booking-logic";
 
 // The four states, and the chip tone each reads as. `open` is the only one that
 // can still be spent, so it is the only one in success green.
@@ -479,7 +480,7 @@ export function VouchersTabContent({
             style={mkBtn({ fontSize: T.lead, minHeight: 28, padding: "2px 10px", background: BTN.nav, opacity: atMin ? 0.4 : 1, cursor: atMin ? "not-allowed" : "pointer" })}>−</button>
           <span style={{ fontSize: T.body, color: S.text, minWidth: 96, textAlign: "center" }}>
             {voucherDefaults && voucherDefaults.expiryMonths > 0
-              ? voucherDefaults.expiryMonths + " month" + (voucherDefaults.expiryMonths !== 1 ? "s" : "")
+              ? countLabel(voucherDefaults.expiryMonths, "month", "months")
               : "Never expires"}
           </span>
           <button type="button"
@@ -495,7 +496,7 @@ export function VouchersTabContent({
       <Section>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, flex: 1 }}>Vouchers</div>
-          <OutlineChip tone="neutral">{totals.count + " total"}</OutlineChip>
+          <OutlineChip tone="neutral">{countLabel(totals.count, "total")}</OutlineChip>
           <OutlineChip tone="success">{money(totals.outstanding, currency) + " outstanding"}</OutlineChip>
         </div>
 
