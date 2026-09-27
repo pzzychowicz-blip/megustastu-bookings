@@ -28199,3 +28199,15 @@ fix is a commit of its own:
    belongs in `useDialog` (capture the restore target before the commit), which every modal uses, so
    it was reverted rather than shipped half-working. Phase 57's `leavePop` may be exposed to the same
    race. Focus events do not fire in the Browser pane, so this wants a device check too.
+4. **Fixed** (`the table-block form's default To is the day's own close`). BlockModal seeded its To
+   time from the live `GRID_CLOSE`, which `extendActiveGrid` now stretches to the viewed day's latest
+   booking: on a day with a booking ending after 23:00 it was "24:00", which an `<input type="time">`
+   cannot show, so the field opened blank. Measured on DEV on 3 Oct (a booking ending 23:45,
+   `GRID_CLOSE` 24): From 13:00, To blank, where it had read 23:00. The default and the dirty check
+   now read `hoursFor(date).gridClose`, the day's own hours, and the same form opens on 23:00 and
+   closes without the unsaved-changes prompt. The live binding still sets the fields' `max`, which is
+   display. `src/CLAUDE.md`'s "display only" paragraph says a stored default must not read it.
+   `tests/grid-extend.test.js` +1.
+
+   **Gate after fix 4:** `122.82 kB` gz main bundle (+0.01) · **1913 tests** (+1) · 0 lint errors, 90
+   warnings (unchanged) · style OK.

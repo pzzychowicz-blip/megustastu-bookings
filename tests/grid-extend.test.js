@@ -83,6 +83,17 @@ describe("the call sites", () => {
     expect(Plan).toMatch(/const closeM = \(h\.closed \? 23 : Math\.max\(h\.gridClose, GRID_CLOSE\)\) \* 60;/);
   });
 
+  // v18.2.0 /code-review: display only means the stretched close must not seed
+  // a STORED default. BlockModal's To read the live GRID_CLOSE, so a booking
+  // ending after 23:00 made it "24:00", which an <input type="time"> cannot
+  // show — the field opened blank (measured on DEV, 3 Oct).
+  it("the table-block form's default To is the DAY's own grid close, not the stretched one", () => {
+    const Block = read("components/BlockModal.jsx");
+    expect(Block).toMatch(/const dayEnd = hoursFor\(date\)\.gridClose \+ ":00";\s*const \[to, setTo\] = useState\(dayEnd\);/);
+    expect(Block, "the dirty check compares the same default").toMatch(/to !== dayEnd\)/);
+    expect(Block).not.toMatch(/useState\(GRID_CLOSE \+ ":00"\)/);
+  });
+
   it("the once-per-date scroll is guarded by App's date ref and records into scrollPosRef", () => {
     expect(Timeline).toMatch(/if \(scrollDateRef\.current === date\) return;/);
     const eff = Timeline.slice(Timeline.indexOf("if (scrollDateRef.current === date) return;"));
