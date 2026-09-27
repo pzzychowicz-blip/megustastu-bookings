@@ -104,6 +104,33 @@ describe("exit holds outlast their animations", () => {
     expect(src).toMatch(/PRUNE_MS\s*=\s*REVEAL_EXIT_MS/);
     expect(src).not.toMatch(/PRUNE_MS\s*=\s*\d/);
   });
+
+  // v18.3.0 (O1): the timeline's arrivals and departures. Both holds clear the
+  // entrance/exit classes, so a short one cancels the entrance (a class removed
+  // mid-animation snaps to full) or unmounts the leaving copy mid-fade.
+  it("useEnterLeave holds both halves for exitHold(speed), never a literal", () => {
+    const src = code(join(ROOT, "src/hooks/useEnterLeave.js"), "utf8");
+    expect(src).toMatch(/const hold = exitHold\(/);
+    expect((src.match(/afterFrame\(function \(\) \{ set(?:Leaving|Arriving)\(NO_(?:SNAPS|IDS)\); \}, hold\)/g) || []).length,
+      "both clears are timed by the derived hold").toBe(2);
+    // …starting on the frame the animation starts on, not in the effect: a
+    // tap's passive effects run before the paint (see afterFrame).
+    expect(src).toMatch(/requestAnimationFrame\(function \(\) \{ t = setTimeout\(fn, ms\); \}\)/);
+    expect(src).not.toMatch(/\},\s*\d+\s*\)/);
+    // …and the timeline asks for the speed its classes run on (--t-move).
+    const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
+    expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move" \}\s*\)/);
+    expect(token("t-move")).toBe(M.dur.move);
+  });
+
+  // The hook compares its deps by IDENTITY during render, so a map prop that
+  // defaults to `{}` is a new object on every pass and the body never settles.
+  it("the timeline's snapshotted maps default to one frozen object", () => {
+    const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
+    for (const name of ["warnings", "clashes", "late", "freeing"]) {
+      expect(tl, name).toMatch(new RegExp("\\b" + name + " = NO_MARKS\\b"));
+    }
+  });
 });
 
 // v17.15.0 — `Reveal` takes a `speed` naming an entry of the M scale, because

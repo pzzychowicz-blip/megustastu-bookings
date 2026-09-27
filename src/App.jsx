@@ -4862,6 +4862,7 @@ function BookingApp({uid}){
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
     dayClosed={dayClosed}
+    bookingsReady={bookingsReady}
     currency={generalSettings.currency} />;
   // v17.15.5: `clashes` is the SAME memo TimelineView takes. The List card drew
   // nothing at all for a double-booking, which is the one fault where this app

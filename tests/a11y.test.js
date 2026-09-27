@@ -515,6 +515,24 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "so it cannot swallow a press aimed at whatever is behind it");
   });
 
+  it("a DEPARTING timeline block is inert too (v18.3.0, O1)", () => {
+    // The ghost's four, on the block — plus the two a block has that a ghost
+    // does not: an id useFlip matches on, and a group-hover lift keyed on
+    // data-bk. A leaving copy in useFlip's map would collide with the live
+    // cell of a booking that came straight back (Undo).
+    has(Timeline, "every handler dropped at once", /const handlers = leaving \? null : \{/,
+      "one object, so a handler added later cannot be missed on the way out");
+    has(Timeline, "spread onto the block", /\{\.\.\.handlers\}/, "the object is what the block wears");
+    has(Timeline, "aria-hidden while leaving", /data-bk=\{leaving \? undefined : b\.id\}\n\s*aria-hidden=\{leaving \? true : undefined\}/,
+      "out of the a11y tree, and out of the group hover");
+    has(Timeline, "the block's button role goes too", /role=\{leaving \? undefined : "button"\}\n\s*tabIndex=\{leaving \? -1 : 0\}/,
+      "Tab must not land on a booking that has left the day");
+    has(Timeline, "the handle is not tabbable", /tabIndex=\{leaving \? -1 : undefined\}\n\s*onClick=\{leaving \? undefined :/,
+      "a real <button> inside an aria-hidden block would still take focus");
+    expect(count(Timeline, /<TimelineBlock (?:key=\{"leaving-" \+ s\.b\.id\} )?leaving b=\{s?\.?b\} pxPerMin=\{pxPerMin\} anim=\{null\} flipId=\{null\}/g),
+      "both leaving sites (a table row, an Unplaced lane) pass no flip id and no status overlay").toBe(2);
+  });
+
   it("a ghost that leaves while HOLDING focus hands it back", () => {
     // /code-review: going inert means aria-hidden, and focused + hidden is a
     // state assistive tech need not make sense of; then it unmounts and focus
@@ -585,8 +603,10 @@ describe("focusable content must not scroll under the finger", () => {
   // The element leaves from under the finger between press and release, so the
   // click lands elsewhere and the popover never opens.
   it("timeline blocks and ghosts suppress pointer focus", () => {
+    // v18.3.0 (O1): the block's handlers moved into one object (so a LEAVING
+    // block drops them all at once), which spells it `onMouseDown: (e) => …`.
     expect(
-      count(Timeline, /onMouseDown=\{\(e\) => \{ e\.preventDefault\(\); \}\}/g),
+      count(Timeline, /onMouseDown(?:=\{|: )\(e\) => \{ e\.preventDefault\(\); \}/g),
       "both the block and the waitlist ghost need it. preventDefault on " +
       "mousedown suppresses ONLY focus — not the click, not pointer events — " +
       "so drags and holds are unaffected."

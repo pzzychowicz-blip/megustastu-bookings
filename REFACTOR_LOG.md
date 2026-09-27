@@ -28441,6 +28441,68 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
      `transform-origin` resolves to that corner.
    - **Close** (normal speed): it shrinks back toward the dot, fading on the exit curve (0.93
      at 100ms, 0.27 at 217ms), and unmounts at 272 / 282ms.
+8. **A booking leaving or joining the timeline fades (O1).** "No show" took a block from full
+   opacity to gone between two frames, and Undo put it back the same way; so did a cancel, a
+   delete, a save, a walk-in, and any of them from another device. A booking that leaves the
+   viewed day is now drawn once more as a LEAVING copy on the ghost's `mgt-ghost-out` (Plan 01
+   put it on `--ease-in`), and one that joins it wears `mgt-appear` until the entrance has run.
+   The lifecycle is keyed per booking id across the whole day, so a table change (which `useFlip`
+   carries) is neither. A leaving copy is inert: `TimelineBlock`'s handlers now live in one
+   object that `leaving` nulls, and the copy is `aria-hidden`, has no `data-bk` and no flip id,
+   takes `pointer-events: none`, and is keyed `"leaving-" + id`. The turnaround tail and the
+   seated outline take the same class as their block. Where the plan left room, and why:
+   - **A new hook, `useEnterLeave`, not `useRevealRows` + a render-time ref.** That hook's
+     diff runs in a passive effect, after paint, so an arrival would paint once at full opacity
+     before its class existed (the ghost's own "a pop, then a fade"). A ghost can wear
+     `mgt-appear` unconditionally; a block mounts for other reasons too (a date change, a move,
+     a view switch). And the snapshot the plan kept in a ref written during render is what
+     `useRevealRows`' own header rules out. One render-time diff, in state, answers arrivals,
+     departures and the snapshot.
+   - **The snapshot carries the marks, not only the booking.** After a No show the late border
+     is gone from `late`, the overstay from `warnings`, the clash from `clashes`; the copy would
+     have lost its amber border on the fade's first frame, and that border is usually why it is
+     leaving. It also carries the chip decision, the no-show count, the freeing pill and its
+     Unplaced lane (a lane that no longer exists takes nobody: the row shrinking is O4).
+   - **The first load is a replacement too.** Before the first snapshot `bookings` is `[]`, so
+     the load itself would read as the whole day arriving. `bookingsReady` (new prop from App)
+     joins the date in the `resetKey`.
+   - **Focus.** The copy is a new instance, so the element holding focus is the live block, and
+     it is removed rather than made inert. A live block that unmounts while focused hands focus
+     to the grid scroller, in a layout cleanup (passive ones run after the node is gone). One
+     `exhaustive-deps` disable, with its reason: the scroller's ref is read at unmount on
+     purpose, since on the grid's first mount it is attached after the blocks' layout effects.
+   - **`= {}` defaults became a frozen `NO_MARKS`** for the four maps the hook snapshots. The
+     hook compares its deps by identity during render, and a default `{}` is a new object on
+     every call, which never settles.
+   **Found by measuring, and fixed:** the first build removed the leaving copy 221ms into its
+   240ms fade, at opacity 0.42 (three runs). The hold started in the effect after the commit,
+   at +86ms; React runs a click's passive effects before the paint, and App's waitlist matcher
+   after it held the first frame to +130ms, which is where the animation starts. The holds now
+   start in the next `requestAnimationFrame` (`afterFrame`): 279–287ms from the animation's
+   start, removed at opacity 0. DESIGN.md records it beside phase 4's "time a hold from when
+   its animation starts"; after a tap, the commit is not that moment either.
+   **Measured** in the rig (tablet, writes blocked, the page's wall clock set to 19:20 so OPT B
+   runs late):
+   - **Out**, No show from the Running-late strip: opacity 1 → 0.98 → 0.88 → 0.66 → 0.27 → 0,
+     accelerating, then unmounted. The copy keeps OPT B's 3px amber border to the end, a
+     hit-test at its centre lands on the grid, and the flip-id count stays at 3 throughout.
+   - **In**, Undo: 0 → 0.36 → 0.72 → 0.91 → 0.99 → 1, decelerating; the class comes off after
+     it ends, and the hover lift then reads `scale(1.08)` (desktop profile; the tablet profile
+     emulates touch, where the lift is gated off).
+   - **Move is not leave:** OPT B dragged two rows (88px): no block wore either class.
+   - **Replacement is not change:** Next day, 5 blocks → 7, nothing faded. A cold load: no block
+     wore either class.
+   - **Two tables:** cancelling Sofía (3 + 4) faded both cells frame for frame.
+   - **Focus:** OPT B focused by keyboard, No show clicked by script: focus lands on the grid
+     scroller (`tabindex -1`).
+   - **Reduced motion**, the toggle and the OS setting: at 0 on the first leaving frame, at 1
+     on the first arriving frame.
+   Tests 1920 → 1923: a leaving block is inert (a11y), the hook's holds come from `exitHold`
+   and start on a frame, and the four maps default to `NO_MARKS` (motion); each fails when its
+   code is broken on purpose. The pointer-focus guard's regex now also accepts the handler
+   object's `onMouseDown: (e) => …` spelling, still requiring both sites. Lint warnings 91 → 90:
+   the React Compiler's `globals` advisory on `__prevStatus` stopped firing in TimelineView;
+   nothing was suppressed for it.
 
 ### Check on the devices after merge
 
@@ -28452,3 +28514,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home, and the lift fades as it goes. How long the block sits still after release (the drop freeze) is noted, not fixed |
 | 05 | Tablet, iPad | Hold a block still. At about 800ms the card disappears and the block visibly lifts at once. Move, and it follows |
 | 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed |
+| 08 | Android tablet | Mark a late booking No show from the Running-late strip. The block fades out still wearing its amber border, and it fades all the way out before it goes. Undo fades it back in. Stepping to the next day fades nothing |

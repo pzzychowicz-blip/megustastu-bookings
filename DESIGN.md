@@ -1655,6 +1655,18 @@ starts the transition, not from the pointerup, because the drop's synchronous
 work runs in between. It is the same lesson as the status-wipe window: **time a
 hold from when its animation starts, not from the event that caused it.**
 
+**…and after a tap, the commit is not that moment either** (v18.3.0 phase 8).
+React runs a click's passive effects synchronously, before the browser paints,
+and a hold started in one of them waits behind every effect after it. Measured
+on "No show": committed at +86ms, first painted at +130ms (App's waitlist
+matcher runs its placement scans on every bookings change), so a hold timed
+from the effect removed the leaving block 221ms into its 240ms fade, at opacity
+0.42. A CSS animation starts on the first frame that renders it, so
+`useEnterLeave` starts its holds in the next `requestAnimationFrame`
+(`afterFrame`): measured after, 279–287ms from the animation's start, and
+removed at opacity 0. In a hidden tab neither the frame nor the animation runs,
+so that wait cuts nothing short.
+
 ### Adding motion to something that has none
 
 - **Fading in to an element's own opacity** is `.mgt-appear`, not
@@ -1701,6 +1713,24 @@ hold from when its animation starts, not from the event that caused it.**
   block** (A3, decided in S3, 2026-09-27): it is a body portal, the split menu
   shares its shell, and a card anchored to the block would sit under the
   finger that is still holding it.
+- **Timeline blocks leave and arrive with the ghost's pair** (v18.3.0, O1).
+  "No show" took a block from full opacity to gone between two frames, and
+  Undo put it back the same way; so did a cancel, a delete, a save, a walk-in
+  and any of them from another device. A booking leaving the viewed day draws a
+  LEAVING copy on `.mgt-ghost-out` (inert: no handlers, `aria-hidden`,
+  `pointer-events: none`, no flip id); one joining it wears `.mgt-appear` until
+  the entrance has run. The lifecycle is keyed **per booking id across the
+  whole day, never per row**: a booking that changed tables is neither leaving
+  nor arriving (`useFlip` carries it), and a per-row lifecycle would fade a copy
+  out of the old row and one into the new row while FLIP slid it between them.
+  Its `resetKey` is the viewed date plus the first load, so a date change and a
+  cold start are replacements and nothing fades. The copy is drawn from a
+  **snapshot** of the booking and the marks it wore, because after the change
+  those are gone from every map the view reads, and the late border is usually
+  WHY a block is leaving. It is `useEnterLeave`, not `useRevealRows`: that
+  hook's diff runs after paint, too late to put an arrival's class on its first
+  frame, and a snapshot needs the previous render's values, which a render-time
+  diff already holds.
 - **An element that must animate OUT needs its content held.** `Reveal` already
   caches its last truthy children for exactly this — pass `null` and it fades
   out what it was showing. Corollary that bit once: it only caches **truthy**
