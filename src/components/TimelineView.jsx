@@ -45,7 +45,7 @@ import {
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
+import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
@@ -2025,16 +2025,21 @@ export const TimelineView = memo(function TimelineView({
   // ── Quick-status popup (long-press → choose new status) ──────────────────
   // v17.0.0: the popup body moved VERBATIM to QuickStatusPopup.jsx so PlanView
   // shares the same status-gating (pending → Confirmed/Cancel; late no-show).
-  const quickPopup = quickStatus ? (
-    <QuickStatusPopup
-      booking={quickStatus.booking}
-      late={late}
-      today={today}
-      nowMins={nowMins}
-      onStatus={onStatus}
-      onNoShow={onNoShow}
-      onClose={() => setQuickStatus(null)} />
-  ) : null;
+  // v18.3.0 (M3): in ModalPresence, so it animates out (PopupShell).
+  const quickPopup = (
+    <ModalPresence show={!!quickStatus}>
+      {quickStatus ? (
+        <QuickStatusPopup
+          booking={quickStatus.booking}
+          late={late}
+          today={today}
+          nowMins={nowMins}
+          onStatus={onStatus}
+          onNoShow={onNoShow}
+          onClose={() => setQuickStatus(null)} />
+      ) : null}
+    </ModalPresence>
+  );
 
   // ── Final assembly ───────────────────────────────────────────────────────
   return (

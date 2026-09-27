@@ -38,7 +38,6 @@
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect, memo } from "react";
-import { createPortal } from "react-dom";
 import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
@@ -47,7 +46,7 @@ import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn, Reveal, SBadge, SizeRing } from "./atoms";
+import { mkBtn, Reveal, SBadge, SizeRing, ModalPresence, PopupShell, useModalPresence } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
 import { todayStr } from "../lib/day";
 
@@ -66,6 +65,66 @@ const MARK_TOP = 11;
 // the memo naturally; `hoursSig` (the parent's weekHours state) is an
 // identity-only prop that busts it on an operating-hours edit, because
 // hoursFor(date) reads a live module binding the memo can't see.
+// ── The table popover (v18.3.0, M3) ──────────────────────────────────────────
+// The day's queue on one table, opened by a tap on it. Moved out of PlanView's
+// render for ONE reason: its buttons must refuse while it LEAVES, and `leaving`
+// comes from the ModalPresence PlanView renders around it, a context PlanView
+// itself sits outside of. Module scope, not inline (the inline-sub-component
+// rule: a component defined in a render is a new type every render). The
+// portal, the scrim and the exit are `PopupShell`'s. What it shows, the
+// walk-in gate and the focus handling are PlanView's, unchanged.
+function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinHere }) {
+  const { leaving } = useModalPresence();
+  return (
+    <PopupShell
+      onScrimClick={() => { if (!leaving) onClose(); }}
+      cardRef={popRef}
+      cardStyle={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}
+    >
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
+      {queue.length === 0 ? (
+        <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
+      ) : queue.map((b) => {
+        // Phase 57: a BUTTON, named by what it shows, time first ("20:00
+        // Ana, 2 guests, confirmed") — its content would have read the
+        // size ring as a bare "2".
+        return (
+          <button type="button" key={b.id} className="mgt-hover-scale"
+            onClick={() => { if (!leaving) onPick(b); }}
+            aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+            <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+            {/* v18.2.0 phase 43 (C2): the party size as the List card's
+                ring — this row IS a small List card (time · name · size ·
+                status). It was "Name (2)", inside the name, so the ellipsis
+                took the size first. Measured on a 375px phone, "2 guests"
+                as text left a name 71px once the card fits the screen
+                ("Unsettled Pr…"); the 18px ring leaves 102. Its title
+                says "2 guests". */}
+            <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
+            {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
+                pointed at `SBadge`. That comment ("solid, like every other
+                status label") was true about the fill and silently false
+                about everything else: the atom gained `StatusIcon` in
+                v17.15.5 and this copy could not follow it, so the popover
+                named a status with a word while the block behind it named
+                the same status with a mark. */}
+            <SBadge status={b.status} />
+          </button>
+        );
+      })}
+      {canWalkin ? (
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+          <button className="mgt-hover-scale"
+            onClick={() => { if (!leaving) onWalkinHere(); }}
+            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
+        </div>
+      ) : null}
+    </PopupShell>
+  );
+}
+
 export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
@@ -459,57 +518,12 @@ export const PlanView = memo(function PlanView({
     // busy. A later SEATED booking now counts as well as confirmed/pending:
     // scrubbed back before a party sat down, their table is not free for them.
     const canWalkin = freeNow && isToday && windowOf(id).fits;
-    // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
-    // SlideView's transform makes an in-tree position:fixed scrim center on
-    // the container, not the viewport.
-    return createPortal(
-      <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
-        style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
-        <div ref={popRef} onClick={(e) => e.stopPropagation()} className="mgt-card-in"
-          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
-          <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
-          {queue.length === 0 ? (
-            <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
-          ) : queue.map((b) => {
-            // Phase 57: a BUTTON, named by what it shows, time first ("20:00
-            // Ana, 2 guests, confirmed") — its content would have read the
-            // size ring as a bare "2".
-            return (
-              <button type="button" key={b.id} className="mgt-hover-scale"
-                onClick={() => { leavePop(); onEdit(b); }}
-                aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
-                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
-                {/* v18.2.0 phase 43 (C2): the party size as the List card's
-                    ring — this row IS a small List card (time · name · size ·
-                    status). It was "Name (2)", inside the name, so the ellipsis
-                    took the size first. Measured on a 375px phone, "2 guests"
-                    as text left a name 71px once the card fits the screen
-                    ("Unsettled Pr…"); the 18px ring leaves 102. Its title
-                    says "2 guests". */}
-                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
-                {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
-                    pointed at `SBadge`. That comment ("solid, like every other
-                    status label") was true about the fill and silently false
-                    about everything else: the atom gained `StatusIcon` in
-                    v17.15.5 and this copy could not follow it, so the popover
-                    named a status with a word while the block behind it named
-                    the same status with a mark. */}
-                <SBadge status={b.status} />
-              </button>
-            );
-          })}
-          {canWalkin ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-              <button className="mgt-hover-scale"
-                onClick={() => { leavePop(); onWalkin(id); }}
-                style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
-            </div>
-          ) : null}
-        </div>
-      </div>,
-      document.body
+    // v18.3.0 (M3): the popover itself is `TablePopover` (module scope, above).
+    return (
+      <TablePopover id={id} queue={queue} canWalkin={canWalkin} popRef={popRef}
+        onClose={() => setTablePop(null)}
+        onPick={(b) => { leavePop(); onEdit(b); }}
+        onWalkinHere={() => { leavePop(); onWalkin(id); }} />
     );
   })() : null;
 
@@ -763,10 +777,13 @@ export const PlanView = memo(function PlanView({
       <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 8, textAlign: "center" }}>
         {"scrub the time strip above · tap a table for its bookings · right-click / hold for quick status" + (gesturesEnabled ? " · scroll or pinch to zoom, drag to pan, double-tap to reset" : "")}
       </div>
-      {popover}
-      {quick ? (
-        <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
-      ) : null}
+      {/* v18.3.0 (M3): both popups animate out (ModalPresence + PopupShell). */}
+      <ModalPresence show={!!tablePop}>{popover}</ModalPresence>
+      <ModalPresence show={!!quick}>
+        {quick ? (
+          <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

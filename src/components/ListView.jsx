@@ -36,7 +36,7 @@ import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone } from "../lib/customers";
-import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn } from "./atoms";
+import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
@@ -1031,25 +1031,28 @@ export const ListView = memo(function ListView({
           if the booking leaves the day. `startArmed`: it was opened by a click,
           so there is no held finger to wait for (see QuickStatusPopup).
           Phase 60: it leaves out what the card already offers, read from the
-          same `cardActionsOf` the card draws from. */}
-      {menuFor ? (function () {
-        const menuB = day.find((x) => x.id === menuFor) || null;
-        const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false };
-        return (
-          <QuickStatusPopup
-            booking={menuB}
-            late={late}
-            today={today}
-            nowMins={nowMins}
-            onStatus={onStatus}
-            onNoShow={onNoShow}
-            onDelete={onDelete}
-            omitStatus={onCard.next}
-            omitNoShow={onCard.noShow}
-            startArmed
-            onClose={() => setMenuFor(null)} />
-        );
-      })() : null}
+          same `cardActionsOf` the card draws from.
+          v18.3.0 (M3): in ModalPresence, so it animates out (PopupShell). */}
+      <ModalPresence show={!!menuFor}>
+        {menuFor ? (function () {
+          const menuB = day.find((x) => x.id === menuFor) || null;
+          const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false };
+          return (
+            <QuickStatusPopup
+              booking={menuB}
+              late={late}
+              today={today}
+              nowMins={nowMins}
+              onStatus={onStatus}
+              onNoShow={onNoShow}
+              onDelete={onDelete}
+              omitStatus={onCard.next}
+              omitNoShow={onCard.noShow}
+              startArmed
+              onClose={() => setMenuFor(null)} />
+          );
+        })() : null}
+      </ModalPresence>
     </div>
   );
 }

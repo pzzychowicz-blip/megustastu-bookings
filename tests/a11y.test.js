@@ -571,7 +571,9 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
     // Leaving for a form refocuses the table IN the handler: the commit that
     // opens the form makes the page `inert`, where focus() does nothing, and
     // the form then returned focus to <body> (measured, StrictMode off).
-    expect(count(Plan, /onClick=\{\(\) => \{ leavePop\(\); on(?:Edit\(b\)|Walkin\(id\)); \}\}/g)).toBe(2);
+    // v18.3.0 (M3): the two handlers are TablePopover's `onPick` / `onWalkinHere`
+    // props now (its buttons must read the exit's `leaving`), still built here.
+    expect(count(Plan, /on(?:Pick=\{\(b\)|WalkinHere=\{\(\)) => \{ leavePop\(\); on(?:Edit\(b\)|Walkin\(id\)); \}\}/g)).toBe(2);
     expect(Plan).not.toMatch(/<div key=\{b\.id\} className="mgt-hover-scale"\s+onClick/);
   });
 });

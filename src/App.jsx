@@ -5329,11 +5329,11 @@ function BookingApp({uid}){
         one above. They answer different questions and can change in the same
         commit — a date change that also brings a clash into view would have one
         overwrite the other inside a single region, and whichever won would be
-        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div>{splitMenuFor?<SplitMenu
+        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div><ModalPresence show={!!splitMenuFor}>{/* v18.3.0 (M3): it animates out (PopupShell) */}{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
               sideBySideOk={splitSideBySideOk}
-              onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
+              onClose={function(){setSplitMenuFor(null);}} />:null}</ModalPresence><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}

@@ -1684,6 +1684,23 @@ hold from when its animation starts, not from the event that caused it.**
   which collides with App's singleton view state — the same collision that stops
   Split View putting one view in both panes. Reasons in `REFACTOR_LOG.md`
   (v17.15.0 and v17.15.3), not `ROADMAP.md`; they are decisions, not pending work.
+- **The popups exit through `PopupShell`** (v18.3.0). The quick-status card,
+  the split menu and the Plan table popover built their scrim and card by hand,
+  entered with the modal keyframes and unmounted on close. They share
+  `PopupShell` (atoms) now, and every mount site wraps them in `ModalPresence`,
+  so they leave the way `Overlay` does (`mgt-scrim-out` / `mgt-card-out`,
+  `--ease-in`, held `EXIT_MS`). **A leaving popup is `pointer-events: none`**,
+  scrim and card, and `aria-hidden`. A modal's leaving scrim swallows the next
+  tap (measured in S1: a click 100ms after Escape landed on the booking form's
+  fading scrim and did nothing), and the quick-status card closes after every
+  status change during service. Measured in v18.3.0: a click 80ms into the exit
+  opens the block underneath; with the scrim forced back to `pointer-events:
+  auto`, the same click is swallowed. The popups' buttons also refuse while
+  `leaving`, and the ⋯ card's focus goes back to ⋯ as the exit starts.
+  **The quick-status card stays viewport-CENTRED, not anchored to the held
+  block** (A3, decided in S3, 2026-09-27): it is a body portal, the split menu
+  shares its shell, and a card anchored to the block would sit under the
+  finger that is still holding it.
 - **An element that must animate OUT needs its content held.** `Reveal` already
   caches its last truthy children for exactly this — pass `null` and it fades
   out what it was showing. Corollary that bit once: it only caches **truthy**

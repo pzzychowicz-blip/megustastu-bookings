@@ -12,6 +12,7 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
@@ -1703,6 +1704,58 @@ export function ModalPresence({ show, children, outMs = EXIT_MS }) {
     <PresenceContext.Provider value={{ leaving: leaving }}>
       {children || last.current}
     </PresenceContext.Provider>
+  );
+}
+
+// ── PopupShell — the one popup shell (v18.3.0, M3) ───────────────────────────
+// The quick-status card, the split menu and the Plan table popover: a centred
+// card on the `--tl-popup-scrim` at z=300, which is a POPUP and not a dialog
+// (`Overlay` is the dialog). The three built it by hand, entered with the
+// modal keyframes, and unmounted on close with no exit. Here it reads the
+// wrapping `ModalPresence`'s `leaving`, like `Overlay`, and swaps to the exit
+// keyframes (--ease-in); every mount site wraps its popup in `ModalPresence`.
+//
+// A body portal, and that is load-bearing: the popups mount inside SlideView,
+// whose transform (while a view slide runs or settles) turns a position:fixed
+// scrim into a box relative to that ancestor, so on a wide timeline it centred
+// on the scroller, not the screen. A body portal always centres on the viewport.
+//
+// A LEAVING popup is `pointer-events: none`, scrim and card. Measured (S1): a
+// modal's leaving scrim swallows the next tap — a click 100ms after Escape
+// landed on the booking form's fading scrim and did nothing. The quick-status
+// card closes on the status path, tens of times a service, so a swallowed tap
+// there would eat the tap after every status change. While it fades, a tap
+// falls through to what is underneath, and it is `aria-hidden`.
+//
+// The no-select trio is on the scrim for the reason QuickStatusPopup gave in
+// v17.16.12: a hold opens this, the finger is still down, and the scrim is most
+// of the screen. A scrim is never a copy target.
+export function PopupShell({ onScrimClick, cardRef, cardStyle, children }) {
+  const { leaving } = useModalPresence();
+  const off = leaving ? "none" : undefined;
+  return createPortal(
+    <div
+      onClick={onScrimClick}
+      className={leaving ? "mgt-scrim-out" : "mgt-scrim-in"}
+      aria-hidden={leaving ? true : undefined}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "var(--tl-popup-scrim)",
+        WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none",
+        pointerEvents: off
+      }}
+    >
+      <div
+        ref={cardRef}
+        onClick={(e) => e.stopPropagation()}
+        className={leaving ? "mgt-card-out" : "mgt-card-in"}
+        style={Object.assign({}, cardStyle, { pointerEvents: off })}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body
   );
 }
 

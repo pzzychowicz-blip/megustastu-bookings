@@ -28386,6 +28386,47 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    events. Held still, the block is at rest at 200 and 550ms and lifted at 950ms (0.85,
    `zIndex` 30, the drag shadow, `translateY(0)`). Released unmoved, it is mid-fade 100ms later
    (0.95) and at rest by 600ms, with no drop.
+6. **The three popups animate out as well as in (M3), and stay centred (A3).** The quick-status
+   card, the split menu and the Plan table popover each built a body-portal scrim and card by
+   hand, entered on the modal keyframes and unmounted on close. They share a new `PopupShell`
+   (atoms) that reads `useModalPresence().leaving`, like `Overlay`, and swaps to
+   `mgt-scrim-out` / `mgt-card-out`. Each mount site wraps its popup in `ModalPresence`: the
+   timeline's and the plan's quick-status card, the List's ⋯ card, the plan's table popover and
+   App's split menu. **A leaving popup is `pointer-events: none`** (scrim and card) and
+   `aria-hidden`, because a leaving scrim swallows the next tap (S1). The popups' buttons also
+   refuse while `leaving`. The quick-status card's Escape and focus effect treats a leaving card
+   as closed, so focus returns to the opener when the exit starts. The table popover's body moved
+   into a module-scope `TablePopover` (51 lines) so its buttons can read `leaving`: PlanView
+   renders the provider, so it sits outside it. Its `leavePop()` handlers are still built in
+   PlanView, and the a11y pin that counts them follows them onto the new props. By reading
+   `useModalStack.js` and App: the split menu's stack entry IS `modalOpen.splitmenu`, and the
+   table popover's Escape listener keys on `tablePop`. Both clear at close, so Escape and the
+   stack treat a leaving popup as closed. **A3 decided (S3): the card stays viewport-centred.**
+   **Measured** in the rig (tablet, writes blocked, real mouse events):
+   - **Every popup's exit:** `mgt-scrim-out` and `mgt-card-out` run 240ms on `--ease-in` (the
+     card at 0.826 opacity and scale 0.995 halfway, and 0 / 0.97 / +8px at the end), with
+     `pointer-events: none` and `aria-hidden` from the first leaving frame. The popup unmounts
+     about 265ms after the exit starts. This held for the quick-status card, the split menu and
+     the table popover.
+   - **Tap-through (the plan's pass/fail):** 80ms into the exit, a click on PhoneProbe opened its
+     edit form. With the leaving scrim forced back to `pointer-events: auto`, the same click was
+     swallowed.
+   - **List ⋯ card:** opened with Enter, closed with Escape. Focus reached ⋯ in the same frame
+     the exit started (35–36ms after Escape: `ModalPresence` flips `leaving` in an effect, two
+     frames). Enter 100ms into the exit reopened the menu from ⋯ and wrote nothing.
+   - **Reduced motion:** under the toggle the card is at its end state on the first leaving
+     frame, and it unmounts after the hold.
+   - `setPlaybackRate(0.1)` shows only the exit's first 25ms before the unmount: it slows the
+     CSS animation, not the JS hold.
+   Lint warnings 86 → 91, all in `PlanView.jsx` (0 → 5):
+   - Four are older effects (the scrubber's three `setSlider` effects and the gestures-off
+     `setView`, "setState synchronously within an effect"), untouched here. The React Compiler
+     lint skipped PlanView at HEAD, because of something in the old inline popover, and now
+     analyses it.
+   - The fifth is new and a false positive: "passing a ref to a function" on `onPick`, whose
+     `leavePop()` reads `popOpenerRef`. `TablePopover` only calls it from a button's click, which
+     the compiler cannot see across the component boundary. Kept rather than moving `leavePop`
+     away from the focus effect it pairs with.
 
 ### Check on the devices after merge
 
@@ -28396,3 +28437,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 |---|---|---|
 | 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home, and the lift fades as it goes. How long the block sits still after release (the drop freeze) is noted, not fixed |
 | 05 | Tablet, iPad | Hold a block still. At about 800ms the card disappears and the block visibly lifts at once. Move, and it follows |
+| 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed |
