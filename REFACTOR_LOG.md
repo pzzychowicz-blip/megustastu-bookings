@@ -28253,3 +28253,14 @@ fix is a commit of its own:
 
    **Gate after fix 8:** `122.80 kB` gz main bundle (unchanged; comments are stripped) · **1914
    tests** · 0 lint errors, 90 warnings (unchanged) · style OK.
+9. **Deferred to ROADMAP** (committed with item 3): `doSave` and `addFormToWaitlist` (phase 80) each
+   run `withTypedCode`, then refuse a number with no code in the same sentence. Two copies of one
+   rule is the shape `src/CLAUDE.md` records, but merging them means touching `doSave`, so it joined
+   the save-path entry (#13), where `doSave` is being taken apart anyway. Fix 1 changed the shared
+   function, so the two copies do not drift today.
+
+**The round:** ten findings, counting the two comment fixes in 8 as two. Eight fixed: 1, 2, 4, 5, 6,
+7 and the two in 8. Two of those rest on reading and a source pin rather than a live run: 7 (no
+context-less browser at hand) and 2 (the race could not be staged). Two deferred: the ⋯ card's focus
+(3, after a fix that did not work) and the shared phone helper (9). **Gate after the round:** `122.80 kB` gz main bundle (+0.04 on
+phase 81) · **1914 tests** (+5) · 0 lint errors, 90 warnings (unchanged) · style OK.
