@@ -118,7 +118,9 @@ describe("X7 — Find a booking's results are columns", () => {
   it("each cell is a column sized to the widest in the results, in its own font", () => {
     expect(P).toMatch(/const nameCol = nameW \? Math\.min\(NAME_CAP, nameW\) : NAME_CAP;/);
     expect(P).toMatch(/const paxCol = widest\(results\.map\(function \(b\) \{ return guestsLabel\(b\.size\); \}\), CELL_FONT\);/);
-    expect(P).toMatch(/const phoneCol = phones\.length \? widest\(phones, CELL_FONT\) : 0;/);
+    // /code-review: "auto" when unmeasurable — `phoneCol` also decides whether
+    // the column is drawn, so undefined there hid every phone number.
+    expect(P).toMatch(/const phoneCol = phones\.length \? \(widest\(phones, CELL_FONT\) \|\| "auto"\) : 0;/);
     expect(P).toMatch(/\.\.\.CELL_FONT, color: S\.muted, width: paxCol, flexShrink: 0/);
     expect(P).toMatch(/\.\.\.CELL_FONT, color: S\.muted, width: phoneCol, flexShrink: 0, whiteSpace: "nowrap" \}\}>\{b\.phone \? formatPhone\(b\.phone\) : ""\}/);
     expect(P).toMatch(/<span style=\{\{ width: SBADGE_W, flexShrink: 0, display: "flex" \}\}><SBadge status=\{b\.status\} \/><\/span>/);

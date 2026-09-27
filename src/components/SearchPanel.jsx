@@ -77,7 +77,10 @@ export function SearchPanel({ bookings, todayStr, isMobile, onPick, onClose }) {
   const nameCol = nameW ? Math.min(NAME_CAP, nameW) : NAME_CAP;
   const paxCol = widest(results.map(function (b) { return guestsLabel(b.size); }), CELL_FONT);
   const phones = results.filter(function (b) { return b.phone; }).map(function (b) { return formatPhone(b.phone); });
-  const phoneCol = phones.length ? widest(phones, CELL_FONT) : 0;
+  // v18.2.0 /code-review: "auto" when the width cannot be measured (no 2D
+  // canvas), never undefined. The render tests `phoneCol` for WHETHER there is
+  // a phone column, so an unmeasurable width used to hide every number.
+  const phoneCol = phones.length ? (widest(phones, CELL_FONT) || "auto") : 0;
 
   const rows = results.map(function (b) {
     return (

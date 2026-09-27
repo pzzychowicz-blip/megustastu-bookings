@@ -28234,3 +28234,13 @@ fix is a commit of its own:
 
    **Gate after fix 6:** `122.80 kB` gz main bundle (unchanged) · **1914 tests** (unchanged) · 0 lint
    errors, 90 warnings (unchanged) · style OK.
+7. **Fixed, from reading** (`Find a booking keeps its phone column when text cannot be measured`).
+   `phoneCol` was `widest(phones)`, which is undefined when no 2D canvas context exists, and the render
+   tests `phoneCol` to decide whether the column is drawn at all, so "cannot measure" read as "no
+   phones" and every number disappeared. It falls back to `"auto"`, the other cells' natural-width
+   fallback. No context-less browser was at hand, so the failing case is established by reading the
+   code. Live on DEV the measured path is unchanged: "PhoneProbe" finds two results, each with its
+   phone in a 104px column. `tests/minor-findings.test.js` pins the fallback.
+
+   **Gate after fix 7:** `122.80 kB` gz main bundle (unchanged) · **1914 tests** (unchanged) · 0 lint
+   errors, 90 warnings (unchanged) · style OK.
