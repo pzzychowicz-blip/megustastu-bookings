@@ -116,6 +116,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
       icon={Icon}
       title={title}
       onHeaderClick={hasBody ? toggle : undefined}
+      expanded={!collapsed}
       style={{ marginBottom: 10, boxShadow: "var(--shadow-soft)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}
       action={<>
         {actionBtns}

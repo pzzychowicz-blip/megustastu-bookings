@@ -85,11 +85,18 @@
 //              a titled pane whose header carries BOTH controls and a chevron,
 //              and converting it without this would have deleted an affordance
 //              inside a design refactor, which is the one thing a refactor may
-//              not do. Deliberately a plain onClick and NOT role="button":
-//              `action` renders controls inside this row, and ARIA makes a
-//              button's children presentational — the trap CLAUDE.md records
-//              from the timeline block. A caller wanting a keyboard-reachable
-//              toggle puts it in `action` as a real <button>.
+//              not do.
+//              v18.3.0 phase 9 (O2b): the toggle is a real <button> now. Until
+//              then it was a plain onClick on the row, so the WhatsApp module's
+//              two collapsible panes could not be opened or closed from the
+//              keyboard at all. The ROW still could not become the button —
+//              `action` holds buttons, a button inside a button is invalid, and
+//              ARIA makes a button's children presentational (the trap
+//              CLAUDE.md records from the timeline block) — so the button wraps
+//              the mark, the title and the count, and `action` stays its
+//              SIBLING. See the render for why the row keeps its onClick.
+//   expanded — with onHeaderClick: the caller's open state, for the button's
+//              aria-expanded. The caller owns the state, so it passes it.
 //   children — the rows. Wrap each in <AlertRow> to get the hairline.
 
 import { ALERT_TONES } from "./atoms";
@@ -111,10 +118,42 @@ export function AlertRow({ first, style, children }) {
   );
 }
 
-export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, count, action, onHeaderClick, style, children }) {
+export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, count, action, onHeaderClick, expanded, style, children }) {
   const t = ALERT_TONES[role] || ALERT_TONES.danger;
   const ink = tone || t.tone;
   const fill = tint || t.tint;
+  // The mark, the title and the count: the row's own items when the header is
+  // not a toggle, the toggle button's contents when it is.
+  const heading = <>
+    {/* Guarded on the prop rather than rendered bare: this eslint config
+        does not count a JSX reference as a use, so a component read ONLY
+        as `<Icon />` reports as unused — the trap `InlineAlert` documents
+        at its own site. The guard is worth having anyway: a pane with no
+        icon should render no hole. */}
+    {Icon ? (
+      <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", color: ink, flexShrink: 0 }}>
+        <Icon size={IC.control} />
+      </span>
+    ) : null}
+    {/* v18.2.0 phase 46: in a WRAPPING header the title's basis is its
+        CONTENT. A line wraps on its items' bases, and `flex: 1` is a
+        zero basis, so the actions stayed on the title's line whenever
+        they alone fitted it and took their width out of the title —
+        measured on a 375px phone, the linked-booking card's title was
+        28px wide and "Open booking" was drawn over its label and its
+        status badge ("✓ Co"). With its content as its basis the
+        actions drop under the title instead. A header that does not
+        wrap is left as it was: there the title is the one item that
+        shrinks either way.
+        v18.3.0 phase 9: in a toggle the item that wraps against `action`
+        is the BUTTON, which takes this same rule; the title keeps it
+        too, so it still grows to the button's width as it grew to the
+        row's (the linked card's summary line fills that width). */}
+    <span style={{ fontSize: T.body, fontWeight: FW.bold, color: ink, flex: onHeaderClick ? "1 1 auto" : 1, minWidth: 0 }}>{title}</span>
+    {count > 1 ? (
+      <span style={{ fontSize: T.small, fontWeight: FW.bold, color: ink, opacity: 0.75, flexShrink: 0 }}>{count}</span>
+    ) : null}
+  </>;
   return (
     <div style={{
       background: fill, borderRadius: R.card,
@@ -122,35 +161,36 @@ export function AlertPanel({ role = "danger", tone, tint, icon: Icon, title, cou
       ...(style || null)
     }}>
       {title ? (
+        // v18.3.0 phase 9: the ROW keeps `onClick`, and the button below has
+        // none of its own. The chevron is in `action` — outside the button —
+        // and before this phase a tap anywhere on the row toggled, the chevron
+        // included; moving the handler onto the button would have left the
+        // chevron, the pane's visible disclosure mark, dead. So every
+        // activation reaches one handler by bubbling: a tap on the button or
+        // the chevron, and Enter / Space on the focused button, which the
+        // browser turns into a click on it. The action buttons still stop
+        // propagation in their callers, so they never toggle.
         <div onClick={onHeaderClick} style={{
           display: "flex", alignItems: "center", gap: SP.base,
           padding: "0 " + NOTIF_PAD_X + "px", marginBottom: 6,
           ...(onHeaderClick ? { cursor: "pointer", flexWrap: "wrap" } : null)
         }}>
-          {/* Guarded on the prop rather than rendered bare: this eslint config
-              does not count a JSX reference as a use, so a component read ONLY
-              as `<Icon />` reports as unused — the trap `InlineAlert` documents
-              at its own site. The guard is worth having anyway: a pane with no
-              icon should render no hole. */}
-          {Icon ? (
-            <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", color: ink, flexShrink: 0 }}>
-              <Icon size={IC.control} />
-            </span>
-          ) : null}
-          {/* v18.2.0 phase 46: in a WRAPPING header the title's basis is its
-              CONTENT. A line wraps on its items' bases, and `flex: 1` is a
-              zero basis, so the actions stayed on the title's line whenever
-              they alone fitted it and took their width out of the title —
-              measured on a 375px phone, the linked-booking card's title was
-              28px wide and "Open booking" was drawn over its label and its
-              status badge ("✓ Co"). With its content as its basis the
-              actions drop under the title instead. A header that does not
-              wrap is left as it was: there the title is the one item that
-              shrinks either way. */}
-          <span style={{ fontSize: T.body, fontWeight: FW.bold, color: ink, flex: onHeaderClick ? "1 1 auto" : 1, minWidth: 0 }}>{title}</span>
-          {count > 1 ? (
-            <span style={{ fontSize: T.small, fontWeight: FW.bold, color: ink, opacity: 0.75, flexShrink: 0 }}>{count}</span>
-          ) : null}
+          {onHeaderClick ? (
+            // Stripped to the row's own look, so this commit changes nothing
+            // on screen: no UA padding, border, fill, font or centring, and
+            // `mgt-nopress` against the universal press dip, which on an item
+            // this wide slides the controls beside it. It WRAPS as the row
+            // does, so where the title cannot fit beside the mark (the linked
+            // card on a 375px phone) the mark keeps its own line above it,
+            // exactly as when both were the row's items — measured, rect for
+            // rect, at 375 and 1280.
+            <button /* @no-lift a header-wide item — a 1.08 lift runs into the action buttons beside it, the strip lid's reason */ type="button" aria-expanded={!!expanded} className="mgt-nopress" style={{
+              flex: "1 1 auto", minWidth: 0,
+              display: "flex", alignItems: "center", flexWrap: "wrap", gap: SP.base,
+              background: "none", border: "none", padding: 0, color: "inherit",
+              font: "inherit", textAlign: "left", cursor: "pointer"
+            }}>{heading}</button>
+          ) : heading}
           {/* Last in the row and flexShrink:0, matching where every dismiss in
               the notification system already sits. `action` is a NODE rather
               than a set of props because what goes here differs per pane — one

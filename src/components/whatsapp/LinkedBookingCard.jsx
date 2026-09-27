@@ -90,6 +90,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
       role="success"
       icon={LinkIcon}
       onHeaderClick={toggle}
+      expanded={!collapsed}
       style={{ marginBottom: 8, boxShadow: "var(--shadow-soft)" }}
       title={<span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
         <span style={{ fontSize: T.small, fontWeight: FW.semi, color: "var(--success-text)", textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>Linked booking</span>

@@ -1645,3 +1645,42 @@ describe("a minus control is drawn with U+2212, never a hyphen (v18.2.0)", () =>
     expect(offenders).toEqual([]);
   });
 });
+
+describe("the AlertPanel header toggle is a real button (v18.3.0 phase 9, O2b)", () => {
+  // The WhatsApp module's linked-booking card and intent banner collapse from
+  // their header, which was a <div onClick> — no role, no tab stop, no state —
+  // so neither could be opened or closed from the keyboard. The row itself
+  // cannot be the button: `action` holds real buttons, and a button's children
+  // are presentational. So the button wraps the mark, the title and the count,
+  // and `action` stays OUTSIDE it.
+  const Panel = read("components/AlertPanel.jsx");
+  const Intent = read("components/whatsapp/IntentBanner.jsx");
+  const Linked = read("components/whatsapp/LinkedBookingCard.jsx");
+
+  it("a toggle header renders a <button> carrying aria-expanded, holding only the heading", () => {
+    const buttons = openingTagsOf(Panel, "button");
+    expect(buttons.length, "AlertPanel renders exactly one button: the toggle").toBe(1);
+    has(buttons[0], "the toggle", /type="button"/, "a button without a type submits any form it lands in");
+    has(buttons[0], "the toggle", /aria-expanded=\{!!expanded\}/,
+      "without aria-expanded a screen reader hears a button, not a disclosure, and never learns whether it is open");
+    has(Panel, "the toggle's contents", />\{heading\}<\/button>/,
+      "the button holds the mark, title and count and NOTHING else — `action` inside it would put buttons in a button");
+  });
+
+  it("the ROW keeps the click and the button has none, so every activation toggles exactly once", () => {
+    // The chevron rides in `action`, outside the button. A handler on the
+    // button alone leaves the chevron dead; a handler on BOTH toggles twice
+    // (the button's click bubbles to the row) and the panel appears not to move.
+    hasnt(openingTagsOf(Panel, "button")[0], "the toggle", /onClick/,
+      "the row's onClick already receives the button's click by bubbling — a second handler toggles twice");
+    has(Panel, "the header row", /<div onClick=\{onHeaderClick\}/,
+      "the chevron in `action` is outside the button; only the row's handler reaches it");
+  });
+
+  it("both collapsible callers pass their open state beside onHeaderClick", () => {
+    for (const [name, src] of [["IntentBanner", Intent], ["LinkedBookingCard", Linked]]) {
+      has(src, name, /onHeaderClick=\{[^}]*\}\s*expanded=\{!collapsed\}/,
+        "the button's aria-expanded reads this prop; without it every panel announces as collapsed");
+    }
+  });
+});

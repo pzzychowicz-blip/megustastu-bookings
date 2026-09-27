@@ -28503,6 +28503,49 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    object's `onMouseDown: (e) => …` spelling, still requiring both sites. Lint warnings 91 → 90:
    the React Compiler's `globals` advisory on `__prevStatus` stopped firing in TimelineView;
    nothing was suppressed for it.
+9. **The AlertPanel header's toggle is a real button (O2b).** The WhatsApp module's linked-booking
+   card and request banner collapse from their header, which was a `<div onClick>`: no role, no
+   tab stop, no state, so neither could be opened or closed from the keyboard. The row cannot
+   be the button, because `action` holds buttons. So when `onHeaderClick` is set, the mark, the
+   title and the count sit in a `<button type="button" aria-expanded>`, `action` stays its
+   sibling, and both callers pass `expanded={!collapsed}`. A header that is not a toggle renders
+   as before. Three departures from the plan, each forced by something it had not seen:
+   - **The row keeps its `onClick`, and the button has none.** The plan moved the handler to
+     the button. But the chevron is in `action`, outside the button, and a tap on it toggled
+     before this phase; moved, the pane's visible disclosure mark would have gone dead. Every
+     activation now reaches the row's one handler by bubbling: a tap on the button or the
+     chevron, and Enter / Space on the focused button. A handler on both would toggle twice.
+   - **The button wraps (`flexWrap: wrap`).** On a 375px phone the collapsed linked card's
+     title does not fit beside its mark, so the row put the mark on a line of its own. A
+     non-wrapping button would have pulled the mark up beside the title, a visual change this
+     phase must not make. The title keeps its phase-46 `flex: 1 1 auto` inside the button,
+     which takes the same rule, so the summary line still fills the width.
+   - **`mgt-nopress` and `@no-lift` now, not in phase 10.** The universal `scale(0.96)` press
+     would otherwise dip the whole heading on every tap. `check:style`'s Rule 10 asks every
+     control to lift or say why not, and a header-wide lift runs into the action buttons
+     beside it, which is the strip lid's reason.
+   **Measured** in the rig (writes blocked). DEV has two conversations with these panels: Sofía
+   has both, Tom a linked card.
+   - **Nothing moved.** Each panel was captured open, closed and open again, at 1280 and at
+     375, in the old markup and the new. Every element present in both (8–10 per panel)
+     keeps its box to within 0.5px, in all 18 states. The largest pixel difference is 1/255,
+     which is antialiasing.
+   - **Keyboard:** Tab reaches the header in one press from the control before it. Enter
+     closes each panel (100 → 60px, 83 → 60px) and Space reopens it. `aria-expanded` follows,
+     and focus stays on the button.
+   - **Names**, from `Accessibility.getPartialAXTree`: role `button`, expanded `true`, named
+     "LINKED BOOKING Confirmed" (the label's `text-transform` and the status badge) and
+     "Customer is requesting changes".
+   - **Pointer:** a click on the title and a click on the chevron each toggle exactly once.
+     "Open booking" opens the booking form and toggles nothing: the stored collapse state is
+     unchanged.
+   - **Pointer focus:** the header has no scrolling ancestor. A mouse press held for 400ms
+     moves nothing, and neither a mouse click nor a tap (phone) leaves a focus ring.
+   Tests 1923 → 1926 (a11y): the toggle is one `<button type="button">` holding only the heading
+   and carrying `aria-expanded`; the row has the click and the button has none; both callers
+   pass `expanded`. Each fails when its code is broken on purpose (four mutations, including
+   `{action}` moved inside the button). Gate: 124.09 kB gz (+0.09), 0 errors / 90 warnings (the
+   three files: 0 → 0), style OK.
 
 ### Check on the devices after merge
 
