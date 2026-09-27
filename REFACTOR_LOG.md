@@ -28065,3 +28065,21 @@ name in the view prints a count with a plain space. `tests/count-label.test.js` 
 
 **Gate after phase 77:** `122.65 kB` gz main bundle (+0.04) · **1903 tests** (+4) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 78. The duration Reset is not red
+
+The second loose end, from round 2. The booking and walk-in forms' duration "Reset" puts a booking's
+length back to its party's default and destroys nothing, but `--btn-reset` was the delete red
+(rgba(211, 58, 58, 0.7)); phase 36 had named it when it moved Clear, which had the same fault, to the
+dialog slate. It takes the same treatment: `--btn-reset: var(--app-btn-slate)`, an alias rather than
+a copy of the value, so it follows slate in both themes, and the contrast registry resolves it through
+the alias as it does Clear and Dismiss. `tests/destructive-buttons.test.js`' X5 block pins it and that
+no theme block overrides it back.
+
+Live on DEV, a new booking with its duration stepped up: Reset reads rgb(100, 116, 139) in light and
+rgba(100, 116, 139, 0.7) in dark, which is `--app-btn-slate` in each (read with the transitions
+finished, since the pane throttles them), and pressing it returns the length and removes the button.
+`tests/destructive-buttons.test.js` +1.
+
+**Gate after phase 78:** `122.65 kB` gz main bundle (unchanged) · **1904 tests** (+1) · 0 lint errors, 90
+warnings (unchanged) · style OK.

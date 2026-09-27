@@ -233,6 +233,11 @@ describe("X5 — Clear is not red", () => {
     expect(CSS).toMatch(/--btn-dismiss: var\(--app-btn-slate\);/);
     expect((CSS.match(/--btn-clear:/g) || []).length, "no theme block overrides it back").toBe(1);
   });
+  // v18.2.0 phase 78: the forms' duration Reset destroys nothing either.
+  it("so does the duration Reset", () => {
+    expect(CSS).toMatch(/--btn-reset: var\(--app-btn-slate\);/);
+    expect((CSS.match(/--btn-reset:/g) || []).length, "no theme block overrides it back").toBe(1);
+  });
 });
 
 // v18.2.0 phase 62 (Patryk's item 3): "Delete" in Templates, "Remove" in

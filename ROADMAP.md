@@ -133,8 +133,6 @@ evidence for each.
 
 - **Loose ends from the v18.2.0 critique, rounds 2 and 3 (2026-09-24 and 26).** Seen
   while fixing other findings; none was in a report, so none was offered or built.
-  - `--btn-reset`, the duration Reset, is still red although it destroys nothing (named
-    in phase 36, which moved Clear to slate). Round 2.
   - Phone header: at 375px the connection dot wraps onto a line of its own. Round 2.
   - "Add to waitlist" takes the phone as typed — phase 19's code check is on the booking
     form's Save only. Round 2.
