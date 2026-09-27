@@ -28572,6 +28572,34 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    Tests 1926 → 1927 (a11y): the toggle carries the lid's classes and veil and has no inline
    background. It fails for each of the three when broken on purpose. Gate: 124.10 kB gz
    (+0.01), 0 errors / 90 warnings, style OK.
+11. **The two inert view-card blurs are gone (A9).** The Timeline and Plan cards each carried
+   `backdropFilter: blur(20px)` over `--bg-app`, a flat fill, and a blur of a flat fill is
+   invisible, while each one spent a slot of the tablet's budget of 4. Both lines are gone,
+   each with a one-line comment; `--tl-card-bg` stays, so the card keeps its tint. The List
+   view's card never had one (no `backdropFilter` in `ListView.jsx`). DESIGN.md never described
+   the card's glass, so its ≤4 bullet now records the view cards' zero and the worst stack.
+   **Measured** in the rig (tablet, writes blocked): a census of every element whose computed
+   `backdrop-filter` is not `none`.
+
+   | Stack | Before | After |
+   |---|---|---|
+   | Split View (Timeline + Plan) at rest | 2 | 0 |
+   | … + booking form | 4 | 2 |
+   | … + discard confirm | **6** | **4** |
+   | Single view + form + confirm | 5 | 4 |
+
+   The plan expected 3 for the single-view stack, but its own before figure (5) less one card
+   is 4: two modals, a scrim and a card each. The worst stack reads 4, which was the goal.
+   **Pixels:** the timeline card on a day without a now-line, at 1280×800 with the theme
+   forced, differs from before by at most 1/255 in light and in dark (bound 8/255), confined to
+   its top 20px. Two runs before the change were identical to each other. (The DEV account's
+   own theme preference now resolves dark, so the rig's theme is set on `data-theme` after
+   load. The one write the rig blocks each run is the presence heartbeat.)
+   Tests 1927 → 1930, in a new `tests/blur-budget.test.js`. Every `backdropFilter` in `src/` is
+   counted against a list of files and totals (Overlay's five in `atoms.jsx`, the login card),
+   so a new blurred surface fails until it is counted against the worst stack. The stylesheet
+   declares none, and the two view cards stay unblurred. It fails for a card's blur put back, a
+   new blur in another file, and a blur in `index.css`.
 
 ### Check on the devices after merge
 

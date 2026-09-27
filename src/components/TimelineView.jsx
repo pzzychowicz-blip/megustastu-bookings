@@ -2172,7 +2172,8 @@ export const TimelineView = memo(function TimelineView({
   return (
     <div style={{
       background: "var(--tl-card-bg)",
-      backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      // v18.3.0 (A9): no backdrop blur. The card sits over the flat --bg-app, where a
+      // blur changes nothing (≤5/255 measured), and it spent the tablet's ≤4 budget.
       borderRadius: R.sheet,
       border: "1px solid var(--tl-card-border)",
       padding: "10px 12px",

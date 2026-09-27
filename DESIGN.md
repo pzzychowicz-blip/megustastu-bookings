@@ -596,7 +596,7 @@ explaining why is usually the one to read.
   that card's covers 14px (x 222 against 208, measured).
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
-- ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
+- ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above). **The view cards spend none (v18.3.0):** Timeline's and Plan's card sit over the flat `--bg-app`, where a blur changes at most 1/255 (measured, both themes), so they are unblurred. The worst stack is then Split View + booking form + discard confirm, at 4: two modals, a scrim and a card each. It was 6.
 - **Keyboard focus is a designed state (v17.8.0).** One `:focus-visible` rule in
   `src/index.css` + a `--focus-ring` token per theme. Before this the app had NO
   focus rule at all and a focused button computed `outline: none` — in the one
