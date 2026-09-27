@@ -131,11 +131,6 @@ evidence for each.
   waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
   a rule, and make both paths say the same.
 
-- **Loose ends from the v18.2.0 critique, rounds 2 and 3 (2026-09-24 and 26).** Seen
-  while fixing other findings; none was in a report, so none was offered or built.
-  - The Activity log stores a redemption as "redeemed 20 of voucher …", with no
-    currency; stored text is left as it was. Round 2.
-
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**

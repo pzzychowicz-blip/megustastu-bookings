@@ -1405,6 +1405,8 @@ function BookingApp({uid}){
   const { vouchers, vouchersByCode, issueVoucher, redeemVoucher, unredeemVoucher, voidVoucher } = useVouchers({
     setWriteWarning,
     userEmail: (auth.currentUser && auth.currentUser.email) || "",
+    // v18.2.0 phase 81: the activity log's redemptions carry it ("20 €").
+    currency: generalSettings.currency,
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────

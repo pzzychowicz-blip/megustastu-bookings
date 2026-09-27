@@ -28127,3 +28127,26 @@ Live on DEV, a new booking for 25 guests wanting indoor on Tue 29.09 at 14:00 ("
 
 **Gate after phase 80:** `122.74 kB` gz main bundle (+0.06) · **1907 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### 81. A redemption in the Activity log names its currency
+
+The last loose end, from round 2, and with it the whole "Loose ends" ROADMAP entry. The Activity log
+stored a redemption as "redeemed 20 of voucher …" and a reversal as "restored 20 to voucher …", with
+no currency, where every other amount in the app is `money()`'s "20 €". `voucherWriteEntries` takes
+the currency in its context and formats both amounts with `money()`, so they round to the cent and
+keep U+00A0 between the number and the symbol; `useVouchers` takes `currency` from App
+(`generalSettings.currency`) and passes it on, with the value in `saveVouchers`' deps. Entries already
+stored keep the text they were written with: a log is a record, and nothing rewrites it. With no
+currency the bare number is printed, as before, so the builder's existing callers and tests are
+unchanged. `money()`'s header said nothing stores what it returns; it now names this one, whose text is
+what the log shows (the log's search folds U+00A0, and its CSV carries the text as written).
+
+Live on DEV: Wed 16.09's strip offered "Settle Laura Vidal's voucher" (voucher 5C7Z-WJ3P, 80 € on it);
+settling 12.30 wrote the redemption (the voucher now 67.7) and the entry "redeemed 12.3 € of voucher
+5C7ZWJ3P against {b:…}", with U+00A0 before the €. In the log it reads "redeemed 12.3 € of voucher
+5C7ZWJ3P against Laura Vidal", above older rows still reading "redeemed 10 of voucher FFBVJYT7 against
+Unsettled Probe". The carry-forward prompt that followed ("Move the rest of this voucher?") was
+answered Not now, so nothing moved. `tests/activity.test.js` +2.
+
+**Gate after phase 81:** `122.76 kB` gz main bundle (+0.02) · **1909 tests** (+2) · 0 lint errors, 90
+warnings (unchanged) · style OK.

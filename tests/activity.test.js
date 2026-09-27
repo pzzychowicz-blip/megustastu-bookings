@@ -345,6 +345,30 @@ describe("voucherWriteEntries", () => {
   it("emits nothing for an untouched voucher", () => {
     expect(voucherWriteEntries([vc()], [vc()])).toEqual([]);
   });
+
+  // v18.2.0 phase 81 (round 2's loose end): the amount carries the restaurant's
+  // currency, in money()'s shape. Measured on DEV: settling Laura Vidal's
+  // voucher for 12.30 logged "redeemed 12.3 € of voucher 5C7ZWJ3P against Laura
+  // Vidal" (U+00A0 before the €), beside older entries still reading "redeemed
+  // 10 of voucher …" as they were stored.
+  it("says the amount in the restaurant's currency when it is given one", () => {
+    const next = vc({ remaining: 37.7, redemptions: { b1: { amount: 12.3, at: 1, by: "x" } } });
+    expect(voucherWriteEntries([vc()], [next], { currency: "€" })[0].text)
+      .toBe("redeemed 12.3\u00a0€ of voucher ABCD2345 against " + bookingToken("b1"));
+    const was = vc({ redemptions: { b1: { amount: 20 } } });
+    const back = vc({ reversals: { b1_2000: { bookingId: "b1", amount: 20 } } });
+    expect(voucherWriteEntries([was], [back], { currency: "£" }).some(function (e) {
+      return e.text === "restored 20\u00a0£ to voucher ABCD2345 from " + bookingToken("b1");
+    })).toBe(true);
+  });
+
+  it("useVouchers hands it the currency, and App hands useVouchers the setting", () => {
+    const hook = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "hooks", "useVouchers.js"), "utf8")).join("\n");
+    expect(hook).toMatch(/voucherWriteEntries\(prev, computed, \{ auto: isSilent === true, currency: currency \}\)/);
+    expect(hook).toMatch(/\}, \[setWriteWarning, currency\]\);/);
+    const app = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).join("\n");
+    expect(app).toMatch(/useVouchers\(\{[\s\S]{0,160}currency: generalSettings\.currency,/);
+  });
 });
 
 // ── Settings ─────────────────────────────────────────────────────────────────

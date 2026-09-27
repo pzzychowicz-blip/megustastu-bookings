@@ -45,6 +45,8 @@ import { identityKey } from "./customers.js";
 // v18.2.0 phase 77: the retention labels are screen text (the Admin select, the
 // log's footnote), so their count and word are joined like every other.
 import { countLabel } from "./booking-logic.js";
+// v18.2.0 phase 81: a voucher entry's amount is money, in the app's one shape.
+import { money } from "./vouchers.js";
 
 export const ACTIVITY_KINDS = [
   "booking", "voucher", "table", "waitlist", "reminder", "standing",
@@ -352,7 +354,7 @@ export function voucherWriteEntries(prev, computed, ctx) {
       const r = v.redemptions[bid];
       entries.push(clean({
         kind: "voucher", auto: mark,
-        text: "redeemed " + amount(r && r.amount) + " of voucher " + v.code + " against " + bookingToken(bid),
+        text: "redeemed " + amount(r && r.amount, opts.currency) + " of voucher " + v.code + " against " + bookingToken(bid),
         bookings: keyed([bid]),
       }));
     });
@@ -361,7 +363,7 @@ export function voucherWriteEntries(prev, computed, ctx) {
       const bid = r && r.bookingId;
       entries.push(clean({
         kind: "voucher", auto: mark,
-        text: "restored " + amount(r && r.amount) + " to voucher " + v.code +
+        text: "restored " + amount(r && r.amount, opts.currency) + " to voucher " + v.code +
           (bid ? " from " + bookingToken(bid) : ""),
         bookings: bid ? keyed([bid]) : undefined,
       }));
@@ -370,9 +372,16 @@ export function voucherWriteEntries(prev, computed, ctx) {
   return entries;
 }
 
-function amount(n) {
+// v18.2.0 phase 81 (round 2's loose end): the amount with its currency —
+// `money()`, "20 €" — where the entry said "redeemed 20 of voucher …" and left
+// the reader to know which currency. `useVouchers` passes the restaurant's
+// (`settings/general.currency`). Entries already stored keep the text they were
+// written with: a log is a record, and nothing rewrites it. No currency (a caller
+// that has none) prints the bare number, as before.
+function amount(n, currency) {
   const v = Number(n);
-  return (isFinite(v) ? v : 0) + "";
+  const x = isFinite(v) ? v : 0;
+  return currency ? money(x, currency) : x + "";
 }
 
 function newKeys(was, now) {

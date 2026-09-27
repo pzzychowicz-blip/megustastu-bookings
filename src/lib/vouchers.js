@@ -660,7 +660,10 @@ export function searchVouchers(vouchers, query, limit, now) {
 // space (U+00A0), so "20 €" is one unit to the line breaker. Measured on a
 // 375px phone, the redeem prompt's "… 20 € left on it." broke as "20" at the
 // end of one line and "€ left on it." at the start of the next. Every caller
-// is on-screen or printed text; nothing stores or exports what this returns.
+// is on-screen or printed text. Since phase 81 one of them STORES it: the
+// activity log's redemption entries ("redeemed 20 € of voucher …"), whose text
+// is what the log shows; its search folds U+00A0 to a space, and its CSV
+// carries the text as written.
 export function money(n, currency) {
   return (Math.round(n * 100) / 100) + " " + currency;
 }
