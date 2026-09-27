@@ -28150,3 +28150,23 @@ answered Not now, so nothing moved. `tests/activity.test.js` +2.
 
 **Gate after phase 81:** `122.76 kB` gz main bundle (+0.02) · **1909 tests** (+2) · 0 lint errors, 90
 warnings (unchanged) · style OK.
+
+### `/code-review` round (2026-09-27)
+
+The ship run reviewed all 93 commits of the version at `max` effort, with the review's angles run
+inline rather than through subagents (the standing rule). Ten findings survived verification, and each
+fix is a commit of its own:
+
+1. **Fixed** (`a British number drops its home 0 in one pass, however the code was typed`).
+   `withTypedCode`'s pinned-code path (phase 20) never ran phase 66's home-0 rule, so it was not
+   idempotent: "44 (0)7911 123456" (the code typed without its plus, the home 0 kept, as British
+   numbers are written) came out as "+44 0)7911 123456" and "44 07911 123456" as "+44 07911 123456",
+   both normalising to +4407911123456, a second customer beside +447911123456. Only a SECOND pass
+   dropped the 0. PhoneField's blur and then Save supplied two; a save by Enter from the number box
+   supplies one. Measured on DEV before the fix: the Enter save stored "+44 0)7911 123456". The rule
+   is now one function, `ukWithoutHomeZero`, which both paths run, and the same Enter save stores
+   "+44 7911 123456". `tests/phone-countries.test.js` +2: those two inputs, and one pass = two over
+   twelve shapes.
+
+   **Gate after fix 1:** `122.75 kB` gz main bundle (−0.01) · **1911 tests** (+2) · 0 lint errors, 90
+   warnings (unchanged) · style OK.

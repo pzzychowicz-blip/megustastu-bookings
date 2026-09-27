@@ -276,15 +276,27 @@ export function phoneHasCode(phone) {
 //     is guessed and no pin is asked for. "0044 0…" is the same number.
 // Both return the international form, so a British guest has ONE customer
 // identity (`normalizePhone`) however their number was typed.
+//
+// v18.2.0 /code-review: the second rule is `ukWithoutHomeZero`, and the
+// pinned-code path below runs it too. "44 (0)7911 123456" — the code typed
+// without its plus, the home 0 kept — came out of that path as "+44
+// 0)7911 123456", a second customer (+4407911123456), and only a SECOND pass
+// dropped the 0. PhoneField's blur and then Save made two passes; a save by
+// Enter from the number box makes one, and stored it (measured on DEV).
+// Now one pass and two agree.
 const UK_MOBILE_AT_HOME = /^07[1-57-9]\d{8}$/;
+function ukWithoutHomeZero(s) {
+  if (dialOf(s) !== "44") return s;
+  const sp = splitPhone(s, "GB");
+  if (sp.iso !== "GB" || sp.national.charAt(0) !== "0") return s;
+  return joinPhone("GB", sp.national.replace(/^0[\s\-().]*/, ""));
+}
 export function withTypedCode(phone, pinned) {
   const s = phone == null ? "" : String(phone).trim();
   if (!s) return phone;
   if (phoneHasCode(s)) {
-    if (dialOf(s) !== "44") return phone;
-    const sp = splitPhone(s, "GB");
-    if (sp.iso !== "GB" || sp.national.charAt(0) !== "0") return phone;
-    return joinPhone("GB", sp.national.replace(/^0[\s\-().]*/, ""));
+    const t = ukWithoutHomeZero(s);
+    return t === s ? phone : t;
   }
   const digits = s.replace(/\D/g, "");
   const gbPinned = (pinned || []).some(function (x) { return String(x).toUpperCase() === "GB"; });
@@ -301,7 +313,7 @@ export function withTypedCode(phone, pinned) {
   // own spacing (the same walk `splitPhone` does).
   let used = 0, i = 0;
   while (i < s.length && used < hit.dial.length) { if (/\d/.test(s[i])) used++; i++; }
-  return joinPhone(hit.iso, s.slice(i).replace(/^[\s\-().]+/, ""));
+  return ukWithoutHomeZero(joinPhone(hit.iso, s.slice(i).replace(/^[\s\-().]+/, "")));
 }
 
 // The pinned list as stored: known ISO codes, upper-case, no repeats, capped.

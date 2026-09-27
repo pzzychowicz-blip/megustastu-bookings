@@ -327,8 +327,27 @@ describe("withTypedCode — the UK's own format (v18.2.0 phase 66)", () => {
     // "0044 …" reaches this function as "+44 …": the phone field's joinPhone
     // stores an international "00" as "+" while it is typed.
     expect(joinPhone("GB", "0044 7911 123456")).toBe("+44 7911 123456");
-    for (const typed of ["07911 123456", "+44 07911 123456", "+44 7911 123456", "44 7911 123456"]) {
+    for (const typed of ["07911 123456", "+44 07911 123456", "+44 7911 123456", "44 7911 123456",
+      "44 07911 123456", "44 (0)7911 123456"]) {
       expect(normalizePhone(withTypedCode(typed, P)), typed).toBe(one);
+    }
+  });
+
+  // v18.2.0 /code-review: the code typed without its plus AND the home 0 kept.
+  // The pinned-code path made "+44 0)7911 123456" of it (a second customer,
+  // +4407911123456), and only a second pass dropped the 0 — which PhoneField's
+  // blur plus Save supplied, and a save by Enter did not (stored on DEV).
+  it("drops the home 0 in ONE pass when the code was typed without its plus", () => {
+    expect(withTypedCode("44 (0)7911 123456", P)).toBe("+44 7911 123456");
+    expect(withTypedCode("44 07911 123456", P)).toBe("+44 7911 123456");
+  });
+
+  it("one pass and two agree, for every way of typing a British number", () => {
+    for (const typed of ["07911 123456", "(0)7911 123456", "+44 07911 123456", "+44 (0) 7911 123456",
+      "0044 07911 123456", "44 7911 123456", "44 07911 123456", "44 (0)7911 123456", "447911123456",
+      "+44 01481 234567", "+39 06 1234 5678", "34 612 345 678"]) {
+      const once = withTypedCode(typed, P);
+      expect(withTypedCode(once, P), typed).toBe(once);
     }
   });
 });
