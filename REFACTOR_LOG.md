@@ -28314,8 +28314,23 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    unmounts. The timeline block and the List card unmount at `currentTime` 699 and 683 (99.94%
    and 99.89% swept), because their window starts at the effect's `now` and the overlay mounts one
    render later. The old 800/820 had the same lag with 40ms more slack. The tail left is under
-   0.1% of the width (under 1.4px on a full-width List card), and the derived hold keeps the plan's
-   target; anchoring the window at the overlay's mount is a separate question, raised with Patryk.
+   0.1% of the width (under 1.4px on a full-width List card), and the lag is a render of the whole
+   view, so it grows on the slower tablet.
+
+   **Follow-up (Patryk's call): the window starts when the overlay mounts.** `lib/wipe-window.js`
+   holds the rule once for both views. The effect stamps a PENDING entry (`pendingWipe`), the
+   overlay arms it from its ref callback as it attaches (`armWipe`: the hold starts then, and the
+   re-render that clears it is scheduled then), and the render reads `wipeOpen`. A pending entry
+   that no overlay ever mounts for (a completed booking whose tables are not in the layout draws
+   no block) lapses after one hold without a re-render. `armWipe` is idempotent, because a
+   multi-table booking draws one overlay per row and every re-render hands React a fresh ref
+   callback. **Measured** again: the timeline block and the List card now both sweep to
+   `inset(0 0 0 100%)` at `currentTime` 760 and then unmount. `tests/wipe-window.test.js` (6): the
+   hold counts from the mount (a 300ms render before it does not shorten it), it arms once, a
+   never-mounted entry lapses silently, and both views arm from the overlay's ref with no
+   `until: now +` left in either.
+   Lint warnings 90 → 86: the four removed were two "setState synchronously within an effect"
+   and two "impure function during render" (`Date.now()`) on the effect lines this rewrote.
 
 ### Check on the devices after merge
 

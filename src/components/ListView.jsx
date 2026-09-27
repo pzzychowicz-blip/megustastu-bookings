@@ -30,7 +30,8 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP, exitHold } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
+import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
@@ -305,16 +306,17 @@ export const ListView = memo(function ListView({
   const [menuFor, setMenuFor] = useState(null);
   useEffect(function () {
     const prev = __listPrev;
-    const now = Date.now();
+    function rerender() { bumpAnim(function (n) { return n + 1; }); }
     if (prev) {
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
         // v15.9.0: the window must outlive the wipe keyframe. v18.3.0 (M5): derived
-        // from --t-wipe (exitHold("wipe")), as TimelineView's is — it was a hand-typed 800/820.
-        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + exitHold("wipe") }; changed = true; }
+        // from --t-wipe and started when the overlay MOUNTS (armWipe, on the card's
+        // overlay), as TimelineView's is — it was a hand-typed 800/820 counted from here.
+        if (p && p !== b.status) { __listAnims[b.id] = pendingWipe({ from: p }, rerender); changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, exitHold("wipe")); }
+      if (changed) rerender();
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
@@ -323,7 +325,7 @@ export const ListView = memo(function ListView({
   }, [bookings]);
   function listAnimFrom(id) {
     const a = __listAnims[id];
-    return a && a.until > Date.now() ? a.from : null;
+    return wipeOpen(a, Date.now()) ? a.from : null;
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
   // v17.3.1: the List's own root — the scroll-into-view lookup below is scoped
@@ -846,7 +848,7 @@ export const ListView = memo(function ListView({
                 (direction flipped rtl→ltr in v15.9.0 on request).
                 `animFrom` is only the trigger flag; the colour is the new status. */}
             {animFrom ? (
-              <div className="mgt-wipe-ltr" style={{
+              <div ref={function (el) { if (el) armWipe(__listAnims[b.id]); }} className="mgt-wipe-ltr" style={{
                 position: "absolute", inset: 0, borderRadius: R.card, pointerEvents: "none", zIndex: 0,
                 background: BLOCK_BG[b.status] || "transparent", opacity: 0.5
               }} />

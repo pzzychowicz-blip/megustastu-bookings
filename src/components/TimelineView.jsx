@@ -41,7 +41,8 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, memo, Fragment }
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
@@ -469,8 +470,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // overlay of the OLD colour animates away (keyframe on mount), revealing the new
   // status colour underneath. wipe = left-to-right clip (v15.9.0: unified with
   // the List/form wipes — ltr, 760ms); fill = fade-out.
+  // v18.3.0: the overlay starts its own window as it attaches (armWipe), so the
+  // hold counts from the keyframe's first frame — lib/wipe-window.js.
   const animOverlay = anim ? (
     <div
+      ref={function (el) { if (el) armWipe(__statusAnims[b.id]); }}
       className={anim === "wipe" ? "mgt-wipe-ltr" : "mgt-fade-overlay"}
       style={{
         position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",   /* @canvas */
@@ -1427,21 +1431,21 @@ export const TimelineView = memo(function TimelineView({
   const [, bumpAnim] = useState(0);
   useEffect(function () {
     const prev = __prevStatus;
-    const now = Date.now();
+    function rerender() { bumpAnim(function (n) { return n + 1; }); }
     if (prev) {
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
         // v15.9.0: the window must outlive the wipe keyframe (an early unmount
         // would pop the last sliver of the old colour off). v18.3.0 (M5): it is
-        // DERIVED from --t-wipe through exitHold("wipe"), where it was a hand-typed
-        // 800 (and 820 for the re-render) that nothing bound to the token. The
-        // re-render timer needs no margin of its own: a setTimeout of N never fires
-        // before now + N, so `until > Date.now()` is already false when it runs.
-        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + exitHold("wipe") }; changed = true; }
-        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + exitHold("wipe") }; changed = true; }
+        // DERIVED from --t-wipe (exitHold("wipe")), where it was a hand-typed 800
+        // (and 820 for the re-render) that nothing bound to the token — and it
+        // starts when the overlay MOUNTS (armWipe, above), not here, one render
+        // earlier. lib/wipe-window.js has the measurement.
+        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = pendingWipe({ type: "wipe" }, rerender); changed = true; }
+        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = pendingWipe({ type: "fill" }, rerender); changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, exitHold("wipe")); }
+      if (changed) rerender();
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
@@ -1450,7 +1454,7 @@ export const TimelineView = memo(function TimelineView({
   }, [bookings]);
   function statusAnimOf(id) {
     const a = __statusAnims[id];
-    return a && a.until > Date.now() ? a.type : null;
+    return wipeOpen(a, Date.now()) ? a.type : null;
   }
 
   // GridLines / BlockBar / TimelineBlock are all HOISTED to module scope (top
