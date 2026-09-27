@@ -170,10 +170,13 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
 
       {/* v17.8.0: the popover appears and disappears through Presence rather
           than a bare `open ?` — it never had an entrance, which stopped being
-          survivable once every other surface in the app eased. mgt-card-in /
-          -out are reused rather than invented: they fade and translateY(8px),
-          which on a top-anchored popover reads as it dropping out of the dot,
-          exactly the motion this needs. outMs must match --t-move or the node
+          survivable once every other surface in the app eased.
+          v18.3.0 (M9): its own pair, `mgt-pop-in` / `-out`, from the corner
+          under the dot (`transformOrigin`, by the side it is anchored to). It
+          reused mgt-card-in / -out, whose translateY(8px) started it BELOW its
+          rest, so it rose toward the dot and scaled from its own centre, which
+          is a centred modal's motion; the comment here said the opposite.
+          outMs must match --t-move or the node
           unmounts mid-animation — which this site knew and every other one did
           not, so v17.15.0 made it `Presence`'s default (EXIT_MS) and deleted
           the hand-typed number here along with the six wrong ones elsewhere.
@@ -182,13 +185,14 @@ export function ConnectionStatus({ connected, hasConnected, userEmail, devices, 
           anchoring are untouched. */}
       <Presence
         show={open}
-        inClass="mgt-card-in"
-        outClass="mgt-card-out"
+        inClass="mgt-pop-in"
+        outClass="mgt-pop-out"
         style={{
           position: "absolute",
           top: "calc(100% + 8px)",
           right: alignRight ? 0 : "auto",
           left: alignRight ? "auto" : 0,
+          transformOrigin: alignRight ? "top right" : "top left",
           zIndex: 30,
           minWidth: 260,
           padding: 12,

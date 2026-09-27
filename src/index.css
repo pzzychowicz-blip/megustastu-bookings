@@ -1135,6 +1135,18 @@ html[data-holding] * {
 .mgt-scrim-out { animation: mgt-scrim-out var(--t-move) var(--ease-in) both; }
 .mgt-card-in   { animation: mgt-card-in var(--t-move) var(--ease-out) both; }
 .mgt-card-out  { animation: mgt-card-out var(--t-move) var(--ease-in) both; }
+/* v18.3.0 (M9): a popover ANCHORED to a trigger grows from the trigger's edge;
+   only a centred modal rises from below. The card pair above started the
+   connection popover 8px lower than its rest, so it rose toward the dot and
+   scaled from its own centre, and its exit sank away from the dot. This pair
+   starts 4px toward the trigger and shrinks back to it; the caller sets
+   `transform-origin` to the corner under the trigger. Same duration, curves
+   and `both` as the card pair, and the `-out` name puts it under
+   tests/motion.test.js' EXIT_MS guard. */
+@keyframes mgt-pop-in  { from { opacity: 0; transform: translateY(-4px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes mgt-pop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-4px) scale(.97); } }
+.mgt-pop-in  { animation: mgt-pop-in var(--t-move) var(--ease-out) both; }
+.mgt-pop-out { animation: mgt-pop-out var(--t-move) var(--ease-in) both; }
 .mgt-sheet-in  { animation: mgt-sheet-in var(--t-move) var(--ease-out) both; }
 .mgt-sheet-out { animation: mgt-sheet-out var(--t-move) var(--ease-in) both; }
 

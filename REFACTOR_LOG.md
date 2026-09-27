@@ -28427,6 +28427,20 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
      `leavePop()` reads `popOpenerRef`. `TablePopover` only calls it from a button's click, which
      the compiler cannot see across the component boundary. Kept rather than moving `leavePop`
      away from the focus effect it pairs with.
+7. **The connection popover drops from its dot (M9).** It reused `mgt-card-in` / `-out`, written
+   for a centred card: `translateY(8px)` started it BELOW its rest, so it rose toward the dot and
+   scaled from its own centre, and its exit sank away. Its comment claimed the opposite. A new
+   `mgt-pop-in` / `-out` pair in `src/index.css` starts 4px toward the trigger and shrinks back to
+   it, with the card pair's duration, direction curves and `both`. The `-out` name puts it under
+   `tests/motion.test.js`' EXIT_MS guard. `ConnectionStatus` swaps to the pair and sets
+   `transformOrigin` to the corner it is anchored by (`top right` / `top left`). Scheduling's
+   own copy is untouched. **Measured** in the rig at 0.1× playback, for both anchors (the header
+   dot, and the dot pinned 12px from the left edge to force `alignRight` false):
+   - **Open:** the top edge moves down exactly 4.0px with no upward step. The anchored edge
+     stays put (right at 1264 / left at 12) while the far edge grows away from it, and
+     `transform-origin` resolves to that corner.
+   - **Close** (normal speed): it shrinks back toward the dot, fading on the exit curve (0.93
+     at 100ms, 0.27 at 217ms), and unmounts at 272 / 282ms.
 
 ### Check on the devices after merge
 
