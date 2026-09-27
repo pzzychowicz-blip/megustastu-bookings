@@ -35,7 +35,7 @@ import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone } from "../lib/customers";
-import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth } from "./atoms";
+import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
@@ -353,7 +353,8 @@ export const ListView = memo(function ListView({
   // the same card, and the last one wins.
   useEffect(function () {
     if (!focusReq || !selectedId) return;
-    const behavior = document.documentElement.dataset.motion === "reduce" ? "auto" : "smooth";
+    // v18.3.0 (M2): both reduced-motion intents, the OS setting as well as the toggle.
+    const behavior = reduceMotionOn() ? "auto" : "smooth";
     // /code-review: ONE lookup, used by both the scroll and the focus below.
     // The `data-flip-id` selector was written out twice in this effect, so the
     // contract "a card is identified by its flip id" was asserted in two places

@@ -28289,6 +28289,16 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    blocks that leave, so it had to be right first. **Measured** in the rig (tablet, 18.3.0
    served): a probe carrying the class runs `mgt-ghost-out` for 240ms on
    `cubic-bezier(0.32, 0, 0.67, 0)`, from the element's own opacity (0.55) to 0.
+2. **The OS reduced-motion setting stops the two scripted smooth scrolls (M2).** The Plan tape's
+   tap-to-jump (`TimeAxis`'s `centre()`) and the List's programmatic scroll to a selected card each
+   asked only the per-device "Reduce animations" toggle. A glide is travel, which is exactly what
+   the OS intent removes (DESIGN.md's two intents), and neither Chromium nor iOS Safari turns a
+   scripted smooth scroll into a jump by itself. Both now ask `reduceMotionOn()`, the helper
+   `VoucherPicker` already used, so no site in `src/` reads `data-motion` directly any more
+   except App's writer. **Measured** in the rig with `prefers-reduced-motion` emulated over CDP:
+   a tape tap 300px off centre moved through 17 positions without it and ONE jump (360 → 672)
+   with it; on a 375px phone, ↓ through a 13-card day scrolled the body through 8–13 positions
+   per step without it and one jump per step with it (223 → 386 → 549 → 712).
 
 ### Check on the devices after merge
 

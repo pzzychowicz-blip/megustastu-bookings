@@ -40,6 +40,7 @@
 import { useRef, useLayoutEffect, useEffect } from "react";
 import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R, T, FW } from "../lib/constants";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
+import { reduceMotionOn } from "./atoms";
 // v17.5.0 correction: no toTime here any more — the selected-time badge moved
 // up into PlanView's Now/legend row, so the tape renders no text of its own
 // beyond the hour labels.
@@ -81,10 +82,14 @@ export function TimeAxis({
   // scripted scroll in the app (ListView's focus-into-view does the same check).
   // A smooth scroll is an animation; the setting exists because it costs real
   // frames on the restaurant's weaker tablets.
+  // v18.3.0 (M2): and the OS reduced-motion setting too, through
+  // reduceMotionOn(). A glide is TRAVEL, which is exactly what the OS intent
+  // removes, and neither Chromium nor iOS Safari turns a scripted smooth
+  // scroll into a jump by itself (measured: the tape still glided 288px).
   function centre(m, smooth) {
     const el = scrollRef.current;
     if (!el) return;
-    const glide = smooth && document.documentElement.dataset.motion !== "reduce";
+    const glide = smooth && !reduceMotionOn();
     snappingRef.current = true;
     el.scrollTo({ left: xOf(m), behavior: glide ? "smooth" : "auto" });
     // Smooth scrolling keeps firing scroll events; let them settle before we
