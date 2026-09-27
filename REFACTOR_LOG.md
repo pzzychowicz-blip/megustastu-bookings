@@ -28059,9 +28059,9 @@ re-placed"), a console line, and two phrases naming a visit by its date ("the Fr
 are not counts. The sweep fails on any other `n + " word"` in `src/`. Five existing pins moved to the
 joined strings.
 
-Live on DEV: after a reload, the Summary's "6 covers" and "2 bookings", the List's day line and the
-connection popover's "634 bookings loaded" all carry U+00A0, and no text node or accessible name in the
-view prints a count with a plain space. `tests/count-label.test.js` new, +4.
+Live on DEV: after a reload, the Summary's headline and shift figures ("2 bookings · 6 covers", "4
+covers") and the load toast's "634 bookings loaded" all carry U+00A0, and no text node or accessible
+name in the view prints a count with a plain space. `tests/count-label.test.js` new, +4.
 
 **Gate after phase 77:** `122.65 kB` gz main bundle (+0.04) · **1903 tests** (+4) · 0 lint errors, 90
 warnings (unchanged) · style OK.
