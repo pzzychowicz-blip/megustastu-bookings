@@ -70,6 +70,7 @@ describe("motion tokens", () => {
     expect(M.dur.move).toBe(token("t-move"));
     expect(M.dur.shift).toBe(token("t-shift"));
     expect(M.dur.reveal).toBe(token("t-reveal"));
+    expect(M.dur.wipe).toBe(token("t-wipe"));
   });
 
   it("a disclosure is slower than a bare geometry move", () => {

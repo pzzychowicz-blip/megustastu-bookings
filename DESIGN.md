@@ -1594,8 +1594,10 @@ may be fine and the curve the fault. Corollary: `--t-tap` is for a control
 *acknowledging* a tap. Anything that TRAVELS (a knob, a pane, a block) takes
 `--t-move` or `--t-shift`, however small the control is. Two more sit outside the scale on purpose: `--t-status`,
 which exists *because* TimelineView and PlanView must agree on it (a shared
-number needs a shared name), and `--t-wipe`, which TimelineView's
-`__statusAnims.until` window depends on.
+number needs a shared name), and `--t-wipe`, which three overlay windows
+depend on (the timeline block's, the List card's and the form's flash). Since
+v18.3.0 all three are `exitHold("wipe")`, derived through `M.dur.wipe`, so the
+token cannot be raised out from under them.
 
 Three exceptions, all real, and the first two are the same idea. `.mgt-dot-pulse`
 keeps `ease-in-out` — a loop has no arrival and no departure, so neither

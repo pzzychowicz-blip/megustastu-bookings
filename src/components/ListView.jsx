@@ -30,7 +30,7 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP, exitHold } from "../lib/constants";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
@@ -310,10 +310,11 @@ export const ListView = memo(function ListView({
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe.
-        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 800 }; changed = true; }
+        // v15.9.0: the window must outlive the wipe keyframe. v18.3.0 (M5): derived
+        // from --t-wipe (exitHold("wipe")), as TimelineView's is — it was a hand-typed 800/820.
+        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + exitHold("wipe") }; changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, exitHold("wipe")); }
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });

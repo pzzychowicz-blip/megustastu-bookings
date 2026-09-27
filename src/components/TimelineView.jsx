@@ -41,7 +41,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, memo, Fragment }
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
@@ -1432,12 +1432,16 @@ export const TimelineView = memo(function TimelineView({
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe
-        // (an early unmount would pop the last sliver of the old colour off).
-        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + 800 }; changed = true; }
-        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + 800 }; changed = true; }
+        // v15.9.0: the window must outlive the wipe keyframe (an early unmount
+        // would pop the last sliver of the old colour off). v18.3.0 (M5): it is
+        // DERIVED from --t-wipe through exitHold("wipe"), where it was a hand-typed
+        // 800 (and 820 for the re-render) that nothing bound to the token. The
+        // re-render timer needs no margin of its own: a setTimeout of N never fires
+        // before now + N, so `until > Date.now()` is already false when it runs.
+        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + exitHold("wipe") }; changed = true; }
+        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + exitHold("wipe") }; changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
+      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, exitHold("wipe")); }
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });

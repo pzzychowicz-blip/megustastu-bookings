@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -116,7 +116,7 @@ export function BookingFormModal({
   function flashStatus(s){
     setStatusFlash({color:BLOCK_BG[s],k:Date.now()});
     if(flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current=setTimeout(function(){setStatusFlash(null);},800); // v15.9.0: outlives the 760ms wipe
+    flashTimer.current=setTimeout(function(){setStatusFlash(null);},exitHold("wipe")); // outlives the --t-wipe sweep (exitHold)
   }
   // ── v16.0.0: customer layer — phone autocomplete + recognition chips ────────
   // Customers are DERIVED from the bookings list (src/lib/customers.js) — no

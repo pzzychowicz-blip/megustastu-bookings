@@ -742,6 +742,8 @@ export var M={
   // timeout cannot read a CSS var (the same constraint as M.dur/M.easeOut).
   reveal:"var(--t-reveal) var(--ease-out)",
   status:"var(--t-status) var(--ease-out)",
+  // v18.3.0 (M5): the status wipe's curve (.mgt-wipe-ltr), here so M.dur.wipe has its CSS pair.
+  wipe:"var(--t-wipe) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
   // The documented LINEAR exception (v17.8.0), alongside .mgt-dot-pulse's
   // ease-in-out. The two direction curves describe arrival and departure — a
@@ -752,9 +754,10 @@ export var M={
   // the only consumer; anything that travels still takes move/shift.
   resize:"var(--t-shift) linear",
   // Raw values — WAAPI only (plus `reveal`, which `Reveal` needs as a NUMBER to
-  // time its mount/settle timeouts against). Keep identical to index.html's
-  // :root — these are the only values here that can drift.
-  dur:{tap:145,move:240,shift:385,reveal:520},
+  // time its mount/settle timeouts against, and — v18.3.0 — `wipe`, which the
+  // three status-wipe sites need for their hold, `exitHold("wipe")`). Keep
+  // identical to index.html's :root — these are the only values here that can drift.
+  dur:{tap:145,move:240,shift:385,reveal:520,wipe:760},
   easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
 };
 

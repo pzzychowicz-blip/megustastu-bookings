@@ -28299,6 +28299,23 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    a tape tap 300px off centre moved through 17 positions without it and ONE jump (360 → 672)
    with it; on a 375px phone, ↓ through a 13-card day scrolled the body through 8–13 positions
    per step without it and one jump per step with it (223 → 386 → 549 → 712).
+3. **The status-wipe hold is derived from its token (M5).** `--t-wipe` is 760ms, and three sites
+   hand-typed the hold that must outlast it: the timeline block's window (`now + 800`, re-render
+   at 820), the List card's (the same pair) and the booking form's flash (800). Nothing bound them
+   to the token, so raising `--t-wipe` past 800 would have cut every wipe off mid-sweep with no
+   test failing: the two-halves defect v17.15.0 closed for every other exit. `M.dur` gains
+   `wipe: 760` and `M` gains its CSS pair `wipe` (the curve `.mgt-wipe-ltr` runs on, which the
+   "every M.dur entry has its CSS pair" test requires), and all five numbers are
+   `exitHold("wipe")` (780). The window and its re-render timer share one value: a `setTimeout` of
+   N never fires before `now + N`, so `until > Date.now()` is already false when it runs.
+   `tests/motion.test.js` binds `M.dur.wipe` to `--t-wipe` inside the existing mirror test.
+   **Measured** in the rig (writes blocked), reading the running `mgt-wipe-ltr` animation's
+   `currentTime` every frame: the form's flash sweeps to `inset(0 0 0 100%)` at 760ms and then
+   unmounts. The timeline block and the List card unmount at `currentTime` 699 and 683 (99.94%
+   and 99.89% swept), because their window starts at the effect's `now` and the overlay mounts one
+   render later. The old 800/820 had the same lag with 40ms more slack. The tail left is under
+   0.1% of the width (under 1.4px on a full-width List card), and the derived hold keeps the plan's
+   target; anchoring the window at the overlay's mount is a separate question, raised with Patryk.
 
 ### Check on the devices after merge
 

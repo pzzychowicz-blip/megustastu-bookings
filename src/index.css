@@ -675,8 +675,11 @@
      --t-status the status colour change, shared by TimelineView and
                 PlanView. Its own token precisely BECAUSE two files must
                 agree; a shared number needs a shared name.
-     --t-wipe   the left-to-right status wipe. TimelineView's overlay
-                window (`__statusAnims.until`) must stay >= this.
+     --t-wipe   the left-to-right status wipe. Its overlay window — the
+                timeline's, the List card's and the form's flash — is
+                `exitHold("wipe")`, DERIVED from this (v18.3.0), so raising
+                it moves all three; M.dur.wipe is the hand-kept mirror and
+                tests/motion.test.js binds it.
 
      JS reads all of these through the `M` object in lib/constants.js. */
   --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
@@ -1498,8 +1501,9 @@ input[type="search"]::-webkit-search-cancel-button {
 /* Status-change colour wipe (v15.9.0: unified left→right everywhere — List
    card, Edit-booking Status flash, timeline block — and slowed 380→760ms).
    The overlay of the old/new colour is clipped away from its LEFT edge, so
-   the reveal sweeps left→right. NB the timeline's overlay window
-   (__statusAnims `until` in TimelineView) must stay ≥ this duration. */
+   the reveal sweeps left→right. The overlay windows that hold it are
+   exitHold("wipe"), derived from --t-wipe (v18.3.0), so they cannot fall
+   short of it. */
 @keyframes mgt-wipe-ltr { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
 .mgt-wipe-ltr { animation: mgt-wipe-ltr var(--t-wipe) var(--ease-out) both; }
 /* Seated→Completed: the old (seated) colour overlay fades out, revealing completed. */
