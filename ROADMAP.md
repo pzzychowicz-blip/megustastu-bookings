@@ -109,6 +109,13 @@ evidence for each.
   `/code-review`): `doSave` and `addFormToWaitlist` each run `withTypedCode`, then refuse a
   number with no code in the same words, which should be one helper.
 
+- **A trunk 0 kept after a non-UK code (found in v18.2.0's `/code-review`).** Phase 66 drops
+  the home 0 after +44 only, so "+33 06 12 34 56 78", "+49 030 …" and "+31 06 …" keep
+  theirs, and the same French, German or Dutch guest typed with and without it is two
+  customers (`normalizePhone`, measured). Italy is the exception: its 0 belongs to the
+  number ("+39 06 …", pinned in `tests/phone-countries.test.js`). Which countries get the
+  rule is a decision, as phase 66's was.
+
 - **Focus after a ⋯ card action that opens a dialog (v18.2.0's `/code-review`).** In the List,
   ⋯ → Delete (or Cancelled, or the voucher and seat prompts) leaves focus on `<body>` when the
   dialog closes. `useDialog` reads `document.activeElement` in a passive effect, after the commit
