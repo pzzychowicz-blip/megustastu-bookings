@@ -17,6 +17,7 @@ import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import { afterFrame } from "../lib/after-frame";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -1677,17 +1678,26 @@ export function useFlip(deps, isQuiet) {
 // mounted so its `*-out` keyframe can finish. It is the default for all three
 // primitives here — see the note at its definition for what each of the four
 // hand-typed numbers it replaces was getting wrong.
+// v18.3.0 (/review-animations): the hold now starts on the first FRAME that
+// shows the exit (`afterFrame`, lib/after-frame.js), from an effect on
+// `leaving`, which runs after the commit that swaps in the `-out` class. It
+// started in the effect that SETS `leaving`, one render earlier, and after a tap
+// that also changes a booking the page is busy between the two: measured, a
+// status picked in the quick-status card ran its 240ms exit for 170ms and the
+// card vanished at opacity 0.55–0.66, and the Plan popover the same at 0.55.
+// The value was right since v17.15.0; the moment it was counted from was not.
 function usePresenceLifecycle(show, outMs) {
   const [render, setRender] = useState(show === true);
   const [leaving, setLeaving] = useState(false);
   useEffect(function () {
-    if (show) { setRender(true); setLeaving(false); return undefined; }
-    if (!render) return undefined;          // never shown → nothing to animate out
-    setLeaving(true);
-    const t = setTimeout(function () { setRender(false); setLeaving(false); }, outMs);
-    return function () { clearTimeout(t); };
+    if (show) { setRender(true); setLeaving(false); return; }
+    if (render) setLeaving(true);           // never shown → nothing to animate out
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `render` read as a closure snapshot
   }, [show]);
+  useEffect(function () {
+    if (!leaving) return undefined;
+    return afterFrame(function () { setRender(false); setLeaving(false); }, outMs);
+  }, [leaving, outMs]);
   return [render, leaving];
 }
 

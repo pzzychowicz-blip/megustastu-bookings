@@ -1723,7 +1723,14 @@ from the effect removed the leaving block 221ms into its 240ms fade, at opacity
 `useEnterLeave` starts its holds in the next `requestAnimationFrame`
 (`afterFrame`): measured after, 279–287ms from the animation's start, and
 removed at opacity 0. In a hidden tab neither the frame nor the animation runs,
-so that wait cuts nothing short.
+so that wait cuts nothing short. **The shared primitive had the same fault**
+(the /review-animations pass): `usePresenceLifecycle`, under every `Presence`,
+`Toast` and `ModalPresence`, started its hold in the effect that sets `leaving`,
+one render before the `-out` class commits. A status picked in the quick-status
+card blocks the page for ~136ms in between, so its 240ms exit ran 170ms and the
+card vanished at opacity 0.55–0.66. It starts the hold with the same
+`afterFrame` now (`lib/after-frame.js`), from an effect on `leaving`: 251–256ms,
+to opacity 0.
 
 **The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
 A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design

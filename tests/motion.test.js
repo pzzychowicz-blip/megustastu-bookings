@@ -114,13 +114,27 @@ describe("exit holds outlast their animations", () => {
     expect((src.match(/afterFrame\(function \(\) \{ set(?:Leaving|Arriving)\(NO_(?:SNAPS|IDS)\); \}, hold\)/g) || []).length,
       "both clears are timed by the derived hold").toBe(2);
     // …starting on the frame the animation starts on, not in the effect: a
-    // tap's passive effects run before the paint (see afterFrame).
-    expect(src).toMatch(/requestAnimationFrame\(function \(\) \{ t = setTimeout\(fn, ms\); \}\)/);
+    // tap's passive effects run before the paint (lib/after-frame.js).
+    expect(src).toMatch(/import \{ afterFrame \} from "\.\.\/lib\/after-frame"/);
     expect(src).not.toMatch(/\},\s*\d+\s*\)/);
     // …and the timeline asks for the speed its classes run on (--t-move).
     const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
     expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move" \}\s*\)/);
     expect(token("t-move")).toBe(M.dur.move);
+  });
+
+  // /review-animations: the shared primitive under every Presence, Toast and
+  // ModalPresence. Its hold started in the effect that SETS `leaving`, one render
+  // before the `-out` class commits, and a status pick blocks the page between
+  // the two: the quick-status card's exit ran 170 of 240ms and vanished at 0.55.
+  it("usePresenceLifecycle times its hold from the leaving frame", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const body = atoms.slice(atoms.indexOf("function usePresenceLifecycle("), atoms.indexOf("export function Presence("));
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toMatch(/if \(!leaving\) return undefined;\s*return afterFrame\(function \(\) \{ setRender\(false\); setLeaving\(false\); \}, outMs\);\s*\}, \[leaving, outMs\]\)/);
+    expect(body, "no hold started in the effect that sets leaving").not.toMatch(/setTimeout\(/);
+    const lib = code(join(ROOT, "src/lib/after-frame.js"), "utf8");
+    expect(lib).toMatch(/requestAnimationFrame\(function \(\) \{ t = setTimeout\(fn, ms\); \}\)/);
   });
 
   // The hook compares its deps by IDENTITY during render, so a map prop that

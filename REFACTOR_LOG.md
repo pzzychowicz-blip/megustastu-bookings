@@ -29198,6 +29198,33 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    entry, which lists them on purpose. Plan 15's gate did not stop A6 (phase 15 shipped),
    so no entry for it.
 
+### After `/review-animations`
+
+Patryk ran the review over the branch. It blocked on two measured defects in phase 6's
+popup exits and flagged two smaller ones. Each fix is its own commit, and each was
+re-measured in the headless rig with the database writes blocked.
+
+1. **An exit hold starts on the frame the exit starts.** `usePresenceLifecycle` (atoms,
+   under every `Presence`, `Toast` and `ModalPresence`) started its unmount timer in the
+   effect that sets `leaving`, one render before the `-out` class commits. After a tap that
+   also changes a booking, the page is busy between the two. Measured on the tablet profile,
+   dark theme, three runs each:
+   - a status picked in the quick-status card blocked frames for 117–137ms, and the 240ms
+     exit ran 170ms, the card vanishing at opacity 0.55–0.66;
+   - a dismiss (a tap on the scrim, nothing changed) ran the full exit, 233–250ms to 0–0.08;
+   - the Plan table popover, handing off to the booking form, was cut the same way at 0.55.
+
+   Phase 8 had found this exact fault in `useEnterLeave` and fixed it there with
+   `afterFrame`. That helper moved to `lib/after-frame.js`, and `usePresenceLifecycle`
+   now takes it from a second effect keyed on `leaving`. After: the Seated pick ran
+   251–256ms to opacity 0 (3 of 3), the dismiss 250ms to 0, and the booking form still
+   closes in full (scrim to 0, unmounted, no console errors). In a hidden tab the leaving
+   node waits for a frame, as the timeline's copies already did, and plays its exit when
+   the tab is shown. `tests/motion.test.js` pins the new shape, and the `useEnterLeave`
+   assertion now reads the import rather than a local copy.
+
+   Gate: 124.95 kB gz (unchanged), 2126 tests (+1), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the

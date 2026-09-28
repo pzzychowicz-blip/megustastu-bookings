@@ -61,32 +61,19 @@
 // Clearing late is harmless: a finished `mgt-appear` with no fill changes
 // nothing, and a finished `mgt-ghost-out` sits at opacity 0, inert. Clearing
 // EARLY is the failure every hold in this app exists to prevent — and here the
-// commit was not early-proof, which is `afterFrame`'s reason (below).
+// commit was not early-proof, which is `afterFrame`'s reason (lib/after-frame.js).
 
 import { useState, useEffect } from "react";
 import { exitHold } from "../lib/constants";
+// A hold starts on the NEXT FRAME, not in the effect: this hook's measurement
+// found it (No show removed at 221 of 240ms), and the helper moved to lib so
+// usePresenceLifecycle (atoms) could share it. lib/after-frame.js has the why.
+import { afterFrame } from "../lib/after-frame";
 
 // Module constants, so "nothing" is one identity and an idle list never hands
 // its caller a fresh Map or Set.
 const NO_SNAPS = new Map();
 const NO_IDS = new Set();
-
-// A hold starts on the NEXT FRAME, not in the effect — measured, not assumed.
-// Phase 3 learnt to time a hold from the commit rather than the event; that is
-// still too early after a tap. React flushes a click's passive effects
-// synchronously, before the browser may paint, and the effects that follow
-// this one (App's waitlist matcher runs its placement scans on every bookings
-// change) held the frame back: No show in the rig, three runs, committed at
-// +86ms and first painted at +130ms, so a timer started in the effect removed
-// the leaving copy 221ms into its 240ms fade, at opacity 0.42. A CSS animation
-// starts on the first frame that renders it, which is the frame this callback
-// opens. In a hidden tab neither the frame nor the animation runs, so nothing
-// is cut short there either; the copy waits, inert, until the tab is shown.
-function afterFrame(fn, ms) {
-  let t = 0;
-  const r = requestAnimationFrame(function () { t = setTimeout(fn, ms); });
-  return function () { cancelAnimationFrame(r); clearTimeout(t); };
-}
 
 function sameDeps(a, b) {
   if (a.length !== b.length) return false;
