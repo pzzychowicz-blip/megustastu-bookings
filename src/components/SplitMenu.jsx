@@ -54,7 +54,8 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
   const armed = useArmAfterRelease();
   // v18.3.0 (M3): true while the wrapping ModalPresence plays the exit; every
   // button refuses then, as it does before the opening finger lifts.
-  const { leaving } = useModalPresence();
+  // Picking the second view hands off to the split: `skipExit()` first (atoms).
+  const { leaving, skipExit } = useModalPresence();
   const live = armed && !leaving;
   if (!view) return null;
 
@@ -101,7 +102,7 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
           {others.map((v) => (
             <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
               style={btn({ background: S.accent, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
-              onClick={() => { if (live && !tlBlocked(v)) onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); }}>{LABEL[v]}</button>
+              onClick={() => { if (live && !tlBlocked(v)) { skipExit(); onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); } }}>{LABEL[v]}</button>
           ))}
         </div>
       )}

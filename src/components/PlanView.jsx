@@ -75,7 +75,8 @@ const MARK_TOP = 11;
 // portal, the scrim and the exit are `PopupShell`'s. What it shows, the
 // walk-in gate and the focus handling are PlanView's, unchanged.
 function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinHere }) {
-  const { leaving } = useModalPresence();
+  // A row or Walk-in here hands off to a form: `skipExit()` first (atoms).
+  const { leaving, skipExit } = useModalPresence();
   return (
     <PopupShell
       onScrimClick={() => { if (!leaving) onClose(); }}
@@ -91,7 +92,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
         // size ring as a bare "2".
         return (
           <button type="button" key={b.id} className="mgt-hover-scale"
-            onClick={() => { if (!leaving) onPick(b); }}
+            onClick={() => { if (!leaving) { skipExit(); onPick(b); } }}
             aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
             <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
@@ -118,7 +119,7 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
       {canWalkin ? (
         <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
           <button className="mgt-hover-scale"
-            onClick={() => { if (!leaving) onWalkinHere(); }}
+            onClick={() => { if (!leaving) { skipExit(); onWalkinHere(); } }}
             style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
         </div>
       ) : null}

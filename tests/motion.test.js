@@ -137,6 +137,31 @@ describe("exit holds outlast their animations", () => {
     expect(lib).toMatch(/requestAnimationFrame\(function \(\) \{ t = setTimeout\(fn, ms\); \}\)/);
   });
 
+  // /review-animations: a popup closed by a PICK hands off to its result (the
+  // wipe, a form, the split) and leaves at once; only a dismiss plays the exit.
+  // The skip must be asked BEFORE the close, in the same handler, so the render
+  // that closes already knows. Measured before: the quick-status card sat 88%+
+  // opaque over the wipe's first 39%, the Plan popover over the booking form.
+  it("a popup's picks skip the exit, and only ModalPresence honours it", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    expect(atoms).toMatch(/if \(!render \|\| \(!show && instant\)\) return null;/);
+    expect(atoms, "a skip is cleared while the surface is open").toMatch(/if \(show && instant\) setInstant\(false\);/);
+    const sites = [
+      ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onDelete(booking.id)"]],
+      ["src/components/PlanView.jsx", ["onPick(b)", "onWalkinHere()"]],
+      ["src/components/SplitMenu.jsx", ["onConfirm({"]],
+    ];
+    for (const [file, picks] of sites) {
+      const src = code(join(ROOT, file), "utf8");
+      expect((src.match(/skipExit\(\);/g) || []).length, file + ": one skip per pick").toBe(picks.length);
+      for (const pick of picks) {
+        const at = src.indexOf(pick);
+        expect(at, file + " still has " + pick).toBeGreaterThan(0);
+        expect(src.slice(Math.max(0, at - 40), at), file + ": skipExit() right before " + pick).toMatch(/skipExit\(\);\s*$/);
+      }
+    }
+  });
+
   // The hook compares its deps by IDENTITY during render, so a map prop that
   // defaults to `{}` is a new object on every pass and the body never settles.
   it("the timeline's snapshotted maps default to one frozen object", () => {

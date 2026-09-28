@@ -14,6 +14,9 @@
 // split menu and the Plan table popover, and every mount site wraps this in
 // `ModalPresence`, so it animates OUT as well as in. While it leaves it is
 // inert: the shell lets taps through, and every button here checks `leaving`.
+// /review-animations: a PICK (a status, No show, Delete) calls `skipExit()`
+// before it closes, so the card is gone as the result starts (the wipe, the
+// cancel or delete confirm); only a dismiss plays the exit (PresenceContext).
 //
 // Props:
 //   booking        — the target booking (name shown as the title)
@@ -60,7 +63,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
   const armedByRelease = useArmAfterRelease();
   const armed = startArmed || armedByRelease;
   // v18.3.0 (M3): true while the wrapping ModalPresence plays the exit.
-  const { leaving } = useModalPresence();
+  const { leaving, skipExit } = useModalPresence();
   const cardRef = useRef(null);
   // Refs, not deps: onClose is usually an inline arrow, and re-running this on
   // every render would restore and re-steal focus each time.
@@ -145,6 +148,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
               }}
               onClick={() => {
                 if (!armed || leaving) return;
+                skipExit();
                 onStatus(booking.id, st);
                 onClose();
               }}
@@ -165,6 +169,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             }}
             onClick={() => {
               if (!armed || leaving) return;
+              skipExit();
               onNoShow(booking.id);
               onClose();
             }}
@@ -180,6 +185,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             style={mkDangerBtn({ fontSize: T.lead, fontWeight: FW.bold, padding: "10px 18px", minHeight: 44, flex: "1 1 auto" })}
             onClick={() => {
               if (!armed || leaving) return;
+              skipExit();
               onDelete(booking.id);
               onClose();
             }}

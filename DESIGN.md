@@ -1798,6 +1798,18 @@ The limits are `lib/plan-zoom.js`.
   opens the block underneath; with the scrim forced back to `pointer-events:
   auto`, the same click is swallowed. The popups' buttons also refuse while
   `leaving`, and the ⋯ card's focus goes back to ⋯ as the exit starts.
+  **A pick leaves at once; only a dismiss plays the exit** (the
+  /review-animations pass). Picking a status, No show or Delete, a booking row
+  or Walk-in here, or the split's second view HANDS OFF to a result that starts
+  in the same moment: the block's wipe, a form or confirm, the split. The exit
+  had nothing to say there and sat on top of the result. Measured, the
+  quick-status card was still 88% or more opaque over the block while the wipe
+  swept its first 39%, and the Plan popover (z 300) was 0.67 over the booking
+  form after the form had reached 0.97. So a pick calls `skipExit()` (from
+  `useModalPresence`) before it closes, and `ModalPresence` renders nothing on
+  that close; the scrim and Escape still fade out. It follows this list's first
+  rule rather than breaking it: the exit is decided, and for a hand-off the
+  decision is that the result is the exit.
   **The quick-status card stays viewport-CENTRED, not anchored to the held
   block** (A3, decided in S3, 2026-09-27): it is a body portal, the split menu
   shares its shell, and a card anchored to the block would sit under the

@@ -29225,6 +29225,40 @@ re-measured in the headless rig with the database writes blocked.
 
    Gate: 124.95 kB gz (unchanged), 2126 tests (+1), 0 lint errors (90 warnings), style OK.
 
+2. **A pick closes a popup at once; a dismiss fades it.** Phase 6 gave the three popups an
+   exit on every close, and on a PICK the exit sat over the result the pick had just
+   started. Measured in dark theme, where the popup scrim is 0.45 black:
+   - the quick-status card sat over the very block it changed (card 455–825 × 311–489,
+     block 464–561 × 329–365) and was 0.88 or more opaque while the wipe swept its first
+     39%;
+   - the Plan table popover, at z 300, was still 0.67 over the booking form after the form
+     had reached 0.97, the two cards centred on one spot.
+
+   Before phase 6 the popup simply vanished and the wipe was fully visible, so this was a
+   regression on the most frequent surface in the app. The review's first remedy applied:
+   delete the exit where it has no job. `ModalPresence` gains `skipExit()`, on its context
+   beside `leaving`. A pick calls it before it closes; both state updates land in one
+   event, so the render that closes renders nothing and `usePresenceLifecycle` skips the
+   leaving phase. A skip whose close never comes is cleared on the next render. The picks:
+   - in the quick-status card: a status, No show and Delete;
+   - in the Plan popover: a booking row and Walk-in here;
+   - in the split menu: the second view.
+
+   A dismiss (the scrim, Escape) still plays the exit, so DESIGN.md's rule holds: the
+   exit is decided, and for a hand-off it is the result.
+
+   Re-measured:
+   - a Seated pick shows no exit frame, and the card is gone on the wipe's first frame;
+   - the popover is gone on the booking form's first frame;
+   - a dismiss runs 250ms to opacity 0 (3 of 3);
+   - after a pick, reopening and dismissing plays the full exit again;
+   - the split menu's pick applies the split with no exit, and its dismiss plays one;
+   - no console errors.
+
+   `tests/motion.test.js` pins one `skipExit()` right before each of the six picks.
+
+   Gate: 124.99 kB gz (+0.04), 2127 tests (+1), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -29234,7 +29268,7 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 |---|---|---|
 | 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home, and the lift fades as it goes. How long the block sits still after release (the drop freeze) is noted, not fixed |
 | 05 | Tablet, iPad | Hold a block still. At about 800ms the card disappears and the block visibly lifts at once. Move, and it follows |
-| 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed |
+| 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed. The card is gone as the block's colour wipe starts, and the whole wipe shows; tap outside the card instead and it fades out |
 | 08 | Android tablet | Mark a late booking No show from the Running-late strip. The block fades out still wearing its amber border, and it fades all the way out before it goes. Undo fades it back in. Stepping to the next day fades nothing |
 | 10 | Tablet, phone | Tapping a WhatsApp alert header shows the veil tint while pressed |
 | 12 | Tablet, iPad | In Split View, start a drag a fingertip's width to one side of the divider: the panes resize, and the divider does not jump to the finger first. A tap on the divider without moving leaves the split where it was |

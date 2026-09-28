@@ -1686,13 +1686,17 @@ export function useFlip(deps, isQuiet) {
 // status picked in the quick-status card ran its 240ms exit for 170ms and the
 // card vanished at opacity 0.55–0.66, and the Plan popover the same at 0.55.
 // The value was right since v17.15.0; the moment it was counted from was not.
-function usePresenceLifecycle(show, outMs) {
+// `skip` (ModalPresence's hand-off, below): this close unmounts at once, with
+// no leaving phase at all.
+function usePresenceLifecycle(show, outMs, skip) {
   const [render, setRender] = useState(show === true);
   const [leaving, setLeaving] = useState(false);
   useEffect(function () {
     if (show) { setRender(true); setLeaving(false); return; }
-    if (render) setLeaving(true);           // never shown → nothing to animate out
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `render` read as a closure snapshot
+    if (!render) return;                    // never shown → nothing to animate out
+    if (skip) setRender(false);
+    else setLeaving(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `render` and `skip` read as closure snapshots of the close
   }, [show]);
   useEffect(function () {
     if (!leaving) return undefined;
@@ -1727,7 +1731,18 @@ export function Toast({ show, children, style }) {
 // PresenceContext — `Overlay` (and ReminderEditor) read it to swap their scrim/
 // card/sheet to the *-out keyframe before unmounting. No wrapper element is
 // rendered, so the modal's own fixed/overlay positioning is untouched.
-export const PresenceContext = createContext({ leaving: false });
+// v18.3.0 (/review-animations): `skipExit()` — call it in the handler that
+// closes, BEFORE the close, and this one close unmounts at once instead of
+// playing the exit. It is for a HAND-OFF: a popup closed by picking something
+// whose result appears in the same moment (a status change and its wipe, a
+// booking row and the form it opens, a split and its layout). The exit had
+// nothing to say there and sat over the result: measured, the quick-status card
+// was still 88%+ opaque over the block while the wipe swept its first 39%, and
+// the Plan popover was 0.67 over the booking form after the form had reached
+// 0.97. A dismiss (the scrim, Escape) still plays the exit. Both setStates land
+// in the same event, so the render that closes already knows; a skip whose
+// close never comes is cleared by the next render (ModalPresence).
+export const PresenceContext = createContext({ leaving: false, skipExit: function () {} });
 // v17.10.2: was `usePresence`, which collided with the Firebase device-presence
 // hook in src/hooks/usePresence.js — two exported, importable functions of that
 // name sharing nothing but a good word. Importing the wrong one gave a confusing
@@ -1738,10 +1753,14 @@ export function useModalPresence() { return useContext(PresenceContext); }
 export function ModalPresence({ show, children, outMs = EXIT_MS }) {
   const last = useRef(null);
   if (children) last.current = children;
-  const [render, leaving] = usePresenceLifecycle(show, outMs);
-  if (!render) return null;
+  // A skip only counts for the close it was asked for: while the surface is
+  // still open (reopened, or a close that never came) it is cleared here.
+  const [instant, setInstant] = useState(false);
+  if (show && instant) setInstant(false);
+  const [render, leaving] = usePresenceLifecycle(show, outMs, instant);
+  if (!render || (!show && instant)) return null;
   return (
-    <PresenceContext.Provider value={{ leaving: leaving }}>
+    <PresenceContext.Provider value={{ leaving: leaving, skipExit: function () { setInstant(true); } }}>
       {children || last.current}
     </PresenceContext.Provider>
   );
@@ -1754,6 +1773,9 @@ export function ModalPresence({ show, children, outMs = EXIT_MS }) {
 // modal keyframes, and unmounted on close with no exit. Here it reads the
 // wrapping `ModalPresence`'s `leaving`, like `Overlay`, and swaps to the exit
 // keyframes (--ease-in); every mount site wraps its popup in `ModalPresence`.
+// The exit is for a DISMISS (the scrim, Escape). A PICK hands off to its result
+// (a wipe, a form, a split) and calls `skipExit()` first, so the popup is gone
+// on the frame the result starts (/review-animations; see PresenceContext).
 //
 // A body portal, and that is load-bearing: the popups mount inside SlideView,
 // whose transform (while a view slide runs or settles) turns a position:fixed
