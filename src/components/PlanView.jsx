@@ -440,11 +440,18 @@ export const PlanView = memo(function PlanView({
   // is read back and becomes the view, so the gesture starts from what is on
   // screen. Returns that view, for a caller about to read `view` in the same
   // event (the pinch and pan anchors below).
+  // /code-review: except a SPRING-BACK, whose drawn zoom is still past the
+  // range. Caught there, a pan kept it (a pan never springs back: measured, the
+  // plan rested at 5.22× after a finger landed 90ms in) and a pinch jumped on
+  // its first move (the band is not the identity out there). That one lands
+  // on its target, which is at most the band's remaining overshoot away; a
+  // reset glide runs between two in-range zooms and is always caught in place.
   function endSettle() {
     if (!settleRef.current) return view;
     clearTimeout(settleRef.current);
     settleRef.current = null;
-    const at = drawnView();
+    const drawn = drawnView();
+    const at = clampZoom(drawn.k) === drawn.k ? drawn : view;
     setView(at);
     setSettling(false);
     return at;

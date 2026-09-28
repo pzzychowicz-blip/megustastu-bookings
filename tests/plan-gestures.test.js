@@ -174,7 +174,8 @@ describe("A8: PlanView takes the limits — which gesture gets which, and what g
   // a wheel step 120ms into a double-tap reset jumped the zoom 1.70× → 1.15×).
   it("a gesture that ends a glide starts from the drawn view, not the target", () => {
     const end = body("endSettle");
-    expect(end).toMatch(/const at = drawnView\(\);\s*setView\(at\);\s*setSettling\(false\);\s*return at;/);
+    // /code-review: a spring-back caught past the range lands on its target instead.
+    expect(end).toMatch(/const drawn = drawnView\(\);\s*const at = clampZoom\(drawn\.k\) === drawn\.k \? drawn : view;\s*setView\(at\);\s*setSettling\(false\);\s*return at;/);
     expect(body("drawnView")).toMatch(/const m = new DOMMatrix\(getComputedStyle\(g\)\.transform\);\s*return \{ k: m\.a, tx: m\.e, ty: m\.f \};/);
     expect(body("bgPointerDown")).toMatch(/panRef\.current = \{ x: e\.clientX, y: e\.clientY, tx: v0\.tx, ty: v0\.ty \};/);
   });

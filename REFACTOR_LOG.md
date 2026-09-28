@@ -29294,6 +29294,26 @@ re-measured in the headless rig with the database writes blocked.
 
    Gate: 125.08 kB gz (−0.01), 2128 tests (unchanged), 0 lint errors (90 warnings), style OK.
 
+### After `/code-review`
+
+The ship run's review, at extra effort, raised nine findings. Each was checked before it was
+acted on. Fixed ones are below, one commit each. The rest are listed with what the check
+found.
+
+1. **A gesture that catches the pinch's spring-back lands on its target.** Review fix 3
+   caught every glide where it was drawn. A spring-back is drawn past the zoom's range, and
+   a pan never springs back. Measured on the tablet profile: pinch to 5.6×, release, one
+   finger down 90ms or 150ms later. The plan then rested at 5.22× and 5.12×, above the 5×
+   maximum, with nothing to bring it back. A pinch caught the same way jumped on its first
+   move (5.22× → 5.13×), because the band is not the identity out there. `endSettle()` now
+   keeps the drawn view only while its zoom is inside the range. Otherwise it lands on the
+   glide's target, which is at most the band's remaining overshoot away. A reset glide runs
+   between two in-range zooms, so it is still caught in place. Re-measured: both pans rest
+   at 5×; the pinch starts at 5×, bands to 5.02× and springs back to 5×. A wheel step 120ms
+   into a reset still goes one notch up from where the glide was.
+
+   Gate: 125.10 kB gz (+0.02), 2128 tests (unchanged), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
