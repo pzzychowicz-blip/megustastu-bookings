@@ -29177,6 +29177,27 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
 
    `grep` finds both, under `user-scalable` and `keyboard`. Bundle and tests unchanged.
 
+27. **ROADMAP: what S3 deferred, and what this build surfaced.** Five new entries under
+   *Deferred*, from the plan:
+   - timeline drag's edge scroll (A5);
+   - the drop freeze, to be measured on the tablet first;
+   - List cards and waitlist rows leaving the way they arrive (O3);
+   - the Unplaced row's mount (O4);
+   - the port of v18.3.0's shared conventions to MGT Scheduling. All seven of its items
+     shipped (N1 phase 17, N4 phase 20, N5 phase 23, N8 phase 21, N9 phase 22, A10 phase 16,
+     M9 phase 7), so none was dropped. Scheduling is still at `014a461`.
+
+   Two more from this build's own findings:
+   - phase 18's real-iPhone sign-in recheck, MERGED into phase 17's "Recheck the keyboard on
+     a real iPhone" entry, now "Recheck two things on a real iPhone", as the plan's
+     merge-don't-duplicate step asks;
+   - the login screen's theme from phase 23: it doesn't follow the OS live, and its
+     status-bar metas ignore a saved `mgt-theme`.
+
+   ROADMAP was scanned for anything v18.3.0 shipped, and the only hits are inside the port
+   entry, which lists them on purpose. Plan 15's gate did not stop A6 (phase 15 shipped),
+   so no entry for it.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
