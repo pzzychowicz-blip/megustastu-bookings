@@ -124,6 +124,10 @@ export function LoginScreen() {
             type="password"
             aria-label="Password"
             autoComplete="current-password"
+            // v18.3.0 (N9): the keyboard's own key reads "go". On an iPhone the
+            // accessory bar covers the card's Log in button while this field
+            // has focus, and handleKey already submits on Enter.
+            enterKeyHint="go"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={handleKey}

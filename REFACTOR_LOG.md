@@ -29012,6 +29012,18 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    app pixel is identical. Landscape needs a rotation, which is a hardware check (the table
    below). Tests unchanged at 2125.
 
+22. **The login keyboard's own key logs in (N9).** On the iPhone, with the password field
+   focused, Safari's accessory bar sits over the card's **Log in** button, so staff had to
+   dismiss the keyboard or press a generic return key. The password `<input>` in
+   `LoginScreen.jsx` now carries `enterKeyHint="go"`. `handleKey` already submits on Enter
+   (checked first, as the plan required), so the hint promises nothing new. The email field
+   is untouched.
+
+   **The Simulator (iOS 26, Safari, logged out, nothing typed):** the password field's
+   return key is now the blue → Go key, where the email field on the same page keeps the
+   grey ⏎. Patryk then signed in by pressing it, and the app opened. Tests unchanged at
+   2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
