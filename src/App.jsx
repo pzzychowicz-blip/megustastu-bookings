@@ -511,10 +511,11 @@ const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 // sheet fill opaque enough that a timeline row scrolling beneath does not show
 // through, measured with `--bg-sheet` at 0.72), with a hairline and the soft
 // shadow to separate it from what scrolls beneath. The safe-area inset keeps
-// both buttons clear of an iPhone's home indicator.
+// both buttons clear of an iPhone's home indicator, and (v18.3.0, N7) the side
+// insets keep them clear of the notch in landscape; in portrait those are 0.
 const MOBILE_BAR={
   position:"fixed",left:0,right:0,bottom:0,zIndex:100,
-  display:"flex",gap:8,padding:"8px 12px",
+  display:"flex",gap:8,padding:"8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left))",
   paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))",
   background:"var(--bg-sheet-mobile)",borderTop:"1px solid var(--border-soft)",boxShadow:"var(--shadow-soft)"
 };
@@ -5086,7 +5087,10 @@ function BookingApp({uid}){
 
   return (
     <div
-      style={Object.assign({background:"var(--bg-app)",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+      style={Object.assign({background:"var(--bg-app)",
+        // v18.3.0 (N7): a phone's side paddings clear the notch in landscape;
+        // the side insets are 0 in portrait, so portrait is unchanged.
+        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
            so the header + date rows stay put. Off = the original growing block.
            v17.5.0 correction: NO overflow:hidden here. It clipped the List

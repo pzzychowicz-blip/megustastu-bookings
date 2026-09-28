@@ -29079,6 +29079,42 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
 
    Bundle 124.82 → 124.91 kB gz. Tests unchanged at 2125.
 
+24. **A landscape iPhone keeps the chrome clear of the notch (N7).** The safe-area paddings
+   covered the bottom (and the sheet's top) only. Nothing read
+   `env(safe-area-inset-left/right)`, although the runtime viewport already carries
+   `viewport-fit=cover`, so a phone turned sideways put the header, the bottom bar and a
+   form's edges under the notch. Each horizontal padding on a phone is now
+   `max(<its value>, env(safe-area-inset-<side>))`:
+   - App's shell: 12px each side;
+   - `MOBILE_BAR`: 12px each side, with its `paddingBottom` override unchanged;
+   - `Overlay`'s mobile sheet: the footer branch's body and footer, and the no-footer
+     branch's inner body, 18px each side, added after each `padding`.
+
+   The desktop branches are untouched. `check:style` accepts the strings as they are, like
+   the existing `max(16px, env(safe-area-inset-top))`. The cited lines had moved from the
+   plan's (atoms 537/540/548 → 558/561/573, App 5082 → 5089), because phases 17 and 18
+   added lines above them; the code at each matched the plan's quote. The one exception is
+   the footer's `paddingBottom`, which gained phase 17's `kb.bottom` arm.
+
+   **In portrait every side inset is 0**, so every value resolves to what it was.
+
+   **The rig** (Chromium, 375×812, writes blocked): computed paddings and rects are
+   identical before and after for the shell, the bottom bar, the Walk-in button, the
+   booking form's body, footer and first field, and the History sheet's scroller and body.
+   An invalid `max()` string would have dropped the whole declaration and read 0.
+
+   **The Simulator** (iOS 26, iPhone portrait, Safari), HEAD's two files against the new:
+   - Timeline: the header, date row, summary, bottom bar and both side gutters are pixel
+     identical (max difference 0). The only differences are the status-bar clock and the
+     grid, which Follow had scrolled by the one minute between the two captures.
+   - Booking sheet: identical apart from the clock (max 5 elsewhere, anti-aliasing).
+
+   The Simulator tool can't rotate, so landscape is a hardware check (the table below).
+   Safari in the Simulator had signed out because removing phase 23's test icon deleted
+   the localhost site data. Patryk signed in again.
+
+   Bundle 124.91 → 124.95 kB gz. Tests unchanged at 2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -29096,5 +29132,5 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home |
 | 15 | Tablet, iPhone | Fling the Plan tape: it travels as far as before and lands on a quarter mark. Drag it and hold still: it does not move under the finger until you lift. A mouse wheel scrubs as before |
 | 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |
-| 21 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait |
+| 21, 24 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait, and the header, the Walk-in / + New bar and an open form's fields and buttons keep clear of the notch on both sides (turn it both ways) |
 | 23 | Android tablet | The installed app's status bar matches the app's background in both themes (switch Dark mode in Settings → App). The splash colour changes only after Chrome refreshes the manifest, which can take a relaunch the next day |
