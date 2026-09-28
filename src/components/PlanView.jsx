@@ -141,6 +141,12 @@ export const PlanView = memo(function PlanView({
   // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
   // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
   gesturesEnabled = true,
+  // /code-review: App's `isMobile` (`winW < 600`, from useWinW), the one-finger
+  // rule's phone test (see `touchAct`). A prop, not a read of the window here:
+  // this component is memoised and nothing else it takes changes on a resize,
+  // so a read in render stayed what it was at the last render, up to a minute
+  // (measured: resized 1280 → 390, the plan kept `touch-action: none`).
+  isMobile = false,
   // v17.6.0: separation between bookings, in minutes (0 = off). Scalar from App
   // rather than the TURN_BUFFER live binding — React.memo can't see a live
   // binding (same reason hoursSig exists).
@@ -401,13 +407,14 @@ export const PlanView = memo(function PlanView({
   //
   // N10: a phone is the one screen where the plan fills the width, so a plan
   // that took every touch would leave a vertical swipe starting on it no way
-  // to scroll the page. Below Overlay's `mob` width, ONE finger scrolls the
-  // page vertically (`pan-y`) and pans the plan sideways; two fingers are
-  // always the pinch. The svg carries the same value as the wrapper rather
-  // than its old `none`: Chrome honours the svg's own copy (the Android path),
-  // and the effective value is the INTERSECTION down the chain, so a `none`
-  // on the svg would keep a phone's vertical swipe dead on Android.
-  const narrow = typeof window !== "undefined" && window.innerWidth < 600;
+  // to scroll the page. On a phone (App's `isMobile`, the width at which Overlay
+  // turns into a sheet), ONE finger scrolls the page vertically (`pan-y`) and
+  // pans the plan sideways; two fingers are always the pinch. The svg carries
+  // the same value as the wrapper rather than its old `none`: Chrome honours the
+  // svg's own copy (the Android path), and the effective value is the
+  // INTERSECTION down the chain, so a `none` on the svg would keep a phone's
+  // vertical swipe dead on Android.
+  const narrow = isMobile;
   const touchAct = !gesturesEnabled ? "auto" : narrow ? "pan-y" : "none";
   useEffect(() => {
     const wrap = wrapRef.current;

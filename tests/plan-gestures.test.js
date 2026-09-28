@@ -47,7 +47,10 @@ describe("A1: the touch defences hang off the HTML wrapper, which iOS honours", 
   });
 
   it("N10: on a phone, ONE finger is left to the page; two are always the pinch", () => {
-    expect(Plan).toMatch(/const narrow = typeof window !== "undefined" && window\.innerWidth < 600;/);
+    // /code-review: App's isMobile, a prop, so a resize reaches this memoised view.
+    expect(Plan).toMatch(/const narrow = isMobile;/);
+    expect(Plan).not.toMatch(/innerWidth/);
+    expect(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "App.jsx"), "utf8")).toMatch(/gesturesEnabled=\{planGestures\}\s*isMobile=\{isMobile\}/);
     expect(Plan).toMatch(/if \(narrow && ev\.touches\.length < 2\) return;\s*ev\.preventDefault\(\);/);
   });
 });

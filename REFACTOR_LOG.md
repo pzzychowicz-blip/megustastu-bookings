@@ -29327,6 +29327,18 @@ found.
    that, reopening the card and tapping the scrim still plays the full exit (16 frames,
    250ms to 0). `tests/motion.test.js` pins the prop, its reset and both block sites.
 
+3. **The Plan's phone touch mode follows a resize.** Phase 13 decided "phone" with
+   `window.innerWidth < 600`, read during render. PlanView is memoised, and nothing else it
+   takes changes on a resize or a rotation, so the read stayed what it was until the clock
+   next re-rendered it. Measured on the tablet profile with Plan zoom & pan on: resized from
+   1280 to 390px, the wrapper and the svg kept `touch-action: none` 1.5s later. So a phone
+   rotated from landscape could not scroll the page from the plan, and the reverse turned
+   off the one-finger vertical pan. PlanView now takes App's `isMobile` (`winW < 600` from
+   `useWinW`, which re-renders on resize) as a prop. That also removes phase 13's own copy
+   of the 600px literal. Re-measured: `pan-y` at 390px, `none` again at 1280.
+
+   Gate: 125.19 kB gz (+0.02), 2128 tests (unchanged; assertions added), 0 lint errors (90 warnings), style OK.
+
    Gate: 125.17 kB gz (+0.07), 2128 tests (unchanged; assertions added), 0 lint errors (90 warnings), style OK.
 
 ### Check on the devices after merge

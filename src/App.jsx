@@ -4814,6 +4814,7 @@ function BookingApp({uid}){
     onNoShow={VA.onNoShow}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
+    isMobile={isMobile}
     turnBuffer={turnBuffer}
     showAvail={planAvail}
     walkinSize={generalSettings.defaultWalkinSize}
