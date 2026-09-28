@@ -36,7 +36,7 @@
 //   • manualBooking IIFE (feeds the stayed-in-parent ManualModal)
 
 import { useRef, useState, useMemo } from "react";
-import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT, BLOCK_BG, BLOCK_INK, S, BTN, R, M, hoursFor, INDOOR, OUTDOOR, T, FW, H, IC, SP, exitHold } from "../lib/constants";
 import {
   getDur, toMins, toTime,
   trialFits, findTimes, formatSugg,
@@ -116,7 +116,7 @@ export function BookingFormModal({
   function flashStatus(s){
     setStatusFlash({color:BLOCK_BG[s],k:Date.now()});
     if(flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current=setTimeout(function(){setStatusFlash(null);},800); // v15.9.0: outlives the 760ms wipe
+    flashTimer.current=setTimeout(function(){setStatusFlash(null);},exitHold("wipe")); // outlives the --t-wipe sweep (exitHold)
   }
   // ── v16.0.0: customer layer — phone autocomplete + recognition chips ────────
   // Customers are DERIVED from the bookings list (src/lib/customers.js) — no
@@ -662,8 +662,9 @@ export function BookingFormModal({
   },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig]);
   const kitchenSugg=kitchenScan.value;
   // v16.3.0 perf phase 2: the ⏳ cue — shown while a deferred scan is pending.
-  // Its Reveal's ~300ms ease is the natural grace: a fast scan unmounts it
-  // having barely opened (imperceptible sliver), a slow scan shows it fully.
+  // Its Reveal's ease (--t-reveal, 520ms) is the natural grace: a fast scan
+  // unmounts it having barely opened (imperceptible sliver), a slow scan shows
+  // it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
   const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
   const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.medium,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;

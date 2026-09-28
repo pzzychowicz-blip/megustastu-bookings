@@ -28,7 +28,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX } from "./lib/constants";
 
 import {
   getDur, toMins, genId, sanitizeBlock,
@@ -396,7 +396,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.2.0",
+  version:"18.3.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -511,10 +511,11 @@ const DAY_DISMISS_KEYS=Object.freeze(["late","overlap","wait"]);
 // sheet fill opaque enough that a timeline row scrolling beneath does not show
 // through, measured with `--bg-sheet` at 0.72), with a hairline and the soft
 // shadow to separate it from what scrolls beneath. The safe-area inset keeps
-// both buttons clear of an iPhone's home indicator.
+// both buttons clear of an iPhone's home indicator, and (v18.3.0, N7) the side
+// insets keep them clear of the notch in landscape; in portrait those are 0.
 const MOBILE_BAR={
   position:"fixed",left:0,right:0,bottom:0,zIndex:100,
-  display:"flex",gap:8,padding:"8px 12px",
+  display:"flex",gap:8,padding:"8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left))",
   paddingBottom:"calc(8px + env(safe-area-inset-bottom, 0px))",
   background:"var(--bg-sheet-mobile)",borderTop:"1px solid var(--border-soft)",boxShadow:"var(--shadow-soft)"
 };
@@ -630,7 +631,6 @@ function readSplit(){
 // A STACKED split is always fine — it halves the height, and fewer visible table
 // rows is what scrolling is for.
 const MIN_TL_PANE=1050;
-const SPLIT_DIVIDER_PX=10;
 // `tlPane` is "a" or "b" — which side the Timeline is on. Pure, so the menu, the
 // view-switcher and the repair effect all ask the same question one way.
 function tlPaneOk(appW,dir,ratio,tlPane){
@@ -869,10 +869,16 @@ function BookingApp({uid}){
   // which then mounts the relevant sub-modal — same z-stack ordering
   // as pre-E1, no behavioural change.
   // Ensure optimal viewport scaling on all devices
+  // v18.3.0 (N1): `interactive-widget=resizes-content` makes Android Chrome's
+  // keyboard shrink the LAYOUT viewport (its default since Chrome 108 shrinks
+  // only the visual one), so fixed boxes and dvh follow it and a modal's Save
+  // stays above the keyboard. iOS ignores the key; there Overlay reads the gap
+  // from `useKeyboardInset`, which is 0 on Android for this very reason.
+  // index.html's viewport (the login screen, no fixed chrome) is left alone.
   useEffect(function(){
     let meta=document.querySelector('meta[name="viewport"]');
     if(!meta){meta=document.createElement("meta");meta.name="viewport";document.head.appendChild(meta);}
-    meta.content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover";
+    meta.content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content";
     document.documentElement.style.cssText="height:100%;overflow:hidden;";
     document.body.style.cssText="height:100%;overflow:auto;margin:0;-webkit-overflow-scrolling:touch;overscroll-behavior:none;";
     return function(){document.documentElement.style.cssText="";document.body.style.cssText="";};
@@ -4807,6 +4813,7 @@ function BookingApp({uid}){
     onNoShow={VA.onNoShow}
     onWalkin={VA.onWalkin}
     gesturesEnabled={planGestures}
+    isMobile={isMobile}
     turnBuffer={turnBuffer}
     showAvail={planAvail}
     walkinSize={generalSettings.defaultWalkinSize}
@@ -4862,6 +4869,7 @@ function BookingApp({uid}){
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
     dayClosed={dayClosed}
+    bookingsReady={bookingsReady}
     currency={generalSettings.currency} />;
   // v17.15.5: `clashes` is the SAME memo TimelineView takes. The List card drew
   // nothing at all for a double-booking, which is the one fault where this app
@@ -5079,7 +5087,10 @@ function BookingApp({uid}){
 
   return (
     <div
-      style={Object.assign({background:"var(--bg-app)",padding:isMobile?"12px 12px calc(12px + env(safe-area-inset-bottom))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
+      style={Object.assign({background:"var(--bg-app)",
+        // v18.3.0 (N7): a phone's side paddings clear the notch in landscape;
+        // the side insets are 0 in portrait, so portrait is unchanged.
+        padding:isMobile?"12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))":"16px",fontFamily:"var(--font-app)",color:S.text,boxSizing:"border-box"},
         /* v17.5.0: shellFixed → a 100dvh flex column whose inner region scrolls,
            so the header + date rows stay put. Off = the original growing block.
            v17.5.0 correction: NO overflow:hidden here. It clipped the List
@@ -5329,11 +5340,11 @@ function BookingApp({uid}){
         one above. They answer different questions and can change in the same
         commit — a date change that also brings a clash into view would have one
         overwrite the other inside a single region, and whichever won would be
-        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div>{splitMenuFor?<SplitMenu
+        arbitrary. Same placement rules: always mounted, outside <main>. */}<div className="mgt-sr-only" role="status" aria-live="polite">{dayAnnounce}</div><ModalPresence show={!!splitMenuFor}>{/* v18.3.0 (M3): it animates out (PopupShell) */}{splitMenuFor?<SplitMenu
               view={splitMenuFor}
               onConfirm={confirmSplit}
               sideBySideOk={splitSideBySideOk}
-              onClose={function(){setSplitMenuFor(null);}} />:null}<ModalPresence show={showForm}>{showForm?<BookingFormModal
+              onClose={function(){setSplitMenuFor(null);}} />:null}</ModalPresence><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
               editId={editId}

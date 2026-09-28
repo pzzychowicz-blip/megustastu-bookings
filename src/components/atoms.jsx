@@ -12,9 +12,12 @@
 // original `RC()` versions in v14.1. No visual or behavioural changes.
 
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
+import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import { afterFrame } from "../lib/after-frame";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -43,6 +46,10 @@ import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 // intrinsic heights diverge, and this app runs on Android Chrome, iPads and
 // iPhones. Nothing is clipped at 44 — the time input, the tallest of them,
 // reports scrollHeight 42 against clientHeight 42.
+//
+// iOS Safari ignores the pin (and the width) on a time input until its UA
+// chrome is off: `input[type="time"]` in index.css (v18.3.0, N3) does that,
+// for every caller at once.
 //
 // `mkArea` puts it back to auto: a textarea is sized by its rows.
 //
@@ -463,6 +470,15 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
   const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
   const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
+  // v18.3.0 (N1): how much of the screen the on-screen keyboard covers (0 when
+  // there is none). A fixed box follows the LAYOUT viewport, which the iOS
+  // keyboard does not shrink, so Save sat behind it. Every box below stays
+  // full-screen and takes the inset as PADDING (or, where its content is
+  // absolutely placed, insets that content), so its own background still
+  // paints under the keyboard and under the see-through bar iOS 26 draws above
+  // it. Moving the boxes' edges instead let the page behind a modal show
+  // through that bar (Patryk's pick, measured in the Simulator).
+  const kb = useKeyboardInset();
 
   useEffect(() => {
     if (!mob) return;
@@ -495,10 +511,13 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   // to reset and a provider promising one would be a lie a child could call.
   if (panel) {
     const pw = panel.maxWidth || 1200;
+    // The keyboard inset: the phone's full-screen card pads its own content, the
+    // desktop scrim pads so the card centres in what is visible and may take all of it.
+    const scrimPad = mob ? 0 : SP.gutter;
     return (
       <div
         className={scrimCls}
-        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: mob ? 0 : 16, boxSizing: "border-box" }}
+        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: scrimPad, paddingTop: scrimPad + (mob ? 0 : kb.top), paddingBottom: scrimPad + (mob ? 0 : kb.bottom), boxSizing: "border-box" }}
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
         <div
@@ -513,7 +532,9 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
             border: "1px solid var(--border-sheet)",
             width: "100%",
             maxWidth: mob ? "none" : pw,
-            height: mob ? "100dvh" : (panel.height || "min(900px, 90dvh)"),
+            height: mob ? "100dvh" : (kb.bottom ? "100%" : (panel.height || "min(900px, 90dvh)")),
+            paddingTop: mob ? kb.top : 0,
+            paddingBottom: mob ? kb.bottom : 0,
             display: "flex",
             flexDirection: "column",
             boxShadow: "var(--shadow-sheet)",
@@ -530,22 +551,29 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   if (mob) {
     // Footer pinned to the viewport bottom; body scrolls between top and footer.
     // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
+    // With the keyboard up, the sheet's padding lifts the footer onto it, and
+    // the footer drops the home-indicator inset, which the keyboard now covers.
+    // v18.3.0 (N7): the side paddings clear the notch in landscape (the side
+    // insets are 0 in portrait, so portrait is unchanged).
     if (footer) {
       return wrap(
-        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
-          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
+        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingTop: kb.top, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+          <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", boxSizing: "border-box" }}>
             {children}
           </div>
-          <div style={{ flexShrink: 0, padding: "12px 18px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
+          <div style={{ flexShrink: 0, padding: "12px 18px", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: kb.bottom ? SP.wide : "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
             {footer}
           </div>
         </div>
       );
     }
+    // No footer: the scroller is absolutely placed, which padding cannot move,
+    // so the keyboard insets the scroller itself and the sheet paints the same
+    // background under it (covered edge to edge, so nothing changes at rest).
     return wrap(
-      <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
-        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
-          <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
+      <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)" }}>
+        <div ref={scrollRef} style={{ position: "absolute", top: kb.top, left: 0, right: 0, bottom: kb.bottom, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+          <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
         </div>
@@ -556,15 +584,19 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   // Desktop centered card. With a footer, the card is a flex column: body
   // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
   // (exactly as before). `top`: hung from TOP_ANCHOR instead — see `anchor`.
+  // With the keyboard up (an iPad), the scrim pads by it so the card centres in
+  // what is visible, and the card may fill that instead of 90dvh; a hung card
+  // keeps its anchor, so its top does not move when the keyboard rises.
   const top = anchor === "top";
+  const cardMaxH = kb.bottom ? (top ? "calc(100% - " + TOP_ANCHOR + ")" : "100%") : "90dvh";
   return wrap(
     <div
       className={scrimCls}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: 12 }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: SP.wide, paddingTop: SP.wide + kb.top, paddingBottom: SP.wide + kb.bottom }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -573,7 +605,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
           </div>
         </div>
       ) : (
-        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
@@ -1570,9 +1602,33 @@ export function reduceMotionOn() {
 // A predicate rather than a boolean so it is evaluated HERE, inside the layout
 // effect — the moment the question is actually asked. That also lets a caller
 // answer it from refs without reading them during render.
+//
+// v18.3.0 (M1): `ref.seed(id, top)` — a ONE-SHOT starting point for one id's
+// next pass, used for a timeline DROP. The recorded top of a dragged block is
+// its row from before the drag began; the finger left it somewhere else, so a
+// flip from the record rewound the block to its old row on the first frame
+// after release and slid it down again (measured: released at top 416, drawn
+// at 328 on the next frame, then 385ms back to 416). The drop seeds the
+// release position instead, container-relative like every top here, so the
+// block settles from under the finger.
+// A seed lives ONE FRAME. React flushes a discrete event's commit, and with it
+// this layout effect, inside the event, before any animation frame, so the
+// drop's own pass reads it. A refused drop changes no assignment and runs no
+// pass, and its seed must not survive to poison a later, unrelated reshuffle,
+// so an unconsumed seed is dropped at the next frame. Under reduced motion a
+// seed is consumed like any top, and nothing animates.
+// Attached in an effect, never during render: writing to a ref in render is
+// what the React-Compiler refs rule forbids.
 export function useFlip(deps, isQuiet) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
+  const seeds = useRef(new Map());
+  useEffect(function () {
+    ref.seed = function (id, top) {
+      seeds.current.set(id, top);
+      requestAnimationFrame(function () { seeds.current.delete(id); });
+    };
+  }, []);
   useLayoutEffect(function () {
     const container = ref.current;
     if (!container) return;
@@ -1593,7 +1649,7 @@ export function useFlip(deps, isQuiet) {
       // container itself cancels out of every child's offset.
       const top = el.getBoundingClientRect().top - originTop;
       next.set(id, top);
-      const prev = prevTops.current.get(id);
+      const prev = seeds.current.has(id) ? seeds.current.get(id) : prevTops.current.get(id);
       if (!quiet && !reduceMotion && prev != null && prev !== top && typeof el.animate === "function") {
         el.animate(
           [{ transform: "translateY(" + (prev - top) + "px)" }, { transform: "translateY(0)" }],
@@ -1603,6 +1659,7 @@ export function useFlip(deps, isQuiet) {
       }
     });
     prevTops.current = next;
+    seeds.current.clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return ref;
@@ -1621,17 +1678,30 @@ export function useFlip(deps, isQuiet) {
 // mounted so its `*-out` keyframe can finish. It is the default for all three
 // primitives here — see the note at its definition for what each of the four
 // hand-typed numbers it replaces was getting wrong.
-function usePresenceLifecycle(show, outMs) {
+// v18.3.0 (/review-animations): the hold now starts on the first FRAME that
+// shows the exit (`afterFrame`, lib/after-frame.js), from an effect on
+// `leaving`, which runs after the commit that swaps in the `-out` class. It
+// started in the effect that SETS `leaving`, one render earlier, and after a tap
+// that also changes a booking the page is busy between the two: measured, a
+// status picked in the quick-status card ran its 240ms exit for 170ms and the
+// card vanished at opacity 0.55–0.66, and the Plan popover the same at 0.55.
+// The value was right since v17.15.0; the moment it was counted from was not.
+// `skip` (ModalPresence's hand-off, below): this close unmounts at once, with
+// no leaving phase at all.
+function usePresenceLifecycle(show, outMs, skip) {
   const [render, setRender] = useState(show === true);
   const [leaving, setLeaving] = useState(false);
   useEffect(function () {
-    if (show) { setRender(true); setLeaving(false); return undefined; }
-    if (!render) return undefined;          // never shown → nothing to animate out
-    setLeaving(true);
-    const t = setTimeout(function () { setRender(false); setLeaving(false); }, outMs);
-    return function () { clearTimeout(t); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `render` read as a closure snapshot
+    if (show) { setRender(true); setLeaving(false); return; }
+    if (!render) return;                    // never shown → nothing to animate out
+    if (skip) setRender(false);
+    else setLeaving(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `render` and `skip` read as closure snapshots of the close
   }, [show]);
+  useEffect(function () {
+    if (!leaving) return undefined;
+    return afterFrame(function () { setRender(false); setLeaving(false); }, outMs);
+  }, [leaving, outMs]);
   return [render, leaving];
 }
 
@@ -1661,7 +1731,18 @@ export function Toast({ show, children, style }) {
 // PresenceContext — `Overlay` (and ReminderEditor) read it to swap their scrim/
 // card/sheet to the *-out keyframe before unmounting. No wrapper element is
 // rendered, so the modal's own fixed/overlay positioning is untouched.
-export const PresenceContext = createContext({ leaving: false });
+// v18.3.0 (/review-animations): `skipExit()` — call it in the handler that
+// closes, BEFORE the close, and this one close unmounts at once instead of
+// playing the exit. It is for a HAND-OFF: a popup closed by picking something
+// whose result appears in the same moment (a status change and its wipe, a
+// booking row and the form it opens, a split and its layout). The exit had
+// nothing to say there and sat over the result: measured, the quick-status card
+// was still 88%+ opaque over the block while the wipe swept its first 39%, and
+// the Plan popover was 0.67 over the booking form after the form had reached
+// 0.97. A dismiss (the scrim, Escape) still plays the exit. Both setStates land
+// in the same event, so the render that closes already knows; a skip whose
+// close never comes is cleared by the next render (ModalPresence).
+export const PresenceContext = createContext({ leaving: false, skipExit: function () {} });
 // v17.10.2: was `usePresence`, which collided with the Firebase device-presence
 // hook in src/hooks/usePresence.js — two exported, importable functions of that
 // name sharing nothing but a good word. Importing the wrong one gave a confusing
@@ -1669,15 +1750,80 @@ export const PresenceContext = createContext({ leaving: false });
 // so it takes the specific name, and it now pairs with its own provider.
 export function useModalPresence() { return useContext(PresenceContext); }
 
-export function ModalPresence({ show, children, outMs = EXIT_MS }) {
+// `handoff` (/code-review): the same hand-off for a close that comes from
+// OUTSIDE the popup, where `skipExit()` cannot be reached. TimelineView's drag
+// closes the quick-status card the moment it lifts the block, and the card's
+// exit faded over that block with its scrim (measured: 250ms, ≥0.88 opaque for
+// the first 120). The parent sets it with the close and clears it on reopening.
+export function ModalPresence({ show, children, outMs = EXIT_MS, handoff = false }) {
   const last = useRef(null);
   if (children) last.current = children;
-  const [render, leaving] = usePresenceLifecycle(show, outMs);
-  if (!render) return null;
+  // A skip only counts for the close it was asked for: while the surface is
+  // still open (reopened, or a close that never came) it is cleared here.
+  const [instant, setInstant] = useState(false);
+  if (show && instant) setInstant(false);
+  const skip = instant || handoff;
+  const [render, leaving] = usePresenceLifecycle(show, outMs, skip);
+  if (!render || (!show && skip)) return null;
   return (
-    <PresenceContext.Provider value={{ leaving: leaving }}>
+    <PresenceContext.Provider value={{ leaving: leaving, skipExit: function () { setInstant(true); } }}>
       {children || last.current}
     </PresenceContext.Provider>
+  );
+}
+
+// ── PopupShell — the one popup shell (v18.3.0, M3) ───────────────────────────
+// The quick-status card, the split menu and the Plan table popover: a centred
+// card on the `--tl-popup-scrim` at z=300, which is a POPUP and not a dialog
+// (`Overlay` is the dialog). The three built it by hand, entered with the
+// modal keyframes, and unmounted on close with no exit. Here it reads the
+// wrapping `ModalPresence`'s `leaving`, like `Overlay`, and swaps to the exit
+// keyframes (--ease-in); every mount site wraps its popup in `ModalPresence`.
+// The exit is for a DISMISS (the scrim, Escape). A PICK hands off to its result
+// (a wipe, a form, a split) and calls `skipExit()` first, so the popup is gone
+// on the frame the result starts (/review-animations; see PresenceContext).
+//
+// A body portal, and that is load-bearing: the popups mount inside SlideView,
+// whose transform (while a view slide runs or settles) turns a position:fixed
+// scrim into a box relative to that ancestor, so on a wide timeline it centred
+// on the scroller, not the screen. A body portal always centres on the viewport.
+//
+// A LEAVING popup is `pointer-events: none`, scrim and card. Measured (S1): a
+// modal's leaving scrim swallows the next tap — a click 100ms after Escape
+// landed on the booking form's fading scrim and did nothing. The quick-status
+// card closes on the status path, tens of times a service, so a swallowed tap
+// there would eat the tap after every status change. While it fades, a tap
+// falls through to what is underneath, and it is `aria-hidden`.
+//
+// The no-select trio is on the scrim for the reason QuickStatusPopup gave in
+// v17.16.12: a hold opens this, the finger is still down, and the scrim is most
+// of the screen. A scrim is never a copy target.
+export function PopupShell({ onScrimClick, cardRef, cardStyle, children }) {
+  const { leaving } = useModalPresence();
+  const off = leaving ? "none" : undefined;
+  return createPortal(
+    <div
+      onClick={onScrimClick}
+      className={leaving ? "mgt-scrim-out" : "mgt-scrim-in"}
+      aria-hidden={leaving ? true : undefined}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "var(--tl-popup-scrim)",
+        WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none",
+        pointerEvents: off
+      }}
+    >
+      <div
+        ref={cardRef}
+        onClick={(e) => e.stopPropagation()}
+        className={leaving ? "mgt-card-out" : "mgt-card-in"}
+        style={Object.assign({}, cardStyle, { pointerEvents: off })}
+      >
+        {children}
+      </div>
+    </div>,
+    document.body
   );
 }
 

@@ -70,6 +70,7 @@ describe("motion tokens", () => {
     expect(M.dur.move).toBe(token("t-move"));
     expect(M.dur.shift).toBe(token("t-shift"));
     expect(M.dur.reveal).toBe(token("t-reveal"));
+    expect(M.dur.wipe).toBe(token("t-wipe"));
   });
 
   it("a disclosure is slower than a bare geometry move", () => {
@@ -102,6 +103,82 @@ describe("exit holds outlast their animations", () => {
     const src = code(join(ROOT, "src/hooks/useRevealRows.js"), "utf8");
     expect(src).toMatch(/PRUNE_MS\s*=\s*REVEAL_EXIT_MS/);
     expect(src).not.toMatch(/PRUNE_MS\s*=\s*\d/);
+  });
+
+  // v18.3.0 (O1): the timeline's arrivals and departures. Both holds clear the
+  // entrance/exit classes, so a short one cancels the entrance (a class removed
+  // mid-animation snaps to full) or unmounts the leaving copy mid-fade.
+  it("useEnterLeave holds both halves for exitHold(speed), never a literal", () => {
+    const src = code(join(ROOT, "src/hooks/useEnterLeave.js"), "utf8");
+    expect(src).toMatch(/const hold = exitHold\(/);
+    expect((src.match(/afterFrame\(function \(\) \{ set(?:Leaving|Arriving)\(NO_(?:SNAPS|IDS)\); \}, hold\)/g) || []).length,
+      "both clears are timed by the derived hold").toBe(2);
+    // …starting on the frame the animation starts on, not in the effect: a
+    // tap's passive effects run before the paint (lib/after-frame.js).
+    expect(src).toMatch(/import \{ afterFrame \} from "\.\.\/lib\/after-frame"/);
+    expect(src).not.toMatch(/\},\s*\d+\s*\)/);
+    // …and the timeline asks for the speed its classes run on (--t-move).
+    const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
+    expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move" \}\s*\)/);
+    // /code-review: the snapshots' lanes follow the layout and the clock too.
+    expect(tl).toMatch(/\[bookings, late, warnings, clashes, freeing, chipsOn, layoutSig, nowMins\],/);
+    expect(token("t-move")).toBe(M.dur.move);
+  });
+
+  // /review-animations: the shared primitive under every Presence, Toast and
+  // ModalPresence. Its hold started in the effect that SETS `leaving`, one render
+  // before the `-out` class commits, and a status pick blocks the page between
+  // the two: the quick-status card's exit ran 170 of 240ms and vanished at 0.55.
+  it("usePresenceLifecycle times its hold from the leaving frame", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const body = atoms.slice(atoms.indexOf("function usePresenceLifecycle("), atoms.indexOf("export function Presence("));
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toMatch(/if \(!leaving\) return undefined;\s*return afterFrame\(function \(\) \{ setRender\(false\); setLeaving\(false\); \}, outMs\);\s*\}, \[leaving, outMs\]\)/);
+    expect(body, "no hold started in the effect that sets leaving").not.toMatch(/setTimeout\(/);
+    const lib = code(join(ROOT, "src/lib/after-frame.js"), "utf8");
+    expect(lib).toMatch(/requestAnimationFrame\(function \(\) \{ t = setTimeout\(fn, ms\); \}\)/);
+  });
+
+  // /review-animations: a popup closed by a PICK hands off to its result (the
+  // wipe, a form, the split) and leaves at once; only a dismiss plays the exit.
+  // The skip must be asked BEFORE the close, in the same handler, so the render
+  // that closes already knows. Measured before: the quick-status card sat 88%+
+  // opaque over the wipe's first 39%, the Plan popover over the booking form.
+  it("a popup's picks skip the exit, and only ModalPresence honours it", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    expect(atoms).toMatch(/const skip = instant \|\| handoff;/);
+    expect(atoms).toMatch(/if \(!render \|\| \(!show && skip\)\) return null;/);
+    expect(atoms, "a skip is cleared while the surface is open").toMatch(/if \(show && instant\) setInstant\(false\);/);
+    // /code-review: a close from OUTSIDE the popup hands off through the prop.
+    // The timeline's drag arm closes the card that way, and the parent clears it on reopening.
+    const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
+    expect(tl).toMatch(/<ModalPresence show=\{!!quickStatus\} handoff=\{quickHandoff\}>/);
+    expect(tl).toMatch(/if \(quickStatus && quickHandoff\) setQuickHandoff\(false\);/);
+    expect(tl).toMatch(/if \(handOffQuick\) handOffQuick\(\); else setQuickStatus\(null\);/);
+    expect((tl.match(/handOffQuick=\{handOffQuick\}/g) || []).length, "both live block sites get the hand-off").toBe(2);
+    const sites = [
+      ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onDelete(booking.id)"]],
+      ["src/components/PlanView.jsx", ["onPick(b)", "onWalkinHere()"]],
+      ["src/components/SplitMenu.jsx", ["onConfirm({"]],
+    ];
+    for (const [file, picks] of sites) {
+      const src = code(join(ROOT, file), "utf8");
+      expect((src.match(/skipExit\(\);/g) || []).length, file + ": one skip per pick").toBe(picks.length);
+      for (const pick of picks) {
+        const at = src.indexOf(pick);
+        expect(at, file + " still has " + pick).toBeGreaterThan(0);
+        expect(src.slice(Math.max(0, at - 40), at), file + ": skipExit() right before " + pick).toMatch(/skipExit\(\);\s*$/);
+      }
+    }
+  });
+
+  // The hook compares its deps by IDENTITY during render, so a map prop that
+  // defaults to `{}` is a new object on every pass and the body never settles.
+  it("the timeline's snapshotted maps default to one frozen object", () => {
+    const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
+    for (const name of ["warnings", "clashes", "late", "freeing"]) {
+      expect(tl, name).toMatch(new RegExp("\\b" + name + " = NO_MARKS\\b"));
+    }
   });
 });
 

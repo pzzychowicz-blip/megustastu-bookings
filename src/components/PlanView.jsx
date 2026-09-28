@@ -38,16 +38,16 @@
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect, memo } from "react";
-import { createPortal } from "react-dom";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
+import { bandZoom, clampZoom, clampPan } from "../lib/plan-zoom"; // v18.3.0 phase 14: the zoom and pan limits
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { StatusIcon } from "./Icons"; // v17.15.7: the one status→mark source
 import { TimeAxis } from "./TimeAxis"; // v17.5.0: the time-block strip that replaced the slider
-import { mkBtn, Reveal, SBadge, SizeRing } from "./atoms";
+import { mkBtn, Reveal, SBadge, SizeRing, ModalPresence, PopupShell, useModalPresence } from "./atoms";
 import { EmptyDay } from "./EmptyDay";
 import { todayStr } from "../lib/day";
 
@@ -66,6 +66,67 @@ const MARK_TOP = 11;
 // the memo naturally; `hoursSig` (the parent's weekHours state) is an
 // identity-only prop that busts it on an operating-hours edit, because
 // hoursFor(date) reads a live module binding the memo can't see.
+// ── The table popover (v18.3.0, M3) ──────────────────────────────────────────
+// The day's queue on one table, opened by a tap on it. Moved out of PlanView's
+// render for ONE reason: its buttons must refuse while it LEAVES, and `leaving`
+// comes from the ModalPresence PlanView renders around it, a context PlanView
+// itself sits outside of. Module scope, not inline (the inline-sub-component
+// rule: a component defined in a render is a new type every render). The
+// portal, the scrim and the exit are `PopupShell`'s. What it shows, the
+// walk-in gate and the focus handling are PlanView's, unchanged.
+function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinHere }) {
+  // A row or Walk-in here hands off to a form: `skipExit()` first (atoms).
+  const { leaving, skipExit } = useModalPresence();
+  return (
+    <PopupShell
+      onScrimClick={() => { if (!leaving) onClose(); }}
+      cardRef={popRef}
+      cardStyle={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}
+    >
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
+      {queue.length === 0 ? (
+        <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
+      ) : queue.map((b) => {
+        // Phase 57: a BUTTON, named by what it shows, time first ("20:00
+        // Ana, 2 guests, confirmed") — its content would have read the
+        // size ring as a bare "2".
+        return (
+          <button type="button" key={b.id} className="mgt-hover-scale"
+            onClick={() => { if (!leaving) { skipExit(); onPick(b); } }}
+            aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+            <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
+            <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+            {/* v18.2.0 phase 43 (C2): the party size as the List card's
+                ring — this row IS a small List card (time · name · size ·
+                status). It was "Name (2)", inside the name, so the ellipsis
+                took the size first. Measured on a 375px phone, "2 guests"
+                as text left a name 71px once the card fits the screen
+                ("Unsettled Pr…"); the 18px ring leaves 102. Its title
+                says "2 guests". */}
+            <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
+            {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
+                pointed at `SBadge`. That comment ("solid, like every other
+                status label") was true about the fill and silently false
+                about everything else: the atom gained `StatusIcon` in
+                v17.15.5 and this copy could not follow it, so the popover
+                named a status with a word while the block behind it named
+                the same status with a mark. */}
+            <SBadge status={b.status} />
+          </button>
+        );
+      })}
+      {canWalkin ? (
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+          <button className="mgt-hover-scale"
+            onClick={() => { if (!leaving) { skipExit(); onWalkinHere(); } }}
+            style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
+        </div>
+      ) : null}
+    </PopupShell>
+  );
+}
+
 export const PlanView = memo(function PlanView({
   bookings, date, layout, blocks = [],
   nowMins = 0, late = {}, freeing = {},
@@ -80,6 +141,12 @@ export const PlanView = memo(function PlanView({
   // v17.1.2: per-device master switch for zoom/pan/double-tap-reset (Settings →
   // General "Plan zoom & pan", localStorage-backed in App — scalar, memo-safe).
   gesturesEnabled = true,
+  // /code-review: App's `isMobile` (`winW < 600`, from useWinW), the one-finger
+  // rule's phone test (see `touchAct`). A prop, not a read of the window here:
+  // this component is memoised and nothing else it takes changes on a resize,
+  // so a read in render stayed what it was at the last render, up to a minute
+  // (measured: resized 1280 → 390, the plan kept `touch-action: none`).
+  isMobile = false,
   // v17.6.0: separation between bookings, in minutes (0 = off). Scalar from App
   // rather than the TURN_BUFFER live binding — React.memo can't see a live
   // binding (same reason hoursSig exists).
@@ -306,29 +373,118 @@ export const PlanView = memo(function PlanView({
     setTablePop(null);
   }
 
-  // ── Zoom / pan (transform on the inner <g>) ─────────────────────────────────
+  // ── Zoom / pan (a CSS transform on the inner <g>) ───────────────────────────
+  // v18.3.0 phase 14 (A8): the view is drawn by a CSS `transform` on the <g>,
+  // no longer its `transform` ATTRIBUTE, because CSS cannot transition an SVG
+  // attribute and the resets now glide. In SVG, CSS transform lengths are user
+  // units, so the numbers are the attribute's own — measured identical before
+  // the swap (0.0px at three views, in Chromium and in WebKit on the iPhone and
+  // iPad Simulators). The limits are `lib/plan-zoom.js`'s.
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
+  // True while a reset or a spring-back glides; never during a gesture.
+  const [settling, setSettling] = useState(false);
+  const settleRef = useRef(null);
   const svgRef = useRef(null);
+  const gRef = useRef(null);          // the zoomed <g>: where a glide has got to (endSettle)
+  const wrapRef = useRef(null);       // the HTML wrapper: iOS's touch defences (A1)
   const panRef = useRef(null);        // {x,y,tx,ty} while background-dragging
-  const pinchRef = useRef(null);      // {d0,k0} while two-pointer pinching
+  const pinchRef = useRef(null);      // {d0,k0,wx,wy} while two-pointer pinching, + {k,m} once it moves
   const pointersRef = useRef({});     // active pointers for pinch
   const movedRef = useRef(false);     // suppress tap-select after a drag
   const pressRef = useRef(null);      // long-press timer for touch quick-status
+
+  // v18.3.0 phase 13 (A1 + N10): pan and pinch work on iOS. iOS WebKit IGNORES
+  // `touch-action` on an <svg> (src/CLAUDE.md's "iOS + SVG touch drags" row):
+  // measured on the iPhone, a finger drag on the plan fired 2 pointermoves,
+  // then pointercancel, and the page scrolled — and Plan zoom & pan is ON by
+  // default, so every iPhone and iPad on the default had a dead pan and pinch.
+  // FloorPlanEditor found this in v17.0.0 round 10 and this is its fix: both
+  // defences on the HTML WRAPPER, which WebKit treats like any other element —
+  // `touchAction` there is honoured and covers the descendant svg (the
+  // effective touch-action walks the ancestor chain), and a NATIVE non-passive
+  // touchmove listener on it can preventDefault (React's root listener is
+  // passive, so a React touch handler cannot).
+  //
+  // N10: a phone is the one screen where the plan fills the width, so a plan
+  // that took every touch would leave a vertical swipe starting on it no way
+  // to scroll the page. On a phone (App's `isMobile`, the width at which Overlay
+  // turns into a sheet), ONE finger scrolls the page vertically (`pan-y`) and
+  // pans the plan sideways; two fingers are always the pinch. The svg carries
+  // the same value as the wrapper rather than its old `none`: Chrome honours the
+  // svg's own copy (the Android path), and the effective value is the
+  // INTERSECTION down the chain, so a `none` on the svg would keep a phone's
+  // vertical swipe dead on Android.
+  const narrow = isMobile;
+  const touchAct = !gesturesEnabled ? "auto" : narrow ? "pan-y" : "none";
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || !gesturesEnabled) return;
+    const block = (ev) => {
+      if (narrow && ev.touches.length < 2) return; // the page's scroll, and the plan's sideways pan
+      ev.preventDefault();
+    };
+    wrap.addEventListener("touchmove", block, { passive: false });
+    return () => wrap.removeEventListener("touchmove", block);
+  }, [gesturesEnabled, narrow]);
 
   function toSvg(e) {
     const svg = svgRef.current;
     const r = svg.getBoundingClientRect();
     return { x: (e.clientX - r.left) * (fp.room.w / r.width), y: (e.clientY - r.top) * (fp.room.h / r.height) };
   }
+  // v18.3.0 phase 14: the next view change glides on `M.shift`, and the
+  // transition comes off again after `exitHold("shift")`, so a gesture after it
+  // is not eased. A gesture that starts mid-glide ends it (`endSettle`).
+  function settle() {
+    clearTimeout(settleRef.current);
+    setSettling(true);
+    settleRef.current = setTimeout(() => { settleRef.current = null; setSettling(false); }, exitHold("shift"));
+  }
+  // v18.3.0 (/review-animations): …and the plan stays where the glide HAS GOT
+  // TO. `view` holds the glide's TARGET, so dropping the transition alone put
+  // the plan there in one frame: measured, a wheel step 120ms into a
+  // double-tap reset jumped the zoom from 1.70× to 1.15×. The drawn transform
+  // is read back and becomes the view, so the gesture starts from what is on
+  // screen. Returns that view, for a caller about to read `view` in the same
+  // event (the pinch and pan anchors below).
+  // /code-review: except a SPRING-BACK, whose drawn zoom is still past the
+  // range. Caught there, a pan kept it (a pan never springs back: measured, the
+  // plan rested at 5.22× after a finger landed 90ms in) and a pinch jumped on
+  // its first move (the band is not the identity out there). That one lands
+  // on its target, which is at most the band's remaining overshoot away; a
+  // reset glide runs between two in-range zooms and is always caught in place.
+  function endSettle() {
+    if (!settleRef.current) return view;
+    clearTimeout(settleRef.current);
+    settleRef.current = null;
+    const drawn = drawnView();
+    const at = clampZoom(drawn.k) === drawn.k ? drawn : view;
+    setView(at);
+    setSettling(false);
+    return at;
+  }
+  // The <g>'s transform is `translate(tx, ty) scale(k)` about 0 0, so the drawn
+  // matrix is (k, 0, 0, k, tx, ty), in the svg's user units like `view`.
+  function drawnView() {
+    const g = gRef.current;
+    if (!g || typeof DOMMatrix !== "function") return view;
+    const m = new DOMMatrix(getComputedStyle(g).transform);
+    return { k: m.a, tx: m.e, ty: m.f };
+  }
+  useEffect(() => () => clearTimeout(settleRef.current), []);
+
   function onWheel(e) {
     if (!gesturesEnabled) return; // no preventDefault → the page scrolls normally
     e.preventDefault();
+    endSettle();
     const p = toSvg(e);
     setView((v) => {
-      const k = Math.max(0.5, Math.min(5, v.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+      // v18.3.0 phase 14: the HARD stop, still — a wheel step has no release
+      // to spring back from — and the pan bound.
+      const k = clampZoom(v.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
       // keep the cursor point stationary: p_screen = k*p_world + t
       const wx = (p.x - v.tx) / v.k, wy = (p.y - v.ty) / v.k;
-      return { k: k, tx: p.x - k * wx, ty: p.y - k * wy };
+      return clampPan({ k: k, tx: p.x - k * wx, ty: p.y - k * wy }, fp.room);
     });
   }
   function bgPointerDown(e) {
@@ -341,16 +497,26 @@ export const PlanView = memo(function PlanView({
     // in bgPointerMove so a stale ref can never pan.
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (!gesturesEnabled) return; // v17.1.2: no pan/pinch arming — taps untouched (movedRef stays false)
+    const v0 = endSettle();   // the view on screen, which this event anchors to
     pointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const pts = Object.values(pointersRef.current);
     if (pts.length === 2) {
       const d0 = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      pinchRef.current = { d0: d0, k0: view.k };
+      // v18.3.0 phase 13 (A2): the ROOM point under the fingers' midpoint,
+      // which the move keeps under the midpoint. `toSvg` reads only
+      // clientX/clientY, so a plain object will do.
+      const m0 = toSvg({ clientX: (pts[0].x + pts[1].x) / 2, clientY: (pts[0].y + pts[1].y) / 2 });
+      pinchRef.current = { d0: d0, k0: v0.k, wx: (m0.x - v0.tx) / v0.k, wy: (m0.y - v0.ty) / v0.k };
       panRef.current = null;
+      // A second finger means this is not a long-press (Patryk, v18.3.0 phase
+      // 13). The first finger's touch on a booked table had armed quick status,
+      // and nothing cleared it here: measured, every pinch that started on one
+      // opened the card 450ms in, over the pinch.
+      clearPress();
       return;
     }
     movedRef.current = false;
-    panRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+    panRef.current = { x: e.clientX, y: e.clientY, tx: v0.tx, ty: v0.ty };
     // NO setPointerCapture here — capturing redirects the subsequent `click`
     // to the svg, which silently killed the table-tap popover (found live).
     // Panning tracks fine while the pointer stays over the canvas.
@@ -367,8 +533,21 @@ export const PlanView = memo(function PlanView({
       // v17.0.0 correction round 6: dampen pinch — the raw finger-distance ratio
       // felt hair-trigger. 0.5 = half sensitivity (a 2× spread → 1.5× zoom).
       const ratio = 1 + (d / pinchRef.current.d0 - 1) * 0.5;
-      const k = Math.max(0.5, Math.min(5, pinchRef.current.k0 * ratio));
-      setView((v) => ({ ...v, k: k }));
+      // v18.3.0 phase 14 (A8): past either end the zoom RESISTS instead of
+      // stopping dead, so the plan keeps following the fingers (at most 25%
+      // over), and springs back on release (bgPointerUp).
+      const k = bandZoom(pinchRef.current.k0 * ratio);
+      // v18.3.0 phase 13 (A2): the pinch follows the fingers. It set only `k`,
+      // so the plan grew about its top-left corner — measured, spreading
+      // 80 → 240px centred on table 6 threw its label (+100.5, +21.4)px off
+      // the midpoint — and two fingers could not pan. `onWheel`'s maths with
+      // the midpoint for the cursor: the room point caught at pinch start
+      // stays under the midpoint, so the zoom is about it and moving both
+      // fingers pans.
+      const m = toSvg({ clientX: (pts[0].x + pts[1].x) / 2, clientY: (pts[0].y + pts[1].y) / 2 });
+      pinchRef.current.k = k;   // phase 14: where the spring-back starts from,
+      pinchRef.current.m = m;   // and the midpoint it re-solves about
+      setView(clampPan({ k: k, tx: m.x - k * pinchRef.current.wx, ty: m.y - k * pinchRef.current.wy }, fp.room));
       return;
     }
     const pan = panRef.current;
@@ -378,15 +557,41 @@ export const PlanView = memo(function PlanView({
     const sx = fp.room.w / r.width, sy = fp.room.h / r.height;
     const dx = (e.clientX - pan.x) * sx, dy = (e.clientY - pan.y) * sy;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
-    if (movedRef.current) { clearPress(); setView((v) => ({ ...v, tx: pan.tx + dx, ty: pan.ty + dy })); }
+    // v18.3.0 phase 13 (Patryk): on a phone, one finger pans SIDEWAYS only —
+    // vertical is the page's (`pan-y`, above), and two fingers pan the plan
+    // any way. The browser claims a vertical swipe only once it has moved past
+    // its slop, and until then the plan followed it: measured, ~16px of room
+    // per swipe, left behind every time. The threshold above still reads the
+    // real `dy`, so a wiggling tap is still not a table tap. A mouse is never
+    // held to this: it has no second finger to pan with.
+    const sideways = narrow && e.pointerType !== "mouse";
+    // v18.3.0 phase 14 (A8): bounded, so the room cannot be dragged off screen.
+    if (movedRef.current) { clearPress(); setView((v) => clampPan({ ...v, tx: pan.tx + dx, ty: sideways ? pan.ty : pan.ty + dy }, fp.room)); }
   }
   function bgPointerUp(e) {
+    // v18.3.0 phase 13 (Patryk): a CANCELLED pan is the browser taking the
+    // gesture — a phone's vertical swipe becoming the page's scroll — so what
+    // the plan followed before it did is undone rather than left as drift.
+    const pan = panRef.current;
+    if (e.type === "pointercancel" && pan && movedRef.current) setView((v) => ({ ...v, tx: pan.tx, ty: pan.ty }));
     delete pointersRef.current[e.pointerId];
-    if (Object.keys(pointersRef.current).length < 2) pinchRef.current = null;
+    if (Object.keys(pointersRef.current).length < 2) {
+      // v18.3.0 phase 14 (A8): a pinch released past either end springs back
+      // to it, re-solved about the last midpoint so the room under the fingers
+      // stays near them, and glides there.
+      const pin = pinchRef.current;
+      if (pin && pin.m && clampZoom(pin.k) !== pin.k) {
+        const k = clampZoom(pin.k);
+        settle();
+        setView(clampPan({ k: k, tx: pin.m.x - k * pin.wx, ty: pin.m.y - k * pin.wy }, fp.room));
+      }
+      pinchRef.current = null;
+    }
     panRef.current = null;
     clearPress();
   }
-  function resetView() { setView({ k: 1, tx: 0, ty: 0 }); }
+  // v18.3.0 phase 14: the double-tap reset glides home rather than jumping.
+  function resetView() { settle(); setView({ k: 1, tx: 0, ty: 0 }); }
   // Turning gestures OFF resets the view — a zoomed/panned plan must not get
   // stuck with no gesture left to un-zoom it — AND clears every gesture ref:
   // movedRef is only ever reset in bgPointerDown (which now bails when off), so
@@ -394,6 +599,7 @@ export const PlanView = memo(function PlanView({
   // table-tap onClick (`!movedRef.current`) forever (/code-review catch).
   useEffect(() => {
     if (!gesturesEnabled) {
+      settle(); // v18.3.0 phase 14: glides home, like the double-tap
       setView({ k: 1, tx: 0, ty: 0 });
       movedRef.current = false;
       panRef.current = null;
@@ -459,57 +665,12 @@ export const PlanView = memo(function PlanView({
     // busy. A later SEATED booking now counts as well as confirmed/pending:
     // scrubbed back before a party sat down, their table is not free for them.
     const canWalkin = freeNow && isToday && windowOf(id).fits;
-    // v17.0.0 correction round 4: portalled to <body> like QuickStatusPopup —
-    // SlideView's transform makes an in-tree position:fixed scrim center on
-    // the container, not the viewport.
-    return createPortal(
-      <div onClick={() => setTablePop(null)} className="mgt-scrim-in"
-        style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--tl-popup-scrim)" }}>
-        <div ref={popRef} onClick={(e) => e.stopPropagation()} className="mgt-card-in"
-          style={{ background: "var(--tl-popup-bg)", borderRadius: R.sheet, border: "1px solid " + S.border, boxShadow: "var(--shadow-popover)", padding: "18px 18px", minWidth: 260, maxWidth: 360, maxHeight: "70vh", overflowY: "auto", zIndex: 301 }}>
-          <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 12 }}>{"Table " + id}</div>
-          {queue.length === 0 ? (
-            <div style={{ fontSize: T.body, color: S.muted, marginBottom: 4 }}>No bookings on this table today.</div>
-          ) : queue.map((b) => {
-            // Phase 57: a BUTTON, named by what it shows, time first ("20:00
-            // Ana, 2 guests, confirmed") — its content would have read the
-            // size ring as a bare "2".
-            return (
-              <button type="button" key={b.id} className="mgt-hover-scale"
-                onClick={() => { leavePop(); onEdit(b); }}
-                aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
-                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
-                <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
-                {/* v18.2.0 phase 43 (C2): the party size as the List card's
-                    ring — this row IS a small List card (time · name · size ·
-                    status). It was "Name (2)", inside the name, so the ellipsis
-                    took the size first. Measured on a 375px phone, "2 guests"
-                    as text left a name 71px once the card fits the screen
-                    ("Unsettled Pr…"); the 18px ring leaves 102. Its title
-                    says "2 guests". */}
-                <SizeRing n={b.size} rim="var(--chip-neutral-border)" />
-                {/* v17.15.6: it IS `SBadge` now, rather than a copy whose comment
-                    pointed at `SBadge`. That comment ("solid, like every other
-                    status label") was true about the fill and silently false
-                    about everything else: the atom gained `StatusIcon` in
-                    v17.15.5 and this copy could not follow it, so the popover
-                    named a status with a word while the block behind it named
-                    the same status with a mark. */}
-                <SBadge status={b.status} />
-              </button>
-            );
-          })}
-          {canWalkin ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-              <button className="mgt-hover-scale"
-                onClick={() => { leavePop(); onWalkin(id); }}
-                style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-walkin)" })}>Walk-in here</button>
-            </div>
-          ) : null}
-        </div>
-      </div>,
-      document.body
+    // v18.3.0 (M3): the popover itself is `TablePopover` (module scope, above).
+    return (
+      <TablePopover id={id} queue={queue} canWalkin={canWalkin} popRef={popRef}
+        onClose={() => setTablePop(null)}
+        onPick={(b) => { leavePop(); onEdit(b); }}
+        onWalkinHere={() => { leavePop(); onWalkin(id); }} />
     );
   })() : null;
 
@@ -547,7 +708,8 @@ export const PlanView = memo(function PlanView({
   return (
     <div style={{
       background: "var(--tl-card-bg)",
-      backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      // v18.3.0 (A9): no backdrop blur. The card sits over the flat --bg-app, where a
+      // blur changes nothing (≤5/255 measured), and it spent the tablet's ≤4 budget.
       borderRadius: R.sheet, border: "1px solid var(--tl-card-border)",
       padding: "10px 12px", boxShadow: "var(--shadow-soft)"
     }}>
@@ -601,9 +763,11 @@ export const PlanView = memo(function PlanView({
       )}
       {/* v17.8.0: the closed-day line moved to NotificationStrip — see the note
           in TimelineView. */}
-      <div style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
+      {/* v18.3.0 phase 13: `touchAction` on the WRAPPER, which WebKit honours,
+          and the svg carries the same value for Chrome (see `touchAct`). */}
+      <div ref={wrapRef} style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)", touchAction: touchAct }}>
         <svg ref={svgRef} viewBox={"0 0 " + fp.room.w + " " + fp.room.h}
-          style={{ display: "block", width: "100%", touchAction: gesturesEnabled ? "none" : "auto" }}
+          style={{ display: "block", width: "100%", touchAction: touchAct }}
           onWheel={onWheel}
           onPointerDown={bgPointerDown} onPointerMove={bgPointerMove}
           onPointerUp={bgPointerUp} onPointerCancel={bgPointerUp}
@@ -615,7 +779,11 @@ export const PlanView = memo(function PlanView({
               <rect width={5.65} height={11.3} fill="var(--tl-blocked-b)" />
             </pattern>
           </defs>
-          <g transform={"translate(" + view.tx + "," + view.ty + ") scale(" + view.k + ")"}>
+          {/* v18.3.0 phase 14 (A8): a CSS transform, so a reset can glide (see
+              the zoom block). The global reduced-motion rules neutralise the
+              transition under both intents: the OS query leaves `transform`
+              out of `transition-property`, the toggle makes it 0.001ms. */}
+          <g ref={gRef} style={{ transform: "translate(" + view.tx + "px," + view.ty + "px) scale(" + view.k + ")", transformOrigin: "0 0", transition: settling ? "transform " + M.shift : "none" }}>
             {(fp.walls || []).map((wl, i) => (
               <line key={"w" + i} x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2} stroke="var(--text-muted)" strokeWidth={7} strokeLinecap="round" />
             ))}
@@ -763,10 +931,13 @@ export const PlanView = memo(function PlanView({
       <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 8, textAlign: "center" }}>
         {"scrub the time strip above · tap a table for its bookings · right-click / hold for quick status" + (gesturesEnabled ? " · scroll or pinch to zoom, drag to pan, double-tap to reset" : "")}
       </div>
-      {popover}
-      {quick ? (
-        <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
-      ) : null}
+      {/* v18.3.0 (M3): both popups animate out (ModalPresence + PopupShell). */}
+      <ModalPresence show={!!tablePop}>{popover}</ModalPresence>
+      <ModalPresence show={!!quick}>
+        {quick ? (
+          <QuickStatusPopup booking={quick} late={late} today={today} nowMins={nowMins} onStatus={onStatus} onNoShow={onNoShow} onClose={() => setQuick(null)} />
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

@@ -3,10 +3,11 @@
 // (red/danger) or modify (orange/warn). Alert-only — the booking actions live in
 // LinkedBookingCard. Collapsible (defaults expanded, since it's an alert); the
 // "✓ Mark as handled" button (teal) dismisses it until a new request arrives —
-// with a 300ms fade (§7 decision 2026-06-13) so the dismissal reads as a
-// deliberate action, not a glitch. The fade is click-local: the auto-handled
-// path (cancelling the linked booking) unmounts the banner from the parent,
-// which is fine — the conversation isn't on screen during that flow.
+// with a fade on `M.exit`, held mounted for `EXIT_MS` (§7 decision
+// 2026-06-13), so the dismissal reads as a deliberate action, not a glitch.
+// The fade is click-local: the auto-handled path (cancelling the linked
+// booking) unmounts the banner from the parent, which is fine — the
+// conversation isn't on screen during that flow.
 
 import { useState } from "react";
 import { Reveal, mkSolidBtn } from "../atoms";
@@ -116,6 +117,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
       icon={Icon}
       title={title}
       onHeaderClick={hasBody ? toggle : undefined}
+      expanded={!collapsed}
       style={{ marginBottom: 10, boxShadow: "var(--shadow-soft)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}
       action={<>
         {actionBtns}

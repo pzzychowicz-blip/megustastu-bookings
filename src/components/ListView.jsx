@@ -31,11 +31,12 @@
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
+import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone } from "../lib/customers";
-import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth } from "./atoms";
+import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 
@@ -305,15 +306,17 @@ export const ListView = memo(function ListView({
   const [menuFor, setMenuFor] = useState(null);
   useEffect(function () {
     const prev = __listPrev;
-    const now = Date.now();
+    function rerender() { bumpAnim(function (n) { return n + 1; }); }
     if (prev) {
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe.
-        if (p && p !== b.status) { __listAnims[b.id] = { from: p, until: now + 800 }; changed = true; }
+        // v15.9.0: the window must outlive the wipe keyframe. v18.3.0 (M5): derived
+        // from --t-wipe and started when the overlay MOUNTS (armWipe, on the card's
+        // overlay), as TimelineView's is — it was a hand-typed 800/820 counted from here.
+        if (p && p !== b.status) { __listAnims[b.id] = pendingWipe({ from: p }, rerender); changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
+      if (changed) rerender();
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
@@ -322,7 +325,7 @@ export const ListView = memo(function ListView({
   }, [bookings]);
   function listAnimFrom(id) {
     const a = __listAnims[id];
-    return a && a.until > Date.now() ? a.from : null;
+    return wipeOpen(a, Date.now()) ? a.from : null;
   }
   const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
   // v17.3.1: the List's own root — the scroll-into-view lookup below is scoped
@@ -346,14 +349,16 @@ export const ListView = memo(function ListView({
   // those up (e.g. mid view-transition) and scroll to the wrong element.
   // Timing: the target is often NOT in its final position on the first frame —
   // a day-change jump plays through SlideView, and a completed/cancelled target
-  // has to wait for the finished fold's ~300ms Reveal to expand (verified live:
-  // a single rAF scroll lands the card on screen but off-centre, and a mount
-  // that gets cancelled mid-animation can miss entirely). So re-scroll on a
+  // has to wait for the finished fold's Reveal (--t-reveal, 520ms) to expand
+  // (verified live: a single rAF scroll lands the card on screen but
+  // off-centre, and a mount that gets cancelled mid-animation can miss
+  // entirely). So re-scroll on a
   // short schedule that outlasts both animations; each repeat just re-targets
   // the same card, and the last one wins.
   useEffect(function () {
     if (!focusReq || !selectedId) return;
-    const behavior = document.documentElement.dataset.motion === "reduce" ? "auto" : "smooth";
+    // v18.3.0 (M2): both reduced-motion intents, the OS setting as well as the toggle.
+    const behavior = reduceMotionOn() ? "auto" : "smooth";
     // /code-review: ONE lookup, used by both the scroll and the focus below.
     // The `data-flip-id` selector was written out twice in this effect, so the
     // contract "a card is identified by its flip id" was asserted in two places
@@ -844,7 +849,7 @@ export const ListView = memo(function ListView({
                 (direction flipped rtl→ltr in v15.9.0 on request).
                 `animFrom` is only the trigger flag; the colour is the new status. */}
             {animFrom ? (
-              <div className="mgt-wipe-ltr" style={{
+              <div ref={function (el) { if (el) armWipe(__listAnims[b.id]); }} className="mgt-wipe-ltr" style={{
                 position: "absolute", inset: 0, borderRadius: R.card, pointerEvents: "none", zIndex: 0,
                 background: BLOCK_BG[b.status] || "transparent", opacity: 0.5
               }} />
@@ -1027,25 +1032,28 @@ export const ListView = memo(function ListView({
           if the booking leaves the day. `startArmed`: it was opened by a click,
           so there is no held finger to wait for (see QuickStatusPopup).
           Phase 60: it leaves out what the card already offers, read from the
-          same `cardActionsOf` the card draws from. */}
-      {menuFor ? (function () {
-        const menuB = day.find((x) => x.id === menuFor) || null;
-        const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false };
-        return (
-          <QuickStatusPopup
-            booking={menuB}
-            late={late}
-            today={today}
-            nowMins={nowMins}
-            onStatus={onStatus}
-            onNoShow={onNoShow}
-            onDelete={onDelete}
-            omitStatus={onCard.next}
-            omitNoShow={onCard.noShow}
-            startArmed
-            onClose={() => setMenuFor(null)} />
-        );
-      })() : null}
+          same `cardActionsOf` the card draws from.
+          v18.3.0 (M3): in ModalPresence, so it animates out (PopupShell). */}
+      <ModalPresence show={!!menuFor}>
+        {menuFor ? (function () {
+          const menuB = day.find((x) => x.id === menuFor) || null;
+          const onCard = menuB ? cardActionsOf(menuB, late, today, nowMins) : { next: null, noShow: false };
+          return (
+            <QuickStatusPopup
+              booking={menuB}
+              late={late}
+              today={today}
+              nowMins={nowMins}
+              onStatus={onStatus}
+              onNoShow={onNoShow}
+              onDelete={onDelete}
+              omitStatus={onCard.next}
+              omitNoShow={onCard.noShow}
+              startArmed
+              onClose={() => setMenuFor(null)} />
+          );
+        })() : null}
+      </ModalPresence>
     </div>
   );
 }

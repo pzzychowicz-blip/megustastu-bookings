@@ -51,7 +51,15 @@ const HTML = readFileSync(
 // dark map is light overlaid with the dark block — which is exactly the
 // inheritance the browser performs, and the reason a light-only token was able
 // to be wrong in dark for so long without anyone noticing.
-function block(selector) {
+// v18.3.0 (A10): split in two so the @media (prefers-contrast: more) block can
+// be taken apart the same way — `bodyOf` finds a rule's body (the FIRST match,
+// brace-counted) in any source string, `block` reads its tokens.
+function block(selector, src = HTML) {
+  const out = {};
+  for (const m of bodyOf(selector, src).matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  return out;
+}
+function bodyOf(selector, HTML) {
   const i = HTML.indexOf(selector);
   if (i < 0) throw new Error("no " + selector + " block in src/index.css");
   const open = HTML.indexOf("{", i);
@@ -70,10 +78,7 @@ function block(selector) {
     else if (HTML[j] === "}" && --depth === 0) { end = j; break; }
   }
   if (end < 0) throw new Error("unbalanced " + selector + " block in src/index.css");
-  const body = HTML.slice(open + 1, end);
-  const out = {};
-  for (const m of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
-  return out;
+  return HTML.slice(open + 1, end);
 }
 // v18.2.0: a token may ALIAS another (`--btn-dismiss: var(--app-btn-slate)`),
 // and the alias must resolve per theme, after the dark block has overridden the
@@ -98,8 +103,24 @@ function resolveAliases(map) {
   return out;
 }
 const RAW_LIGHT = block(":root {");
+const RAW_DARK = block('[data-theme="dark"] {');
 const LIGHT_VARS = resolveAliases(RAW_LIGHT);
-const DARK_VARS = resolveAliases(Object.assign({}, RAW_LIGHT, block('[data-theme="dark"] {')));
+const DARK_VARS = resolveAliases(Object.assign({}, RAW_LIGHT, RAW_DARK));
+
+// ── v18.3.0 (A10): the THIRD and FOURTH theme states ────────────────────────
+// Increase Contrast (`@media (prefers-contrast: more)`) overrides tokens in
+// both themes. The overlay order is the cascade's: the media block comes after
+// both base blocks at the same specificity, so in dark its `:root` rule beats
+// the dark block and its own dark rule then beats that. Aliases resolve on the
+// merged map, so `--border-soft: var(--text-muted)` takes each theme's ink.
+const MORE_SRC = bodyOf("@media (prefers-contrast: more)", HTML);
+const RAW_MORE_LIGHT = block(":root {", MORE_SRC);
+const RAW_MORE_DARK = block('[data-theme="dark"] {', MORE_SRC);
+const LIGHT_MORE_VARS = resolveAliases(Object.assign({}, RAW_LIGHT, RAW_MORE_LIGHT));
+const DARK_MORE_VARS = resolveAliases(Object.assign({}, RAW_LIGHT, RAW_DARK, RAW_MORE_LIGHT, RAW_MORE_DARK));
+const VARS = { light: LIGHT_VARS, dark: DARK_VARS, "light-more": LIGHT_MORE_VARS, "dark-more": DARK_MORE_VARS };
+// the base theme a state is measured against (BASE, and a per-theme floor)
+const baseOf = (theme) => (theme.startsWith("dark") ? "dark" : "light");
 
 // ── Colour maths ─────────────────────────────────────────────────────────────
 function parse(v) {
@@ -529,14 +550,14 @@ const exemptFloor = (fill, theme) => {
 };
 
 function measure(entry, theme) {
-  const vars = theme === "light" ? LIGHT_VARS : DARK_VARS;
+  const vars = VARS[theme];
   const rawFill = vars[entry.fill];
   const rawInk = vars[entry.ink];
   expect(rawFill, entry.fill + " missing in " + theme).toBeTruthy();
   expect(rawInk, entry.ink + " missing in " + theme).toBeTruthy();
   const fill = parse(rawFill);
   if (entry.alpha != null) fill.a = entry.alpha;
-  const surface = over(fill, BASE[theme]);
+  const surface = over(fill, BASE[baseOf(theme)]);
   const ink = over(parse(rawInk), surface);
   return +ratio(ink, surface).toFixed(2);
 }
@@ -651,15 +672,22 @@ describe("timeline start-time chip — the hour pill over each block, as rendere
   }
 });
 
-describe("fill/ink contrast — every text-bearing fill, both themes", () => {
+// v18.3.0 (A10): and under Increase Contrast in each, which must never read
+// WORSE than at rest — a user who asked for more contrast is the last one who
+// should get less.
+describe("fill/ink contrast — every text-bearing fill, both themes, at rest and under more contrast", () => {
   for (const entry of FILLS) {
-    for (const theme of ["light", "dark"]) {
+    for (const theme of ["light", "dark", "light-more", "dark-more"]) {
       it(`${entry.what} (${entry.fill}) is legible in ${theme}`, () => {
         const got = measure(entry, theme);
+        if (theme.endsWith("-more")) {
+          const rest = measure(entry, baseOf(theme));
+          expect(got, `${entry.what} reads ${got}:1 under more contrast, ${rest}:1 at rest in ${baseOf(theme)}`).toBeGreaterThanOrEqual(rest);
+        }
         if (entry.role === "exempt") {
           // Not asserted against the bar — asserted against ITSELF, so the
           // exemption cannot quietly rot into something worse.
-          const floor = exemptFloor(entry.fill, theme);
+          const floor = exemptFloor(entry.fill, baseOf(theme));
           expect(
             got,
             `${entry.what} in ${theme} is a recorded exemption at ${got}:1, but it ` +
@@ -752,6 +780,25 @@ describe("registry coverage", () => {
       unused,
       "declared INK but never used as one: " + unused.join(", ")
     ).toEqual([]);
+  });
+
+  // v18.3.0 (A10): a typo'd name in the Increase Contrast block would set a
+  // property nothing reads, silently; and a token the light rule sets that the
+  // dark rule does not would hand the dark theme a LIGHT value, since the
+  // media's :root rule outranks the dark base block.
+  it("the Increase Contrast block overrides tokens that exist, in both themes", () => {
+    expect(Object.keys(RAW_MORE_LIGHT).length).toBeGreaterThan(0);
+    expect(Object.keys(RAW_MORE_LIGHT).filter((k) => !(k in RAW_LIGHT))).toEqual([]);
+    expect(Object.keys(RAW_MORE_DARK).filter((k) => !(k in RAW_LIGHT) && !(k in RAW_DARK))).toEqual([]);
+    expect(Object.keys(RAW_MORE_LIGHT).filter((k) => !(k in RAW_MORE_DARK))).toEqual([]);
+  });
+
+  it("the glass it overrides is opaque in both themes", () => {
+    for (const vars of [LIGHT_MORE_VARS, DARK_MORE_VARS]) {
+      for (const k of ["--tl-card-bg", "--bg-sheet", "--bg-sheet-mobile", "--tl-popup-bg"]) {
+        expect(parse(vars[k]).a, k).toBe(1);
+      }
+    }
   });
 
   it("every ink token a fill names actually exists in both themes", () => {

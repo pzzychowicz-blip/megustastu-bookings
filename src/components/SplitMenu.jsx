@@ -25,12 +25,14 @@
 // The body portal is load-bearing for the same reason it is there: a
 // position:fixed scrim mounted inside a transformed ancestor resolves against
 // that ancestor, not the viewport.
+// v18.3.0 (M3): the shell is no longer a copy. Both are `PopupShell` (atoms),
+// with the Plan table popover, and App wraps this in `ModalPresence`, so the
+// menu animates out as well as in, inert while it leaves.
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { S, R, T, FW, IC } from "../lib/constants";
 import { useArmAfterRelease } from "../hooks/useArmAfterRelease";
-import { mkBtn } from "./atoms";
+import { mkBtn, PopupShell, useModalPresence } from "./atoms";
 import { SplitSideIcon, SplitStackIcon } from "./Icons";
 
 const LABEL = { timeline: "Timeline", list: "List", plan: "Plan" };
@@ -50,6 +52,11 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
   // Same defect and same fix as QuickStatusPopup, which this shell is copied
   // from; the two share the mechanism rather than each carrying a copy of it.
   const armed = useArmAfterRelease();
+  // v18.3.0 (M3): true while the wrapping ModalPresence plays the exit; every
+  // button refuses then, as it does before the opening finger lifts.
+  // Picking the second view hands off to the split: `skipExit()` first (atoms).
+  const { leaving, skipExit } = useModalPresence();
+  const live = armed && !leaving;
   if (!view) return null;
 
   const others = ORDER.filter((v) => v !== view);
@@ -68,62 +75,49 @@ export function SplitMenu({ view, onConfirm, onClose, sideBySideOk = true }) {
   // v17.8.0: the direction buttons carry a glyph now, so they lay out as a row.
   const dirBtn = (extra) => btn(Object.assign({ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8 }, extra));
 
-  return createPortal(
-    <div
-      onClick={() => { if (armed) onClose(); }}
-      className="mgt-scrim-in"
-      style={{
-        position: "fixed", inset: 0, zIndex: 300,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "var(--tl-popup-scrim)",
-        WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none"
+  return (
+    <PopupShell
+      onScrimClick={() => { if (live) onClose(); }}
+      cardStyle={{
+        background: "var(--tl-popup-bg)", borderRadius: R.sheet,
+        border: "1px solid " + S.border,
+        boxShadow: "var(--shadow-popover)",
+        padding: "18px 24px",
+        minWidth: 240, maxWidth: 320, zIndex: 301,
       }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="mgt-card-in"
-        style={{
-          background: "var(--tl-popup-bg)", borderRadius: R.sheet,
-          border: "1px solid " + S.border,
-          boxShadow: "var(--shadow-popover)",
-          padding: "18px 24px",
-          minWidth: 240, maxWidth: 320, zIndex: 301,
-        }}
-      >
-        <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: T.body, color: "var(--text-faint)", marginBottom: 14 }}>{sub}</div>
+      <div style={{ fontSize: T.title, fontWeight: FW.bold, color: S.text, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: T.body, color: "var(--text-faint)", marginBottom: 14 }}>{sub}</div>
 
-        {step === 1 ? (
-          <div style={row}>
-            <button className={noSide ? "mgt-nopress" : "mgt-hover-scale"} disabled={noSide}
-              style={dirBtn({ background: "var(--app-btn-grey)", ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
-              onClick={() => { if (armed && !noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
-            <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
-              onClick={() => { if (armed) { setDir("h"); setStep(2); } }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
-          </div>
-        ) : (
-          <div style={row}>
-            {others.map((v) => (
-              <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
-                style={btn({ background: S.accent, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
-                onClick={() => { if (armed && !tlBlocked(v)) onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); }}>{LABEL[v]}</button>
-            ))}
-          </div>
-        )}
-
-        {showWhy ? (
-          <div style={{ fontSize: T.small, color: "var(--warn-text)", marginTop: 10 }}>
-            This screen is too narrow to put the timeline beside another view — it
-            would show about two hours of the day. Top and bottom keeps its full
-            width. (Settings → App width.)
-          </div>
-        ) : null}
-
-        <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
-          tap outside or press Esc to close
+      {step === 1 ? (
+        <div style={row}>
+          <button className={noSide ? "mgt-nopress" : "mgt-hover-scale"} disabled={noSide}
+            style={dirBtn({ background: "var(--app-btn-grey)", ...(noSide ? { opacity: 0.45, cursor: "default" } : null) })}
+            onClick={() => { if (live && !noSide) { setDir("v"); setStep(2); } }}><SplitSideIcon size={IC.chrome} />Side by side</button>
+          <button className="mgt-hover-scale" style={dirBtn({ background: "var(--app-btn-grey)" })}
+            onClick={() => { if (live) { setDir("h"); setStep(2); } }}><SplitStackIcon size={IC.chrome} />Top and bottom</button>
         </div>
+      ) : (
+        <div style={row}>
+          {others.map((v) => (
+            <button key={v} className={tlBlocked(v) ? "mgt-nopress" : "mgt-hover-scale"} disabled={tlBlocked(v)}
+              style={btn({ background: S.accent, ...(tlBlocked(v) ? { opacity: 0.45, cursor: "default" } : null) })}
+              onClick={() => { if (live && !tlBlocked(v)) { skipExit(); onConfirm({ a: view, b: v, dir: dir, ratio: 0.5 }); } }}>{LABEL[v]}</button>
+          ))}
+        </div>
+      )}
+
+      {showWhy ? (
+        <div style={{ fontSize: T.small, color: "var(--warn-text)", marginTop: 10 }}>
+          This screen is too narrow to put the timeline beside another view — it
+          would show about two hours of the day. Top and bottom keeps its full
+          width. (Settings → App width.)
+        </div>
+      ) : null}
+
+      <div style={{ fontSize: T.small, color: "var(--text-faint)", marginTop: 12, textAlign: "center" }}>
+        tap outside or press Esc to close
       </div>
-    </div>,
-    document.body
+    </PopupShell>
   );
 }

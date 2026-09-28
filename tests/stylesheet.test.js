@@ -73,6 +73,7 @@ const CRITICAL_SELECTORS = [
   ".mgt-skip",                        // the skip link is hidden BY this rule
   ".mgt-skip:focus",                  // …and revealed by this one
   ".mgt-detent",                      // TimeAxis snap
+  ".mgt-split-hit",                   // v18.3.0: the divider's touch hit area (hidden, then shown on touch)
   // v17.16.12 — the transient hold guard (lib/holdSelection sets the
   // attribute; this rule is the whole of what the attribute DOES). Missing,
   // `beginHold` still sets `data-holding` on <html> and nothing at all
@@ -227,6 +228,24 @@ describe("the app stylesheet (src/index.css)", () => {
   it.each(CRITICAL_SELECTORS)("still defines %s", (sel) => {
     const found = preludes(css).some((p) => p.includes(sel));
     expect(found).toBe(true);
+  });
+
+  // v18.3.0 (A7). The Split View divider's 44px hit area is for TOUCH only
+  // (Patryk): the strips it covers stop reaching the panes, so a mouse keeps
+  // the bare 10px divider. Each half fails without a sound — lose the first
+  // and a mouse loses 17px of each pane beside the divider; lose the second
+  // and a finger is back to a 10px target — and CRITICAL_SELECTORS cannot tell
+  // them apart, since both preludes read `.mgt-split-hit`.
+  it("the divider's hit area is hidden, then shown on touch, the divider wears it, and a press does not jump", () => {
+    expect(css).toMatch(/\.mgt-split-hit\s*\{\s*display:\s*none;\s*\}/);
+    expect(css).toMatch(/@media \(hover: none\), \(pointer: coarse\)\s*\{\s*\.mgt-split-hit\s*\{\s*display:\s*block;\s*\}/);
+    const Split = stripJs(readFileSync(join(ROOT, "src", "components", "SplitLayout.jsx"), "utf8")).join("\n");
+    expect(Split).toMatch(/<div aria-hidden="true" className="mgt-split-hit" style=\{\{\s*position: "absolute",/);
+    // …and a press on it must not move the divider. It used to jump TO the
+    // press point: 5px at most on 10px, 22px on 44 (measured 14.8px from a
+    // press 15px off the rule, saved with no drag at all).
+    expect(Split, "the grab offset is taken at pointerdown").toMatch(/grabRef\.current = raw == null \? 0 : raw - r;/);
+    expect(Split, "and every ratio read subtracts it").toMatch(/Math\.min\(MAX_RATIO, raw - grabRef\.current\)/);
   });
 
   // v17.10.1 — NOT a CRITICAL_SELECTORS entry, and that is the point. The

@@ -40,6 +40,7 @@
 import { useRef, useLayoutEffect, useEffect } from "react";
 import { OPEN, GRID_CLOSE, QUARTER_HOURS, S, R, T, FW } from "../lib/constants";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
+import { reduceMotionOn } from "./atoms";
 // v17.5.0 correction: no toTime here any more — the selected-time badge moved
 // up into PlanView's Now/legend row, so the tape renders no text of its own
 // beyond the hour labels.
@@ -49,7 +50,23 @@ import { hourLabelAt, isHourMark } from "../lib/time-grid";
 // couple of flicks.
 const PX_PER_QUARTER = 24;
 const H = 62;             // tape height
-const SNAP_MS = 130;      // idle time after scrolling before we snap
+// v18.3.0 (A6): the snap to the nearest quarter waits for the browser's own
+// `scrollend` — fired once a fling has finished decelerating AND the finger is
+// up. It used to be a 130ms idle timer after the last scroll event, which on
+// iOS fired while a finger held the tape still (measured: it slid the tape
+// 4px under the finger) and let a fling stand still for 183–217ms before the
+// snap moved it again; `scrollend` cuts that pause to 134–150ms. Native CSS
+// scroll-snap was measured too and rejected: it lands in one motion, but
+// WebKit decelerates a snapping scroller faster, so a fling travelled about a
+// fifth as far (88–112px against 423–548px) and a service took ~9 flicks.
+// Where a browser has no `scrollend` (Chrome before 114, Safari before 26),
+// the timer stands in. So does it for a WHEEL or trackpad: Chrome fires
+// `scrollend` after each notch's own little animation, so snapping there
+// glided between notches and swallowed the next one (measured: three notches
+// travelled 96px instead of 120). A wheel's momentum arrives as wheel events,
+// so the idle timer already waits for it.
+const HAS_SCROLLEND = typeof window !== "undefined" && "onscrollend" in window;
+const SNAP_MS = 130;      // the fallback: idle time after scrolling before we snap
 
 export function TimeAxis({
   selected, onSelect, nowMins = 0, isToday = false,
@@ -64,6 +81,7 @@ export function TimeAxis({
   const snapTimer = useRef(null);
   const guardTimer = useRef(null);     // lifts snappingRef when a snap settles
   const snappingRef = useRef(false);   // ignore scroll events we caused ourselves
+  const wheelRef = useRef(false);      // the last input was a wheel or trackpad: the timer snaps
   const selRef = useRef(selected);
   selRef.current = selected;
 
@@ -81,10 +99,14 @@ export function TimeAxis({
   // scripted scroll in the app (ListView's focus-into-view does the same check).
   // A smooth scroll is an animation; the setting exists because it costs real
   // frames on the restaurant's weaker tablets.
+  // v18.3.0 (M2): and the OS reduced-motion setting too, through
+  // reduceMotionOn(). A glide is TRAVEL, which is exactly what the OS intent
+  // removes, and neither Chromium nor iOS Safari turns a scripted smooth
+  // scroll into a jump by itself (measured: the tape still glided 288px).
   function centre(m, smooth) {
     const el = scrollRef.current;
     if (!el) return;
-    const glide = smooth && document.documentElement.dataset.motion !== "reduce";
+    const glide = smooth && !reduceMotionOn();
     snappingRef.current = true;
     el.scrollTo({ left: xOf(m), behavior: glide ? "smooth" : "auto" });
     // Smooth scrolling keeps firing scroll events; let them settle before we
@@ -129,8 +151,26 @@ export function TimeAxis({
     if (!el) return;
     const q = clampQ(minsAt(el.scrollLeft));
     if (q !== selRef.current) onSelect(q);
+    if (HAS_SCROLLEND && !wheelRef.current) return;   // onScrollEnd snaps
     window.clearTimeout(snapTimer.current);
-    snapTimer.current = window.setTimeout(() => { centre(clampQ(minsAt(el.scrollLeft)), true); }, SNAP_MS);
+    snapTimer.current = window.setTimeout(snapToQuarter, SNAP_MS);
+  }
+
+  function onScrollEnd() {
+    if (!wheelRef.current) snapToQuarter();
+  }
+
+  // The snap: once the scroll is over, glide the nearest quarter to the
+  // centre. A scroll WE caused (a glide) is left alone, which is also what
+  // stops the glide's own `scrollend` from snapping again; and a tape already
+  // on a mark does not glide at all.
+  function snapToQuarter() {
+    const el = scrollRef.current;
+    if (!el || snappingRef.current) return;
+    const q = clampQ(minsAt(el.scrollLeft));
+    if (q !== selRef.current) onSelect(q);
+    if (Math.abs(xOf(q) - el.scrollLeft) < 0.5) return;
+    centre(q, true);
   }
 
   // Tap to jump: the click's x within the track, centred.
@@ -155,9 +195,10 @@ export function TimeAxis({
       <div
         ref={scrollRef}
         onScroll={onScroll}
+        onScrollEnd={HAS_SCROLLEND ? onScrollEnd : undefined}
         onClick={onTrackClick}
-        onPointerDown={releaseSnapGuard}
-        onWheel={releaseSnapGuard}
+        onPointerDown={() => { wheelRef.current = false; releaseSnapGuard(); }}
+        onWheel={() => { wheelRef.current = true; releaseSnapGuard(); }}
         style={{
           overflowX: "auto", overflowY: "hidden",
           paddingInline: "50%",               // lets the ends reach the centre

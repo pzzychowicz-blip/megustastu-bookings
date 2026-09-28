@@ -37,15 +37,17 @@
 //     idle — fixes the previous "Follow"/"Follow" duplicate that relied on
 //     colour alone to convey state.
 
-import { useState, useRef, useEffect, useLayoutEffect, useMemo, memo, Fragment } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, memo, Fragment } from "react";
 import {
   OPEN, GRID_CLOSE, QUARTER_HOURS,
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
-  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+  S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
+import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
-import { mkBtn, Presence, Reveal, useFlip, SizeRing } from "./atoms";
+import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
+import { useEnterLeave } from "../hooks/useEnterLeave";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
 import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon, IndoorIcon, OutdoorIcon } from "./Icons";
@@ -61,10 +63,23 @@ import { money } from "../lib/vouchers";
 // left/width is the schedule changing (geometry — M.shift), transform is the
 // hover/group lift answering a pointer (M.tap). One shared constant because
 // four call sites paint a block or its ghost and they must lift in lockstep —
-// the :has() ghost rule in index.html depends on exactly that.
+// the :has() ghost rule in index.css depends on exactly that.
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
 const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
+// v18.3.0 (M4): a RELEASED block travelling home. TL_MOVE's transform runs on
+// M.tap because at rest a transform is the hover lift answering a pointer — but
+// after a drag the same property carries the block back from wherever the
+// finger left it, up to rows away, and anything that TRAVELS takes --t-move or
+// --t-shift (DESIGN.md). Measured before: an 18px release went home in 145ms,
+// and the drag's opacity and shadow switched off on the release frame. So for
+// exitHold("shift") after a release the block uses this, and its opacity comes
+// back on the same curve as the move. Then TL_MOVE again, so the hover lift
+// stays quick. /review-animations: NOT the shadow. `box-shadow` repaints on
+// every frame it animates (a 24px blur here, on the tablet, on a gesture used
+// every service), and the eye is on the block travelling home; the drag shadow
+// drops on the release frame, as it did before phase 4.
+const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", transform " + M.shift + ", opacity " + M.shift;
 
 // v17.9.0: the hour-pill look, once. Three places in this file paint a time on
 // --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
@@ -220,7 +235,12 @@ function BlockFlag({ title, children }) {
   );
 }
 
-function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null }) {
+// v18.3.0 (O1): `leaving` draws a booking that has just left the day (a no-show,
+// a cancel, a delete, a change from another device) from its last snapshot, on
+// the waitlist ghost's exit, and INERT: WaitGhost's `leaving` branch, property
+// for property. `arriving` puts a booking new to the day on the ghost's entrance.
+// TimelineView's useEnterLeave decides both; see there.
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null }) {
   const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -350,6 +370,29 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     </Reveal>
   );
 
+  // v18.3.0 (O1): a block that UNMOUNTS while holding focus hands it to the grid
+  // scroller — WaitGhost's focusFallbackRef, moved to where focus actually is.
+  // A departing booking's leaving copy is a NEW instance (keyed "leaving-" + id,
+  // so no live block's state rides into a ghost), so the element holding focus
+  // is the live block, and it is removed rather than made inert; focus would
+  // fall to <body> and drop a keyboard user at the top of the document. A layout
+  // cleanup, because it runs while the node is still attached (passive ones run
+  // after removal). It fires on any unmount, and each is better off: a move to
+  // another row or a date change also used to drop focus to <body>.
+  const elRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    return () => {
+      if (!el || !el.contains(document.activeElement)) return;
+      // Read at unmount ON PURPOSE. On the grid's first mount this effect runs
+      // before the scroller's own ref is attached (a parent's ref lands after
+      // its children's layout effects), so a value captured above is null.
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the scroller node at unmount time is the one wanted
+      const fb = focusFallbackRef && focusFallbackRef.current;
+      if (fb) fb.focus({ preventScroll: true });
+    };
+  }, [focusFallbackRef]);
+
   // Per-instance refs for long-press detection.
   const pressTimer = useRef(null);
   const didLong = useRef(false);
@@ -358,8 +401,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // ── v17.0.0 correction: drag & drop to another table row ──────────────────
   // Mouse: vertical movement > 6px starts the drag (below it, click→edit wins).
   // Touch: the 400ms long-press opens quick-status as before; KEEP HOLDING to
-  // ~800ms (unmoved) and the popup is dismissed — the block lifts and follows
-  // the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
+  // ~800ms (unmoved) and the popup is dismissed and the block lifts at once,
+  // then follows the finger. Dropping on a row calls onDropOnTable(bookingId, tableId); App
   // decides move vs swap. Vertical offset lives in local state (translateY);
   // the horizontal position (time) never changes.
   const dragRef = useRef(null);            // {y0, pid, el, active, lastY}
@@ -367,6 +410,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
   const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
   const dragRafRef = useRef(0);            // v17.0.0 review fix #4: coalesce moves to one render/frame
+  // v18.3.0 (M4): non-zero for exitHold("shift") after a released drag, while
+  // the block travels home on TL_SETTLE (see there). A COUNT of releases, not a
+  // boolean, so each release restarts the hold, and the hold is timed from the
+  // COMMIT that starts the transition, not from the pointerup: a drop runs
+  // App's dropOnTable synchronously in between (measured on a Mac: 19ms for a
+  // refusal that returns early, ~110ms for one that walks the candidates, more
+  // on the tablet), and a hold counted from the event would cut the fade and
+  // the z-order short by that much. The phase 3 wipe window's lesson, again.
+  const [settling, setSettling] = useState(0);
+  useEffect(() => {
+    if (!settling) return undefined;
+    const t = setTimeout(() => { setSettling(0); }, exitHold("shift"));
+    return () => { clearTimeout(t); };
+  }, [settling]);
 
   function beginDrag(el, pid) {
     dragRef.current = { ...(dragRef.current || {}), active: true };
@@ -399,8 +456,18 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       dragHoldTimer.current = setTimeout(() => {
         const d = dragRef.current;
         if (!d || d.active) return;
-        setQuickStatus(null);              // the 400ms popup opened — drag wins
+        // The 400ms popup opened — drag wins, and the card goes at once
+        // (/code-review: TimelineView's hand-off), not over the lifted block.
+        if (handOffQuick) handOffQuick(); else setQuickStatus(null);
         beginDrag(d.el, d.pid);
+        // v18.3.0 (A4): the lift at ARM time, so a still finger sees the drag
+        // take over from the vanished card. The lift keyed on `dragDy`, which
+        // only the first MOVE set, so for a finger holding still the card
+        // disappeared at 800ms and nothing else changed. Transition is "none"
+        // while dragDy is set, so it lifts in one frame, as on a first move; a
+        // release without moving lands on the home row (no drop) and the
+        // phase 4 settle lowers it again.
+        setDragDy(0);
         // React 17+ roots attach touchmove passively — a native non-passive
         // listener is the only way to stop the page scrolling mid-drag.
         const prevent = (ev) => { ev.preventDefault(); };
@@ -454,6 +521,20 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     const target = d && d.active && commit ? tableAtY(e.clientY) : null;
     setDragDy(null);
     if (setDragHover) setDragHover(null);
+    // v18.3.0 (M4): a block that stays mounted (a same-row release, a refused
+    // drop, a swap that keeps one of its tables) glides home on TL_SETTLE.
+    if (d && d.active) setSettling((n) => n + 1);
+    // v18.3.0 (M1): a drop to another row re-parents the block, and useFlip
+    // would animate it from its row before the drag. Seed the release position
+    // instead. Below the teardown, which stays first, and still exact: the
+    // setStates above reach the DOM only at this event's commit, so the rect
+    // still carries the live translateY, i.e. where the finger left the block.
+    // Only the cell that carries the flip id (a multi-table booking's other
+    // cells carry none, and keep today's flip).
+    if (target && target !== homeTable && seedFlip && flipId === b.id && d.el) {
+      const c = d.el.closest("[data-flip-root]");
+      if (c) seedFlip(b.id, d.el.getBoundingClientRect().top - c.getBoundingClientRect().top);
+    }
     if (target && target !== homeTable) {
       // Swallowed deliberately, and only here: the teardown above has already
       // run, so the block recovers either way, and an uncaught handler error
@@ -469,8 +550,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // overlay of the OLD colour animates away (keyframe on mount), revealing the new
   // status colour underneath. wipe = left-to-right clip (v15.9.0: unified with
   // the List/form wipes — ltr, 760ms); fill = fade-out.
+  // v18.3.0: the overlay starts its own window as it attaches (armWipe), so the
+  // hold counts from the keyframe's first frame — lib/wipe-window.js.
   const animOverlay = anim ? (
     <div
+      ref={function (el) { if (el) armWipe(__statusAnims[b.id]); }}
       className={anim === "wipe" ? "mgt-wipe-ltr" : "mgt-fade-overlay"}
       style={{
         position: "absolute", inset: 0, borderRadius: 10, pointerEvents: "none",   /* @canvas */
@@ -528,7 +612,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     onEdit(b);
   }
   // v17.2.0: group hover-lift — a multi-table booking renders one cell per row;
-  // toggle .mgt-group-hover (index.html, hover-capable media guard) on ALL cells
+  // toggle .mgt-group-hover (index.css, hover-capable media guard) on ALL cells
   // sharing this booking's data-bk so they lift together. DOM-class approach on
   // purpose: React state here would re-render the whole memoized timeline per
   // hover. Booking ids are path-safe ([0-9a-z] + the r…_date recurring shape) —
@@ -558,43 +642,56 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     (warn ? ", overstaying" : "") +
     (late === "warn" ? ", running late" : late === "noshow" ? ", not arrived" : "");
 
+  // v18.3.0 (O1): every handler in one object, so a LEAVING block drops all of
+  // them in one place and a handler added later cannot be missed there.
+  const handlers = leaving ? null : {
+    /* v17.12.0 fix: focusable by KEYBOARD, not by pointer. The browser
+       focuses on mousedown and focusing scrolls the element into view — and
+       this scroller is the TIMELINE, so the measured jump was 1000–2000px
+       SIDEWAYS on a single click. `preventDefault` here suppresses only the
+       focus; it does not cancel the click and does not touch pointer events,
+       so the 6px drag threshold and the touch hold are untouched (both are
+       armed on `pointerdown`, which has already fired). Tab still focuses. */
+    onMouseDown: (e) => { e.preventDefault(); },
+    onMouseEnter: () => setGroupHover(true),
+    onMouseLeave: () => setGroupHover(false),
+    onClick: handleClick,
+    onTouchStart: onTouchStart,
+    onTouchMove: onTouchMove,
+    onTouchEnd: onTouchEnd,
+    onContextMenu: onCtx,
+    onPointerDown: onDragPointerDown,
+    onPointerMove: onDragPointerMove,
+    onPointerUp: (e) => endDrag(e, true),
+    onPointerCancel: (e) => endDrag(e, false),
+    /* v17.16.12: the third way a drag can end — belt-and-braces for capture
+       lost while this element STAYS MOUNTED, which is the only case it can
+       actually help with. /code-review corrected the first version of this
+       comment, which justified itself with a mid-drag re-parent (a reshuffle
+       moving the booking to another row): that case needs no net and this
+       handler could not provide one anyway. React unmounts the Fragment in
+       the old row, so `dragDy` is destroyed with the component and nothing
+       can strand — and the node is detached before `lostpointercapture`
+       fires, where React's root-container listener does not see it. Kept
+       because it costs nothing and the teardown is idempotent: on the normal
+       path it fires AFTER `pointerup`, by which point `dragRef` is null, so
+       it re-clears already-cleared state and commits nothing. */
+    onLostPointerCapture: (e) => endDrag(e, false),
+  };
+
   return (
     <div
-      className="mgt-hover-scale mgt-blk"
+      ref={elRef}
+      // v18.3.0 (O1): a leaving copy takes the ghost's exit (on --ease-in, Plan
+      // 01) and loses the hover lift; an arriving block takes the ghost's
+      // entrance, which is opacity-only with NO fill — a fill would pin the
+      // lift off for good (index.css, mgt-appear).
+      className={leaving ? "mgt-blk mgt-ghost-out" : "mgt-hover-scale mgt-blk" + (arriving ? " mgt-appear" : "")}
       data-flip-id={flipId || undefined}
-      data-bk={b.id}
-      /* v17.12.0 fix: focusable by KEYBOARD, not by pointer. The browser
-         focuses on mousedown and focusing scrolls the element into view — and
-         this scroller is the TIMELINE, so the measured jump was 1000–2000px
-         SIDEWAYS on a single click. `preventDefault` here suppresses only the
-         focus; it does not cancel the click and does not touch pointer events,
-         so the 6px drag threshold and the touch hold are untouched (both are
-         armed on `pointerdown`, which has already fired). Tab still focuses. */
-      onMouseDown={(e) => { e.preventDefault(); }}
-      onMouseEnter={() => setGroupHover(true)}
-      onMouseLeave={() => setGroupHover(false)}
-      onClick={handleClick}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      onContextMenu={onCtx}
-      onPointerDown={onDragPointerDown}
-      onPointerMove={onDragPointerMove}
-      onPointerUp={(e) => endDrag(e, true)}
-      onPointerCancel={(e) => endDrag(e, false)}
-      /* v17.16.12: the third way a drag can end — belt-and-braces for capture
-         lost while this element STAYS MOUNTED, which is the only case it can
-         actually help with. /code-review corrected the first version of this
-         comment, which justified itself with a mid-drag re-parent (a reshuffle
-         moving the booking to another row): that case needs no net and this
-         handler could not provide one anyway. React unmounts the Fragment in
-         the old row, so `dragDy` is destroyed with the component and nothing
-         can strand — and the node is detached before `lostpointercapture`
-         fires, where React's root-container listener does not see it. Kept
-         because it costs nothing and the teardown is idempotent: on the normal
-         path it fires AFTER `pointerup`, by which point `dragRef` is null, so
-         it re-clears already-cleared state and commits nothing. */
-      onLostPointerCapture={(e) => endDrag(e, false)}
+      // Not on a leaving copy: setGroupHover lifts every [data-bk] of an id.
+      data-bk={leaving ? undefined : b.id}
+      aria-hidden={leaving ? true : undefined}
+      {...handlers}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
         left, width: w,
@@ -606,6 +703,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         color: BLOCK_INK[b.status] || BLOCK_INK.confirmed,
         display: "flex", alignItems: "center", boxSizing: "border-box",
         cursor: dragDy != null ? "grabbing" : "pointer",
+        // v18.3.0 (O1): the other half of "inert while leaving", as on the
+        // ghost — a press aimed at the grid behind a fading block reaches it.
+        pointerEvents: leaving ? "none" : undefined,
         border: border || RIM_SOLID,
         WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none",
         // v17.0.0 round 7 (Android fix): without this, the browser claims any
@@ -623,11 +723,17 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         // v17.0.0: while dragging, the inline transform/zIndex/opacity lift the
         // block and follow the pointer (inline transform beats the hover class).
         ...(dragDy != null ? { transform: "translateY(" + dragDy + "px)", zIndex: 30, opacity: 0.85 } : null),
+        // v18.3.0 (M4): and it stays above the grid until it LANDS. z-index cannot
+        // fade, and dropped on the release frame it slid the travelling block
+        // under every later row (measured: a refused drop from i1 passed under the
+        // rows below 5A and under the booking's own 5B cell for most of its trip).
+        ...(dragDy == null && settling ? { zIndex: 30 } : null),
         // v15.8.0: reposition eases (seated-shift / reshuffle). v15.8.1: `transform`
         // re-added so the .mgt-hover-scale lift eases again — the inline transition had
         // been overriding the class's `transform 120ms`, making the hover scale instant.
         // The seated ghost outline mirrors this exact transition so the two lift together.
-        transition: dragDy != null ? "none" : TL_MOVE
+        // v18.3.0 (M4): TL_SETTLE for a moment after a released drag.
+        transition: dragDy != null ? "none" : settling ? TL_SETTLE : TL_MOVE
       }}
     >
       {animOverlay}
@@ -685,10 +791,10 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           `didLong` guard and cannot fire the edit form on the tail of a
           press-and-hold. */}
       <div
-        role="button"
-        tabIndex={0}
-        aria-label={a11yLabel}
-        onKeyDown={(e) => {
+        role={leaving ? undefined : "button"}
+        tabIndex={leaving ? -1 : 0}
+        aria-label={leaving ? undefined : a11yLabel}
+        onKeyDown={leaving ? undefined : (e) => {
           if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
           handleClick();
@@ -805,7 +911,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
           here is unchanged from the span, `borderLeft` included. */}
       <button /* @no-lift the block already lifts as a group (data-bk) — a nested lift double-scales */
         type="button"
-        onClick={(e) => { e.stopPropagation(); onManual(b.id); }}
+        tabIndex={leaving ? -1 : undefined}
+        onClick={leaving ? undefined : (e) => { e.stopPropagation(); onManual(b.id); }}
         title="Assign tables"
         aria-label={"Assign tables for " + b.name}
         style={{
@@ -1151,16 +1258,23 @@ function WaitGhost({ g, totalMins, pxPerMin = 1, onBook, leaving = false, focusF
 // `layoutSig` are identity-only props that bust the memo when the operating
 // hours or table layout change (this component reads OPEN/GRID_CLOSE/
 // QUARTER_HOURS/TIMELINE_TABLES as live module bindings the memo can't see).
+// v18.3.0 (O1): the default for the four maps useEnterLeave snapshots from.
+// A `= {}` default is a NEW object on every call, and the hook compares those
+// maps by identity — so an omitted prop would re-run its diff on every pass of
+// the body, forever ("Too many re-renders"). App passes all four; this makes a
+// caller that does not (a preview, a test) safe too.
+const NO_MARKS = Object.freeze({});
+
 export const TimelineView = memo(function TimelineView({
   bookings, date, onEdit, onManual, onStatus,
-  blocks = [], onBlock, nowMins = 0, warnings = {},
+  blocks = [], onBlock, nowMins = 0, warnings = NO_MARKS,
   // v17.11.0: double-bookings on the viewed day, from App's findClashes memo.
   //   clashes    {bookingId: {names:[…], tables:[…]}} — the block's marker/border
   //   clashSpans {tableId: [{from,to}…]}              — the hatched overlap bands
   // Two shapes because they answer two questions: which BOOKINGS are in a clash,
   // and which MINUTES of which ROW are double-claimed. Deriving one from the
   // other here would mean re-running the pair scan in the render path.
-  clashes = {}, clashSpans = {},
+  clashes = NO_MARKS, clashSpans = {},
   // v17.11.0: the empty-day prompt (EmptyDay.jsx), which shipped in List only.
   // v17.14.0: `emptyWalkin`, not `onWalkin` — PlanView already had an
   // `onWalkin(tableId)` of its own for its table popover, so the empty-day
@@ -1170,7 +1284,7 @@ export const TimelineView = memo(function TimelineView({
   // v17.16.2: TODAY (App's single `todayStr()`), which is NOT `date` — that is
   // the day being VIEWED. liveBarDur needs both to put now on a booking's axis.
   today = "",
-  late = {}, freeing = {}, onNoShow = () => {},
+  late = NO_MARKS, freeing = NO_MARKS, onNoShow = () => {},
   zoom = 1, setZoom,
   // v17.2.0: per-device Timeline settings (App's tlSettings — scalars, memo-safe).
   followZoom = 4,      // zoom the Follow button jumps to (was hard-coded 4)
@@ -1198,10 +1312,24 @@ export const TimelineView = memo(function TimelineView({
   // React.memo on every BookingApp render), scoped there to the viewed date.
   waitGhosts = [],
   onBookWait = () => {},
+  // v18.3.0 (O1): false until the first bookings snapshot lands. Before it
+  // `bookings` is [] whatever the database holds, so the load itself would read
+  // as every block on the day ARRIVING; it is part of useEnterLeave's resetKey
+  // instead, which makes it a replacement.
+  bookingsReady = true,
+  // The memo-busting layout identity (App's `layout` state; the note above the component).
+  // /code-review: read here too, as one of useEnterLeave's deps.
+  layoutSig = null,
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
+  // /code-review: the drag closes the card as a HAND-OFF (ModalPresence's
+  // `handoff`): the block it lifts is the result, so the card goes at once
+  // instead of fading over it. Cleared when a card opens again.
+  const [quickHandoff, setQuickHandoff] = useState(false);
+  if (quickStatus && quickHandoff) setQuickHandoff(false);
+  function handOffQuick() { setQuickHandoff(true); setQuickStatus(null); }
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
   const isToday = date === today;
@@ -1402,6 +1530,44 @@ export const TimelineView = memo(function TimelineView({
     return liveBarDur(b, nowMins, today) * pxPerMin >= chipRoomFor(b, nsMap[identityKey(b)] || 0, warnings[b.id], !!clashes[b.id]);
   });
 
+  // ── v18.3.0 (O1): a booking leaving or joining the day fades ────────────────
+  // "No show" took a block from full opacity to gone between two frames, and
+  // Undo put it back the same way; so did a cancel, a delete, a save, a walk-in
+  // and any of those from another device. The ghost's pair fixes it: a leaving
+  // copy on `mgt-ghost-out`, an arrival on `mgt-appear`.
+  //
+  // Keyed per booking id across the WHOLE day, never per row. A booking that
+  // changed tables is neither leaving nor arriving — useFlip carries it — and a
+  // per-row lifecycle would fade a copy out of the old row and one into the new
+  // row while FLIP slid it between them. The resetKey is the viewed date (a
+  // date change is a replacement, not a change: DESIGN.md) plus the first load.
+  //
+  // A snapshot is what a leaving copy needs to look as it did — the booking and
+  // the marks it wore. After the change they are gone from every map below: the
+  // late border is usually WHY a block is leaving (No show), and without the
+  // snapshot it would lose that border on the fade's first frame. It is purely
+  // visual: `day` never contains it, so it counts toward no lane, clash, chip
+  // decision or `tableForClientY`. `lane` is its Unplaced-row lane, if it had one.
+  // /code-review: the lanes also move with the layout (which tables have rows)
+  // and the clock (a seated block's live width), so both are deps: without
+  // them a layout edit left every snapshot on its old lane until a booking
+  // changed, and a booking leaving then faded in the wrong lane or not at all.
+  const { leaving: leavingCells, arriving } = useEnterLeave(
+    date + (bookingsReady ? "" : "|loading"),
+    [bookings, late, warnings, clashes, freeing, chipsOn, layoutSig, nowMins],
+    function () {
+      const laneOf = new Map();
+      unplacedLanes.forEach((lane, li) => { lane.forEach((b) => { laneOf.set(b.id, li); }); });
+      return new Map(day.map((b) => [b.id, {
+        b: b, late: late[b.id] || null, warnings: warnings, clash: clashes[b.id] || null,
+        noShows: nsMap[identityKey(b)] || 0, chip: chipsOn && (b.status === "confirmed" || b.status === "pending"),
+        freeMin: freeing[b.id] != null ? freeing[b.id] : null,
+        lane: laneOf.has(b.id) ? laneOf.get(b.id) : null
+      }]));
+    },
+    { speed: "move" }
+  );
+
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the
   // CSS left/width transition can't cover — the block re-parents into a new row) eases
   // into place. Keyed on the assignment signature ONLY, so it fires on a table change —
@@ -1416,6 +1582,10 @@ export const TimelineView = memo(function TimelineView({
   // carries data-flip-id — one element per id, no collision, animates only a real move.
   const assignSig = day.map((b) => b.id + "@" + (b.tables || []).join("-")).join(",");
   const flipRef = useFlip([assignSig]);
+  // v18.3.0 (M1): a drop hands useFlip its release position (see useFlip's
+  // `seed`). Reads the method at CALL time: it is attached in an effect, after
+  // the first render.
+  const seedFlip = useCallback(function (id, top) { if (flipRef.seed) flipRef.seed(id, top); }, [flipRef]);
 
   // ── Status-change animations (v15.8.0) ──────────────────────────────────
   // Detection uses MODULE-level maps (__prevStatus / __statusAnims) so a stamp
@@ -1427,17 +1597,21 @@ export const TimelineView = memo(function TimelineView({
   const [, bumpAnim] = useState(0);
   useEffect(function () {
     const prev = __prevStatus;
-    const now = Date.now();
+    function rerender() { bumpAnim(function (n) { return n + 1; }); }
     if (prev) {
       let changed = false;
       day.forEach(function (b) {
         const p = prev[b.id];
-        // v15.9.0: window 700→800ms so it outlives the slowed 760ms wipe keyframe
-        // (an early unmount would pop the last sliver of the old colour off).
-        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = { type: "wipe", until: now + 800 }; changed = true; }
-        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = { type: "fill", until: now + 800 }; changed = true; }
+        // v15.9.0: the window must outlive the wipe keyframe (an early unmount
+        // would pop the last sliver of the old colour off). v18.3.0 (M5): it is
+        // DERIVED from --t-wipe (exitHold("wipe")), where it was a hand-typed 800
+        // (and 820 for the re-render) that nothing bound to the token — and it
+        // starts when the overlay MOUNTS (armWipe, above), not here, one render
+        // earlier. lib/wipe-window.js has the measurement.
+        if (p === "confirmed" && b.status === "seated") { __statusAnims[b.id] = pendingWipe({ type: "wipe" }, rerender); changed = true; }
+        else if (p === "seated" && b.status === "completed") { __statusAnims[b.id] = pendingWipe({ type: "fill" }, rerender); changed = true; }
       });
-      if (changed) { bumpAnim(function (n) { return n + 1; }); setTimeout(function () { bumpAnim(function (n) { return n + 1; }); }, 820); }
+      if (changed) rerender();
     }
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
@@ -1446,7 +1620,7 @@ export const TimelineView = memo(function TimelineView({
   }, [bookings]);
   function statusAnimOf(id) {
     const a = __statusAnims[id];
-    return a && a.until > Date.now() ? a.type : null;
+    return wipeOpen(a, Date.now()) ? a.type : null;
   }
 
   // GridLines / BlockBar / TimelineBlock are all HOISTED to module scope (top
@@ -1589,6 +1763,95 @@ export const TimelineView = memo(function TimelineView({
     return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
   }
 
+  // One booking's cell in one table row: its turnaround tail, its seated
+  // outline and the block. v18.3.0 (O1): a function now, because a LEAVING
+  // booking draws the same three things from its snapshot `snap` (see
+  // useEnterLeave above); `snap` is null for a live one.
+  function cellFor(b, id, snap) {
+    // The fade the tail and the outline share with their block, so the three
+    // leave and arrive as one thing: both are opacity-only (from and to the
+    // element's own opacity, which is how the tail keeps its 0.28).
+    const fx = snap ? "mgt-ghost-out" : arriving.has(b.id) ? "mgt-appear" : undefined;
+    const primary = primaryGridTable(b, gridIds) === id;
+    // v17.6.0: the turnaround tail — the table is held for `turnBuffer`
+    // minutes after the party's end, so the separation is visible rather
+    // than just being an invisible refusal when you try to book. Rendered
+    // as its OWN low-opacity sibling instead of lengthening the block:
+    // the block's width comes from liveBarDur, which also gates the
+    // start-time chips and is read by List, so growing it would move
+    // unrelated behaviour. Completed bookings get no tail — a completed
+    // visit's table reads as free everywhere else in the app.
+    let tail = null;
+    if (turnBuffer > 0 && b.status !== "completed") {
+      // /code-review: clamp the tail to the grid's right edge. A booking
+      // that ends at (or past) GRID_CLOSE would otherwise place its tail
+      // entirely OUTSIDE the grid — an absolutely-positioned child still
+      // counts toward the scroller's scrollWidth, so it added a strip of
+      // empty scroll past the end of the day that grew with zoom.
+      const tStart = toMins(b.time) + liveBarDur(b, nowMins, today);
+      const tEnd = Math.min(tStart + turnBuffer, GRID_CLOSE * 60);
+      const tMins = tEnd - tStart;
+      tail = tMins <= 0 ? null : (
+        <div
+          className={fx}
+          aria-hidden="true"
+          style={{
+            position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+            left: pct(tStart),
+            width: Math.max((tMins / totalMins) * 100, 0.3) + "%",
+            background: BLOCK_BG[b.status] || BLOCK_BG.confirmed,
+            opacity: 0.28,
+            borderRadius: "0 10px 10px 0",
+            boxSizing: "border-box", pointerEvents: "none",
+            transition: "left " + M.shift + ", width " + M.shift
+          }}
+        />
+      );
+    }
+    let ghost = null;
+    if (b.status === "seated") {
+      const origD = b.originalDuration || b.duration;
+      const sm = toMins(b.time) - OPEN * 60;
+      const gLeft = pct(OPEN * 60 + sm);
+      const gW = Math.max((origD / totalMins) * 100, 0.5) + "%";
+      ghost = (
+        <div
+          className={"mgt-tlghost" + (fx ? " " + fx : "")}
+          // Never on a leaving copy: one element per id in useFlip's map.
+          data-flip-id={primary && !snap ? b.id + "__ghost" : undefined}
+          style={{
+            position: "absolute", top: 3, height: (ROW_H - 8) + "px",
+            left: gLeft, width: gW,
+            background: "transparent", borderRadius: 10,   /* @canvas */
+            border: "2px dashed " + BLOCK_BG.seated,
+            boxSizing: "border-box", pointerEvents: "none",
+            transition: TL_MOVE
+          }}
+        />
+      );
+    }
+    // A leaving copy is keyed apart from the live block, so React never hands
+    // one's instance (its drag, its settle, its timers) to the other. It wears
+    // its snapshot's marks, no status overlay and no flip id, and takes no
+    // handlers (TimelineBlock's `leaving`).
+    if (snap) {
+      return (
+        <Fragment key={"leaving-" + b.id}>
+          {tail}
+          {ghost}
+          <TimelineBlock leaving b={b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={snap.warnings} clash={snap.clash} currency={currency} late={snap.late} noShows={snap.noShows} showChip={snap.chip} freeMin={primary ? snap.freeMin : null} />
+        </Fragment>
+      );
+    }
+    return (
+      <Fragment key={b.id}>
+        {tail}
+        {ghost}
+        <TimelineBlock arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
+      </Fragment>
+    );
+  }
+
   const gridRows = TIMELINE_TABLES.map((tbl) => {
     const id = tbl.id;
     const rows = day.filter((b) => (b.tables || []).includes(id));
@@ -1640,72 +1903,14 @@ export const TimelineView = memo(function TimelineView({
             reassign — FLIP on the PRIMARY cell only (distinct `__ghost` id namespace so
             it never collides with the block's data-flip-id={b.id}); (3) hover-lift — the
             ghost paints under its block but, being its immediate preceding sibling, is
-            scaled by the `.mgt-tlghost:has(+ .mgt-hover-scale:hover)` rule (index.html)
+            scaled by the `.mgt-tlghost:has(+ .mgt-hover-scale:hover)` rule (index.css)
             so it lifts in lockstep with the block. */}
-        {rows.map((b) => {
-          // v17.6.0: the turnaround tail — the table is held for `turnBuffer`
-          // minutes after the party's end, so the separation is visible rather
-          // than just being an invisible refusal when you try to book. Rendered
-          // as its OWN low-opacity sibling instead of lengthening the block:
-          // the block's width comes from liveBarDur, which also gates the
-          // start-time chips and is read by List, so growing it would move
-          // unrelated behaviour. Completed bookings get no tail — a completed
-          // visit's table reads as free everywhere else in the app.
-          let tail = null;
-          if (turnBuffer > 0 && b.status !== "completed") {
-            // /code-review: clamp the tail to the grid's right edge. A booking
-            // that ends at (or past) GRID_CLOSE would otherwise place its tail
-            // entirely OUTSIDE the grid — an absolutely-positioned child still
-            // counts toward the scroller's scrollWidth, so it added a strip of
-            // empty scroll past the end of the day that grew with zoom.
-            const tStart = toMins(b.time) + liveBarDur(b, nowMins, today);
-            const tEnd = Math.min(tStart + turnBuffer, GRID_CLOSE * 60);
-            const tMins = tEnd - tStart;
-            tail = tMins <= 0 ? null : (
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute", top: 3, height: (ROW_H - 8) + "px",
-                  left: pct(tStart),
-                  width: Math.max((tMins / totalMins) * 100, 0.3) + "%",
-                  background: BLOCK_BG[b.status] || BLOCK_BG.confirmed,
-                  opacity: 0.28,
-                  borderRadius: "0 10px 10px 0",
-                  boxSizing: "border-box", pointerEvents: "none",
-                  transition: "left " + M.shift + ", width " + M.shift
-                }}
-              />
-            );
-          }
-          let ghost = null;
-          if (b.status === "seated") {
-            const origD = b.originalDuration || b.duration;
-            const sm = toMins(b.time) - OPEN * 60;
-            const gLeft = pct(OPEN * 60 + sm);
-            const gW = Math.max((origD / totalMins) * 100, 0.5) + "%";
-            ghost = (
-              <div
-                className="mgt-tlghost"
-                data-flip-id={primaryGridTable(b, gridIds) === id ? b.id + "__ghost" : undefined}
-                style={{
-                  position: "absolute", top: 3, height: (ROW_H - 8) + "px",
-                  left: gLeft, width: gW,
-                  background: "transparent", borderRadius: 10,   /* @canvas */
-                  border: "2px dashed " + BLOCK_BG.seated,
-                  boxSizing: "border-box", pointerEvents: "none",
-                  transition: TL_MOVE
-                }}
-              />
-            );
-          }
-          return (
-            <Fragment key={b.id}>
-              {tail}
-              {ghost}
-              <TimelineBlock b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) === id ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primaryGridTable(b, gridIds) === id ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />
-            </Fragment>
-          );
-        })}
+        {rows.map((b) => cellFor(b, id, null))}
+        {/* v18.3.0 (O1): bookings that have just LEFT the day and drew a cell
+            in this row, fading out from their snapshot. After the live blocks,
+            as the plan has it: a copy fading over whatever slides into its
+            place reads as a hand-over, and it takes no presses on the way. */}
+        {leavingCells.filter((s) => (s.b.tables || []).includes(id)).map((s) => cellFor(s.b, id, s))}
         {/* LAST in the row, so it paints over the blocks — the whole point is
             that it marks the span the later block is hiding the earlier one on. */}
         {(clashSpans[id] || []).map((sp, i) => (
@@ -1733,7 +1938,11 @@ export const TimelineView = memo(function TimelineView({
       {unplacedLanes.map((lane, li) => (
         <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
           <GridLines />
-          {lane.map((b) => <TimelineBlock key={b.id} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} />)}
+          {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
+          {/* v18.3.0 (O1): a booking that left while in THIS lane. A lane that no
+              longer exists takes nobody: the row shrinking is its own mount
+              (O4), not this fade. */}
+          {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
         </div>
       ))}
     </div>
@@ -1784,9 +1993,14 @@ export const TimelineView = memo(function TimelineView({
     >
       {/* v15.8.0: width transitions so a zoom change (+/− / 1× / Follow) eases to
           the new scale. Blocks/gridlines are %-positioned against this width, so
-          they re-scale with it for free. (The one layout-bound animation — see
-          REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
-      <div ref={flipRef} style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
+          they re-scale with it for free. (A layout-bound animation, on M.shift,
+          and not the only one: the blocks' left/width, the Toggle knob's left,
+          Reveal's grid rows, AutoHeight's height and the notification strip's
+          WAAPI height are the others. See REFACTOR_LOG's perf note; the global
+          prefers-reduced-motion guard zeroes it.) */}
+      {/* v18.3.0 (M1): `data-flip-root` lets a dropped block find this
+          container without a second ref, to seed its release position. */}
+      <div ref={flipRef} data-flip-root="" style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
         <div style={{
           position: "relative",
           borderBottom: "2px solid var(--tl-header-border)",
@@ -1960,22 +2174,28 @@ export const TimelineView = memo(function TimelineView({
   // ── Quick-status popup (long-press → choose new status) ──────────────────
   // v17.0.0: the popup body moved VERBATIM to QuickStatusPopup.jsx so PlanView
   // shares the same status-gating (pending → Confirmed/Cancel; late no-show).
-  const quickPopup = quickStatus ? (
-    <QuickStatusPopup
-      booking={quickStatus.booking}
-      late={late}
-      today={today}
-      nowMins={nowMins}
-      onStatus={onStatus}
-      onNoShow={onNoShow}
-      onClose={() => setQuickStatus(null)} />
-  ) : null;
+  // v18.3.0 (M3): in ModalPresence, so it animates out (PopupShell).
+  const quickPopup = (
+    <ModalPresence show={!!quickStatus} handoff={quickHandoff}>
+      {quickStatus ? (
+        <QuickStatusPopup
+          booking={quickStatus.booking}
+          late={late}
+          today={today}
+          nowMins={nowMins}
+          onStatus={onStatus}
+          onNoShow={onNoShow}
+          onClose={() => setQuickStatus(null)} />
+      ) : null}
+    </ModalPresence>
+  );
 
   // ── Final assembly ───────────────────────────────────────────────────────
   return (
     <div style={{
       background: "var(--tl-card-bg)",
-      backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      // v18.3.0 (A9): no backdrop blur. The card sits over the flat --bg-app, where a
+      // blur changes nothing (≤5/255 measured), and it spent the tablet's ≤4 budget.
       borderRadius: R.sheet,
       border: "1px solid var(--tl-card-border)",
       padding: "10px 12px",

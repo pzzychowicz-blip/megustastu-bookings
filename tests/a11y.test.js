@@ -515,6 +515,24 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
       "so it cannot swallow a press aimed at whatever is behind it");
   });
 
+  it("a DEPARTING timeline block is inert too (v18.3.0, O1)", () => {
+    // The ghost's four, on the block — plus the two a block has that a ghost
+    // does not: an id useFlip matches on, and a group-hover lift keyed on
+    // data-bk. A leaving copy in useFlip's map would collide with the live
+    // cell of a booking that came straight back (Undo).
+    has(Timeline, "every handler dropped at once", /const handlers = leaving \? null : \{/,
+      "one object, so a handler added later cannot be missed on the way out");
+    has(Timeline, "spread onto the block", /\{\.\.\.handlers\}/, "the object is what the block wears");
+    has(Timeline, "aria-hidden while leaving", /data-bk=\{leaving \? undefined : b\.id\}\n\s*aria-hidden=\{leaving \? true : undefined\}/,
+      "out of the a11y tree, and out of the group hover");
+    has(Timeline, "the block's button role goes too", /role=\{leaving \? undefined : "button"\}\n\s*tabIndex=\{leaving \? -1 : 0\}/,
+      "Tab must not land on a booking that has left the day");
+    has(Timeline, "the handle is not tabbable", /tabIndex=\{leaving \? -1 : undefined\}\n\s*onClick=\{leaving \? undefined :/,
+      "a real <button> inside an aria-hidden block would still take focus");
+    expect(count(Timeline, /<TimelineBlock (?:key=\{"leaving-" \+ s\.b\.id\} )?leaving b=\{s?\.?b\} pxPerMin=\{pxPerMin\} anim=\{null\} flipId=\{null\}/g),
+      "both leaving sites (a table row, an Unplaced lane) pass no flip id and no status overlay").toBe(2);
+  });
+
   it("a ghost that leaves while HOLDING focus hands it back", () => {
     // /code-review: going inert means aria-hidden, and focused + hidden is a
     // state assistive tech need not make sense of; then it unmounts and focus
@@ -571,7 +589,9 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
     // Leaving for a form refocuses the table IN the handler: the commit that
     // opens the form makes the page `inert`, where focus() does nothing, and
     // the form then returned focus to <body> (measured, StrictMode off).
-    expect(count(Plan, /onClick=\{\(\) => \{ leavePop\(\); on(?:Edit\(b\)|Walkin\(id\)); \}\}/g)).toBe(2);
+    // v18.3.0 (M3): the two handlers are TablePopover's `onPick` / `onWalkinHere`
+    // props now (its buttons must read the exit's `leaving`), still built here.
+    expect(count(Plan, /on(?:Pick=\{\(b\)|WalkinHere=\{\(\)) => \{ leavePop\(\); on(?:Edit\(b\)|Walkin\(id\)); \}\}/g)).toBe(2);
     expect(Plan).not.toMatch(/<div key=\{b\.id\} className="mgt-hover-scale"\s+onClick/);
   });
 });
@@ -583,8 +603,10 @@ describe("focusable content must not scroll under the finger", () => {
   // The element leaves from under the finger between press and release, so the
   // click lands elsewhere and the popover never opens.
   it("timeline blocks and ghosts suppress pointer focus", () => {
+    // v18.3.0 (O1): the block's handlers moved into one object (so a LEAVING
+    // block drops them all at once), which spells it `onMouseDown: (e) => …`.
     expect(
-      count(Timeline, /onMouseDown=\{\(e\) => \{ e\.preventDefault\(\); \}\}/g),
+      count(Timeline, /onMouseDown(?:=\{|: )\(e\) => \{ e\.preventDefault\(\); \}/g),
       "both the block and the waitlist ghost need it. preventDefault on " +
       "mousedown suppresses ONLY focus — not the click, not pointer events — " +
       "so drags and holds are unaffected."
@@ -1621,5 +1643,58 @@ describe("a minus control is drawn with U+2212, never a hyphen (v18.2.0)", () =>
     const offenders = srcFilesMatching(/>\s*-\s*<\/button>/)
       .map(([f]) => f);
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("the AlertPanel header toggle is a real button (v18.3.0 phase 9, O2b)", () => {
+  // The WhatsApp module's linked-booking card and intent banner collapse from
+  // their header, which was a <div onClick> — no role, no tab stop, no state —
+  // so neither could be opened or closed from the keyboard. The row itself
+  // cannot be the button: `action` holds real buttons, and a button's children
+  // are presentational. So the button wraps the mark, the title and the count,
+  // and `action` stays OUTSIDE it.
+  const Panel = read("components/AlertPanel.jsx");
+  const Intent = read("components/whatsapp/IntentBanner.jsx");
+  const Linked = read("components/whatsapp/LinkedBookingCard.jsx");
+
+  it("a toggle header renders a <button> carrying aria-expanded, holding only the heading", () => {
+    const buttons = openingTagsOf(Panel, "button");
+    expect(buttons.length, "AlertPanel renders exactly one button: the toggle").toBe(1);
+    has(buttons[0], "the toggle", /type="button"/, "a button without a type submits any form it lands in");
+    has(buttons[0], "the toggle", /aria-expanded=\{!!expanded\}/,
+      "without aria-expanded a screen reader hears a button, not a disclosure, and never learns whether it is open");
+    has(Panel, "the toggle's contents", />\{heading\}<\/button>/,
+      "the button holds the mark, title and count and NOTHING else — `action` inside it would put buttons in a button");
+  });
+
+  it("the ROW keeps the click and the button has none, so every activation toggles exactly once", () => {
+    // The chevron rides in `action`, outside the button. A handler on the
+    // button alone leaves the chevron dead; a handler on BOTH toggles twice
+    // (the button's click bubbles to the row) and the panel appears not to move.
+    hasnt(openingTagsOf(Panel, "button")[0], "the toggle", /onClick/,
+      "the row's onClick already receives the button's click by bubbling — a second handler toggles twice");
+    has(Panel, "the header row", /<div onClick=\{onHeaderClick\}/,
+      "the chevron in `action` is outside the button; only the row's handler reaches it");
+  });
+
+  it("the toggle takes the strip lid's tint, with no inline background to beat it (phase 10)", () => {
+    // `.mgt-ac-row` paints through `background-color`; an inline `background`
+    // outranks any stylesheet rule, so the class would sit there and the tint
+    // would never show — the trap DESIGN.md records from the Collapsible
+    // header, which read `rgba(0, 0, 0, 0)` while hovered.
+    const tag = openingTagsOf(Panel, "button")[0];
+    has(tag, "the toggle", /className="mgt-ac-row mgt-nopress"/,
+      "the lid's two classes: the tint on hover and press, and no press dip on a header-wide item");
+    has(tag, "the toggle", /"--row-bg-hover": "var\(--bg-veil\)"/,
+      "unset, the hover falls back to the accent wash and recolours the pane's severity tint");
+    hasnt(tag, "the toggle", /\bbackground(Color)?\s*:/,
+      "an inline background beats `.mgt-ac-row`'s background-color, so hover and press would tint nothing");
+  });
+
+  it("both collapsible callers pass their open state beside onHeaderClick", () => {
+    for (const [name, src] of [["IntentBanner", Intent], ["LinkedBookingCard", Linked]]) {
+      has(src, name, /onHeaderClick=\{[^}]*\}\s*expanded=\{!collapsed\}/,
+        "the button's aria-expanded reads this prop; without it every panel announces as collapsed");
+    }
   });
 });

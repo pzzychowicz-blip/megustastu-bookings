@@ -712,6 +712,14 @@ export var SP={
 // 54px calendar day cell is a grid dimension, not a control.
 export var H={chip:28,compact:32,chrome:36,control:40,touch:44};
 
+// The Split View divider's width, in px of LAYOUT (v18.3.0 /code-review). App's
+// `tlPaneOk` takes it out of the width a timeline pane is measured by, and
+// SplitLayout draws it (its touch hit area is H.touch across, on top of this).
+// Here because both need it and a component file cannot export a constant
+// (react-refresh): until now each kept a copy with a comment asking the two to
+// change together.
+export const SPLIT_DIVIDER_PX = 10;
+
 // ── Motion tokens (v17.8.0) ───────────────────────────────────────────────────
 // The same idea as `R`, for time and easing. The full rationale (why two curves
 // split by direction, what each duration step is FOR, and the two documented
@@ -742,6 +750,8 @@ export var M={
   // timeout cannot read a CSS var (the same constraint as M.dur/M.easeOut).
   reveal:"var(--t-reveal) var(--ease-out)",
   status:"var(--t-status) var(--ease-out)",
+  // v18.3.0 (M5): the status wipe's curve (.mgt-wipe-ltr), here so M.dur.wipe has its CSS pair.
+  wipe:"var(--t-wipe) var(--ease-out)",
   exit:"var(--t-move) var(--ease-in)",
   // The documented LINEAR exception (v17.8.0), alongside .mgt-dot-pulse's
   // ease-in-out. The two direction curves describe arrival and departure — a
@@ -752,9 +762,10 @@ export var M={
   // the only consumer; anything that travels still takes move/shift.
   resize:"var(--t-shift) linear",
   // Raw values — WAAPI only (plus `reveal`, which `Reveal` needs as a NUMBER to
-  // time its mount/settle timeouts against). Keep identical to index.html's
-  // :root — these are the only values here that can drift.
-  dur:{tap:145,move:240,shift:385,reveal:520},
+  // time its mount/settle timeouts against, and — v18.3.0 — `wipe`, which the
+  // three status-wipe sites need for their hold, `exitHold("wipe")`). Keep
+  // identical to index.html's :root — these are the only values here that can drift.
+  dur:{tap:145,move:240,shift:385,reveal:520,wipe:760},
   easeOut:"cubic-bezier(0.33, 1, 0.68, 1)"   /* @motion */
 };
 

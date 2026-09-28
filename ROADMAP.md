@@ -149,6 +149,83 @@ evidence for each.
   waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
   a rule, and make both paths say the same.
 
+- **Recheck two things on a real iPhone (found in v18.3.0 phases 17 and 18).**
+
+  **The sign-in shift (phase 18).** In the iOS 26 Simulator the window was scrolled when
+  the app mounted in 2 of 8 sign-ins made with Return (112px in Safari, 36px in the
+  home-screen app), and iOS undid it every time. S2 had twice seen the app open ~37pt too
+  high after signing in. Phase 22's Go key makes Return the usual way to sign in, so on a
+  real iPhone sign in with it several times, in Safari and as a home-screen app, and note
+  whether the header ever stays low. Only then consider `window.scrollTo(0, 0)` at mount.
+
+  **The keyboard (phase 17).** `Overlay` now pads by the keyboard's inset, so Save is
+  never behind the keyboard, but in the iOS 26 Simulator Safari's floating address pill
+  and ⌃⌄✓ form bar sat over part of the booking form's footer for some fields: Notes put the pill over Back, and on a probe page a
+  bottom textarea put the bar over the whole footer. iOS reported a different visible area
+  for each field (src/CLAUDE.md's Gotchas row on the keyboard). On a real iPhone, in Safari
+  and as a home-screen app, tap Name, Notes and Deposit and note where the footer lands.
+  Only act if the overlap is real there. The fixes that exist all pad for the bar, which
+  leaves a gap in the cases that are clean now.
+
+- **Timeline drag: scroll at the edge (A5, the motion & touch audit).** An armed drag cannot
+  reach rows below the fold: on the tablet i3 and i4 sit at 821 and 865px on an 800px
+  screen, and on a phone everything from table 6 down. Add a band of about 48px at each
+  edge that, in a `requestAnimationFrame` loop, scrolls the body and adds the scrolled
+  delta to the drag's `dy`. Drag is used every service (S3).
+
+- **The drop freeze (audit M1).** After a drop the block sits still for about 104ms on the
+  Mac with no frame painted: `dropOnTable`'s synchronous trials plus the re-render. The
+  tablet's figure is unmeasured and is on v18.3.0's device list (row 04). Measure it there
+  before proposing a deferral or a fix.
+
+- **List cards and waitlist rows leave the way they arrive (O3).** `useRevealRows` with
+  `speed: "move"`, a departed row ranked at `rank − 0.5` so it holds its place, and
+  `useFlip`'s `isQuiet` while a row collapses. After v18.3.0's O1 (the timeline blocks'
+  fade) has run on the tablet.
+
+- **The Unplaced row's mount (O4).** Mounting it pushes every table row down by
+  lanes × 44px plus the gap, in one frame. Measure frame by frame first: `useFlip` may
+  already move the blocks while the labels jump. And `tableForClientY` would need the row's
+  live height during a reveal, or a drop lands rows off.
+
+- **The login screen's theme (found in v18.3.0 phase 23).** `useThemeMode` is mounted in
+  `BookingApp`, so until someone signs in nothing follows the OS live: the login screen
+  stays in the theme the boot script chose until it reloads (seen in the iPhone Simulator's
+  home-screen app), and its status-bar metas follow the OS even where a saved `mgt-theme`
+  says otherwise. Mounting the hook in `App()` instead is the likely fix; check that the
+  signed-in theme preference still wins once `BookingApp` mounts.
+
+- **A modal opened from the keyboard can lose its focus return (found by v18.3.0's
+  `/code-review`).** Measured in the rig, from the keyboard: on a List card's ⋯ menu, choose
+  Delete or Cancelled, then press Escape on the confirm. Focus lands on `<body>`, not on ⋯.
+  The same happens after Find a booking (header) is closed with Escape. `useDialog` (atoms)
+  records `document.activeElement` in a passive effect. By then, the commit that mounted
+  the modal has made the page `inert`, and that has already blurred the opener. A probe did
+  two things together: `useDialog` captured the opener at its first render
+  (`useState(() => document.activeElement)`), and the ⋯ pick handed focus back to ⋯ in its
+  handler (PlanView's `leavePop` pattern). With both, focus returned to ⋯ for both
+  confirms. Find still landed on `<body>`, so it has a second cause of its own. Neither
+  path was changed by v18.3.0. Measure every modal's return path before changing a
+  primitive that all of them share.
+
+- **Timeline fades replay after the tablet wakes (found by v18.3.0's `/code-review`).**
+  `useEnterLeave`'s holds start on the next animation frame (`afterFrame`), and a hidden
+  tab renders none. So bookings cancelled or added on another device while the screen was
+  off pile up, and on wake they all play their fade at once: the departed ones from their
+  old snapshots, possibly over whatever took their place, and the new ones fading in, all
+  minutes late. This is the behaviour `lib/after-frame.js` documents ("the leaving node
+  waits, inert, until the tab is shown"). Whether a change nobody saw should animate is a
+  decision. One option: treat a diff taken while `document.hidden` as a replacement, the
+  way a date change is. Check on the tablet first how it reads there.
+
+- **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
+  restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
+  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the
+  per-scheme `theme-color` metas plus the manifest colours and its `?v=` bump (N5),
+  `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
+  `prefers-contrast: more` block (A10), and the popover keyframe pair for
+  `ConnectionStatus` (M9). Drop any item the device check turns back.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**

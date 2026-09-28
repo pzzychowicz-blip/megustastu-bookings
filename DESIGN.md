@@ -206,6 +206,15 @@ explaining why is usually the one to read.
   are reserved for decision surfaces where a mis-tap costs something — modal
   footers and the quick-status popup. Size by what a mistake costs, not by one
   number from a guideline.
+- **A hit area can outgrow what it draws, but it takes what it covers (v18.3.0,
+  A7).** The Split View divider draws a 2px rule in 10px of layout. On touch,
+  an empty child (`.mgt-split-hit`) reaches 17px into each pane, so a finger
+  has `H.touch` to aim at. Those strips stop reaching the panes, and stacked
+  they held a timeline block and its Assign button (measured). So the pad is
+  **touch only** (Patryk); a cursor hits 10px easily. And a bigger target must
+  not jump to the press: the divider used to move TO the pointer, a 5px snap
+  at most on 10px but 22px on 44. It now keeps the press's offset from the
+  rule, so a press alone moves nothing and a drag moves it by the drag.
 - **A literal is invisible to a token audit (v17.8.0).** The contrast pass
   measured every `--token` and still missed four fills carrying white text —
   TableGrid's selected (2.31), blocked (3.13) and swap (~1.4, white on bright
@@ -251,6 +260,25 @@ explaining why is usually the one to read.
   **Opacity conflates QUIET with FAINT; weight separates them** — and the chip
   was only ever "too loud" relative to a NAME sitting at 1.86–2.97:1, so dimming
   it was levelling down to the illegible element rather than fixing it.
+- **Increase Contrast is a third and fourth theme state (v18.3.0, A10).** iOS's
+  Increase Contrast turns on `(prefers-contrast: more)`. It is the query that
+  reaches the restaurant's phones: `prefers-reduced-transparency` did not match
+  on iOS 26.5 (measured), and `forced-colors` is Windows only. One `@media`
+  block after the dark tokens flips two things. **The glass goes opaque**:
+  `--tl-card-bg`, `--bg-sheet`, `--bg-sheet-mobile`, and in dark `--tl-popup-bg`
+  (light's is already opaque). Each value is that token's composite over
+  `--bg-app`, so a surface keeps its colour and only stops showing what is
+  behind it — the page header ghosted faintly through the iPhone booking sheet
+  in dark. **The hairlines take the muted ink**: `--border-soft`,
+  `--border-sheet` and `--tl-card-border` become `var(--text-muted)`, which is
+  what "more contrast" asks of an edge. **Text does not change**: every ink
+  already passes, and the setting asks for solid surfaces and visible edges,
+  not a second palette. The dark rule comes second inside the block, so at
+  equal specificity it wins for `[data-theme="dark"]`. `tests/contrast.test.js`
+  measures `light-more` and `dark-more` as two more themes, where every
+  fill/ink pair must be no worse than at rest. It also fails if the block
+  names a token its base theme lacks (a typo would silently do nothing), or if
+  an overridden glass token is still translucent.
 - **A literal duplicate of a token is a token that cannot be fixed (v17.8.0).**
   TimelineView's Follow button held a hard-coded copy of `--app-btn-grey`'s
   value and was the one secondary button the contrast pass could not reach; the
@@ -596,7 +624,7 @@ explaining why is usually the one to read.
   that card's covers 14px (x 222 against 208, measured).
 - Every modal uses the **`Overlay` atom** (owns blur + mobile-sheet / desktop-card branching).
 - **Popovers/dialogs use the opaque sheet token**, not the translucent card token (a card token at ~0.45 opacity reads see-through for a dialog).
-- ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above).
+- ≤4 simultaneous `backdrop-filter: blur()` (see perf gotcha above). **The view cards spend none (v18.3.0):** Timeline's and Plan's card sit over the flat `--bg-app`, where a blur changes at most 1/255 (measured, both themes), so they are unblurred. The worst stack is then Split View + booking form + discard confirm, at 4: two modals, a scrim and a card each. It was 6.
 - **Keyboard focus is a designed state (v17.8.0).** One `:focus-visible` rule in
   `src/index.css` + a `--focus-ring` token per theme. Before this the app had NO
   focus rule at all and a focused button computed `outline: none` — in the one
@@ -1109,8 +1137,9 @@ explaining why is usually the one to read.
   the cursor between aiming and clicking (measured: Edit −24px, Delete +31px) so
   clicks landed on the card instead. Any surface that HOLDS click targets gets
   **`.mgt-ac-row`** instead: a background tint, no transform. One class covers
-  autocomplete rows, the List card, the Summary panel and the notification
-  strip's lid; both colours arrive as custom properties (`--row-bg`,
+  autocomplete rows, the List card, the Summary panel, the notification
+  strip's lid and (v18.3.0) a collapsible `AlertPanel`'s header toggle, whose
+  row holds the pane's action buttons beside it; both colours arrive as custom properties (`--row-bg`,
   `--row-bg-hover`) **because every one of those surfaces sets its resting fill
   INLINE and an inline `background` beats a stylesheet `background-color`** — a
   plain rule silently never applies. Symptom to recognise: "I have to move the
@@ -1479,6 +1508,22 @@ its declaration does not.** An ink that inverts the same way the composite does
 theme is broken: 4.59:1 light but 2.30:1 dark, against white's 1.30 / 6.42.
 Measured live at 5.14:1 light and 4.60:1 dark, so it is no longer an exemption.
 
+**The zoom lock is a decision, not an oversight.** App's runtime viewport sets
+`maximum-scale=1, user-scalable=no` (the viewport effect in `App.jsx`). That
+turns off pinch-zoom, which WCAG 1.4.4 counts against an app. Here it is a
+deliberate POS choice, first recorded in `REFACTOR_LOG.md` under v17.3.2 and
+re-confirmed by Patryk in S3 (2026-09-27) on these facts:
+- It stops iOS zooming into a focused field whose text is under 16px. S3 counted
+  29 of 30 text inputs at 16px or more (`mkInp` is `T.title`); the one the lock
+  still protects is the header's Viewed date field (`T.lead`, 14px).
+- It stops staff pinch-zooming the timeline's small text by accident.
+- It removes the double-tap-zoom tap delay. That is why `touch-action:
+  manipulation` is set only on the view switcher: undoing the lock means adding
+  it to every control.
+- Android honours the lock. Whether iOS 26 honours `user-scalable=no` has not
+  been measured; that needs the hardware.
+- MGT Scheduling carries the same lock (its `index.html`), so the two apps agree.
+
 ### External links (v18.0.0 phase 4) — the app's first, and its only one
 
 The Integrations panel points at Vercel. Until then this app contained **no
@@ -1531,7 +1576,7 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   the only feedback the two non-`<button>` tap targets had, so both gained the
   app's own language, and **which one they get is the v17.9.1 rule again**:
   `.mgt-ac-row:active` gives a **tint** to containers of controls (List card,
-  Summary, autocomplete rows, the strip's lid) — a scale there would shrink the
+  Summary, autocomplete rows, the strip's lid, the `AlertPanel` toggle) — a scale there would shrink the
   card under the button you were aiming at, because **`:active` matches
   ANCESTORS of the pressed element**; `.mgt-blk:active` gives the **dip** to the
   timeline block and waitlist ghost, which are leaf controls. Target `.mgt-blk`
@@ -1544,8 +1589,21 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
 
 Tokens in `src/index.css`'s `:root` (theme-agnostic, so NOT duplicated into the
 dark block, same as the radii); JS reads them through **`M`** in
-`lib/constants.js`. **No new easing or duration literal** — `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart from `M`'s own
-WAAPI values.
+`lib/constants.js`. **No new easing or duration literal.** The check is
+`grep -rn --include='*.css' --include='*.js' --include='*.jsx' "ms ease\|ms linear\|cubic-bezier" src/`.
+The `--include`s keep out the `CLAUDE.md` notes under `src/`, whose prose quotes
+old values. At v18.3.0 it returns seven lines, and every one is expected:
+- the two curve tokens themselves, `--ease-out` and `--ease-in` in `index.css`'s
+  `:root`;
+- `M.easeOut`, the WAAPI copy of `--ease-out` in `lib/constants.js`, and the
+  comment above it;
+- the two LOOPS, which are not transitions and take no token: the WhatsApp
+  shimmer's `1100ms ease-in-out` in `index.css`, and the recheck spinner's
+  `900ms linear` in `ConversationView.jsx` (marked `@motion`);
+- the motion scale's own history comment in `index.css`, which names the five
+  curves it replaced.
+
+Anything else it returns is a new literal.
 
 **The split is by DIRECTION, not by element.** `--ease-out` (cubic-out,
 `0.33,1,0.68,1`) for everything that arrives, opens, moves, or answers a finger;
@@ -1594,8 +1652,10 @@ may be fine and the curve the fault. Corollary: `--t-tap` is for a control
 *acknowledging* a tap. Anything that TRAVELS (a knob, a pane, a block) takes
 `--t-move` or `--t-shift`, however small the control is. Two more sit outside the scale on purpose: `--t-status`,
 which exists *because* TimelineView and PlanView must agree on it (a shared
-number needs a shared name), and `--t-wipe`, which TimelineView's
-`__statusAnims.until` window depends on.
+number needs a shared name), and `--t-wipe`, which three overlay windows
+depend on (the timeline block's, the List card's and the form's flash). Since
+v18.3.0 all three are `exitHold("wipe")`, derived through `M.dur.wipe`, so the
+token cannot be raised out from under them.
 
 Three exceptions, all real, and the first two are the same idea. `.mgt-dot-pulse`
 keeps `ease-in-out` — a loop has no arrival and no departure, so neither
@@ -1640,6 +1700,60 @@ relative is also what the hook MEANS: it animates a row change, which is
 movement inside the container; a whole-container move is the page reflowing
 around it, which the browser has already drawn.
 
+**A dropped block settles from where the finger LEFT it** (v18.3.0). A drop
+re-parents the block into its new row, and `useFlip` animated it from the top it
+recorded before the drag began: on the first frame after release the block was
+back on its old row, then slid down again. `endDrag` now hands the hook the
+release position (`ref.seed`, which lives one frame), so the flip runs from
+there. A block that stays mounted (released on its own row, or a refused drop)
+travels home on `TL_SETTLE`: `--t-shift` for transform and opacity, with its
+z-order held until it lands. Not the shadow (the /review-animations pass): a
+`box-shadow` repaints on every frame it animates, a 24px blur on the tablet
+for 385ms, so the drag shadow drops on the release frame. It used the hover lift's `--t-tap`, but
+after a drag the same property is travel. That hold counts from the COMMIT that
+starts the transition, not from the pointerup, because the drop's synchronous
+work runs in between. It is the same lesson as the status-wipe window: **time a
+hold from when its animation starts, not from the event that caused it.**
+
+**…and after a tap, the commit is not that moment either** (v18.3.0 phase 8).
+React runs a click's passive effects synchronously, before the browser paints,
+and a hold started in one of them waits behind every effect after it. Measured
+on "No show": committed at +86ms, first painted at +130ms (App's waitlist
+matcher runs its placement scans on every bookings change), so a hold timed
+from the effect removed the leaving block 221ms into its 240ms fade, at opacity
+0.42. A CSS animation starts on the first frame that renders it, so
+`useEnterLeave` starts its holds in the next `requestAnimationFrame`
+(`afterFrame`): measured after, 279–287ms from the animation's start, and
+removed at opacity 0. In a hidden tab neither the frame nor the animation runs,
+so that wait cuts nothing short. **The shared primitive had the same fault**
+(the /review-animations pass): `usePresenceLifecycle`, under every `Presence`,
+`Toast` and `ModalPresence`, started its hold in the effect that sets `leaving`,
+one render before the `-out` class commits. A status picked in the quick-status
+card blocks the page for ~136ms in between, so its 240ms exit ran 170ms and the
+card vanished at opacity 0.55–0.66. It starts the hold with the same
+`afterFrame` now (`lib/after-frame.js`), from an effect on `leaving`: 251–256ms,
+to opacity 0.
+
+**The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
+A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design
+§9's rubber band, in log-zoom, so it overshoots by at most 25% at either end
+and keeps following the fingers, then springs back to the limit on release
+about the last midpoint. The wheel keeps the hard stop, because a wheel step has
+no release to spring back from. The pan keeps a fifth of the view covered by the
+room on each axis, so the room cannot be pushed off screen. The spring-back, the
+double-tap reset and the reset when zoom & pan is switched off glide on
+`--t-shift` (geometry), and nothing glides during a gesture: a transform eased
+while a finger drives it lags the finger. The glide needed the zoom `<g>`'s
+transform to move from the SVG attribute to CSS, since CSS cannot transition an
+attribute; the two forms were measured identical (0.0px, Chromium and WebKit)
+before the swap. **No momentum on the pan:** a floor plan is placed, not thrown.
+The limits are `lib/plan-zoom.js`. **A glide is caught where it is**
+(/review-animations): a pinch, a pan or a wheel step during a glide reads the
+drawn transform back and starts from it. `view` holds the glide's target, and
+dropping the transition alone put the plan there in one frame (measured: a
+wheel step 120ms into a double-tap reset jumped the zoom from 1.70× to 1.15×;
+after, it went from the ~1.69× on screen to 1.95×, one notch).
+
 ### Adding motion to something that has none
 
 - **Fading in to an element's own opacity** is `.mgt-appear`, not
@@ -1669,6 +1783,65 @@ around it, which the browser has already drawn.
   which collides with App's singleton view state — the same collision that stops
   Split View putting one view in both panes. Reasons in `REFACTOR_LOG.md`
   (v17.15.0 and v17.15.3), not `ROADMAP.md`; they are decisions, not pending work.
+  (v18.3.0 made the three popups two-way — see the next point — so the count of
+  two holds again.) **The WhatsApp module's keyed swaps are one-way for the same
+  reason as the Settings tab body**: a `key` change remounts the wrapper, so the
+  old content is gone before the new one fades or slides in. There are four:
+  the Inbox ⇄ Archived list (`InboxPanel.jsx`, `key={tab}`), the phone's
+  list ⇄ conversation slide (`InboxPanel.jsx`, `key` on the active
+  conversation), and the template chips that swap with the EN/ES switch
+  (`ReplyComposer.jsx`, `key={outLang}`, once for each layout: the phone's
+  scrolling row and the laptop's).
+- **The popups exit through `PopupShell`** (v18.3.0). The quick-status card,
+  the split menu and the Plan table popover built their scrim and card by hand,
+  entered with the modal keyframes and unmounted on close. They share
+  `PopupShell` (atoms) now, and every mount site wraps them in `ModalPresence`,
+  so they leave the way `Overlay` does (`mgt-scrim-out` / `mgt-card-out`,
+  `--ease-in`, held `EXIT_MS`). **A leaving popup is `pointer-events: none`**,
+  scrim and card, and `aria-hidden`. A modal's leaving scrim swallows the next
+  tap (measured in S1: a click 100ms after Escape landed on the booking form's
+  fading scrim and did nothing), and the quick-status card closes after every
+  status change during service. Measured in v18.3.0: a click 80ms into the exit
+  opens the block underneath; with the scrim forced back to `pointer-events:
+  auto`, the same click is swallowed. The popups' buttons also refuse while
+  `leaving`, and the ⋯ card's focus goes back to ⋯ as the exit starts.
+  **A pick leaves at once; only a dismiss plays the exit** (the
+  /review-animations pass). Picking a status, No show or Delete, a booking row
+  or Walk-in here, or the split's second view HANDS OFF to a result that starts
+  in the same moment: the block's wipe, a form or confirm, the split. The exit
+  had nothing to say there and sat on top of the result. Measured, the
+  quick-status card was still 88% or more opaque over the block while the wipe
+  swept its first 39%, and the Plan popover (z 300) was 0.67 over the booking
+  form after the form had reached 0.97. So a pick calls `skipExit()` (from
+  `useModalPresence`) before it closes, and `ModalPresence` renders nothing on
+  that close; the scrim and Escape still fade out. It follows this list's first
+  rule rather than breaking it: the exit is decided, and for a hand-off the
+  decision is that the result is the exit. A close that comes from OUTSIDE the
+  popup, where `skipExit()` cannot be reached, passes `ModalPresence`'s `handoff`
+  prop instead: the timeline's drag closes the card as it lifts the block, and
+  the card's exit had faded over that block with its scrim (/code-review).
+  **The quick-status card stays viewport-CENTRED, not anchored to the held
+  block** (A3, decided in S3, 2026-09-27): it is a body portal, the split menu
+  shares its shell, and a card anchored to the block would sit under the
+  finger that is still holding it.
+- **Timeline blocks leave and arrive with the ghost's pair** (v18.3.0, O1).
+  "No show" took a block from full opacity to gone between two frames, and
+  Undo put it back the same way; so did a cancel, a delete, a save, a walk-in
+  and any of them from another device. A booking leaving the viewed day draws a
+  LEAVING copy on `.mgt-ghost-out` (inert: no handlers, `aria-hidden`,
+  `pointer-events: none`, no flip id); one joining it wears `.mgt-appear` until
+  the entrance has run. The lifecycle is keyed **per booking id across the
+  whole day, never per row**: a booking that changed tables is neither leaving
+  nor arriving (`useFlip` carries it), and a per-row lifecycle would fade a copy
+  out of the old row and one into the new row while FLIP slid it between them.
+  Its `resetKey` is the viewed date plus the first load, so a date change and a
+  cold start are replacements and nothing fades. The copy is drawn from a
+  **snapshot** of the booking and the marks it wore, because after the change
+  those are gone from every map the view reads, and the late border is usually
+  WHY a block is leaving. It is `useEnterLeave`, not `useRevealRows`: that
+  hook's diff runs after paint, too late to put an arrival's class on its first
+  frame, and a snapshot needs the previous render's values, which a render-time
+  diff already holds.
 - **An element that must animate OUT needs its content held.** `Reveal` already
   caches its last truthy children for exactly this — pass `null` and it fades
   out what it was showing. Corollary that bit once: it only caches **truthy**
@@ -1709,6 +1882,12 @@ around it, which the browser has already drawn.
   grid heading for a top corner. The T/L/P switch keeps the horizontal slide,
   because the strip sits outside the view and a view switch moves nothing
   vertically. **Before choosing a duration, ask which axis the gesture owns.**
+- **Keys animate like taps (v18.3.0, a kept decision).** T/L/P and ←/→ play the
+  same slide and fade as a tap on the view switcher or the date arrows. The
+  general rule "never animate a keyboard action" (keys are for speed, and motion
+  slows them) is known here and declined. Keyboard use is rare in this app, whose
+  main devices are the tablets and phones, and one code path is simpler than a
+  `viaKey` flag carried into every entrance. Patryk's call in S3 (2026-09-27).
 - **A one-shot is not `AutoHeight`.** That atom's observer chases its content
   every frame and clips the overflow, which is right for a Settings tab and
   wrong for any box whose contents animate by design — there, every in-place

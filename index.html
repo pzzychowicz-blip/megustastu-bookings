@@ -4,16 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=17.4.2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#007AFF" />
+    <!-- v18.3.0 (N5): the status bar takes the app's own background (--bg-app),
+         one meta per OS scheme for the moment before the bundle runs. After
+         that, useThemeMode rewrites both to the APP's resolved --bg-app, which
+         can differ from the OS. Outside the inline boot script, so the CSP
+         hash is untouched. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e2e7f1" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#181b22" />
     <!-- v17.4.0 (PWA): installable on the restaurant tablets. apple-touch-icon
          is the FULL-BLEED png (iOS rounds it itself; transparent corners would
-         render black). NB since v17.4.1 NOTHING registers a service worker —
-         public/sw.js is only the kill switch (see src/main.jsx).
+         render black). Since v17.10.1 public/sw.js is the offline shell again,
+         and it serves the icons AND the manifest cache-first.
          v17.4.2: ?v= tokens carry the icon redesign past the HTTP cache. Bump
          them with __APP_SIGNATURE__ whenever the icon bytes change; a filename
          is otherwise cached for a year. This does NOT refresh an existing iOS
-         home-screen shortcut — see the REFACTOR_LOG entry. -->
-    <link rel="manifest" href="/manifest.webmanifest?v=17.4.2" />
+         home-screen shortcut — see the REFACTOR_LOG entry.
+         v18.3.0: bump the MANIFEST's ?v= when its CONTENT changes too (colours,
+         name), not only its icons: the worker keys its cache on the full URL,
+         so only a new ?v= fetches the new file. -->
+    <link rel="manifest" href="/manifest.webmanifest?v=18.3.0" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=17.4.2" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

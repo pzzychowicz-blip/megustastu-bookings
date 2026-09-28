@@ -27,8 +27,8 @@ function TemplateChips({ templates, convLang, onInsert, scrollLang }) {
     >{outLang === "es" ? t.labelEs : t.labelEn}</button>
   ));
 
-  // EN/ES switch — eases its active highlight like the app's Toggle atom
-  // (`background-color`/`color` 160ms linear), per the shared toggle CSS.
+  // EN/ES switch — eases its active highlight (`background-color`/`color`) on
+  // `M.tap`, the same curve as its hover lift's `transform`.
   const langSwitch = (
     <div style={{ display: "flex", gap: 2, flexShrink: 0, background: "var(--wa-row-bg)", border: "1px solid var(--wa-bubble-in-border)", borderRadius: R.pill, padding: 2 }}>
       {["en", "es"].map((l) => (
