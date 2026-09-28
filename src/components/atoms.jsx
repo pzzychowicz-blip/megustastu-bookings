@@ -46,6 +46,10 @@ import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 // iPhones. Nothing is clipped at 44 — the time input, the tallest of them,
 // reports scrollHeight 42 against clientHeight 42.
 //
+// iOS Safari ignores the pin (and the width) on a time input until its UA
+// chrome is off: `input[type="time"]` in index.css (v18.3.0, N3) does that,
+// for every caller at once.
+//
 // `mkArea` puts it back to auto: a textarea is sized by its rows.
 //
 // ── The one coupling this buys, written down because nothing checks it ──────

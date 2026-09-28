@@ -1511,6 +1511,17 @@ input[type="search"]::-webkit-search-cancel-button {
   appearance: none;
 }
 
+/* v18.3.0 (N3): iOS Safari gives a time input an intrinsic min-width and its
+   own height, so it ignored mkInp's width:100% / height and overflowed its
+   column (+43px on the iPad card). Measured in the iOS 26 Simulator:
+   min-width:0 ALONE changed nothing; it is the UA chrome that holds both, so
+   appearance:none is what makes the pill take its column and the pinned 44.
+   The native picker still opens. The value is left-aligned like every other
+   input (iOS centred it). Chromium renders all five sites pixel-identical
+   with or without this rule. */
+input[type="time"] { min-width: 0; -webkit-appearance: none; appearance: none; }
+input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+
 /* v17.12.0: visually hidden, but PRESENT to assistive technology — the
    carrier for live-region text that has no on-screen equivalent. It is
    not `display:none` and not `visibility:hidden`: both remove the node

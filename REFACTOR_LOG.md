@@ -28949,6 +28949,31 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    makes signing in with the keyboard up the usual path. The home-screen icon added for the
    test was removed from the Simulator afterwards.
 
+19. **Time fields fit their column on iOS (N3).** iOS Safari gives `input[type="time"]` an
+   intrinsic minimum width and its own height, so it ignored `mkInp`'s `width: 100%` and
+   `height: H.touch`. On the iPhone booking sheet the Time pill ran past the card's right
+   edge and stood taller than Date; on the iPad card it was 43px wider than its column. One
+   rule in `src/index.css` fixes all five sites (booking form, walk-in, Block's From and To,
+   the reminder editor), because the defect belongs to the input type rather than to any
+   caller. `atoms.jsx`'s height note points at it.
+
+   **Applied in two passes, as the plan asked, and the second was needed.** Pass 1,
+   `min-width: 0` alone, changed nothing in the iPhone Simulator: same overflow, same
+   height. Pass 2 adds `appearance: none` and left-aligns the value. The UA chrome was
+   holding both the width and the height, so the plan's split (min-width for the width,
+   appearance for the height) is not what happens; the comment on the rule says so.
+
+   **The Simulator, after** (iOS 26, Safari): on the iPhone and on the iPad, all five pills
+   sit inside their column with top and bottom edges level with the neighbouring pill. On
+   the iPad card, Time is 403px wide, the same as Date beside it (about 244pt, the rig's
+   column). Tapping Time on the iPhone still opens the native wheel picker. The value is now
+   left-aligned like every other field (iOS had centred it).
+
+   **The rig** (Chromium): the ten time inputs at 1280×800 and 375×812 have identical rects
+   before and after, and element screenshots of the booking form's and Block's Time match
+   HEAD pixel for pixel (max difference 0) in both themes. The Android tablet sees no
+   change. Tests unchanged at 2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
