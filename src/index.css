@@ -932,6 +932,18 @@ input, textarea, select, button {
 :root {
   -webkit-tap-highlight-color: transparent;
 }
+/* v18.3.0 (N4): native control parts follow the APP's theme, not only the OS
+   (data-theme is what the Dark mode setting and the no-flash script set).
+   Measured: in Chromium's dark theme the date field's calendar icon and the
+   time field's clock icon were black on the dark pill, and this makes them
+   light; Chrome's own pickers and scrollbars follow it too. It does NOT reach
+   the iOS 26 calendar popover, which follows the OS appearance only (probed:
+   color-scheme on the input and a color-scheme meta both left it light).
+   Kept out of the token blocks at the top, which tests/contrast.test.js reads
+   as flat `--name: value;` lists. The dark rule comes second so it wins on
+   <html>, where both selectors match. */
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
 /* v17.10.1: a control's LABEL is not selectable text.
    On Android, a long-press does two things at once: it arms our own hold
    gesture (the timeline/plan quick-status popup, ViewSwitcher's split

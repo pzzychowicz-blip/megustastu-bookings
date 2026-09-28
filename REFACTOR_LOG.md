@@ -28974,6 +28974,36 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    HEAD pixel for pixel (max difference 0) in both themes. The Android tablet sees no
    change. Tests unchanged at 2125.
 
+20. **Native controls follow the app's theme where the browser lets them (N4).** Nothing
+   declared `color-scheme`, so native control parts were drawn for a light page even in
+   the app's dark theme. Two rules in `src/index.css`, next to the tap-highlight rule and
+   outside the token blocks that `tests/contrast.test.js` parses: `:root` is `light`, and
+   `[data-theme="dark"]` is `dark`. They sit on `<html>`, where `data-theme` lives, and the
+   dark rule comes second so it wins.
+
+   **The rig (Chromium, the Android tablet's engine), with the theme forced by `?theme=`:**
+   the computed `color-scheme` reads `light`, then `dark`, where HEAD read `normal` in both.
+   Full screenshots (timeline, booking form, Settings, List at 1280×800) against HEAD's
+   stylesheet:
+   - light theme: identical apart from the clock ticking over between the two runs;
+   - dark theme: exactly one change. The date fields' calendar icon and the time field's
+     clock icon were black on the dark pill, almost invisible, and are now light.
+   Chrome's own date and time pickers follow `color-scheme` as well. That is Chrome's
+   documented behaviour, not measured here, because a headless screenshot doesn't show the
+   picker popup.
+
+   **What it does not do, found in the Simulator (iOS 26, iPhone):** the plan's target was
+   the header date picker opening dark over the dark app. It doesn't, and nothing on the
+   page can make it. With the OS in Light and the app in Dark, the calendar popover opened
+   light at HEAD and still light with the rules. With the OS in Dark and the app in Light it
+   opened dark. A probe page confirmed it: iOS computes `color-scheme: dark` on the input,
+   and draws the field itself dark, but the popover stays light, with or without a
+   `<meta name="color-scheme" content="dark">`. The popover follows the OS appearance only.
+   **Patryk chose to ship the rules for the tablet and record the iOS limit** (asked); the
+   rule's comment says the same, and there is no ROADMAP entry because no page-side fix
+   exists. The Simulator's appearance was set back to Light afterwards. Tests unchanged at
+   2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
