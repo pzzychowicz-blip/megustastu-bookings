@@ -349,9 +349,10 @@ export const ListView = memo(function ListView({
   // those up (e.g. mid view-transition) and scroll to the wrong element.
   // Timing: the target is often NOT in its final position on the first frame —
   // a day-change jump plays through SlideView, and a completed/cancelled target
-  // has to wait for the finished fold's ~300ms Reveal to expand (verified live:
-  // a single rAF scroll lands the card on screen but off-centre, and a mount
-  // that gets cancelled mid-animation can miss entirely). So re-scroll on a
+  // has to wait for the finished fold's Reveal (--t-reveal, 520ms) to expand
+  // (verified live: a single rAF scroll lands the card on screen but
+  // off-centre, and a mount that gets cancelled mid-animation can miss
+  // entirely). So re-scroll on a
   // short schedule that outlasts both animations; each repeat just re-targets
   // the same card, and the last one wins.
   useEffect(function () {

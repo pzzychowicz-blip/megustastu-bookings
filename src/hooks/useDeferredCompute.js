@@ -14,9 +14,10 @@
 //             on every deps change (Patryk-chosen: never show a stale answer —
 //             the availability banner collapses while re-checking).
 //   pending — true from a deps change until its result lands. Consumers show
-//             the ⏳ indicator on it, wrapped in <Reveal> — the Reveal's ~300ms
-//             ease IS the grace period: a fast scan unmounts the indicator
-//             having barely opened (imperceptible), a slow scan shows it fully.
+//             the ⏳ indicator on it, wrapped in <Reveal> — the Reveal's ease
+//             (--t-reveal, 520ms) IS the grace period: a fast scan unmounts
+//             the indicator having barely opened (imperceptible), a slow scan
+//             shows it fully.
 //
 // Scheduling — the paint-then-compute guarantee: setState(pending) commits the
 // blank/indicator render; then requestAnimationFrame fires JUST BEFORE the next

@@ -662,8 +662,9 @@ export function BookingFormModal({
   },[kitchenBusy,bookings,form.date,form.size,form.preference,form.customDur,form.time,editId,tableBlocks,hoursSig]);
   const kitchenSugg=kitchenScan.value;
   // v16.3.0 perf phase 2: the ⏳ cue — shown while a deferred scan is pending.
-  // Its Reveal's ~300ms ease is the natural grace: a fast scan unmounts it
-  // having barely opened (imperceptible sliver), a slow scan shows it fully.
+  // Its Reveal's ease (--t-reveal, 520ms) is the natural grace: a fast scan
+  // unmounts it having barely opened (imperceptible sliver), a slow scan shows
+  // it fully.
   // One shared row covers both scans; it sits in the availBanner's slot region.
   const availChecking=availScan.pending||(kitchenBusy&&kitchenScan.pending);
   const checkingRow=<div style={{background:"var(--bg-soft)",border:"1px solid var(--border-soft)",borderRadius:R.card,padding:"10px 14px",marginBottom:12,fontSize: T.body,fontWeight: FW.medium,color:"var(--text-muted)",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><span aria-hidden="true" className="mgt-dot-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--text-muted)", flexShrink: 0 }} />Checking table availability…</div>;

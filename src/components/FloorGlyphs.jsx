@@ -43,8 +43,8 @@ export function chairPositions(entry){
 // Extra children (countdown pills etc.) render above the label.
 // `shapeStyle` (v17.1.1) — optional style for the table SHAPE itself (PlanView
 // passes a fill/stroke transition so an occupancy change fades like the
-// timeline's Seated→Completed overlay, 360ms ease-out; the reduce-motion
-// kill-switch in index.html still zeroes it via !important).
+// timeline's Seated→Completed overlay, on `M.status` (--t-status, --ease-out);
+// the reduce-motion kill-switch in index.css still zeroes it via !important).
 export function TableGlyph({ id, entry, fill, stroke, strokeWidth = 2, strokeDasharray, labelSuffix = "", chairFill = "var(--bg-stepper)", ariaLabel, children, onPointerDown, onClick, onContextMenu, style, shapeStyle }){
   const w = entry.w, h = entry.shape === "rect" ? entry.h : entry.w;
   const t = TBL[isIn(id) ? "ind" : "out"];

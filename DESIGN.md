@@ -1573,8 +1573,21 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
 
 Tokens in `src/index.css`'s `:root` (theme-agnostic, so NOT duplicated into the
 dark block, same as the radii); JS reads them through **`M`** in
-`lib/constants.js`. **No new easing or duration literal** — `grep -rn "ms ease\|ms linear\|cubic-bezier" src/` must come back empty apart from `M`'s own
-WAAPI values.
+`lib/constants.js`. **No new easing or duration literal.** The check is
+`grep -rn --include='*.css' --include='*.js' --include='*.jsx' "ms ease\|ms linear\|cubic-bezier" src/`.
+The `--include`s keep out the `CLAUDE.md` notes under `src/`, whose prose quotes
+old values. At v18.3.0 it returns seven lines, and every one is expected:
+- the two curve tokens themselves, `--ease-out` and `--ease-in` in `index.css`'s
+  `:root`;
+- `M.easeOut`, the WAAPI copy of `--ease-out` in `lib/constants.js`, and the
+  comment above it;
+- the two LOOPS, which are not transitions and take no token: the WhatsApp
+  shimmer's `1100ms ease-in-out` in `index.css`, and the recheck spinner's
+  `900ms linear` in `ConversationView.jsx` (marked `@motion`);
+- the motion scale's own history comment in `index.css`, which names the five
+  curves it replaced.
+
+Anything else it returns is a new literal.
 
 **The split is by DIRECTION, not by element.** `--ease-out` (cubic-out,
 `0.33,1,0.68,1`) for everything that arrives, opens, moves, or answers a finger;
@@ -1740,6 +1753,15 @@ The limits are `lib/plan-zoom.js`.
   which collides with App's singleton view state — the same collision that stops
   Split View putting one view in both panes. Reasons in `REFACTOR_LOG.md`
   (v17.15.0 and v17.15.3), not `ROADMAP.md`; they are decisions, not pending work.
+  (v18.3.0 made the three popups two-way — see the next point — so the count of
+  two holds again.) **The WhatsApp module's keyed swaps are one-way for the same
+  reason as the Settings tab body**: a `key` change remounts the wrapper, so the
+  old content is gone before the new one fades or slides in. There are four:
+  the Inbox ⇄ Archived list (`InboxPanel.jsx`, `key={tab}`), the phone's
+  list ⇄ conversation slide (`InboxPanel.jsx`, `key` on the active
+  conversation), and the template chips that swap with the EN/ES switch
+  (`ReplyComposer.jsx`, `key={outLang}`, once for each layout: the phone's
+  scrolling row and the laptop's).
 - **The popups exit through `PopupShell`** (v18.3.0). The quick-status card,
   the split menu and the Plan table popover built their scrim and card by hand,
   entered with the modal keyframes and unmounted on close. They share

@@ -29115,6 +29115,48 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
 
    Bundle 124.91 → 124.95 kB gz. Tests unchanged at 2125.
 
+25. **The motion comments say what runs (M8).** Comments and `DESIGN.md` prose only; no code
+   line changed (the diff was read line by line). Each cited line was re-read first, and all
+   nine still said what the plan quoted. Every "runs" value was checked in the code before it
+   went into a comment:
+   - `index.css`'s two timeline lift rules said `transform 120ms` / `120ms ease`. The ghost
+     and the blocks run `TL_MOVE` (`transform` on `M.tap`), and a released block runs
+     `TL_SETTLE` on `--t-shift` (phase 4).
+   - Four comments said a Reveal takes "~300ms": the booking form's and the walk-in form's
+     checking row, `useDeferredCompute`'s header and the List's re-scroll. Each is a
+     default-speed Reveal (the List's through `Collapsible`), so `--t-reveal`, 520ms. The
+     List's re-scroll schedule `[120, 300, 550, 850]` still outlasts it, so only the comment
+     changed.
+   - `ReplyComposer`'s EN/ES switch said `160ms linear`, "like the Toggle atom". It runs
+     `M.tap`, and the Toggle runs its fill on `M.move`, so the comparison went too.
+   - `IntentBanner` said "a 300ms fade". It fades on `M.exit`, held by `EXIT_MS`.
+   - `TimelineView`'s grid width called itself "the one layout-bound animation". It names
+     the others now: the blocks' `left`/`width`, the Toggle knob's `left`, Reveal's grid
+     rows, AutoHeight's `height`, the notification strip's WAAPI height.
+
+   **Two additions beyond the plan's table, both comments.** `FloorGlyphs.jsx` said
+   `360ms ease-out` and pointed at the kill-switch "in index.html"; it runs `M.status`, and
+   the kill-switch has lived in `index.css` since v17.15.1. It was also a hit for the grep
+   below, which is why it was in scope. And three `TimelineView` comments sent the reader to
+   `index.html` for the `:has()` ghost rule and `.mgt-group-hover`, which live in
+   `index.css`. One of them sits on `TL_MOVE`, which the corrected CSS comments now name.
+
+   **`DESIGN.md`, two passages.**
+   - The "no new literal" check could not be run as written: it returned the token
+     definitions, the loops and a paragraph of `CLAUDE.md` prose. It now greps `*.css`,
+     `*.js` and `*.jsx` only, and names the seven lines it returns today, all expected: the
+     two curve tokens, `M.easeOut` and its comment, the shimmer and recheck-spinner loops,
+     and the motion scale's history comment.
+   - "The **two** that remain" is true again, now that phase 6 made the popups two-way, and
+     the passage now says why. It also names the WhatsApp module's four keyed swaps as
+     one-way for the Settings tab body's reason (a `key` change remounts, so the old
+     content is gone before the new fades in): `InboxPanel.jsx`'s Inbox ⇄ Archived list and
+     phone list ⇄ conversation slide, and `ReplyComposer.jsx`'s template chips, once per
+     layout. The plan called the last two "template and quick-reply rows"; both are the
+     template chips, re-checked before citing.
+
+   Bundle unchanged at 124.95 kB gz. Tests unchanged at 2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the

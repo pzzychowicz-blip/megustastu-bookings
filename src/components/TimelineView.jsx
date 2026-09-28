@@ -63,7 +63,7 @@ import { money } from "../lib/vouchers";
 // left/width is the schedule changing (geometry — M.shift), transform is the
 // hover/group lift answering a pointer (M.tap). One shared constant because
 // four call sites paint a block or its ghost and they must lift in lockstep —
-// the :has() ghost rule in index.html depends on exactly that.
+// the :has() ghost rule in index.css depends on exactly that.
 // (Below the imports: it worked above them only because imports hoist, which is
 // the kind of thing that stops being true the day a circular import appears.)
 const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.tap;
@@ -606,7 +606,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     onEdit(b);
   }
   // v17.2.0: group hover-lift — a multi-table booking renders one cell per row;
-  // toggle .mgt-group-hover (index.html, hover-capable media guard) on ALL cells
+  // toggle .mgt-group-hover (index.css, hover-capable media guard) on ALL cells
   // sharing this booking's data-bk so they lift together. DOM-class approach on
   // purpose: React state here would re-render the whole memoized timeline per
   // hover. Booking ids are path-safe ([0-9a-z] + the r…_date recurring shape) —
@@ -1884,7 +1884,7 @@ export const TimelineView = memo(function TimelineView({
             reassign — FLIP on the PRIMARY cell only (distinct `__ghost` id namespace so
             it never collides with the block's data-flip-id={b.id}); (3) hover-lift — the
             ghost paints under its block but, being its immediate preceding sibling, is
-            scaled by the `.mgt-tlghost:has(+ .mgt-hover-scale:hover)` rule (index.html)
+            scaled by the `.mgt-tlghost:has(+ .mgt-hover-scale:hover)` rule (index.css)
             so it lifts in lockstep with the block. */}
         {rows.map((b) => cellFor(b, id, null))}
         {/* v18.3.0 (O1): bookings that have just LEFT the day and drew a cell
@@ -1974,8 +1974,11 @@ export const TimelineView = memo(function TimelineView({
     >
       {/* v15.8.0: width transitions so a zoom change (+/− / 1× / Follow) eases to
           the new scale. Blocks/gridlines are %-positioned against this width, so
-          they re-scale with it for free. (The one layout-bound animation — see
-          REFACTOR_LOG perf note; the global prefers-reduced-motion guard zeroes it.) */}
+          they re-scale with it for free. (A layout-bound animation, on M.shift,
+          and not the only one: the blocks' left/width, the Toggle knob's left,
+          Reveal's grid rows, AutoHeight's height and the notification strip's
+          WAAPI height are the others. See REFACTOR_LOG's perf note; the global
+          prefers-reduced-motion guard zeroes it.) */}
       {/* v18.3.0 (M1): `data-flip-root` lets a dropped block find this
           container without a second ref, to seed its release position. */}
       <div ref={flipRef} data-flip-root="" style={{ width: gridW + "px", minWidth: "100%", position: "relative", transition: "width " + M.shift }}>
