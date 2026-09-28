@@ -29314,6 +29314,21 @@ found.
 
    Gate: 125.10 kB gz (+0.02), 2128 tests (unchanged), 0 lint errors (90 warnings), style OK.
 
+2. **The timeline's drag closes the quick-status card at once.** At the 800ms arm the drag
+   closed the card with `setQuickStatus(null)`, which since phase 6 is a dismiss. The card
+   and its scrim played their exit over the block the drag had just lifted. Measured on the
+   tablet profile, dark theme, holding a block: the block lifted at 873ms, and the card faded
+   from 880 to 1129ms, still 0.88 or more opaque for the first 120ms. Phase 5's own comment
+   promised a card that had vanished. This close is a hand-off, but it comes from
+   `TimelineBlock`, outside the popup's `ModalPresence`, where `skipExit()` cannot be
+   reached. So `ModalPresence` takes a `handoff` prop for that case. TimelineView sets
+   `quickHandoff` with the close (`handOffQuick`) and clears it when a card opens again.
+   Re-measured: the card is gone on the frame the block lifts (853ms, no exit frames). After
+   that, reopening the card and tapping the scrim still plays the full exit (16 frames,
+   250ms to 0). `tests/motion.test.js` pins the prop, its reset and both block sites.
+
+   Gate: 125.17 kB gz (+0.07), 2128 tests (unchanged; assertions added), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the

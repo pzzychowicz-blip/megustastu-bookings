@@ -1816,7 +1816,10 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   `useModalPresence`) before it closes, and `ModalPresence` renders nothing on
   that close; the scrim and Escape still fade out. It follows this list's first
   rule rather than breaking it: the exit is decided, and for a hand-off the
-  decision is that the result is the exit.
+  decision is that the result is the exit. A close that comes from OUTSIDE the
+  popup, where `skipExit()` cannot be reached, passes `ModalPresence`'s `handoff`
+  prop instead: the timeline's drag closes the card as it lifts the block, and
+  the card's exit had faded over that block with its scrim (/code-review).
   **The quick-status card stays viewport-CENTRED, not anchored to the held
   block** (A3, decided in S3, 2026-09-27): it is a body portal, the split menu
   shares its shell, and a card anchored to the block would sit under the

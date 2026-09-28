@@ -240,7 +240,7 @@ function BlockFlag({ title, children }) {
 // the waitlist ghost's exit, and INERT: WaitGhost's `leaving` branch, property
 // for property. `arriving` puts a booking new to the day on the ghost's entrance.
 // TimelineView's useEnterLeave decides both; see there.
-function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, leaving = false, arriving = false, focusFallbackRef = null }) {
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null }) {
   const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -456,7 +456,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       dragHoldTimer.current = setTimeout(() => {
         const d = dragRef.current;
         if (!d || d.active) return;
-        setQuickStatus(null);              // the 400ms popup opened — drag wins
+        // The 400ms popup opened — drag wins, and the card goes at once
+        // (/code-review: TimelineView's hand-off), not over the lifted block.
+        if (handOffQuick) handOffQuick(); else setQuickStatus(null);
         beginDrag(d.el, d.pid);
         // v18.3.0 (A4): the lift at ARM time, so a still finger sees the drag
         // take over from the vanished card. The lift keyed on `dragDy`, which
@@ -1319,6 +1321,12 @@ export const TimelineView = memo(function TimelineView({
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
+  // /code-review: the drag closes the card as a HAND-OFF (ModalPresence's
+  // `handoff`): the block it lifts is the result, so the card goes at once
+  // instead of fading over it. Cleared when a card opens again.
+  const [quickHandoff, setQuickHandoff] = useState(false);
+  if (quickStatus && quickHandoff) setQuickHandoff(false);
+  function handOffQuick() { setQuickHandoff(true); setQuickStatus(null); }
   // v17.0.0 correction: the table row a drag currently hovers (highlight).
   const [dragHover, setDragHover] = useState(null);
   const isToday = date === today;
@@ -1832,7 +1840,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} />
+        <TimelineBlock arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
       </Fragment>
     );
   }
@@ -1923,7 +1931,7 @@ export const TimelineView = memo(function TimelineView({
       {unplacedLanes.map((lane, li) => (
         <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
           <GridLines />
-          {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} />)}
+          {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
           {/* v18.3.0 (O1): a booking that left while in THIS lane. A lane that no
               longer exists takes nobody: the row shrinking is its own mount
               (O4), not this fade. */}
@@ -2161,7 +2169,7 @@ export const TimelineView = memo(function TimelineView({
   // shares the same status-gating (pending → Confirmed/Cancel; late no-show).
   // v18.3.0 (M3): in ModalPresence, so it animates out (PopupShell).
   const quickPopup = (
-    <ModalPresence show={!!quickStatus}>
+    <ModalPresence show={!!quickStatus} handoff={quickHandoff}>
       {quickStatus ? (
         <QuickStatusPopup
           booking={quickStatus.booking}

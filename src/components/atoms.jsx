@@ -1750,15 +1750,21 @@ export const PresenceContext = createContext({ leaving: false, skipExit: functio
 // so it takes the specific name, and it now pairs with its own provider.
 export function useModalPresence() { return useContext(PresenceContext); }
 
-export function ModalPresence({ show, children, outMs = EXIT_MS }) {
+// `handoff` (/code-review): the same hand-off for a close that comes from
+// OUTSIDE the popup, where `skipExit()` cannot be reached. TimelineView's drag
+// closes the quick-status card the moment it lifts the block, and the card's
+// exit faded over that block with its scrim (measured: 250ms, ≥0.88 opaque for
+// the first 120). The parent sets it with the close and clears it on reopening.
+export function ModalPresence({ show, children, outMs = EXIT_MS, handoff = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   // A skip only counts for the close it was asked for: while the surface is
   // still open (reopened, or a close that never came) it is cleared here.
   const [instant, setInstant] = useState(false);
   if (show && instant) setInstant(false);
-  const [render, leaving] = usePresenceLifecycle(show, outMs, instant);
-  if (!render || (!show && instant)) return null;
+  const skip = instant || handoff;
+  const [render, leaving] = usePresenceLifecycle(show, outMs, skip);
+  if (!render || (!show && skip)) return null;
   return (
     <PresenceContext.Provider value={{ leaving: leaving, skipExit: function () { setInstant(true); } }}>
       {children || last.current}

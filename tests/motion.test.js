@@ -144,8 +144,16 @@ describe("exit holds outlast their animations", () => {
   // opaque over the wipe's first 39%, the Plan popover over the booking form.
   it("a popup's picks skip the exit, and only ModalPresence honours it", () => {
     const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
-    expect(atoms).toMatch(/if \(!render \|\| \(!show && instant\)\) return null;/);
+    expect(atoms).toMatch(/const skip = instant \|\| handoff;/);
+    expect(atoms).toMatch(/if \(!render \|\| \(!show && skip\)\) return null;/);
     expect(atoms, "a skip is cleared while the surface is open").toMatch(/if \(show && instant\) setInstant\(false\);/);
+    // /code-review: a close from OUTSIDE the popup hands off through the prop.
+    // The timeline's drag arm closes the card that way, and the parent clears it on reopening.
+    const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
+    expect(tl).toMatch(/<ModalPresence show=\{!!quickStatus\} handoff=\{quickHandoff\}>/);
+    expect(tl).toMatch(/if \(quickStatus && quickHandoff\) setQuickHandoff\(false\);/);
+    expect(tl).toMatch(/if \(handOffQuick\) handOffQuick\(\); else setQuickStatus\(null\);/);
+    expect((tl.match(/handOffQuick=\{handOffQuick\}/g) || []).length, "both live block sites get the hand-off").toBe(2);
     const sites = [
       ["src/components/QuickStatusPopup.jsx", ["onStatus(booking.id, st)", "onNoShow(booking.id)", "onDelete(booking.id)"]],
       ["src/components/PlanView.jsx", ["onPick(b)", "onWalkinHere()"]],
