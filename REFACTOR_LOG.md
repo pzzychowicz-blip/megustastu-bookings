@@ -28915,6 +28915,40 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    Six mutations each fail it, the plan's moved-edge form among them. Main bundle
    124.80 → 124.82 kB gz.
 
+18. **The shift after sign-in (N2) did not reproduce, so nothing ships.** S2 twice saw the
+   iPhone app open about 37pt too high right after signing in, and never after a reload. The
+   plan suspected BookingApp's mount effect: if the login keyboard had scrolled the window,
+   setting `html { overflow: hidden }` there would freeze the offset. Its gate is a DEV-only
+   badge that reads `window.scrollY` as the effect starts, and the fix ships only if one
+   sign-in shows both a scroll and a shift. Patryk signed in eleven times on the iPhone
+   Simulator (iOS 26), in Safari and in the home-screen app. The plan asked for three; he
+   asked for more twice.
+
+   | Sign-ins | Surface, how | At mount | Afterwards |
+   |---|---|---|---|
+   | 2 | Safari | `scrollY` 0 | In place |
+   | 1 | Safari, Return with the keyboard up | `scrollY` 112, `visualViewport.offsetTop` 112, `innerHeight` 684 | In place |
+   | 1 | Safari, Log in tapped with the keyboard up | 0 | In place 5s later |
+   | 1 | Home-screen app, Return | `scrollY` 36, `offsetTop` 0, `innerHeight` 894 (keyboard already down) | In place 5s later |
+   | 6 | Both, Return, with a live badge | 0 | `scrollY`, `body.scrollTop` and `#root`'s top all 0 for 4–8s, and one for 14 minutes |
+
+   What it shows:
+   - **The window can be scrolled when the app mounts.** Both times it was a Return sign-in,
+     2 of the 8. The 36 is S2's ~37pt. The Safari reading has the same shape as phase 17's
+     top textarea: `innerHeight` shrinks by the scroll. It looks like a race: the shell swaps
+     `LoginScreen` for `BookingApp` in one commit when `onAuthStateChanged` fires (`App()`), so
+     the mount lands before or after the keyboard has gone depending on how fast the sign-in
+     answers.
+   - **It never froze.** The home-screen sign-in mounted 36px scrolled with the keyboard
+     already down, which is the exact state the hypothesis says `overflow: hidden` locks in,
+     and the app still came out in place.
+
+   So the gate ended on its "not reproduced" branch, and no guessed fix ships:
+   `window.scrollTo(0, 0)` would reset a state iOS already resets. The badge never reached a
+   commit. Plan 27 adds a ROADMAP entry to recheck on a real iPhone, because Plan 22's Go key
+   makes signing in with the keyboard up the usual path. The home-screen icon added for the
+   test was removed from the Simulator afterwards.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
