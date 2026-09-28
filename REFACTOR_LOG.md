@@ -29327,6 +29327,8 @@ found.
    that, reopening the card and tapping the scrim still plays the full exit (16 frames,
    250ms to 0). `tests/motion.test.js` pins the prop, its reset and both block sites.
 
+   Gate: 125.17 kB gz (+0.07), 2128 tests (unchanged; assertions added), 0 lint errors (90 warnings), style OK.
+
 3. **The Plan's phone touch mode follows a resize.** Phase 13 decided "phone" with
    `window.innerWidth < 600`, read during render. PlanView is memoised, and nothing else it
    takes changes on a resize or a rotation, so the read stayed what it was until the clock
@@ -29339,7 +29341,19 @@ found.
 
    Gate: 125.19 kB gz (+0.02), 2128 tests (unchanged; assertions added), 0 lint errors (90 warnings), style OK.
 
-   Gate: 125.17 kB gz (+0.07), 2128 tests (unchanged; assertions added), 0 lint errors (90 warnings), style OK.
+4. **A leaving booking's snapshot follows the layout and the clock.** Phase 8's
+   `useEnterLeave` rebuilds its snapshots only when one of its deps changes. Each snapshot's
+   Unplaced lane comes from `unplacedLanes`, which also moves with the layout (which tables
+   have rows) and with the clock (a seated block's live width re-packs the lanes). Neither
+   was a dep. So after a layout edit, and until some booking changed, a booking leaving from
+   the Unplaced row would fade in its old lane, or would not fade at all if that lane was
+   gone. Found by reading the code; a layout edit cannot be reproduced without a DEV write.
+   `layoutSig` (App's `layout`, already passed for the memo) and `nowMins` are deps now.
+   That is one extra capture a minute, one pass over the day. Re-measured, a No show from
+   the strip on an 18-guest booking across seven tables: all seven cells' leaving copies
+   fade together, 1.0 to 0 in 250ms, and are gone by 449ms.
+
+   Gate: 125.20 kB gz (+0.01), 2128 tests (unchanged; an assertion added), 0 lint errors (90 warnings), style OK.
 
 ### Check on the devices after merge
 

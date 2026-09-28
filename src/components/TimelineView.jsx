@@ -1317,6 +1317,9 @@ export const TimelineView = memo(function TimelineView({
   // as every block on the day ARRIVING; it is part of useEnterLeave's resetKey
   // instead, which makes it a replacement.
   bookingsReady = true,
+  // The memo-busting layout identity (App's `layout` state; the note above the component).
+  // /code-review: read here too, as one of useEnterLeave's deps.
+  layoutSig = null,
 }) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
@@ -1545,9 +1548,13 @@ export const TimelineView = memo(function TimelineView({
   // snapshot it would lose that border on the fade's first frame. It is purely
   // visual: `day` never contains it, so it counts toward no lane, clash, chip
   // decision or `tableForClientY`. `lane` is its Unplaced-row lane, if it had one.
+  // /code-review: the lanes also move with the layout (which tables have rows)
+  // and the clock (a seated block's live width), so both are deps: without
+  // them a layout edit left every snapshot on its old lane until a booking
+  // changed, and a booking leaving then faded in the wrong lane or not at all.
   const { leaving: leavingCells, arriving } = useEnterLeave(
     date + (bookingsReady ? "" : "|loading"),
-    [bookings, late, warnings, clashes, freeing, chipsOn],
+    [bookings, late, warnings, clashes, freeing, chipsOn, layoutSig, nowMins],
     function () {
       const laneOf = new Map();
       unplacedLanes.forEach((lane, li) => { lane.forEach((b) => { laneOf.set(b.id, li); }); });
