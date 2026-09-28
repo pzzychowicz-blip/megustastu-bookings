@@ -368,11 +368,45 @@ export const PlanView = memo(function PlanView({
   // ── Zoom / pan (transform on the inner <g>) ─────────────────────────────────
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
   const svgRef = useRef(null);
+  const wrapRef = useRef(null);       // the HTML wrapper: iOS's touch defences (A1)
   const panRef = useRef(null);        // {x,y,tx,ty} while background-dragging
-  const pinchRef = useRef(null);      // {d0,k0} while two-pointer pinching
+  const pinchRef = useRef(null);      // {d0,k0,wx,wy} while two-pointer pinching
   const pointersRef = useRef({});     // active pointers for pinch
   const movedRef = useRef(false);     // suppress tap-select after a drag
   const pressRef = useRef(null);      // long-press timer for touch quick-status
+
+  // v18.3.0 phase 13 (A1 + N10): pan and pinch work on iOS. iOS WebKit IGNORES
+  // `touch-action` on an <svg> (src/CLAUDE.md's "iOS + SVG touch drags" row):
+  // measured on the iPhone, a finger drag on the plan fired 2 pointermoves,
+  // then pointercancel, and the page scrolled — and Plan zoom & pan is ON by
+  // default, so every iPhone and iPad on the default had a dead pan and pinch.
+  // FloorPlanEditor found this in v17.0.0 round 10 and this is its fix: both
+  // defences on the HTML WRAPPER, which WebKit treats like any other element —
+  // `touchAction` there is honoured and covers the descendant svg (the
+  // effective touch-action walks the ancestor chain), and a NATIVE non-passive
+  // touchmove listener on it can preventDefault (React's root listener is
+  // passive, so a React touch handler cannot).
+  //
+  // N10: a phone is the one screen where the plan fills the width, so a plan
+  // that took every touch would leave a vertical swipe starting on it no way
+  // to scroll the page. Below Overlay's `mob` width, ONE finger scrolls the
+  // page vertically (`pan-y`) and pans the plan sideways; two fingers are
+  // always the pinch. The svg carries the same value as the wrapper rather
+  // than its old `none`: Chrome honours the svg's own copy (the Android path),
+  // and the effective value is the INTERSECTION down the chain, so a `none`
+  // on the svg would keep a phone's vertical swipe dead on Android.
+  const narrow = typeof window !== "undefined" && window.innerWidth < 600;
+  const touchAct = !gesturesEnabled ? "auto" : narrow ? "pan-y" : "none";
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || !gesturesEnabled) return;
+    const block = (ev) => {
+      if (narrow && ev.touches.length < 2) return; // the page's scroll, and the plan's sideways pan
+      ev.preventDefault();
+    };
+    wrap.addEventListener("touchmove", block, { passive: false });
+    return () => wrap.removeEventListener("touchmove", block);
+  }, [gesturesEnabled, narrow]);
 
   function toSvg(e) {
     const svg = svgRef.current;
@@ -404,8 +438,17 @@ export const PlanView = memo(function PlanView({
     const pts = Object.values(pointersRef.current);
     if (pts.length === 2) {
       const d0 = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      pinchRef.current = { d0: d0, k0: view.k };
+      // v18.3.0 phase 13 (A2): the ROOM point under the fingers' midpoint,
+      // which the move keeps under the midpoint. `toSvg` reads only
+      // clientX/clientY, so a plain object will do.
+      const m0 = toSvg({ clientX: (pts[0].x + pts[1].x) / 2, clientY: (pts[0].y + pts[1].y) / 2 });
+      pinchRef.current = { d0: d0, k0: view.k, wx: (m0.x - view.tx) / view.k, wy: (m0.y - view.ty) / view.k };
       panRef.current = null;
+      // A second finger means this is not a long-press (Patryk, v18.3.0 phase
+      // 13). The first finger's touch on a booked table had armed quick status,
+      // and nothing cleared it here: measured, every pinch that started on one
+      // opened the card 450ms in, over the pinch.
+      clearPress();
       return;
     }
     movedRef.current = false;
@@ -427,7 +470,15 @@ export const PlanView = memo(function PlanView({
       // felt hair-trigger. 0.5 = half sensitivity (a 2× spread → 1.5× zoom).
       const ratio = 1 + (d / pinchRef.current.d0 - 1) * 0.5;
       const k = Math.max(0.5, Math.min(5, pinchRef.current.k0 * ratio));
-      setView((v) => ({ ...v, k: k }));
+      // v18.3.0 phase 13 (A2): the pinch follows the fingers. It set only `k`,
+      // so the plan grew about its top-left corner — measured, spreading
+      // 80 → 240px centred on table 6 threw its label (+100.5, +21.4)px off
+      // the midpoint — and two fingers could not pan. `onWheel`'s maths with
+      // the midpoint for the cursor: the room point caught at pinch start
+      // stays under the midpoint, so the zoom is about it and moving both
+      // fingers pans.
+      const m = toSvg({ clientX: (pts[0].x + pts[1].x) / 2, clientY: (pts[0].y + pts[1].y) / 2 });
+      setView({ k: k, tx: m.x - k * pinchRef.current.wx, ty: m.y - k * pinchRef.current.wy });
       return;
     }
     const pan = panRef.current;
@@ -437,9 +488,22 @@ export const PlanView = memo(function PlanView({
     const sx = fp.room.w / r.width, sy = fp.room.h / r.height;
     const dx = (e.clientX - pan.x) * sx, dy = (e.clientY - pan.y) * sy;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true;
-    if (movedRef.current) { clearPress(); setView((v) => ({ ...v, tx: pan.tx + dx, ty: pan.ty + dy })); }
+    // v18.3.0 phase 13 (Patryk): on a phone, one finger pans SIDEWAYS only —
+    // vertical is the page's (`pan-y`, above), and two fingers pan the plan
+    // any way. The browser claims a vertical swipe only once it has moved past
+    // its slop, and until then the plan followed it: measured, ~16px of room
+    // per swipe, left behind every time. The threshold above still reads the
+    // real `dy`, so a wiggling tap is still not a table tap. A mouse is never
+    // held to this: it has no second finger to pan with.
+    const sideways = narrow && e.pointerType !== "mouse";
+    if (movedRef.current) { clearPress(); setView((v) => ({ ...v, tx: pan.tx + dx, ty: sideways ? pan.ty : pan.ty + dy })); }
   }
   function bgPointerUp(e) {
+    // v18.3.0 phase 13 (Patryk): a CANCELLED pan is the browser taking the
+    // gesture — a phone's vertical swipe becoming the page's scroll — so what
+    // the plan followed before it did is undone rather than left as drift.
+    const pan = panRef.current;
+    if (e.type === "pointercancel" && pan && movedRef.current) setView((v) => ({ ...v, tx: pan.tx, ty: pan.ty }));
     delete pointersRef.current[e.pointerId];
     if (Object.keys(pointersRef.current).length < 2) pinchRef.current = null;
     panRef.current = null;
@@ -616,9 +680,11 @@ export const PlanView = memo(function PlanView({
       )}
       {/* v17.8.0: the closed-day line moved to NotificationStrip — see the note
           in TimelineView. */}
-      <div style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)" }}>
+      {/* v18.3.0 phase 13: `touchAction` on the WRAPPER, which WebKit honours,
+          and the svg carries the same value for Chrome (see `touchAct`). */}
+      <div ref={wrapRef} style={{ borderRadius: R.card, overflow: "hidden", border: "1px solid var(--border-soft)", background: "var(--bg-soft)", touchAction: touchAct }}>
         <svg ref={svgRef} viewBox={"0 0 " + fp.room.w + " " + fp.room.h}
-          style={{ display: "block", width: "100%", touchAction: gesturesEnabled ? "none" : "auto" }}
+          style={{ display: "block", width: "100%", touchAction: touchAct }}
           onWheel={onWheel}
           onPointerDown={bgPointerDown} onPointerMove={bgPointerMove}
           onPointerUp={bgPointerUp} onPointerCancel={bgPointerUp}

@@ -28637,6 +28637,61 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    Tests 1930 → 1932 (`stylesheet`): `.mgt-split-hit` joins CRITICAL_SELECTORS, and one test
    pins both CSS halves (hidden; shown on touch), the class on the child, and the grab offset.
    Four mutations each fail it.
+13. **Plan pan and pinch work on iOS, and the pinch follows the fingers (A1 + N10 + A2).**
+   Plan zoom & pan is on by default, and its only touch defence was `touch-action` on the
+   `<svg>`, which iOS WebKit ignores. So on every iPhone and iPad the pan and the pinch were dead,
+   and the page scrolled instead. PlanView now uses FloorPlanEditor's v17.0.0 round-10 fix:
+   `touchAction` on the HTML wrapper (`wrapRef`) and a native non-passive `touchmove` listener
+   there. Below Overlay's 600px `mob` width the value is `pan-y` and the listener lets one
+   finger through, so a vertical swipe that starts on the plan scrolls a phone's page (N10).
+   The pinch set only `k`, so it zoomed about the plan's top-left corner. It now catches the
+   room point under the fingers' midpoint when the second finger lands and keeps it there,
+   `onWheel`'s maths with the midpoint for the cursor, so it zooms about the fingers and two
+   fingers pan (A2). The 0.5 damping is unchanged.
+   Two departures from the plan, both measured:
+   - **The svg carries the wrapper's value, not its old `none`.** The plan kept it unchanged,
+     but the effective touch-action is the intersection down the chain, so a `none` on the svg
+     leaves a phone's vertical swipe dead in Chrome, and the plan's own rig check fails.
+   - **No `tx0`/`ty0` in `pinchRef`.** The move solves the translation from `wx`/`wy`, so they
+     would never be read.
+   And two calls by Patryk (asked), each from something the rig showed:
+   - **A second finger cancels the touch long-press.** A pinch whose first finger landed on a
+     booked table opened quick status 450ms in, over the pinch, on every run. This predates the
+     phase; Plan 13 put the long-press out of bounds, and it is one `clearPress()`.
+   - **On a phone, one finger pans sideways only, and a pan the browser takes over is
+     undone.** The browser claims a vertical swipe only after its slop, and until then the plan
+     followed the finger: measured, 16px of room left behind per swipe. A mouse keeps both
+     axes, since it has no second finger. `bgPointerUp` undoes a `pointercancel`ed pan.
+   **Measured** in the rig (writes blocked; the DEV account's Plan zoom & pan is off, so the
+   rig switches it on locally). A pinch spreading 80 → 240px centred on table 6:
+
+   | | Label from the midpoint | Both fingers +60px right |
+   |---|---|---|
+   | Before (phone) | (+100.5, +21.4) | 0 |
+   | After, phone | (0.0, −0.1) | +60.0 |
+   | After, tablet | (−0.1, −0.6) | +60.0 |
+
+   On a 375×560 phone, where the page overflows, a one-finger swipe up from the plan scrolls
+   `<main>` 107px and leaves the plan exactly where it was. A sideways one pans the plan 96px,
+   and a mouse drag pans both axes. On the tablet a vertical one-finger drag pans the plan by
+   the full drag and scrolls nothing, as the svg's `none` always did there. A table tap still
+   opens its bookings, a 700ms hold still opens quick status, and a pinch no longer does.
+   **Simulator** (Safari on the rig's dev server; Plan zoom & pan switched on for the run and
+   back off after):
+   - **iPhone 18 Pro Max:** a sideways swipe pans the plan 100pt, with nothing vertical. A
+     vertical swipe from the plan scrolls the page, and the plan inside it does not move. A
+     `touch2_path` pinch 60 → 220pt zooms 2.3×, about the midpoint (table 2 and the wall
+     land where the maths puts them), and Safari's own page zoom does not engage.
+   - **iPad Air 11-inch** (landscape; Patryk signed it in): a one-finger drag pans the plan
+     118pt, the full drag, and the header and tape do not move. A pinch 60 → 180pt zooms 2×
+     about the midpoint.
+   **Found, not fixed:** on the rig's phone profile, lifting the finger after a hold on a table
+   lands on the quick-status card's Cancelled and opens "Cancel booking?". It is the same before
+   this change, the tablet profile does not do it, and `useArmAfterRelease` exists for exactly
+   this, so it may be the headless touch emulation. A device check decides.
+   Tests 1932 → 1940, in a new `tests/plan-gestures.test.js`: the wrapper's defences and the
+   svg's matching value, the phone's one-finger pass-through, the midpoint pinch (source and
+   maths), the long-press cancel, the sideways pan and the undo. Five mutations each fail it.
 
 ### Check on the devices after merge
 
@@ -28651,3 +28706,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 08 | Android tablet | Mark a late booking No show from the Running-late strip. The block fades out still wearing its amber border, and it fades all the way out before it goes. Undo fades it back in. Stepping to the next day fades nothing |
 | 10 | Tablet, phone | Tapping a WhatsApp alert header shows the veil tint while pressed |
 | 12 | Tablet, iPad | In Split View, start a drag a fingertip's width to one side of the divider: the panes resize, and the divider does not jump to the finger first. A tap on the divider without moving leaves the split where it was |
+| 13 | iPhone, iPad, tablet | With Plan zoom & pan on: one finger pans the plan (tablet, iPad); two fingers pinch about their midpoint and pan together. On a phone, a vertical swipe starting on the plan scrolls the page and a sideways one pans the plan. A pinch starting on a booked table does not open quick status. The Android tablet behaves as before apart from the pinch anchor. Also: hold a table on a phone and lift: quick status stays up and nothing is tapped |
