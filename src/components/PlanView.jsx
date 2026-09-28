@@ -38,9 +38,10 @@
 // Blur budget: no backdrop-filter here — popovers use the opaque popup tokens.
 
 import { useState, useRef, useEffect, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, hoursFor, GRID_CLOSE, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { toMins, toTime, getBlockSlots, statusOrder, getDur, describeBooking, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
 import { freeWindow } from "../lib/plan-avail";
+import { bandZoom, clampZoom, clampPan } from "../lib/plan-zoom"; // v18.3.0 phase 14: the zoom and pan limits
 import { TableGlyph, DoorGlyph } from "./FloorGlyphs"; // v17.1.0: glyphs extracted so the editor can lazy-load
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
@@ -365,12 +366,21 @@ export const PlanView = memo(function PlanView({
     setTablePop(null);
   }
 
-  // ── Zoom / pan (transform on the inner <g>) ─────────────────────────────────
+  // ── Zoom / pan (a CSS transform on the inner <g>) ───────────────────────────
+  // v18.3.0 phase 14 (A8): the view is drawn by a CSS `transform` on the <g>,
+  // no longer its `transform` ATTRIBUTE, because CSS cannot transition an SVG
+  // attribute and the resets now glide. In SVG, CSS transform lengths are user
+  // units, so the numbers are the attribute's own — measured identical before
+  // the swap (0.0px at three views, in Chromium and in WebKit on the iPhone and
+  // iPad Simulators). The limits are `lib/plan-zoom.js`'s.
   const [view, setView] = useState({ k: 1, tx: 0, ty: 0 });
+  // True while a reset or a spring-back glides; never during a gesture.
+  const [settling, setSettling] = useState(false);
+  const settleRef = useRef(null);
   const svgRef = useRef(null);
   const wrapRef = useRef(null);       // the HTML wrapper: iOS's touch defences (A1)
   const panRef = useRef(null);        // {x,y,tx,ty} while background-dragging
-  const pinchRef = useRef(null);      // {d0,k0,wx,wy} while two-pointer pinching
+  const pinchRef = useRef(null);      // {d0,k0,wx,wy} while two-pointer pinching, + {k,m} once it moves
   const pointersRef = useRef({});     // active pointers for pinch
   const movedRef = useRef(false);     // suppress tap-select after a drag
   const pressRef = useRef(null);      // long-press timer for touch quick-status
@@ -413,15 +423,35 @@ export const PlanView = memo(function PlanView({
     const r = svg.getBoundingClientRect();
     return { x: (e.clientX - r.left) * (fp.room.w / r.width), y: (e.clientY - r.top) * (fp.room.h / r.height) };
   }
+  // v18.3.0 phase 14: the next view change glides on `M.shift`, and the
+  // transition comes off again after `exitHold("shift")`, so a gesture after it
+  // is not eased. A gesture that starts mid-glide ends it (`endSettle`): the
+  // plan lands on the glide's target, which is what `view` already holds.
+  function settle() {
+    clearTimeout(settleRef.current);
+    setSettling(true);
+    settleRef.current = setTimeout(() => { settleRef.current = null; setSettling(false); }, exitHold("shift"));
+  }
+  function endSettle() {
+    if (!settleRef.current) return;
+    clearTimeout(settleRef.current);
+    settleRef.current = null;
+    setSettling(false);
+  }
+  useEffect(() => () => clearTimeout(settleRef.current), []);
+
   function onWheel(e) {
     if (!gesturesEnabled) return; // no preventDefault → the page scrolls normally
     e.preventDefault();
+    endSettle();
     const p = toSvg(e);
     setView((v) => {
-      const k = Math.max(0.5, Math.min(5, v.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+      // v18.3.0 phase 14: the HARD stop, still — a wheel step has no release
+      // to spring back from — and the pan bound.
+      const k = clampZoom(v.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
       // keep the cursor point stationary: p_screen = k*p_world + t
       const wx = (p.x - v.tx) / v.k, wy = (p.y - v.ty) / v.k;
-      return { k: k, tx: p.x - k * wx, ty: p.y - k * wy };
+      return clampPan({ k: k, tx: p.x - k * wx, ty: p.y - k * wy }, fp.room);
     });
   }
   function bgPointerDown(e) {
@@ -434,6 +464,7 @@ export const PlanView = memo(function PlanView({
     // in bgPointerMove so a stale ref can never pan.
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (!gesturesEnabled) return; // v17.1.2: no pan/pinch arming — taps untouched (movedRef stays false)
+    endSettle();
     pointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const pts = Object.values(pointersRef.current);
     if (pts.length === 2) {
@@ -469,7 +500,10 @@ export const PlanView = memo(function PlanView({
       // v17.0.0 correction round 6: dampen pinch — the raw finger-distance ratio
       // felt hair-trigger. 0.5 = half sensitivity (a 2× spread → 1.5× zoom).
       const ratio = 1 + (d / pinchRef.current.d0 - 1) * 0.5;
-      const k = Math.max(0.5, Math.min(5, pinchRef.current.k0 * ratio));
+      // v18.3.0 phase 14 (A8): past either end the zoom RESISTS instead of
+      // stopping dead, so the plan keeps following the fingers (at most 25%
+      // over), and springs back on release (bgPointerUp).
+      const k = bandZoom(pinchRef.current.k0 * ratio);
       // v18.3.0 phase 13 (A2): the pinch follows the fingers. It set only `k`,
       // so the plan grew about its top-left corner — measured, spreading
       // 80 → 240px centred on table 6 threw its label (+100.5, +21.4)px off
@@ -478,7 +512,9 @@ export const PlanView = memo(function PlanView({
       // stays under the midpoint, so the zoom is about it and moving both
       // fingers pans.
       const m = toSvg({ clientX: (pts[0].x + pts[1].x) / 2, clientY: (pts[0].y + pts[1].y) / 2 });
-      setView({ k: k, tx: m.x - k * pinchRef.current.wx, ty: m.y - k * pinchRef.current.wy });
+      pinchRef.current.k = k;   // phase 14: where the spring-back starts from,
+      pinchRef.current.m = m;   // and the midpoint it re-solves about
+      setView(clampPan({ k: k, tx: m.x - k * pinchRef.current.wx, ty: m.y - k * pinchRef.current.wy }, fp.room));
       return;
     }
     const pan = panRef.current;
@@ -496,7 +532,8 @@ export const PlanView = memo(function PlanView({
     // real `dy`, so a wiggling tap is still not a table tap. A mouse is never
     // held to this: it has no second finger to pan with.
     const sideways = narrow && e.pointerType !== "mouse";
-    if (movedRef.current) { clearPress(); setView((v) => ({ ...v, tx: pan.tx + dx, ty: sideways ? pan.ty : pan.ty + dy })); }
+    // v18.3.0 phase 14 (A8): bounded, so the room cannot be dragged off screen.
+    if (movedRef.current) { clearPress(); setView((v) => clampPan({ ...v, tx: pan.tx + dx, ty: sideways ? pan.ty : pan.ty + dy }, fp.room)); }
   }
   function bgPointerUp(e) {
     // v18.3.0 phase 13 (Patryk): a CANCELLED pan is the browser taking the
@@ -505,11 +542,23 @@ export const PlanView = memo(function PlanView({
     const pan = panRef.current;
     if (e.type === "pointercancel" && pan && movedRef.current) setView((v) => ({ ...v, tx: pan.tx, ty: pan.ty }));
     delete pointersRef.current[e.pointerId];
-    if (Object.keys(pointersRef.current).length < 2) pinchRef.current = null;
+    if (Object.keys(pointersRef.current).length < 2) {
+      // v18.3.0 phase 14 (A8): a pinch released past either end springs back
+      // to it, re-solved about the last midpoint so the room under the fingers
+      // stays near them, and glides there.
+      const pin = pinchRef.current;
+      if (pin && pin.m && clampZoom(pin.k) !== pin.k) {
+        const k = clampZoom(pin.k);
+        settle();
+        setView(clampPan({ k: k, tx: pin.m.x - k * pin.wx, ty: pin.m.y - k * pin.wy }, fp.room));
+      }
+      pinchRef.current = null;
+    }
     panRef.current = null;
     clearPress();
   }
-  function resetView() { setView({ k: 1, tx: 0, ty: 0 }); }
+  // v18.3.0 phase 14: the double-tap reset glides home rather than jumping.
+  function resetView() { settle(); setView({ k: 1, tx: 0, ty: 0 }); }
   // Turning gestures OFF resets the view — a zoomed/panned plan must not get
   // stuck with no gesture left to un-zoom it — AND clears every gesture ref:
   // movedRef is only ever reset in bgPointerDown (which now bails when off), so
@@ -517,6 +566,7 @@ export const PlanView = memo(function PlanView({
   // table-tap onClick (`!movedRef.current`) forever (/code-review catch).
   useEffect(() => {
     if (!gesturesEnabled) {
+      settle(); // v18.3.0 phase 14: glides home, like the double-tap
       setView({ k: 1, tx: 0, ty: 0 });
       movedRef.current = false;
       panRef.current = null;
@@ -696,7 +746,11 @@ export const PlanView = memo(function PlanView({
               <rect width={5.65} height={11.3} fill="var(--tl-blocked-b)" />
             </pattern>
           </defs>
-          <g transform={"translate(" + view.tx + "," + view.ty + ") scale(" + view.k + ")"}>
+          {/* v18.3.0 phase 14 (A8): a CSS transform, so a reset can glide (see
+              the zoom block). The global reduced-motion rules neutralise the
+              transition under both intents: the OS query leaves `transform`
+              out of `transition-property`, the toggle makes it 0.001ms. */}
+          <g style={{ transform: "translate(" + view.tx + "px," + view.ty + "px) scale(" + view.k + ")", transformOrigin: "0 0", transition: settling ? "transform " + M.shift : "none" }}>
             {(fp.walls || []).map((wl, i) => (
               <line key={"w" + i} x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2} stroke="var(--text-muted)" strokeWidth={7} strokeLinecap="round" />
             ))}

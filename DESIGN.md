@@ -1677,6 +1677,21 @@ from the effect removed the leaving block 221ms into its 240ms fade, at opacity
 removed at opacity 0. In a hidden tab neither the frame nor the animation runs,
 so that wait cuts nothing short.
 
+**The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
+A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design
+§9's rubber band, in log-zoom, so it overshoots by at most 25% at either end
+and keeps following the fingers, then springs back to the limit on release
+about the last midpoint. The wheel keeps the hard stop, because a wheel step has
+no release to spring back from. The pan keeps a fifth of the view covered by the
+room on each axis, so the room cannot be pushed off screen. The spring-back, the
+double-tap reset and the reset when zoom & pan is switched off glide on
+`--t-shift` (geometry), and nothing glides during a gesture: a transform eased
+while a finger drives it lags the finger. The glide needed the zoom `<g>`'s
+transform to move from the SVG attribute to CSS, since CSS cannot transition an
+attribute; the two forms were measured identical (0.0px, Chromium and WebKit)
+before the swap. **No momentum on the pan:** a floor plan is placed, not thrown.
+The limits are `lib/plan-zoom.js`.
+
 ### Adding motion to something that has none
 
 - **Fading in to an element's own opacity** is `.mgt-appear`, not

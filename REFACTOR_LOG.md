@@ -28693,6 +28693,64 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    svg's matching value, the phone's one-finger pass-through, the midpoint pinch (source and
    maths), the long-press cancel, the sideways pan and the undo. Five mutations each fail it.
 
+14. **Plan view edges: bounded pan, rubber-banded zoom, a gliding reset (A8).**
+   Before this, the pan had no bounds, so the room could be dragged off screen and double-tap
+   was then the only way back. The zoom stopped dead at 0.5× and 5×, so a pinch past either end
+   stopped following the fingers, and both resets jumped in one frame. Now:
+   - Every view the plan sets goes through `clampPan`, which keeps a fifth of the view covered
+     by the room on each axis.
+   - A pinch past either limit is rubber-banded, using apple-design §9's function in log-zoom
+     with at most 25% overshoot. On release it springs back to the limit, about the same
+     midpoint.
+   - The wheel keeps the hard stop, because a wheel step has no release to spring back from.
+   - The spring-back, the double-tap reset and the gestures-off reset glide on `M.shift`.
+
+   To make that glide possible, the zoom `<g>` moved from the `transform` attribute, which CSS
+   cannot transition, to a CSS `transform` in px, which in SVG are user units. `settling` carries
+   the transition for `exitHold("shift")`. Reduced motion needs no JS gate: the OS query leaves
+   `transform` out of `transition-property`, and the toggle zeroes the duration.
+
+   **The identity gate came first, as the plan requires.** Table 6's rect relative to the svg
+   was recorded at k 1 / t 0, k 2 / t (−200, −100) and k 0.6 / t (80, 40), in both forms:
+   - Chromium, phone and tablet: 0.0px apart.
+   - WebKit, on the iPhone and iPad simulators via a static probe page: 0.000px apart.
+
+   Whole-element pixel diffs on the tablet showed noise. An attribute-against-attribute
+   baseline showed the same noise, so it came from the capture, not the swap.
+
+   Three departures from the plan:
+   - **The limits are a module, `lib/plan-zoom.js`, not constants inside PlanView.** A module
+     can be tested on its numbers rather than eyeballed. It holds no decision about when a limit
+     applies; PlanView keeps that.
+   - **`endSettle()` drops the transition the moment a new gesture or wheel step begins.** The
+     plan never sets `settling` during a gesture, but one can begin during a glide. Without this,
+     a finger landing mid-glide would drag against a 385ms transition.
+   - **The gestures-off reset glides too.** The plan lists it; it is named here because it runs
+     from an effect, not from a handler.
+
+   **Measured** in the rig (writes blocked, gestures switched on locally, room 900 × 700).
+   Tablet and phone agree:
+
+   | Check | Result |
+   |---|---|
+   | Drag the room 1500px left | `tx` stops at −720 = 0.2W − kW; a fifth of the view is still room |
+   | Pinch to about 8× raw, hold | `k` holds at 5.636 (the band's ceiling is 6.25) |
+   | Release | A `CSSTransition` on `transform`, 385ms, `cubic-bezier(0.33, 1, 0.68, 1)`. `k` reaches 5 at about 356ms, monotonic, and the room point under the midpoint is back under it. `transition` is `none` after the hold |
+   | Double-click from k 2.6 | Glides home, reaching k 1 / t 0 at about 399ms. Monotonic on `k`, `tx` and `ty` |
+   | Wheel in, 25 steps | Hard stop at 5; no animation |
+   | Reduce animations toggle, double-click | Instant |
+
+   Under the OS reduced-motion query, the spring-back and the reset are both instant. Phase
+   13's rig checks re-ran unchanged.
+
+   Tests 1940 → 1949 in `tests/plan-gestures.test.js`:
+   - The module's numbers: the band, its continuity and monotonicity, the wheel's hard range,
+     and the pan bounds.
+   - The wiring: the CSS `<g>`, the settle hold, `endSettle` in both input paths, both resets,
+     the wheel's clamp against the pinch's band, the clamped pan, and the spring-back.
+
+   Eight mutations each fail a test. Main bundle 124.41 → 124.71 kB gz.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -28707,3 +28765,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 10 | Tablet, phone | Tapping a WhatsApp alert header shows the veil tint while pressed |
 | 12 | Tablet, iPad | In Split View, start a drag a fingertip's width to one side of the divider: the panes resize, and the divider does not jump to the finger first. A tap on the divider without moving leaves the split where it was |
 | 13 | iPhone, iPad, tablet | With Plan zoom & pan on: one finger pans the plan (tablet, iPad); two fingers pinch about their midpoint and pan together. On a phone, a vertical swipe starting on the plan scrolls the page and a sideways one pans the plan. A pinch starting on a booked table does not open quick status. The Android tablet behaves as before apart from the pinch anchor. Also: hold a table on a phone and lift: quick status stays up and nothing is tapped |
+| 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home |
