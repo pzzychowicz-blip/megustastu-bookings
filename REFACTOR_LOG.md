@@ -29282,6 +29282,18 @@ re-measured in the headless rig with the database writes blocked.
 
    Gate: 125.09 kB gz (+0.10), 2128 tests (+1), 0 lint errors (90 warnings), style OK.
 
+4. **The drag settle no longer animates the shadow.** Phase 4's `TL_SETTLE` eased
+   `box-shadow` for 385ms, from the drag's `0 10px 24px` to the block's rest shadow. A
+   shadow is repainted on every frame it animates, on the tablet, on a gesture staff use
+   every service, while the eye is on the block travelling home. It drops on the release
+   frame now, as it did before phase 4; position and opacity still glide. Re-measured on the
+   desktop profile, a small drag released on its own row: two frames after release the
+   block runs `opacity` and `transform` transitions (385ms each) and nothing else, the shadow
+   already reads `0 2px 6px`, and once settled the block is back on `TL_MOVE`. The only write
+   the blocker saw was the device-presence heartbeat, so the release wrote no booking.
+
+   Gate: 125.08 kB gz (−0.01), 2128 tests (unchanged), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -29289,7 +29301,7 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 
 | Phase | Device | Check |
 |---|---|---|
-| 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home, and the lift fades as it goes. How long the block sits still after release (the drop freeze) is noted, not fixed |
+| 04 | Android tablet | Drag a booking two rows down and release. It settles from under the finger, with no jump back to the old row. A drag released on its own row glides home and its opacity comes back as it goes; the drag shadow drops at release. How long the block sits still after release (the drop freeze) is noted, not fixed |
 | 05 | Tablet, iPad | Hold a block still. At about 800ms the card disappears and the block visibly lifts at once. Move, and it follows |
 | 06 | Tablet | Change a status in the quick-status card, then immediately tap another block. The second tap lands; nothing is swallowed. The card is gone as the block's colour wipe starts, and the whole wipe shows; tap outside the card instead and it fades out |
 | 08 | Android tablet | Mark a late booking No show from the Running-late strip. The block fades out still wearing its amber border, and it fades all the way out before it goes. Undo fades it back in. Stepping to the next day fades nothing |

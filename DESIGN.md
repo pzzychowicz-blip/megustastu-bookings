@@ -1706,8 +1706,10 @@ recorded before the drag began: on the first frame after release the block was
 back on its old row, then slid down again. `endDrag` now hands the hook the
 release position (`ref.seed`, which lives one frame), so the flip runs from
 there. A block that stays mounted (released on its own row, or a refused drop)
-travels home on `TL_SETTLE`: `--t-shift` for transform, opacity and shadow,
-with its z-order held until it lands. It used the hover lift's `--t-tap`, but
+travels home on `TL_SETTLE`: `--t-shift` for transform and opacity, with its
+z-order held until it lands. Not the shadow (the /review-animations pass): a
+`box-shadow` repaints on every frame it animates, a 24px blur on the tablet
+for 385ms, so the drag shadow drops on the release frame. It used the hover lift's `--t-tap`, but
 after a drag the same property is travel. That hold counts from the COMMIT that
 starts the transition, not from the pointerup, because the drop's synchronous
 work runs in between. It is the same lesson as the status-wipe window: **time a

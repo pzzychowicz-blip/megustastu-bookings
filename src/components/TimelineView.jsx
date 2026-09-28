@@ -73,9 +73,13 @@ const TL_MOVE = "left " + M.shift + ", width " + M.shift + ", transform " + M.ta
 // finger left it, up to rows away, and anything that TRAVELS takes --t-move or
 // --t-shift (DESIGN.md). Measured before: an 18px release went home in 145ms,
 // and the drag's opacity and shadow switched off on the release frame. So for
-// exitHold("shift") after a release the block uses this, and the lift fades on
-// the same curve as the move. Then TL_MOVE again, so the hover lift stays quick.
-const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", transform " + M.shift + ", opacity " + M.shift + ", box-shadow " + M.shift;
+// exitHold("shift") after a release the block uses this, and its opacity comes
+// back on the same curve as the move. Then TL_MOVE again, so the hover lift
+// stays quick. /review-animations: NOT the shadow. `box-shadow` repaints on
+// every frame it animates (a 24px blur here, on the tablet, on a gesture used
+// every service), and the eye is on the block travelling home; the drag shadow
+// drops on the release frame, as it did before phase 4.
+const TL_SETTLE = "left " + M.shift + ", width " + M.shift + ", transform " + M.shift + ", opacity " + M.shift;
 
 // v17.9.0: the hour-pill look, once. Three places in this file paint a time on
 // --tl-hour-pill — the ruler's hour labels, a block's start-time chip, and a
