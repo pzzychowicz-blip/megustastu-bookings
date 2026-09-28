@@ -34,6 +34,11 @@ export function useThemeMode(explicitPref) {
     function apply(dark) {
       setIsDark(dark);
       document.documentElement.dataset.theme = dark ? "dark" : "light";
+      // v18.3.0 (N5): the status bar follows the APP's theme, which can differ
+      // from the OS, so both scheme metas carry the resolved --bg-app, read
+      // from CSS (no colour literal in JS).
+      const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg-app").trim();
+      if (bg) document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute("content", bg); });
     }
     // Explicit override -> write it, don't listen for OS changes.
     if (explicitPref === true || explicitPref === false) {

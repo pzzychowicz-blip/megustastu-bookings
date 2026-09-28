@@ -29024,6 +29024,61 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    grey ⏎. Patryk then signed in by pressing it, and the app opened. Tests unchanged at
    2125.
 
+23. **The status bar and the splash take the app's own background (N5).** There was one
+   blue `theme-color` (`#007AFF`) for both themes, and the manifest said `#007AFF` and
+   `#f2f2f7`, while the app's background is `--bg-app` (`#e2e7f1` light, `#181b22` dark). iOS
+   never showed it, because Safari 26 and the home-screen app paint the page colour. The
+   Android tablet's installed PWA uses `theme-color` for its status bar and the manifest for
+   its splash. Three files:
+   - `index.html`: two metas, one per OS scheme (`media="(prefers-color-scheme: …)"`), for the
+     moment before the bundle runs. They sit outside the inline boot script, so the CSP hash
+     is untouched (`tests/csp.test.js` passes).
+   - `useThemeMode.js`: `apply(dark)` rewrites BOTH metas to the resolved `--bg-app`, read
+     with `getComputedStyle`. Both, because the app's theme can differ from the OS (Dark mode
+     on a light phone), and whichever meta the OS's scheme selects must carry the app's
+     colour. Reading the CSS var keeps colour literals out of JS (`check:style`).
+   - `public/manifest.webmanifest`: `background_color` and `theme_color` are `#e2e7f1`. `name`
+     and `short_name` are untouched, since `tests/stylesheet.test.js` counts the `APP_NAME`
+     copies there. The manifest link's `?v=` is now `18.3.0`; the icons keep `17.4.2`, since
+     their bytes did not change. The PWA comment above it now says to bump the manifest's
+     `?v=` when its CONTENT changes. It also no longer claims that nothing registers a
+     service worker, which has been untrue since v17.10.1.
+
+   **Why the `?v=` matters, checked in `public/sw.js` and not changed there:** `ASSET_RE`
+   tests `url.pathname` and lists `manifest.webmanifest`, so the manifest is served
+   cache-first. `caches.match(req, { cacheName })` keys on the full URL, query included. So
+   the old `?v=17.4.2` entry would have gone on serving the blue manifest forever, and only
+   a new `?v=` fetches the new file.
+
+   **Build:** `dist/manifest.webmanifest` reads `#e2e7f1` for both colours. The tenant plugin
+   copies them through. The built `index.html` carries both metas and `?v=18.3.0`.
+
+   **The rig** (Chromium, writes blocked; 3 writes dropped, none reached DEV). The Dark mode
+   switch in Settings → App was toggled twice under each OS scheme. Under OS light and under
+   OS dark, both metas read `#181b22` with the app dark and `#e2e7f1` with it light. With
+   the OS dark and the app light, the dark-scheme meta is already `#e2e7f1` at load.
+
+   **The Simulator** (iOS 26, iPhone), new code against HEAD's three files:
+   - Safari: the status band is identical in both themes (max pixel difference 0).
+   - Home-screen app, on the login screen (its storage is separate, so no sign-in): the band
+     is the page's colour, `(226,231,241)` light and `(24,27,34)` dark, as at HEAD. The only
+     differing pixels are the clock's digits, because the minute ticked over.
+   - iOS ignored HEAD's blue in both places, so for iOS this is a regression check and
+     nothing changes on screen. The test icon was removed and the appearance set back to
+     Light afterwards.
+
+   **Known limit: the login screen and the moment before the bundle.** `useThemeMode` is
+   mounted in `BookingApp`, so until someone is signed in the metas are the static pair,
+   which follow the OS scheme. The page follows the boot script, which also honours a
+   saved `mgt-theme`. On a device with a saved theme that differs from the OS, the login
+   screen's status bar takes the OS's colour. The boot script could fix it, but it cannot
+   change without a new CSP hash, and the plan puts it out of bounds. Staff rarely see the
+   login screen. Separately, and older than this change: the login screen does not follow an
+   OS appearance switch until it reloads. Seen in the home-screen app, where it stayed
+   light after the Simulator went dark.
+
+   Bundle 124.82 → 124.91 kB gz. Tests unchanged at 2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -29042,3 +29097,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 15 | Tablet, iPhone | Fling the Plan tape: it travels as far as before and lands on a quarter mark. Drag it and hold still: it does not move under the finger until you lift. A mouse wheel scrubs as before |
 | 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |
 | 21 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait |
+| 23 | Android tablet | The installed app's status bar matches the app's background in both themes (switch Dark mode in Settings → App). The splash colour changes only after Chrome refreshes the manifest, which can take a relaunch the next day |
