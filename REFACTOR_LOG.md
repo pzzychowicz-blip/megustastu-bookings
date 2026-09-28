@@ -29355,6 +29355,16 @@ found.
 
    Gate: 125.20 kB gz (+0.01), 2128 tests (unchanged; an assertion added), 0 lint errors (90 warnings), style OK.
 
+5. **One constant for the Split View divider's width.** Phase 12 gave SplitLayout its own
+   `DIVIDER = 10`, a second copy of App's `SPLIT_DIVIDER_PX`, with a comment on each saying
+   the two change together. Change one alone and `tlPaneOk` works out the timeline pane's
+   width with a different divider from the one drawn, and nothing would notice. The comment
+   said a component file cannot export the value, which is true (react-refresh). But a lib
+   file can, so it is `SPLIT_DIVIDER_PX` in `lib/constants.js` now and both import it. The
+   value is unchanged, so nothing on screen moves.
+
+   Gate: 125.20 kB gz (unchanged), 2128 tests (unchanged), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the

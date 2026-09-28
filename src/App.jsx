@@ -28,7 +28,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX } from "./lib/constants";
 
 import {
   getDur, toMins, genId, sanitizeBlock,
@@ -631,7 +631,6 @@ function readSplit(){
 // A STACKED split is always fine — it halves the height, and fewer visible table
 // rows is what scrolling is for.
 const MIN_TL_PANE=1050;
-const SPLIT_DIVIDER_PX=10;   // SplitLayout's DIVIDER: the two change together
 // `tlPane` is "a" or "b" — which side the Timeline is on. Pure, so the menu, the
 // view-switcher and the repair effect all ask the same question one way.
 function tlPaneOk(appW,dir,ratio,tlPane){
