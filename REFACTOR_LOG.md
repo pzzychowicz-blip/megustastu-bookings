@@ -29004,6 +29004,14 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    exists. The Simulator's appearance was set back to Light afterwards. Tests unchanged at
    2125.
 
+21. **iOS doesn't inflate text in landscape (N8).** Nothing set `text-size-adjust`, so iPhone
+   Safari was free to enlarge text when the phone turns sideways. `html` now carries
+   `-webkit-text-size-adjust: 100%` and the unprefixed form, beside `html, body { margin: 0; }`.
+   **Portrait, iPhone Simulator:** a full-resolution screenshot of the app before and after
+   differs only inside Safari's own toolbar (x 1100–1200, y 2600–2800 of 1320×2868); every
+   app pixel is identical. Landscape needs a rotation, which is a hardware check (the table
+   below). Tests unchanged at 2125.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -29021,3 +29029,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home |
 | 15 | Tablet, iPhone | Fling the Plan tape: it travels as far as before and lands on a quarter mark. Drag it and hold still: it does not move under the finger until you lift. A mouse wheel scrubs as before |
 | 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |
+| 21 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait |

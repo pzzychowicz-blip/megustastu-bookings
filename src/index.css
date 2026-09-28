@@ -901,6 +901,9 @@
   }
 }
 html, body { margin: 0; }
+/* v18.3.0 (N8): iPhone Safari may inflate text when the phone turns to
+   landscape; 100% keeps the type scale as written. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg-app);
   min-height: 100dvh;
