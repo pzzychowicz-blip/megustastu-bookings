@@ -874,6 +874,32 @@
   /* v17.9.1: light halo on the dark plan (see :root for the reasoning) */
   --glyph-halo: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
 }
+/* v18.3.0 (A10): Increase Contrast (iOS) and "more contrast" everywhere else.
+   The glass goes opaque, each value being that token's composite over
+   --bg-app, so a surface reads the same as at rest, only solid (the header no
+   longer ghosts through the phone's booking sheet). The hairlines take the
+   muted ink. Both themes sit inside the one @media, and the dark rule comes
+   second so it wins under [data-theme="dark"]. Text colours do not change.
+   tests/contrast.test.js measures both states as a third and fourth theme. */
+@media (prefers-contrast: more) {
+  :root {
+    --tl-card-bg: #eef1f7;
+    --bg-sheet: #f7f8fb;
+    --bg-sheet-mobile: #f0f3f8;
+    --border-soft: var(--text-muted);
+    --border-sheet: var(--text-muted);
+    --tl-card-border: var(--text-muted);
+  }
+  [data-theme="dark"] {
+    --tl-card-bg: #212327;
+    --bg-sheet: #29292c;
+    --bg-sheet-mobile: #1c1c1e;
+    --tl-popup-bg: #2b2b2d;
+    --border-soft: var(--text-muted);
+    --border-sheet: var(--text-muted);
+    --tl-card-border: var(--text-muted);
+  }
+}
 html, body { margin: 0; }
 body {
   background: var(--bg-app);

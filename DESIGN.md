@@ -260,6 +260,25 @@ explaining why is usually the one to read.
   **Opacity conflates QUIET with FAINT; weight separates them** — and the chip
   was only ever "too loud" relative to a NAME sitting at 1.86–2.97:1, so dimming
   it was levelling down to the illegible element rather than fixing it.
+- **Increase Contrast is a third and fourth theme state (v18.3.0, A10).** iOS's
+  Increase Contrast turns on `(prefers-contrast: more)`. It is the query that
+  reaches the restaurant's phones: `prefers-reduced-transparency` did not match
+  on iOS 26.5 (measured), and `forced-colors` is Windows only. One `@media`
+  block after the dark tokens flips two things. **The glass goes opaque**:
+  `--tl-card-bg`, `--bg-sheet`, `--bg-sheet-mobile`, and in dark `--tl-popup-bg`
+  (light's is already opaque). Each value is that token's composite over
+  `--bg-app`, so a surface keeps its colour and only stops showing what is
+  behind it — the page header ghosted faintly through the iPhone booking sheet
+  in dark. **The hairlines take the muted ink**: `--border-soft`,
+  `--border-sheet` and `--tl-card-border` become `var(--text-muted)`, which is
+  what "more contrast" asks of an edge. **Text does not change**: every ink
+  already passes, and the setting asks for solid surfaces and visible edges,
+  not a second palette. The dark rule comes second inside the block, so at
+  equal specificity it wins for `[data-theme="dark"]`. `tests/contrast.test.js`
+  measures `light-more` and `dark-more` as two more themes, where every
+  fill/ink pair must be no worse than at rest. It also fails if the block
+  names a token its base theme lacks (a typo would silently do nothing), or if
+  an overridden glass token is still translucent.
 - **A literal duplicate of a token is a token that cannot be fixed (v17.8.0).**
   TimelineView's Follow button held a hard-coded copy of `--app-btn-grey`'s
   value and was the one secondary button the contrast pass could not reach; the

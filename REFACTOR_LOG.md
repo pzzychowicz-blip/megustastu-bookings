@@ -28812,6 +28812,44 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
 
    Five mutations each fail it. Main bundle 124.71 → 124.80 kB gz.
 
+16. **Increase Contrast gets opaque glass and solid borders (A10).** iOS's Increase Contrast
+   turns on `(prefers-contrast: more)`, and `src/index.css` had no rule for it, so the glass
+   stayed translucent and the page header ghosted faintly through the iPhone booking sheet in
+   dark. One `@media` block after the dark tokens now does two things:
+   - **Opaque glass.** `--tl-card-bg`, `--bg-sheet` and `--bg-sheet-mobile` (both themes) and
+     dark `--tl-popup-bg` become opaque. Light's popup was already `#eef1f7`.
+   - **Solid hairlines.** `--border-soft`, `--border-sheet` and `--tl-card-border` take
+     `var(--text-muted)`.
+
+   Text colours and the base tokens do not move. **Each opaque value is the token's composite
+   over `--bg-app`**, so a surface keeps its colour and only stops showing what is behind it.
+   Re-derived from HEAD's stylesheet, all seven match the plan's values exactly: light
+   `#eef1f7` · `#f7f8fb` · `#f0f3f8`, dark `#212327` · `#29292c` · `#1c1c1e` · `#2b2b2d`.
+
+   **Rig (tablet and phone), `prefers-contrast` emulated over CDP:** at rest, all nine tokens
+   read HEAD's values. Under `more` they read the plan's, with the hairlines at `#5a6474`
+   (light) and `#a6a6ac` (dark). The booking dialog in dark is `#29292c` on the tablet (the
+   card, `--bg-sheet`) and `#1c1c1e` on the phone (the sheet, `--bg-sheet-mobile`). Screenshots
+   in both themes show the same layout with solid card edges.
+
+   **iPhone Simulator** (Safari, dark, Increase Contrast switched on with `simctl` and reset to
+   its original `disabled` afterwards): the booking sheet is opaque with no header ghosting,
+   and the card hairlines are the muted grey.
+
+   **`tests/contrast.test.js` measures the state as two more themes, `light-more` and
+   `dark-more`.** A brace-counted read of the `@media` block overlays its two rules onto the
+   light and dark maps. The fill/ink loop runs over all four states, and in the new two every
+   pair must be no worse than at rest. Two new checks in the registry-coverage group:
+   - every token the block sets exists in the theme it overrides, and the dark rule covers
+     every light key;
+   - every glass token it overrides is opaque in both states.
+
+   The suite's first-`indexOf` reads of `:root` and `[data-theme="dark"]` are unaffected,
+   because the block comes later; this was confirmed by running the suite before extending it.
+   Contrast suite 202 → 364 tests, whole suite 1954 → 2116. Four mutations each fail it: a
+   dark token dropped, a misspelt token name, a worse ink, a translucent glass value. Main
+   bundle unchanged at 124.80 kB gz; stylesheet 4.88 → 4.95 kB gz.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
