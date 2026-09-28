@@ -29259,6 +29259,29 @@ re-measured in the headless rig with the database writes blocked.
 
    Gate: 124.99 kB gz (+0.04), 2127 tests (+1), 0 lint errors (90 warnings), style OK.
 
+3. **A gesture that interrupts the Plan's glide starts from where the glide has got to.**
+   Phase 14's `endSettle()` dropped the transition when a pinch, a pan or a wheel step
+   began. `view` holds the glide's TARGET, so the plan was redrawn there in one frame.
+   Measured on the desktop profile, with Plan zoom & pan switched on locally (the pref
+   write blocked):
+   - a double-tap reset from 4.05× glided smoothly to 1× in about 390ms (the control);
+   - a wheel step 120ms into it jumped the zoom from 1.70× to 1.15×: the target (1×) times
+     one notch, against the direction the plan was on screen.
+
+   `endSettle()` now reads the `<g>`'s drawn transform back (`drawnView`: the matrix is
+   `(k, 0, 0, k, tx, ty)` in user units, like `view`) and makes that the view before it
+   drops the transition. It returns that view, and `bgPointerDown` anchors the pinch
+   midpoint and the pan to it (`v0`). The wheel takes it through its functional update.
+
+   Re-measured: the glide had reached about 1.69× when the wheel step landed, and the plan
+   went to 1.95× (one ×1.15 notch from what was on screen), with no frame-to-frame jump
+   over 0.4×. The event's read is one frame old, so the plan shows one more glide frame
+   (1.56×) before the notch. A pinch landing mid-glide takes the same path; how it feels
+   under a finger is a device check. `tests/plan-gestures.test.js` pins the read-back and
+   the `v0` anchors.
+
+   Gate: 125.09 kB gz (+0.10), 2128 tests (+1), 0 lint errors (90 warnings), style OK.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -29273,7 +29296,7 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 10 | Tablet, phone | Tapping a WhatsApp alert header shows the veil tint while pressed |
 | 12 | Tablet, iPad | In Split View, start a drag a fingertip's width to one side of the divider: the panes resize, and the divider does not jump to the finger first. A tap on the divider without moving leaves the split where it was |
 | 13 | iPhone, iPad, tablet | With Plan zoom & pan on: one finger pans the plan (tablet, iPad); two fingers pinch about their midpoint and pan together. On a phone, a vertical swipe starting on the plan scrolls the page and a sideways one pans the plan. A pinch starting on a booked table does not open quick status. The Android tablet behaves as before apart from the pinch anchor. Also: hold a table on a phone and lift: quick status stays up and nothing is tapped |
-| 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home |
+| 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home, and a pinch or a pan started during that glide catches the plan where it is, with no jump |
 | 15 | Tablet, iPhone | Fling the Plan tape: it travels as far as before and lands on a quarter mark. Drag it and hold still: it does not move under the finger until you lift. A mouse wheel scrubs as before |
 | 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |
 | 21, 24 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait, and the header, the Walk-in / + New bar and an open form's fields and buttons keep clear of the notch on both sides (turn it both ways) |

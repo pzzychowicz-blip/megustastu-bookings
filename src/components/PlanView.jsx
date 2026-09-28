@@ -379,6 +379,7 @@ export const PlanView = memo(function PlanView({
   const [settling, setSettling] = useState(false);
   const settleRef = useRef(null);
   const svgRef = useRef(null);
+  const gRef = useRef(null);          // the zoomed <g>: where a glide has got to (endSettle)
   const wrapRef = useRef(null);       // the HTML wrapper: iOS's touch defences (A1)
   const panRef = useRef(null);        // {x,y,tx,ty} while background-dragging
   const pinchRef = useRef(null);      // {d0,k0,wx,wy} while two-pointer pinching, + {k,m} once it moves
@@ -426,18 +427,35 @@ export const PlanView = memo(function PlanView({
   }
   // v18.3.0 phase 14: the next view change glides on `M.shift`, and the
   // transition comes off again after `exitHold("shift")`, so a gesture after it
-  // is not eased. A gesture that starts mid-glide ends it (`endSettle`): the
-  // plan lands on the glide's target, which is what `view` already holds.
+  // is not eased. A gesture that starts mid-glide ends it (`endSettle`).
   function settle() {
     clearTimeout(settleRef.current);
     setSettling(true);
     settleRef.current = setTimeout(() => { settleRef.current = null; setSettling(false); }, exitHold("shift"));
   }
+  // v18.3.0 (/review-animations): …and the plan stays where the glide HAS GOT
+  // TO. `view` holds the glide's TARGET, so dropping the transition alone put
+  // the plan there in one frame: measured, a wheel step 120ms into a
+  // double-tap reset jumped the zoom from 1.70× to 1.15×. The drawn transform
+  // is read back and becomes the view, so the gesture starts from what is on
+  // screen. Returns that view, for a caller about to read `view` in the same
+  // event (the pinch and pan anchors below).
   function endSettle() {
-    if (!settleRef.current) return;
+    if (!settleRef.current) return view;
     clearTimeout(settleRef.current);
     settleRef.current = null;
+    const at = drawnView();
+    setView(at);
     setSettling(false);
+    return at;
+  }
+  // The <g>'s transform is `translate(tx, ty) scale(k)` about 0 0, so the drawn
+  // matrix is (k, 0, 0, k, tx, ty), in the svg's user units like `view`.
+  function drawnView() {
+    const g = gRef.current;
+    if (!g || typeof DOMMatrix !== "function") return view;
+    const m = new DOMMatrix(getComputedStyle(g).transform);
+    return { k: m.a, tx: m.e, ty: m.f };
   }
   useEffect(() => () => clearTimeout(settleRef.current), []);
 
@@ -465,7 +483,7 @@ export const PlanView = memo(function PlanView({
     // in bgPointerMove so a stale ref can never pan.
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (!gesturesEnabled) return; // v17.1.2: no pan/pinch arming — taps untouched (movedRef stays false)
-    endSettle();
+    const v0 = endSettle();   // the view on screen, which this event anchors to
     pointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     const pts = Object.values(pointersRef.current);
     if (pts.length === 2) {
@@ -474,7 +492,7 @@ export const PlanView = memo(function PlanView({
       // which the move keeps under the midpoint. `toSvg` reads only
       // clientX/clientY, so a plain object will do.
       const m0 = toSvg({ clientX: (pts[0].x + pts[1].x) / 2, clientY: (pts[0].y + pts[1].y) / 2 });
-      pinchRef.current = { d0: d0, k0: view.k, wx: (m0.x - view.tx) / view.k, wy: (m0.y - view.ty) / view.k };
+      pinchRef.current = { d0: d0, k0: v0.k, wx: (m0.x - v0.tx) / v0.k, wy: (m0.y - v0.ty) / v0.k };
       panRef.current = null;
       // A second finger means this is not a long-press (Patryk, v18.3.0 phase
       // 13). The first finger's touch on a booked table had armed quick status,
@@ -484,7 +502,7 @@ export const PlanView = memo(function PlanView({
       return;
     }
     movedRef.current = false;
-    panRef.current = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+    panRef.current = { x: e.clientX, y: e.clientY, tx: v0.tx, ty: v0.ty };
     // NO setPointerCapture here — capturing redirects the subsequent `click`
     // to the svg, which silently killed the table-tap popover (found live).
     // Panning tracks fine while the pointer stays over the canvas.
@@ -751,7 +769,7 @@ export const PlanView = memo(function PlanView({
               the zoom block). The global reduced-motion rules neutralise the
               transition under both intents: the OS query leaves `transform`
               out of `transition-property`, the toggle makes it 0.001ms. */}
-          <g style={{ transform: "translate(" + view.tx + "px," + view.ty + "px) scale(" + view.k + ")", transformOrigin: "0 0", transition: settling ? "transform " + M.shift : "none" }}>
+          <g ref={gRef} style={{ transform: "translate(" + view.tx + "px," + view.ty + "px) scale(" + view.k + ")", transformOrigin: "0 0", transition: settling ? "transform " + M.shift : "none" }}>
             {(fp.walls || []).map((wl, i) => (
               <line key={"w" + i} x1={wl.x1} y1={wl.y1} x2={wl.x2} y2={wl.y2} stroke="var(--text-muted)" strokeWidth={7} strokeLinecap="round" />
             ))}

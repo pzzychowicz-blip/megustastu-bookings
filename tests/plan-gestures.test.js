@@ -56,7 +56,10 @@ describe("A2: the pinch follows the fingers", () => {
   it("catches the room point under the midpoint when the second finger lands", () => {
     const down = body("bgPointerDown");
     expect(down).toMatch(/const m0 = toSvg\(\{ clientX: \(pts\[0\]\.x \+ pts\[1\]\.x\) \/ 2, clientY: \(pts\[0\]\.y \+ pts\[1\]\.y\) \/ 2 \}\);/);
-    expect(down).toMatch(/wx: \(m0\.x - view\.tx\) \/ view\.k, wy: \(m0\.y - view\.ty\) \/ view\.k/);
+    // /review-animations: anchored to `v0`, the view ON SCREEN (endSettle), not
+    // `view`, which mid-glide holds the glide's target.
+    expect(down).toMatch(/const v0 = endSettle\(\);/);
+    expect(down).toMatch(/wx: \(m0\.x - v0\.tx\) \/ v0\.k, wy: \(m0\.y - v0\.ty\) \/ v0\.k/);
   });
 
   it("keeps it under the midpoint as the fingers move — zoom about it, pan with it", () => {
@@ -155,7 +158,7 @@ describe("A8: lib/plan-zoom.js — the zoom band and the pan bound, as numbers",
 
 describe("A8: PlanView takes the limits — which gesture gets which, and what glides", () => {
   it("the zoom <g> is drawn by a CSS transform, which can glide, never the attribute", () => {
-    expect(Plan).toMatch(/<g style=\{\{ transform: "translate\(" \+ view\.tx \+ "px," \+ view\.ty \+ "px\) scale\(" \+ view\.k \+ "\)", transformOrigin: "0 0", transition: settling \? "transform " \+ M\.shift : "none" \}\}>/);
+    expect(Plan).toMatch(/<g ref=\{gRef\} style=\{\{ transform: "translate\(" \+ view\.tx \+ "px," \+ view\.ty \+ "px\) scale\(" \+ view\.k \+ "\)", transformOrigin: "0 0", transition: settling \? "transform " \+ M\.shift : "none" \}\}>/);
     expect(Plan).not.toMatch(/<g transform=\{"translate\(" \+ view\.tx/);
   });
 
@@ -164,6 +167,16 @@ describe("A8: PlanView takes the limits — which gesture gets which, and what g
     expect(body("bgPointerDown")).toMatch(/endSettle\(\);/);
     expect(body("onWheel")).toMatch(/endSettle\(\);/);
     expect(Plan).toMatch(/useEffect\(\(\) => \(\) => clearTimeout\(settleRef\.current\), \[\]\);/);
+  });
+
+  // /review-animations: ending a glide keeps the plan where the glide HAS GOT TO.
+  // Dropping the transition alone put it on the target in one frame (measured:
+  // a wheel step 120ms into a double-tap reset jumped the zoom 1.70× → 1.15×).
+  it("a gesture that ends a glide starts from the drawn view, not the target", () => {
+    const end = body("endSettle");
+    expect(end).toMatch(/const at = drawnView\(\);\s*setView\(at\);\s*setSettling\(false\);\s*return at;/);
+    expect(body("drawnView")).toMatch(/const m = new DOMMatrix\(getComputedStyle\(g\)\.transform\);\s*return \{ k: m\.a, tx: m\.e, ty: m\.f \};/);
+    expect(body("bgPointerDown")).toMatch(/panRef\.current = \{ x: e\.clientX, y: e\.clientY, tx: v0\.tx, ty: v0\.ty \};/);
   });
 
   it("the double-tap reset and the gestures-off reset glide", () => {

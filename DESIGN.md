@@ -1745,7 +1745,12 @@ while a finger drives it lags the finger. The glide needed the zoom `<g>`'s
 transform to move from the SVG attribute to CSS, since CSS cannot transition an
 attribute; the two forms were measured identical (0.0px, Chromium and WebKit)
 before the swap. **No momentum on the pan:** a floor plan is placed, not thrown.
-The limits are `lib/plan-zoom.js`.
+The limits are `lib/plan-zoom.js`. **A glide is caught where it is**
+(/review-animations): a pinch, a pan or a wheel step during a glide reads the
+drawn transform back and starts from it. `view` holds the glide's target, and
+dropping the transition alone put the plan there in one frame (measured: a
+wheel step 120ms into a double-tap reset jumped the zoom from 1.70× to 1.15×;
+after, it went from the ~1.69× on screen to 1.95×, one notch).
 
 ### Adding motion to something that has none
 
