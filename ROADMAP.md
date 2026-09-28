@@ -149,6 +149,16 @@ evidence for each.
   waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
   a rule, and make both paths say the same.
 
+- **Recheck the keyboard on a real iPhone (found in v18.3.0 phase 17).** `Overlay` now pads
+  by the keyboard's inset, so Save is never behind the keyboard, but in the iOS 26
+  Simulator Safari's floating address pill and ⌃⌄✓ form bar sat over part of the booking
+  form's footer for some fields: Notes put the pill over Back, and on a probe page a
+  bottom textarea put the bar over the whole footer. iOS reported a different visible area
+  for each field (src/CLAUDE.md's Gotchas row on the keyboard). On a real iPhone, in Safari
+  and as a home-screen app, tap Name, Notes and Deposit and note where the footer lands.
+  Only act if the overlap is real there. The fixes that exist all pad for the bar, which
+  leaves a gap in the cases that are clean now.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**

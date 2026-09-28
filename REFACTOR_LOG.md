@@ -28850,6 +28850,71 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
    dark token dropped, a misspelt token name, a worse ink, a translucent glass value. Main
    bundle unchanged at 124.80 kB gz; stylesheet 4.88 → 4.95 kB gz.
 
+17. **The keyboard no longer hides a modal's Save (N1).** A `position: fixed` box and every
+   `dvh` follow the LAYOUT viewport, and the iOS keyboard shrinks only the visual one. So in
+   the iPhone booking sheet the pinned footer (Save booking, Back) sat behind the keyboard,
+   and on the iPad the card kept `90dvh` with its footer underneath. Android Chrome has done
+   the same since Chrome 108. Three pieces:
+   - **`src/hooks/useKeyboardInset.js`** reads the gap between `innerHeight` and
+     `window.visualViewport` as `{ top, bottom }`. A gap of 100px or less is browser chrome
+     and reads 0. The state changes only when a number does.
+   - **`Overlay`** applies it in every branch.
+   - **App's runtime viewport** gains `interactive-widget=resizes-content`, so on Android the
+     keyboard shrinks the layout viewport itself and the hook reads 0 there. `index.html`'s
+     viewport (the login screen) is untouched.
+
+   **The probe first** (iPhone Simulator, Safari, iOS 26, a page copying the booking sheet):
+   `innerHeight` stayed 796 while `visualViewport.height` fell to 447, in one `resize` event
+   112ms after focus. That confirmed both the bug and the model.
+
+   **One departure, asked:** the plan moved each box's edges to the inset. iOS 26 draws a
+   see-through pill and form bar above the keyboard, outside that viewport, so a sheet whose
+   bottom had moved up let the page behind the modal show through them. **Patryk chose to
+   keep every box full-screen and take the inset as PADDING**, which puts the footer in the
+   same place with the sheet's own background under the glass:
+   - the footer sheet pads, and its footer drops the home-indicator inset, which the
+     keyboard now covers;
+   - the no-footer sheet insets its absolutely placed scroller (padding cannot move it) and
+     paints the same background beneath;
+   - both scrims pad, so a card centres in what is visible;
+   - `cardMaxH` lets a card fill that area only while the keyboard is up. A hung card keeps
+     `TOP_ANCHOR`, so its top does not move.
+
+   **Rig, no keyboard:** the booking form, Find a booking, Settings, the WhatsApp inbox (the
+   panel) and a booking's History (the no-footer branch), at 1280×800 and 375×812. Rects,
+   paddings and max-height are identical to HEAD in all ten, measured by swapping HEAD's two
+   files in and back out.
+
+   **The Simulator, keyboard up, the real app:**
+
+   | Device, field | Footer | On dismiss |
+   |---|---|---|
+   | iPhone, Name | Directly above the keyboard's bar, Name visible | Full height, no gap |
+   | iPhone, Notes | Above the keyboard, but Safari's pill sits over part of Back; Save booking clear | Full height |
+   | iPad, Notes | Save and Back and Notes above the keyboard; iOS scrolled the page for the field, so the card's top went under the toolbar while typing | Re-centres at 90dvh |
+
+   **What is left, and why it was shipped anyway (Patryk, asked):** iOS 26 Safari does not
+   report its floating pill and bar the same way for every field. On the probe:
+   - a text input kept them outside the visual viewport, so the footer was clear;
+   - a bottom textarea's viewport grew by 100px about 450ms later, which put the ⌃⌄✓ bar
+     over the whole footer (visible, not tappable);
+   - a top textarea made iOS scroll the WINDOW by 32px despite `html { overflow: hidden }`
+     and shrink `innerHeight` to 764, which put the pill over it.
+
+   Nothing the page can read tells these apart. Every case is still better than HEAD, where
+   the footer was behind the keyboard. The ROADMAP asks for a recheck on a real iPhone
+   before anything more; the iPad has no floating bars and was clean on the probe. The
+   home-screen app could not be tried: it needs a sign-in on the Simulator.
+
+   Tests 2116 → 2125 in a new `tests/keyboard-inset.test.js`:
+   - `keyboardInsetOf`, fed the Simulator's numbers, and the toolbar threshold;
+   - every Overlay branch taking the inset as padding, with no fixed box moving an edge;
+   - the card's max-height;
+   - the viewport string, and `index.html` left alone.
+
+   Six mutations each fail it, the plan's moved-edge form among them. Main bundle
+   124.80 → 124.82 kB gz.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -28866,3 +28931,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 13 | iPhone, iPad, tablet | With Plan zoom & pan on: one finger pans the plan (tablet, iPad); two fingers pinch about their midpoint and pan together. On a phone, a vertical swipe starting on the plan scrolls the page and a sideways one pans the plan. A pinch starting on a booked table does not open quick status. The Android tablet behaves as before apart from the pinch anchor. Also: hold a table on a phone and lift: quick status stays up and nothing is tapped |
 | 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home |
 | 15 | Tablet, iPhone | Fling the Plan tape: it travels as far as before and lands on a quarter mark. Drag it and hold still: it does not move under the finger until you lift. A mouse wheel scrubs as before |
+| 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |

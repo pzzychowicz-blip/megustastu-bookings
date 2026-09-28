@@ -869,10 +869,16 @@ function BookingApp({uid}){
   // which then mounts the relevant sub-modal — same z-stack ordering
   // as pre-E1, no behavioural change.
   // Ensure optimal viewport scaling on all devices
+  // v18.3.0 (N1): `interactive-widget=resizes-content` makes Android Chrome's
+  // keyboard shrink the LAYOUT viewport (its default since Chrome 108 shrinks
+  // only the visual one), so fixed boxes and dvh follow it and a modal's Save
+  // stays above the keyboard. iOS ignores the key; there Overlay reads the gap
+  // from `useKeyboardInset`, which is 0 on Android for this very reason.
+  // index.html's viewport (the login screen, no fixed chrome) is left alone.
   useEffect(function(){
     let meta=document.querySelector('meta[name="viewport"]');
     if(!meta){meta=document.createElement("meta");meta.name="viewport";document.head.appendChild(meta);}
-    meta.content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover";
+    meta.content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content";
     document.documentElement.style.cssText="height:100%;overflow:hidden;";
     document.body.style.cssText="height:100%;overflow:auto;margin:0;-webkit-overflow-scrolling:touch;overscroll-behavior:none;";
     return function(){document.documentElement.style.cssText="";document.body.style.cssText="";};

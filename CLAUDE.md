@@ -233,7 +233,8 @@ Four rules stay here, because each one ships a bug from code that is not visual:
   the tablet (51 instances). Reuse the `Overlay` atom rather than adding a
   blurred surface.
 - **Every modal uses `Overlay`** — it owns the blur, the mobile-sheet /
-  desktop-card branching, `role="dialog"`, the focus trap and focus restore. A
+  desktop-card branching, `role="dialog"`, the focus trap and focus restore,
+  and (v18.3.0) the on-screen keyboard's inset, which keeps Save above it. A
   modal that must sit above another gets a positioned wrapper with a higher
   z-index (ReminderEditor 250, the discard confirm 260), never a hand-written
   scrim; the popups paint `--tl-popup-scrim`, because a popup is not a dialog

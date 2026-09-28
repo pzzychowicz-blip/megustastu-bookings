@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS, exitHold } from "../lib/constants";
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
+import { useKeyboardInset } from "../hooks/useKeyboardInset";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -464,6 +465,15 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   const sheetCls = leaving ? "mgt-sheet-out" : "mgt-sheet-in";
   const scrimCls = leaving ? "mgt-scrim-out" : "mgt-scrim-in";
   const cardCls = leaving ? "mgt-card-out" : "mgt-card-in";
+  // v18.3.0 (N1): how much of the screen the on-screen keyboard covers (0 when
+  // there is none). A fixed box follows the LAYOUT viewport, which the iOS
+  // keyboard does not shrink, so Save sat behind it. Every box below stays
+  // full-screen and takes the inset as PADDING (or, where its content is
+  // absolutely placed, insets that content), so its own background still
+  // paints under the keyboard and under the see-through bar iOS 26 draws above
+  // it. Moving the boxes' edges instead let the page behind a modal show
+  // through that bar (Patryk's pick, measured in the Simulator).
+  const kb = useKeyboardInset();
 
   useEffect(() => {
     if (!mob) return;
@@ -496,10 +506,13 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   // to reset and a provider promising one would be a lie a child could call.
   if (panel) {
     const pw = panel.maxWidth || 1200;
+    // The keyboard inset: the phone's full-screen card pads its own content, the
+    // desktop scrim pads so the card centres in what is visible and may take all of it.
+    const scrimPad = mob ? 0 : SP.gutter;
     return (
       <div
         className={scrimCls}
-        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: mob ? 0 : 16, boxSizing: "border-box" }}
+        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: scrimPad, paddingTop: scrimPad + (mob ? 0 : kb.top), paddingBottom: scrimPad + (mob ? 0 : kb.bottom), boxSizing: "border-box" }}
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
         <div
@@ -514,7 +527,9 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
             border: "1px solid var(--border-sheet)",
             width: "100%",
             maxWidth: mob ? "none" : pw,
-            height: mob ? "100dvh" : (panel.height || "min(900px, 90dvh)"),
+            height: mob ? "100dvh" : (kb.bottom ? "100%" : (panel.height || "min(900px, 90dvh)")),
+            paddingTop: mob ? kb.top : 0,
+            paddingBottom: mob ? kb.bottom : 0,
             display: "flex",
             flexDirection: "column",
             boxShadow: "var(--shadow-sheet)",
@@ -531,21 +546,26 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   if (mob) {
     // Footer pinned to the viewport bottom; body scrolls between top and footer.
     // (minHeight:0 lets the flex body actually scroll instead of growing the column.)
+    // With the keyboard up, the sheet's padding lifts the footer onto it, and
+    // the footer drops the home-indicator inset, which the keyboard now covers.
     if (footer) {
       return wrap(
-        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingTop: kb.top, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", boxSizing: "border-box" }}>
             {children}
           </div>
-          <div style={{ flexShrink: 0, padding: "12px 18px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
+          <div style={{ flexShrink: 0, padding: "12px 18px", paddingBottom: kb.bottom ? SP.wide : "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
             {footer}
           </div>
         </div>
       );
     }
+    // No footer: the scroller is absolutely placed, which padding cannot move,
+    // so the keyboard insets the scroller itself and the sheet paints the same
+    // background under it (covered edge to edge, so nothing changes at rest).
     return wrap(
-      <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200 }}>
-        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+      <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)" }}>
+        <div ref={scrollRef} style={{ position: "absolute", top: kb.top, left: 0, right: 0, bottom: kb.bottom, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
@@ -557,15 +577,19 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   // Desktop centered card. With a footer, the card is a flex column: body
   // scrolls (minHeight:0), footer stays pinned. Without, the whole card scrolls
   // (exactly as before). `top`: hung from TOP_ANCHOR instead — see `anchor`.
+  // With the keyboard up (an iPad), the scrim pads by it so the card centres in
+  // what is visible, and the card may fill that instead of 90dvh; a hung card
+  // keeps its anchor, so its top does not move when the keyboard rises.
   const top = anchor === "top";
+  const cardMaxH = kb.bottom ? (top ? "calc(100% - " + TOP_ANCHOR + ")" : "100%") : "90dvh";
   return wrap(
     <div
       className={scrimCls}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: 12 }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: SP.wide, paddingTop: SP.wide + kb.top, paddingBottom: SP.wide + kb.bottom }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -574,7 +598,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
           </div>
         </div>
       ) : (
-        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: "90dvh", marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           {children}
         </div>
       )}
