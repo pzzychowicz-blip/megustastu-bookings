@@ -28751,6 +28751,67 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
 
    Eight mutations each fail a test. Main bundle 124.41 → 124.71 kB gz.
 
+15. **The Plan tape snaps once the scroll is over (A6): on `scrollend`, not CSS scroll-snap.**
+   The tape snapped to the nearest quarter 130ms after its last `scroll` event. The plan held
+   two suspicions about that: after a fling it settles twice, and it can fire under a finger
+   that is holding the tape still. It also held its fix, native `scroll-snap`, behind a
+   measurement gate.
+
+   **The gate: a probe page, iPhone Simulator (Safari), 24px quarters, the tape's own JS.**
+   Three identical flings (130pt, 0.12s) on each tape:
+
+   | Tape | Travel after the finger lifts | Then | Lands on |
+   |---|---|---|---|
+   | A · today's 130ms timer | 423–480px, momentum over at ~2.4s | still 183–217ms, then a 4–7px glide (2 of 3 backwards) | a quarter |
+   | B · `scroll-snap-type: x mandatory` | **88–112px**, over by ~0.6s | nothing | a quarter |
+   | C · `x proximity` | 92–96px | nothing | a quarter |
+   | D · the JS snap on `scrollend` | 450–548px | still 134–150ms, then a 4–6px glide | a quarter |
+
+   The gate passed as written: A does settle twice, and B lands on a quarter in one motion.
+   But B and C cost about four fifths of a fling's reach. WebKit decelerates a snapping
+   scroller faster, and the tape's own header promises that a whole service fits in a couple
+   of flicks; a 10-hour day would take about nine. **Patryk chose D (asked).** A drag-then-hold
+   (`touch_path`) confirmed the other suspicion: A snapped at 298ms with the finger still down
+   until 818ms, sliding the tape 4px under it. D waited for the lift.
+
+   **One departure, found by the rig, not the Simulator:** a mouse wheel keeps the 130ms
+   timer. Chrome fires `scrollend` after each notch's own animation, so snapping there glided
+   between notches and swallowed the next one. Measured over three 37px notches:
+
+   | | Travel | End |
+   |---|---|---|
+   | HEAD | 111px | 120 |
+   | Snapping on every `scrollend` | 96px | 96 |
+   | With the wheel exception | 111px | 120 (same as HEAD) |
+
+   A wheel's momentum arrives as wheel events, so the idle timer already waits for it.
+   `wheelRef` records the last input (a pointerdown clears it, a wheel sets it). A browser
+   without `scrollend` (Chrome < 114, Safari < 26) keeps the timer too, since React 19.2.5
+   has no polyfill.
+
+   **Rig, tablet and phone profiles, against HEAD:**
+
+   | Check | Result |
+   |---|---|
+   | Touch drag, finger held still 500ms | Held at 250–274 until the lift, then glided to 240 / 264. HEAD slid 274 → 264 under the finger |
+   | Click on the tape | Glides and lands on a multiple of 24; one `scrollend`, at the end |
+   | Now button | Glides home |
+   | Every selection sampled per frame | A quarter |
+
+   **The app on the iPhone Simulator:** a fling passes through 18:15 and 19:45 mid-flight and
+   comes to rest at 19:15, with the marker on the tick and the badge reading 19:15.
+
+   Also measured: the probe's first recorder awaited its own promise, so each recording showed
+   the previous step. It is fixed, and none of the numbers above come from it.
+
+   Tests 1949 → 1954 in a new `tests/time-axis.test.js`:
+   - the `scrollend` wiring, and its wheel and no-support exceptions;
+   - a guard that neither starts a snap during our own glide nor glides onto a mark it is
+     already on;
+   - no CSS scroll-snap.
+
+   Five mutations each fail it. Main bundle 124.71 → 124.80 kB gz.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the
@@ -28766,3 +28827,4 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 12 | Tablet, iPad | In Split View, start a drag a fingertip's width to one side of the divider: the panes resize, and the divider does not jump to the finger first. A tap on the divider without moving leaves the split where it was |
 | 13 | iPhone, iPad, tablet | With Plan zoom & pan on: one finger pans the plan (tablet, iPad); two fingers pinch about their midpoint and pan together. On a phone, a vertical swipe starting on the plan scrolls the page and a sideways one pans the plan. A pinch starting on a booked table does not open quick status. The Android tablet behaves as before apart from the pinch anchor. Also: hold a table on a phone and lift: quick status stays up and nothing is tapped |
 | 14 | iPhone, iPad, tablet | Pinch past the zoom limits: the plan resists, then springs back on release. The room can't be flung off screen. Double-tap glides home |
+| 15 | Tablet, iPhone | Fling the Plan tape: it travels as far as before and lands on a quarter mark. Drag it and hold still: it does not move under the finger until you lift. A mouse wheel scrubs as before |
