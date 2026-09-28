@@ -29365,6 +29365,19 @@ found.
 
    Gate: 125.20 kB gz (unchanged), 2128 tests (unchanged), 0 lint errors (90 warnings), style OK.
 
+Not fixed here:
+- **The Plan's second copy of the 600px phone test** went with fix 3, which replaced it
+  with App's `isMobile`.
+- **Keyboard focus after a ⋯ pick that opens a confirm** is real. Measured from the
+  keyboard: Delete or Cancelled, then Escape on the confirm, leaves focus on `<body>`. The
+  cause is in `useDialog`, which records the opener after the inert page has already blurred
+  it. That primitive is shared by every modal and this branch did not touch it, so it went
+  to ROADMAP with the probe that fixed the ⋯ case.
+- **Fades that replay when the tablet wakes.** `lib/after-frame.js` documents this
+  behaviour, and whether it should change is a design decision, so it went to ROADMAP.
+- **The login screen's status bar** was already on ROADMAP from phase 23 ("The login
+  screen's theme").
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the

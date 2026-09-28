@@ -195,6 +195,29 @@ evidence for each.
   says otherwise. Mounting the hook in `App()` instead is the likely fix; check that the
   signed-in theme preference still wins once `BookingApp` mounts.
 
+- **A modal opened from the keyboard can lose its focus return (found by v18.3.0's
+  `/code-review`).** Measured in the rig, from the keyboard: on a List card's ⋯ menu, choose
+  Delete or Cancelled, then press Escape on the confirm. Focus lands on `<body>`, not on ⋯.
+  The same happens after Find a booking (header) is closed with Escape. `useDialog` (atoms)
+  records `document.activeElement` in a passive effect. By then, the commit that mounted
+  the modal has made the page `inert`, and that has already blurred the opener. A probe did
+  two things together: `useDialog` captured the opener at its first render
+  (`useState(() => document.activeElement)`), and the ⋯ pick handed focus back to ⋯ in its
+  handler (PlanView's `leavePop` pattern). With both, focus returned to ⋯ for both
+  confirms. Find still landed on `<body>`, so it has a second cause of its own. Neither
+  path was changed by v18.3.0. Measure every modal's return path before changing a
+  primitive that all of them share.
+
+- **Timeline fades replay after the tablet wakes (found by v18.3.0's `/code-review`).**
+  `useEnterLeave`'s holds start on the next animation frame (`afterFrame`), and a hidden
+  tab renders none. So bookings cancelled or added on another device while the screen was
+  off pile up, and on wake they all play their fade at once: the departed ones from their
+  old snapshots, possibly over whatever took their place, and the new ones fading in, all
+  minutes late. This is the behaviour `lib/after-frame.js` documents ("the leaving node
+  waits, inert, until the tab is shown"). Whether a change nobody saw should animate is a
+  decision. One option: treat a diff taken while `document.hidden` as a replacement, the
+  way a date change is. Check on the tablet first how it reads there.
+
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the
