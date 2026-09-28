@@ -29157,6 +29157,26 @@ for each finding is in `MGT_Bookings_Motion_Touch_Audit.md` under its id.
 
    Bundle unchanged at 124.95 kB gz. Tests unchanged at 2125.
 
+26. **S3's two keep-as-is decisions are written down (M7, N6).** `DESIGN.md` only, each where
+   the file already discusses its subject.
+   - **Keys animate like taps (M7)** is a bullet beside the "A gesture owns ONE axis" note.
+     T/L/P and ←/→ play the same slide and fade as a tap. The "never animate a keyboard
+     action" rule is declined: keys are rare on the tablets and phones, and one code path
+     beats a `viaKey` flag.
+   - **The zoom lock (N6)** closes the Accessibility section. `maximum-scale=1,
+     user-scalable=no` is a POS decision, first recorded under v17.3.2, and every fact it
+     rests on was re-checked in the code before being written:
+     - the lock is in App's viewport effect (`App.jsx:882` today, not the plan's 875; the
+       phases above moved it);
+     - the Viewed date field is `T.lead`, 14px (`:5227`, not 5219);
+     - `mkInp` is `T.title`, 17px, which fits S3's count of 29 of 30 inputs at 16px or more;
+     - `touch-action: manipulation` appears only in `ViewSwitcher.jsx`;
+     - MGT Scheduling's `index.html:5` carries the same lock.
+
+     Whether iOS 26 honours `user-scalable=no` is left as unmeasured, as S3 found it.
+
+   `grep` finds both, under `user-scalable` and `keyboard`. Bundle and tests unchanged.
+
 ### Check on the devices after merge
 
 Nothing in this programme can feel these before the deploy. Patryk checks each on the

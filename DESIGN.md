@@ -1508,6 +1508,22 @@ its declaration does not.** An ink that inverts the same way the composite does
 theme is broken: 4.59:1 light but 2.30:1 dark, against white's 1.30 / 6.42.
 Measured live at 5.14:1 light and 4.60:1 dark, so it is no longer an exemption.
 
+**The zoom lock is a decision, not an oversight.** App's runtime viewport sets
+`maximum-scale=1, user-scalable=no` (the viewport effect in `App.jsx`). That
+turns off pinch-zoom, which WCAG 1.4.4 counts against an app. Here it is a
+deliberate POS choice, first recorded in `REFACTOR_LOG.md` under v17.3.2 and
+re-confirmed by Patryk in S3 (2026-09-27) on these facts:
+- It stops iOS zooming into a focused field whose text is under 16px. S3 counted
+  29 of 30 text inputs at 16px or more (`mkInp` is `T.title`); the one the lock
+  still protects is the header's Viewed date field (`T.lead`, 14px).
+- It stops staff pinch-zooming the timeline's small text by accident.
+- It removes the double-tap-zoom tap delay. That is why `touch-action:
+  manipulation` is set only on the view switcher: undoing the lock means adding
+  it to every control.
+- Android honours the lock. Whether iOS 26 honours `user-scalable=no` has not
+  been measured; that needs the hardware.
+- MGT Scheduling carries the same lock (its `index.html`), so the two apps agree.
+
 ### External links (v18.0.0 phase 4) — the app's first, and its only one
 
 The Integrations panel points at Vercel. Until then this app contained **no
@@ -1837,6 +1853,12 @@ The limits are `lib/plan-zoom.js`.
   grid heading for a top corner. The T/L/P switch keeps the horizontal slide,
   because the strip sits outside the view and a view switch moves nothing
   vertically. **Before choosing a duration, ask which axis the gesture owns.**
+- **Keys animate like taps (v18.3.0, a kept decision).** T/L/P and ←/→ play the
+  same slide and fade as a tap on the view switcher or the date arrows. The
+  general rule "never animate a keyboard action" (keys are for speed, and motion
+  slows them) is known here and declined. Keyboard use is rare in this app, whose
+  main devices are the tablets and phones, and one code path is simpler than a
+  `viaKey` flag carried into every entrance. Patryk's call in S3 (2026-09-27).
 - **A one-shot is not `AutoHeight`.** That atom's observer chases its content
   every frame and clips the overflow, which is right for a Settings tab and
   wrong for any box whose contents animate by design — there, every in-place
