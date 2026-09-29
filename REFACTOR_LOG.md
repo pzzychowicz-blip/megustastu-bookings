@@ -29454,3 +29454,7 @@ ROADMAP items to the version and two device checks.
    `#e2e7f1` / `#181b22`. The pane's colour-scheme emulation fires no `change` event even on
    a bare `matchMedia` listener, so live following cannot be measured there. It is on the
    iPhone check list.
+4. **`api/_lib/env.js` names the right Gemini default (ROADMAP, go-live item 4).** Its header
+   said the fallback model was `gemini-3-flash`. The real default is
+   `gemini-3.1-flash-lite` (`gemini.js`'s `liveParse`, which also records why the others were
+   rejected). Comment only; the header now points at where the default lives.
