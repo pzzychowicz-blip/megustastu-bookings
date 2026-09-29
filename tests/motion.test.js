@@ -167,7 +167,8 @@ describe("exit holds outlast their animations", () => {
       for (const pick of picks) {
         const at = src.indexOf(pick);
         expect(at, file + " still has " + pick).toBeGreaterThan(0);
-        expect(src.slice(Math.max(0, at - 40), at), file + ": skipExit() right before " + pick).toMatch(/skipExit\(\);\s*$/);
+        // v18.3.1: the ⋯ card's `handBack()` (focus only, it renders nothing) may sit between.
+        expect(src.slice(Math.max(0, at - 80), at), file + ": skipExit() right before " + pick).toMatch(/skipExit\(\);\s*(handBack\(\);\s*)?$/);
       }
     }
   });

@@ -29491,3 +29491,33 @@ ROADMAP items to the version and two device checks.
    one splits it into a ~43ms handler (the trials, which PROD pays too) and ~290ms of React
    work that is largely DEV-only, including ~40ms of `getBoundingClientRect`. The figures and
    what is still missing (a PROD-build number) are in the ROADMAP entry, which stays open.
+8. **Focus returns to the opener after a modal closes (ROADMAP: two entries, from v18.2.0's
+   and v18.3.0's `/code-review`).** `useDialog` (atoms) recorded `document.activeElement` in
+   its mount effect, which is right only if the opener still holds focus by then. **Measured**
+   in the rig from the keyboard with StrictMode OFF (the production shape; with it on every
+   modal fakes this failure, the measurement-traps row): Settings, Find a booking and the
+   List card's ⋯ → Delete / Cancelled confirms all returned focus to `<body>`; + New and
+   Walk-in were right. Three causes, one shape. Settings is a lazy chunk, so its Overlay
+   first renders after the commit that made the page `inert`, which blurred the cog. Find
+   focuses its search box at commit, so `activeElement` is INSIDE the dialog, and detached
+   at close. The ⋯ pick unmounts the menu holding focus, and the confirm's inert commit
+   blurs what the menu handed focus back to. Each opener was blurred a moment before the
+   effect ran, so `lib/focus-return.js` keeps a record of recent `focusout`s (a capture
+   listener, installed when the module loads) and `openerFor(dialog)` falls back to the
+   latest blur that is outside the dialog, still in the document, under 1.5s old and not a
+   text field (on iOS a tapped button does not take focus, so the latest blur can be a
+   search box left a minute ago, and focusing it on close would raise the keyboard). The
+   decision is the pure `pickOpener`. The ⋯ card also hands focus back to ⋯ in its pick
+   handlers (`handBack`, PlanView's `leavePop` pattern), so the opener is focused before the
+   confirm mounts. The first version installed the listener from `useDialog` and Find, the
+   first dialog opened, still went to `<body>`: its button blurred before any dialog had
+   mounted. After: all eight cases return to their opener, 3/3 runs with StrictMode off and
+   1/1 with it on. `tests/focus-return.test.js`.
+9. **Device check: sign-in and the keyboard on the iPhone (ROADMAP, from v18.3.0 phases 17
+   and 18).** Patryk, iPhone 12 mini, iOS 27. **The sign-in shift was not seen**: 3–4
+   sign-ins with the Go key in the home-screen app, the header in place every time (Safari
+   was not tested separately). So no `scrollTo(0, 0)` at mount. **The keyboard overlap is
+   real**: typing in Notes puts the booking form's footer under Safari's pill and form bar,
+   in Safari and in the home-screen app. The ROADMAP entry now holds that half alone. Also
+   confirmed on the device: the login screen follows Light/Dark live (phase 3), and the
+   header stays sharp after signing in (phase 2).

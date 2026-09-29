@@ -115,15 +115,6 @@ evidence for each.
   number ("+39 06 …", pinned in `tests/phone-countries.test.js`). Which countries get the
   rule is a decision, as phase 66's was.
 
-- **Focus after a ⋯ card action that opens a dialog (v18.2.0's `/code-review`).** In the List,
-  ⋯ → Delete (or Cancelled, or the voucher and seat prompts) leaves focus on `<body>` when the
-  dialog closes. `useDialog` reads `document.activeElement` in a passive effect, after the commit
-  that makes the page `inert`, and a rendering update's focus fixup can blur the opener first.
-  Handing focus back in the handler (phase 57's `leavePop`) did not change it. Capture the
-  restore target before the commit (at the Overlay's first render or in a layout effect), check
-  it across every modal, and re-check `leavePop`. Needs a device, because focus events do not
-  fire in the Browser pane.
-
 - **In-range dependency updates, and whether to automate them (#14).** firebase 12.12 →
   12.19 needs a tablet check first (the `forceWebSockets`/JSONP history). react 19.3 and
   plugin-react 6.1 are also available, and eslint 10 and vitest 5 are waiting as majors.
@@ -148,23 +139,17 @@ evidence for each.
   waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
   a rule, and make both paths say the same.
 
-- **Recheck two things on a real iPhone (found in v18.3.0 phases 17 and 18).**
+- **The booking form's footer under the iOS keyboard, while typing in Notes (found in
+  v18.3.0 phase 17, confirmed on a real iPhone in v18.3.1).**
 
-  **The sign-in shift (phase 18).** In the iOS 26 Simulator the window was scrolled when
-  the app mounted in 2 of 8 sign-ins made with Return (112px in Safari, 36px in the
-  home-screen app), and iOS undid it every time. S2 had twice seen the app open ~37pt too
-  high after signing in. Phase 22's Go key makes Return the usual way to sign in, so on a
-  real iPhone sign in with it several times, in Safari and as a home-screen app, and note
-  whether the header ever stays low. Only then consider `window.scrollTo(0, 0)` at mount.
-
-  **The keyboard (phase 17).** `Overlay` now pads by the keyboard's inset, so Save is
-  never behind the keyboard, but in the iOS 26 Simulator Safari's floating address pill
-  and ⌃⌄✓ form bar sat over part of the booking form's footer for some fields: Notes put the pill over Back, and on a probe page a
-  bottom textarea put the bar over the whole footer. iOS reported a different visible area
-  for each field (src/CLAUDE.md's Gotchas row on the keyboard). On a real iPhone, in Safari
-  and as a home-screen app, tap Name, Notes and Deposit and note where the footer lands.
-  Only act if the overlap is real there. The fixes that exist all pad for the bar, which
-  leaves a gap in the cases that are clean now.
+  `Overlay` pads by the keyboard's inset, so Save is never behind the keyboard itself.
+  But Safari's floating address pill and the ⌃⌄✓ form bar can still sit over the footer:
+  on Patryk's iPhone 12 mini (iOS 27) typing in **Notes** covers it, in Safari AND in the
+  home-screen app (v18.3.1's device check). In the iOS 26 Simulator a bottom textarea put
+  the bar over the whole footer, and iOS reported a different visible area for each field
+  (src/CLAUDE.md's Gotchas row on the keyboard), so a fix aimed at one field can break
+  another. Re-measure Name and Deposit on the device with Notes before choosing one.
+  (The other half of this entry, the sign-in shift, was checked in v18.3.1 and not seen.)
 
 - **The drop freeze (audit M1).** After a drop the block sits still with no frame painted.
   **Measured on the tablet in v18.3.1** (a DEV build over `adb reverse`, five real drops of a
@@ -187,19 +172,6 @@ evidence for each.
   lanes × 44px plus the gap, in one frame. Measure frame by frame first: `useFlip` may
   already move the blocks while the labels jump. And `tableForClientY` would need the row's
   live height during a reveal, or a drop lands rows off.
-
-- **A modal opened from the keyboard can lose its focus return (found by v18.3.0's
-  `/code-review`).** Measured in the rig, from the keyboard: on a List card's ⋯ menu, choose
-  Delete or Cancelled, then press Escape on the confirm. Focus lands on `<body>`, not on ⋯.
-  The same happens after Find a booking (header) is closed with Escape. `useDialog` (atoms)
-  records `document.activeElement` in a passive effect. By then, the commit that mounted
-  the modal has made the page `inert`, and that has already blurred the opener. A probe did
-  two things together: `useDialog` captured the opener at its first render
-  (`useState(() => document.activeElement)`), and the ⋯ pick handed focus back to ⋯ in its
-  handler (PlanView's `leavePop` pattern). With both, focus returned to ⋯ for both
-  confirms. Find still landed on `<body>`, so it has a second cause of its own. Neither
-  path was changed by v18.3.0. Measure every modal's return path before changing a
-  primitive that all of them share.
 
 - **Timeline fades replay after the tablet wakes (found by v18.3.0's `/code-review`).**
   `useEnterLeave`'s holds start on the next animation frame (`afterFrame`), and a hidden

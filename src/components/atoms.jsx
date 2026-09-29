@@ -18,6 +18,7 @@ import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
 import { afterFrame } from "../lib/after-frame";
+import { openerFor } from "../lib/focus-return";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -361,8 +362,14 @@ export function useDialog(ref) {
 const restoreRef = useRef(null);
 const uid = useId();
 useEffect(() => {
-  restoreRef.current = document.activeElement;
   const el = ref.current;
+  // v18.3.1: the opener, not merely whatever holds focus now. For a lazy
+  // modal (Settings), an auto-focusing one (Find a booking) or a confirm
+  // raised from a menu that unmounted (the List card's ⋯), activeElement is
+  // <body> or inside this dialog by the time this runs, so `openerFor` falls
+  // back to the element blurred just before (lib/focus-return.js). Measured
+  // with StrictMode off: all three returned focus to <body>.
+  restoreRef.current = openerFor(el);
   if (el) {
     // Scoped to THIS dialog's subtree, then given an id unique to this
     // instance — two modals can be mounted at once (a sub-modal opened from

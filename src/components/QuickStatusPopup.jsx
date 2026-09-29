@@ -73,9 +73,20 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
   // the opener and Escape is released when the exit STARTS, not 260ms later
   // when ModalPresence unmounts the cached card.
   const open = !!booking && !leaving;
+  // v18.3.1: the ⋯ that opened a click-opened card, kept so a pick can hand
+  // focus back to it IN THE HANDLER (below). The cleanup's own restore comes
+  // too late when the pick raises a confirm: that confirm's commit makes the
+  // page inert first, and focus() on an inert element does nothing. PlanView's
+  // `leavePop` is the same move for the same reason (src/CLAUDE.md's Gotchas).
+  const openerRef = useRef(null);
+  function handBack() {
+    const o = openerRef.current;
+    if (startArmed && o && document.contains(o) && typeof o.focus === "function") o.focus({ preventScroll: true });
+  }
   useEffect(function () {
     if (!startArmed || !open) return undefined;
     const opener = document.activeElement;
+    openerRef.current = opener;
     const first = cardRef.current && cardRef.current.querySelector("button");
     if (first) first.focus({ preventScroll: true });
     function onKey(e) {
@@ -149,6 +160,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
               onClick={() => {
                 if (!armed || leaving) return;
                 skipExit();
+                handBack();
                 onStatus(booking.id, st);
                 onClose();
               }}
@@ -170,6 +182,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             onClick={() => {
               if (!armed || leaving) return;
               skipExit();
+              handBack();
               onNoShow(booking.id);
               onClose();
             }}
@@ -186,6 +199,7 @@ export function QuickStatusPopup({ booking, late = {}, today = "", nowMins = 0, 
             onClick={() => {
               if (!armed || leaving) return;
               skipExit();
+              handBack();
               onDelete(booking.id);
               onClose();
             }}
