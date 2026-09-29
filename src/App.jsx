@@ -2385,6 +2385,11 @@ function BookingApp({uid}){
   // lost every gift-voucher balance. `lib/backup.js` holds the rule and the why;
   // `database.rules.README.md` § Backups and restore holds the restore.
   const backupInFlightRef=useRef(false);
+  // v18.3.1: the backup's outcome, shown UNDER the button in Settings. It went
+  // to the red "Couldn't save" banner, which sits behind the Settings overlay
+  // and under `inert`, so an offline press looked dead until Settings closed.
+  // null | {kind:"busy"|"done"|"error", text}. Cleared when Settings closes.
+  const [backupStatus,setBackupStatus]=useState(null);
   function doBackup(){
     // The widest data-protection action in the app — every booking, every
     // customer name and every phone number in one file — and the ONE gated
@@ -2396,6 +2401,7 @@ function BookingApp({uid}){
     // download the same file twice.
     if(backupInFlightRef.current) return;
     backupInFlightRef.current=true;
+    setBackupStatus({kind:"busy",text:"Reading the database…"});
     readDatabaseRoot().then(function(root){
       const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
       try{
@@ -2408,11 +2414,12 @@ function BookingApp({uid}){
         a.click();
         document.body.removeChild(a);
         setTimeout(function(){URL.revokeObjectURL(url);},1000);
-      }catch{setWriteWarning("Couldn't create the backup file on this device.");}
+        setBackupStatus({kind:"done",text:"Backup file created: "+a.download+". Check this device's downloads."});
+      }catch{setBackupStatus({kind:"error",text:"Couldn't create the backup file on this device."});}
     },function(err){
-      setWriteWarning(err&&err.message==="offline"
-        ?"Backup needs a connection to the database. Try again once the app shows Connected."
-        :"Couldn't read the database for the backup.");
+      setBackupStatus({kind:"error",text:err&&err.message==="offline"
+        ?"Offline. A backup needs a connection to read the latest data. Try again once the app shows Connected."
+        :"Couldn't read the database for the backup."});
     }).finally(function(){backupInFlightRef.current=false;});
   }
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
@@ -2595,7 +2602,7 @@ function BookingApp({uid}){
   // keeps its tab reset on BOTH paths — the clean close here and the discard
   // below — because that was part of the close behaviour before the guard, not
   // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");}
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");setBackupStatus(null);}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
@@ -5474,6 +5481,7 @@ function BookingApp({uid}){
             generalSettings={generalSettings}
             onSaveGeneralSettings={saveGeneralSettings}
             onBackup={doBackup}
+            backupStatus={backupStatus}
             recurring={recurring}
             onSetRecurringEnabled={function(on){if(refused("recurringManage"))return;setRecurringEnabled(on);}}
             onSetRecurringHorizon={function(w){if(refused("recurringManage"))return;setRecurringHorizon(w);}}

@@ -158,4 +158,16 @@ describe("App's doBackup goes through the builder", () => {
     expect(body).not.toMatch(/\bbookings:bookings\b/);
     expect(body).not.toMatch(/\boperatingHours:weekHours\b/);
   });
+  // v18.3.1: every outcome is reported under the button, never in the red
+  // banner, which sits behind the Settings overlay and under inert.
+  it("reports every outcome through backupStatus, not the write banner", () => {
+    expect(body).not.toMatch(/setWriteWarning/);
+    expect(body.match(/setBackupStatus\(\{kind:"(busy|done|error)"/g)).toHaveLength(4);
+    expect(app).toMatch(/function closeSettings\(\)\{[^}]*setBackupStatus\(null\);\}/);
+  });
+
+  it("Settings keeps the status region mounted, so it can announce", () => {
+    const settings = stripComments(readFileSync(join(ROOT_DIR, "src", "components", "Settings.jsx"), "utf8")).join("\n");
+    expect(settings).toMatch(/<div role="status"[^>]*>\s*\{backupStatus \? backupStatus\.text : null\}/);
+  });
 });

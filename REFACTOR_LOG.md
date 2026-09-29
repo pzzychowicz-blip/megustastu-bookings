@@ -29589,3 +29589,14 @@ ROADMAP items to the version and two device checks.
     dependency or a NANP area code comes back as typed. **Verified on DEV** in the booking
     form, typed key by key and blurred: "+33 06 12 34 56 78" → 🇫🇷 +33 "6 12 34 56 78",
     "0049 030 1234567" → 🇩🇪 +49 "30 1234567", "+39 06 1234 5678" kept its 0.
+15. **Download backup says what happened, under the button (ROADMAP, v18.1.1's
+    `/code-review`).** Offline, the refusal went to the red "Couldn't save" banner, which
+    sits behind the Settings overlay and under `inert`, so the press looked dead until
+    Settings closed. App's `backupStatus` (busy · done · error) now renders in an
+    always-mounted `role="status"` line under the button: "Reading the database…", "Backup
+    file created: mgt-backup-YYYY-MM-DD.json. Check this device's downloads.", or the
+    refusal in `--danger-text`. Closing Settings clears it. Offline still refuses, with no
+    partial device copy (Patryk's choice: a file that may miss other devices' changes is
+    the wrong thing to hand over silently). **Measured** in the rig: online, the file
+    downloaded and the line named it; with the context offline, the press gave the
+    refusal in danger red (rgb 153 27 27) under the button; reopened, the line was empty.
