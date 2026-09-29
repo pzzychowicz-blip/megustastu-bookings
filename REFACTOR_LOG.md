@@ -29486,3 +29486,8 @@ ROADMAP items to the version and two device checks.
    finger (480). The top band scrolled back 370 → 138, and in the middle it held (128 and
    128). A drop released over i3 (nearest row centre, 11px) at scroll 521 put the party of
    two on i2 + i3. Patryk's own drags on that tab all worked.
+7. **Device check: the drop freeze on the tablet (ROADMAP M1), measured, nothing changed.**
+   Five real drops on the DEV tab: 249–272ms with no frame after release. A CPU profile of
+   one splits it into a ~43ms handler (the trials, which PROD pays too) and ~290ms of React
+   work that is largely DEV-only, including ~40ms of `getBoundingClientRect`. The figures and
+   what is still missing (a PROD-build number) are in the ROADMAP entry, which stays open.
