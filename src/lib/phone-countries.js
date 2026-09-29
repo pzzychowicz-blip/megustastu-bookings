@@ -277,25 +277,44 @@ export function phoneHasCode(phone) {
 // Both return the international form, so a British guest has ONE customer
 // identity (`normalizePhone`) however their number was typed.
 //
-// v18.2.0 /code-review: the second rule is `ukWithoutHomeZero`, and the
+// v18.2.0 /code-review: the second rule is `withoutHomeZero` (it was
+// `ukWithoutHomeZero` until v18.3.1, below), and the
 // pinned-code path below runs it too. "44 (0)7911 123456" — the code typed
 // without its plus, the home 0 kept — came out of that path as "+44
 // 0)7911 123456", a second customer (+4407911123456), and only a SECOND pass
 // dropped the 0. PhoneField's blur and then Save made two passes; a save by
 // Enter from the number box makes one, and stored it (measured on DEV).
 // Now one pass and two agree.
+//
+// v18.3.1 (ROADMAP, Patryk): the second rule is every country's, not only the
+// UK's. In the international format almost no country keeps its home 0, so
+// "+33 06 12 34 56 78" and "+33 6 12 34 56 78" were two customers (and "+49
+// 030 …", "+31 06 …"). `withoutHomeZero` drops a 0 typed straight after ANY
+// code except those in KEEPS_ZERO, whose numbers really do start with 0 in
+// international form: Italy (+39 06 … is Rome) and the two states inside it
+// (San Marino +378 0549 …, the Vatican +379), Côte d'Ivoire (+225, 10 digits
+// starting 0X since 2021), Benin (+229 01 …, since 2024), Gabon (+241) and
+// Congo-Brazzaville (+242). A code missing from that list keeps its 0 exactly
+// as before, which is the safe direction. New input only (Patryk's call):
+// `normalizePhone` is unchanged, so no stored identity moves.
 const UK_MOBILE_AT_HOME = /^07[1-57-9]\d{8}$/;
-function ukWithoutHomeZero(s) {
-  if (dialOf(s) !== "44") return s;
-  const sp = splitPhone(s, "GB");
-  if (sp.iso !== "GB" || sp.national.charAt(0) !== "0") return s;
-  return joinPhone("GB", sp.national.replace(/^0[\s\-().]*/, ""));
+export const KEEPS_ZERO = ["39", "378", "379", "225", "229", "241", "242"];
+function withoutHomeZero(s) {
+  const dial = dialOf(s);
+  if (!dial || KEEPS_ZERO.indexOf(dial) !== -1) return s;
+  const sp = splitPhone(s);
+  if (!sp.iso || sp.national.charAt(0) !== "0") return s;
+  // Re-join under the code's own label ("+44 1481", "+1 876"): the digits are
+  // the code as typed, whichever country of a shared code the picker shows.
+  const rest = sp.national.replace(/^0[\s\-().]*/, "");
+  const c = COUNTRIES.find(function (x) { return x.dial === dial; });
+  return /\d/.test(rest) ? dialLabel(c) + " " + rest : s;
 }
 export function withTypedCode(phone, pinned) {
   const s = phone == null ? "" : String(phone).trim();
   if (!s) return phone;
   if (phoneHasCode(s)) {
-    const t = ukWithoutHomeZero(s);
+    const t = withoutHomeZero(s);
     return t === s ? phone : t;
   }
   const digits = s.replace(/\D/g, "");
@@ -313,7 +332,7 @@ export function withTypedCode(phone, pinned) {
   // own spacing (the same walk `splitPhone` does).
   let used = 0, i = 0;
   while (i < s.length && used < hit.dial.length) { if (/\d/.test(s[i])) used++; i++; }
-  return ukWithoutHomeZero(joinPhone(hit.iso, s.slice(i).replace(/^[\s\-().]+/, "")));
+  return withoutHomeZero(joinPhone(hit.iso, s.slice(i).replace(/^[\s\-().]+/, "")));
 }
 
 // The pinned list as stored: known ISO codes, upper-case, no repeats, capped.

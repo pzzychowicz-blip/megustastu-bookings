@@ -352,6 +352,49 @@ describe("withTypedCode — the UK's own format (v18.2.0 phase 66)", () => {
   });
 });
 
+// v18.3.1 (ROADMAP): the home 0 after a code is dropped for EVERY country but
+// those whose numbers start with 0 in international form.
+describe("withTypedCode — the home 0 after any code (v18.3.1)", () => {
+  const P = ["ES", "GB", "DE", "FR", "IT", "NL"];
+
+  it("drops it after France, Germany, the Netherlands, Belgium, in each typed form", () => {
+    expect(withTypedCode("+33 06 12 34 56 78", P)).toBe("+33 6 12 34 56 78");
+    expect(withTypedCode("0033 (0)6 12 34 56 78", P)).toBe("+33 6 12 34 56 78");
+    expect(withTypedCode("33 06 12 34 56 78", P)).toBe("+33 6 12 34 56 78");
+    expect(withTypedCode("+49 030 1234567", P)).toBe("+49 30 1234567");
+    expect(withTypedCode("+31 06 12345678", P)).toBe("+31 6 12345678");
+    expect(withTypedCode("+32 0470 12 34 56", [])).toBe("+32 470 12 34 56");
+  });
+
+  it("keeps it where it belongs to the number", () => {
+    expect(phoneLib.KEEPS_ZERO).toEqual(["39", "378", "379", "225", "229", "241", "242"]);
+    for (const n of ["+39 06 1234 5678", "+378 0549 123456", "+225 07 12 34 56 78", "+229 01 97 12 34 56",
+      "+241 062 12 34 56", "+242 06 123 4567"]) {
+      expect(withTypedCode(n, P), n).toBe(n);
+    }
+  });
+
+  it("files a French guest typed with and without the 0 under ONE customer", () => {
+    const one = normalizePhone("+33 6 12 34 56 78");
+    for (const typed of ["+33 06 12 34 56 78", "+33 6 12 34 56 78", "0033 06 12 34 56 78", "33 06 12 34 56 78"]) {
+      expect(normalizePhone(withTypedCode(typed, P)), typed).toBe(one);
+    }
+  });
+
+  it("leaves a lone 0 and a number with no code alone, and one pass equals two", () => {
+    expect(withTypedCode("+33 0", P)).toBe("+33 0");
+    expect(withTypedCode("06 12 34 56 78", P)).toBe("06 12 34 56 78");
+    for (const typed of ["+33 06 12 34 56 78", "+49 030 1234567", "+39 06 1234 5678", "+44 01481 234567"]) {
+      const once = withTypedCode(typed, P);
+      expect(withTypedCode(once, P), typed).toBe(once);
+    }
+  });
+
+  it("does not touch normalizePhone, so no stored identity moves", () => {
+    expect(normalizePhone("+33 06 12 34 56 78")).toBe("+330612345678");
+  });
+});
+
 // v18.2.0 phase 80 (round 2's loose end): "Add to waitlist" took the phone as
 // typed, so phase 19's code check guarded Save and nothing else. Measured on DEV
 // after: "600 111 333" pressed straight from the number box was refused on the

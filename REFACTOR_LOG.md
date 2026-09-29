@@ -29576,3 +29576,16 @@ ROADMAP items to the version and two device checks.
     day a restaurant turned WhatsApp on in mock mode. `simEnabled()` is fail-closed.
     `tests/wa-parse-log.test.js` drives the real `parseMessage` in mock mode with an
     allergy in the message and checks the line.
+14. **A home 0 typed after any country code is dropped (ROADMAP, v18.2.0's `/code-review`).**
+    Phase 66 of v18.2.0 did it for +44 only, so "+33 06 12 34 56 78" and "+33 6 12 34 56
+    78" were two customers, and so were "+49 030 …" and "+31 06 …". `ukWithoutHomeZero`
+    is now `withoutHomeZero`: after ANY code, a leading 0 goes, except for the codes in
+    `KEEPS_ZERO`, whose numbers start with 0 in international form. Patryk chose "all,
+    with exceptions" and named Italy, San Marino, the Vatican and Côte d'Ivoire; checking
+    the list added Benin (+229 01 …, since 2024), Gabon (+241) and Congo-Brazzaville
+    (+242). A code missing from it keeps its 0 exactly as before. **New input only**
+    (Patryk): `normalizePhone` is unchanged, so no stored identity moves and existing
+    duplicates stay split. The number re-joins under the code's own label, so a Crown
+    dependency or a NANP area code comes back as typed. **Verified on DEV** in the booking
+    form, typed key by key and blurred: "+33 06 12 34 56 78" → 🇫🇷 +33 "6 12 34 56 78",
+    "0049 030 1234567" → 🇩🇪 +49 "30 1234567", "+39 06 1234 5678" kept its 0.
