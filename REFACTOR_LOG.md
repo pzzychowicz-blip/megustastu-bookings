@@ -29549,3 +29549,17 @@ ROADMAP items to the version and two device checks.
     `inputMode="numeric"`, the pad the phone field's `tel` already gets. Not `"decimal"`:
     on a Spanish-locale iPhone that pad types a comma, which `sanitize`'s `Number()` reads
     as 0, and deposits are whole euros (the field steps by 5). Verified on the device.
+12. **"Delete customer & all data" reaches WhatsApp (ROADMAP, #24; SECURITY.md §3).** It
+    anonymised the bookings, dropped the waitlist entries and redacted the activity log,
+    and left the guest's `conversations/<phone>` and `messages/<phone>` behind: only the
+    Inbox's own delete removed them. `useWhatsApp` gains `eraseConversation(phoneKey)`, one
+    root `update()` nulling both paths, and `deleteCustomer` calls it with the customer's
+    normalised phone, the key the backend stores under. **It is not gated** on the
+    listeners having loaded, as the hook's savers are, nor on the module: those gates stop
+    a stale device writing over real data, which a single guest's delete cannot do, and
+    with WhatsApp switched off the listeners never load, which is exactly when old chats
+    are forgotten. `isPhoneKey` keeps a phone-less guest from erasing anything. The rules
+    suite gained the write's exact shape (no root `.write`, so it rests on each leaf's
+    `$phoneKey` grant; another guest's rows survive it): 294 tests. **Verified on DEV**
+    in the rig: a seeded customer with a conversation and a message, deleted through
+    Settings → Customers, and both paths read back empty (they existed before).

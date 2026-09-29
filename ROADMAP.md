@@ -83,12 +83,10 @@ evidence for each.
      `_lib/inbound-core.js` and `_lib/meta.js`. No test runs any of them.
   2. Load a conversation's messages when it opens (`messages/$phoneKey`) instead of
      every device subscribing to all of `/messages`, and set a retention period.
-  3. **"Delete customer & all data" must also remove the guest's `conversations/` and
-     `messages/`.** Today only the Inbox's delete does.
-  4. Decide whether `api/_lib/gemini.js`'s parse log keeps 200 characters of message
+  3. Decide whether `api/_lib/gemini.js`'s parse log keeps 200 characters of message
      text in live mode.
 
-  SECURITY.md §3 lists all four as open.
+  SECURITY.md §3 lists them as open. (The erasure item shipped in v18.3.1.)
 
 - **Lint: triage, then decide a gate (#10).** There are 89 warnings: about 71 when the
   workflow skill was written, 88 on 2026-09-18, 89 now. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so

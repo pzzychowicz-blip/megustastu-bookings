@@ -570,6 +570,16 @@ describe("the writer hook points", () => {
     // …and with the PLURAL guest ids, not just the phone: matchesIdentity spans
     // every absorbed guest group, so a single-key erasure leaves some behind.
     expect(body).toMatch(/guestIds/);
+    // v18.3.1: and the guest's WhatsApp conversation and messages, under the
+    // same normalised key (SECURITY.md §3's erasure gap).
+    expect(body).toMatch(/if\(key\) wa\.eraseConversation\(key\);/);
+    const hook = stripComments(readFileSync(new URL("../src/hooks/useWhatsApp.js", import.meta.url), "utf8")).join("\n");
+    const erase = hook.slice(hook.indexOf("function eraseConversation"), hook.indexOf("const unreadCount"));
+    expect(erase).toMatch(/patch\["conversations\/" \+ phoneKey\] = null;/);
+    expect(erase).toMatch(/patch\["messages\/" \+ phoneKey\] = null;/);
+    // Not gated on the listeners having loaded: with the module off they never do.
+    expect(erase).not.toMatch(/Loaded\.current/);
+    expect(erase).toMatch(/if \(!isPhoneKey\(phoneKey\)\) return;/);
   });
 
   it("the writer hook installs the sink, and is the only thing that does", () => {

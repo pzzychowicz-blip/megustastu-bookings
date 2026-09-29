@@ -2439,6 +2439,10 @@ function BookingApp({uid}){
       return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
     });});
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+    // v18.3.1: and their WhatsApp conversation and messages, stored under the
+    // same normalised phone. Unconditional, module on or off (useWhatsApp's
+    // eraseConversation says why); a phone-less guest has none.
+    if(key) wa.eraseConversation(key);
     // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
     // of the log erases itself — its text holds {b:<id>} tokens resolved against
     // the live bookings, so the anonymisation above rewrites what it displays —

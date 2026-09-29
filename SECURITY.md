@@ -157,10 +157,10 @@ An EU business (Fuerteventura, Spain). What the app keeps about people, and wher
 
 **Right to erasure.** Settings → Customers → **Delete customer & all data**
 anonymizes that guest's bookings (name → "Data removed", phone, notes and history
-wiped, statistics kept) and redacts their entries in the activity log. **It does not
-touch WhatsApp.** The guest's `conversations/<phone>` and `messages/<phone>` survive,
-and the only way to remove them is deleting the conversation from the Inbox. That
-gap has to close before WhatsApp goes live (`ROADMAP.md`).
+wiped, statistics kept), redacts their entries in the activity log and, since
+v18.3.1, deletes their WhatsApp `conversations/<phone>` and `messages/<phone>`, whether
+the module is on or off. A guest who wrote on WhatsApp from a number that no booking
+of theirs carries is not reached by it; delete that conversation from the Inbox.
 
 **Access:** every signed-in account sees every customer's data (§2). That's acceptable
 for one small team, but it's a decision, not an accident.
@@ -168,7 +168,6 @@ for one small team, but it's a decision, not an accident.
 **Open, to decide before WhatsApp goes live:**
 - a retention period for messages
 - whether the parse log line keeps the message text and `notes` in live mode
-- erasure reaching WhatsApp data
 - per-role read scope
 
 The public `/privacy` page Meta requires draws on this section.
