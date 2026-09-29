@@ -166,12 +166,6 @@ evidence for each.
   Only act if the overlap is real there. The fixes that exist all pad for the bar, which
   leaves a gap in the cases that are clean now.
 
-- **Timeline drag: scroll at the edge (A5, the motion & touch audit).** An armed drag cannot
-  reach rows below the fold: on the tablet i3 and i4 sit at 821 and 865px on an 800px
-  screen, and on a phone everything from table 6 down. Add a band of about 48px at each
-  edge that, in a `requestAnimationFrame` loop, scrolls the body and adds the scrolled
-  delta to the drag's `dy`. Drag is used every service (S3).
-
 - **The drop freeze (audit M1).** After a drop the block sits still for about 104ms on the
   Mac with no frame painted: `dropOnTable`'s synchronous trials plus the re-render. The
   tablet's figure is unmeasured and is on v18.3.0's device list (row 04). Measure it there

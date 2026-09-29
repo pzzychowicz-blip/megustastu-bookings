@@ -29466,3 +29466,23 @@ ROADMAP items to the version and two device checks.
    `status`. Unexercised until go-live, because `WA_SEND_MODE` defaults to mock. The
    webhook's version is a Meta dashboard setting, now named in the ROADMAP entry that
    remains (two items left: photos, `/privacy`).
+6. **A timeline drag scrolls at the edge (ROADMAP A5, the motion & touch audit).** An armed
+   drag blocks the page's own scroll (the block's non-passive `touchmove` listener), so a
+   block could only reach the rows already on screen: i3 and i4 on the tablet, everything
+   from table 6 down on a phone. `lib/edge-scroll.js` holds the maths: a 48px band at each
+   edge of the visible scrollport, speed ramping linearly to 0.6px/ms at the edge and held
+   past it, whole pixels per frame with the fraction carried. `TimelineBlock` runs the loop
+   (`edgeFrame`), started by a move or by the touch arm, stopped by every end of the drag and
+   on unmount. Each frame adds what it scrolled to the drag's offset (`dragDyOf`: finger
+   travel plus scroll since the arm), so the block stays under the finger, and updates the
+   hover row. The drop needed nothing, because `tableForClientY` reads live row geometry. The
+   scrollport is whatever actually scrolls: the body, the fixed shell's `<main>`, or a Split
+   View pane. On a phone the lower band stops at the Walk-in / + New bar, now marked
+   `data-fixed-bottom`. Also fixed on the way: `beginDrag` REPLACED the drag object while
+   `onDragPointerMove` went on writing `lastY` to the old one, so a mouse drag's first frame
+   read `undefined`. It mutates in place now. **Measured** on the real tablet against DEV
+   (CDP touches, fixed shell, `<main>` visible from 137 to 491px, 479px of scroll): in the
+   bottom band `<main>` went 0 → 59 → 248 → 428px over 800ms, with the block's centre at the
+   finger (480). The top band scrolled back 370 → 138, and in the middle it held (128 and
+   128). A drop released over i3 (nearest row centre, 11px) at scroll 521 put the party of
+   two on i2 + i3. Patryk's own drags on that tab all worked.

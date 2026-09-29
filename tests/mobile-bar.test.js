@@ -13,7 +13,9 @@ const header = App.slice(App.indexOf("<header"), App.indexOf("</header>"));
 describe("the phone's bottom bar", () => {
   it("replaces the header's create buttons on a phone, and only there", () => {
     expect(header).toMatch(/\{isMobile\?null:<><button\s+onClick=\{openWalkin\}/);
-    expect(header).toMatch(/\{isMobile\?<div\s+role="group" aria-label="Add a booking"\s+style=\{MOBILE_BAR\}>/);
+    // v18.3.1: data-fixed-bottom is how the timeline drag's edge scroll finds
+    // the bar (lib/edge-scroll.js's scrollBounds), so it is pinned here too.
+    expect(header).toMatch(/\{isMobile\?<div\s+role="group" aria-label="Add a booking"\s+data-fixed-bottom=""\s+style=\{MOBILE_BAR\}>/);
   });
 
   it("sits INSIDE <header>, so the header's inert reaches it while a modal is open", () => {

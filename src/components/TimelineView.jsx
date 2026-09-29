@@ -58,6 +58,7 @@ import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes } from "../lib/unplaced";
 import { money } from "../lib/vouchers";
+import { edgeVelocity, edgeStep, scrollParentY, scrollBounds } from "../lib/edge-scroll";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -410,6 +411,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   const dragHoldTimer = useRef(null);      // touch: the 800ms drag-mode timer
   const preventScrollRef = useRef(null);   // native non-passive touchmove blocker
   const dragRafRef = useRef(0);            // v17.0.0 review fix #4: coalesce moves to one render/frame
+  // v18.3.1 (A5): the edge-scroll loop — its frame, and the last frame's
+  // timestamp (0 = not running), for a time-based speed on any refresh rate.
+  const edgeRafRef = useRef(0);
+  const edgeLastRef = useRef(0);
+  useEffect(() => () => { cancelAnimationFrame(edgeRafRef.current); }, []);
   // v18.3.0 (M4): non-zero for exitHold("shift") after a released drag, while
   // the block travels home on TL_SETTLE (see there). A COUNT of releases, not a
   // boolean, so each release restarts the hold, and the hold is timed from the
@@ -425,8 +431,52 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     return () => { clearTimeout(t); };
   }, [settling]);
 
+  // v18.3.1 (A5): the drag's offset is the finger's travel PLUS whatever the
+  // scrollport has scrolled since the arm: the block lives in the scrolled
+  // content, so without the second term an edge scroll would carry it away
+  // from under the finger.
+  function dragDyOf(d) {
+    return d.lastY - d.y0 + (d.sc ? d.sc.scrollTop - d.s0 : 0);
+  }
+  // v18.3.1 (A5): one frame of the edge scroll. Runs while an armed drag's
+  // finger is inside the band at the scrollport's top or bottom edge (the
+  // ROADMAP entry: an armed drag blocks the page's own scroll, so i3/i4 on the
+  // tablet and the rows below table 6 on a phone were out of reach). It moves
+  // the drag and its hover row with the scroll, and stops at the scroll's end
+  // or when the finger leaves the band. `tableAtY` reads live row geometry,
+  // so the drop needs nothing: the row under the finger is the row it lands on.
+  function edgeFrame(ts) {
+    edgeRafRef.current = 0;
+    const d = dragRef.current;
+    const box = d && d.active && d.sc ? scrollBounds(d.sc) : null;
+    const v = box ? edgeVelocity(d.lastY, box.top, box.bottom) : 0;
+    if (!v) { edgeLastRef.current = 0; return; }
+    const dt = edgeLastRef.current ? Math.min(ts - edgeLastRef.current, 50) : 16;
+    edgeLastRef.current = ts;
+    const next = edgeStep(d.carry || 0, v, dt);
+    d.carry = next.carry;
+    if (next.step) {
+      const before = d.sc.scrollTop;
+      d.sc.scrollTop = before + next.step;
+      if (d.sc.scrollTop === before) { edgeLastRef.current = 0; d.carry = 0; return; }   // at the end
+      setDragDy(dragDyOf(d));
+      if (setDragHover) setDragHover(tableAtY(d.lastY));
+    }
+    edgeRafRef.current = requestAnimationFrame(edgeFrame);
+  }
+  function kickEdge() {
+    if (!edgeRafRef.current) edgeRafRef.current = requestAnimationFrame(edgeFrame);
+  }
   function beginDrag(el, pid) {
-    dragRef.current = { ...(dragRef.current || {}), active: true };
+    // v18.3.1 (A5): the scrollport the edge scroll moves, and where it stood.
+    // Mutated IN PLACE, not replaced: `onDragPointerMove` holds the object it
+    // read before calling this and writes `lastY` to it on the next line, so a
+    // replacement lost the mouse drag's first move (the frame read undefined).
+    const sc = scrollParentY(el);
+    const d = dragRef.current || {};
+    Object.assign(d, { active: true, sc, s0: sc ? sc.scrollTop : 0, carry: 0 });
+    if (d.lastY == null) d.lastY = d.y0;
+    dragRef.current = d;
     didLong.current = true;                // suppress the click→edit on release
     // Capturing on the block itself is safe (the PlanView gotcha was capturing
     // on a PARENT, which redirects child clicks) — and needed so a fast mouse
@@ -473,6 +523,7 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
         const prevent = (ev) => { ev.preventDefault(); };
         d.el.addEventListener("touchmove", prevent, { passive: false });
         preventScrollRef.current = { el: d.el, fn: prevent };
+        kickEdge();                        // v18.3.1 (A5): armed while already in the band
       }, 800);
     }
   }
@@ -488,18 +539,21 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     // each one setState-d. (A drag only runs while the tab is visible, so the
     // "rAF never fires when hidden" trap doesn't apply here.)
     d.lastY = e.clientY;
+    kickEdge();                            // v18.3.1 (A5): a no-op outside the band
     if (dragRafRef.current) return;
     dragRafRef.current = requestAnimationFrame(function () {
       dragRafRef.current = 0;
       const dd = dragRef.current;
       if (!dd || !dd.active) return;
-      setDragDy(dd.lastY - dd.y0);
+      setDragDy(dragDyOf(dd));
       if (setDragHover) setDragHover(tableAtY(dd.lastY));
     });
   }
   function endDrag(e, commit) {
     clearTimeout(dragHoldTimer.current);
     if (dragRafRef.current) { cancelAnimationFrame(dragRafRef.current); dragRafRef.current = 0; }
+    if (edgeRafRef.current) { cancelAnimationFrame(edgeRafRef.current); edgeRafRef.current = 0; }
+    edgeLastRef.current = 0;
     if (preventScrollRef.current) {
       preventScrollRef.current.el.removeEventListener("touchmove", preventScrollRef.current.fn);
       preventScrollRef.current = null;

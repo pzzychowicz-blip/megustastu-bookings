@@ -5182,6 +5182,9 @@ function BookingApp({uid}){
               ConnectionStatus. That also drops one item from a header that
               wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div>{isMobile?<div
             role="group" aria-label="Add a booking"
+            /* v18.3.1: the timeline drag's edge scroll stops its lower band
+               at this bar's top (lib/edge-scroll.js, scrollBounds). */
+            data-fixed-bottom=""
             style={MOBILE_BAR}><button
               onClick={openWalkin}
               className="mgt-hover-scale"
