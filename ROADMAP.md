@@ -19,17 +19,16 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **Four code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
+- **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send
   photos back, while `api/_lib/meta.js` sends text only and `api/wa-inbound.js` stores
   any non-text message as `"[image message]"`; Meta holds the files (7 days received,
   30 days sent), so nothing new is stored here. (2) **A public `/privacy` page** —
   Meta will not switch the app to Live, and so will not deliver real webhooks, without
-  a reachable privacy-policy URL. (3) **`GRAPH_VERSION` v21.0 → v26.0**
-  (`api/_lib/meta.js`) — v21.0 stops working on 21 January 2027. (4) **A stale comment**
-  — `api/_lib/env.js`'s header names `gemini-3-flash` as the fallback model; the real
-  default is `gemini-3.1-flash-lite` (`api/_lib/gemini.js:216`).
+  a reachable privacy-policy URL. (The Graph v26.0 bump and the stale Gemini comment
+  shipped in v18.3.1; set the Meta app's WEBHOOK version to v26.0 in the dashboard at
+  go-live, since the code cannot.)
 
 - **WhatsApp coexistence — the Business app and the Cloud API on one number**
   (decided 2026-09-21, go-live plan § 3a–3b). Replaces the ops-SIM migration: the groups

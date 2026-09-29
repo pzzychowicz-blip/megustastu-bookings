@@ -29458,3 +29458,11 @@ ROADMAP items to the version and two device checks.
    said the fallback model was `gemini-3-flash`. The real default is
    `gemini-3.1-flash-lite` (`gemini.js`'s `liveParse`, which also records why the others were
    rejected). Comment only; the header now points at where the default lives.
+5. **Meta Graph API v21.0 → v26.0 (ROADMAP, go-live item 3).** `api/_lib/meta.js`'s
+   `GRAPH_VERSION`. v26.0 shipped on 2026-07-29 and Meta removes v21.0 on 21 January 2027.
+   The code makes one Graph call, a text message to `/{phone-number-id}/messages`, and the
+   WhatsApp changelog lists no breaking change to it across 22–26. v24.0 changed the status
+   webhook's `conversation` object; `wa-inbound.js` reads only `recipient_id`, `id` and
+   `status`. Unexercised until go-live, because `WA_SEND_MODE` defaults to mock. The
+   webhook's version is a Meta dashboard setting, now named in the ROADMAP entry that
+   remains (two items left: photos, `/privacy`).
