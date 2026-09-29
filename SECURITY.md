@@ -149,11 +149,12 @@ An EU business (Fuerteventura, Spain). What the app keeps about people, and wher
 - **Google (Gemini API):** in live parse mode (`WA_LLM_MODE=live`), the first 1,000
   characters of each inbound message (`WA_PARSE_TEXT_LEN`), plus up to 12 recent
   messages of the conversation on a re-check, go out to be parsed.
-- **Vercel (function logs):** `api/_lib/gemini.js` logs **the first 200 characters of
-  every parsed message** and the parse result on every parse. The result holds name,
-  party size, date, time and `notes`, which the prompt fills with allergies,
-  birthdays and wheelchair needs. **Those notes are health data** (GDPR Art. 9). A
-  re-check logs its parse result too. Vercel's log retention applies.
+- **Vercel (function logs):** since v18.3.1 the parse and re-check log lines carry no
+  guest content outside a sandbox deployment (`WA_SIM_ENABLED=1`): the message's length,
+  the parse's intent, language, confidence and preference, and the NAMES of the fields
+  it filled. A sandbox still logs the first 200 characters and the full result, which
+  holds `notes` (allergies, wheelchair needs: health data, GDPR Art. 9), so a sandbox
+  must never receive real guests' messages. Vercel's log retention applies.
 
 **Right to erasure.** Settings → Customers → **Delete customer & all data**
 anonymizes that guest's bookings (name → "Data removed", phone, notes and history
@@ -167,7 +168,6 @@ for one small team, but it's a decision, not an accident.
 
 **Open, to decide before WhatsApp goes live:**
 - a retention period for messages
-- whether the parse log line keeps the message text and `notes` in live mode
 - per-role read scope
 
 The public `/privacy` page Meta requires draws on this section.

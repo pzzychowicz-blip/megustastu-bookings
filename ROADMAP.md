@@ -78,15 +78,13 @@ evidence for each.
   Realtime Database → Usage (storage, downloads a month) and set a threshold.
   Archiving needs design, because customer history derives from all bookings.
 
-- **Before WhatsApp goes live (#4, #8, #24):**
+- **Before WhatsApp goes live (#4, #8):**
   1. Node tests for `api/wa-send.js`, `wa-recheck.js`, `wa-config.js`,
      `_lib/inbound-core.js` and `_lib/meta.js`. No test runs any of them.
   2. Load a conversation's messages when it opens (`messages/$phoneKey`) instead of
      every device subscribing to all of `/messages`, and set a retention period.
-  3. Decide whether `api/_lib/gemini.js`'s parse log keeps 200 characters of message
-     text in live mode.
 
-  SECURITY.md §3 lists them as open. (The erasure item shipped in v18.3.1.)
+  SECURITY.md §3 lists them as open. (The erasure item and the parse log shipped in v18.3.1.)
 
 - **Lint: triage, then decide a gate (#10).** There are 89 warnings: about 71 when the
   workflow skill was written, 88 on 2026-09-18, 89 now. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so

@@ -22,7 +22,7 @@
 // exact current string in AI Studio (the local harness exposes GET /dev/models
 // to list what the key can see).
 
-import { env, llmMode } from "./env.js";
+import { env, llmMode, simEnabled } from "./env.js";
 
 // ── Who this restaurant is, for the prompts (v18.0.0 phase 5c) ───────────────
 // The prompts carried "a small restaurant in the Canary Islands" as a literal,
@@ -265,6 +265,29 @@ async function liveParse(text, ctx) {
   }
 }
 
+// ── The parse log ─────────────────────────────────────────────────────────────
+// v18.3.1 (SECURITY.md §3, Patryk's decision): outside a sandbox the two parse
+// log lines carry NO guest content. Vercel keeps function logs for days and
+// everyone on the project can read them, and the full line held 200 characters
+// of the message plus the parse result, whose `notes` is where the prompt puts
+// allergies and wheelchair needs (GDPR Art. 9 health data) and whose `name` and
+// `ambiguity` (free text, often a quote) identify the guest. What stays is what
+// diagnoses a bad parse: the message's LENGTH, the non-personal fields
+// (intent · language · confidence · preference), and WHICH content fields came
+// back filled. Keyed on `simEnabled()`, not on `llmMode()`: the mock parser is
+// the production DEFAULT, so "mock keeps the text" would have logged every real
+// guest's message the day a restaurant turned WhatsApp on in mock mode.
+// simEnabled() is fail-closed (only a sandbox deployment sets it).
+const LOG_PLAIN = ["intent", "language", "confidence", "preference"];
+const LOG_CONTENT = ["name", "size", "date", "time", "notes", "ambiguity"];
+export function parseLogFields(parsed, full) {
+  if (full || !parsed || typeof parsed !== "object") return parsed == null ? null : parsed;
+  const out = {};
+  LOG_PLAIN.forEach((k) => { if (parsed[k] != null) out[k] = parsed[k]; });
+  out.filled = LOG_CONTENT.filter((k) => parsed[k] != null && parsed[k] !== "");
+  return out;
+}
+
 // parseMessage(text, {hours, existingDraft}) → parse object or null (= save
 // without draft). hours: the settings/operatingHours node or null.
 // existingDraft: the conversation's PENDING draftData (draftStatus "parsed") or
@@ -284,8 +307,11 @@ export async function parseMessage(text, { hours, existingDraft } = {}) {
   const mode = llmMode();
   let parsed = mode === "live" ? await liveParse(text, ctx) : mockParse(text);
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
-  // Drift-review log: every parse, message + result, one line each.
-  console.log("[wa-parse:" + mode + "] " + JSON.stringify({ text: String(text).slice(0, 200), merged: !!existingDraft, parsed }));
+  // Drift-review log: every parse, one line (content only in a sandbox, above).
+  const full = simEnabled();
+  console.log("[wa-parse:" + mode + "] " + JSON.stringify(full
+    ? { text: String(text).slice(0, 200), merged: !!existingDraft, parsed }
+    : { len: String(text).length, merged: !!existingDraft, parsed: parseLogFields(parsed, false) }));
   return parsed;
 }
 
@@ -365,7 +391,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
   const mode = llmMode();
   let parsed = mode === "live" ? await liveParse(transcript, ctx) : mockParse(lastInbound);
   if (mode !== "live" && existingDraft && parsed) parsed = mergeDraft(existingDraft, parsed);
-  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, parsed }));
+  console.log("[wa-recheck:" + mode + "] " + JSON.stringify({ msgs: list.length, merged: !!existingDraft, parsed: parseLogFields(parsed, simEnabled()) }));
   return parsed;
 }
 

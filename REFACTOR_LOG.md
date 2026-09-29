@@ -29563,3 +29563,16 @@ ROADMAP items to the version and two device checks.
     `$phoneKey` grant; another guest's rows survive it): 294 tests. **Verified on DEV**
     in the rig: a seeded customer with a conversation and a message, deleted through
     Settings → Customers, and both paths read back empty (they existed before).
+13. **The Gemini parse log carries no guest content outside a sandbox (ROADMAP, #24;
+    SECURITY.md §3).** `api/_lib/gemini.js` logged the first 200 characters of every
+    parsed WhatsApp message and the full parse result, whose `notes` is where the prompt
+    puts allergies and wheelchair needs; the re-check logged the result too. Patryk
+    chose to drop the text, and then (asked again, since the result carries the same
+    data) to log field NAMES only: `parseLogFields` keeps intent, language, confidence and
+    preference and lists which of name · size · date · time · notes · ambiguity came back
+    filled, with the message's length. **Keyed on `simEnabled()`, not on the LLM mode,**
+    which departs from the option as worded ("mock and sandbox keep the text"): mock is the
+    production DEFAULT, so a mode rule would have logged every real guest's message the
+    day a restaurant turned WhatsApp on in mock mode. `simEnabled()` is fail-closed.
+    `tests/wa-parse-log.test.js` drives the real `parseMessage` in mock mode with an
+    allergy in the message and checks the line.
