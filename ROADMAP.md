@@ -125,10 +125,10 @@ evidence for each.
   (`dropOnTable` → `saveBookings` → the `trialFits`/`applyOpt` trials) is ~43ms, which a PROD
   build pays too; React's render, commit and passive effects are ~290ms, much of it DEV-only
   (`jsxDEV`, `addObjectDiffToProperties`, StrictMode's double render), and ~40ms of it is
-  `getBoundingClientRect` layout reads (the FLIP measurements), which PROD also pays. The PROD
-  figure is still unmeasured: it needs a production build against DEV (`VITE_FB_TARGET=dev`)
-  on a tablet origin that must not keep its service worker. Decide from that figure whether
-  the handler's trials or the FLIP reads are worth deferring.
+  `getBoundingClientRect` layout reads (the FLIP measurements), which PROD also pays. **The
+  PROD figure** (v18.3.1 phase 19, a production build against DEV on the tablet, six drops):
+  88–129ms, about 100ms, one long task each. Decide whether that is worth deferring the
+  handler's trials or the FLIP reads, or whether to close this entry as won't-fix.
 
 - **List cards and waitlist rows leave the way they arrive (O3).** `useRevealRows` with
   `speed: "move"`, a departed row ranked at `rank − 0.5` so it holds its place, and

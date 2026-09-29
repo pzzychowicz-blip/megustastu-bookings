@@ -29649,3 +29649,19 @@ ROADMAP items to the version and two device checks.
     indoor was full."; after 15:00, with the optimiser off, "Booking saved. Seated
     outdoor: indoor was full." where it used to refuse; the block's rail carried the 14px
     alert mark on all five tables and the List card read "Wanted indoor" in rgb(138 75 10).
+19. **Device check: the drop freeze in a PRODUCTION build (ROADMAP M1), measured, nothing
+    changed.** Phase 7's figures came from the DEV server, whose React work is largely
+    DEV-only. Patryk allowed a one-off exception to "never a production build here": `vite
+    build` with `VITE_FB_TARGET=dev`, served from `dist/` on the tablet's `localhost:5173`
+    (over `adb reverse`) and opened with `?sw=off`, so the origin never kept a worker. It was
+    checked before any drop: build 18.3.1, the hashed bundle rather than `@vite/client`, no
+    service worker registration, and the only RTDB host in storage was
+    `megustastu-bookings-dev`. **Measured**, same rig as phase 7 (a CDP touch hold, drag and
+    release of a two-table party, a rAF log around the release): six real drops, one and two
+    rows up and down, gave the first frame after release at 129, 94, 115, 105, 88 and 91ms,
+    each a single long task, against 249–272ms in DEV. A seventh, released on its own row,
+    took 88ms. The booking ended where it started. Then it was torn down: the static server
+    stopped, the Vite dev server back on 5173, the tab reloaded on it, `mgt-sw` removed, and
+    no registration and no cache left. So the freeze in production is about 100ms, six
+    frames, on the tablet. Whether that is worth deferring the trials or the FLIP reads is
+    Patryk's call, and the ROADMAP entry now carries the number.
