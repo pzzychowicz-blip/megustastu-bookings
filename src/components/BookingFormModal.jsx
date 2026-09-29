@@ -1055,9 +1055,13 @@ export function BookingFormModal({
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={mkArea()} />;}}</Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none. */}<Fld label={"Deposit (" + (currency || "€") + ")"}>{function(fid){return <input
+          style={mkArea()} />;}}</Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none.
+          v18.3.1: `inputMode="numeric"`, the digit pad (Patryk, on the iPhone).
+          Not "decimal": on a Spanish-locale phone that pad types a comma, which
+          sanitize's Number() reads as 0, and deposits are whole euros. */}<Fld label={"Deposit (" + (currency || "€") + ")"}>{function(fid){return <input
           id={fid}
           type="number"
+          inputMode="numeric"
           min={0}
           step={5}
           value={form.deposit}

@@ -29544,3 +29544,8 @@ ROADMAP items to the version and two device checks.
     (Notes directly: inset 96 and 102px, footer bottom at the bar's top; the voucher field;
     Deposit; Name then Notes), and Patryk saw the footer everywhere.
     `tests/keyboard-inset.test.js` carries the device's numbers.
+11. **Deposit opens the digit pad (Patryk, on the iPhone).** The field is `type="number"`,
+    which on iOS brings up the full keyboard on its numbers page. It now carries
+    `inputMode="numeric"`, the pad the phone field's `tel` already gets. Not `"decimal"`:
+    on a Spanish-locale iPhone that pad types a comma, which `sanitize`'s `Number()` reads
+    as 0, and deposits are whole euros (the field steps by 5). Verified on the device.
