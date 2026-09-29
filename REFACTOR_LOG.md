@@ -29600,6 +29600,10 @@ ROADMAP items to the version and two device checks.
     the wrong thing to hand over silently). **Measured** in the rig: online, the file
     downloaded and the line named it; with the context offline, the press gave the
     refusal in danger red (rgb 153 27 27) under the button; reopened, the line was empty.
+    **Checked by Patryk on the iPhone** (Safari, DEV over the LAN): the backup downloaded
+    and the line named the file. Safari allows the download that starts after the async
+    server read, which until then only Chromium had been seen to do. The ROADMAP entry is
+    closed.
 16. **Timeline fades no longer replay when the tablet wakes (ROADMAP, found by v18.3.0's
     `/code-review`).** **Measured first** on the restaurant tablet (the DEV tab, screen
     off with `adb` power keys, bookings changed from the Mac): with the screen off 37s, a

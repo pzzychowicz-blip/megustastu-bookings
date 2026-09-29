@@ -50,7 +50,7 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
-The next ten come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
+The next nine come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
@@ -62,15 +62,6 @@ evidence for each.
   with `age` to a key only Patryk holds, and keeps N days. Undecided: GitHub Actions or
   Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
   (`database.rules.README.md` § Backups and restore).
-
-- **Download backup: feedback inside Settings, and offline** (v18.1.1's `/code-review`).
-  v18.1.1 reads the server, so offline it refuses, and the refusal lands in the red
-  "Couldn't save" banner behind the Settings dialog. Measured: it is covered by the
-  overlay and sits under `inert`, so the press looks dead until Settings closes.
-  Before v18.1.1, an offline press still exported the device's in-memory copy.
-  Decide an inline status line under the button, and whether offline falls back to a
-  clearly-partial device export. Also check one backup on the iPad/iPhone: the
-  download now fires after an async read, which only Chromium has been seen to allow.
 
 - **Measure `/bookings` before its size becomes a problem (#3).** Every device
   subscribes to every booking ever made, each with an uncapped `history`, and a resync
