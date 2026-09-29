@@ -29397,3 +29397,32 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |
 | 21, 24 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait, and the header, the Walk-in / + New bar and an open form's fields and buttons keep clear of the notch on both sides (turn it both ways) |
 | 23 | Android tablet | The installed app's status bar matches the app's background in both themes (switch Dark mode in Settings → App). The splash colour changes only after Chrome refreshes the manifest, which can take a relaunch the next day |
+
+## v18.3.1 — the restaurant devices' fixes
+
+**Date:** 2026-09-29 · **Branch:** `fix/v18.3.1-device-fixes` ·
+**Behavioural change:** yes: the tablet's timeline drag works again, and the iPhone
+home-screen app's header is no longer blurred. The other phases are listed below.
+
+Found with both restaurant devices on USB after v18.3.0 merged: the Honor tablet (Chrome 154,
+CDP over `adb`) and Patryk's iPhone 12 mini (iOS 27, home-screen app). Patryk added four
+ROADMAP items to the version and two device checks.
+
+### Phases
+
+1. **A timeline drag on the tablet no longer dies the moment it arms.** On the tablet a
+   hold lifted the block at 800ms, and then the block ignored the finger, in most attempts.
+   **Measured** with an event recorder on the PROD tablet (read-only; every probe ended in a
+   touch cancel, so nothing dropped) over 11 real drags. Every failure had a
+   `gotpointercapture` 10–420ms into the hold, targeted at the inner `<span>` the finger
+   landed on: Chrome's implicit touch capture, reported as soon as the finger trembles
+   before the arm. Both successes had none. When the arm's `setPointerCapture` moved the
+   capture to the block, the span's `lostpointercapture` BUBBLED to the block's
+   `onLostPointerCapture`, and v17.16.12's safety net ran `endDrag`, tearing down the drag it
+   had just started. A CDP touch with one 1px move at 60ms reproduced it every time; with no
+   move it never failed. The handler now acts only on the block's own loss
+   (`e.target === e.currentTarget`). Verified on the real tablet against DEV (`adb reverse`
+   to the dev server, Patryk signed in): the same event sequence, span loses the capture, and
+   the block follows to +64px, 3/3; Patryk's own drags all worked. Why it began now is not
+   established: the handler dates from v17.16.12, and the tablet's Chrome went from 150 to
+   154 in between. `tests/timeline-drag.test.js` pins the guard.

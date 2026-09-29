@@ -675,8 +675,18 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
        fires, where React's root-container listener does not see it. Kept
        because it costs nothing and the teardown is idempotent: on the normal
        path it fires AFTER `pointerup`, by which point `dragRef` is null, so
-       it re-clears already-cleared state and commits nothing. */
-    onLostPointerCapture: (e) => endDrag(e, false),
+       it re-clears already-cleared state and commits nothing.
+       v18.3.1: ONLY the block's own loss, never a child's. `lostpointercapture`
+       BUBBLES, and a touch pointer is implicitly captured to the element the
+       finger landed on — the time or name <span>, not the block. Chrome 154
+       on the tablet fires `gotpointercapture` for that implicit capture as
+       soon as the finger moves at all before the 800ms arm (a 1px tremble),
+       so when `beginDrag` moved the capture to the block, the SPAN's loss
+       bubbled here and tore down the drag it had just armed: the block lifted
+       and then ignored the finger. Measured on the tablet over 11 real drags:
+       every failure had that early capture, both successes had none, and a
+       CDP touch with one 1px move reproduced it every time. */
+    onLostPointerCapture: (e) => { if (e.target === e.currentTarget) endDrag(e, false); },
   };
 
   return (
