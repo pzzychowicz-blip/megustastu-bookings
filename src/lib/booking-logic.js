@@ -1465,6 +1465,11 @@ export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,pref
   // 11 guests wanting indoor were offered outdoor for tomorrow and refused for
   // tonight. The preferred zone is still tried first (findBest above); a party
   // seated outside it is flagged instead (`offZone`).
+  // /code-review: and the guest's own preferred tables come before any other
+  // table outside that zone. The check above tests them against the zone, so
+  // with indoor full a regular's outdoor favourite lost to whatever
+  // findBestAny picked.
+  if(!tables&&pt.length>0&&canAssign(pt,slots,s,e)&&comboOk(pt,"auto")&&comboCap(pt)>=size) tables=pt;
   if(!tables) tables=findBestAny(size,s,e,slots);
   return tables;
 }

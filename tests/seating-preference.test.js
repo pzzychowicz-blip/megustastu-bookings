@@ -30,6 +30,16 @@ describe("findFreeSlot: the preferred zone first, then any", () => {
     expect(isAllOut(t)).toBe(true);
   });
 
+  // /code-review: with the preferred zone full, the guest's own tables in the
+  // other zone come before any other table there.
+  it("with the zone full, tries the guest's preferred tables before any other", () => {
+    const outs = ALL_TABLES.map((t) => t.id).filter((id) => isAllOut([id]));
+    const fav = outs[outs.length - 1];
+    const cap = ALL_TABLES.find((t) => t.id === fav).capacity;
+    const t = findFreeSlot(occupy(INDOOR), D, "20:00", Math.min(2, cap), "indoor", 90, [], null, [fav]);
+    expect(t).toEqual([fav]);
+  });
+
   it("returns null only when no zone has room", () => {
     const all = ALL_TABLES.map((t) => t.id);
     expect(findFreeSlot(occupy(all), D, "20:00", 2, "indoor", 90, [], null, null)).toBe(null);
