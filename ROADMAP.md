@@ -188,13 +188,6 @@ evidence for each.
   already move the blocks while the labels jump. And `tableForClientY` would need the row's
   live height during a reveal, or a drop lands rows off.
 
-- **The login screen's theme (found in v18.3.0 phase 23).** `useThemeMode` is mounted in
-  `BookingApp`, so until someone signs in nothing follows the OS live: the login screen
-  stays in the theme the boot script chose until it reloads (seen in the iPhone Simulator's
-  home-screen app), and its status-bar metas follow the OS even where a saved `mgt-theme`
-  says otherwise. Mounting the hook in `App()` instead is the likely fix; check that the
-  signed-in theme preference still wins once `BookingApp` mounts.
-
 - **A modal opened from the keyboard can lose its focus return (found by v18.3.0's
   `/code-review`).** Measured in the rig, from the keyboard: on a List card's ⋯ menu, choose
   Delete or Cancelled, then press Escape on the confirm. Focus lands on `<body>`, not on ⋯.

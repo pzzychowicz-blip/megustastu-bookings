@@ -29440,3 +29440,17 @@ ROADMAP items to the version and two device checks.
    page added to the Home Screen (same metas, colours and 12px padding as the app): the
    header is blurred with the strip off and sharp with it on. The padding workaround other
    apps use (push the header ~40pt down) would have cost 40pt of a 812pt screen.
+3. **The login screen follows the theme (ROADMAP, found in v18.3.0 phase 23).** `useThemeMode`
+   was mounted only in `BookingApp`, so while signed out nothing followed the OS live (the
+   login screen kept the no-flash script's theme until a reload), and the status-bar metas
+   kept `index.html`'s per-scheme values even where a saved `mgt-theme` said otherwise. A
+   one-line `SignedOutTheme` component in `App.jsx` mounts the same hook with the same device
+   preference (`readThemePref`) inside the auth-check and login branches only. It is a
+   component rather than a hook call in `App` because `App` stays mounted under
+   `BookingApp`: a second live instance there would follow the OS over the account's
+   explicit choice, and mounting with the branch keeps the two from ever overlapping.
+   **Measured** on the login screen (a signed-out origin in the Browser pane): a saved "dark"
+   on a light OS now writes `#181b22` into both theme-color metas, where they stayed at
+   `#e2e7f1` / `#181b22`. The pane's colour-scheme emulation fires no `change` event even on
+   a bare `matchMedia` listener, so live following cannot be measured there. It is on the
+   iPhone check list.

@@ -5618,6 +5618,22 @@ function BookingApp({uid}){
 }
 
 
+// ── v18.3.1: the theme while nobody is signed in ─────────────────────────────
+// `useThemeMode` lived only in BookingApp, so the login screen (and the auth
+// check before it) followed nothing live: it kept the theme the no-flash script
+// chose until a reload, and its status-bar metas kept index.html's per-scheme
+// values, so a device saved as "light" on a dark OS showed a dark status bar
+// over a light login screen. This mounts the same hook with the same device
+// preference (`readThemePref`, the localStorage key the account's choice is
+// mirrored into) for exactly as long as the signed-out branch renders. A
+// COMPONENT, not a hook call in App: App stays mounted under BookingApp, and a
+// second live instance there would follow the OS over the account's explicit
+// choice. Mounting and unmounting with the branch means the two never overlap.
+function SignedOutTheme(){
+  useThemeMode(readThemePref());
+  return null;
+}
+
 // ── Auth Wrapper ──────────────────────────────────────────────────────────────
 export default function App(){
   const [user, setUser] = useState(null);
@@ -5628,9 +5644,9 @@ export default function App(){
   },[]);
   if(checking) return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize: T.lead}}>Loading...</div>
+      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize: T.lead}}><SignedOutTheme />Loading...</div>
   );
-  if(!user) return <LoginScreen />;
+  if(!user) return <><SignedOutTheme /><LoginScreen /></>;
   // v17.6.0: `key={user.uid}` remounts BookingApp on an account switch, so a
   // previous user's per-device state can't survive into the next session; the
   // uid also feeds useUserPrefs' per-account node.
