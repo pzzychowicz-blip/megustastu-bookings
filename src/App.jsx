@@ -2976,9 +2976,11 @@ function BookingApp({uid}){
         // re-optimised and the toast must not say one was.
         // v18.3.1: a save that lands the party outside the zone it asked for
         // says so (a preference is a wish now); only when THIS save moved it
-        // there, so re-saving a booking already flagged repeats nothing.
+        // there, so re-saving a booking already flagged repeats nothing, and
+        // only when the APP chose the tables (/code-review): "indoor was full"
+        // is false for tables somebody picked by hand. The flag still shows.
         const edited=fin.find(function(b){return b.id===editId;});
-        const zoneNote=edited&&offZone(edited)&&!offZone(orig)?offZoneNote(edited):"";
+        const zoneNote=!mt.length&&edited&&offZone(edited)&&!offZone(orig)?offZoneNote(edited):"";
         if((needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)&&ok) flash(seatingNow?"saved":null,zoneNote);
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
@@ -3072,9 +3074,10 @@ function BookingApp({uid}){
         // isn't linked yet (booking typed manually, not via Accept & open),
         // link it so the conversation shows the LinkedBookingCard.
         wa.linkBookingByPhone(newId, f.phone);
-        // v18.3.1: seated outside its zone, the toast says so (offZoneNote).
+        // v18.3.1: seated outside its zone, the toast says so (offZoneNote);
+        // not for hand-picked tables (/code-review), as in the edit path.
         const placedNew=fin.find(function(b){return b.id===newId;});
-        if(ok) flash(null,placedNew?offZoneNote(placedNew):"");
+        if(ok) flash(null,!mt.length&&placedNew?offZoneNote(placedNew):"");
         // v16.0.0: this new booking converted a waitlist entry (Book from the
         // panel) — remove the entry now the booking is dispatched (a held write
         // shows optimistically + auto-retries, so the intent stands either way).

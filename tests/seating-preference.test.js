@@ -46,6 +46,13 @@ describe("offZone and its words", () => {
     expect(offZone({ preference: "indoor", tables: [] })).toBe(false);
     expect(offZone(null)).toBe(false);
   });
+  // /code-review: `isIn` reads an unknown id as outdoor, so a booking left on a
+  // renamed indoor table read "seated outdoor" from the Unplaced row.
+  it("is false for a table the layout does not have", () => {
+    expect(offZone({ preference: "indoor", tables: ["no-such-table"] })).toBe(false);
+    expect(offZone({ preference: "indoor", tables: [INDOOR[0], "no-such-table"] })).toBe(false);
+    expect(offZoneLabel({ preference: "indoor", tables: ["no-such-table"] })).toBe("");
+  });
   it("names the flag and the save note", () => {
     const b = { preference: "indoor", tables: [out] };
     expect(offZoneLabel(b)).toBe("Wanted indoor, seated outdoor");
@@ -69,7 +76,8 @@ describe("where it shows", () => {
   });
   it("both saves hand the note to the toast", () => {
     const app = read("App.jsx");
-    expect(app).toMatch(/if\(ok\) flash\(null,placedNew\?offZoneNote\(placedNew\):""\);/);
+    expect(app).toMatch(/if\(ok\) flash\(null,!mt\.length&&placedNew\?offZoneNote\(placedNew\):""\);/);
+    expect(app).toMatch(/const zoneNote=!mt\.length&&edited&&offZone\(edited\)/);
     expect(app).toMatch(/flash\(seatingNow\?"saved":null,zoneNote\);/);
     expect(app).toMatch(/setReshuffledMsg\(savedToast\(k,active\)\+\(note\?" "\+note:""\)\);/);
   });

@@ -1472,14 +1472,18 @@ export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,pref
 // True when the booking wanted indoor or outdoor and holds tables that are not
 // all in that zone. The timeline rail and the List card flag it, and a save
 // that lands a party there says so (`offZoneNote`).
+// Only tables the layout HAS count (/code-review): `isIn` reads an unknown id as
+// outdoor, so a booking left on a renamed indoor table read "Wanted indoor,
+// seated outdoor" while it sat in the Unplaced row with no real table at all.
 export function offZone(b){
-  var p=b&&b.preference,t=b&&b.tables;
+  const p=b&&b.preference,t=b&&b.tables;
   if((p!=="indoor"&&p!=="outdoor")||!Array.isArray(t)||!t.length) return false;
+  if(!t.every(function(id){return ALL_TABLES.some(function(x){return x.id===id;});})) return false;
   return p==="indoor"?!isAllIn(t):!isAllOut(t);
 }
 function offZoneSeat(b){
-  var other=b.preference==="indoor"?"outdoor":"indoor";
-  var all=b.preference==="indoor"?isAllOut(b.tables):isAllIn(b.tables);
+  const other=b.preference==="indoor"?"outdoor":"indoor";
+  const all=b.preference==="indoor"?isAllOut(b.tables):isAllIn(b.tables);
   return (all?"":"partly ")+other;
 }
 // "Wanted indoor, seated outdoor" — the flag's name and tooltip.
