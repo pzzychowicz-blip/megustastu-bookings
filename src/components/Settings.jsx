@@ -587,7 +587,7 @@ export function AppTabContent({ isDark, onToggleDark, autoTheme = false, onToggl
   );
 }
 
-export function GeneralTabContent({ can = function () { return true; }, appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
+export function GeneralTabContent({ can = function () { return true; }, appVersion, weekHours, onSaveDayHours = () => {}, onSaveAllDays = () => {}, weekRange, splitHour, shiftsEnabled, onSaveShifts = () => {}, optimizerCutoff, optimizerAutoSwitch, onSaveOptimizer = () => {}, bookingDefaults, onSaveBookingDefaults = () => {}, generalSettings, onSaveGeneralSettings = () => {}, onBackup, backupStatus = null, recurring, onSetRecurringEnabled = () => {}, onSetRecurringHorizon = () => {}, onUpdateRule = () => {}, onRemoveRule = () => {}, onDirty = null }) {
   // v15.0.0: the shift split + optimizer cutoff are single GLOBAL values, so their
   // stepper bounds use the STABLE week range (min-open … max-close across open days),
   // never a single day's hours.
@@ -1140,7 +1140,15 @@ export function GeneralTabContent({ can = function () { return true; }, appVersi
             <button
               onClick={onBackup}
               className="mgt-hover-scale mgt-press"
+              aria-busy={backupStatus && backupStatus.kind === "busy" ? true : undefined}
               style={mkBtn({ fontSize: T.body, minHeight: 40, padding: "8px 16px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><DownloadIcon size={IC.control} />Download backup</button>
+          </div>
+          {/* v18.3.1: the outcome, here rather than in the red banner behind
+              this overlay (App's backupStatus). The region is ALWAYS mounted:
+              a live region added together with its message announces nothing
+              (src/CLAUDE.md). Empty, it takes no space. */}
+          <div role="status" style={{ fontSize: T.body, fontWeight: FW.medium, textAlign: "left", marginTop: backupStatus ? SP.base : 0, color: backupStatus && backupStatus.kind === "error" ? "var(--danger-text)" : "var(--text-muted)" }}>
+            {backupStatus ? backupStatus.text : null}
           </div>
         </Section>
       ) : null}
@@ -1252,6 +1260,7 @@ export function SettingsContent({
   generalSettings,
   onSaveGeneralSettings,
   onBackup,
+  backupStatus,
   recurring,
   onSetRecurringEnabled,
   onSetRecurringHorizon,
@@ -1360,7 +1369,7 @@ export function SettingsContent({
   } else if (cur === "app") {
     content = <AppTabContent isDark={isDark} onToggleDark={onToggleDark} autoTheme={autoTheme} onToggleAutoTheme={onToggleAutoTheme} appWidth={appWidth} onSetAppWidth={onSetAppWidth} reduceMotion={reduceMotion} onToggleReduceMotion={onToggleReduceMotion} swEnabled={swEnabled} onToggleSw={onToggleSw} planGestures={planGestures} onTogglePlanGestures={onTogglePlanGestures} planAvail={planAvail} onTogglePlanAvail={onTogglePlanAvail} navLocked={navLocked} onToggleNavLock={onToggleNavLock} splitEnabled={splitEnabled} onToggleSplitEnabled={onToggleSplitEnabled} tlSettings={tlSettings} onSetTlSetting={onSetTlSetting} />;
   } else if (cur === "general") {
-    content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
+    content = <GeneralTabContent can={can} appVersion={appVersion} weekHours={weekHours} onSaveDayHours={onSaveDayHours} onSaveAllDays={onSaveAllDays} weekRange={weekRange} splitHour={splitHour} shiftsEnabled={shiftsEnabled} onSaveShifts={onSaveShifts} optimizerCutoff={optimizerCutoff} optimizerAutoSwitch={optimizerAutoSwitch} onSaveOptimizer={onSaveOptimizer} bookingDefaults={bookingDefaults} onSaveBookingDefaults={onSaveBookingDefaults} generalSettings={generalSettings} onSaveGeneralSettings={onSaveGeneralSettings} onBackup={onBackup} backupStatus={backupStatus} recurring={recurring} onSetRecurringEnabled={onSetRecurringEnabled} onSetRecurringHorizon={onSetRecurringHorizon} onUpdateRule={onUpdateRule} onRemoveRule={onRemoveRule} onDirty={reportDirty} />;
   } else if (cur === "layout") {
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
   } else if (cur === "customers") {

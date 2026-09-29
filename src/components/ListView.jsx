@@ -32,7 +32,7 @@
 import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
-import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone } from "../lib/customers";
@@ -585,10 +585,14 @@ export const ListView = memo(function ListView({
         // (Icons.jsx), after the voucher, as the block's rail has it after the
         // deposit. The word stays beside the mark, the card's rule for its
         // flags (the block has room for the mark alone).
+        // v18.3.1: seated outside that zone (a preference is a wish now), the
+        // tag keeps its mark and turns warning ink, "Wanted indoor", named
+        // "Wanted indoor, seated outdoor" (`offZoneLabel`).
+        const zoneOff = offZone(b);
         const zoneTag = (b.preference === "indoor" || b.preference === "outdoor") ? (
-          <CardFlag ink={FLAG_NEUTRAL} title={b.preference === "indoor" ? "Prefers indoor" : "Prefers outdoor"}>
+          <CardFlag ink={zoneOff ? FLAG_WARN : FLAG_NEUTRAL} title={zoneOff ? offZoneLabel(b) : (b.preference === "indoor" ? "Prefers indoor" : "Prefers outdoor")}>
             {b.preference === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} />}
-            {b.preference === "indoor" ? "Indoor" : "Outdoor"}
+            {zoneOff ? "Wanted " + b.preference : (b.preference === "indoor" ? "Indoor" : "Outdoor")}
           </CardFlag>
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (

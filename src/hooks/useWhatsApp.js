@@ -39,7 +39,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
-import { matchCustomerByPhone, normalizePhone, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
+import { matchCustomerByPhone, normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
 import { sendsViaServer, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
@@ -670,6 +670,36 @@ export function useWhatsApp({
     update(ref(db), patch).catch(function () {});
   }
 
+  // eraseConversation(phoneKey) — v18.3.1: the WhatsApp half of "Delete
+  // customer & all data" (SECURITY.md §3). One atomic update nulls
+  // conversations/<key> and messages/<key>.
+  //
+  // Deliberately NOT gated on the loaded refs the savers above check, and not on
+  // the module being on: those gates stop a stale device WRITING data over real
+  // data, and a delete of one guest's key cannot do that. An erasure that
+  // waited for the listeners would do nothing while WhatsApp is switched off,
+  // which is exactly when a guest's old chats are forgotten. The key is the
+  // customer's normalised phone, which is what the backend stores under
+  // (inbound-core's normalizePhone, then sanitizeKey, a no-op on "+" and
+  // digits). `isPhoneKey` refuses "+" and anything that is not a key, so a
+  // phone-less guest erases nothing here.
+  function eraseConversation(phoneKey) {
+    if (!isPhoneKey(phoneKey)) return;
+    const arr = conversationsRef.current.filter(function (c) { return c.phoneKey !== phoneKey; });
+    if (arr.length !== conversationsRef.current.length) { conversationsRef.current = arr; setConversations(arr); }
+    conversationKeysRef.current = conversationKeysRef.current.filter(function (k) { return k !== phoneKey; });
+    if (messagesMapRef.current[phoneKey]) {
+      const nextMap = Object.assign({}, messagesMapRef.current);
+      delete nextMap[phoneKey];
+      messagesMapRef.current = nextMap;
+      setMessagesMap(nextMap);
+    }
+    const patch = {};
+    patch["conversations/" + phoneKey] = null;
+    patch["messages/" + phoneKey] = null;
+    update(ref(db), patch).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
+  }
+
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
 
   return {
@@ -677,7 +707,7 @@ export function useWhatsApp({
     conversations, messagesMap, templates,
     // savers (used by the simulator core — keyed shape, Phase 1b)
     patchConversation, upsertConversation, appendMessage, patchMessage,
-    removeConversation, removeMessages, saveTemplates, clearAllWaData,
+    removeConversation, removeMessages, saveTemplates, clearAllWaData, eraseConversation,
     // derived
     unreadCount,
     // draft seam (doSave calls completeDraftAccept, then linkBookingByPhone)

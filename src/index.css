@@ -1732,8 +1732,51 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
    portalled to <body> (sibling of #root) so hiding #root doesn't hide it.
    The sheet hard-codes light colours, so print stays light in any theme. */
 .mgt-print-sheet { display: none; }
+/* v18.3.1: an installed iOS app's header was blurred (iOS 26+, measured on
+   Patryk's iPhone 12 mini on iOS 27). In a home-screen web app iOS draws the
+   Liquid Glass "scroll edge effect" at the top of the web view: a blur that
+   runs about 40pt below the status bar, which on a phone is the whole header
+   row (the restaurant name, the cog, the tables line). No meta tag or CSS
+   property turns it off, and `env(safe-area-inset-top)` is 0 here, because
+   the status bar style is "default" and the page starts below it.
+
+   WebKit skips the effect when a FIXED or STICKY box with a plain
+   `background-color` covers the top edge (its `fixedContainerEdges` probe
+   hit-tests a few px in from the edge, walks up to the first fixed/sticky
+   ancestor and wants one at least ~90% of the width), and uses that box's
+   colour instead. This is that box: full width, in the page's own colour.
+   Checked on the device with a probe page added to the Home Screen: the
+   header is blurred without the strip and sharp with it.
+
+   - 12px is the phone shell's top padding (App's outer div), so at rest it
+     covers nothing, and it is taller than the probe's depth. Content that
+     scrolls up under it disappears 12px early, as under a status bar.
+   - Standalone only: a Safari tab has no such blur, and on the desktop a
+     band over scrolled content would be a change for nothing. The Android
+     tablet's installed app gets it too, where it is the page colour over
+     page padding.
+   - Not `pointer-events: none`: WebKit's probe is a hit test, and a box that
+     is not hit may not count. Nothing tappable sits in the top 12px.
+   - z-index above the page and the phone's bottom bar (100), below every
+     modal layer (the Overlay scrim is 200, the skip link 200): with a scrim
+     up, the scrim is what the probe finds, which is also a plain colour. */
+.mgt-edge { display: none; }
+@media (display-mode: standalone) {
+  .mgt-edge {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 12px;
+    background: var(--bg-app);
+    z-index: 150;
+  }
+}
+
 @media print {
   #root { display: none !important; }
+  .mgt-edge { display: none !important; }
   .mgt-print-sheet { display: block !important; }
   @page { margin: 12mm; }
 }

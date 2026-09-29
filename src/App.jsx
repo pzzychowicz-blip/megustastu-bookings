@@ -64,7 +64,7 @@ import {
   // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
   kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
-  savedToast,
+  savedToast, offZone, offZoneNote,
   // v18.0.0 session 8 (C7): the last minute a booking may start, and the
   // formatter for it. `toTime` was removed here as a dead import once; it has a
   // caller again.
@@ -396,7 +396,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.0",
+  version:"18.3.1",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2160,10 +2160,12 @@ function BookingApp({uid}){
   // describes what the ACTION did, so it must be fixed at the moment of the
   // action rather than recomputed against a `viewDate` the user may since have
   // navigated away from. Same shape as v17.16.9's carried label.
-  function flash(kind){
+  // v18.3.1: `note`, a sentence appended to the toast (a party seated outside
+  // the zone it asked for, `offZoneNote`).
+  function flash(kind,note){
     const k=kind||true;
     const active=optimizerActiveFor(viewDate,autoOptimizer);
-    setReshuffledMsg(savedToast(k,active));
+    setReshuffledMsg(savedToast(k,active)+(note?" "+note:""));
     // Offered to the next `armUndo`, which runs synchronously after every
     // `flash` that arms one. Cleared with the flag so a flash that arms NO undo
     // cannot leave the note lying about for a later pill to pick up — the same
@@ -2385,6 +2387,16 @@ function BookingApp({uid}){
   // lost every gift-voucher balance. `lib/backup.js` holds the rule and the why;
   // `database.rules.README.md` § Backups and restore holds the restore.
   const backupInFlightRef=useRef(false);
+  // v18.3.1: the backup's outcome, shown UNDER the button in Settings. It went
+  // to the red "Couldn't save" banner, which sits behind the Settings overlay
+  // and under `inert`, so an offline press looked dead until Settings closed.
+  // null | {kind:"busy"|"done"|"error", text}. Cleared when Settings closes.
+  const [backupStatus,setBackupStatus]=useState(null);
+  // /code-review: which open of Settings a backup belongs to. Closing Settings
+  // bumps it, so a read that returns afterwards neither leaves a stale line for
+  // the next open nor loses a failure: an error then goes to the red banner,
+  // which is visible again once the overlay is gone.
+  const backupGenRef=useRef(0);
   function doBackup(){
     // The widest data-protection action in the app — every booking, every
     // customer name and every phone number in one file — and the ONE gated
@@ -2396,6 +2408,12 @@ function BookingApp({uid}){
     // download the same file twice.
     if(backupInFlightRef.current) return;
     backupInFlightRef.current=true;
+    const gen=backupGenRef.current;
+    function report(st){
+      if(gen===backupGenRef.current) setBackupStatus(st);
+      else if(st.kind==="error") setWriteWarning(st.text);
+    }
+    setBackupStatus({kind:"busy",text:"Reading the database…"});
     readDatabaseRoot().then(function(root){
       const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
       try{
@@ -2408,11 +2426,12 @@ function BookingApp({uid}){
         a.click();
         document.body.removeChild(a);
         setTimeout(function(){URL.revokeObjectURL(url);},1000);
-      }catch{setWriteWarning("Couldn't create the backup file on this device.");}
+        report({kind:"done",text:"Backup file created: "+a.download+". Check this device's downloads."});
+      }catch{report({kind:"error",text:"Couldn't create the backup file on this device."});}
     },function(err){
-      setWriteWarning(err&&err.message==="offline"
-        ?"Backup needs a connection to the database. Try again once the app shows Connected."
-        :"Couldn't read the database for the backup.");
+      report({kind:"error",text:err&&err.message==="offline"
+        ?"Offline. A backup needs a connection to read the latest data. Try again once the app shows Connected."
+        :"Couldn't read the database for the backup."});
     }).finally(function(){backupInFlightRef.current=false;});
   }
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
@@ -2439,6 +2458,10 @@ function BookingApp({uid}){
       return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
     });});
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+    // v18.3.1: and their WhatsApp conversation and messages, stored under the
+    // same normalised phone. Unconditional, module on or off (useWhatsApp's
+    // eraseConversation says why); a phone-less guest has none.
+    if(key) wa.eraseConversation(key);
     // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
     // of the log erases itself — its text holds {b:<id>} tokens resolved against
     // the live bookings, so the anonymisation above rewrites what it displays —
@@ -2591,7 +2614,7 @@ function BookingApp({uid}){
   // keeps its tab reset on BOTH paths — the clean close here and the discard
   // below — because that was part of the close behaviour before the guard, not
   // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");}
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");setBackupStatus(null);backupGenRef.current++;}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
@@ -2951,7 +2974,14 @@ function BookingApp({uid}){
         wa.completeModifyApply(editId, ok);
         // C8: a save that seats passes `optStateForSave: false`, so no table was
         // re-optimised and the toast must not say one was.
-        if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash(seatingNow?"saved":null);
+        // v18.3.1: a save that lands the party outside the zone it asked for
+        // says so (a preference is a wish now); only when THIS save moved it
+        // there, so re-saving a booking already flagged repeats nothing, and
+        // only when the APP chose the tables (/code-review): "indoor was full"
+        // is false for tables somebody picked by hand. The flag still shows.
+        const edited=fin.find(function(b){return b.id===editId;});
+        const zoneNote=!mt.length&&edited&&offZone(edited)&&!offZone(orig)?offZoneNote(edited):"";
+        if((needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)&&ok) flash(seatingNow?"saved":null,zoneNote);
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
         if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
@@ -3044,7 +3074,10 @@ function BookingApp({uid}){
         // isn't linked yet (booking typed manually, not via Accept & open),
         // link it so the conversation shows the LinkedBookingCard.
         wa.linkBookingByPhone(newId, f.phone);
-        if(ok) flash();
+        // v18.3.1: seated outside its zone, the toast says so (offZoneNote);
+        // not for hand-picked tables (/code-review), as in the edit path.
+        const placedNew=fin.find(function(b){return b.id===newId;});
+        if(ok) flash(null,!mt.length&&placedNew?offZoneNote(placedNew):"");
         // v16.0.0: this new booking converted a waitlist entry (Book from the
         // panel) — remove the entry now the booking is dispatched (a held write
         // shows optimistically + auto-retries, so the intent stands either way).
@@ -4833,6 +4866,7 @@ function BookingApp({uid}){
   // has always been built this way, so this costs nothing.
   const timelineEl=<TimelineView
     bookings={bookings}
+    catchingUp={reconnectShown||resyncing}
     date={viewDate}
     today={today}
     onEdit={VA.onEdit}
@@ -5182,6 +5216,9 @@ function BookingApp({uid}){
               ConnectionStatus. That also drops one item from a header that
               wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div>{isMobile?<div
             role="group" aria-label="Add a booking"
+            /* v18.3.1: the timeline drag's edge scroll stops its lower band
+               at this bar's top (lib/edge-scroll.js, scrollBounds). */
+            data-fixed-bottom=""
             style={MOBILE_BAR}><button
               onClick={openWalkin}
               className="mgt-hover-scale"
@@ -5467,6 +5504,7 @@ function BookingApp({uid}){
             generalSettings={generalSettings}
             onSaveGeneralSettings={saveGeneralSettings}
             onBackup={doBackup}
+            backupStatus={backupStatus}
             recurring={recurring}
             onSetRecurringEnabled={function(on){if(refused("recurringManage"))return;setRecurringEnabled(on);}}
             onSetRecurringHorizon={function(w){if(refused("recurringManage"))return;setRecurringHorizon(w);}}
@@ -5618,6 +5656,22 @@ function BookingApp({uid}){
 }
 
 
+// ── v18.3.1: the theme while nobody is signed in ─────────────────────────────
+// `useThemeMode` lived only in BookingApp, so the login screen (and the auth
+// check before it) followed nothing live: it kept the theme the no-flash script
+// chose until a reload, and its status-bar metas kept index.html's per-scheme
+// values, so a device saved as "light" on a dark OS showed a dark status bar
+// over a light login screen. This mounts the same hook with the same device
+// preference (`readThemePref`, the localStorage key the account's choice is
+// mirrored into) for exactly as long as the signed-out branch renders. A
+// COMPONENT, not a hook call in App: App stays mounted under BookingApp, and a
+// second live instance there would follow the OS over the account's explicit
+// choice. Mounting and unmounting with the branch means the two never overlap.
+function SignedOutTheme(){
+  useThemeMode(readThemePref());
+  return null;
+}
+
 // ── Auth Wrapper ──────────────────────────────────────────────────────────────
 export default function App(){
   const [user, setUser] = useState(null);
@@ -5628,9 +5682,9 @@ export default function App(){
   },[]);
   if(checking) return (
     <div
-      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize: T.lead}}>Loading...</div>
+      style={{background:"var(--bg-app)",minHeight:"100dvh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"var(--font-app)",color:S.text,fontSize: T.lead}}><SignedOutTheme />Loading...</div>
   );
-  if(!user) return <LoginScreen />;
+  if(!user) return <><SignedOutTheme /><LoginScreen /></>;
   // v17.6.0: `key={user.uid}` remounts BookingApp on an account switch, so a
   // previous user's per-device state can't survive into the next session; the
   // uid also feeds useUserPrefs' per-account node.

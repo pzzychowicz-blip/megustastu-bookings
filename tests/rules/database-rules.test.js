@@ -738,6 +738,19 @@ describe("the WhatsApp sandbox nodes (v17.16.8)", () => {
     await assertFails(staff().ref("messages").set({ other: { m9: { id: "m9" } } }));
   });
 
+  it("erasing one guest: a root update nulling their conversation and messages is accepted", async () => {
+    // v18.3.1: "Delete customer & all data" (useWhatsApp's eraseConversation).
+    // There is no root .write, so this rests on each leaf meeting $phoneKey's
+    // own grant; another guest's rows must survive it.
+    await seed((db) => db.ref("conversations").set({ [PHONE]: { phone: PHONE }, "+34999": { phone: "+34999" } }));
+    await seed((db) => db.ref("messages").set({ [PHONE]: { m1: { id: "m1" } }, "+34999": { m2: { id: "m2" } } }));
+    await assertSucceeds(staff().ref().update({ ["conversations/" + PHONE]: null, ["messages/" + PHONE]: null }));
+    expect(await seedRead("conversations/" + PHONE)).toBeNull();
+    expect(await seedRead("messages/" + PHONE)).toBeNull();
+    expect(await seedRead("conversations/+34999")).not.toBeNull();
+    expect(await seedRead("messages/+34999")).not.toBeNull();
+  });
+
   it("templates: a bare whole-node set is REFUSED, the rev'd write is accepted", async () => {
     // The un-CASed write the sandbox hardening removes. Both halves matter: if
     // the bare form still passed, the rev pair would be decoration.

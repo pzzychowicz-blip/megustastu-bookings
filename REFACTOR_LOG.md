@@ -29397,3 +29397,328 @@ restaurant devices during the boot-banner check. A row joins the table when its 
 | 17 | Android tablet | Booking form: tap Name with the keyboard up. Save and Back stay visible above the keyboard. The page behind the form still fits the screen once the keyboard goes |
 | 21, 24 | iPhone | Turn the phone to landscape in Safari and in the home-screen app: the text stays the size it was in portrait, and the header, the Walk-in / + New bar and an open form's fields and buttons keep clear of the notch on both sides (turn it both ways) |
 | 23 | Android tablet | The installed app's status bar matches the app's background in both themes (switch Dark mode in Settings → App). The splash colour changes only after Chrome refreshes the manifest, which can take a relaunch the next day |
+
+## v18.3.1 — the restaurant devices' fixes
+
+**Date:** 2026-09-29 · **Branch:** `fix/v18.3.1-device-fixes` ·
+**Behavioural change:** yes: the tablet's timeline drag works again, and the iPhone
+home-screen app's header is no longer blurred. The other phases are listed below.
+
+Found with both restaurant devices on USB after v18.3.0 merged: the Honor tablet (Chrome 154,
+CDP over `adb`) and Patryk's iPhone 12 mini (iOS 27, home-screen app). Patryk added four
+ROADMAP items to the version and two device checks.
+
+### Phases
+
+1. **A timeline drag on the tablet no longer dies the moment it arms.** On the tablet a
+   hold lifted the block at 800ms, and then the block ignored the finger, in most attempts.
+   **Measured** with an event recorder on the PROD tablet (read-only; every probe ended in a
+   touch cancel, so nothing dropped) over 11 real drags. Every failure had a
+   `gotpointercapture` 10–420ms into the hold, targeted at the inner `<span>` the finger
+   landed on: Chrome's implicit touch capture, reported as soon as the finger trembles
+   before the arm. Both successes had none. When the arm's `setPointerCapture` moved the
+   capture to the block, the span's `lostpointercapture` BUBBLED to the block's
+   `onLostPointerCapture`, and v17.16.12's safety net ran `endDrag`, tearing down the drag it
+   had just started. A CDP touch with one 1px move at 60ms reproduced it every time; with no
+   move it never failed. The handler now acts only on the block's own loss
+   (`e.target === e.currentTarget`). Verified on the real tablet against DEV (`adb reverse`
+   to the dev server, Patryk signed in): the same event sequence, span loses the capture, and
+   the block follows to +64px, 3/3; Patryk's own drags all worked. Why it began now is not
+   established: the handler dates from v17.16.12, and the tablet's Chrome went from 150 to
+   154 in between. `tests/timeline-drag.test.js` pins the guard.
+2. **The iPhone home-screen app's header is no longer blurred.** Since iOS 26 an installed
+   web app gets the Liquid Glass scroll edge effect at the top of the web view, a blur about
+   40pt deep below the status bar. On a phone that covers the whole header row (Patryk's
+   screenshot, iPhone 12 mini, iOS 27). No meta tag or CSS property turns it off. WebKit skips
+   it when a fixed or sticky box with a plain background colour covers the top edge (its
+   `fixedContainerEdges` probe), and paints that colour instead. `index.html` now carries a
+   static `.mgt-edge`, a fixed full-width 12px strip in `--bg-app`, shown only under
+   `(display-mode: standalone)`. The 12px is the phone shell's top padding, so at rest it
+   covers nothing. It sits at z-index 150: above the page and the bottom bar (100), below the
+   modal layer (200). It is static, outside `#root`, so the login screen and the error
+   boundary get it too, and print hides it. **Measured first** on the iPhone with a probe
+   page added to the Home Screen (same metas, colours and 12px padding as the app): the
+   header is blurred with the strip off and sharp with it on. The padding workaround other
+   apps use (push the header ~40pt down) would have cost 40pt of a 812pt screen.
+3. **The login screen follows the theme (ROADMAP, found in v18.3.0 phase 23).** `useThemeMode`
+   was mounted only in `BookingApp`, so while signed out nothing followed the OS live (the
+   login screen kept the no-flash script's theme until a reload), and the status-bar metas
+   kept `index.html`'s per-scheme values even where a saved `mgt-theme` said otherwise. A
+   one-line `SignedOutTheme` component in `App.jsx` mounts the same hook with the same device
+   preference (`readThemePref`) inside the auth-check and login branches only. It is a
+   component rather than a hook call in `App` because `App` stays mounted under
+   `BookingApp`: a second live instance there would follow the OS over the account's
+   explicit choice, and mounting with the branch keeps the two from ever overlapping.
+   **Measured** on the login screen (a signed-out origin in the Browser pane): a saved "dark"
+   on a light OS now writes `#181b22` into both theme-color metas, where they stayed at
+   `#e2e7f1` / `#181b22`. The pane's colour-scheme emulation fires no `change` event even on
+   a bare `matchMedia` listener, so live following cannot be measured there. It is on the
+   iPhone check list.
+4. **`api/_lib/env.js` names the right Gemini default (ROADMAP, go-live item 4).** Its header
+   said the fallback model was `gemini-3-flash`. The real default is
+   `gemini-3.1-flash-lite` (`gemini.js`'s `liveParse`, which also records why the others were
+   rejected). Comment only; the header now points at where the default lives.
+5. **Meta Graph API v21.0 → v26.0 (ROADMAP, go-live item 3).** `api/_lib/meta.js`'s
+   `GRAPH_VERSION`. v26.0 shipped on 2026-07-29 and Meta removes v21.0 on 21 January 2027.
+   The code makes one Graph call, a text message to `/{phone-number-id}/messages`, and the
+   WhatsApp changelog lists no breaking change to it across 22–26. v24.0 changed the status
+   webhook's `conversation` object; `wa-inbound.js` reads only `recipient_id`, `id` and
+   `status`. Unexercised until go-live, because `WA_SEND_MODE` defaults to mock. The
+   webhook's version is a Meta dashboard setting, now named in the ROADMAP entry that
+   remains (two items left: photos, `/privacy`).
+6. **A timeline drag scrolls at the edge (ROADMAP A5, the motion & touch audit).** An armed
+   drag blocks the page's own scroll (the block's non-passive `touchmove` listener), so a
+   block could only reach the rows already on screen: i3 and i4 on the tablet, everything
+   from table 6 down on a phone. `lib/edge-scroll.js` holds the maths: a 48px band at each
+   edge of the visible scrollport, speed ramping linearly to 0.6px/ms at the edge and held
+   past it, whole pixels per frame with the fraction carried. `TimelineBlock` runs the loop
+   (`edgeFrame`), started by a move or by the touch arm, stopped by every end of the drag and
+   on unmount. Each frame adds what it scrolled to the drag's offset (`dragDyOf`: finger
+   travel plus scroll since the arm), so the block stays under the finger, and updates the
+   hover row. The drop needed nothing, because `tableForClientY` reads live row geometry. The
+   scrollport is whatever actually scrolls: the body, the fixed shell's `<main>`, or a Split
+   View pane. On a phone the lower band stops at the Walk-in / + New bar, now marked
+   `data-fixed-bottom`. Also fixed on the way: `beginDrag` REPLACED the drag object while
+   `onDragPointerMove` went on writing `lastY` to the old one, so a mouse drag's first frame
+   read `undefined`. It mutates in place now. **Measured** on the real tablet against DEV
+   (CDP touches, fixed shell, `<main>` visible from 137 to 491px, 479px of scroll): in the
+   bottom band `<main>` went 0 → 59 → 248 → 428px over 800ms, with the block's centre at the
+   finger (480). The top band scrolled back 370 → 138, and in the middle it held (128 and
+   128). A drop released over i3 (nearest row centre, 11px) at scroll 521 put the party of
+   two on i2 + i3. Patryk's own drags on that tab all worked.
+7. **Device check: the drop freeze on the tablet (ROADMAP M1), measured, nothing changed.**
+   Five real drops on the DEV tab: 249–272ms with no frame after release. A CPU profile of
+   one splits it into a ~43ms handler (the trials, which PROD pays too) and ~290ms of React
+   work that is largely DEV-only, including ~40ms of `getBoundingClientRect`. The figures and
+   what is still missing (a PROD-build number) are in the ROADMAP entry, which stays open.
+8. **Focus returns to the opener after a modal closes (ROADMAP: two entries, from v18.2.0's
+   and v18.3.0's `/code-review`).** `useDialog` (atoms) recorded `document.activeElement` in
+   its mount effect, which is right only if the opener still holds focus by then. **Measured**
+   in the rig from the keyboard with StrictMode OFF (the production shape; with it on every
+   modal fakes this failure, the measurement-traps row): Settings, Find a booking and the
+   List card's ⋯ → Delete / Cancelled confirms all returned focus to `<body>`; + New and
+   Walk-in were right. Three causes, one shape. Settings is a lazy chunk, so its Overlay
+   first renders after the commit that made the page `inert`, which blurred the cog. Find
+   focuses its search box at commit, so `activeElement` is INSIDE the dialog, and detached
+   at close. The ⋯ pick unmounts the menu holding focus, and the confirm's inert commit
+   blurs what the menu handed focus back to. Each opener was blurred a moment before the
+   effect ran, so `lib/focus-return.js` keeps a record of recent `focusout`s (a capture
+   listener, installed when the module loads) and `openerFor(dialog)` falls back to the
+   latest blur that is outside the dialog, still in the document, under 1.5s old and not a
+   text field (on iOS a tapped button does not take focus, so the latest blur can be a
+   search box left a minute ago, and focusing it on close would raise the keyboard). The
+   decision is the pure `pickOpener`. The ⋯ card also hands focus back to ⋯ in its pick
+   handlers (`handBack`, PlanView's `leavePop` pattern), so the opener is focused before the
+   confirm mounts. The first version installed the listener from `useDialog` and Find, the
+   first dialog opened, still went to `<body>`: its button blurred before any dialog had
+   mounted. After: all eight cases return to their opener, 3/3 runs with StrictMode off and
+   1/1 with it on. `tests/focus-return.test.js`.
+9. **Device check: sign-in and the keyboard on the iPhone (ROADMAP, from v18.3.0 phases 17
+   and 18).** Patryk, iPhone 12 mini, iOS 27. **The sign-in shift was not seen**: 3–4
+   sign-ins with the Go key in the home-screen app, the header in place every time (Safari
+   was not tested separately). So no `scrollTo(0, 0)` at mount. **The keyboard overlap is
+   real**: typing in Notes puts the booking form's footer under Safari's pill and form bar,
+   in Safari and in the home-screen app. Fixed in phase 10. Also
+   confirmed on the device: the login screen follows Light/Dark live (phase 3), and the
+   header stays sharp after signing in (phase 2).
+10. **The booking form's footer stays above the iOS keyboard for every field (ROADMAP, from
+    v18.3.0 phase 17).** Patryk's report was more precise than the entry: Notes (and the
+    voucher field) were covered only when tapped with the keyboard DOWN, and reached from
+    Name they were fine. **Measured** on his iPhone 12 mini (iOS 27) in Safari and in the
+    home-screen app, with a temporary DEV-only beacon that sent `innerHeight`,
+    `visualViewport` and the footer's rect to a LAN log server on every `focusin`. With the
+    keyboard down iOS scrolls the window to show a low field, and `innerHeight` shrinks by
+    that scroll (Notes: 243px, 664 → 421), while `offsetTop` reports the scroll as well. The
+    focused field always measured inside 0 to `visualViewport.height`, so that is the
+    visible area in the page's coordinates, and the covered part of a full-screen fixed box
+    is `innerHeight − height`. v18.3.0's `innerHeight − (height + offsetTop)` counted the
+    scroll twice: 421 − 568 is negative, the inset read 0, and the footer sat at 352–421
+    under the ⌃⌄✓ bar (the voucher box: 57px scroll, footer at 313–382; the phone field in
+    the home-screen app: 10px, footer at 356–366). Reached from Name, iOS does not scroll,
+    both formulas agree, and that is why it looked intermittent. `keyboardInsetOf` now pads
+    by `innerHeight − height` and judges whether the keyboard is up on `innerHeight +
+    offsetTop − height`, the whole keyboard, because the Notes remainder (96px) is under the
+    100px toolbar threshold on its own. The top inset is gone: `Overlay` padded its sheet's
+    top by `offsetTop`, which with the scroll already out of `innerHeight` only pushed
+    content down. After: every sample visible in both Safari and the home-screen app
+    (Notes directly: inset 96 and 102px, footer bottom at the bar's top; the voucher field;
+    Deposit; Name then Notes), and Patryk saw the footer everywhere.
+    `tests/keyboard-inset.test.js` carries the device's numbers.
+11. **Deposit opens the digit pad (Patryk, on the iPhone).** The field is `type="number"`,
+    which on iOS brings up the full keyboard on its numbers page. It now carries
+    `inputMode="numeric"`, the pad the phone field's `tel` already gets. Not `"decimal"`:
+    on a Spanish-locale iPhone that pad types a comma, which `sanitize`'s `Number()` reads
+    as 0, and deposits are whole euros (the field steps by 5). Verified on the device.
+12. **"Delete customer & all data" reaches WhatsApp (ROADMAP, #24; SECURITY.md §3).** It
+    anonymised the bookings, dropped the waitlist entries and redacted the activity log,
+    and left the guest's `conversations/<phone>` and `messages/<phone>` behind: only the
+    Inbox's own delete removed them. `useWhatsApp` gains `eraseConversation(phoneKey)`, one
+    root `update()` nulling both paths, and `deleteCustomer` calls it with the customer's
+    normalised phone, the key the backend stores under. **It is not gated** on the
+    listeners having loaded, as the hook's savers are, nor on the module: those gates stop
+    a stale device writing over real data, which a single guest's delete cannot do, and
+    with WhatsApp switched off the listeners never load, which is exactly when old chats
+    are forgotten. `isPhoneKey` keeps a phone-less guest from erasing anything. The rules
+    suite gained the write's exact shape (no root `.write`, so it rests on each leaf's
+    `$phoneKey` grant; another guest's rows survive it): 294 tests. **Verified on DEV**
+    in the rig: a seeded customer with a conversation and a message, deleted through
+    Settings → Customers, and both paths read back empty (they existed before).
+13. **The Gemini parse log carries no guest content outside a sandbox (ROADMAP, #24;
+    SECURITY.md §3).** `api/_lib/gemini.js` logged the first 200 characters of every
+    parsed WhatsApp message and the full parse result, whose `notes` is where the prompt
+    puts allergies and wheelchair needs; the re-check logged the result too. Patryk
+    chose to drop the text, and then (asked again, since the result carries the same
+    data) to log field NAMES only: `parseLogFields` keeps intent, language, confidence and
+    preference and lists which of name · size · date · time · notes · ambiguity came back
+    filled, with the message's length. **Keyed on `simEnabled()`, not on the LLM mode,**
+    which departs from the option as worded ("mock and sandbox keep the text"): mock is the
+    production DEFAULT, so a mode rule would have logged every real guest's message the
+    day a restaurant turned WhatsApp on in mock mode. `simEnabled()` is fail-closed.
+    `tests/wa-parse-log.test.js` drives the real `parseMessage` in mock mode with an
+    allergy in the message and checks the line.
+14. **A home 0 typed after any country code is dropped (ROADMAP, v18.2.0's `/code-review`).**
+    Phase 66 of v18.2.0 did it for +44 only, so "+33 06 12 34 56 78" and "+33 6 12 34 56
+    78" were two customers, and so were "+49 030 …" and "+31 06 …". `ukWithoutHomeZero`
+    is now `withoutHomeZero`: after ANY code, a leading 0 goes, except for the codes in
+    `KEEPS_ZERO`, whose numbers start with 0 in international form. Patryk chose "all,
+    with exceptions" and named Italy, San Marino, the Vatican and Côte d'Ivoire; checking
+    the list added Benin (+229 01 …, since 2024), Gabon (+241) and Congo-Brazzaville
+    (+242). A code missing from it keeps its 0 exactly as before. **New input only**
+    (Patryk): `normalizePhone` is unchanged, so no stored identity moves and existing
+    duplicates stay split. The number re-joins under the code's own label, so a Crown
+    dependency or a NANP area code comes back as typed. **Verified on DEV** in the booking
+    form, typed key by key and blurred: "+33 06 12 34 56 78" → 🇫🇷 +33 "6 12 34 56 78",
+    "0049 030 1234567" → 🇩🇪 +49 "30 1234567", "+39 06 1234 5678" kept its 0.
+15. **Download backup says what happened, under the button (ROADMAP, v18.1.1's
+    `/code-review`).** Offline, the refusal went to the red "Couldn't save" banner, which
+    sits behind the Settings overlay and under `inert`, so the press looked dead until
+    Settings closed. App's `backupStatus` (busy · done · error) now renders in an
+    always-mounted `role="status"` line under the button: "Reading the database…", "Backup
+    file created: mgt-backup-YYYY-MM-DD.json. Check this device's downloads.", or the
+    refusal in `--danger-text`. Closing Settings clears it. Offline still refuses, with no
+    partial device copy (Patryk's choice: a file that may miss other devices' changes is
+    the wrong thing to hand over silently). **Measured** in the rig: online, the file
+    downloaded and the line named it; with the context offline, the press gave the
+    refusal in danger red (rgb 153 27 27) under the button; reopened, the line was empty.
+    **Checked by Patryk on the iPhone** (Safari, DEV over the LAN): the backup downloaded
+    and the line named the file. Safari allows the download that starts after the async
+    server read, which until then only Chromium had been seen to do. The ROADMAP entry is
+    closed.
+16. **Timeline fades no longer replay when the tablet wakes (ROADMAP, found by v18.3.0's
+    `/code-review`).** **Measured first** on the restaurant tablet (the DEV tab, screen
+    off with `adb` power keys, bookings changed from the Mac): with the screen off 37s, a
+    booking added while the page was hidden faded in 0.4s after wake, and 1.8s after wake
+    a booking deleted meanwhile reappeared from its snapshot and faded out while another
+    faded in. A second recording found the reason for the split: the page goes hidden at
+    once, and ~6s later the tablet drops its connection ("Working offline"), so most
+    changes are not diffed while hidden at all. They arrive in the catch-up after wake,
+    0.9s for the reconnect ("Reconnected — changes synced.") and 0.5s more for the data,
+    with the page visible. `useEnterLeave` now treats a diff as a REPLACEMENT (re-seed,
+    nothing held, nothing fades) when the page is hidden OR the caller's `opts.quiet` is
+    set; TimelineView passes `catchingUp`, App's `reconnectShown || resyncing`, the 4s the
+    reconnect toast is up (the resync runs inside the same handler). **After**, same
+    sequence: nothing animated on wake but the toast, the missed booking was simply there
+    and the deleted one simply gone; a booking added and one deleted with the tablet awake
+    still faded in and out. A catch-up slower than the 4s toast would still fade.
+17. **firebase 12.12.1 → 12.19.0 (ROADMAP #14).** The tablet check first, because of the
+    `forceWebSockets`/JSONP history. Firebase's release notes list no Realtime Database
+    change from 12.13 to 12.19; Auth gains two iOS Safari fixes ("Database is closing"
+    during sign-in, 12.18/12.19) and a `strict-origin-when-cross-origin` referrer (12.15,
+    which is what referrer-restricted API keys need, SECURITY.md §4). `npm audit`: 0.
+    **Verified on the restaurant tablet** (DEV tab over `adb reverse`, Chrome 154): the
+    running app reports `SDK_VERSION` 12.19.0, connected, the day loaded, no
+    `firebase:previous_websocket_failure`; a booking written from the tablet was
+    acknowledged in 285ms and drawn; with the screen off it went "Working offline" at
+    +12s as before, and on wake reconnected in 1.1s ("Reconnected — changes synced.")
+    with a delete made meanwhile applied. Both dev servers had to be restarted to
+    re-bundle it, one after the other: two Vite servers on one cache directory, started
+    together, re-bundled over each other and the page fetched a file that was gone.
+18. **A seating preference is a wish, on every path (ROADMAP, found in v18.2.0 phase 68).**
+    `findFreeSlot` fell back to any zone only for "auto", so with the optimiser off (today
+    after the 15:00 cutoff) an indoor party was refused when indoor was full, while on
+    every other day the optimiser (`_runGreedy`'s `findBestAny`) seated it outdoors: the
+    same party accepted or refused by date. Patryk chose "wish, flagged": `findFreeSlot`
+    now tries the preferred zone first (`findBest`) and then any, the waitlist match drops
+    phase 68's strict `inZone` filter (Patryk's own earlier call, reversed by this one),
+    and the form's refusal no longer says "(indoor preference)", since it now means no
+    zone had room. A party seated outside its zone is `offZone` (`booking-logic.js`): the
+    timeline rail's zone flag becomes `AlertIcon` in the same `BlockFlag`, slot, size and
+    drop priority (Patryk: "a flag icon like the others"; warning ink cannot sit on the
+    block's status fill), named "Wanted indoor, seated outdoor"; the List card's tag turns
+    `FLAG_WARN` and reads "Wanted indoor"; and a save that moved it there says so in its
+    toast ("Seated outdoor: indoor was full.", `offZoneNote` through `flash`'s new
+    `note`). I had told Patryk the Plan popover would show it too; it has no zone mark,
+    so it does not. **Verified on DEV**, 11 guests wanting indoor at 21:30 today (the
+    indoor combination seats 10): before 15:00, "Tables re-optimised. Seated outdoor:
+    indoor was full."; after 15:00, with the optimiser off, "Booking saved. Seated
+    outdoor: indoor was full." where it used to refuse; the block's rail carried the 14px
+    alert mark on all five tables and the List card read "Wanted indoor" in rgb(138 75 10).
+19. **Device check: the drop freeze in a PRODUCTION build (ROADMAP M1), measured, nothing
+    changed.** Phase 7's figures came from the DEV server, whose React work is largely
+    DEV-only. Patryk allowed a one-off exception to "never a production build here": `vite
+    build` with `VITE_FB_TARGET=dev`, served from `dist/` on the tablet's `localhost:5173`
+    (over `adb reverse`) and opened with `?sw=off`, so the origin never kept a worker. It was
+    checked before any drop: build 18.3.1, the hashed bundle rather than `@vite/client`, no
+    service worker registration, and the only RTDB host in storage was
+    `megustastu-bookings-dev`. **Measured**, same rig as phase 7 (a CDP touch hold, drag and
+    release of a two-table party, a rAF log around the release): six real drops, one and two
+    rows up and down, gave the first frame after release at 129, 94, 115, 105, 88 and 91ms,
+    each a single long task, against 249–272ms in DEV. A seventh, released on its own row,
+    took 88ms. The booking ended where it started. Then it was torn down: the static server
+    stopped, the Vite dev server back on 5173, the tab reloaded on it, `mgt-sw` removed, and
+    no registration and no cache left. So the freeze in production is about 100ms, six
+    frames, on the tablet. Whether that is worth deferring the trials or the FLIP reads is
+    Patryk's call, and the ROADMAP entry now carries the number.
+
+### `/code-review` round (2026-09-29)
+
+High effort, ten findings, each checked against the code before anything changed.
+Six were fixed, one per commit, with the gate green on each (2173 → 2176 tests):
+
+- **A backup read that returned after Settings closed** set the status line anyway,
+  so a failure was shown nowhere (it used to reach the banner) and the next open
+  showed an old outcome. `backupGenRef` ties a read to its open of Settings. A late
+  error goes to the red banner, which is visible again by then, and a late success
+  says nothing.
+- **"Indoor was full" for tables picked by hand.** Both saves gave the off-zone note
+  whenever the booking ended outside its zone, including manual tables (`mt`) with
+  the zone empty. The note is now only for tables the app chose; the flag still shows.
+- **A table the layout does not have read as "seated outdoor".** `isIn` reads an
+  unknown id as outdoor, so an indoor-preference booking left on a renamed table was
+  flagged from the Unplaced row. `offZone` counts only tables the layout has (and its
+  new code uses `const`, not `var`).
+- **The guest's preferred tables lost to the any-zone fallback.** `findFreeSlot`
+  tested them against the zone, so with indoor full a regular's outdoor favourite
+  lost to whatever `findBestAny` picked. They are now tried, zone aside, before it.
+- **The Gemini error line could quote the reply.** V8's `SyntaxError` quotes the
+  start of the text it could not parse: measured, "Unexpected token 'L', \"Lucía
+  Garc\"... is not valid JSON". It is now logged as "the reply was not valid JSON",
+  tested through the live path with a stubbed `fetch` (the test fails with
+  `e.message` put back).
+- **The List card's zone tag text** is one ternary with the same output.
+
+Not changed:
+
+- **The iPad's modal keyboard inset** (phase 10 dropped `kb.top` from the desktop card
+  as well as the phone sheet, measured on the iPhone only). That needs the iPad, so it
+  is on the device list below, not a code change.
+- **A host's own changes do not fade for the 4s after any reconnect** (phase 16's `quiet`
+  is keyed on the toast). This is the trade-off phase 16 already records, and it is
+  cosmetic.
+- **The edge scroll reads two rects and runs one selector query a frame.** That is
+  small next to the re-render each step already causes, and caching them would change
+  code measured on the tablet for no measured gain.
+
+Checked and not a finding: the 12px top strip (z-index 150) sits under every popup,
+toast layer and modal (200+). The status toasts are laid out below the header and
+scroll with the page, so the strip never covers one.
+
+### Check on the devices after merge
+
+| Phase | Device | Check |
+|---|---|---|
+| 1 | Android tablet | Hold a block, tremble slightly, then drag it two rows: it follows the finger to the drop |
+| 2 | iPhone (home-screen app) | The header is sharp, in both themes |
+| 6 | Tablet, iPhone | Drag a block to the bottom edge: the grid scrolls, and the drop lands on the row under the finger |
+| 10 | iPad | Booking form in Safari: focus Notes with the keyboard down. The card's top stays visible and Save stays above the keyboard |
+| 16 | Android tablet | Screen off, change a booking from another device, wake: nothing fades, and the change is simply there |

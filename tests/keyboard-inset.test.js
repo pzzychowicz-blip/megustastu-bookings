@@ -24,29 +24,50 @@ const win = (innerHeight, height, offsetTop) => ({ innerHeight, visualViewport: 
 
 describe("N1: the keyboard's inset, from the visual viewport", () => {
   it("is nothing without a window or a visualViewport", () => {
-    expect(keyboardInsetOf(null)).toEqual({ top: 0, bottom: 0 });
-    expect(keyboardInsetOf({ innerHeight: 800 })).toEqual({ top: 0, bottom: 0 });
+    expect(keyboardInsetOf(null)).toEqual({ bottom: 0 });
+    expect(keyboardInsetOf({ innerHeight: 800 })).toEqual({ bottom: 0 });
   });
 
   it("is nothing for a gap a browser toolbar makes", () => {
     // Only a gap over 100px is a keyboard, so a toolbar showing or hiding
     // never moves a dialog.
-    expect(keyboardInsetOf(win(796, 796, 0))).toEqual({ top: 0, bottom: 0 });
-    expect(keyboardInsetOf(win(796, 740, 0))).toEqual({ top: 0, bottom: 0 });
-    expect(keyboardInsetOf(win(796, 696, 0))).toEqual({ top: 0, bottom: 0 });
+    expect(keyboardInsetOf(win(796, 796, 0))).toEqual({ bottom: 0 });
+    expect(keyboardInsetOf(win(796, 740, 0))).toEqual({ bottom: 0 });
+    expect(keyboardInsetOf(win(796, 696, 0))).toEqual({ bottom: 0 });
   });
 
   it("is the keyboard's height, as the iPhone Simulator reported it", () => {
     // Safari, iOS 26: innerHeight stayed 796 while the visual viewport fell to 447.
-    expect(keyboardInsetOf(win(796, 447, 0))).toEqual({ top: 0, bottom: 349 });
-    // A field iOS scrolled the page for: innerHeight 764, the viewport 32px down.
-    expect(keyboardInsetOf(win(764, 447, 32))).toEqual({ top: 32, bottom: 285 });
-    expect(keyboardInsetOf(win(796, 447.4, 0.6))).toEqual({ top: 1, bottom: 348 });
+    expect(keyboardInsetOf(win(796, 447, 0))).toEqual({ bottom: 349 });
+    expect(keyboardInsetOf(win(796, 447.4, 0.6))).toEqual({ bottom: 349 });
+  });
+
+  it("counts a scroll iOS made for the field ONCE (v18.3.1, a real iPhone 12 mini)", () => {
+    // Name first, no scroll: the sheet padded 339 and the footer sat on the bar.
+    expect(keyboardInsetOf(win(664, 325, 0))).toEqual({ bottom: 339 });
+    // Notes with the keyboard down: iOS scrolled 243px and innerHeight shrank
+    // to 421. innerHeight − (height + offsetTop) is negative, so v18.3.0 padded
+    // nothing and the footer (352–421) sat under the ⌃⌄✓ bar.
+    expect(keyboardInsetOf(win(421, 325, 243))).toEqual({ bottom: 96 });
+    // The voucher box: a 57px scroll left v18.3.0's footer at 313–382.
+    expect(keyboardInsetOf(win(607, 325, 57))).toEqual({ bottom: 282 });
+    // The Simulator's 32px scroll (v18.3.0 phase 17), under-padded by 32 then.
+    expect(keyboardInsetOf(win(764, 447, 32))).toEqual({ bottom: 317 });
+  });
+
+  it("judges the keyboard on its whole height, but pads only what is left", () => {
+    // 96px of inset is under the 100px toolbar threshold on its own; the
+    // keyboard it belongs to (421 + 243 − 325 = 339) is not.
+    expect(keyboardInsetOf(win(421, 325, 243))).toEqual({ bottom: 96 });
+    // Scrolled by the whole keyboard: the sheet already ends at the bar.
+    expect(keyboardInsetOf(win(325, 325, 339))).toEqual({ bottom: 0 });
+    // A small scroll with no keyboard is still nothing.
+    expect(keyboardInsetOf(win(740, 700, 40))).toEqual({ bottom: 0 });
   });
 
   it("is nothing where the keyboard resizes the layout viewport itself (Android)", () => {
     // interactive-widget=resizes-content shrinks innerHeight with the keyboard.
-    expect(keyboardInsetOf(win(430, 430, 0))).toEqual({ top: 0, bottom: 0 });
+    expect(keyboardInsetOf(win(430, 430, 0))).toEqual({ bottom: 0 });
   });
 });
 
@@ -59,15 +80,17 @@ describe("N1: every Overlay branch takes the inset as padding", () => {
   it("pads the full-screen boxes instead of moving their edges", () => {
     // The footer sheet: the box stays top 0 / bottom 0 and pads by the inset,
     // and the footer drops the home-indicator inset the keyboard covers.
-    expect(Overlay).toContain('position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingTop: kb.top, paddingBottom: kb.bottom');
+    expect(Overlay).toContain('position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingBottom: kb.bottom');
     expect(Overlay).toContain('paddingBottom: kb.bottom ? SP.wide : "max(12px, env(safe-area-inset-bottom))"');
     // The no-footer sheet: its scroller is absolutely placed (padding cannot
     // move it), so the scroller is inset and the sheet paints under it.
-    expect(Overlay).toContain('position: "absolute", top: kb.top, left: 0, right: 0, bottom: kb.bottom');
+    expect(Overlay).toContain('position: "absolute", top: 0, left: 0, right: 0, bottom: kb.bottom');
     expect(Overlay).toMatch(/className=\{sheetCls\} style=\{\{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var\(--bg-sheet-mobile\)" \}\}/);
     // The scrims pad, so a card centres in what is visible.
-    expect(Overlay).toContain("paddingTop: SP.wide + kb.top, paddingBottom: SP.wide + kb.bottom");
-    expect(Overlay).toContain("paddingTop: scrimPad + (mob ? 0 : kb.top), paddingBottom: scrimPad + (mob ? 0 : kb.bottom)");
+    expect(Overlay).toContain("paddingBottom: SP.wide + kb.bottom");
+    expect(Overlay).toContain("paddingBottom: scrimPad + (mob ? 0 : kb.bottom)");
+    // No top inset anywhere (v18.3.1: iOS's scroll is already out of innerHeight).
+    expect(Overlay).not.toMatch(/kb\.top/);
     // No fixed box moves an edge by the inset.
     expect(Overlay).not.toMatch(/position: "fixed"[^}]*\b(top|bottom): kb\./);
   });

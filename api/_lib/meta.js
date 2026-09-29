@@ -7,7 +7,7 @@
 // SEND MODES (env WA_SEND_MODE):
 //   mock (default) — no network. Returns a fake wamid and status "delivered".
 //                    This is the sandbox mode until the number is migrated.
-//   live           — POST to graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages
+//   live           — POST to graph.facebook.com/v26.0/{PHONE_NUMBER_ID}/messages
 //                    with the Cloud API bearer token. Returns the real wamid;
 //                    status starts "sent" and advances via webhook statuses[].
 //
@@ -19,7 +19,13 @@
 import crypto from "node:crypto";
 import { env, sendMode, allowUnsigned } from "./env.js";
 
-const GRAPH_VERSION = "v21.0";
+// v18.3.1: v21.0 → v26.0 (shipped 2026-07-29). Meta removes v21.0 on
+// 21 January 2027. The one call made here (a text message to /messages) has
+// no documented breaking change across 22–26; the v24 change to the status
+// webhook's `conversation` object touches nothing wa-inbound.js reads
+// (recipient_id, id, status). The WEBHOOK's version is set in the Meta app
+// dashboard, not here. Unexercised until go-live: WA_SEND_MODE is mock.
+const GRAPH_VERSION = "v26.0";
 
 // rawBody: Buffer|string of the EXACT bytes received (HMAC is byte-sensitive).
 export function verifySignature(rawBody, signatureHeader) {

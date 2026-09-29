@@ -40,29 +40,24 @@
 
 import { hoursFor } from "./constants";
 import {
-  toMins, toTime, getDur, optimizerActiveFor, findFreeSlot, trialFits, isAllIn, isAllOut
+  toMins, toTime, getDur, optimizerActiveFor, findFreeSlot, trialFits
 } from "./booking-logic";
 
 // Whole-pass budget for the expensive trials, shared across entries.
 export const WAIT_SCAN_BUDGET_MS = 300;
 
 // ── v18.2.0 phase 68: a party's seating preference (the critique's L-1) ─────
-// An entry remembers the zone the party asked for, and the match honours it
-// STRICTLY: a table only in that zone. It was matched to anything — measured
-// on DEV, "Indoor Probe", 11 guests refused indoor (the indoor combination
-// seats 10), was offered outdoor tables 2, 3, 4, 5A and 5B as "table free".
-// Strict is Patryk's call and deliberately stricter than the booking form on a
-// day the optimiser runs: `findFreeSlot` treats a preference as hard, but
-// `trialFits` goes through the optimiser, which falls back to ANY zone when the
-// preferred one is full (`_runGreedy`'s `findBestAny`). A party waiting because
-// its zone was full is not offered the other one.
+// An entry remembers the zone the party asked for, and the match tries that
+// zone first (findBest inside findFreeSlot, and the optimiser's own order).
+//
+// v18.3.1 (Patryk): a preference is a WISH everywhere, so the match no longer
+// refuses the other zone. Phase 68 made it strict here, deliberately stricter
+// than the booking form on an optimiser day; this version made the form a wish
+// on every day instead (findFreeSlot now falls back to any zone), and the
+// waitlist follows it, so the two say the same. A party booked outside its zone
+// is flagged on the timeline and the List card (`offZone`, booking-logic).
 function prefOf(w) {
   return w && (w.preference === "indoor" || w.preference === "outdoor") ? w.preference : "auto";
-}
-function inZone(tables, pref) {
-  if (pref === "indoor") return isAllIn(tables);
-  if (pref === "outdoor") return isAllOut(tables);
-  return true;
 }
 
 /**
@@ -136,9 +131,7 @@ export function placeWaitlist(o) {
         if (cheap) { lastResh = false; return cheap; }
       }
       if (clock() - scanT0 > budgetMs) { budgetHit = true; return null; }
-      const found = trialFits(world, w.date, timeStr, size, pref, dur, blocks, null, null, noResh);
-      // The optimiser's fallback to the other zone is no offer (phase 68).
-      const t = found && inZone(found, pref) ? found : null;
+      const t = trialFits(world, w.date, timeStr, size, pref, dur, blocks, null, null, noResh);
       // noResh === true means trialFits was forbidden from moving anyone, so
       // its answer is a clean placement too.
       if (t) lastResh = !noResh;

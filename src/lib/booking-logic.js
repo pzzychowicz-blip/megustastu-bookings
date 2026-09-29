@@ -1458,8 +1458,46 @@ export function findFreeSlot(bookings,date,time,size,pref,dur,blocks,editId,pref
   var pt=Array.isArray(prefTables)?prefTables:[];
   if(pt.length>0&&canAssign(pt,slots,s,e)&&comboOk(pt,pref||"auto")&&comboCap(pt)>=size) return pt;
   var tables=findBest(size,pref||"auto",s,e,slots);
-  if(!tables&&(pref||"auto")==="auto") tables=findBestAny(size,s,e,slots);
+  // v18.3.1 (Patryk): a stated preference is a WISH, on every path. This fell
+  // back to any zone only for "auto", so with the optimiser off (today, after
+  // the cutoff) an indoor party was refused when indoor was full, while on any
+  // other day `_runGreedy`'s findBestAny seated it outdoors: measured on DEV,
+  // 11 guests wanting indoor were offered outdoor for tomorrow and refused for
+  // tonight. The preferred zone is still tried first (findBest above); a party
+  // seated outside it is flagged instead (`offZone`).
+  // /code-review: and the guest's own preferred tables come before any other
+  // table outside that zone. The check above tests them against the zone, so
+  // with indoor full a regular's outdoor favourite lost to whatever
+  // findBestAny picked.
+  if(!tables&&pt.length>0&&canAssign(pt,slots,s,e)&&comboOk(pt,"auto")&&comboCap(pt)>=size) tables=pt;
+  if(!tables) tables=findBestAny(size,s,e,slots);
   return tables;
+}
+// ── v18.3.1: a party seated outside the zone it asked for ───────────────────
+// True when the booking wanted indoor or outdoor and holds tables that are not
+// all in that zone. The timeline rail and the List card flag it, and a save
+// that lands a party there says so (`offZoneNote`).
+// Only tables the layout HAS count (/code-review): `isIn` reads an unknown id as
+// outdoor, so a booking left on a renamed indoor table read "Wanted indoor,
+// seated outdoor" while it sat in the Unplaced row with no real table at all.
+export function offZone(b){
+  const p=b&&b.preference,t=b&&b.tables;
+  if((p!=="indoor"&&p!=="outdoor")||!Array.isArray(t)||!t.length) return false;
+  if(!t.every(function(id){return ALL_TABLES.some(function(x){return x.id===id;});})) return false;
+  return p==="indoor"?!isAllIn(t):!isAllOut(t);
+}
+function offZoneSeat(b){
+  const other=b.preference==="indoor"?"outdoor":"indoor";
+  const all=b.preference==="indoor"?isAllOut(b.tables):isAllIn(b.tables);
+  return (all?"":"partly ")+other;
+}
+// "Wanted indoor, seated outdoor" — the flag's name and tooltip.
+export function offZoneLabel(b){
+  return offZone(b)?"Wanted "+b.preference+", seated "+offZoneSeat(b):"";
+}
+// "Seated outdoor: indoor was full." — appended to the save toast.
+export function offZoneNote(b){
+  return offZone(b)?"Seated "+offZoneSeat(b)+": "+b.preference+" was full.":"";
 }
 // v17.14.0: did this pass actually change anything? Element-wise, in order, on
 // `undoKey`'s field set — which is deliberately the SAME set `dayBookingsSig`

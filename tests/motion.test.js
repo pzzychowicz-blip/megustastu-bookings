@@ -119,7 +119,7 @@ describe("exit holds outlast their animations", () => {
     expect(src).not.toMatch(/\},\s*\d+\s*\)/);
     // …and the timeline asks for the speed its classes run on (--t-move).
     const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
-    expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move" \}\s*\)/);
+    expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move"(, quiet: catchingUp)? \}\s*\)/);
     // /code-review: the snapshots' lanes follow the layout and the clock too.
     expect(tl).toMatch(/\[bookings, late, warnings, clashes, freeing, chipsOn, layoutSig, nowMins\],/);
     expect(token("t-move")).toBe(M.dur.move);
@@ -167,7 +167,8 @@ describe("exit holds outlast their animations", () => {
       for (const pick of picks) {
         const at = src.indexOf(pick);
         expect(at, file + " still has " + pick).toBeGreaterThan(0);
-        expect(src.slice(Math.max(0, at - 40), at), file + ": skipExit() right before " + pick).toMatch(/skipExit\(\);\s*$/);
+        // v18.3.1: the ⋯ card's `handBack()` (focus only, it renders nothing) may sit between.
+        expect(src.slice(Math.max(0, at - 80), at), file + ": skipExit() right before " + pick).toMatch(/skipExit\(\);\s*(handBack\(\);\s*)?$/);
       }
     }
   });
