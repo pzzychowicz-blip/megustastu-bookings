@@ -524,7 +524,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
     return (
       <div
         className={scrimCls}
-        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: scrimPad, paddingTop: scrimPad + (mob ? 0 : kb.top), paddingBottom: scrimPad + (mob ? 0 : kb.bottom), boxSizing: "border-box" }}
+        style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: scrimPad, paddingBottom: scrimPad + (mob ? 0 : kb.bottom), boxSizing: "border-box" }}
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
         <div
@@ -540,7 +540,6 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
             width: "100%",
             maxWidth: mob ? "none" : pw,
             height: mob ? "100dvh" : (kb.bottom ? "100%" : (panel.height || "min(900px, 90dvh)")),
-            paddingTop: mob ? kb.top : 0,
             paddingBottom: mob ? kb.bottom : 0,
             display: "flex",
             flexDirection: "column",
@@ -564,7 +563,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
     // insets are 0 in portrait, so portrait is unchanged).
     if (footer) {
       return wrap(
-        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingTop: kb.top, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", boxSizing: "border-box" }}>
             {children}
           </div>
@@ -579,7 +578,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
     // background under it (covered edge to edge, so nothing changes at rest).
     return wrap(
       <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, background: "var(--bg-sheet-mobile)" }}>
-        <div ref={scrollRef} style={{ position: "absolute", top: kb.top, left: 0, right: 0, bottom: kb.bottom, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
+        <div ref={scrollRef} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: kb.bottom, background: "var(--bg-sheet-mobile)", overflowY: "scroll", WebkitOverflowScrolling: "touch" }}>
           <div style={{ minHeight: "100%", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: "max(80px, calc(40px + env(safe-area-inset-bottom)))",   /* @canvas */ boxSizing: "border-box" }}>
             {children}
           </div>
@@ -599,7 +598,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   return wrap(
     <div
       className={scrimCls}
-      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: SP.wide, paddingTop: SP.wide + kb.top, paddingBottom: SP.wide + kb.bottom }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", display: "flex", alignItems: top ? "flex-start" : "center", justifyContent: "center", zIndex: 200, padding: SP.wide, paddingBottom: SP.wide + kb.bottom }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (

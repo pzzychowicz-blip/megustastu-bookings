@@ -139,18 +139,6 @@ evidence for each.
   waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
   a rule, and make both paths say the same.
 
-- **The booking form's footer under the iOS keyboard, while typing in Notes (found in
-  v18.3.0 phase 17, confirmed on a real iPhone in v18.3.1).**
-
-  `Overlay` pads by the keyboard's inset, so Save is never behind the keyboard itself.
-  But Safari's floating address pill and the ⌃⌄✓ form bar can still sit over the footer:
-  on Patryk's iPhone 12 mini (iOS 27) typing in **Notes** covers it, in Safari AND in the
-  home-screen app (v18.3.1's device check). In the iOS 26 Simulator a bottom textarea put
-  the bar over the whole footer, and iOS reported a different visible area for each field
-  (src/CLAUDE.md's Gotchas row on the keyboard), so a fix aimed at one field can break
-  another. Re-measure Name and Deposit on the device with Notes before choosing one.
-  (The other half of this entry, the sign-in shift, was checked in v18.3.1 and not seen.)
-
 - **The drop freeze (audit M1).** After a drop the block sits still with no frame painted.
   **Measured on the tablet in v18.3.1** (a DEV build over `adb reverse`, five real drops of a
   two-table party one or two rows, a rAF log around the release): 249, 250, 249, 249 and

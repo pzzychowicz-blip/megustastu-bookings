@@ -29518,6 +29518,29 @@ ROADMAP items to the version and two device checks.
    sign-ins with the Go key in the home-screen app, the header in place every time (Safari
    was not tested separately). So no `scrollTo(0, 0)` at mount. **The keyboard overlap is
    real**: typing in Notes puts the booking form's footer under Safari's pill and form bar,
-   in Safari and in the home-screen app. The ROADMAP entry now holds that half alone. Also
+   in Safari and in the home-screen app. Fixed in phase 10. Also
    confirmed on the device: the login screen follows Light/Dark live (phase 3), and the
    header stays sharp after signing in (phase 2).
+10. **The booking form's footer stays above the iOS keyboard for every field (ROADMAP, from
+    v18.3.0 phase 17).** Patryk's report was more precise than the entry: Notes (and the
+    voucher field) were covered only when tapped with the keyboard DOWN, and reached from
+    Name they were fine. **Measured** on his iPhone 12 mini (iOS 27) in Safari and in the
+    home-screen app, with a temporary DEV-only beacon that sent `innerHeight`,
+    `visualViewport` and the footer's rect to a LAN log server on every `focusin`. With the
+    keyboard down iOS scrolls the window to show a low field, and `innerHeight` shrinks by
+    that scroll (Notes: 243px, 664 → 421), while `offsetTop` reports the scroll as well. The
+    focused field always measured inside 0 to `visualViewport.height`, so that is the
+    visible area in the page's coordinates, and the covered part of a full-screen fixed box
+    is `innerHeight − height`. v18.3.0's `innerHeight − (height + offsetTop)` counted the
+    scroll twice: 421 − 568 is negative, the inset read 0, and the footer sat at 352–421
+    under the ⌃⌄✓ bar (the voucher box: 57px scroll, footer at 313–382; the phone field in
+    the home-screen app: 10px, footer at 356–366). Reached from Name, iOS does not scroll,
+    both formulas agree, and that is why it looked intermittent. `keyboardInsetOf` now pads
+    by `innerHeight − height` and judges whether the keyboard is up on `innerHeight +
+    offsetTop − height`, the whole keyboard, because the Notes remainder (96px) is under the
+    100px toolbar threshold on its own. The top inset is gone: `Overlay` padded its sheet's
+    top by `offsetTop`, which with the scroll already out of `innerHeight` only pushed
+    content down. After: every sample visible in both Safari and the home-screen app
+    (Notes directly: inset 96 and 102px, footer bottom at the bar's top; the voucher field;
+    Deposit; Name then Notes), and Patryk saw the footer everywhere.
+    `tests/keyboard-inset.test.js` carries the device's numbers.
