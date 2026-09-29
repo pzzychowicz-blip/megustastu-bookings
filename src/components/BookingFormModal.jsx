@@ -630,8 +630,10 @@ export function BookingFormModal({
 
   // v16.0.0: when nothing fits, offer the waitlist (new bookings only — an
   // edited booking already exists; waitlisting it would double-track the party).
+  // v18.3.1: no "(indoor preference)" suffix. A preference is a wish now, so
+  // the other zone is tried too, and a refusal means no zone had room.
   const availBanner=formAvail&&!formAvail.ok?<><AvailBanner
-    msg={"No tables available"+(form.preference!=="auto"?" ("+form.preference+" preference)":"")+"."}
+    msg="No tables available."
     sugg={formAvail.sugg}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
       className="mgt-hover-scale"

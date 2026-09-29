@@ -29629,3 +29629,23 @@ ROADMAP items to the version and two device checks.
     with a delete made meanwhile applied. Both dev servers had to be restarted to
     re-bundle it, one after the other: two Vite servers on one cache directory, started
     together, re-bundled over each other and the page fetched a file that was gone.
+18. **A seating preference is a wish, on every path (ROADMAP, found in v18.2.0 phase 68).**
+    `findFreeSlot` fell back to any zone only for "auto", so with the optimiser off (today
+    after the 15:00 cutoff) an indoor party was refused when indoor was full, while on
+    every other day the optimiser (`_runGreedy`'s `findBestAny`) seated it outdoors: the
+    same party accepted or refused by date. Patryk chose "wish, flagged": `findFreeSlot`
+    now tries the preferred zone first (`findBest`) and then any, the waitlist match drops
+    phase 68's strict `inZone` filter (Patryk's own earlier call, reversed by this one),
+    and the form's refusal no longer says "(indoor preference)", since it now means no
+    zone had room. A party seated outside its zone is `offZone` (`booking-logic.js`): the
+    timeline rail's zone flag becomes `AlertIcon` in the same `BlockFlag`, slot, size and
+    drop priority (Patryk: "a flag icon like the others"; warning ink cannot sit on the
+    block's status fill), named "Wanted indoor, seated outdoor"; the List card's tag turns
+    `FLAG_WARN` and reads "Wanted indoor"; and a save that moved it there says so in its
+    toast ("Seated outdoor: indoor was full.", `offZoneNote` through `flash`'s new
+    `note`). I had told Patryk the Plan popover would show it too; it has no zone mark,
+    so it does not. **Verified on DEV**, 11 guests wanting indoor at 21:30 today (the
+    indoor combination seats 10): before 15:00, "Tables re-optimised. Seated outdoor:
+    indoor was full."; after 15:00, with the optimiser off, "Booking saved. Seated
+    outdoor: indoor was full." where it used to refuse; the block's rail carried the 14px
+    alert mark on all five tables and the List card read "Wanted indoor" in rgb(138 75 10).

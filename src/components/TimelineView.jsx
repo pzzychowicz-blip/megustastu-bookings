@@ -43,14 +43,14 @@ import {
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel } from "../lib/booking-logic";
+import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useEnterLeave } from "../hooks/useEnterLeave";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
-import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon, IndoorIcon, OutdoorIcon } from "./Icons";
+import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon, IndoorIcon, OutdoorIcon, AlertIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
@@ -152,9 +152,13 @@ function railFlagsOf(b, noShows, warn, currency) {
   return [
     depositAmt > 0
       ? { k: "dep", keep: 2, title: "Deposit " + money(depositAmt, currency), icon: <DepositIcon size={IC.control} /> } : null,
+    // v18.3.1: seated outside the zone it asked for (a preference is a wish
+    // now), the zone mark gives way to the alert mark, in the same slot, at the
+    // same size, in the same BlockFlag (Patryk: a flag like the others). Warning
+    // ink cannot sit on the block's status fill, so the mark says it instead.
     zone
-      ? { k: "zone", keep: 3, title: zone === "indoor" ? "Prefers indoor" : "Prefers outdoor",
-          icon: zone === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} /> } : null,
+      ? { k: "zone", keep: 3, title: offZone(b) ? offZoneLabel(b) : (zone === "indoor" ? "Prefers indoor" : "Prefers outdoor"),
+          icon: offZone(b) ? <AlertIcon size={IC.control} /> : zone === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} /> } : null,
     hasPrefT
       ? { k: "pref", keep: 6, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
     isLocked(b)
@@ -1381,15 +1385,15 @@ export const TimelineView = memo(function TimelineView({
   // as every block on the day ARRIVING; it is part of useEnterLeave's resetKey
   // instead, which makes it a replacement.
   bookingsReady = true,
-  // The memo-busting layout identity (App's `layout` state; the note above the component).
-  // /code-review: read here too, as one of useEnterLeave's deps.
-  layoutSig = null,
-}) {
   // v18.3.1: App's `reconnectShown || resyncing`, the window in which bookings
   // changed elsewhere while this device slept arrive all at once. A change
   // then is a catch-up, not something happening now, so it does not fade
   // (useEnterLeave's opts.quiet; measured on the tablet in its header).
   catchingUp = false,
+  // The memo-busting layout identity (App's `layout` state; the note above the component).
+  // /code-review: read here too, as one of useEnterLeave's deps.
+  layoutSig = null,
+}) {
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);

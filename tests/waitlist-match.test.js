@@ -17,7 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { placeWaitlist } from "../src/lib/waitlist-match.js";
-import { genId, isAllIn, isAllOut } from "../src/lib/booking-logic.js";
+import { genId, isAllIn, isAllOut, offZone } from "../src/lib/booking-logic.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 
 // ALL_TABLES holds {id, capacity} objects, not ids — a booking's `tables` is a
@@ -252,15 +252,14 @@ describe("placeWaitlist — purity", () => {
 // than the booking form on a day the optimiser runs, whose trialFits falls back
 // to any zone when the preferred one is full.
 describe("placeWaitlist — a party's seating preference (v18.2.0 phase 68)", () => {
-  it("offers an indoor party of 11 NOTHING when indoor seats 10 — L-1's case", () => {
+  // v18.3.1 (Patryk): a preference is a WISH, so the match no longer refuses
+  // the other zone; it flags the result (`offZone`) instead.
+  it("offers an indoor party of 11 a place when indoor seats 10, flagged off-zone", () => {
     const res = run({ waitlist: [w({ size: 11, prefTime: "20:00", preference: "indoor" })] });
-    expect(Object.keys(res)).toHaveLength(0);
-    // …where the same party with no preference is placed, and not indoors only
-    // (on the default layout, the mixed combination 1A + 1B + 7 + i4).
-    const auto = run({ waitlist: [w({ size: 11, prefTime: "20:00" })] });
-    const r = Object.values(auto)[0];
+    const r = Object.values(res)[0];
     expect(r && r.tables.length).toBeGreaterThan(0);
     expect(isAllIn(r.tables)).toBe(false);
+    expect(offZone({ preference: "indoor", tables: r.tables })).toBe(true);
   });
 
   it("offers an indoor party indoor tables, and an outdoor party outdoor ones", () => {
@@ -273,13 +272,11 @@ describe("placeWaitlist — a party's seating preference (v18.2.0 phase 68)", ()
     expect(isAllOut(b.tables)).toBe(true);
   });
 
-  it("with its zone full, an indoor party waits even though outdoor is free", () => {
+  it("with its zone full, an indoor party is offered outdoor rather than waiting", () => {
     const indoor = ALL_TABLES.filter((t) => t.zone === "indoor" || /^i/.test(t.id)).map((t) => t.id);
     const full = indoor.map((id) => bk({ time: "19:30", duration: 180, tables: [id], _locked: true }));
     const res = run({ bookings: full, waitlist: [w({ size: 2, prefTime: "20:00", preference: "indoor" })] });
-    expect(Object.keys(res)).toHaveLength(0);
-    const auto = run({ bookings: full, waitlist: [w({ size: 2, prefTime: "20:00" })] });
-    expect(isAllOut(Object.values(auto)[0].tables)).toBe(true);
+    expect(isAllOut(Object.values(res)[0].tables)).toBe(true);
   });
 
   it("an unknown or 'auto' preference changes nothing", () => {

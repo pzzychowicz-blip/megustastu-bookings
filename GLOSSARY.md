@@ -136,6 +136,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | Star | **preferred flag** (`StarIcon`) | The booking has preferred tables. |
 | House with an arrow down inside it | **indoor flag** (`IndoorIcon`) | v18.2.0. The booking's seating preference is indoor. The List card adds the word. With the deposit, the last flag a narrow block drops. |
 | House with an arrow leaving it | **outdoor flag** (`OutdoorIcon`) | v18.2.0. The booking's seating preference is outdoor (the terrace). As the indoor flag. |
+| Alert triangle on a block's rail, or "Wanted indoor" in amber on a List card | **seated outside its zone** (`offZone`, `booking-logic.js`) | v18.3.1. The party asked for indoor (or outdoor) and holds tables that are not all there, because a preference is a wish: the preferred zone is tried first, the other when it is full. The block's zone flag becomes the alert mark, named "Wanted indoor, seated outdoor"; the save that put it there says "Seated outdoor: indoor was full." |
 | Padlock | **locked flag** (`LockIcon`) | The optimiser will not move it. Every walk-in and every drag-drop sets this. |
 | Crossed circle | **repeat-no-show flag** (`NoShowIcon`) | 2+ past no-shows on that phone number. |
 | Two offset bars | **overstaying flag** (`OverlapIcon`) | This party is sitting into the next booking's slot. |
@@ -261,7 +262,7 @@ Where the real ambiguity lives.
 | "Daily cutoff" in Settings | **cutoff** (`settings/optimizer.cutoff`) | The hour the optimiser stops acting on today. Off at 15:00, back on at the new day. |
 | A party that walked in | **walk-in** | `_manual: true, _locked: true` — immune to the optimiser. |
 | The ⏳ N badge in the date-nav row | **waitlist** (`useWaitlist.js`) | Parties waiting for a table, FCFS by `createdAt`. |
-| A waitlist party matched to a table | **waitlist match** (`placeWaitlist`, `lib/waitlist-match.js`) | v18.2.0 phase 68: only in the zone the party asked for (the entry's `preference`), shown as "Indoor" / "Outdoor" on its row. **Sequential, not parallel** — each match is held as a synthetic locked booking the next scan sees. |
+| A waitlist party matched to a table | **waitlist match** (`placeWaitlist`, `lib/waitlist-match.js`) | The zone the party asked for first (the entry's `preference`, "Indoor" / "Outdoor" on its row), the other zone when it is full (v18.3.1: a preference is a wish; v18.2.0 phase 68 had it strict). **Sequential, not parallel** — each match is held as a synthetic locked booking the next scan sees. |
 | "Separation between bookings" | **turnaround buffer** (`TURN_BUFFER`, `padEnd`) | Minutes a table stays unavailable after a party leaves. Off by default. **Placement only** — it never makes an already-booked day report clashes. |
 | Tables that can be pushed together | **join group** (`joinGroups`) | Which tables are physically adjacent. A table belongs to at most one. |
 | A run of joined tables used as one | **combo** (`VALID_COMBOS`) | **Derived** from join groups, not hand-listed. Every contiguous run of ≥2. |

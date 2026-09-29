@@ -118,16 +118,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **A booking's seating preference is soft on a day the optimiser runs (found in v18.2.0
-  phase 68).** `findFreeSlot` treats "indoor"/"outdoor" as a hard constraint, but the
-  optimiser behind `trialFits` falls back to ANY zone when the preferred one is full
-  (`_runGreedy`'s `findBestAny`). So the booking form accepts or refuses the same party
-  depending on the day: measured on DEV, 11 guests wanting indoor (the indoor combination
-  seats 10) were offered outdoor 1A · 1B · 3 · 4 · 7 for tomorrow 20:00, and refused ("No
-  tables available (indoor preference)") for today 21:30, after the 15:00 cutoff. The
-  waitlist matches strictly since phase 68. Decide whether a stated preference is a wish or
-  a rule, and make both paths say the same.
-
 - **The drop freeze (audit M1).** After a drop the block sits still with no frame painted.
   **Measured on the tablet in v18.3.1** (a DEV build over `adb reverse`, five real drops of a
   two-table party one or two rows, a rAF log around the release): 249, 250, 249, 249 and

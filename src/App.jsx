@@ -64,7 +64,7 @@ import {
   // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
   kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
-  savedToast,
+  savedToast, offZone, offZoneNote,
   // v18.0.0 session 8 (C7): the last minute a booking may start, and the
   // formatter for it. `toTime` was removed here as a dead import once; it has a
   // caller again.
@@ -2160,10 +2160,12 @@ function BookingApp({uid}){
   // describes what the ACTION did, so it must be fixed at the moment of the
   // action rather than recomputed against a `viewDate` the user may since have
   // navigated away from. Same shape as v17.16.9's carried label.
-  function flash(kind){
+  // v18.3.1: `note`, a sentence appended to the toast (a party seated outside
+  // the zone it asked for, `offZoneNote`).
+  function flash(kind,note){
     const k=kind||true;
     const active=optimizerActiveFor(viewDate,autoOptimizer);
-    setReshuffledMsg(savedToast(k,active));
+    setReshuffledMsg(savedToast(k,active)+(note?" "+note:""));
     // Offered to the next `armUndo`, which runs synchronously after every
     // `flash` that arms one. Cleared with the flag so a flash that arms NO undo
     // cannot leave the note lying about for a later pill to pick up — the same
@@ -2962,7 +2964,12 @@ function BookingApp({uid}){
         wa.completeModifyApply(editId, ok);
         // C8: a save that seats passes `optStateForSave: false`, so no table was
         // re-optimised and the toast must not say one was.
-        if((needsR||swapAffected||f.status==="completed"||seatingNow)&&ok) flash(seatingNow?"saved":null);
+        // v18.3.1: a save that lands the party outside the zone it asked for
+        // says so (a preference is a wish now); only when THIS save moved it
+        // there, so re-saving a booking already flagged repeats nothing.
+        const edited=fin.find(function(b){return b.id===editId;});
+        const zoneNote=edited&&offZone(edited)&&!offZone(orig)?offZoneNote(edited):"";
+        if((needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)&&ok) flash(seatingNow?"saved":null,zoneNote);
         // v17.4.0: form edits are undoable — the pre-edit `orig` is the snapshot
         // (undo swaps it back in wholesale, incl. tables/status/duration).
         if(ok&&editChanged) armUndo(undoDelta(bookings,fin),editId,"edit",false);
@@ -3055,7 +3062,9 @@ function BookingApp({uid}){
         // isn't linked yet (booking typed manually, not via Accept & open),
         // link it so the conversation shows the LinkedBookingCard.
         wa.linkBookingByPhone(newId, f.phone);
-        if(ok) flash();
+        // v18.3.1: seated outside its zone, the toast says so (offZoneNote).
+        const placedNew=fin.find(function(b){return b.id===newId;});
+        if(ok) flash(null,placedNew?offZoneNote(placedNew):"");
         // v16.0.0: this new booking converted a waitlist entry (Book from the
         // panel) — remove the entry now the booking is dispatched (a held write
         // shows optimistically + auto-retries, so the intent stands either way).
@@ -4844,6 +4853,7 @@ function BookingApp({uid}){
   // has always been built this way, so this costs nothing.
   const timelineEl=<TimelineView
     bookings={bookings}
+    catchingUp={reconnectShown||resyncing}
     date={viewDate}
     today={today}
     onEdit={VA.onEdit}
@@ -4853,7 +4863,6 @@ function BookingApp({uid}){
     blocks={tableBlocks}
     onBlock={VA.onBlock}
     nowMins={nowMins}
-    catchingUp={reconnectShown||resyncing}
     warnings={overlapWarnings}
     clashes={clashMap}
     clashSpans={clashSpans}
