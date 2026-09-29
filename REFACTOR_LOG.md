@@ -29616,3 +29616,16 @@ ROADMAP items to the version and two device checks.
     sequence: nothing animated on wake but the toast, the missed booking was simply there
     and the deleted one simply gone; a booking added and one deleted with the tablet awake
     still faded in and out. A catch-up slower than the 4s toast would still fade.
+17. **firebase 12.12.1 → 12.19.0 (ROADMAP #14).** The tablet check first, because of the
+    `forceWebSockets`/JSONP history. Firebase's release notes list no Realtime Database
+    change from 12.13 to 12.19; Auth gains two iOS Safari fixes ("Database is closing"
+    during sign-in, 12.18/12.19) and a `strict-origin-when-cross-origin` referrer (12.15,
+    which is what referrer-restricted API keys need, SECURITY.md §4). `npm audit`: 0.
+    **Verified on the restaurant tablet** (DEV tab over `adb reverse`, Chrome 154): the
+    running app reports `SDK_VERSION` 12.19.0, connected, the day loaded, no
+    `firebase:previous_websocket_failure`; a booking written from the tablet was
+    acknowledged in 285ms and drawn; with the screen off it went "Working offline" at
+    +12s as before, and on wake reconnected in 1.1s ("Reconnected — changes synced.")
+    with a delete made meanwhile applied. Both dev servers had to be restarted to
+    re-bundle it, one after the other: two Vite servers on one cache directory, started
+    together, re-bundled over each other and the page fetched a file that was gone.

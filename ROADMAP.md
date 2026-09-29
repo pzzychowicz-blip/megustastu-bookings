@@ -104,10 +104,10 @@ evidence for each.
   `/code-review`): `doSave` and `addFormToWaitlist` each run `withTypedCode`, then refuse a
   number with no code in the same words, which should be one helper.
 
-- **In-range dependency updates, and whether to automate them (#14).** firebase 12.12 →
-  12.19 needs a tablet check first (the `forceWebSockets`/JSONP history). react 19.3 and
-  plugin-react 6.1 are also available, and eslint 10 and vitest 5 are waiting as majors.
-  Optionally, turn on Dependabot for security updates only.
+- **In-range dependency updates, and whether to automate them (#14).** firebase went to
+  12.19 in v18.3.1 (checked on the tablet). react 19.3 and plugin-react 6.1 are still
+  available, and eslint 10 and vitest 5 are waiting as majors. Optionally, turn on
+  Dependabot for security updates only.
 
 - **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
   141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with

@@ -19,7 +19,7 @@
     "wa:backend": "node scripts/wa-backend-dev.mjs"
   },
   "dependencies": {
-    "firebase": "^12.11.0",
+    "firebase": "^12.19.0",
     "firebase-admin": "^14.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
