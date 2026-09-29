@@ -29669,3 +29669,56 @@ ROADMAP items to the version and two device checks.
     no registration and no cache left. So the freeze in production is about 100ms, six
     frames, on the tablet. Whether that is worth deferring the trials or the FLIP reads is
     Patryk's call, and the ROADMAP entry now carries the number.
+
+### `/code-review` round (2026-09-29)
+
+High effort, ten findings, each checked against the code before anything changed.
+Six were fixed, one per commit, with the gate green on each (2173 → 2176 tests):
+
+- **A backup read that returned after Settings closed** set the status line anyway,
+  so a failure was shown nowhere (it used to reach the banner) and the next open
+  showed an old outcome. `backupGenRef` ties a read to its open of Settings. A late
+  error goes to the red banner, which is visible again by then, and a late success
+  says nothing.
+- **"Indoor was full" for tables picked by hand.** Both saves gave the off-zone note
+  whenever the booking ended outside its zone, including manual tables (`mt`) with
+  the zone empty. The note is now only for tables the app chose; the flag still shows.
+- **A table the layout does not have read as "seated outdoor".** `isIn` reads an
+  unknown id as outdoor, so an indoor-preference booking left on a renamed table was
+  flagged from the Unplaced row. `offZone` counts only tables the layout has (and its
+  new code uses `const`, not `var`).
+- **The guest's preferred tables lost to the any-zone fallback.** `findFreeSlot`
+  tested them against the zone, so with indoor full a regular's outdoor favourite
+  lost to whatever `findBestAny` picked. They are now tried, zone aside, before it.
+- **The Gemini error line could quote the reply.** V8's `SyntaxError` quotes the
+  start of the text it could not parse: measured, "Unexpected token 'L', \"Lucía
+  Garc\"... is not valid JSON". It is now logged as "the reply was not valid JSON",
+  tested through the live path with a stubbed `fetch` (the test fails with
+  `e.message` put back).
+- **The List card's zone tag text** is one ternary with the same output.
+
+Not changed:
+
+- **The iPad's modal keyboard inset** (phase 10 dropped `kb.top` from the desktop card
+  as well as the phone sheet, measured on the iPhone only). That needs the iPad, so it
+  is on the device list below, not a code change.
+- **A host's own changes do not fade for the 4s after any reconnect** (phase 16's `quiet`
+  is keyed on the toast). This is the trade-off phase 16 already records, and it is
+  cosmetic.
+- **The edge scroll reads two rects and runs one selector query a frame.** That is
+  small next to the re-render each step already causes, and caching them would change
+  code measured on the tablet for no measured gain.
+
+Checked and not a finding: the 12px top strip (z-index 150) sits under every popup,
+toast layer and modal (200+). The status toasts are laid out below the header and
+scroll with the page, so the strip never covers one.
+
+### Check on the devices after merge
+
+| Phase | Device | Check |
+|---|---|---|
+| 1 | Android tablet | Hold a block, tremble slightly, then drag it two rows: it follows the finger to the drop |
+| 2 | iPhone (home-screen app) | The header is sharp, in both themes |
+| 6 | Tablet, iPhone | Drag a block to the bottom edge: the grid scrolls, and the drop lands on the row under the finger |
+| 10 | iPad | Booking form in Safari: focus Notes with the keyboard down. The card's top stays visible and Save stays above the keyboard |
+| 16 | Android tablet | Screen off, change a booking from another device, wake: nothing fades, and the change is simply there |

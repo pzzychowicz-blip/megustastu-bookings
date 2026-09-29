@@ -77,8 +77,8 @@ evidence for each.
 
   SECURITY.md §3 lists them as open. (The erasure item and the parse log shipped in v18.3.1.)
 
-- **Lint: triage, then decide a gate (#10).** There are 89 warnings: about 71 when the
-  workflow skill was written, 88 on 2026-09-18, 89 now. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so
+- **Lint: triage, then decide a gate (#10).** There are 90 warnings: about 71 when the
+  workflow skill was written, 88 on 2026-09-18, 90 on 2026-09-29. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so
   fix each one or keep it with `-- <reason>`. Then decide whether CI gets
   `--max-warnings N`, which is a policy change.
 
