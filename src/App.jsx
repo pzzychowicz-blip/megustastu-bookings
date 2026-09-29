@@ -2392,6 +2392,11 @@ function BookingApp({uid}){
   // and under `inert`, so an offline press looked dead until Settings closed.
   // null | {kind:"busy"|"done"|"error", text}. Cleared when Settings closes.
   const [backupStatus,setBackupStatus]=useState(null);
+  // /code-review: which open of Settings a backup belongs to. Closing Settings
+  // bumps it, so a read that returns afterwards neither leaves a stale line for
+  // the next open nor loses a failure: an error then goes to the red banner,
+  // which is visible again once the overlay is gone.
+  const backupGenRef=useRef(0);
   function doBackup(){
     // The widest data-protection action in the app — every booking, every
     // customer name and every phone number in one file — and the ONE gated
@@ -2403,6 +2408,11 @@ function BookingApp({uid}){
     // download the same file twice.
     if(backupInFlightRef.current) return;
     backupInFlightRef.current=true;
+    const gen=backupGenRef.current;
+    function report(st){
+      if(gen===backupGenRef.current) setBackupStatus(st);
+      else if(st.kind==="error") setWriteWarning(st.text);
+    }
     setBackupStatus({kind:"busy",text:"Reading the database…"});
     readDatabaseRoot().then(function(root){
       const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
@@ -2416,10 +2426,10 @@ function BookingApp({uid}){
         a.click();
         document.body.removeChild(a);
         setTimeout(function(){URL.revokeObjectURL(url);},1000);
-        setBackupStatus({kind:"done",text:"Backup file created: "+a.download+". Check this device's downloads."});
-      }catch{setBackupStatus({kind:"error",text:"Couldn't create the backup file on this device."});}
+        report({kind:"done",text:"Backup file created: "+a.download+". Check this device's downloads."});
+      }catch{report({kind:"error",text:"Couldn't create the backup file on this device."});}
     },function(err){
-      setBackupStatus({kind:"error",text:err&&err.message==="offline"
+      report({kind:"error",text:err&&err.message==="offline"
         ?"Offline. A backup needs a connection to read the latest data. Try again once the app shows Connected."
         :"Couldn't read the database for the backup."});
     }).finally(function(){backupInFlightRef.current=false;});
@@ -2604,7 +2614,7 @@ function BookingApp({uid}){
   // keeps its tab reset on BOTH paths — the clean close here and the discard
   // below — because that was part of the close behaviour before the guard, not
   // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");setBackupStatus(null);}
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");setBackupStatus(null);backupGenRef.current++;}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}

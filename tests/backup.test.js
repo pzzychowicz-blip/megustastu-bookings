@@ -158,12 +158,19 @@ describe("App's doBackup goes through the builder", () => {
     expect(body).not.toMatch(/\bbookings:bookings\b/);
     expect(body).not.toMatch(/\boperatingHours:weekHours\b/);
   });
-  // v18.3.1: every outcome is reported under the button, never in the red
-  // banner, which sits behind the Settings overlay and under inert.
-  it("reports every outcome through backupStatus, not the write banner", () => {
-    expect(body).not.toMatch(/setWriteWarning/);
-    expect(body.match(/setBackupStatus\(\{kind:"(busy|done|error)"/g)).toHaveLength(4);
-    expect(app).toMatch(/function closeSettings\(\)\{[^}]*setBackupStatus\(null\);\}/);
+  // v18.3.1: every outcome is reported under the button while Settings is
+  // open, because the red banner sits behind its overlay and under inert.
+  it("reports every outcome under the button while Settings is open", () => {
+    expect(body).toMatch(/setBackupStatus\(\{kind:"busy"/);
+    expect(body.match(/report\(\{kind:"(done|error)"/g)).toHaveLength(3);
+    expect(body).toMatch(/if\(gen===backupGenRef\.current\) setBackupStatus\(st\);/);
+  });
+  // /code-review: a read that returns after Settings closed belongs to no open
+  // of it. It must not leave a stale line for the next open, and a failure
+  // must still be seen: the banner, visible once the overlay is gone.
+  it("a read returning after Settings closed goes to the banner, errors only", () => {
+    expect(body).toMatch(/else if\(st\.kind==="error"\) setWriteWarning\(st\.text\);/);
+    expect(app).toMatch(/function closeSettings\(\)\{[^}]*setBackupStatus\(null\);backupGenRef\.current\+\+;\}/);
   });
 
   it("Settings keeps the status region mounted, so it can announce", () => {
