@@ -258,7 +258,13 @@ async function liveParse(text, ctx) {
     }
     return parsed;
   } catch (e) {
-    console.warn("[gemini] " + (e.name === "AbortError" ? "timeout after " + TIMEOUT_MS + "ms" : e.message) + " — message saved without draft.");
+    // /code-review: never e.message for a SyntaxError. V8 quotes the start of
+    // the text it could not parse ("Unexpected token 'L', \"Lucía Garc\"..."),
+    // and that text is the model's reply about the guest, which the parse log
+    // above keeps out of production logs.
+    const why = e.name === "AbortError" ? "timeout after " + TIMEOUT_MS + "ms"
+      : e.name === "SyntaxError" ? "the reply was not valid JSON" : e.message;
+    console.warn("[gemini] " + why + " — message saved without draft.");
     return null;
   } finally {
     clearTimeout(timer);
