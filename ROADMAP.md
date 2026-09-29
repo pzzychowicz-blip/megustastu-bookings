@@ -223,8 +223,8 @@ evidence for each.
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the
   per-scheme `theme-color` metas plus the manifest colours and its `?v=` bump (N5),
   `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
-  `prefers-contrast: more` block (A10), and the popover keyframe pair for
-  `ConnectionStatus` (M9). Drop any item the device check turns back.
+  `prefers-contrast: more` block (A10), the popover keyframe pair for
+  `ConnectionStatus` (M9), and v18.3.1's `.mgt-edge` top strip (the iOS home-screen blur). Drop any item the device check turns back.
 
 ## Designed, not implemented
 

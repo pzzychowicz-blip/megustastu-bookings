@@ -197,6 +197,10 @@
         } catch (e) { /* no watchdog; the app either starts or it doesn't */ }
       })();
     </script>
+    <!-- v18.3.1: the top edge an installed iOS app samples instead of blurring.
+         See .mgt-edge in src/index.css. Static, outside #root, so the login
+         screen, the app and the error boundary all get it. -->
+    <div class="mgt-edge" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

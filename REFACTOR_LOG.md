@@ -29426,3 +29426,17 @@ ROADMAP items to the version and two device checks.
    the block follows to +64px, 3/3; Patryk's own drags all worked. Why it began now is not
    established: the handler dates from v17.16.12, and the tablet's Chrome went from 150 to
    154 in between. `tests/timeline-drag.test.js` pins the guard.
+2. **The iPhone home-screen app's header is no longer blurred.** Since iOS 26 an installed
+   web app gets the Liquid Glass scroll edge effect at the top of the web view, a blur about
+   40pt deep below the status bar. On a phone that covers the whole header row (Patryk's
+   screenshot, iPhone 12 mini, iOS 27). No meta tag or CSS property turns it off. WebKit skips
+   it when a fixed or sticky box with a plain background colour covers the top edge (its
+   `fixedContainerEdges` probe), and paints that colour instead. `index.html` now carries a
+   static `.mgt-edge`, a fixed full-width 12px strip in `--bg-app`, shown only under
+   `(display-mode: standalone)`. The 12px is the phone shell's top padding, so at rest it
+   covers nothing. It sits at z-index 150: above the page and the bottom bar (100), below the
+   modal layer (200). It is static, outside `#root`, so the login screen and the error
+   boundary get it too, and print hides it. **Measured first** on the iPhone with a probe
+   page added to the Home Screen (same metas, colours and 12px padding as the app): the
+   header is blurred with the strip off and sharp with it on. The padding workaround other
+   apps use (push the header ~40pt down) would have cost 40pt of a 812pt screen.
