@@ -119,7 +119,7 @@ describe("exit holds outlast their animations", () => {
     expect(src).not.toMatch(/\},\s*\d+\s*\)/);
     // …and the timeline asks for the speed its classes run on (--t-move).
     const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");
-    expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move" \}\s*\)/);
+    expect(tl).toMatch(/useEnterLeave\([\s\S]*?\{ speed: "move"(, quiet: catchingUp)? \}\s*\)/);
     // /code-review: the snapshots' lanes follow the layout and the clock too.
     expect(tl).toMatch(/\[bookings, late, warnings, clashes, freeing, chipsOn, layoutSig, nowMins\],/);
     expect(token("t-move")).toBe(M.dur.move);

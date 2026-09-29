@@ -1385,6 +1385,11 @@ export const TimelineView = memo(function TimelineView({
   // /code-review: read here too, as one of useEnterLeave's deps.
   layoutSig = null,
 }) {
+  // v18.3.1: App's `reconnectShown || resyncing`, the window in which bookings
+  // changed elsewhere while this device slept arrive all at once. A change
+  // then is a catch-up, not something happening now, so it does not fade
+  // (useEnterLeave's opts.quiet; measured on the tablet in its header).
+  catchingUp = false,
   const scrollRef = useRef(null);
   const followRafRef = useRef(0);   // v15.8.1: pending rAF id for the follow re-assert loop
   const [quickStatus, setQuickStatus] = useState(null);
@@ -1629,7 +1634,7 @@ export const TimelineView = memo(function TimelineView({
         lane: laneOf.has(b.id) ? laneOf.get(b.id) : null
       }]));
     },
-    { speed: "move" }
+    { speed: "move", quiet: catchingUp }
   );
 
   // v15.8.0 cont.4: FLIP the blocks so a table REASSIGNMENT (a vertical row move the

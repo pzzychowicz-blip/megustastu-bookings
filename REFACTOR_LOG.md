@@ -29600,3 +29600,19 @@ ROADMAP items to the version and two device checks.
     the wrong thing to hand over silently). **Measured** in the rig: online, the file
     downloaded and the line named it; with the context offline, the press gave the
     refusal in danger red (rgb 153 27 27) under the button; reopened, the line was empty.
+16. **Timeline fades no longer replay when the tablet wakes (ROADMAP, found by v18.3.0's
+    `/code-review`).** **Measured first** on the restaurant tablet (the DEV tab, screen
+    off with `adb` power keys, bookings changed from the Mac): with the screen off 37s, a
+    booking added while the page was hidden faded in 0.4s after wake, and 1.8s after wake
+    a booking deleted meanwhile reappeared from its snapshot and faded out while another
+    faded in. A second recording found the reason for the split: the page goes hidden at
+    once, and ~6s later the tablet drops its connection ("Working offline"), so most
+    changes are not diffed while hidden at all. They arrive in the catch-up after wake,
+    0.9s for the reconnect ("Reconnected — changes synced.") and 0.5s more for the data,
+    with the page visible. `useEnterLeave` now treats a diff as a REPLACEMENT (re-seed,
+    nothing held, nothing fades) when the page is hidden OR the caller's `opts.quiet` is
+    set; TimelineView passes `catchingUp`, App's `reconnectShown || resyncing`, the 4s the
+    reconnect toast is up (the resync runs inside the same handler). **After**, same
+    sequence: nothing animated on wake but the toast, the missed booking was simply there
+    and the deleted one simply gone; a booking added and one deleted with the tablet awake
+    still faded in and out. A catch-up slower than the 4s toast would still fade.

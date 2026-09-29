@@ -150,16 +150,6 @@ evidence for each.
   already move the blocks while the labels jump. And `tableForClientY` would need the row's
   live height during a reveal, or a drop lands rows off.
 
-- **Timeline fades replay after the tablet wakes (found by v18.3.0's `/code-review`).**
-  `useEnterLeave`'s holds start on the next animation frame (`afterFrame`), and a hidden
-  tab renders none. So bookings cancelled or added on another device while the screen was
-  off pile up, and on wake they all play their fade at once: the departed ones from their
-  old snapshots, possibly over whatever took their place, and the new ones fading in, all
-  minutes late. This is the behaviour `lib/after-frame.js` documents ("the leaving node
-  waits, inert, until the tab is shown"). Whether a change nobody saw should animate is a
-  decision. One option: treat a diff taken while `document.hidden` as a replacement, the
-  way a date change is. Check on the tablet first how it reads there.
-
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the

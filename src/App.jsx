@@ -4853,6 +4853,7 @@ function BookingApp({uid}){
     blocks={tableBlocks}
     onBlock={VA.onBlock}
     nowMins={nowMins}
+    catchingUp={reconnectShown||resyncing}
     warnings={overlapWarnings}
     clashes={clashMap}
     clashSpans={clashSpans}

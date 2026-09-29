@@ -46,6 +46,9 @@
 //   capture   () => Map(id → snapshot) for the CURRENT render. Its keys are the
 //             list's membership; a snapshot is whatever the caller needs to
 //             draw that item again. Called only when a dep changed.
+//   opts.quiet  v18.3.1: true while every change is a catch-up nobody watched
+//             (the reconnect after wake); a diff taken then re-seeds like
+//             resetKey. A diff while the page is hidden always does.
 //   opts.speed  the `M` entry the caller's enter/exit classes run on, so the
 //             hold is derived from the same token (useRevealRows' `speed`).
 //
@@ -75,6 +78,26 @@ import { afterFrame } from "../lib/after-frame";
 const NO_SNAPS = new Map();
 const NO_IDS = new Set();
 
+// v18.3.1 (ROADMAP, found by v18.3.0's /code-review): a change nobody could see
+// is not animated. The holds start on the next animation FRAME and a hidden page
+// renders none, so every change that landed while the tablet's screen was off
+// waited and then played at once on wake. Measured on the restaurant's tablet
+// (DEV tab, screen off 37s, two bookings added and one deleted from another
+// device): on wake one block faded in at +0.4s, and at +1.8s the DELETED booking
+// reappeared from its snapshot and faded out while the other new one faded in.
+// So a diff taken while the page is hidden is a REPLACEMENT, exactly like a
+// resetKey change: the list re-seeds, nothing is held, nothing fades.
+//
+// Hidden is only half of it. The same measurement showed the tablet dropping
+// its connection ~6s after the screen went off, so most changes are not diffed
+// while hidden at all: they arrive in the CATCH-UP after wake, 0.5s after the
+// reconnect (with "Reconnected — changes synced." up), while the page is
+// visible. `opts.quiet` is the caller's word for that window (TimelineView's
+// `catchingUp`), and a diff taken inside it is a replacement too.
+function pageHidden() {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
 function sameDeps(a, b) {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
@@ -87,8 +110,10 @@ export function useEnterLeave(resetKey, deps, capture, opts) {
   const [leaving, setLeaving] = useState(NO_SNAPS);
   const [arriving, setArriving] = useState(NO_IDS);
 
-  if (seen.key !== resetKey) {
-    // A replacement: re-seed exactly as on first mount.
+  const quiet = !!(opts && opts.quiet);
+  if (seen.key !== resetKey || (!sameDeps(seen.deps, deps) && (quiet || pageHidden()))) {
+    // A replacement: re-seed exactly as on first mount. A change while the
+    // page is hidden, or inside the caller's quiet window, is one too (above).
     setSeen({ key: resetKey, deps: deps, snaps: capture() });
     if (leaving.size) setLeaving(NO_SNAPS);
     if (arriving.size) setArriving(NO_IDS);
