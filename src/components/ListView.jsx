@@ -592,7 +592,7 @@ export const ListView = memo(function ListView({
         const zoneTag = (b.preference === "indoor" || b.preference === "outdoor") ? (
           <CardFlag ink={zoneOff ? FLAG_WARN : FLAG_NEUTRAL} title={zoneOff ? offZoneLabel(b) : (b.preference === "indoor" ? "Prefers indoor" : "Prefers outdoor")}>
             {b.preference === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} />}
-            {(zoneOff ? "Wanted " : "") + (b.preference === "indoor" ? (zoneOff ? "indoor" : "Indoor") : (zoneOff ? "outdoor" : "Outdoor"))}
+            {zoneOff ? "Wanted " + b.preference : (b.preference === "indoor" ? "Indoor" : "Outdoor")}
           </CardFlag>
         ) : null;
         const prefTag = (b.preferredTables && b.preferredTables.length > 0) ? (
