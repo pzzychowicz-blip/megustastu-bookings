@@ -1457,7 +1457,12 @@ export const TimelineView = memo(function TimelineView({
       scrollRef.current.scrollLeft = scrollPosRef.current;
     }
     return () => cancelAnimationFrame(followRafRef.current);
-  }, [followNow, isToday, nowMins, gridW, followLeadMins]);
+    // v18.3.2 (the stale-closure triage): `totalMins` joins the list. `gridW`
+    // follows it everywhere except under its 320px floor (a grid shorter than
+    // about 4½ hours at 1×), where the hours could change with `gridW` standing
+    // still and the fraction computed from the old span. `scrollPosRef` is
+    // App's ref, the same object every render, so listing it costs nothing.
+  }, [followNow, isToday, nowMins, gridW, followLeadMins, totalMins, scrollPosRef]);
 
   function onGridScroll() {
     if (scrollRef.current && scrollPosRef) {

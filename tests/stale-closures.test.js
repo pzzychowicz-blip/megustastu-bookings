@@ -47,3 +47,17 @@ describe("WeekView's keydown listener is re-added on every render", () => {
     expect(Week).toMatch(/function goToday\(\)\{ setRef\(today\); setFocus\(today\); \}/);
   });
 });
+
+// ── TimelineView: Follow's fraction is computed from the CURRENT span ─────────
+// `gridW` is max(320, totalMins × zoom × 1.2), so it tracks `totalMins` except
+// under its floor, where the hours could change and the fraction be computed
+// from the old span. Found by reading; measured after, Follow on today's DEV
+// timeline scrolled to 0.5166 of the grid, against (18:10 − 13:00) / 600 min.
+describe("the timeline's follow effect lists the span it divides by", () => {
+  const Tl = read("components/TimelineView.jsx");
+  it("names totalMins and scrollPosRef", () => {
+    expect(Tl).toMatch(/\}, \[followNow, isToday, nowMins, gridW, followLeadMins, totalMins, scrollPosRef\]\);/);
+    expect(Tl).toMatch(/const fraction = \(targetMins - OPEN \* 60\) \/ totalMins;/);
+    expect(Tl).toMatch(/const gridW = Math\.max\(320, totalMins \* zoom \* 1\.2\);/);
+  });
+});

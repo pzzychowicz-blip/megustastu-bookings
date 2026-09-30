@@ -29888,6 +29888,15 @@ won't-fix.
      dependency array now, as InboxPanel's. **Measured after**, keys driven in the DEV
      app: two → stepped two weeks, M and W switched mode around the focused day, T came
      back, ↓ moved the day and Enter opened it.
+   - **TimelineView: Follow could divide by an old span.** Its effect computes the scroll
+     fraction from `totalMins` and watched `gridW` instead, and `gridW` is
+     `max(320, totalMins × zoom × 1.2)`, so under that floor (a grid shorter than about
+     4½ hours at 1×) an hours change left the fraction computed from the old span. Found
+     by reading. `totalMins` joins the list, and so does `scrollPosRef` (App's ref, the
+     same object every render). Outside the floor this re-runs nothing new, since
+     `gridW` changes with `totalMins` there. **Measured after**: F on today's DEV
+     timeline scrolled to 0.5166 of the grid, against (18:10 − 13:00) / 600 minutes =
+     0.5167 (now 18:40, less the 30-minute lead), and no console errors.
 
 ### Check on the devices after merge
 
