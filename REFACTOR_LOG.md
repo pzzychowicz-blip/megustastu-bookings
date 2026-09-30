@@ -29902,6 +29902,8 @@ won't-fix.
      on a `useCallback` with no deps), so it never changes and re-runs nothing.
      `useWinW` and `useWinH` read their setter as `ws[1]` / `hs[1]`, which the lint cannot
      recognise as a setter; they destructure it now (`useWinW` loses its `var`s with it).
+     `useCollapseState`'s re-sync effect lists `key`, the storage key it reads, where it
+     listed the `phoneKey` that key is made from; the two change together.
 
 ### Check on the devices after merge
 

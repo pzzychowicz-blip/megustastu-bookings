@@ -29,6 +29,8 @@ export function useCollapseState(phoneKey, section, defaultCollapsed) {
   });
   // Re-sync when the conversation (or section) changes — the same component
   // instance is reused across conversations in the two-pane layout.
+  // v18.3.2: it lists `key`, the value it reads, rather than the `phoneKey` it
+  // is made from. The two change together, so nothing runs differently.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(key);
@@ -36,7 +38,7 @@ export function useCollapseState(phoneKey, section, defaultCollapsed) {
       const obj = JSON.parse(raw);
       setCollapsed(typeof obj[section] === "boolean" ? obj[section] : defaultCollapsed);
     } catch { setCollapsed(defaultCollapsed); }
-  }, [phoneKey, section, defaultCollapsed]);
+  }, [key, section, defaultCollapsed]);
   function toggle() {
     const next = !collapsed;
     setCollapsed(next);
