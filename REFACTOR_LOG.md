@@ -29897,6 +29897,13 @@ won't-fix.
      `gridW` changes with `totalMins` there. **Measured after**: F on today's DEV
      timeline scrolled to 0.5166 of the grid, against (18:10 − 13:00) / 600 minutes =
      0.5167 (now 18:40, less the 30-minute lead), and no console errors.
+   - **ConversationView: a new message's entrance was keyed on the count.** The effect that
+     plays it compares the last message's id, and re-ran only when the message COUNT moved,
+     so a change that replaced the last message without changing the count would never
+     play its entrance. It is keyed on `lastId` now. Found by reading; an appended message
+     moves both, so nothing else runs differently. **Measured after**, on DEV: a message
+     sent into the open thread with the sandbox's `__waSim.question` drew exactly one bubble
+     with `mgt-bubble-in`, the new one.
    - **Five that only needed a value the lint could see**, no behaviour change: App's
      return-to-inbox effect lists `setShowInbox`, which is one of `setModalFns` (memoised
      on a `useCallback` with no deps), so it never changes and re-runs nothing.

@@ -66,7 +66,10 @@ export function ConversationView({
       prevLastIdRef.current = lastId;
       setAnimateId(lastId);                     // a new message landed in the open thread
     }
-  }, [conv.phoneKey, msgsForConv.length]);
+    // v18.3.2: keyed on `lastId`, the value it compares, where it was keyed on
+    // the message COUNT. An appended message moves both; a snapshot that swaps
+    // the last message for a new one moves only the id, and now animates it.
+  }, [conv.phoneKey, lastId]);
 
   // ── "Booking confirmed" banner auto-dismiss ─────────────────────────────────
   // The big accepted banner used to sit in the thread until someone hit its ✕.
