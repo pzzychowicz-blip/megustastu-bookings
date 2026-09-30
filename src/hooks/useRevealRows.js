@@ -27,6 +27,16 @@
 // already sliding to make room (useFlip) and the growing row added a second
 // motion on top of that.
 //
+// `opts.quiet` (v18.3.2, O3) is the caller's word that every change now is a
+// CATCH-UP nobody watched: App's `reconnectShown || resyncing`, the window in
+// which a sleeping device's missed changes arrive all at once. A membership
+// change inside it re-seeds the lifecycle, exactly like a `resetKey` change:
+// departed ids are dropped and newcomers open, with nothing folding. It is
+// useEnterLeave's `opts.quiet` (v18.3.1, measured on the tablet there), carried
+// to the lists that fold since O3. Only a CHANGE inside the window re-seeds, so
+// a fold that began before the window runs to the end, unless another change
+// lands inside it (the re-seed then drops it, as useEnterLeave's drops a fade).
+//
 // `sig` is a stable, sorted membership signature — the effects key on it, NOT the
 // fresh-every-render ids array, so a value-only change (e.g. warn→noshow, or a
 // countdown tick) re-renders without churning the lifecycle. The membership diff
@@ -54,6 +64,7 @@ const PRUNE_MS = REVEAL_EXIT_MS;
 export function useRevealRows(ids, resetKey, opts) {
   const speed = (opts && opts.speed) || "reveal";
   const instantIn = !!(opts && opts.instantIn);
+  const quiet = !!(opts && opts.quiet);
   const pruneMs = speed === "reveal" ? PRUNE_MS : exitHold(speed);
   const [renderIds, setRenderIds] = useState(function () { return ids.slice(); });
   const [openIds, setOpenIds] = useState(function () { return new Set(ids); });
@@ -138,6 +149,34 @@ export function useRevealRows(ids, resetKey, opts) {
   }, [prevReset]);
 
   const sig = ids.slice().sort().join(",");
+
+  // ── A change nobody watched is a replacement too (v18.3.2, O3) ─────────────
+  // `opts.quiet` (the header): a membership change inside the caller's catch-up
+  // window re-seeds exactly as a resetKey change does, and DURING RENDER for
+  // the same reason, so the first committed dom is already the new list. From
+  // the diff effect below it landed a commit late, and that commit drew the
+  // departed card once more, inert (measured: 22ms on DEV). `seenSig` is the
+  // membership the last render saw, kept through every change so that turning
+  // quiet on re-seeds nothing by itself: a fold that began before the window
+  // runs to the end, unless another change lands inside it. `quietResets`
+  // drives the same ref bookkeeping as the resetKey block's layout effect.
+  const [seenSig, setSeenSig] = useState(sig);
+  const [quietResets, setQuietResets] = useState(0);
+  if (sig !== seenSig) {
+    setSeenSig(sig);
+    if (quiet) {
+      setRenderIds(ids.slice());
+      setOpenIds(new Set(ids));
+      setQuietResets(quietResets + 1);
+    }
+  }
+  useLayoutEffect(function () {
+    if (!quietResets) return;
+    prevKeys.current = ids.slice();
+    Object.keys(timers.current).forEach(function (id) { clearTimeout(timers.current[id]); });
+    timers.current = {};
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ids` is read live; this fires on a quiet re-seed, never on a content change
+  }, [quietResets]);
 
   // ── Membership diff: add newcomers, collapse + prune departures ────────────
   useEffect(function () {

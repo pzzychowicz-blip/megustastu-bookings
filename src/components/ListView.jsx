@@ -281,6 +281,10 @@ export const ListView = memo(function ListView({
   // the strip's `Closed this day` section is the empty state for that case, and
   // offering two buttons the app refuses is worse than offering none.
   dayClosed = false,
+  // v18.3.2 (O3): App's `catchingUp`, the reconnect catch-up window. A card
+  // leaving or arriving then is a change nobody watched, so it does not fold
+  // (useRevealRows' `quiet`; TimelineView's prop of the same name).
+  catchingUp = false,
   currency = "€"
 }) {
   // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
@@ -351,13 +355,16 @@ export const ListView = memo(function ListView({
   const activeIds = active.map(function (b) { return b.id; });
   const activeById = {};
   active.forEach(function (b) { activeById[b.id] = b; });
-  const { renderIds, openIds } = useRevealRows(activeIds, date, { speed: ROW_FOLD, instantIn: true });
+  const { renderIds, openIds } = useRevealRows(activeIds, date, { speed: ROW_FOLD, instantIn: true, quiet: catchingUp });
   const cardOrder = useLeavingOrder(activeIds, renderIds);
   // FOLDING once a leaving card's Reveal has CLOSED, not from the commit it
   // leaves on: that commit still draws it open, so nothing has moved and FLIP's
   // baseline is still true. Quiet while a card folds and for the commit after
   // (the prune, which re-keys FLIP), or FLIP would measure the whole fold as one
   // unseen jump and play it again: the WhatsApp list's precedent (`collapsing`).
+  // A catch-up re-seed (`catchingUp`) opens every card at once, so nothing is
+  // folding and FLIP slides the cards to their new places, which is how this
+  // list moved on a catch-up before O3.
   const folding = cardOrder.some(function (id) { return !openIds.has(id); });
   const wasFolding = useRef(false);
   useEffect(function () { wasFolding.current = folding; });

@@ -76,7 +76,7 @@ describe("one name for a list row's fold", () => {
 describe("the waitlist panel's rows leave the way they arrive", () => {
   const panel = read("components/WaitlistPanel.jsx");
   it("folds on ROW_FOLD and arrives at full height", () => {
-    expect(panel).toMatch(/useRevealRows\(ids,date,\{speed:ROW_FOLD,instantIn:true\}\)/);
+    expect(panel).toMatch(/useRevealRows\(ids,date,\{speed:ROW_FOLD,instantIn:true,quiet:catchingUp\}\)/);
   });
   it("draws a leaving row where it was, from Reveal's cache, inert", () => {
     expect(panel).toMatch(/const order=useLeavingOrder\(ids,renderIds\);/);
@@ -91,7 +91,7 @@ describe("the waitlist panel's rows leave the way they arrive", () => {
 describe("the List's active cards leave the way they arrive", () => {
   const list = read("components/ListView.jsx");
   it("folds on ROW_FOLD, arrives at full height, and treats a new day as a new list", () => {
-    expect(list).toMatch(/useRevealRows\(activeIds, date, \{ speed: ROW_FOLD, instantIn: true \}\)/);
+    expect(list).toMatch(/useRevealRows\(activeIds, date, \{ speed: ROW_FOLD, instantIn: true, quiet: catchingUp \}\)/);
     expect(list).toMatch(/const cardOrder = useLeavingOrder\(activeIds, renderIds\);/);
   });
   it("draws a leaving card where it was, from Reveal's cache, inert, with the list owning its items", () => {

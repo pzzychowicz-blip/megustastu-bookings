@@ -5,7 +5,8 @@
 // page is hidden and ~6s later the connection drops, so changes made
 // elsewhere arrive either while hidden or in the catch-up 0.5s after the
 // reconnect on wake. Both used to play every fade at once, including a deleted
-// booking reappearing to fade out. Comments stripped (tests/test-hygiene.test.js).
+// booking reappearing to fade out. v18.3.2 (O3) carries the catch-up window to
+// the two lists that fold since then. Comments stripped (tests/test-hygiene.test.js).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -22,8 +23,26 @@ describe("useEnterLeave: a hidden or quiet diff is a replacement", () => {
     expect(hook).toMatch(/const quiet = !!\(opts && opts\.quiet\);/);
     expect(hook).toMatch(/if \(seen\.key !== resetKey \|\| \(!sameDeps\(seen\.deps, deps\) && \(quiet \|\| pageHidden\(\)\)\)\) \{/);
   });
-  it("the timeline passes the catch-up window, and App defines it", () => {
+  it("the timeline passes the catch-up window, and App defines it once for all three consumers", () => {
     expect(read("components/TimelineView.jsx")).toMatch(/\{ speed: "move", quiet: catchingUp \}/);
-    expect(read("App.jsx")).toMatch(/catchingUp=\{reconnectShown\|\|resyncing\}/);
+    const app = read("App.jsx");
+    expect(app).toMatch(/const catchingUp=reconnectShown\|\|resyncing;/);
+    expect(app.match(/catchingUp=\{catchingUp\}/g) || []).toHaveLength(3);
+    expect(app).not.toMatch(/catchingUp=\{reconnectShown/);
+  });
+});
+
+describe("useRevealRows: a quiet diff is a replacement (v18.3.2, O3)", () => {
+  const hook = read("hooks/useRevealRows.js");
+  it("re-seeds on a membership change inside the caller's quiet window, pending prunes included", () => {
+    expect(hook).toMatch(/const quiet = !!\(opts && opts\.quiet\);/);
+    // During render, as the resetKey re-seed is: the first committed dom is the new list.
+    expect(hook).toMatch(/const \[seenSig, setSeenSig\] = useState\(sig\);/);
+    expect(hook).toMatch(/if \(sig !== seenSig\) \{\s*setSeenSig\(sig\);\s*if \(quiet\) \{\s*setRenderIds\(ids\.slice\(\)\);\s*setOpenIds\(new Set\(ids\)\);\s*setQuietResets\(quietResets \+ 1\);\s*\}\s*\}/);
+    expect(hook).toMatch(/useLayoutEffect\(function \(\) \{\s*if \(!quietResets\) return;\s*prevKeys\.current = ids\.slice\(\);\s*Object\.keys\(timers\.current\)\.forEach\(function \(id\) \{ clearTimeout\(timers\.current\[id\]\); \}\);\s*timers\.current = \{\};/);
+  });
+  it("the List's cards and the waitlist's rows pass the catch-up window", () => {
+    expect(read("components/ListView.jsx")).toMatch(/useRevealRows\(activeIds, date, \{ speed: ROW_FOLD, instantIn: true, quiet: catchingUp \}\)/);
+    expect(read("components/WaitlistPanel.jsx")).toMatch(/useRevealRows\(ids,date,\{speed:ROW_FOLD,instantIn:true,quiet:catchingUp\}\)/);
   });
 });

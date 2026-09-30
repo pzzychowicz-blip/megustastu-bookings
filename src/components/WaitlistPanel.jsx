@@ -57,6 +57,8 @@
 //   onBook(entry)  — open the pre-filled booking form
 //   onRemove(id)   — delete the entry
 //   onClose()      — close the panel
+//   catchingUp     — v18.3.2 (O3): App's reconnect catch-up window; a row that
+//                    leaves or arrives then does not fold (useRevealRows' quiet)
 
 import { useState } from "react";
 import { S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
@@ -89,12 +91,12 @@ function addedLabel(ts){
   return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
 }
 
-export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose }){
+export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose, catchingUp = false }){
   const [confirmId,setConfirmId]=useState(null);
   // v18.3.2 (O3): the rows drawn — the live ones, and any still folding away —
   // in the order they hold on screen (the header).
   const ids=entries.map(function(w){return w.id;});
-  const {renderIds,openIds}=useRevealRows(ids,date,{speed:ROW_FOLD,instantIn:true});
+  const {renderIds,openIds}=useRevealRows(ids,date,{speed:ROW_FOLD,instantIn:true,quiet:catchingUp});
   const order=useLeavingOrder(ids,renderIds);
 
   function rowFor(w,i){

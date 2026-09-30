@@ -30054,6 +30054,24 @@ won't-fix.
      first's top plus its height in every frame), neither got a FLIP animation at either
      prune, and the fold header followed the list's bottom and ended 10px higher than
      before, the removed gap.
+   - **Neither list folds a catch-up.** v18.3.1 made the timeline's blocks treat a change
+     inside App's reconnect window (`reconnectShown || resyncing`) as a replacement, after
+     the tablet played every missed fade at once on wake. The two lists that fold since O3
+     take the same rule: `useRevealRows` gains `opts.quiet`, and a membership change inside
+     it re-seeds as a `resetKey` change does, pending prunes included. App now defines
+     `catchingUp` once and hands it to all three (it was written inline at the timeline's
+     mount). With every card open after a re-seed, the List's FLIP slides the others into
+     place, which is how it moved on a catch-up before O3. **Measured on DEV** through a
+     real outage, `goOffline` / `goOnline` on the app's own Database with a second tab
+     completing the day's one booking in between. The first version re-seeded from the
+     diff effect: the missed change landed at 645ms, drew the card inert for one commit,
+     and at 667ms it was gone. That extra commit is what the lint's new
+     `set-state-in-effect` advisory (64 → 65) was pointing at, and the `resetKey` block had
+     recorded the same reason for re-seeding during render. Moved into render (`seenSig`,
+     the membership the last render saw, followed through every change so that turning
+     quiet on re-seeds nothing by itself), and re-measured after a reload: the reconnect
+     toast at 245ms, and at 577ms the card went from live to gone in one mutation, where a
+     fold holds it for 405ms. Lint back to 64.
 
 ### Check on the devices after merge
 
@@ -30065,3 +30083,4 @@ won't-fix.
 | 5 | iPhone | Booking form, keyboard down, tap Notes: Save sits above the keyboard's bar with no visible jump (v18.3.1's case, now a frame later by design) |
 | 7 | Android tablet | Waitlist with three parties: remove the middle one. Its row folds away and the one below follows it up, with no jump at the end. Remove the rest: the last row turns into "No one on the waitlist for this day." in one move |
 | 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one and Undo: it comes back at full height and the card below slides down |
+| 7 | Android tablet | List view on a day with bookings: screen off for a minute, complete one of them from another device, screen on. When "Reconnected" shows, the card is simply gone, with no fold playing |

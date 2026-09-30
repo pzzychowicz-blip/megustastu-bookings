@@ -4792,8 +4792,15 @@ function BookingApp({uid}){
     });
     return out;
   },[waitlist,viewDate,waitAvail]);
+  // v18.3.2 (O3): the window in which a sleeping device's missed changes arrive
+  // all at once (the reconnect toast, or the resync after a gap). A change then
+  // is a catch-up nobody watched, so the timeline does not fade it and the List
+  // and the waitlist do not fold it (useEnterLeave's and useRevealRows' quiet).
+  // ONE definition for the three: it was written inline at the timeline's mount.
+  const catchingUp=reconnectShown||resyncing;
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
     entries={dayWaiting}
+    catchingUp={catchingUp}
     availability={waitAvail}
     date={viewDate}
     onBook={bookFromWaitlist}
@@ -4893,7 +4900,7 @@ function BookingApp({uid}){
   // has always been built this way, so this costs nothing.
   const timelineEl=<TimelineView
     bookings={bookings}
-    catchingUp={reconnectShown||resyncing}
+    catchingUp={catchingUp}
     date={viewDate}
     today={today}
     onEdit={VA.onEdit}
@@ -4944,6 +4951,7 @@ function BookingApp({uid}){
     vouchersByCode={vouchersByCode}
     vouchersOn={vouchersOn}
     bookings={bookings}
+    catchingUp={catchingUp}
     date={viewDate}
     today={today}
     onEdit={VA.onEdit}

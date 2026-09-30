@@ -1896,6 +1896,11 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   the old height to the new. **Retiming cannot fix a replacement animated as a
   change** — the wobble was the visible half, the stale content was the half
   that mattered.
+  A change nobody watched is a replacement too: one that lands while the page is
+  hidden, or inside App's reconnect catch-up (`catchingUp`), re-seeds like a
+  `resetKey` change (`opts.quiet`), because on wake it would otherwise play every
+  missed arrival and departure at once (v18.3.1, the timeline's blocks; v18.3.2,
+  the List's cards and the waitlist's rows).
 - **A gesture owns ONE axis.** If two things move at once on different axes,
   no duration or curve reconciles them — co-timing them perfectly is what makes
   the diagonal *clean*, not what removes it (v17.15.0 shipped that intermediate
