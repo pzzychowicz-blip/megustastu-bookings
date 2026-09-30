@@ -29966,6 +29966,8 @@ won't-fix.
      went 7 → 8 while the thread was on screen, and the list showed it unread on the way
      back) until it was selected again. Marking a message read because it landed in the
      open thread would change behaviour, so it is left as it was and put to Patryk.
+     useWhatsApp: the auto-archive sweep calls `patchConversation`, new each render, and
+     runs when what it reads changes; watching the function would run it on every render.
    - **And one directive that suppressed nothing.** App's split-orientation repair carried a
      bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
      already complete (`applySplit` calls only a state setter and `localStorage`, and

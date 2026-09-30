@@ -508,6 +508,7 @@ export function useWhatsApp({
         autoArchivedBookingId: c.acceptedBookingId,
       });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchConversation is new each render; watching it would re-run this sweep on every render
   }, [on, bookings, conversations, waSettings]);
   // ── Bulk actions (multi-select) ──────────────────────────────────────────────
   // Loop the existing single-key primitives (patchConversation is per-key
