@@ -396,6 +396,7 @@ useEffect(() => {
       prev.focus({ preventScroll: true });
     }
   };
+// eslint-disable-next-line react-hooks/exhaustive-deps -- once per open: the opener is taken and focus handed in once; ref and uid are fixed for the dialog's life
 }, []);
 
 // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
@@ -1421,6 +1422,7 @@ export function AutoHeight({ children, watch, style }) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return function () { ro.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attached once; armSettle reads only refs and setters, and listing it would rebuild the observer on every render
   }, []);
   // v17.9.1: `watch` — an identity to re-measure on, SYNCHRONOUSLY, before paint.
   //
@@ -1497,6 +1499,7 @@ export function AutoHeight({ children, watch, style }) {
     setAnimating(true);
     armSettle();
     setH(to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the swap; armSettle reads only refs and setters, and listing it would probe the ceiling (two forced layouts) on every render
   }, [watch]);
   return (
     <div

@@ -29931,7 +29931,15 @@ won't-fix.
      form field changes reads `error` and must not watch it, or it would clear each error
      the moment it was set; the reconciliation effect reads `firstLoadCount`, a ref, and
      calls `saveBookings`, which is new each render and reads only refs (the test above),
-     so watching it would reconcile on every render.
+     so watching it would reconcile on every render. atoms: `useDialog` runs once per open,
+     because it takes the opener and hands focus in, and a second run would take the
+     dialog itself as the opener; `ref` and `uid` are fixed for the dialog's life.
+     AutoHeight's observer is attached once and its `watch` swap is keyed on the swap, and
+     both call `armSettle`, which (with `settle`) reads only refs, setters and module
+     values; listed, it would rebuild the observer, or probe the visible ceiling with two
+     forced layouts, on every render. The test above covers AutoHeight too now: it derives
+     the five render-scoped names and the two functions, and a `watch` planted in
+     `settle` fails it.
    - **And one directive that suppressed nothing.** App's split-orientation repair carried a
      bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
      already complete (`applySplit` calls only a state setter and `localStorage`, and

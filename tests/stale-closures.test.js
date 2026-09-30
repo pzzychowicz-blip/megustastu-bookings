@@ -50,16 +50,18 @@ describe("WeekView's keydown listener is re-added on every render", () => {
   });
 });
 
-// ── usePersistence: five effects that list less than they call ──────────────
-// The bookings listener, the connection listener and the heartbeat attach ONCE,
-// so they call the FIRST render's drainPending / resync / gapTrip / kickIfStuck;
-// the auto-extend and auto-complete passes leave `saveBookings` unlisted, so
-// they run when what they read changes rather than on every render. All five
-// are kept with a reason, and all five are right for ONE reason: every function
-// those effects reach reads only refs, state setters and imports, so any
-// render's copy does what the latest would. This derives both halves from the
-// file — the render-scoped names (the hook's props and state VALUES) and the
-// functions reachable from its effects — and fails when one reads the other.
+// ── Effects that list less than the functions they call ──────────────────────
+// usePersistence's bookings listener, connection listener and heartbeat attach
+// ONCE, so they call the FIRST render's drainPending / resync / gapTrip /
+// kickIfStuck, and its auto-extend and auto-complete passes leave `saveBookings`
+// unlisted. AutoHeight's observer is attached once and its `watch` swap is keyed
+// on the swap, and both call `armSettle`. Every one of those keeps its directive
+// for ONE reason: the functions those effects reach read only refs, state
+// setters and module values, so any render's copy does what the latest would.
+// This derives both halves from the source — the render-scoped names (props and
+// state VALUES) and the functions reachable from the effects — and fails when
+// one reads the other, which a later edit to a FUNCTION could do without
+// touching an effect at all.
 const blankStrings = (src) => src.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""');
 // The body of the block whose `{` sits at `open`, by brace count.
 function blockAt(src, open) {
@@ -73,19 +75,21 @@ function blockAt(src, open) {
 // A use of `name` as a variable: not a property (`x.name`), not part of a longer word.
 const refersTo = (body, name) => new RegExp("(?<![.\\w$])" + name + "(?![\\w$])").test(body);
 
-function staleReads(source) {
+// `unit` is an exported function taking destructured props: a hook or a component.
+function staleReads(source, unit) {
   const blank = blankStrings(source);
-  const hook = blank.slice(blank.indexOf("export function usePersistence("));
-  const props = hook.match(/^export function usePersistence\(\{([^}]*)\}\)/)[1].split(",").map((s) => s.trim()).filter(Boolean);
-  const stateValues = [...hook.matchAll(/const \[(\w+),\s*\w+\]\s*=\s*useState\(/g)].map((m) => m[1]);
+  const head = blank.match(new RegExp("export function " + unit + "\\(\\{([^}]*)\\}\\)\\s*\\{"));
+  const body = blockAt(blank, head.index + head[0].length - 1);
+  const props = head[1].split(",").map((s) => s.trim()).filter(Boolean);
+  const stateValues = [...body.matchAll(/const \[(\w+),\s*\w+\]\s*=\s*useState\(/g)].map((m) => m[1]);
   const scoped = props.concat(stateValues);
   const fns = {};
-  for (const m of hook.matchAll(/^ {2}function (\w+)\([^)]*\)\s*\{/gm)) fns[m[1]] = blockAt(hook, m.index + m[0].length - 1);
-  const effects = [...hook.matchAll(/useEffect\(function\(\)\s*\{/g)].map((m) => blockAt(hook, m.index + m[0].length - 1));
+  for (const m of body.matchAll(/^ {2}function (\w+)\([^)]*\)\s*\{/gm)) fns[m[1]] = blockAt(body, m.index + m[0].length - 1);
+  const effects = [...body.matchAll(/use(?:Layout)?Effect\(function\s*\(\)\s*\{/g)].map((m) => blockAt(body, m.index + m[0].length - 1));
   const reached = new Set();
   const queue = [];
-  const visit = (body) => {
-    for (const n of Object.keys(fns)) if (!reached.has(n) && refersTo(body, n)) { reached.add(n); queue.push(n); }
+  const visit = (text) => {
+    for (const n of Object.keys(fns)) if (!reached.has(n) && refersTo(text, n)) { reached.add(n); queue.push(n); }
   };
   effects.forEach(visit);
   while (queue.length) visit(fns[queue.shift()]);
@@ -96,7 +100,7 @@ function staleReads(source) {
 
 describe("usePersistence's effects reach no prop and no state value", () => {
   const Persist = read("hooks/usePersistence.js");
-  const found = staleReads(Persist);
+  const found = staleReads(Persist, "usePersistence");
   it("derives something to check on both sides", () => {
     expect(found.scoped).toEqual(expect.arrayContaining(["autoOptimizer", "nowMins", "bookings", "tableBlocks", "resyncing"]));
     expect(found.reached).toEqual(expect.arrayContaining(["drainPending", "resync", "gapTrip", "kickIfStuck", "saveBookings"]));
@@ -107,7 +111,24 @@ describe("usePersistence's effects reach no prop and no state value", () => {
   it("catches it when one does", () => {
     const planted = Persist.replace("staleRef.current=false;", "staleRef.current=!nowMins;");
     expect(planted).not.toBe(Persist);
-    expect(staleReads(planted).bad).toEqual(["clearStale reads nowMins"]);
+    expect(staleReads(planted, "usePersistence").bad).toEqual(["clearStale reads nowMins"]);
+  });
+});
+
+describe("AutoHeight's effects reach no prop and no state value", () => {
+  const Atoms = read("components/atoms.jsx");
+  const found = staleReads(Atoms, "AutoHeight");
+  it("derives something to check on both sides", () => {
+    expect(found.scoped).toEqual(["children", "watch", "style", "h", "animating"]);
+    expect(found.reached).toEqual(["armSettle", "settle"]);
+  });
+  it("and neither function reads one", () => {
+    expect(found.bad).toEqual([]);
+  });
+  it("catches it when one does", () => {
+    const planted = Atoms.replace("capAtRef.current = 0;", "capAtRef.current = watch ? 0 : 1;");
+    expect(planted).not.toBe(Atoms);
+    expect(staleReads(planted, "AutoHeight").bad).toEqual(["settle reads watch"]);
   });
 });
 
