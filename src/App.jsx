@@ -1166,6 +1166,7 @@ function BookingApp({uid}){
   // can be wrong.
   // v18.2.0 phase 19: form.phone joins the list — Save can now refuse a number
   // without a country code, and picking one has to clear that message.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a field change clears it; watching `error` would clear each error the moment it is set
   useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
@@ -2206,6 +2207,7 @@ function BookingApp({uid}){
       return r.next;   // === prev when nothing moved, so React bails out
     },true);
     if(ok&&changed) flashSyncFix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- firstLoadCount is a ref; saveBookings is new each render, and watching it would reconcile on every render
   },[bookings,tableBlocks,autoOptimizer,resyncing]);
 
   // ── v16.0.0: Waitlist active matching ───────────────────────────────────────

@@ -29922,6 +29922,11 @@ won't-fix.
      render-scoped names, two props and twelve state values, and the nine reachable
      functions) and fails when one reads the other; a `!nowMins` planted in `clearStale`
      fails it.
+   - **Kept, with a reason, file by file.** App: the effect that clears a save error when a
+     form field changes reads `error` and must not watch it, or it would clear each error
+     the moment it was set; the reconciliation effect reads `firstLoadCount`, a ref, and
+     calls `saveBookings`, which is new each render and reads only refs (the test above),
+     so watching it would reconcile on every render.
 
 ### Check on the devices after merge
 
