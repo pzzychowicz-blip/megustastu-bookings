@@ -18,12 +18,16 @@
 // intentionally unchanged from the original — `var` retained, function
 // declaration retained — so this is a pure structural move with no
 // modernisation. JSX-style hook conversion comes in Phase C3.
+//
+// v18.3.2 (the stale-closure triage): the state is DESTRUCTURED now, as a
+// `const`. Read through `ws[1]`, the lint could not tell `setW` was a state
+// setter and asked for it as an effect dependency; destructured, it knows a
+// setter never changes. No behaviour change.
 
 import { useState, useEffect } from "react";
 
 export function useWinW(){
-  var ws=useState(typeof window!=="undefined"?window.innerWidth:1024);
-  var w=ws[0],setW=ws[1];
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:1024);
   useEffect(function(){
     function h(){setW(window.innerWidth);}
     window.addEventListener("resize",h);

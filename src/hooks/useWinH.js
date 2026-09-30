@@ -15,8 +15,9 @@
 import { useState, useEffect } from "react";
 
 export function useWinH(){
-  const hs = useState(typeof window !== "undefined" ? window.innerHeight : 768);
-  const h = hs[0], setH = hs[1];
+  // v18.3.2: destructured, so the lint can see `setH` is a state setter (it
+  // could not through `hs[1]`, and asked for it as a dependency).
+  const [h, setH] = useState(typeof window !== "undefined" ? window.innerHeight : 768);
   useEffect(function(){
     function onResize(){ setH(window.innerHeight); }
     window.addEventListener("resize", onResize);

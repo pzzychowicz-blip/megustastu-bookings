@@ -29900,6 +29900,8 @@ won't-fix.
    - **Four that only needed a value the lint could see**, no behaviour change: App's
      return-to-inbox effect lists `setShowInbox`, which is one of `setModalFns` (memoised
      on a `useCallback` with no deps), so it never changes and re-runs nothing.
+     `useWinW` and `useWinH` read their setter as `ws[1]` / `hs[1]`, which the lint cannot
+     recognise as a setter; they destructure it now (`useWinW` loses its `var`s with it).
 
 ### Check on the devices after merge
 
