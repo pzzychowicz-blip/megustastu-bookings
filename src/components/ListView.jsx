@@ -30,8 +30,10 @@
 // unchanged, just hoisted into renderCard() so both groups share it.
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP } from "../lib/constants";
+import { S, BLOCK_BG, BLOCK_INK, STATUS_COLORS, BTN, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
+import { useRevealRows } from "../hooks/useRevealRows";
+import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
@@ -136,6 +138,13 @@ const FLAGS_MIN = 104;
 //              "do the size and status fit beside the name" has one answer per
 //              day (phase 18).
 const UNIT_W = 18 + 8 + STATUS_COL;
+// v18.3.2 (O3): the space between two active cards. It was the list's flex
+// `gap`, which a folding card cannot take with it: a gap sits between flex
+// items whatever their size, so a card folded to 0px still kept 10px beside it,
+// and the list would have jumped by those 10px when the card unmounted. It is
+// now each card's own top margin, inside its `Reveal`, so it folds with the
+// card, and the list's -CARD_GAP top margin cancels the first one.
+const CARD_GAP = SP.mid;
 // A cell beside the name: as tall as the name's first line, content centred.
 const NAME_CELL = { display: "flex", alignItems: "center", minHeight: NAME_LINE };
 // The name's font, ONE object read by both the name span and the canvas that
@@ -327,7 +336,32 @@ export const ListView = memo(function ListView({
     const a = __listAnims[id];
     return wipeOpen(a, Date.now()) ? a.from : null;
   }
-  const flipRef = useFlip([active.map(function (b) { return b.id; }).join(",")]);
+  // ── v18.3.2 (O3): a card LEAVES the way it arrives ──────────────────────────
+  // A card that left the active list (completed, cancelled, deleted, moved to
+  // another day) blinked out while the cards below slid up by FLIP. Now each
+  // card sits in a `Reveal` and folds away on ROW_FOLD (385ms, the WhatsApp
+  // list's fold, Patryk's pick for this list on 2026-09-30); the cards below
+  // follow the shrinking height, and FLIP stays out of it. A new card still
+  // ARRIVES at full height (`instantIn`), the cards below sliding down by FLIP
+  // as before: Patryk's call, as it was for that list. The leaving card is
+  // drawn from `Reveal`'s cached children, so it looks exactly as it last did,
+  // it holds its place (`useLeavingOrder`), and it is `inert` until it is gone.
+  // `date` is the replacement key: the next day's list is a different list, and
+  // folding today's cards under it would be the strip's stale-content defect.
+  const activeIds = active.map(function (b) { return b.id; });
+  const activeById = {};
+  active.forEach(function (b) { activeById[b.id] = b; });
+  const { renderIds, openIds } = useRevealRows(activeIds, date, { speed: ROW_FOLD, instantIn: true });
+  const cardOrder = useLeavingOrder(activeIds, renderIds);
+  // FOLDING once a leaving card's Reveal has CLOSED, not from the commit it
+  // leaves on: that commit still draws it open, so nothing has moved and FLIP's
+  // baseline is still true. Quiet while a card folds and for the commit after
+  // (the prune, which re-keys FLIP), or FLIP would measure the whole fold as one
+  // unseen jump and play it again: the WhatsApp list's precedent (`collapsing`).
+  const folding = cardOrder.some(function (id) { return !openIds.has(id); });
+  const wasFolding = useRef(false);
+  useEffect(function () { wasFolding.current = folding; });
+  const flipRef = useFlip([cardOrder.join(",")], function () { return folding || wasFolding.current; });
   // v17.3.1: the List's own root — the scroll-into-view lookup below is scoped
   // to it (TimelineView tags its blocks with the same data-flip-id values).
   const rootRef = useRef(null);
@@ -365,9 +399,20 @@ export const ListView = memo(function ListView({
     // and a change to it could move the scroll and the focus to different
     // elements. (`data-bk`'s note in TimelineView is the precedent for that
     // identity changing.)
+    // v18.3.2 (O3): a card folding out of the active list keeps its flip id —
+    // it is drawn from Reveal's cache — and the same booking can already be in
+    // the finished list below it, so the first match is not always the card.
+    // The folding one sits in an inert Reveal INSIDE the list; an `inert` above
+    // the list (App's, behind a modal) is not a reason to skip.
     function findCard() {
       const root = rootRef.current;
-      return root ? root.querySelector('[data-flip-id="' + selectedId + '"]') : null;
+      if (!root) return null;
+      const all = root.querySelectorAll('[data-flip-id="' + selectedId + '"]');
+      for (let k = 0; k < all.length; k++) {
+        const inert = all[k].closest("[inert]");
+        if (!inert || !root.contains(inert)) return all[k];
+      }
+      return null;
     }
     function go() {
       const el = findCard();
@@ -471,7 +516,9 @@ export const ListView = memo(function ListView({
     ? selectedId
     : (reachable[0] ? reachable[0].id : null);
 
-  function renderCard(b) {
+  // `gapAbove` (v18.3.2, O3): an active card's CARD_GAP, a top margin that folds
+  // with the card; the finished cards keep their list's flex gap and pass none.
+  function renderCard(b, gapAbove) {
         // v14 p1 (Issue 2 fix): end-time label is pinned to the scheduled plan
         // (time + duration) while the guest is within plan; once they overstay,
         // syncLiveDurations bumps b.duration to elapsed and the label starts
@@ -839,6 +886,7 @@ export const ListView = memo(function ListView({
               // one (measured 2px apart: the time at 19 against 17, ⋯ at 577
               // against 579).
               borderRadius: R.card, padding: cardBw === 3 ? "12px 14px" : "14px 16px",
+              marginTop: gapAbove,
               position: "relative",
               opacity: (b.status === "completed" || b.status === "cancelled") ? 0.75 : 1,
               // v14.4.0: accent ring marks the keyboard-focused card (List shortcuts).
@@ -1013,10 +1061,25 @@ export const ListView = memo(function ListView({
           layout effect bails out entirely on a null container, so unmounting it
           would silently disable the list-reorder animation for the rest of the
           session. */}
+      {/* v18.3.2 (O3): every card in a Reveal, in `cardOrder` (the live cards
+          plus any still folding away). `presentational`, because a list must
+          OWN its items and the Reveal's two wrappers sit between. A leaving
+          card passes no children: Reveal draws the ones it cached, inert.
+          No flex gap: the space is each card's CARD_GAP top margin, and the
+          -CARD_GAP here cancels the first. On a day with no active card that
+          leaves the empty list without the extra 10px gap it used to put
+          above the finished fold. */}
       <div ref={flipRef} role={active.length ? "list" : undefined}
         aria-label={active.length ? "Bookings" : undefined}
-        style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {active.map(renderCard)}
+        style={{ display: "flex", flexDirection: "column", marginTop: -CARD_GAP }}>
+        {cardOrder.map(function (id) {
+          const b = activeById[id];
+          return (
+            <Reveal key={id} show={openIds.has(id)} speed={ROW_FOLD} presentational inert={!b}>
+              {b ? renderCard(b, CARD_GAP) : null}
+            </Reveal>
+          );
+        })}
       </div>
       {finished.length > 0 ? (
         <Collapsible
@@ -1027,7 +1090,7 @@ export const ListView = memo(function ListView({
           style={{ marginBottom: 0 }}
         >
           <div role="list" aria-label="Completed and cancelled bookings" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {finished.map(renderCard)}
+            {finished.map(function (b) { return renderCard(b); })}
           </div>
         </Collapsible>
       ) : null}

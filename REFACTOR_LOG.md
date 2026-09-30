@@ -30028,6 +30028,32 @@ won't-fix.
      measurement note moved onto the constant, including its sentence about a semantic
      argument undoing a measurement, which is what the O3 plan's `move` was. No behaviour
      change.
+   - **The List's active cards, the same way.** Each card sits in a `Reveal` on `ROW_FOLD`
+     through `useRevealRows(activeIds, date, { speed, instantIn: true })` and
+     `useLeavingOrder`, `presentational` so the list still owns its items, and a leaving
+     card is drawn from the cache and `inert`. Three things the waitlist did not need. The
+     space between cards was the list's flex `gap`, and a gap stays beside a card folded to
+     0px, so the list would have jumped 10px at every prune: it is each card's own top
+     margin now (`CARD_GAP`, `SP.mid`), inside its `Reveal`, with `-CARD_GAP` on the list
+     cancelling the first, which also removes the 10px an empty active list used to put
+     above the finished fold. FLIP is quiet while a card folds and for the commit after it
+     (`folding || wasFolding`, the WhatsApp list's `collapsing`), or it would replay the
+     whole fold at the prune as one jump; `folding` means a leaving card's `Reveal` has
+     CLOSED, not merely that it left, so an arrival still slides the cards below as before.
+     And `findCard` (the scroll to the selected card) skips a card in an `inert` inside the
+     list: the folding copy keeps its flip id while the same booking can already be in the
+     finished list below it. The finished list calls `renderCard(b)`: `.map(renderCard)`
+     would pass the index in as the gap.
+   - **Measured on DEV**, 1280×800 with the pane visible, so every frame ran. Completing the
+     first of two cards (the `c` key): inert at once, folded 108 → 0.1px by 433ms, pruned at
+     455ms, and the card below rose by exactly the height lost (its top minus the fold's
+     height read 196.0 in every frame), with no FLIP animation at any point. Walked back to
+     Confirmed in the edit form, it arrived at full height in one commit, 67ms after Save,
+     and the card below slid down by FLIP, −108px → 0 in ~390ms, as before. Two departures
+     74ms apart (complete, arrow, complete): each held its place (the second's top was the
+     first's top plus its height in every frame), neither got a FLIP animation at either
+     prune, and the fold header followed the list's bottom and ended 10px higher than
+     before, the removed gap.
 
 ### Check on the devices after merge
 
@@ -30038,3 +30064,4 @@ won't-fix.
 | 5 | Android tablet | **Wanted before the push** (Patryk), the way v18.3.1 checked firebase (a DEV tab over `adb reverse`): React reports 19.3.0, the day loads and stays connected, a booking saves, a block drags and drops, and with the keyboard up the booking form's Save stays visible. Rotate the tablet: the layout switches with no visible flash |
 | 5 | iPhone | Booking form, keyboard down, tap Notes: Save sits above the keyboard's bar with no visible jump (v18.3.1's case, now a frame later by design) |
 | 7 | Android tablet | Waitlist with three parties: remove the middle one. Its row folds away and the one below follows it up, with no jump at the end. Remove the rest: the last row turns into "No one on the waitlist for this day." in one move |
+| 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one and Undo: it comes back at full height and the card below slides down |

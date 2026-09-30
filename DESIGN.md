@@ -1877,6 +1877,13 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   A list's empty line is the other half of the same swap: its own `Reveal` on the
   rows' speed, opened once no row is OPEN, so it eases in beside the last fold;
   not rendered while the list has rows, so an arrival replaces it in one frame.
+  The space between two rows goes INSIDE each row's `Reveal`, as a margin, never
+  on the list as a flex `gap`: a gap stays beside a row folded to 0px, so the
+  list would jump by it at the prune (the List's `CARD_GAP`, the waitlist row's
+  8px). A FLIP on the same list stays quiet while a row folds and for the commit
+  after it, or it replays the whole fold at the prune as one jump. The empty-day
+  prompt is not a list's empty line: it belongs to the VIEW (Timeline and Plan
+  draw it too), so above the List's cards it keeps v17.15.0's `--t-reveal`.
 - **A REPLACEMENT is not a change, and a per-item lifecycle cannot tell them
   apart.** `useRevealRows` holds a departed id mounted so it can collapse and
   mounts a newcomer closed so it can ease open — right for an item arriving or

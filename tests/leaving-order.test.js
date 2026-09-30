@@ -87,3 +87,33 @@ describe("the waitlist panel's rows leave the way they arrive", () => {
     expect(panel).toMatch(/\{entries\.length\?null:<Reveal show=\{noneOpen\} speed=\{ROW_FOLD\}><div/);
   });
 });
+
+describe("the List's active cards leave the way they arrive", () => {
+  const list = read("components/ListView.jsx");
+  it("folds on ROW_FOLD, arrives at full height, and treats a new day as a new list", () => {
+    expect(list).toMatch(/useRevealRows\(activeIds, date, \{ speed: ROW_FOLD, instantIn: true \}\)/);
+    expect(list).toMatch(/const cardOrder = useLeavingOrder\(activeIds, renderIds\);/);
+  });
+  it("draws a leaving card where it was, from Reveal's cache, inert, with the list owning its items", () => {
+    expect(list).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} speed=\{ROW_FOLD\} presentational inert=\{!b\}>\s*\{b \? renderCard\(b, CARD_GAP\) : null\}\s*<\/Reveal>/);
+  });
+  it("spaces the cards by a margin that folds with each one, not by the list's gap", () => {
+    // A flex gap stays beside a card folded to 0px, so the list would jump by it at the prune.
+    expect(list).toMatch(/const CARD_GAP = SP\.mid;/);
+    expect(list).toMatch(/style=\{\{ display: "flex", flexDirection: "column", marginTop: -CARD_GAP \}\}>\s*\{cardOrder\.map\(/);
+    expect(list).toMatch(/function renderCard\(b, gapAbove\)/);
+    expect(list).toMatch(/marginTop: gapAbove,/);
+  });
+  it("never hands renderCard a map index as its gap", () => {
+    // `.map(renderCard)` passes (b, index): the second finished card would get a 1px margin.
+    expect(list).not.toMatch(/\.map\(renderCard\)/);
+    expect(list).toMatch(/\{finished\.map\(function \(b\) \{ return renderCard\(b\); \}\)\}/);
+  });
+  it("keeps FLIP quiet while a card folds and for the prune after it", () => {
+    expect(list).toMatch(/const folding = cardOrder\.some\(function \(id\) \{ return !openIds\.has\(id\); \}\);/);
+    expect(list).toMatch(/const flipRef = useFlip\(\[cardOrder\.join\(","\)\], function \(\) \{ return folding \|\| wasFolding\.current; \}\);/);
+  });
+  it("scrolls to the live card, not to its folding copy", () => {
+    expect(list).toMatch(/const inert = all\[k\]\.closest\("\[inert\]"\);\s*if \(!inert \|\| !root\.contains\(inert\)\) return all\[k\];/);
+  });
+});
