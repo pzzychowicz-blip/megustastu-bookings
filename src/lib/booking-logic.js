@@ -1367,7 +1367,7 @@ export function tablesKept(orig,draft,hasManual,cleared){
 // Which of `tables` a table block covers during [s,e). Unbuffered: a block's
 // window was chosen by hand, and `getBlockSlots` is never padded.
 export function blockedTablesAt(tables,blocks,date,s,e){
-  var busy=getBusy(getBlockSlots(blocks||[],date),s,e);
+  const busy=getBusy(getBlockSlots(blocks||[],date),s,e);
   return (tables||[]).filter(function(t){return busy.has(t);});
 }
 // Why a save that keeps hand-placed tables cannot land: a table is blocked for
@@ -1375,12 +1375,12 @@ export function blockedTablesAt(tables,blocks,date,s,e){
 // `list` is the day AFTER the save's own pass, so the parties the optimiser (or
 // `replacePinnedClashes`) could move are already gone from the clash list.
 export function handKeptRefusal(list,date,id,blocks){
-  var b=(list||[]).find(function(x){return x.id===id;});
+  const b=(list||[]).find(function(x){return x.id===id;});
   if(!b) return null;
-  var s=toMins(b.time);
-  var blocked=blockedTablesAt(b.tables,blocks,date,s,s+(Number(b.duration)||90));
+  const s=toMins(b.time);
+  const blocked=blockedTablesAt(b.tables,blocks,date,s,s+(Number(b.duration)||90));
   if(blocked.length) return (blocked.length>1?"Tables "+blocked.join("+")+" are":"Table "+blocked[0]+" is")+" blocked at that time. Assign different tables.";
-  var locked=pinnedClashParties(list,date,id).locked;
+  const locked=pinnedClashParties(list,date,id).locked;
   return locked.length?pinnedClashRefusal(locked[0]):null;
 }
 // C3: seating never asked whether the table still had somebody at it. The two
