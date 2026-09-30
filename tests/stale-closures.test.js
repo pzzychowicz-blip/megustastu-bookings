@@ -30,3 +30,20 @@ describe("InboxPanel's keydown listener is re-added on every render", () => {
     expect(Inbox).toMatch(/window\.addEventListener\("keydown", onKey, true\);/);
   });
 });
+
+// ── WeekView: T goes to TODAY, whenever it is pressed ────────────────────────
+// Found by reading, not reproduced (it needs the popover open across midnight):
+// the list was [mode, ref, focus], and `goToday` reads `today`, taken at render.
+// Measured after, keys driven in the DEV app: → → steps two weeks, M and W
+// switch mode around the focused day, T comes back, ↓ moves the day, Enter
+// opens it.
+describe("WeekView's keydown listener is re-added on every render", () => {
+  const Week = read("components/WeekView.jsx");
+  it("its effect has no dependency array", () => {
+    expect(Week).toMatch(/window\.addEventListener\("keydown", onKey\);\s*return function\(\)\{ window\.removeEventListener\("keydown", onKey\); \};\s*\}\);/);
+  });
+  it("and today is still taken at render, which is why that matters", () => {
+    expect(Week).toMatch(/const today = todayStr\(\);/);
+    expect(Week).toMatch(/function goToday\(\)\{ setRef\(today\); setFocus\(today\); \}/);
+  });
+});

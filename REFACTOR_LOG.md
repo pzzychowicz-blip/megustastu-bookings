@@ -29880,6 +29880,14 @@ won't-fix.
      not the order of adding, is what puts this listener ahead of the global one.
      `tests/stale-closures.test.js` pins the shape. The module is off in production, so
      there is no device check; the test conversations stay in DEV.
+   - **WeekView: T could go to yesterday.** The keydown effect listed `[mode, ref, focus]`,
+     which covers what its helpers read of those, but `goToday` reads `today`, taken at
+     render, so with the popover left open across midnight and no key pressed, T went to
+     the day before. Found by reading, not reproduced. Every helper is rebuilt per
+     render, so listing them would re-run the effect per render anyway: it has no
+     dependency array now, as InboxPanel's. **Measured after**, keys driven in the DEV
+     app: two → stepped two weeks, M and W switched mode around the focused day, T came
+     back, ↓ moved the day and Enter opened it.
 
 ### Check on the devices after merge
 
