@@ -29897,13 +29897,15 @@ won't-fix.
      `gridW` changes with `totalMins` there. **Measured after**: F on today's DEV
      timeline scrolled to 0.5166 of the grid, against (18:10 − 13:00) / 600 minutes =
      0.5167 (now 18:40, less the 30-minute lead), and no console errors.
-   - **Four that only needed a value the lint could see**, no behaviour change: App's
+   - **Five that only needed a value the lint could see**, no behaviour change: App's
      return-to-inbox effect lists `setShowInbox`, which is one of `setModalFns` (memoised
      on a `useCallback` with no deps), so it never changes and re-runs nothing.
      `useWinW` and `useWinH` read their setter as `ws[1]` / `hs[1]`, which the lint cannot
      recognise as a setter; they destructure it now (`useWinW` loses its `var`s with it).
      `useCollapseState`'s re-sync effect lists `key`, the storage key it reads, where it
-     listed the `phoneKey` that key is made from; the two change together.
+     listed the `phoneKey` that key is made from; the two change together. `usePresence`
+     wrote `auth.currentUser && auth.currentUser.email` into its dependency list, which the
+     lint cannot check; the email is read into `authEmail` above the effect, which lists that.
 
 ### Check on the devices after merge
 

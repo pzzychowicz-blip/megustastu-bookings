@@ -115,8 +115,11 @@ export function usePresence(){
   // Register this connection whenever the socket is up (and re-register after a
   // reconnect — onDisconnect fires server-side on drop, so a fresh connect needs
   // a fresh child). Keyed on the authed email so a re-login refreshes it.
+  // v18.3.2: the email is read once, here, so the dependency list can name it
+  // (the lint cannot check an expression written into the list itself).
+  const authEmail=auth.currentUser&&auth.currentUser.email;
   useEffect(function(){
-    const email=(auth.currentUser&&auth.currentUser.email)||"unknown";
+    const email=authEmail||"unknown";
     let active=true;
     function stopBeat(){ if(beatRef.current){ clearInterval(beatRef.current); beatRef.current=0; } }
     const unsub=onValue(ref(db,".info/connected"),function(snap){
@@ -173,7 +176,7 @@ export function usePresence(){
       // Graceful teardown (logout / unmount) — onDisconnect covers ungraceful drops.
       if(myRefRef.current){ remove(myRefRef.current).catch(function(){}); myRefRef.current=null; }
     };
-  },[auth.currentUser&&auth.currentUser.email]);
+  },[authEmail]);
 
   // Live list of everyone connected. The staleness filter lives HERE, on the
   // read, so it protects the UI whether or not any write ever succeeds — and so
