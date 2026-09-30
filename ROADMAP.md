@@ -107,18 +107,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **The drop freeze (audit M1).** After a drop the block sits still with no frame painted.
-  **Measured on the tablet in v18.3.1** (a DEV build over `adb reverse`, five real drops of a
-  two-table party one or two rows, a rAF log around the release): 249, 250, 249, 249 and
-  272ms, against about 104ms on the Mac. A CPU profile of one drop splits it: the handler
-  (`dropOnTable` → `saveBookings` → the `trialFits`/`applyOpt` trials) is ~43ms, which a PROD
-  build pays too; React's render, commit and passive effects are ~290ms, much of it DEV-only
-  (`jsxDEV`, `addObjectDiffToProperties`, StrictMode's double render), and ~40ms of it is
-  `getBoundingClientRect` layout reads (the FLIP measurements), which PROD also pays. **The
-  PROD figure** (v18.3.1 phase 19, a production build against DEV on the tablet, six drops):
-  88–129ms, about 100ms, one long task each. Decide whether that is worth deferring the
-  handler's trials or the FLIP reads, or whether to close this entry as won't-fix.
-
 - **List cards and waitlist rows leave the way they arrive (O3).** `useRevealRows` with
   `speed: "move"`, a departed row ranked at `rank − 0.5` so it holds its place, and
   `useFlip`'s `isQuiet` while a row collapses. After v18.3.0's O1 (the timeline blocks'

@@ -29816,6 +29816,20 @@ won't-fix.
    number and stored "34 600 111 777" as "+34 600 111 777". Those rows stay in DEV (tag
    `v1832p-`). The ROADMAP entry keeps its larger half, the one field table.
 
+4. **The drop freeze (audit M1) closed as won't-fix, and deleted from ROADMAP.** No code
+   changes. After a drop the block holds still until the first frame paints. v18.3.1
+   measured it twice on the tablet: 249–272ms from the DEV server (phase 7), and 88–129ms
+   in a production build (phase 19, six drops, one long task each), so about 100ms, six
+   frames, in the build the restaurant runs. Phase 7's CPU profile says what a production
+   build still pays: the handler's trials (`dropOnTable` → `saveBookings` →
+   `trialFits`/`applyOpt`, ~43ms), which decide where the party goes, and the FLIP
+   measurements' `getBoundingClientRect` reads (~40ms), which let the other blocks glide
+   rather than jump. The rest of the DEV figure was React's DEV-only work. Taking the
+   remaining ~100ms down would mean deferring one of those two, and Patryk's call is that
+   the gap is not worth that. As with CT-2A-10 (v17.16.7), the decision is made, so the
+   entry is not pending work: it leaves ROADMAP, and both measurements stay in v18.3.1's
+   entry.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
