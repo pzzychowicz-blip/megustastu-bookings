@@ -29906,6 +29906,11 @@ won't-fix.
      listed the `phoneKey` that key is made from; the two change together. `usePresence`
      wrote `auth.currentUser && auth.currentUser.email` into its dependency list, which the
      lint cannot check; the email is read into `authEmail` above the effect, which lists that.
+   - **ManualModal's keyboard effect already re-added its listener on every render**: its
+     list named `affectedBookings`, a new array each render. The list is gone, so the
+     effect says what it does, as InboxPanel's and WeekView's now do; nothing runs
+     differently. Checked on DEV after a reload: S turned swap mode on and a second S
+     turned it off, Escape asked about the unsaved picks, and Discard closed both.
    - **Kept, with a reason: usePersistence's five.** The bookings listener, the connection
      listener and the heartbeat attach once, so they call the first render's
      `drainPending`, `resync`, `gapTrip` and `kickIfStuck`; the auto-extend and
