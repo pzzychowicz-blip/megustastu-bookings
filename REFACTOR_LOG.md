@@ -29797,6 +29797,25 @@ won't-fix.
    covers the predicate, the pass on both paths, the three refusals, and reads the three
    call sites. The bookings the rig wrote stay in DEV (its tag is `v1832-`).
 
+3. **One phone rule (ROADMAP #13's small half, from v18.2.0's `/code-review`).** Save
+   (`doSave`) and Add to waitlist (`addFormToWaitlist`) each ran `withTypedCode` and then
+   refused a number with no country code in the same sentence, so the rule was written
+   out twice and a test existed only to check the two sentences matched.
+   `phoneForSave(phone, pinned, prefix, untouched)` (`booking-logic.js`, beside
+   `enteredPhone`) is the one copy: it returns the number to store and the refusal, if
+   any, and its fourth argument is Save's exemption for an edit that leaves the stored
+   number alone. No behaviour moves. Each door keeps its own order: Save still reads the
+   refusal after the name check, Add to waitlist before it writes. App spells neither
+   half of the rule nor the sentence any more; `tests/phone-countries.test.js` pins that,
+   the two call sites, and the helper's answers (a code typed without its plus, a British
+   mobile typed the home way, no phone at all, the exemption, and one pass being final),
+   each value measured from the function before it was written into the test.
+   **Measured on DEV after it** (headless Chromium, the real form): Save by Enter refused
+   "600 111 333" on the phone field and wrote nothing, then stored "34 600 111 666" as
+   "+34 600 111 666"; with every table held at 20:00, Add to waitlist refused the same
+   number and stored "34 600 111 777" as "+34 600 111 777". Those rows stay in DEV (tag
+   `v1832p-`). The ROADMAP entry keeps its larger half, the one field table.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |

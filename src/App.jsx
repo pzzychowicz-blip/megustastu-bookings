@@ -63,6 +63,9 @@ import {
   tablesFreeFor,
   // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
   enteredPhone,
+  // v18.3.2 (ROADMAP #13): and one for "may this typed number be stored" —
+  // Save and Add to waitlist asked it in two copies.
+  phoneForSave,
   // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
   kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
@@ -84,9 +87,6 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
-// v18.2.0 phase 19: Save refuses a typed number that names no country code;
-// phase 20: a number typed WITH its code but no "+" gets that code first.
-import { phoneHasCode, withTypedCode } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -2335,12 +2335,13 @@ function BookingApp({uid}){
     // country is refused on the phone field, since the entry becomes a booking
     // and the same guest with and without "+34" is two customers. The button is
     // offered on a NEW booking only, so Save's untouched-number exemption has
-    // nothing to exempt here.
+    // nothing to exempt here. v18.3.2: both halves are `phoneForSave`, the one
+    // copy Save asks too (ROADMAP #13).
     const f0=formRef.current;
-    const typed=withTypedCode(f0.phone,generalSettings.pinnedCountries);
-    const f=typed!==f0.phone?Object.assign({},f0,{phone:typed}):f0;
+    const phoneRule=phoneForSave(f0.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
+    const f=phoneRule.phone!==f0.phone?Object.assign({},f0,{phone:phoneRule.phone}):f0;
     const ph=cleanPhoneOf(f.phone);
-    if(ph&&!phoneHasCode(ph)){setErrorField("phone");setError("Choose the country code for this phone number.");return;}
+    if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
     addToWaitlist({
       name:f.name||"",
       phone:ph,
@@ -3128,11 +3129,13 @@ function BookingApp({uid}){
     // Not into the form state: a `setForm` here would change `form.phone` and
     // the stale-error effect would then clear any error this same save sets.
     // An edit that leaves the stored number untouched is never rewritten —
-    // phase 19's exemption, one test for both.
+    // phase 19's exemption, one test for both. v18.3.2: the rewrite and the
+    // refusal below are ONE call, `phoneForSave`, which Add to waitlist asks
+    // too; the refusal is only read after the name check, where it always was.
     const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
     const phoneUntouched=!!origB&&cleanPhoneOf(origB.phone)===cleanPhoneOf(fIn.phone);
-    const typedPhone=phoneUntouched?fIn.phone:withTypedCode(fIn.phone,generalSettings.pinnedCountries);
-    const f=typedPhone!==fIn.phone?Object.assign({},fIn,{phone:typedPhone}):fIn;
+    const phoneRule=phoneForSave(fIn.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,phoneUntouched);
+    const f=phoneRule.phone!==fIn.phone?Object.assign({},fIn,{phone:phoneRule.phone}):fIn;
     // v17.12.0: cleared here, set only by the field-specific branches below, so
     // the form-level errors further down leave it null without having to say so.
     setErrorField(null);
@@ -3145,8 +3148,7 @@ function BookingApp({uid}){
       // link either. Checked right after the name, the field beside it.
       // An EDIT that leaves an old code-less number untouched still saves: the
       // rule is about numbers typed now, not a sweep of the stored ones.
-      {const ph=cleanPhoneOf(f.phone);
-        if(ph&&!phoneHasCode(ph)&&!phoneUntouched){setErrorField("phone");setError("Choose the country code for this phone number.");return;}}
+      if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setErrorField("date");setError("Please set a date.");return;}

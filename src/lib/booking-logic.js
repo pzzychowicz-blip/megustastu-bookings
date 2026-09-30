@@ -38,6 +38,9 @@ import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — se
 // reachable from the serverless functions (api/* → whatsapp.js → customers.js →
 // here), and Node's ESM resolver does not add the extension the way Vite does.
 import { normalizeCode, formatCode } from "./vouchers.js";
+// v18.3.2: the phone rule's two halves, for `phoneForSave`. `phone-countries.js`
+// imports nothing, so this edge cannot close a cycle; ".js" for the ESM chain.
+import { withTypedCode, phoneHasCode } from "./phone-countries.js";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -460,6 +463,22 @@ export function kitchenRelevant(orig,f,size){
 export function enteredPhone(p,prefix){
   var t=p==null?"":String(p).trim();
   return (t===""||t==="+"||t===prefix)?"":t;
+}
+// ── v18.3.2: the phone rule, for every door that stores a TYPED number ──────
+// ROADMAP #13's small half (v18.2.0's /code-review). `doSave` and
+// `addFormToWaitlist` each ran `withTypedCode` and then refused a number with no
+// code in the same words: two copies of one rule. A code typed without its plus
+// becomes the code (a save by Enter never blurs the number box, so the field's
+// own detection may not have run); a number that still names no country is
+// refused, because the same guest with and without "+34" is two customers
+// (`normalizePhone`). `untouched` is an edit that leaves the stored number as it
+// was, which is neither rewritten nor refused (v18.2.0 phase 19's exemption).
+// "No phone at all" is `enteredPhone`'s answer, so it is never refused.
+export const NO_CODE_REFUSAL="Choose the country code for this phone number.";
+export function phoneForSave(phone,pinned,prefix,untouched){
+  const out=untouched?phone:withTypedCode(phone,pinned);
+  const ph=enteredPhone(out,prefix);
+  return {phone:out,refusal:(!untouched&&ph&&!phoneHasCode(ph))?NO_CODE_REFUSAL:null};
 }
 export function diffBooking(orig,f,size,phonePrefix){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=enteredPhone(orig.phone,phonePrefix);var formPhone=enteredPhone(f.phone,phonePrefix);if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var origVou=normalizeCode(orig.voucherCode);var formVou=normalizeCode(f.voucherCode);if(origVou!==formVou) ch.push("voucher "+(origVou?formatCode(origVou):"none")+"→"+(formVou?formatCode(formVou):"none"));var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 // v17.16.13: the keyed-object arm walks ENTRIES, not values, so each row can be

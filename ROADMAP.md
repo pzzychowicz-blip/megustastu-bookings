@@ -91,9 +91,7 @@ evidence for each.
   `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version. The phone rule goes with it (v18.2.0's
-  `/code-review`): `doSave` and `addFormToWaitlist` each run `withTypedCode`, then refuse a
-  number with no code in the same words, which should be one helper.
+  first. This is a data-touching patch version.
 
 - **In-range dependency updates, and whether to automate them (#14).** firebase went to
   12.19 in v18.3.1 (checked on the tablet). react 19.3 and plugin-react 6.1 are still
