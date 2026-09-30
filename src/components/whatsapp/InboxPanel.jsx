@@ -208,6 +208,7 @@ export function InboxPanel({
       const top = tab === "inbox" ? resolveInitialKey(conversations) : topKeyOfTab(conversations, tab);
       if (top) setActiveKey(top);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires on the narrow→wide change only; activeKey, tab and conversations are read then, not watched
   }, [twoPane]);
 
   // Keyboard: Esc (close templates → back to list on mobile → close inbox), plus
@@ -352,6 +353,7 @@ export function InboxPanel({
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (c && c.unread) onMarkRead(activeKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- marks a thread read when it is selected, not when a message lands in it while open (measured, v18.3.2)
   }, [activeKey]);
   // Remember the open thread for the next time the inbox opens. Only a real
   // selection is stored — clearing to the list (mobile back, archive) leaves the

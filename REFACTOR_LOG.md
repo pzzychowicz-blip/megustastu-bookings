@@ -29959,6 +29959,13 @@ won't-fix.
      timer does not watch `onDismissAcceptedBadge`, a fresh closure every render, which
      would restart the timer each render so that it never fired (its comment already said
      so); the copy it keeps writes through `patchConversation`, which reads refs and setters.
+     InboxPanel: the narrow→wide pick is a transition, so it lists only `twoPane` and reads
+     the rest at that moment (a ref gates it to the change itself). Mark-read runs on
+     SELECTION and does not watch `conversations`. **Measured on DEV**: with a thread open,
+     a message sent into it with `__waSim.question` made it unread again (the Inbox count
+     went 7 → 8 while the thread was on screen, and the list showed it unread on the way
+     back) until it was selected again. Marking a message read because it landed in the
+     open thread would change behaviour, so it is left as it was and put to Patryk.
    - **And one directive that suppressed nothing.** App's split-orientation repair carried a
      bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
      already complete (`applySplit` calls only a state setter and `localStorage`, and
