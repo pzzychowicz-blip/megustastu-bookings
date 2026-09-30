@@ -1,7 +1,9 @@
 // tests/stale-closures.test.js — v18.3.2 phase 6, the stale-closure triage
 // (ROADMAP #10's first half). Each `react-hooks/exhaustive-deps` site was read
 // and either fixed or kept with a `-- <reason>`; the fixes that change what
-// runs are pinned here, one describe each, beside the measurement behind them.
+// runs are pinned here, one describe each, beside the measurement behind them,
+// and so are usePersistence's five keeps, whose reason a later edit to a
+// function they call could make false without touching the effects at all.
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -45,6 +47,67 @@ describe("WeekView's keydown listener is re-added on every render", () => {
   it("and today is still taken at render, which is why that matters", () => {
     expect(Week).toMatch(/const today = todayStr\(\);/);
     expect(Week).toMatch(/function goToday\(\)\{ setRef\(today\); setFocus\(today\); \}/);
+  });
+});
+
+// ── usePersistence: five effects that list less than they call ──────────────
+// The bookings listener, the connection listener and the heartbeat attach ONCE,
+// so they call the FIRST render's drainPending / resync / gapTrip / kickIfStuck;
+// the auto-extend and auto-complete passes leave `saveBookings` unlisted, so
+// they run when what they read changes rather than on every render. All five
+// are kept with a reason, and all five are right for ONE reason: every function
+// those effects reach reads only refs, state setters and imports, so any
+// render's copy does what the latest would. This derives both halves from the
+// file — the render-scoped names (the hook's props and state VALUES) and the
+// functions reachable from its effects — and fails when one reads the other.
+const blankStrings = (src) => src.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""');
+// The body of the block whose `{` sits at `open`, by brace count.
+function blockAt(src, open) {
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(open + 1, i);
+  }
+  throw new Error("unbalanced block at " + open);
+}
+// A use of `name` as a variable: not a property (`x.name`), not part of a longer word.
+const refersTo = (body, name) => new RegExp("(?<![.\\w$])" + name + "(?![\\w$])").test(body);
+
+function staleReads(source) {
+  const blank = blankStrings(source);
+  const hook = blank.slice(blank.indexOf("export function usePersistence("));
+  const props = hook.match(/^export function usePersistence\(\{([^}]*)\}\)/)[1].split(",").map((s) => s.trim()).filter(Boolean);
+  const stateValues = [...hook.matchAll(/const \[(\w+),\s*\w+\]\s*=\s*useState\(/g)].map((m) => m[1]);
+  const scoped = props.concat(stateValues);
+  const fns = {};
+  for (const m of hook.matchAll(/^ {2}function (\w+)\([^)]*\)\s*\{/gm)) fns[m[1]] = blockAt(hook, m.index + m[0].length - 1);
+  const effects = [...hook.matchAll(/useEffect\(function\(\)\s*\{/g)].map((m) => blockAt(hook, m.index + m[0].length - 1));
+  const reached = new Set();
+  const queue = [];
+  const visit = (body) => {
+    for (const n of Object.keys(fns)) if (!reached.has(n) && refersTo(body, n)) { reached.add(n); queue.push(n); }
+  };
+  effects.forEach(visit);
+  while (queue.length) visit(fns[queue.shift()]);
+  const bad = [];
+  for (const n of reached) for (const v of scoped) if (refersTo(fns[n], v)) bad.push(n + " reads " + v);
+  return { scoped, reached: [...reached].sort(), bad };
+}
+
+describe("usePersistence's effects reach no prop and no state value", () => {
+  const Persist = read("hooks/usePersistence.js");
+  const found = staleReads(Persist);
+  it("derives something to check on both sides", () => {
+    expect(found.scoped).toEqual(expect.arrayContaining(["autoOptimizer", "nowMins", "bookings", "tableBlocks", "resyncing"]));
+    expect(found.reached).toEqual(expect.arrayContaining(["drainPending", "resync", "gapTrip", "kickIfStuck", "saveBookings"]));
+  });
+  it("and no reachable function reads one", () => {
+    expect(found.bad).toEqual([]);
+  });
+  it("catches it when one does", () => {
+    const planted = Persist.replace("staleRef.current=false;", "staleRef.current=!nowMins;");
+    expect(planted).not.toBe(Persist);
+    expect(staleReads(planted).bad).toEqual(["clearStale reads nowMins"]);
   });
 });
 

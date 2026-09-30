@@ -29906,6 +29906,22 @@ won't-fix.
      listed the `phoneKey` that key is made from; the two change together. `usePresence`
      wrote `auth.currentUser && auth.currentUser.email` into its dependency list, which the
      lint cannot check; the email is read into `authEmail` above the effect, which lists that.
+   - **Kept, with a reason: usePersistence's five.** The bookings listener, the connection
+     listener and the heartbeat attach once, so they call the first render's
+     `drainPending`, `resync`, `gapTrip` and `kickIfStuck`; the auto-extend and
+     auto-complete passes leave `saveBookings` out of their lists. All five are right for
+     one reason, checked function by function: the nine functions those effects reach read
+     only refs, state setters and imports, so any render's copy does what the latest would.
+     Listing them would break something each time. The listeners would re-attach on every
+     render, and a re-attached `.info/connected` answers at once with "connected", which its
+     handler takes for a reconnect and shows the reconnect toast. The heartbeat's 10s
+     interval would restart on every render, so in an app rendering more often than that it
+     would never fire, and a save made 90s after the last beat or server snapshot would read
+     as a wake from sleep and be held. The two passes would run over every booking on every
+     render. `tests/stale-closures.test.js` derives both halves from the file (the 14
+     render-scoped names, two props and twelve state values, and the nine reachable
+     functions) and fails when one reads the other; a `!nowMins` planted in `clearStale`
+     fails it.
 
 ### Check on the devices after merge
 
