@@ -29968,6 +29968,10 @@ won't-fix.
      open thread would change behaviour, so it is left as it was and put to Patryk.
      useWhatsApp: the auto-archive sweep calls `patchConversation`, new each render, and
      runs when what it reads changes; watching the function would run it on every render.
+   - **One measurement trap found on the way**, added to the `mgt-measurement-traps`
+     skill: a modal closed in a hidden Browser pane stays in the DOM until a frame runs,
+     because every exit hold starts on the next animation frame, so Discard looked broken
+     until a screenshot forced one.
    - **Where it ends.** No `exhaustive-deps` warning is left: lint 90 → 64, and the 64 are
      the React Compiler advisories. Thirteen older directives that suppress the rule
      without a reason were never among the 25 and are not touched here; they join the
