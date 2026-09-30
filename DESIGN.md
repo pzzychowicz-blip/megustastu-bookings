@@ -1860,6 +1860,22 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   remembered index **ties** with whatever shifted up into its place, and the tie
   falls through to arrival order — so it visibly jumps before it collapses. Sort
   departed items half a step above their replacement (`rank - 0.5`).
+  **v18.3.2: that formula holds for ONE departure, not two.** It compares a
+  departed item's OLD index with the live items' NEW ones, so [A, B, C, D, E]
+  losing B and D in one commit leaves E at 2 and D (3 − 0.5) sorts after it. Anchor
+  a departed item to its PREDECESSOR instead, the nearest item drawn before it
+  last time that is still drawn: `placeLeaving` (`lib/leaving-order.js`), through
+  `useLeavingOrder`, which the waitlist rows and the List's cards use. The strip's
+  `rankOf` still ranks the old way; its sections rarely leave two at a time.
+- **A list row leaving after an action folds on `--t-shift` (v18.3.2, O3)**, the
+  WhatsApp list's fold, not `--t-move`: a `Reveal` changes geometry, and a 280ms
+  fold read as a snap there (Patryk). It ARRIVES at full height (`useRevealRows`'
+  `instantIn`), the rows below making room, because a row growing open as well is
+  a second motion on top of theirs. A leaving row is drawn from `Reveal`'s cached
+  children, as it last looked, and is `inert` (Reveal's prop) until it is gone.
+  A list's empty line is the other half of the same swap: its own `Reveal` on the
+  rows' speed, opened once no row is OPEN, so it eases in beside the last fold;
+  not rendered while the list has rows, so an arrival replaces it in one frame.
 - **A REPLACEMENT is not a change, and a per-item lifecycle cannot tell them
   apart.** `useRevealRows` holds a departed id mounted so it can collapse and
   mounts a newcomer closed so it can ease open — right for an item arriving or

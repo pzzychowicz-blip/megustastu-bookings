@@ -29980,6 +29980,48 @@ won't-fix.
      bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
      already complete (`applySplit` calls only a state setter and `localStorage`, and
      `tlPaneOk` is module-level), which the lint reported as unused. It is gone.
+7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
+   left blinked out in one frame while the ones below slid or jumped up. Two decisions came
+   first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)
+   "as the WhatsApp conversation list already does", and that list folds on `shift`
+   (385ms), after Patryk found a 280ms fold read as a snap. Put to him: **385ms**, and a new
+   card or row **arrives as today**, at full height with the ones below making room, the
+   WhatsApp list's asymmetric mode (his call there: a row also growing open was too much
+   movement).
+   - **The waitlist panel, first.** Each row sits in a `Reveal` on `shift` through
+     `useRevealRows(ids, date, { speed, instantIn: true })`. A leaving row passes no
+     children, so `Reveal` draws the ones it cached: the row exactly as it last looked,
+     armed "Confirm — remove" included. The row's 8px margin is inside the `Reveal`, so
+     the gap under it folds with it, and at rest the rows sit 66px apart as before.
+   - **`Reveal` takes `inert`** (atoms), for a row on its way out: one attribute keeps it
+     from a tap, a focus and a screen reader, where the WhatsApp list's departing row
+     needed `pointer-events`, a `tabIndex` and a click guard and was still announced.
+   - **Where a leaving row is drawn: `placeLeaving`** (`lib/leaving-order.js`, through
+     `hooks/useLeavingOrder.js`). DESIGN.md's rule was `rank − 0.5`, the notification
+     strip's `rankOf`. That compares a leaving row's OLD index with the live rows' NEW
+     ones, which is right for one departure and wrong for two: [A, B, C, D, E] losing B and
+     D leaves E at 2, and D (3 − 0.5) sorts after it. The List loses several cards at once
+     whenever the close-time auto-complete runs. So a leaving row goes straight after the
+     nearest row drawn before it last time that is still drawn, in the order they were last
+     drawn. For one departure that is the same answer. The previous order is kept in state,
+     adjusted during render, rather than in a ref read during render, which is what the
+     React Compiler lint warns about (a first version with a ref took lint 64 → 65).
+   - **The empty line is the other half of the same swap.** "No one on the waitlist for
+     this day." has its own `Reveal` on the rows' speed, opened once no row is open: on the
+     commit the last party leaves, its row is still open, so the line mounts closed and
+     eases open beside the fold. It is not rendered at all while anyone is waiting, so a
+     party arriving replaces it in the same frame.
+   - **Measured on DEV**, 1280×800, frames forced by screenshots (the pane draws none
+     otherwise; see the `mgt-measurement-traps` row on a hidden pane). Removing the first
+     of two rows: it went inert at once and folded from ~100ms, 66 → 26.8px by 194ms at
+     opacity 0.41, and the row below moved up by exactly the height it lost (the extra
+     1.6px by then is the centred card shrinking behind it). Removing the last row: it
+     folded 66 → 0.4px by 419ms while the empty line grew 0 → 64.1, their sum going 66 →
+     64.5, and the note under them moved 1.2px in all. Arriving, from a second tab: at the
+     first mutation holding the new row it was already open (66px, opacity 1, not inert).
+     The first version gave the empty line a `show` of its own, and there it folded for
+     385ms under the new row, so the card held both and grew by a row before settling. With
+     the fix, the line was already gone in that same mutation.
 
 ### Check on the devices after merge
 
@@ -29989,3 +30031,4 @@ won't-fix.
 | 2 | Android tablet | Drag a booking to a table, then edit its time: it keeps the table, and a party in its way moves to another |
 | 5 | Android tablet | **Wanted before the push** (Patryk), the way v18.3.1 checked firebase (a DEV tab over `adb reverse`): React reports 19.3.0, the day loads and stays connected, a booking saves, a block drags and drops, and with the keyboard up the booking form's Save stays visible. Rotate the tablet: the layout switches with no visible flash |
 | 5 | iPhone | Booking form, keyboard down, tap Notes: Save sits above the keyboard's bar with no visible jump (v18.3.1's case, now a frame later by design) |
+| 7 | Android tablet | Waitlist with three parties: remove the middle one. Its row folds away and the one below follows it up, with no jump at the end. Remove the rest: the last row turns into "No one on the waitlist for this day." in one move |

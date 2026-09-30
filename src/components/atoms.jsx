@@ -1055,7 +1055,14 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // Presentation is the right tool rather than `aria-owns`: these divs carry no
 // focus and no ARIA of their own, which is exactly the condition under which
 // the role is honoured, and it needs no ids to keep in step.
-export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false }) {
+//
+// `inert` (v18.3.2, O3) — marks the outer wrapper `inert`, for a row that is
+// LEAVING: it stays drawn for the length of its collapse, from the children
+// cached here, and a card on its way out must not take a tap, a focus or a
+// screen reader's attention. One attribute does all three, where the WA list's
+// departing row needed `pointer-events`, a `tabIndex` and a click guard, and
+// was still announced. A real boolean, for App's `anyModal` reason.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false, inert = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -1115,7 +1122,7 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     // now by tests/wa-sandbox-integrity.test.js.
     : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
-    <div role={presentational ? "presentation" : undefined} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
+    <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
       <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
   );
