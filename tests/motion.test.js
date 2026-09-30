@@ -105,6 +105,29 @@ describe("exit holds outlast their animations", () => {
     expect(src).not.toMatch(/PRUNE_MS\s*=\s*\d/);
   });
 
+  // v18.3.2 (O3): measured on DEV, deleting the List's last card through its
+  // confirm held the page ~380ms before the first frame; the fold began then and
+  // a prune timed from the effect cut it at half height. Both holds under a
+  // folding row start on the frame the fold starts on, and a change that lands
+  // while the page is hidden snaps (it would otherwise play on wake).
+  it("useRevealRows times its prune from the fold's first frame", () => {
+    const src = code(join(ROOT, "src/hooks/useRevealRows.js"), "utf8");
+    expect(src).toMatch(/import \{ afterFrame, pageHidden \} from "\.\.\/lib\/after-frame";/);
+    expect(src).toMatch(/timers\.current\[id\] = afterFrame\(function \(\) \{\s*delete timers\.current\[id\];[\s\S]*?\}, pruneMs\);/);
+    expect(src, "no prune timed from the effect").not.toMatch(/setTimeout\(/);
+    expect(src, "timers hold afterFrame's cancel").not.toMatch(/clearTimeout\(/);
+  });
+  it("Reveal times its unmount and its reveal from the frame their transition starts on", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const body = atoms.slice(atoms.indexOf("export function Reveal("), atoms.indexOf("export function AutoHeight("));
+    expect(atoms.indexOf("export function AutoHeight(")).toBeGreaterThan(atoms.indexOf("export function Reveal("));
+    expect(body.length).toBeGreaterThan(0);
+    expect(body).toMatch(/setOpen\(true\);\s*stopHold = afterFrame\(function \(\) \{ setRevealed\(true\); \}, exitHold\(speed\)\);/);
+    expect(body).toMatch(/if \(pageHidden\(\)\) \{ setMounted\(false\); return undefined; \}\s*return afterFrame\(function \(\) \{ setMounted\(false\); \}, exitHold\(speed\)\);/);
+    expect(body).toMatch(/if \(pageHidden\(\)\) \{ setOpen\(true\); setRevealed\(true\); return undefined; \}/);
+    expect(body, "no hold started in the effect").not.toMatch(/setTimeout\(/);
+  });
+
   // v18.3.0 (O1): the timeline's arrivals and departures. Both holds clear the
   // entrance/exit classes, so a short one cancels the entrance (a class removed
   // mid-animation snaps to full) or unmounts the leaving copy mid-fade.
@@ -115,7 +138,7 @@ describe("exit holds outlast their animations", () => {
       "both clears are timed by the derived hold").toBe(2);
     // …starting on the frame the animation starts on, not in the effect: a
     // tap's passive effects run before the paint (lib/after-frame.js).
-    expect(src).toMatch(/import \{ afterFrame \} from "\.\.\/lib\/after-frame"/);
+    expect(src).toMatch(/import \{ afterFrame(, pageHidden)? \} from "\.\.\/lib\/after-frame"/);
     expect(src).not.toMatch(/\},\s*\d+\s*\)/);
     // …and the timeline asks for the speed its classes run on (--t-move).
     const tl = code(join(ROOT, "src/components/TimelineView.jsx"), "utf8");

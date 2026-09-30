@@ -19,7 +19,10 @@ const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("
 describe("useEnterLeave: a hidden or quiet diff is a replacement", () => {
   const hook = read("hooks/useEnterLeave.js");
   it("re-seeds on a resetKey change, a hidden page, or the caller's quiet window", () => {
-    expect(hook).toMatch(/return typeof document !== "undefined" && document\.visibilityState === "hidden";/);
+    // v18.3.2: the predicate lives beside afterFrame, for its three callers.
+    expect(read("lib/after-frame.js")).toMatch(/export function pageHidden\(\) \{\s*return typeof document !== "undefined" && document\.visibilityState === "hidden";/);
+    expect(hook).toMatch(/import \{ afterFrame, pageHidden \} from "\.\.\/lib\/after-frame";/);
+    expect(hook).not.toMatch(/function pageHidden\(/);
     expect(hook).toMatch(/const quiet = !!\(opts && opts\.quiet\);/);
     expect(hook).toMatch(/if \(seen\.key !== resetKey \|\| \(!sameDeps\(seen\.deps, deps\) && \(quiet \|\| pageHidden\(\)\)\)\) \{/);
   });
@@ -32,14 +35,14 @@ describe("useEnterLeave: a hidden or quiet diff is a replacement", () => {
   });
 });
 
-describe("useRevealRows: a quiet diff is a replacement (v18.3.2, O3)", () => {
+describe("useRevealRows: a quiet or hidden diff is a replacement (v18.3.2, O3)", () => {
   const hook = read("hooks/useRevealRows.js");
-  it("re-seeds on a membership change inside the caller's quiet window, pending prunes included", () => {
+  it("re-seeds on a membership change inside the caller's quiet window or while hidden, pending prunes included", () => {
     expect(hook).toMatch(/const quiet = !!\(opts && opts\.quiet\);/);
     // During render, as the resetKey re-seed is: the first committed dom is the new list.
     expect(hook).toMatch(/const \[seenSig, setSeenSig\] = useState\(sig\);/);
-    expect(hook).toMatch(/if \(sig !== seenSig\) \{\s*setSeenSig\(sig\);\s*if \(quiet\) \{\s*setRenderIds\(ids\.slice\(\)\);\s*setOpenIds\(new Set\(ids\)\);\s*setQuietResets\(quietResets \+ 1\);\s*\}\s*\}/);
-    expect(hook).toMatch(/useLayoutEffect\(function \(\) \{\s*if \(!quietResets\) return;\s*prevKeys\.current = ids\.slice\(\);\s*Object\.keys\(timers\.current\)\.forEach\(function \(id\) \{ clearTimeout\(timers\.current\[id\]\); \}\);\s*timers\.current = \{\};/);
+    expect(hook).toMatch(/if \(sig !== seenSig\) \{\s*setSeenSig\(sig\);\s*if \(quiet \|\| pageHidden\(\)\) \{\s*setRenderIds\(ids\.slice\(\)\);\s*setOpenIds\(new Set\(ids\)\);\s*setQuietResets\(quietResets \+ 1\);\s*\}\s*\}/);
+    expect(hook).toMatch(/useLayoutEffect\(function \(\) \{\s*if \(!quietResets\) return;\s*prevKeys\.current = ids\.slice\(\);\s*cancelAll\(timers\);/);
   });
   it("the List's cards and the waitlist's rows pass the catch-up window", () => {
     expect(read("components/ListView.jsx")).toMatch(/useRevealRows\(activeIds, date, \{ speed: ROW_FOLD, instantIn: true, quiet: catchingUp \}\)/);

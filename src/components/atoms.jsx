@@ -17,7 +17,7 @@ import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
-import { afterFrame } from "../lib/after-frame";
+import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
@@ -1073,20 +1073,34 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // ease so the collapse still clips cleanly. (Timeout-driven — more robust across
   // browsers than transitionend on grid-template-rows.)
   const [revealed, setRevealed] = useState(show === true);
+  // v18.3.2 (O3): both holds start on the FRAME their transition starts on
+  // (`afterFrame`), not in this effect. Measured on DEV: deleting the List's
+  // last card through its confirm held the page ~380ms before the first frame,
+  // so the fold began then while an unmount timed from the effect fired ~80ms
+  // later and cut it at half height. And a change that lands while the page is
+  // HIDDEN snaps to its end state: no frame runs there, so the hold would wait
+  // and the transition play on wake, a change nobody watched (v18.3.1's rule).
   useEffect(function () {
     if (show) {
       setMounted(true);
+      if (pageHidden()) { setOpen(true); setRevealed(true); return undefined; }
       // Double rAF: ensure the 0fr→1fr change lands in a separate frame from
       // the mount so the transition actually fires (a single frame can batch).
+      // `revealed` waits from the frame that draws the open, a frame after r2.
       let r2 = 0;
-      const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, exitHold(speed));
-      return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
+      let stopHold = null;
+      const r1 = requestAnimationFrame(function () {
+        r2 = requestAnimationFrame(function () {
+          setOpen(true);
+          stopHold = afterFrame(function () { setRevealed(true); }, exitHold(speed));
+        });
+      });
+      return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); if (stopHold) stopHold(); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, exitHold(speed));
-    return function () { clearTimeout(t); };
+    if (pageHidden()) { setMounted(false); return undefined; }
+    return afterFrame(function () { setMounted(false); }, exitHold(speed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
   }, [show]);
   if (!mounted) return null;

@@ -108,11 +108,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **List cards and waitlist rows leave the way they arrive (O3).** `useRevealRows` with
-  `speed: "move"`, a departed row ranked at `rank − 0.5` so it holds its place, and
-  `useFlip`'s `isQuiet` while a row collapses. After v18.3.0's O1 (the timeline blocks'
-  fade) has run on the tablet.
-
 - **The Unplaced row's mount (O4).** Mounting it pushes every table row down by
   lanes × 44px plus the gap, in one frame. Measure frame by frame first: `useFlip` may
   already move the blocks while the labels jump. And `tableForClientY` would need the row's

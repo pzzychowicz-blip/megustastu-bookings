@@ -30072,6 +30072,32 @@ won't-fix.
      quiet on re-seeds nothing by itself), and re-measured after a reload: the reconnect
      toast at 245ms, and at 577ms the card went from live to gone in one mutation, where a
      fold holds it for 405ms. Lint back to 64.
+   - **A fold's hold starts on its first frame.** Deleting the day's last card through its
+     confirm cut its fold part-way. Measured on DEV: the first frame after the click came
+     382ms late, the fold began there, and the prune removed the card at ~465ms from 61px of
+     108, so the day's column went 90.9 → 43.2px between two frames. Both holds on a leaving
+     row started their clocks in an effect, `useRevealRows`' prune and `Reveal`'s unmount,
+     and React runs a click's passive effects before the paint, so a late first frame came
+     out of the fold's own time. That is v18.3.0 phase 8's finding, whose rule is that a
+     hold starts on the next animation frame (`afterFrame`), and these two had not been
+     moved to it. They are now, with `Reveal`'s un-clip after opening. What held that frame
+     back (the delete's own work or the pane) was not established, so the fix was measured
+     against a late frame forced on purpose, on the same delete of the same card: a
+     `MutationObserver` busy-waits 300ms at the commit that marks the card inert. The old
+     code removed it at 467ms, at 71px and opacity 0.66, 81ms into its fold. This one folded
+     it to 0px by 736ms and removed it at 802ms.
+   - **A hold that waits for a frame takes the hidden-page rule with it.** `afterFrame` has
+     no timeout fallback, so a card deleted while the tablet's screen is off would wait and
+     fold on wake, the change nobody watched that v18.3.1 took out of the timeline. So a
+     membership change while the page is hidden re-seeds `useRevealRows` during render, as
+     a quiet one does, and `Reveal` goes straight to its end state, open or unmounted.
+     Measured with `visibilityState` reading hidden: the card was gone 64ms after the click
+     and "Nothing booked" was at its full 164.5px 10ms later, with no frame drawn; three
+     frames later nothing had moved; and Undo put the card back at full height at 34ms and
+     removed the prompt at 44ms. `pageHidden()` moved from `useEnterLeave` to
+     `lib/after-frame.js`, since three callers ask it. `usePresenceLifecycle` does not: a
+     modal or a toast still waits and plays its exit when the tab is shown, v18.3.0's rule,
+     unchanged here.
 
 ### Check on the devices after merge
 
@@ -30082,5 +30108,5 @@ won't-fix.
 | 5 | Android tablet | **Wanted before the push** (Patryk), the way v18.3.1 checked firebase (a DEV tab over `adb reverse`): React reports 19.3.0, the day loads and stays connected, a booking saves, a block drags and drops, and with the keyboard up the booking form's Save stays visible. Rotate the tablet: the layout switches with no visible flash |
 | 5 | iPhone | Booking form, keyboard down, tap Notes: Save sits above the keyboard's bar with no visible jump (v18.3.1's case, now a frame later by design) |
 | 7 | Android tablet | Waitlist with three parties: remove the middle one. Its row folds away and the one below follows it up, with no jump at the end. Remove the rest: the last row turns into "No one on the waitlist for this day." in one move |
-| 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one and Undo: it comes back at full height and the card below slides down |
+| 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one through its confirm: it folds all the way too, not vanishing part-way. Undo: it comes back at full height and the card below slides down |
 | 7 | Android tablet | List view on a day with bookings: screen off for a minute, complete one of them from another device, screen on. When "Reconnected" shows, the card is simply gone, with no fold playing |

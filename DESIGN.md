@@ -1733,6 +1733,12 @@ card blocks the page for ~136ms in between, so its 240ms exit ran 170ms and the
 card vanished at opacity 0.55–0.66. It starts the hold with the same
 `afterFrame` now (`lib/after-frame.js`), from an effect on `leaving`: 251–256ms,
 to opacity 0.
+**And the list rows** (v18.3.2, found when O3 put the List's cards on them):
+`Reveal`'s unmount and `useRevealRows`' prune still timed from the effect, and
+after a delete's confirm the first frame came 382ms late, so the prune took the
+card at 61px of 108. They start on the same `afterFrame` now. With the first
+frame forced 300ms late, the fold runs to 0px, where the old timing cut it at
+71px.
 
 **The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
 A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design
@@ -1900,7 +1906,8 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   hidden, or inside App's reconnect catch-up (`catchingUp`), re-seeds like a
   `resetKey` change (`opts.quiet`), because on wake it would otherwise play every
   missed arrival and departure at once (v18.3.1, the timeline's blocks; v18.3.2,
-  the List's cards and the waitlist's rows).
+  the List's cards and the waitlist's rows, and any `Reveal`, which goes straight
+  to its end state while the page is hidden).
 - **A gesture owns ONE axis.** If two things move at once on different axes,
   no duration or curve reconciles them — co-timing them perfectly is what makes
   the diagonal *clean*, not what removes it (v17.15.0 shipped that intermediate
