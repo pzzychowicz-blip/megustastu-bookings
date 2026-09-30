@@ -29916,7 +29916,10 @@ won't-fix.
      `useWinW` and `useWinH` read their setter as `ws[1]` / `hs[1]`, which the lint cannot
      recognise as a setter; they destructure it now (`useWinW` loses its `var`s with it).
      `useCollapseState`'s re-sync effect lists `key`, the storage key it reads, where it
-     listed the `phoneKey` that key is made from; the two change together. `usePresence`
+     listed the `phoneKey` that key is made from; the two change together (checked on DEV
+     in the two-pane inbox, which reuses one card across conversations: collapsed on one,
+     the linked-booking card read expanded on the next and collapsed again on return).
+     `usePresence`
      wrote `auth.currentUser && auth.currentUser.email` into its dependency list, which the
      lint cannot check; the email is read into `authEmail` above the effect, which lists that.
    - **ManualModal's keyboard effect already re-added its listener on every render**: its
