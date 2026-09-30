@@ -29727,7 +29727,8 @@ scroll with the page, so the strip never covers one.
 
 **Date:** 2026-09-30 · **Branch:** `fix/v18.3.2-bug-sweep` ·
 **Behavioural change:** yes: picking from a booking-form dropdown by touch no longer
-activates the field underneath it. The other phases are listed below.
+activates the field underneath it, and a booking somebody placed by hand keeps its tables
+when its time is edited. The other phases are listed below.
 
 Patryk read the ROADMAP for bugs and reported two from the restaurant devices. The version
 carries both, plus six ROADMAP items: the stale-closure lint triage (#10's first half), the
@@ -29761,8 +29762,44 @@ won't-fix.
    fails with the `preventDefault` taken out). The tablet was not connected, so the check
    on it is in the table below.
 
+2. **A booking somebody placed keeps its tables when its time changes (reported from the
+   restaurant).** "If I have a reservation assigned but I change the time it reassigns
+   though. When Optimizer is on. It cannot work like that." Every drag-drop, Assign
+   (`ManualModal` always saves `locked: true`) and walk-in is `_locked`, and `doSaveEdit`'s
+   `unlockForOpt` cleared the lock on any save that changed a placement input, the time
+   included: the optimiser re-chose the tables, and the save locked the booking again on
+   whatever it had been given. With the optimiser off, `findFreeSlot` re-chose them.
+   **Measured on DEV first**, with the old code (bookings seeded straight into DEV, the
+   edit made through the real form in headless Chromium): a booking locked on table 3 at
+   17:30, moved to 20:00 on a future date, saved on 1A and the form previewed "(auto) · was:
+   3"; the same edit with a LOCKED party on 3 at 20:00 saved on 1A too; today, with the
+   optimiser off, a booking locked on 4 was moved to 1B. Patryk chose the rule: only a
+   hand-placed booking keeps its tables (an optimiser-placed one is re-placed on every
+   save of its day anyway); an unlocked party in the way is moved; a locked or seated one
+   refuses the save by name. `keepsHandTables(orig, draft)` (`booking-logic.js`) is true
+   for a `_locked` booking with tables, a confirmed or pending draft, and nothing its tables
+   were chosen FOR changed — the size, the date, the zone and the preferred tables, each
+   compared exactly as `needsR` compares it — so a time or length change, a revival or an
+   un-seat keeps them, and a size, date or zone change still re-places, as Clear and a new
+   pick do. `tablesKept` puts it together with `tablesPinned` as the one question, and the
+   save, the form's availability scan and its Tables row all ask it (the preview had
+   promised the move). A kept booking takes the seated rule: the optimiser's pass places
+   every unlocked party around it, or `replacePinnedClashes` does with the optimiser off,
+   and `handKeptRefusal` refuses what is left — a table block over the new window, or a
+   locked or seated party ("Table 3 is also held by Rita at 20:00, who is locked to it.
+   Assign different tables."), and only when the window moved. **After it**, same rig,
+   fresh dates: kept on 3 with the party in the way moved to 1A and the preview reading
+   "Tables 3"; the locked case refused with that sentence and wrote nothing; today, kept on
+   2 with the other party moved to 5A. It also closes a gap beside it: lengthening a
+   locked booking with the optimiser off saved the clash and left the reconciler to move
+   the other party (the OFF branch copies a locked booking's tables through and re-places
+   nobody; replayed as a test). `tests/booking-logic.test.js`
+   covers the predicate, the pass on both paths, the three refusals, and reads the three
+   call sites. The bookings the rig wrote stay in DEV (its tag is `v1832-`).
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
 |---|---|---|
 | 1 | Android tablet | New booking: tap Code, tap Spain. Spain is picked and the Time picker does not open. Pick a guest from the name suggestions: Seating preference does not open |
+| 2 | Android tablet | Drag a booking to a table, then edit its time: it keeps the table, and a party in its way moves to another |

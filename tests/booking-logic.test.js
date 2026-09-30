@@ -25,6 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
+  keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
   optimizerActiveFor,
@@ -2722,6 +2723,183 @@ describe("doSaveEdit calls replacePinnedClashes on `recheck` (v18.0.0 session 10
 
   it("and `recheck` is still the union that makes that gate wider than needsR", () => {
     expect(/const recheck=needsR\|\|planChanged\|\|revived\|\|!!unseat;/.test(APP)).toBe(true);
+  });
+});
+
+// ── v18.3.2 — tables somebody chose stay chosen when only the time moves ─────
+// Reported from the restaurant: "if I have a reservation assigned but I change
+// the time it reassigns though. When Optimizer is on." `doSaveEdit`'s
+// `unlockForOpt` blanked a hand-placed booking's tables on ANY placement change,
+// the time included, and let the optimiser choose again.
+describe("keepsHandTables / tablesKept (v18.3.2)", () => {
+  const placed = (o) => mk(Object.assign({ id: "x", time: "19:00", tables: ["3"], _locked: true, _manual: true }, o));
+  const draftOf = (b, o) => Object.assign(
+    { status: b.status, size: b.size, date: b.date, preference: b.preference, preferredTables: b.preferredTables }, o);
+
+  it("a hand-placed booking keeps its tables when nothing it was placed FOR changes", () => {
+    const b = placed();
+    expect(keepsHandTables(b, draftOf(b, {}))).toBe(true);
+    expect(keepsHandTables(b, draftOf(b, { status: "pending" }))).toBe(true);
+    expect(keepsHandTables(b, draftOf(b, { size: "2" })), "the form's size arrives as a string").toBe(true);
+  });
+
+  it("…and not when the size, the date, the zone or the preferred tables change", () => {
+    const b = placed();
+    for (const o of [{ size: 3 }, { date: "2099-06-16" }, { preference: "indoor" }, { preferredTables: ["7"] }]) {
+      expect(keepsHandTables(b, draftOf(b, o)), JSON.stringify(o)).toBe(false);
+    }
+  });
+
+  it("preferred tables compare as a set, the way needsR compares them", () => {
+    const b = placed({ preferredTables: ["4", "3"] });
+    expect(keepsHandTables(b, draftOf(b, { preferredTables: ["3", "4"] }))).toBe(true);
+  });
+
+  it("only a booking somebody placed (`_locked`), and only one with tables to keep", () => {
+    const auto = mk({ tables: ["3"] });
+    expect(keepsHandTables(auto, draftOf(auto, {})), "the optimiser's own placement").toBe(false);
+    const none = placed({ tables: [] });
+    expect(keepsHandTables(none, draftOf(none, {}))).toBe(false);
+    expect(keepsHandTables(null, draftOf(placed(), {}))).toBe(false);
+  });
+
+  it("a seated or finished draft is tablesPinned's; tablesKept answers for both halves", () => {
+    const b = placed();
+    expect(keepsHandTables(b, draftOf(b, { status: "seated" }))).toBe(false);
+    expect(tablesKept(b, draftOf(b, { status: "seated" }), false, false)).toBe(true);
+    expect(tablesKept(b, draftOf(b, { status: "completed" }), false, false)).toBe(true);
+    expect(tablesKept(b, draftOf(b, {}), false, false)).toBe(true);
+    const auto = mk({ tables: ["3"] });
+    expect(tablesKept(auto, draftOf(auto, {}), false, false)).toBe(false);
+  });
+
+  it("a new pick or an explicit Clear still wins, as it does for a seated party", () => {
+    const b = placed();
+    expect(tablesKept(b, draftOf(b, {}), true, false)).toBe(false);
+    expect(tablesKept(b, draftOf(b, {}), false, true)).toBe(false);
+  });
+});
+
+describe("what a save does with hand-placed tables when the time moves (v18.3.2)", () => {
+  // Table 3 is one of the MGT seed's outdoor 2-tops, and the optimiser's first
+  // choice for a lone 2-top is 1A — so a booking the greedy re-places visibly
+  // leaves 3. D is in the future, where the optimiser always runs.
+  const placed = (o) => mk(Object.assign(
+    { id: "x", name: "Placed", time: "19:00", scheduledTime: "19:00", tables: ["3"], _locked: true, _manual: true }, o));
+  const at20 = (b) => Object.assign({}, b, { time: "20:00", scheduledTime: "20:00" });
+
+  it("the save before v18.3.2 moved it: unlockForOpt blanked the tables and the optimiser chose again", () => {
+    const x = at20(placed());
+    const unlocked = Object.assign({}, x, { tables: [], _locked: false });
+    const out = bookingsAfterAction([unlocked], D, [], "x", true, true);
+    expect(out.find((b) => b.id === "x").tables).not.toEqual(["3"]);
+  });
+
+  it("kept, the optimiser's pass leaves it on table 3", () => {
+    const out = bookingsAfterAction([at20(placed())], D, [], "x", false, true);
+    expect(out.find((b) => b.id === "x").tables).toEqual(["3"]);
+    expect(handKeptRefusal(out, D, "x", [])).toBe(null);
+  });
+
+  it("an unlocked party in the way is moved, on a day the optimiser owns", () => {
+    const day = [at20(placed()), mk({ id: "y", name: "InTheWay", time: "20:00", tables: ["3"] })];
+    const out = bookingsAfterAction(day, D, [], "x", false, true);
+    expect(out.find((b) => b.id === "x").tables).toEqual(["3"]);
+    const y = out.find((b) => b.id === "y").tables;
+    expect(y.length).toBeGreaterThan(0);
+    expect(y).not.toEqual(["3"]);
+    expect(handKeptRefusal(out, D, "x", [])).toBe(null);
+  });
+
+  it("a LOCKED party in the way refuses the save, by name", () => {
+    const day = [at20(placed()), mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true })];
+    const out = bookingsAfterAction(day, D, [], "x", false, true);
+    expect(handKeptRefusal(out, D, "x", [])).toBe(
+      "Table 3 is also held by Rita at 20:00, who is locked to it. Assign different tables.");
+  });
+
+  it("so does a SEATED one", () => {
+    const day = [at20(placed()), mk({ id: "s", name: "Pau", time: "19:30", status: "seated", tables: ["3"] })];
+    const out = bookingsAfterAction(day, D, [], "x", false, true);
+    expect(handKeptRefusal(out, D, "x", [])).toBe(
+      "Table 3 is also held by Pau at 19:30, who is seated. Assign different tables.");
+  });
+
+  it("and a table block over the new time", () => {
+    const blocks = [{ id: "bl1", tableId: "3", date: D, allDay: false, from: "19:45", to: "21:00" }];
+    const out = bookingsAfterAction([at20(placed())], D, blocks, "x", false, true);
+    expect(handKeptRefusal(out, D, "x", blocks)).toBe("Table 3 is blocked at that time. Assign different tables.");
+  });
+
+  it("a block that ends before the new time is not in the way", () => {
+    const blocks = [{ id: "bl1", tableId: "3", date: D, allDay: false, from: "17:00", to: "19:30" }];
+    const out = bookingsAfterAction([at20(placed())], D, blocks, "x", false, true);
+    expect(handKeptRefusal(out, D, "x", blocks)).toBe(null);
+  });
+
+  it("blockedTablesAt names only the blocked tables of a combination", () => {
+    const blocks = [{ id: "bl1", tableId: "1B", date: D, allDay: false, from: "20:00", to: "21:00" }];
+    expect(blockedTablesAt(["1A", "1B"], blocks, D, 20 * 60, 21 * 60 + 30)).toEqual(["1B"]);
+    expect(blockedTablesAt(["1A", "1B"], blocks, D, 18 * 60, 19 * 60 + 30)).toEqual([]);
+    expect(blockedTablesAt(["1A"], null, D, 0, 60)).toEqual([]);
+  });
+
+  // TODAY with the toggle off is the one way onto the optimiser-OFF path, and
+  // `bookingsAfterAction` reads the clock, so the clock is pinned (the session
+  // 10 block above says why).
+  describe("with the optimiser off", () => {
+    const T = todayStr();
+    beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(T + "T17:30:00")); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it("the OFF pass keeps everyone's tables, and replacePinnedClashes moves the unlocked party", () => {
+      const day = [at20(placed({ date: T })), mk({ id: "y", date: T, name: "InTheWay", time: "20:00", tables: ["3"] })];
+      const out = bookingsAfterAction(day, T, [], "x", false, false);
+      expect(findClashes(out, T).length, "the clash the save must not write").toBeGreaterThan(0);
+      const fixed = replacePinnedClashes(out, T, "x", [], false);
+      expect(fixed.find((b) => b.id === "x").tables).toEqual(["3"]);
+      expect(fixed.find((b) => b.id === "y").tables).not.toEqual(["3"]);
+      expect(findClashes(fixed, T)).toHaveLength(0);
+      expect(handKeptRefusal(fixed, T, "x", [])).toBe(null);
+    });
+
+    it("the gap beside it: LENGTHENING a locked booking saved the clash, since nothing re-placed the other party", () => {
+      // needsR is false for a length change, so unlockForOpt never fired; the
+      // save asked for a reassignment (`forceReassign`, the tables were not
+      // free for the longer window), and the OFF branch copies a locked
+      // booking's tables through and re-places nobody.
+      const day = [placed({ date: T, time: "19:00", duration: 150, customDur: 150 }),
+        mk({ id: "y", date: T, name: "Later", time: "20:45", tables: ["3"] })];
+      const out = bookingsAfterAction(day, T, [], "x", true, false);
+      expect(findClashes(out, T).length, "before v18.3.2 this was the saved state").toBeGreaterThan(0);
+      // Kept now, so `replacePinnedClashes` runs on `recheck` and clears it.
+      expect(tablesKept(day[0], { status: "confirmed", size: 2, date: T, preference: "auto", preferredTables: [] }, false, false)).toBe(true);
+      expect(findClashes(replacePinnedClashes(out, T, "x", [], false), T)).toHaveLength(0);
+    });
+  });
+});
+
+// The facts above are only worth having if the save and the preview ASK them,
+// and both are closures this suite does not run, so the wiring is read.
+describe("the save and the preview ask tablesKept (v18.3.2)", () => {
+  const APP = stripComments(
+    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const FORM = stripComments(
+    readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("doSaveEdit's `pinned` is tablesKept over the stored booking and the draft", () => {
+    expect(/const pinned=tablesKept\(orig,\{status:f\.status,size:size,date:f\.date,preference:f\.preference,preferredTables:f\.preferredTables\},mt\.length>0,clearM\);/.test(APP)).toBe(true);
+    expect(/const pinned=tablesPinned\(/.test(APP)).toBe(false);
+  });
+
+  it("and refuses what the pass could not move, only when the window moved", () => {
+    expect(/if\(handKept&&recheck\)\{\s*const keptRefusal=handKeptRefusal\(fin,f\.date,editId,tableBlocks\);/.test(APP)).toBe(true);
+  });
+
+  it("the form's availability scan and its Tables row read the same function", () => {
+    expect(/tablesKept\(cur,form,false,!!form\._clearManual\)/.test(FORM)).toBe(true);
+    expect(/const pinnedTbl=cur&&tablesKept\(cur,form,!!mt,cleared\)\?curTbl:null;/.test(FORM)).toBe(true);
+    expect(/tablesPinned\(form\.status/.test(FORM), "no site still asks the status alone").toBe(false);
   });
 });
 

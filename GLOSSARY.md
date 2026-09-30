@@ -137,7 +137,7 @@ fourth shape (pale fill + matching border + third-shade text) is banned.
 | House with an arrow down inside it | **indoor flag** (`IndoorIcon`) | v18.2.0. The booking's seating preference is indoor. The List card adds the word. With the deposit, the last flag a narrow block drops. |
 | House with an arrow leaving it | **outdoor flag** (`OutdoorIcon`) | v18.2.0. The booking's seating preference is outdoor (the terrace). As the indoor flag. |
 | Alert triangle on a block's rail, or "Wanted indoor" in amber on a List card | **seated outside its zone** (`offZone`, `booking-logic.js`) | v18.3.1. The party asked for indoor (or outdoor) and holds tables that are not all there, because a preference is a wish: the preferred zone is tried first, the other when it is full. The block's zone flag becomes the alert mark, named "Wanted indoor, seated outdoor"; the save that put it there says "Seated outdoor: indoor was full." when the app chose the tables (not for tables picked by hand). |
-| Padlock | **locked flag** (`LockIcon`) | The optimiser will not move it. Every walk-in and every drag-drop sets this. |
+| Padlock | **locked flag** (`LockIcon`) | The optimiser will not move it. Every walk-in, every drag-drop and every Assign sets this. Since v18.3.2 an edit that moves only its time keeps its tables too (`tablesKept`): a party in the way is moved, or the save is refused by name. |
 | Crossed circle | **repeat-no-show flag** (`NoShowIcon`) | 2+ past no-shows on that phone number. |
 | Two offset bars | **overstaying flag** (`OverlapIcon`) | This party is sitting into the next booking's slot. |
 | Two overlapping squares | **double-booked marker** (`ClashIcon`) | Another booking claims this table now. Outranks the overstay warning. |

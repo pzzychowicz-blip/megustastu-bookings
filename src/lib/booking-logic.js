@@ -1323,6 +1323,66 @@ export function tablesPinned(status,hasManual,cleared){
   if(hasManual||cleared) return false;
   return status==="seated"||status==="completed"||status==="cancelled";
 }
+// ── v18.3.2: tables somebody CHOSE stay chosen when only the window moves ────
+// Reported from the restaurant (Patryk, 2026-09-30): "if I have a reservation
+// assigned but I change the time it reassigns though. When Optimizer is on. It
+// cannot work like that." Every drag-drop, every Assign (ManualModal always
+// saves `locked: true`) and every walk-in is `_locked`, the flag `applyOpt`
+// reads as "copy these tables through". `doSaveEdit`'s `unlockForOpt` cleared
+// it on ANY save that changed a placement input, the time included, so the
+// optimiser re-chose the tables and the save then locked the booking again on
+// whatever it was handed. With the optimiser off, `findFreeSlot` re-chose them.
+//
+// Patryk's rule: a hand-placed booking keeps its tables through an edit that
+// moves only its WINDOW (the time, the length, a revival, an un-seat). A booking
+// in the way that the optimiser may move is moved (`replacePinnedClashes`, the
+// seated rule); a locked or seated one, or a table block, refuses the save by
+// name (`handKeptRefusal`). A change to what the tables were chosen FOR (the
+// party size, the date, the zone, the preferred tables) still re-places it, as
+// an explicit Clear or a new pick does. Optimiser-placed bookings are left to
+// the optimiser: `applyOpt` re-places every unlocked booking on every save of
+// its day, so keeping one for a single save would be undone by the next.
+//
+// Each test agrees with `needsR` in `doSaveEdit` term for term (`size` against
+// `Number(f.size)||2`, the raw preference, the sorted preferred tables), so
+// "nothing but the window moved" means the same thing to both.
+export function keepsHandTables(orig,draft){
+  if(!orig||!draft||orig._locked!==true) return false;
+  if(!(orig.tables||[]).length) return false;
+  if(draft.status!=="confirmed"&&draft.status!=="pending") return false;
+  if((Number(draft.size)||2)!==orig.size) return false;
+  if(draft.date!==orig.date||draft.preference!==orig.preference) return false;
+  function key(t){return Array.isArray(t)?t.slice().sort().join(","):"";}
+  return key(draft.preferredTables)===key(orig.preferredTables);
+}
+// THE question every site asks (the save, the form's availability scan and its
+// Tables row): will this save carry the booking's tables through? Pinned by the
+// draft's STATUS, or kept because a person placed them. One function, because
+// the preview and the save disagreeing is the defect this file keeps recording.
+export function tablesKept(orig,draft,hasManual,cleared){
+  if(tablesPinned(draft&&draft.status,hasManual,cleared)) return true;
+  if(hasManual||cleared) return false;
+  return keepsHandTables(orig,draft);
+}
+// Which of `tables` a table block covers during [s,e). Unbuffered: a block's
+// window was chosen by hand, and `getBlockSlots` is never padded.
+export function blockedTablesAt(tables,blocks,date,s,e){
+  var busy=getBusy(getBlockSlots(blocks||[],date),s,e);
+  return (tables||[]).filter(function(t){return busy.has(t);});
+}
+// Why a save that keeps hand-placed tables cannot land: a table is blocked for
+// the new window, or a party that cannot be moved holds one. Null when it can.
+// `list` is the day AFTER the save's own pass, so the parties the optimiser (or
+// `replacePinnedClashes`) could move are already gone from the clash list.
+export function handKeptRefusal(list,date,id,blocks){
+  var b=(list||[]).find(function(x){return x.id===id;});
+  if(!b) return null;
+  var s=toMins(b.time);
+  var blocked=blockedTablesAt(b.tables,blocks,date,s,s+(Number(b.duration)||90));
+  if(blocked.length) return (blocked.length>1?"Tables "+blocked.join("+")+" are":"Table "+blocked[0]+" is")+" blocked at that time. Assign different tables.";
+  var locked=pinnedClashParties(list,date,id).locked;
+  return locked.length?pinnedClashRefusal(locked[0]):null;
+}
 // C3: seating never asked whether the table still had somebody at it. The two
 // parties then hold the same table with both bookings `isLocked`, which is the
 // one clash `applyOpt` cannot separate and the reconciler deliberately leaves

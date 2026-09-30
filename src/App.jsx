@@ -49,6 +49,8 @@ import {
   seatNoteFor,
   // v18.0.0 session 8 (item 3): a booking saved as seated keeps its tables.
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
+  // v18.3.2: and so does a booking somebody placed by hand, when only its time moves.
+  tablesKept, handKeptRefusal,
   // v18.0.0 session 8 (C1): and leaving seated puts the booked plan back.
   unseatRestore,
   // v18.0.0 session 8 (C2): and it cannot be seated with no table at all.
@@ -2788,7 +2790,14 @@ function BookingApp({uid}){
         // is sitting at them. `tablesPinned` is the one predicate; see its note
         // in booking-logic.js for what was measured. `editFinished` survives for
         // exactly one guard below, where the two questions genuinely differ.
-        const pinned=tablesPinned(f.status,mt.length>0,clearM);
+        // v18.3.2 (Patryk): `tablesKept`, one predicate wider — a booking
+        // somebody placed by hand (`_locked`) keeps its tables through a save
+        // that moves only its window, so a time change no longer hands it to
+        // the optimiser (`keepsHandTables`, booking-logic.js). The form's
+        // preview asks the same function. `handKept` is that half alone, for
+        // the refusals below.
+        const pinned=tablesKept(orig,{status:f.status,size:size,date:f.date,preference:f.preference,preferredTables:f.preferredTables},mt.length>0,clearM);
+        const handKept=pinned&&!tablesPinned(f.status,mt.length>0,clearM);
         // Hoisted out of buildNext: this exact expression was written twice —
         // once to unlock and once to restore — and two copies of a condition
         // that must agree is how they stop agreeing.
@@ -2942,6 +2951,18 @@ function BookingApp({uid}){
           if(fitRefusal){setError(fitRefusal);return;}
           const lockedClash=pinnedClashParties(fin,f.date,editId).locked;
           if(lockedClash.length){setError(pinnedClashRefusal(lockedClash[0]));return;}
+        }
+        // v18.3.2: hand-placed tables kept through a window change. Whoever the
+        // pass could move is already moved (`applyOpt` places every unlocked
+        // booking around a locked one; with the optimiser off,
+        // `replacePinnedClashes` above does it). What is left is a party that
+        // cannot be moved, or a table block, and the save is refused by name
+        // rather than saved on top of either. Only when the window moved
+        // (`recheck`): an edit that leaves it alone is not held hostage to a
+        // clash it did not cause.
+        if(handKept&&recheck){
+          const keptRefusal=handKeptRefusal(fin,f.date,editId,tableBlocks);
+          if(keptRefusal){setError(keptRefusal);return;}
         }
         if(!mt.length&&recheck){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
