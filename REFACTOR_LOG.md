@@ -29955,7 +29955,10 @@ won't-fix.
      values; listed, it would rebuild the observer, or probe the visible ceiling with two
      forced layouts, on every render. The test above covers AutoHeight too now: it derives
      the five render-scoped names and the two functions, and a `watch` planted in
-     `settle` fails it.
+     `settle` fails it. ConversationView: the "Booking confirmed" banner's auto-dismiss
+     timer does not watch `onDismissAcceptedBadge`, a fresh closure every render, which
+     would restart the timer each render so that it never fired (its comment already said
+     so); the copy it keeps writes through `patchConversation`, which reads refs and setters.
    - **And one directive that suppressed nothing.** App's split-orientation repair carried a
      bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
      already complete (`applySplit` calls only a state setter and `localStorage`, and

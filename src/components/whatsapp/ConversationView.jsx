@@ -91,6 +91,7 @@ export function ConversationView({
       if (onDismissAcceptedBadge) onDismissAcceptedBadge(conv.phoneKey);
     }, WA_ACCEPTED_BANNER_MS);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a fresh closure each render would restart the timer (above); the one it keeps writes through patchConversation, which reads refs and setters
   }, [acceptedBannerShowing, conv.phoneKey]);
 
   // ── Manual re-check state ───────────────────────────────────────────────────
