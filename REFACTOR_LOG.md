@@ -29863,6 +29863,24 @@ won't-fix.
    both phone doors. `npm audit`: 0. The tablet was not connected, so the check v18.3.1
    gave firebase there is in the table below.
 
+6. **The stale-closure triage (ROADMAP #10's first half).** The 25
+   `react-hooks/exhaustive-deps` warnings, each read before it was touched and then fixed
+   or kept with a `-- <reason>`. One commit per change:
+   - **InboxPanel: Backspace and R acted on a stale selection.** The keydown effect named
+     sixteen dependencies and not the selection, and ticking a checkbox re-renders the
+     panel only. The handlers App passes are fresh closures on every App render, which
+     re-ran the effect often enough to hide it. **Reproduced on DEV** with the sandbox's
+     own `__waSim.question`: two of three conversations ticked, Backspace (bulk archive)
+     0.2s or 16s later archived nothing; with two App renders forced between the ticks and
+     the key (A twice, the needs-action filter on and off), it archived both. R, the bulk
+     restore, reads the same selection. The effect now has no dependency array, so the
+     listener is re-added per render and always current. **After**: Backspace 0.2s after
+     the ticks archived exactly the two, and R restored both from Archived; Escape still
+     leaves select mode first and closes the inbox second, because the capture phase,
+     not the order of adding, is what puts this listener ahead of the global one.
+     `tests/stale-closures.test.js` pins the shape. The module is off in production, so
+     there is no device check; the test conversations stay in DEV.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |

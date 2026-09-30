@@ -328,7 +328,19 @@ export function InboxPanel({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [twoPane, activeKey, showTpl, tab, conversations, onClose, query, needsAction, selectMode, confirmBulkDelete, onAccept, onDismiss, onArchive, onUnarchive, onBulkArchive, onBulkUnarchive]);
+    // v18.3.2 (the stale-closure triage): NO dependency array, so the listener
+    // is re-added on every render and always reads this render's values. The
+    // list it had named sixteen of them and left out the selection:
+    // `selectedKeysInTab` reads `selected`, and ticking a checkbox re-renders
+    // this panel only. The handlers App passes are fresh closures on every App
+    // render, which re-ran this effect often enough to hide it, but not after a
+    // tick. Measured on DEV: two conversations ticked, Backspace 0.2s or 16s
+    // later archived NOTHING (R, the bulk restore, reads the same selection);
+    // with two App renders forced between the ticks and the key, it archived
+    // both. Re-adding a listener is cheap, and the capture phase above, which is
+    // what orders this ahead of the global handler, does not depend on when it
+    // was added.
+  });
   // Body-scroll lock while the inbox is open.
   useEffect(() => {
     const orig = document.body.style.overflow;
