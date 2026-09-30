@@ -29904,6 +29904,12 @@ won't-fix.
      moves both, so nothing else runs differently. **Measured after**, on DEV: a message
      sent into the open thread with the sandbox's `__waSim.question` drew exactly one bubble
      with `mgt-bubble-in`, the new one.
+   - **InboxPanel's drop-the-selection effect lists `activeKey`**, which it reads. Every
+     door that selects a conversation picks it from the current tab (the list, ↑/↓, a tab
+     switch, the narrow→wide pick, and an archived return key, which opens on the Archived
+     tab), so a new selection always passes and nothing runs differently. Checked on DEV:
+     archiving the open conversation from the Inbox tab dropped the selection, and
+     restoring it from the Archived tab dropped it there.
    - **Five that only needed a value the lint could see**, no behaviour change: App's
      return-to-inbox effect lists `setShowInbox`, which is one of `setModalFns` (memoised
      on a `useCallback` with no deps), so it never changes and re-runs nothing.

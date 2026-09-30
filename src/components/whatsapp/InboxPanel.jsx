@@ -360,13 +360,16 @@ export function InboxPanel({
     if (activeKey) writeLastConv(activeKey);
   }, [activeKey]);
   // Drop the selection if the active conversation leaves the current tab.
+  // v18.3.2: `activeKey` is listed too. Every door that selects picks from the
+  // current tab, so a new selection passes and nothing runs differently; the
+  // list now names everything the check reads.
   useEffect(() => {
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (!c) { setActiveKey(null); return; }
     const inCurrentTab = tab === "archived" ? c.archived : !c.archived;
     if (!inCurrentTab) setActiveKey(null);
-  }, [conversations, tab]);
+  }, [conversations, tab, activeKey]);
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
   const activeMessages = activeConv ? (messages[activeConv.phoneKey] || []) : [];
