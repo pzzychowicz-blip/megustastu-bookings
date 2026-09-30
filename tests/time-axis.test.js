@@ -31,8 +31,9 @@ describe("A6: the tape snaps once the browser says the scroll is over", () => {
   });
 
   it("keeps the idle timer for a wheel, and where there is no scrollend", () => {
-    // React has no scrollend polyfill (react-dom 19.2.5), so a browser
-    // without it would never snap if the timer went entirely. And a wheel
+    // React has no scrollend polyfill (react-dom 19.2.5; 19.3.0 re-read in
+    // v18.3.2), so a browser without it would never snap if the timer went
+    // entirely. And a wheel
     // fires scrollend after every notch: snapping there swallowed the next
     // notch (three travelled 96px, not 120).
     const scroll = body("onScroll");

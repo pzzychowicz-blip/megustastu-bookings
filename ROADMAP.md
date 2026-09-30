@@ -93,10 +93,10 @@ evidence for each.
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
   first. This is a data-touching patch version.
 
-- **In-range dependency updates, and whether to automate them (#14).** firebase went to
-  12.19 in v18.3.1 (checked on the tablet). react 19.3 and plugin-react 6.1 are still
-  available, and eslint 10 and vitest 5 are waiting as majors. Optionally, turn on
-  Dependabot for security updates only.
+- **In-range dependency updates, and whether to automate them (#14).** Still in range on
+  2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`
+  9.39.5, globals 17.12 and eslint-plugin-react-refresh 0.5.7. eslint 10 and vitest 5
+  are waiting as majors. Optionally, turn on Dependabot for security updates only.
 
 - **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
   141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with

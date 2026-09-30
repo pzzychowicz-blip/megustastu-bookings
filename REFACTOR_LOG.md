@@ -29830,9 +29830,44 @@ won't-fix.
    entry is not pending work: it leaves ROADMAP, and both measurements stay in v18.3.1's
    entry.
 
+5. **react 19.3 and plugin-react 6.1 (ROADMAP #14).** react and react-dom 19.2.5 → 19.3.0,
+   `@vitejs/plugin-react` 6.0.1 → 6.1.1, and `@types/react` / `@types/react-dom` to 19.3.0
+   with them. react-dom brings scheduler 0.27 → 0.28, whose code is byte-identical (only
+   its version moved). Read against what the app uses, 19.3's changelog is mostly new APIs
+   (`<ViewTransition>`, Fragment refs, `browser()`), server rendering, and fixes to
+   features this app does not use (transitions, `useDeferredValue`, `useEffectEvent`, form
+   actions, `innerHTML`, Activity). `scrollend` is wired exactly as before, still with no
+   polyfill, so TimeAxis keeps its fallback; the three places that cite the version now
+   name both. plugin-react's changes are opt-in React Compiler options, which
+   `vite.config.js` does not set. **The one change that reaches the app** is
+   facebook/react#35117: `resize` moved from discrete to continuous priority, and React
+   applies that to native listeners too, through `window.event`. **Measured** in the DEV
+   app with a stub DevTools hook, crossing the 600px breakpoint three times on each
+   version: 19.2.5 committed `useWinW`'s update at Immediate priority inside the resize
+   dispatch, before that frame's rAF; 19.3.0 commits it at UserBlocking priority in a
+   scheduler task about 24ms later, a frame late. A minimal root on the same page agrees
+   (19.2.5 within the microtasks, 19.3.0 one task later), and `flushSync` still commits at
+   once. `useWinH` and `useKeyboardInset` set state from a `resize` listener the same way,
+   so they take the frame too; the inset's `scroll` half always did. The first probe, a `MutationObserver` armed from the probe's
+   own listener, read "no change" on both versions, because the app's listener runs
+   first. That trap is now a row in `mgt-measurement-traps`, and the resize fact a row in
+   `src/CLAUDE.md`. **Size:** the entry chunk is unchanged (122.19 kB gz); `vendor-react`
+   grows 59.60 → 68.25 kB gz (189.59 → 218.84 kB), measured against a clean `npm ci`
+   build of the previous commit. **Also found:** this worktree's `node_modules` held
+   firebase 12.12.1 against a lockfile of 12.19.0, so every local gate and rig run before
+   this phase used the older SDK; the install brought it level with what CI installs.
+   **Checked after it, on DEV:** a cold load (React 19.3.0 served, no console errors or
+   warnings), the gate (2204 tests), and this version's three rigs: the tap on Spain
+   reaches nothing under the list and a swipe scrolls 184px; the kept-tables cases on
+   both optimiser paths (kept on 3 and 6, the other party moved, the locked case refused);
+   both phone doors. `npm audit`: 0. The tablet was not connected, so the check v18.3.1
+   gave firebase there is in the table below.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
 |---|---|---|
 | 1 | Android tablet | New booking: tap Code, tap Spain. Spain is picked and the Time picker does not open. Pick a guest from the name suggestions: Seating preference does not open |
 | 2 | Android tablet | Drag a booking to a table, then edit its time: it keeps the table, and a party in its way moves to another |
+| 5 | Android tablet | **Wanted before the push** (Patryk), the way v18.3.1 checked firebase (a DEV tab over `adb reverse`): React reports 19.3.0, the day loads and stays connected, a booking saves, a block drags and drops, and with the keyboard up the booking form's Save stays visible. Rotate the tablet: the layout switches with no visible flash |
+| 5 | iPhone | Booking form, keyboard down, tap Notes: Save sits above the keyboard's bar with no visible jump (v18.3.1's case, now a frame later by design) |
