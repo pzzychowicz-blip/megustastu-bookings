@@ -1342,7 +1342,10 @@ function BookingApp({uid}){
     // The module check is the same one the button and the `I` key carry: this is
     // a third door into the inbox and gating two of three is gating none.
     if(whatsappOn&&returnToInboxKey&&!showForm&&!confirmCancel&&!showInbox){setShowInbox(true);}
-  },[whatsappOn,returnToInboxKey,showForm,confirmCancel,showInbox]);
+    // v18.3.2: `setShowInbox` is listed because the lint cannot see that it is
+    // stable (one of `setModalFns`, memoised on a `useCallback` with no deps);
+    // it never changes, so this re-runs nothing new. `closeInbox` lists it too.
+  },[whatsappOn,returnToInboxKey,showForm,confirmCancel,showInbox,setShowInbox]);
   // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
   // so the helpers always see live savers/conversations without rebinding. The
   // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).

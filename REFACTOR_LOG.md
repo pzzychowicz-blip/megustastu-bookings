@@ -29897,6 +29897,9 @@ won't-fix.
      `gridW` changes with `totalMins` there. **Measured after**: F on today's DEV
      timeline scrolled to 0.5166 of the grid, against (18:10 − 13:00) / 600 minutes =
      0.5167 (now 18:40, less the 30-minute lead), and no console errors.
+   - **Four that only needed a value the lint could see**, no behaviour change: App's
+     return-to-inbox effect lists `setShowInbox`, which is one of `setModalFns` (memoised
+     on a `useCallback` with no deps), so it never changes and re-runs nothing.
 
 ### Check on the devices after merge
 
