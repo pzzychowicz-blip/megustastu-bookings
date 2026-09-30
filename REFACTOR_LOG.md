@@ -29927,6 +29927,10 @@ won't-fix.
      the moment it was set; the reconciliation effect reads `firstLoadCount`, a ref, and
      calls `saveBookings`, which is new each render and reads only refs (the test above),
      so watching it would reconcile on every render.
+   - **And one directive that suppressed nothing.** App's split-orientation repair carried a
+     bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
+     already complete (`applySplit` calls only a state setter and `localStorage`, and
+     `tlPaneOk` is module-level), which the lint reported as unused. It is gone.
 
 ### Check on the devices after merge
 

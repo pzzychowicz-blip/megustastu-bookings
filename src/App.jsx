@@ -1916,7 +1916,6 @@ function BookingApp({uid}){
     if(!split||!tlSide) return;
     if(tlPaneOk(shellW,split.dir,split.ratio,tlSide)) return;
     applySplit(Object.assign({},split,{dir:"h"}));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[shellW,split,tlSide]);
   // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
   // Normally <body> is the scrollport (see the mount effect near the top of
