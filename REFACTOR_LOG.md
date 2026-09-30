@@ -29722,3 +29722,47 @@ scroll with the page, so the strip never covers one.
 | 6 | Tablet, iPhone | Drag a block to the bottom edge: the grid scrolls, and the drop lands on the row under the finger |
 | 10 | iPad | Booking form in Safari: focus Notes with the keyboard down. The card's top stays visible and Save stays above the keyboard |
 | 16 | Android tablet | Screen off, change a booking from another device, wake: nothing fades, and the change is simply there |
+
+## v18.3.2 — the bug sweep
+
+**Date:** 2026-09-30 · **Branch:** `fix/v18.3.2-bug-sweep` ·
+**Behavioural change:** yes: picking from a booking-form dropdown by touch no longer
+activates the field underneath it. The other phases are listed below.
+
+Patryk read the ROADMAP for bugs and reported two from the restaurant devices. The version
+carries both, plus six ROADMAP items: the stale-closure lint triage (#10's first half), the
+List and waitlist exits (O3), the Unplaced row's mount (O4), one phone-rule helper (#13's
+small half), react 19.3 and plugin-react 6.1 (#14), and closing the drop freeze (M1) as
+won't-fix.
+
+### Phases
+
+1. **Picking a country code by touch no longer opens the Time picker (reported from the
+   tablet).** "When I choose country code on a tablet it jumps straight to Time and opens
+   it." `useAcRow` picks a row on `touchend`, and the pick closes the list, so the
+   mousedown, mouseup and click the browser synthesizes for the tap arrive after the row is
+   gone and land on whatever the list was covering. **Measured** in headless Chromium with
+   touch at 1280×800 (a CDP tap on DEV, a capture-phase event log): the country list's
+   first pinned row, Spain, overlaps the Time input by 17px (row 285–325, Time 258–302).
+   A tap on that overlap picked Spain, and 14ms later `mousedown`, `mouseup` and `click`
+   hit `input[type=time]`, which took focus; on Android a click on a time input opens its
+   picker. The name list did the same to Seating preference, a `<select>`, whose option
+   sheet opens on Android. The phone and voucher lists use the same hook. The 600ms
+   mousedown guard could not help, because it guards the ROW and the ghost's target is
+   something else. The fix cancels the tap's `touchend` (after checking `e.cancelable`),
+   which suppresses the synthesized events; a swipe still returns before it and scrolls.
+   The old comment said React makes touch listeners passive: only `touchstart` and
+   `touchmove`, so the rule it protected (native scroll stays free) still holds. **After
+   it**, the same tap picked Spain and nothing reached Time; a swipe scrolled the list
+   175px and picked nothing; a name pick left focus in the name box, as a mouse pick
+   always has; a desktop mouse pick still worked. The handlers moved into a pure
+   `acRowHandlersFor(ref, select)` so `tests/ac-row.test.js` can drive a tap, a swipe, a
+   non-cancelable `touchend` and the synthesized mousedown without React (the tap test
+   fails with the `preventDefault` taken out). The tablet was not connected, so the check
+   on it is in the table below.
+
+### Check on the devices after merge
+
+| Phase | Device | Check |
+|---|---|---|
+| 1 | Android tablet | New booking: tap Code, tap Spain. Spain is picked and the Time picker does not open. Pick a guest from the name suggestions: Seating preference does not open |
