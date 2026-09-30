@@ -59,7 +59,7 @@
 //   onClose()      — close the panel
 
 import { useState } from "react";
-import { S, BLOCK_BG, R, T, FW, IC, SP } from "../lib/constants";
+import { S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
@@ -68,11 +68,6 @@ import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
 import { TrashIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 
-// v18.3.2 (O3): the fold a leaving row takes, and the empty line's swap. A NAME
-// from the `M` scale, so `useRevealRows`' prune and each `Reveal`'s own hold
-// come from the same entry. `shift` (385ms) is the WhatsApp list's, where a
-// 280ms fold read as a snap (Patryk, 2026-09-30, over the plan's 240ms `move`).
-const ROW_SPEED = "shift";
 
 // The button group's ARMED width: Book (60.3) + the 6px gap + "Confirm —
 // remove" with its trash mark (160.1; 140.1 before phase 62 gave it the mark) =
@@ -99,7 +94,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   // v18.3.2 (O3): the rows drawn — the live ones, and any still folding away —
   // in the order they hold on screen (the header).
   const ids=entries.map(function(w){return w.id;});
-  const {renderIds,openIds}=useRevealRows(ids,date,{speed:ROW_SPEED,instantIn:true});
+  const {renderIds,openIds}=useRevealRows(ids,date,{speed:ROW_FOLD,instantIn:true});
   const order=useLeavingOrder(ids,renderIds);
 
   function rowFor(w,i){
@@ -141,7 +136,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   entries.forEach(function(w,i){at[w.id]=i;});
   const rows=order.map(function(id){
     const i=at[id];
-    return <Reveal key={id} show={openIds.has(id)} speed={ROW_SPEED} inert={i===undefined}>{i===undefined?null:rowFor(entries[i],i)}</Reveal>;
+    return <Reveal key={id} show={openIds.has(id)} speed={ROW_FOLD} inert={i===undefined}>{i===undefined?null:rowFor(entries[i],i)}</Reveal>;
   });
   // The empty line opens once no row is OPEN. On the commit the last party
   // leaves, its row is still open (useRevealRows closes it in an effect), so the
@@ -165,7 +160,7 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
     <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={BLOCK_BG.pending}>{"Waitlist — "+formatDay(date)}</ModalTitle>{rows}{/* v18.3.2 (O3): its own Reveal on
         the rows' speed, so the last party leaving and this line arriving are
         one swap (DESIGN.md: one Reveal cannot animate a swap), and gone at once
-        when a party arrives (`noneOpen`, above). */}{entries.length?null:<Reveal show={noneOpen} speed={ROW_SPEED}><div
+        when a party arrives (`noneOpen`, above). */}{entries.length?null:<Reveal show={noneOpen} speed={ROW_FOLD}><div
         style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div></Reveal>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }

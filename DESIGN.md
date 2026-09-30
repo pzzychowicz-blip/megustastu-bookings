@@ -1868,7 +1868,8 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   `useLeavingOrder`, which the waitlist rows and the List's cards use. The strip's
   `rankOf` still ranks the old way; its sections rarely leave two at a time.
 - **A list row leaving after an action folds on `--t-shift` (v18.3.2, O3)**, the
-  WhatsApp list's fold, not `--t-move`: a `Reveal` changes geometry, and a 280ms
+  WhatsApp list's fold, not `--t-move`, and every such list names it `ROW_FOLD`
+  (`lib/constants.js`): a `Reveal` changes geometry, and a 280ms
   fold read as a snap there (Patryk). It ARRIVES at full height (`useRevealRows`'
   `instantIn`), the rows below making room, because a row growing open as well is
   a second motion on top of theirs. A leaving row is drawn from `Reveal`'s cached

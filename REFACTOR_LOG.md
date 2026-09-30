@@ -30022,6 +30022,12 @@ won't-fix.
      The first version gave the empty line a `show` of its own, and there it folded for
      385ms under the new row, so the card held both and grew by a row before settling. With
      the fix, the line was already gone in that same mutation.
+   - **One name for the fold: `ROW_FOLD`** (`lib/constants.js`, beside the exit holds). The
+     WhatsApp list's `ROW_SPEED = "shift"` and the waitlist's copy were the same decision
+     written twice, and the List was about to write it a third time. The WhatsApp list's
+     measurement note moved onto the constant, including its sentence about a semantic
+     argument undoing a measurement, which is what the O3 plan's `move` was. No behaviour
+     change.
 
 ### Check on the devices after merge
 

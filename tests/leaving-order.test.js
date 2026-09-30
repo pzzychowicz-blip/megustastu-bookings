@@ -61,18 +61,29 @@ describe("Reveal can mark a leaving row inert", () => {
   });
 });
 
+describe("one name for a list row's fold", () => {
+  it("is ROW_FOLD, --t-shift, beside the exit holds", () => {
+    expect(read("lib/constants.js")).toMatch(/export var ROW_FOLD = "shift";/);
+  });
+  it("and the WhatsApp list, where it was measured, folds on it", () => {
+    const list = read("components/whatsapp/ConversationList.jsx");
+    expect(list).toMatch(/import \{ T, ROW_FOLD \} from "\.\.\/\.\.\/lib\/constants";/);
+    expect(list).toMatch(/useRevealRows\(sorted\.map\(\(c\) => c\.phoneKey\), undefined, \{ speed: ROW_FOLD, instantIn: true \}\)/);
+    expect(list).not.toMatch(/ROW_SPEED/);
+  });
+});
+
 describe("the waitlist panel's rows leave the way they arrive", () => {
   const panel = read("components/WaitlistPanel.jsx");
-  it("folds on --t-shift and arrives at full height", () => {
-    expect(panel).toMatch(/const ROW_SPEED = "shift";/);
-    expect(panel).toMatch(/useRevealRows\(ids,date,\{speed:ROW_SPEED,instantIn:true\}\)/);
+  it("folds on ROW_FOLD and arrives at full height", () => {
+    expect(panel).toMatch(/useRevealRows\(ids,date,\{speed:ROW_FOLD,instantIn:true\}\)/);
   });
   it("draws a leaving row where it was, from Reveal's cache, inert", () => {
     expect(panel).toMatch(/const order=useLeavingOrder\(ids,renderIds\);/);
-    expect(panel).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} speed=\{ROW_SPEED\} inert=\{i===undefined\}>\{i===undefined\?null:rowFor\(entries\[i\],i\)\}<\/Reveal>/);
+    expect(panel).toMatch(/<Reveal key=\{id\} show=\{openIds\.has\(id\)\} speed=\{ROW_FOLD\} inert=\{i===undefined\}>\{i===undefined\?null:rowFor\(entries\[i\],i\)\}<\/Reveal>/);
   });
   it("swaps the last row for the empty line on the same curve, and drops the line at once when a party arrives", () => {
     expect(panel).toMatch(/const noneOpen=!order\.some\(function\(id\)\{return openIds\.has\(id\);\}\);/);
-    expect(panel).toMatch(/\{entries\.length\?null:<Reveal show=\{noneOpen\} speed=\{ROW_SPEED\}><div/);
+    expect(panel).toMatch(/\{entries\.length\?null:<Reveal show=\{noneOpen\} speed=\{ROW_FOLD\}><div/);
   });
 });
