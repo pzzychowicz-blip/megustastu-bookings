@@ -26,8 +26,9 @@
 //
 // The builders that WRITE a booking stay explicit code (Patryk, 2026-10-01): a
 // generated builder hides the one decision worth seeing, which fields a
-// particular save writes. A test checks each of them against this table
-// instead (`tests/booking-fields.test.js`, v18.3.4 phase 8).
+// particular save writes. `tests/booking-fields.test.js` checks each of them
+// against this table instead, so a new row fails there until every builder has
+// been decided for it.
 //
 // ── Imports: leaves only ─────────────────────────────────────────────────────
 // `booking-logic.js` imports this file and reads `UNDO_FIELDS` at module scope,

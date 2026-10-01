@@ -30737,3 +30737,43 @@ and every save writes exactly the fields it writes today.
 
    Both rules were paused afterwards. No new console error. Bundle: the entry is
    0.02 kB gz smaller.
+
+8. **The guard: `tests/booking-fields.test.js`.** The table derives the read, undo, the
+   history line and the draft, but the four builders that write a booking stay
+   explicit code (Patryk's call), so this file checks each of them against the table:
+   - **An unchanged edit rewrites nothing but its history.** The fixture holds a value
+     of its own in every field, none of them an empty row's default (`_conflict`
+     alone, which the save derives). Saving what `draftFromBooking` opens with must
+     keep every field in the table's key order, add one "edited: saved (no field
+     changes)", and arm no undo. That is the round trip that catches the wipe: a
+     field the draft does not carry comes back changed, named in history, and
+     undoable.
+   - **A field the form edits is written by both saves.** One entry per key of the
+     form's draft, each changed alone. The edit and the create must store it (the
+     voucher normalised, the hand-picked tables as `tables`), apart from two keys
+     that name their reason: `returnOf`, which an edit never writes, and
+     `guestSeed`, which names another booking. `EMPTY_FORM` must hold every draft
+     key, plus `repeatWeekly` alone.
+   - **No builder writes a key outside the table or `undefined`.**
+   - **Each create builder writes every row or names it, with the reason.**
+     `buildBooking` leaves out four, `walkinBooking` twelve, `occurrenceBooking` five.
+   - The table names each field once, and no two clauses or draft seeds share a
+     position.
+
+   It replaces the `deposit:`/`voucherCode:` scan in `booking-logic.test.js`, which
+   knew one pair of fields, could not see the walk-in, and by now found no line in
+   App at all. Ten sabotages were each caught:
+   - the voucher row losing its draft seed (5 failures);
+   - the edit not writing `voucherCode` (1);
+   - the create not writing it (2);
+   - a new stored row decided nowhere (5);
+   - a new form field the saves don't write (7);
+   - the deposit seed opening empty (3);
+   - the walk-in writing `undefined` (2);
+   - the occurrence writing a key outside the table (1);
+   - two clauses at one position (1);
+   - `EMPTY_FORM` without `voucherCode` (1).
+
+   CLAUDE.md's "A new per-booking FIELD" row now says one row plus this guard, where
+   it said eight places. `tests/CLAUDE.md` names both v18.3.4 guards, and says the
+   characterization snapshots are never updated with `-u`.

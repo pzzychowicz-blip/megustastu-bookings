@@ -1980,19 +1980,10 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
     expect(d.voucherCode).toBe("ABCD1234");
   });
 
-  it("every `deposit:` in a booking-shaped literal has a voucherCode beside it", () => {
-    // The general form of the rule, so the NEXT field added is caught too.
-    // A booking literal is one that sets `deposit:` and `status:` together.
-    // v18.3.4: the edit's write moved to lib/booking-save.js, so both files.
-    const SAVE = readFileSync(new URL("../src/lib/booking-save.js", import.meta.url), "utf8");
-    const offenders = [];
-    for (const [file, text] of [["App.jsx", APP], ["lib/booking-save.js", SAVE]]) {
-      text.split("\n").forEach((l, i) => {
-        if (/deposit:/.test(l) && /status:/.test(l) && !/voucherCode:/.test(l)) offenders.push(file + ":" + (i + 1));
-      });
-    }
-    expect(offenders).toEqual([]);
-  });
+  // The general form of the rule, so the NEXT field added is caught too, was a
+  // scan here pairing `deposit:` with `voucherCode:` on any line that also set
+  // `status:`. v18.3.4 replaced it with tests/booking-fields.test.js, which runs
+  // every builder against the field table instead of reading their spelling.
 });
 
 describe("plannedDuration — the length a booking was BOOKED for (v18.0.0 session 7)", () => {
