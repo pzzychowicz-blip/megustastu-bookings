@@ -30230,6 +30230,13 @@ plugin-react 6.1 (#14), and closing the drop freeze (M1) as won't-fix.
      a fade, as before O4. It is a duplicate of a block that stays on its row, so nothing
      travels, and fading it means tracking the row's cells the way the ghosts are tracked.
 
+### `/code-review` round (2026-10-01)
+
+- **`ROW_FOLD` is a `const`.** O3 declared it `export var`, against the root
+  CLAUDE.md's "Never `var` in new code" (the file's own exception covers the vars
+  Phase A left). `tests/leaving-order.test.js` pinned the `var` spelling and pins
+  `const` now.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |

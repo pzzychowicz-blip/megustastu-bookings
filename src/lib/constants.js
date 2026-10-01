@@ -816,7 +816,7 @@ export var REVEAL_EXIT_MS = exitHold("reveal");
 // 2026-09-30. It is also the honest token: a `Reveal` changes geometry. Pass it
 // as `speed` to both `useRevealRows` and each row's `Reveal`, so the prune and
 // the collapse come from the same entry.
-export var ROW_FOLD = "shift";
+export const ROW_FOLD = "shift";
 
 // v17.10.0: `guestId` is the phone-less customer identity carried by the draft
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that

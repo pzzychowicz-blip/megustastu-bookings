@@ -63,7 +63,7 @@ describe("Reveal can mark a leaving row inert", () => {
 
 describe("one name for a list row's fold", () => {
   it("is ROW_FOLD, --t-shift, beside the exit holds", () => {
-    expect(read("lib/constants.js")).toMatch(/export var ROW_FOLD = "shift";/);
+    expect(read("lib/constants.js")).toMatch(/export const ROW_FOLD = "shift";/);
   });
   it("and the WhatsApp list, where it was measured, folds on it", () => {
     const list = read("components/whatsapp/ConversationList.jsx");
