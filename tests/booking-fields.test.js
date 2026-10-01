@@ -18,10 +18,15 @@
 // written back empty by the next save — is invisible until somebody edits a
 // booking that had one. Both are run here, not read.
 //
-// No source is read, so the stripping rule (tests/test-hygiene.test.js) does
-// not apply.
+// One check reads source: which code opens the booking form on an EXISTING
+// booking (v18.3.4's /code-review). It reads it comment-stripped
+// (tests/test-hygiene.test.js), because comments here name the call it hunts.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { stripComments } from "../scripts/strip-comments.mjs";
 import { BOOKING_FIELDS, sanitize, draftFromBooking } from "../src/lib/booking-fields.js";
 import { applyEdit, buildBooking, walkinBooking, occurrenceBooking } from "../src/lib/booking-save.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
@@ -122,6 +127,48 @@ describe("an edit saved unchanged rewrites nothing but its history", () => {
   });
   it("writes a well-formed row", () => {
     expectWellFormed(saved, "applyEdit");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// The round trip above holds for a form that OPENS the table's draft, and only
+// for that. v18.3.4's /code-review found two that did not: WhatsApp's "open the
+// linked booking" and "Apply changes" wrote their edit drafts out by hand on top
+// of EMPTY_FORM, so Save, with nothing changed, wiped the booking's deposit and
+// voucher. So every place that opens the form on an existing booking — a
+// `setEditId` with an id, after an `openForm` — is found here and must open
+// `draftFromBooking`, with any requested changes laid on top of it.
+const SRC = fileURLToPath(new URL("../src/", import.meta.url));
+// Sorted: `readdirSync`'s order is the file system's (CI's ext4 is not alphabetical).
+const sourceFiles = (dir) => readdirSync(dir).sort().flatMap((n) => {
+  const p = join(dir, n);
+  return statSync(p).isDirectory() ? sourceFiles(p) : /\.jsx?$/.test(n) ? [p] : [];
+});
+const EDIT_OPENERS = sourceFiles(SRC).flatMap((file) => {
+  const code = stripComments(readFileSync(file, "utf8")).join("\n");
+  if (!code.includes("openForm(")) return [];
+  const out = [];
+  const re = /setEditId\(([^)]*)\)/g;
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    if (m[1].trim() === "null") continue;
+    const at = code.lastIndexOf("openForm(", m.index);
+    out.push({ site: relative(SRC, file) + " " + m[1].trim(), opens: at < 0 ? "" : code.slice(at + "openForm(".length, at + 60) });
+  }
+  return out;
+});
+
+describe("every edit form opens the table's draft", () => {
+  it("finds the three places that open one", () => {
+    // Counted, so a new door fails here until it is looked at.
+    expect(EDIT_OPENERS.map((o) => o.site)).toEqual([
+      "App.jsx b.id",                        // openEdit
+      "hooks/useWhatsApp.js booking.id",     // handleOpenLinkedBooking
+      "hooks/useWhatsApp.js booking.id",     // handleApplyModify
+    ]);
+  });
+  it("each opens draftFromBooking", () => {
+    expect(EDIT_OPENERS.filter((o) => !/^(Object\.assign\()?draftFromBooking\(/.test(o.opens)).map((o) => o.site + ": " + o.opens)).toEqual([]);
   });
 });
 

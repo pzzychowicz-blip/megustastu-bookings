@@ -458,7 +458,10 @@ Two surfaces, same defect, found five versions apart.
   shared file, so a prod change to how the booking form opens breaks it
   silently. Its three form-openers must all go through App's `openForm()` — a
   raw `setForm` reads as dirty immediately and pops "Discard unsaved changes?"
-  on an untouched Cancel.
+  on an untouched Cancel. Its two EDIT openers open `draftFromBooking(booking)`,
+  the draft `openEdit` opens (v18.3.4): a draft built by hand on `EMPTY_FORM`
+  opened without the deposit and the voucher, and an unchanged Save wiped both.
+  `tests/booking-fields.test.js` checks every edit opener in `src/`.
 
 ---
 

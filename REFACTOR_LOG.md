@@ -30464,10 +30464,12 @@ run.
 ## v18.3.4 — one field table for a booking
 
 **Date:** 2026-10-01 · **Branch:** `refactor/v18.3.4-booking-field-table` ·
-**Behavioural change:** none. `tests/save-path.test.js` (phase 1) is the proof, since
-none of its snapshots moves after the commit that took them: all 97 inline snapshots,
-extracted from the file at phase 1 and at the last phase and compared, are identical,
-and the file's other changes are the harness's wiring.
+**Behavioural change:** one, from the `/code-review` (below): a booking opened from the
+WhatsApp inbox opens with its deposit and its voucher, so Save no longer wipes them.
+Nothing else: `tests/save-path.test.js` (phase 1) is the proof, since none of its
+snapshots moves after the commit that took them: all 97 inline snapshots, extracted
+from the file at phase 1 and at the last phase and compared, are identical, and the
+file's other changes are the harness's wiring.
 
 ROADMAP #13, as v18.3.3 left it. A booking's fields are written out by hand in eight
 places: `sanitize`, `UNDO_FIELDS` and `diffBooking` (`booking-logic.js`); `openEdit`,
@@ -30815,6 +30817,42 @@ measurement-traps skill's drag trap. The picker writes the same `_manual`/`_lock
 pair, so it stood in. The walk-in and the generator were run after phase 7, and
 nothing they call has changed since.
 
+### `/code-review`
+
+Run at max effort over the branch diff, inline. Seven findings, each checked before it
+was acted on. The confirmed ones in this version's scope are fixed, each in its own
+commit; the others are deferred to the ROADMAP; none was disproved.
+
+1. **WhatsApp's two edit doors wiped a booking's deposit and voucher (fixed).**
+   `useWhatsApp.js` opens the edit form from the inbox's linked-booking card
+   (`handleOpenLinkedBooking`) and from Apply changes on a modify request
+   (`handleApplyModify`). Both built the draft by hand on `EMPTY_FORM`, so it had no
+   deposit and no voucher, and it carried the stored `customDur` where `openEdit` opens
+   the planned length. Phase 8's guard could not see either door: it checks what
+   `draftFromBooking` opens, and these never called it. The bug predates this version
+   (both doors date from v18.0.0 phase 5a, `ef243f9`). It is fixed here because this
+   version's guard and CLAUDE.md row said the class was closed.
+
+   Confirmed by running `applyEdit` on the hand-built draft of a booking holding deposit
+   20 and voucher ABCD2345. An unchanged Save stored deposit 0 and voucher "", history
+   read "edited: deposit 20→0 €, voucher ABCD-2345→none", and Undo was armed. A
+   seated-then-completed visit opened the same way saved "duration 90→47min".
+
+   Both doors now open `draftFromBooking(booking)`; the modify door lays the request's
+   date, time, size and preference on top.
+
+   **The guard now finds every edit door.** In each `src/` file that calls `openForm(`,
+   it finds every `setEditId(<id>)` other than `null` and requires the nearest
+   `openForm(` above it to open `draftFromBooking`. It finds three doors (App's
+   `openEdit` and the two WhatsApp doors), and it fails if that number moves, so a
+   fourth door gets looked at. Against the code before the fix it failed, naming both
+   WhatsApp doors.
+
+   **On DEV**: a draft accepted from a conversation was saved with deposit 20 and a
+   note. Open booking showed deposit 20. Save with nothing changed kept deposit 20, and
+   history reads "edited: saved (no field changes)". CLAUDE.md's field row and
+   GLOSSARY's form-handoff rule name the two doors.
+
 ### Gate
 
 Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
@@ -30832,13 +30870,15 @@ commit (`git archive`).
 | phase 6 | 124.32 kB | 2397 | 0 errors, 63 warnings | OK |
 | phase 7 | 124.30 kB | 2397 | 0 errors, 63 warnings | OK |
 | phase 8 | 124.30 kB | 2444 | 0 errors, 63 warnings | OK |
+| `/code-review` 1 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
 
 The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
 App. No rules change, so no `test:rules` run.
 
 ### Check on the devices after merge
 
-Nothing should look or behave differently. These are the flows whose code moved.
+Nothing should look or behave differently apart from the WhatsApp row. The other rows
+are the flows whose code moved.
 
 | Phase | Device | Check |
 |---|---|---|
@@ -30846,3 +30886,4 @@ Nothing should look or behave differently. These are the flows whose code moved.
 | 4, 5 | Android tablet | Move a booking placed by hand (dragged) to another time: it keeps its tables. Move it onto a party locked to the same table: the amber line names that party before Save, and Save says the same |
 | 6 | Android tablet | Book Again from a completed booking: the new one reads "created via Book Again (from …)", the source "Book Again → new booking on …" |
 | 7 | Android tablet | A walk-in during service: "Walk-in N", seated on the tables picked |
+| `/code-review` 1 | Android tablet, if the WhatsApp module is on | Open a booking that has a deposit from its conversation's Open booking: the form shows the deposit, and Save without changes keeps it |
