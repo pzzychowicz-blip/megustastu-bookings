@@ -49,10 +49,10 @@
 
 import { useState, useRef } from "react";
 import { READY, DISPATCHED, mayDispatch } from "../lib/submitGuard";
-import { KITCHEN_TABLE_LIMIT, hoursFor } from "../lib/constants";
+import { KITCHEN_TABLE_LIMIT } from "../lib/constants";
 import { sameDraft } from "../lib/drafts";
 import {
-  getDur, genId, histEntry, nowTime, getKitchenLoad
+  getDur, genId, histEntry, nowTime, getKitchenLoad, walkinRefusal
 } from "../lib/booking-logic";
 import { todayStr } from "../lib/day";
 
@@ -123,6 +123,10 @@ export function useWalkin({
     // while the modal is still fading out. src/lib/submitGuard.js.
     if(!mayDispatch(walkinGuardRef.current)) return;
     const wf=walkinForm;
+    // v18.3.3: asked here as well as in saveWalkin, because the kitchen
+    // confirm re-enters this function directly, possibly after closing time.
+    const late=closedNow();
+    if(late){setWalkinError(late);return;}
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
     const nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:todayStr(),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
@@ -131,6 +135,11 @@ export function useWalkin({
     // "Please assign tables first" return above leaves it READY.
     walkinGuardRef.current=DISPATCHED;
     setShowWalkin(false);setViewDate(todayStr());
+  }
+  // v18.3.3: the refusal for a walk-in right now, or null (`walkinRefusal`).
+  function closedNow(){
+    const d=new Date();
+    return walkinRefusal(todayStr(d),todayStr(d),d.getHours()*60+d.getMinutes());
   }
   // saveWalkin: kitchen-load guard. If adding this walk-in would push
   // simultaneous starts over KITCHEN_TABLE_LIMIT, raise the shared
@@ -147,7 +156,9 @@ export function useWalkin({
     const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
     const wDate=todayStr();
     // v15.0.0: per-weekday hours — block a walk-in when today is marked Closed.
-    if(hoursFor(wDate).closed){setWalkinError("Closed today — walk-ins can't be added. Open today in Settings → Opening hours if this is wrong.");return;}
+    // v18.3.3: and once today's close has passed (`walkinRefusal`).
+    const late=closedNow();
+    if(late){setWalkinError(late);return;}
     const load=getKitchenLoad(bookings,wDate,t,dur,null);
     if(load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
       setConfirmKitchen("walkin");return;

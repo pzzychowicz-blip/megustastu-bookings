@@ -262,6 +262,18 @@ export function pastCloseMins(dateStr,todayS,nowMins){
 export function seatingClosed(dateStr,todayS,nowMins){
   return pastCloseMins(dateStr,todayS,nowMins)!==null;
 }
+// v18.3.3: why a walk-in cannot be seated now, or null. A walk-in is created
+// SEATED on today, so it is the fifth door to the question above, and the one
+// that did not ask it: after closing the walk-in was written, and the close-time
+// auto-complete flipped it to completed on the next 15s tick with a 15-minute
+// duration (`max(15, close − start)`), so a party sitting down read as a visit
+// that had already ended. The closed-day sentence moved here from useWalkin so
+// the two refusals are one function, asked by both of its doors.
+export function walkinRefusal(dateStr,todayS,nowMins){
+  if(hoursFor(dateStr).closed) return "Closed today — walk-ins can't be added. Open today in Settings → Opening hours if this is wrong.";
+  if(seatingClosed(dateStr,todayS,nowMins)) return "It's past closing — walk-ins can't be seated now.";
+  return null;
+}
 // v18.2.0 phase 67: where a day's bookings START — the earliest start of the
 // day's bookings that are not cancelled (completed count: they happened), or
 // Infinity for an empty day. The Timeline opens a non-today day scrolled to it

@@ -30338,3 +30338,19 @@ class rather than fixing a bug and touches booking data.
    `dueOccurrences` (the race, the backfill, the derived start, skips, a closed day, the
    last start) and the wiring; removing the start check fails 2 and testing the close
    again fails 1.
+
+3. **A walk-in after closing is refused.** A walk-in is created seated on today, and
+   `saveWalkin` refused a closed DAY but not a passed close, while the close-time
+   auto-complete flips every seated booking whose day's close has passed. So a walk-in
+   added after closing was written and turned into a completed visit of 15 minutes
+   (`max(15, close − start)`) on the next 15s tick. Found by reading; the other four
+   ways to seat a party have refused then since v17.16.12 (`seatingClosed`). Patryk
+   chose a refusal. `walkinRefusal(date, today, nowMins)` (`booking-logic.js`) holds
+   both sentences, the closed day's (moved from `useWalkin`) and "It's past closing —
+   walk-ins can't be seated now.", and both doors ask it: `saveWalkin` before the
+   kitchen confirm, and `doSaveWalkin`, which that confirm re-enters directly.
+   **Measured on DEV**, the page's clock shifted 8 hours to 22:52: Seat showed the
+   refusal and wrote nothing; at the real time (14:54) a walk-in on i4 saved seated.
+   The shift itself tripped the stale gate and held the next write, which is now a row
+   in `mgt-measurement-traps`. `tests/walkin.test.js` (removing the past-close line
+   fails it).
