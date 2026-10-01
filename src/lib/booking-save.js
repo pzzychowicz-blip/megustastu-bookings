@@ -52,6 +52,21 @@ export function memoByPrev(fn){
   return function(prev){if(prev===mPrev) return mFin;const r=fn(prev);mPrev=prev;mFin=r;return r;};
 }
 
+// ── releaseSwapped: a party a swap takes tables from ─────────────────────────
+// The table picker's Swap hands tables another party holds to the booking being
+// placed, and names each party it takes from with the tables it takes
+// (`affected`, the form's `swapAffected`). Such a party keeps the rest of its
+// tables and is unlocked, so the optimiser pass that follows can place it
+// again. Any other booking comes back as it was, the same object.
+// v18.3.4 (/code-review): written out three times — the edit's save, the new
+// booking's save and App's `manualAssign` (the picker's Swap outside the form).
+export function releaseSwapped(b,affected){
+  const match=affected.find(function(ab){return ab.id===b.id;});
+  if(!match) return b;
+  const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});
+  return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
+}
+
 // ── editWindow: where an edit puts the booking, before the clock ─────────────
 // What the draft alone decides about the edited booking's window:
 //   size             the party size saved (`Number(draft.size) || 2`)
@@ -342,7 +357,7 @@ export function applyEdit(input){
         if(unseatHist) h=h.concat([unseatHist]);
         return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
       }
-      if(swapAffected){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}}
+      if(swapAffected) return releaseSwapped(b,swapAffected);
       return b;
     });
     let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,forceReassign,optStateForSave);
@@ -527,7 +542,7 @@ export function buildBooking(input){
   // re-adding it).
   function applyBase(prev){
     let base=stampGuestSeed(prev,f).filter(function(b){return b.id!==newId;});
-    if(swapAffected){base=base.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
+    if(swapAffected){base=base.map(function(b){return releaseSwapped(b,swapAffected);});}
     // If this is a Book Again creation, append a back-reference entry to the
     // source booking's history (purely informational — no status/table change).
     if(source){

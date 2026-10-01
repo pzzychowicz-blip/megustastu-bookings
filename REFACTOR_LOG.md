@@ -30869,6 +30869,17 @@ commit; the others are deferred to the ROADMAP; none was disproved.
    clause, the `deposit` row with `undo: false`, and a clause added to `guestId`. The
    guard as it stood passed the first two.
 
+3. **The swap release was written out three times (fixed).** When the table picker's
+   Swap takes tables from a party, that party keeps the rest of its tables and is
+   unlocked so the optimiser can place it again. `applyEdit` and `buildBooking` each
+   wrote this out byte for byte, and the search for the shape found a third copy in
+   App's `manualAssign` (the picker's Swap outside the form). All three call
+   `releaseSwapped(b, affected)` in `booking-save.js` now. The characterization
+   snapshots did not move. `manualAssign` had no test at all, so `booking-logic.test.js`
+   runs the helper and checks that `manualAssign` calls it. Keeping `_manual` in the
+   helper fails three tests: the new one and both swap scenarios in
+   `save-path.test.js`.
+
 ### Gate
 
 Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
@@ -30888,6 +30899,7 @@ commit (`git archive`).
 | phase 8 | 124.30 kB | 2444 | 0 errors, 63 warnings | OK |
 | `/code-review` 1 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
 | `/code-review` 2 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
+| `/code-review` 3 | 124.21 kB | 2449 | 0 errors, 63 warnings | OK |
 
 The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
 App. No rules change, so no `test:rules` run.

@@ -86,9 +86,9 @@ import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences } from "./lib/recurring";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
-// v18.3.4: the booking form's two saves as pure plans, and the memo every save
-// transform shares.
-import { applyEdit, buildBooking, memoByPrev, occurrenceBooking } from "./lib/booking-save";
+// v18.3.4: the booking form's two saves as pure plans, the memo every save
+// transform shares, and the swap release `manualAssign` shares with the saves.
+import { applyEdit, buildBooking, memoByPrev, occurrenceBooking, releaseSwapped } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -3879,13 +3879,8 @@ function BookingApp({uid}){
       const updated=b.map(function(x){
         if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
         // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
-        if(affected&&affected.length>0){
-          const match=affected.find(function(ab){return ab.id===x.id;});
-          if(match){
-            const remaining=(x.tables||[]).filter(function(t){return !match.tables.includes(t);});
-            return Object.assign({},x,{tables:remaining,_locked:false,_manual:false});
-          }
-        }
+        // (`releaseSwapped`, lib/booking-save.js, which the form's two saves share).
+        if(affected&&affected.length>0) return releaseSwapped(x,affected);
         return x;
       });
       // Re-optimize to reassign affected bookings to new tables (when optimizer active)

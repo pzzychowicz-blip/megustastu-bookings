@@ -35,7 +35,7 @@ import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
-import { applyEdit, buildBooking, editWindow, keptRefusal } from "../src/lib/booking-save.js";
+import { applyEdit, buildBooking, editWindow, keptRefusal, releaseSwapped } from "../src/lib/booking-save.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -3175,3 +3175,29 @@ describe("`_manual` implies `_locked`, which is what keeps the two previews agre
   });
 });
 
+
+// ── releaseSwapped (v18.3.4 /code-review) ───────────────────────────────────
+// What a party keeps when the table picker's Swap takes tables from it. Three
+// doors apply it — the edit's save, the new booking's save (both run in
+// tests/save-path.test.js's swap scenarios) and App's `manualAssign`, the
+// picker's Swap outside the form, which nothing else here runs.
+describe("releaseSwapped: what a swap leaves the party it takes from", () => {
+  const holder = { id: "h", name: "Ana", tables: ["5A", "5B"], _manual: true, _locked: true, status: "confirmed" };
+
+  it("keeps the rest of its tables, unlocked so the optimiser can place it again", () => {
+    expect(releaseSwapped(holder, [{ id: "h", tables: ["5A"] }])).toStrictEqual(
+      Object.assign({}, holder, { tables: ["5B"], _manual: false, _locked: false }));
+    expect(holder.tables).toEqual(["5A", "5B"]);
+  });
+
+  it("returns any other booking as the same object", () => {
+    expect(releaseSwapped(holder, [{ id: "other", tables: ["5A"] }])).toBe(holder);
+  });
+
+  it("is what manualAssign applies", () => {
+    const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+    const body = APP.slice(APP.indexOf("function manualAssign("), APP.indexOf("setManualTarget(null)", APP.indexOf("function manualAssign(")));
+    expect(body).toContain("releaseSwapped(x,affected)");
+    expect(body).not.toContain("_locked:false");
+  });
+});
