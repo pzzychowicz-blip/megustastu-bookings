@@ -29731,10 +29731,10 @@ activates the field underneath it, and a booking somebody placed by hand keeps i
 when its time is edited. The other phases are listed below.
 
 Patryk read the ROADMAP for bugs and reported two from the restaurant devices. The version
-carries both, plus six ROADMAP items: the stale-closure lint triage (#10's first half), the
-List and waitlist exits (O3), the Unplaced row's mount (O4), one phone-rule helper (#13's
-small half), react 19.3 and plugin-react 6.1 (#14), and closing the drop freeze (M1) as
-won't-fix.
+carries both, plus six ROADMAP items: the stale-closure lint triage and the thirteen bare
+directives (#10, all but its `--max-warnings` decision), the List and waitlist exits (O3),
+the Unplaced row's mount (O4), one phone-rule helper (#13's small half), react 19.3 and
+plugin-react 6.1 (#14), and closing the drop freeze (M1) as won't-fix.
 
 ### Phases
 
