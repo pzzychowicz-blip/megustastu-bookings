@@ -1167,8 +1167,17 @@ function BookingApp({uid}){
   // can be wrong.
   // v18.2.0 phase 19: form.phone joins the list — Save can now refuse a number
   // without a country code, and picking one has to clear that message.
+  // v18.3.3: and every other field a save error can be about. The list held
+  // seven, so an error whose remedy was outside it stayed on screen after the
+  // remedy: "A seated booking can't be moved to another date — change the
+  // status first." outlived the status change (measured on DEV), and "Could not
+  // assign a table — try manual assignment." would outlive a manual assignment
+  // (by reading). Status, the hand-picked tables, Clear and the preferred tables
+  // join it; no save error is about the voucher, whose picker refuses for
+  // itself. Nothing else writes these during a save (doSave applies its phone
+  // rewrite to a copy for the reason above), so a save never clears its own error.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- a field change clears it; watching `error` would clear each error the moment it is set
-  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur]);
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur,form.status,form.manualTables,form._clearManual,form.preferredTables]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's

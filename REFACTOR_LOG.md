@@ -30354,3 +30354,17 @@ class rather than fixing a bug and touches booking data.
    The shift itself tripped the stale gate and held the next write, which is now a row
    in `mgt-measurement-traps`. `tests/walkin.test.js` (removing the past-close line
    fails it).
+
+4. **A save error clears when its remedy is applied.** The booking form's error is
+   cleared by an effect watching the fields it can be about, and it watched seven
+   (name, phone, time, size, date, preference, length). An error whose remedy lay
+   outside them stayed up after the remedy. **Measured on DEV**: a confirmed booking
+   moved to another date and set to Seated was refused with "A seated booking can't be
+   moved to another date — change the status first.", and the message stayed after the
+   status went back to Confirmed. By reading, "Could not assign a table — try manual
+   assignment." did the same after a manual assignment. The status, the hand-picked
+   tables, Clear and the preferred tables join the list; the voucher does not, since no
+   save error is about it (its picker refuses for itself). Nothing writes these fields
+   during a save, so a save cannot clear its own error. **After it**, same booking: the
+   refusal was still up 1.5s after Save and went the moment the status changed.
+   `tests/form-error.test.js` reads the list.
