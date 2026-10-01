@@ -53,6 +53,7 @@ import globals from "globals";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import * as bookingLogic from "../src/lib/booking-logic.js";
 import * as bookingFields from "../src/lib/booking-fields.js";
+import * as bookingSave from "../src/lib/booking-save.js";
 import * as constants from "../src/lib/constants.js";
 import * as customers from "../src/lib/customers.js";
 import * as vouchers from "../src/lib/vouchers.js";
@@ -67,6 +68,7 @@ import * as drafts from "../src/lib/drafts.js";
 const LIB = {
   "booking-logic": bookingLogic,
   "booking-fields": bookingFields,
+  "booking-save": bookingSave,
   "constants": constants,
   "customers": customers,
   "vouchers": vouchers,
@@ -178,8 +180,10 @@ function compile(fileSrc, lifted, env) {
 // ── App's save path, lifted ─────────────────────────────────────────────────
 // `doSave` is the door both kinds of save go through (validation, the prompts,
 // then one of the two paths); the helpers it and they call are App code too.
+// v18.3.4: `memoByPrev` moved to lib/booking-save.js, so it is bound as an
+// import now rather than lifted.
 const APP_SAVE_NAMES = [
-  "memoByPrev", "cleanPhoneOf", "withClearedSeats", "seatClashSnap", "undoDelta",
+  "cleanPhoneOf", "withClearedSeats", "seatClashSnap", "undoDelta",
   "doSaveEdit", "doSaveNew", "doSave", "openEdit",
 ];
 const APP_SAVE = APP_SAVE_NAMES.map((n) => liftFunction(APP, n));

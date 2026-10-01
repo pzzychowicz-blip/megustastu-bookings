@@ -87,8 +87,12 @@ describe("where it shows", () => {
   it("both saves hand the note to the toast", () => {
     const app = read("App.jsx");
     expect(app).toMatch(/if\(ok\) flash\(null,!mt\.length&&placedNew\?offZoneNote\(placedNew\):""\);/);
-    expect(app).toMatch(/const zoneNote=!mt\.length&&edited&&offZone\(edited\)/);
-    expect(app).toMatch(/flash\(seatingNow\?"saved":null,zoneNote\);/);
+    // v18.3.4: the edit's note is decided in `applyEdit` and handed to the
+    // toast by App's wrapper.
+    const save = read("lib/booking-save.js");
+    expect(save).toMatch(/const zoneNote=!mt\.length&&edited&&offZone\(edited\)/);
+    expect(save).toMatch(/flash:\(needsR\|\|swapAffected\|\|f\.status==="completed"\|\|seatingNow\|\|zoneNote\)\?\{kind:seatingNow\?"saved":null,note:zoneNote\}:null,/);
+    expect(app).toMatch(/if\(plan\.flash&&ok\) flash\(plan\.flash\.kind,plan\.flash\.note\);/);
     expect(app).toMatch(/setReshuffledMsg\(savedToast\(k,active\)\+\(note\?" "\+note:""\)\);/);
   });
   it("the waitlist no longer filters out the other zone", () => {

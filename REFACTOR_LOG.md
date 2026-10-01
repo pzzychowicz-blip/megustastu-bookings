@@ -30585,3 +30585,48 @@ and every save writes exactly the fields it writes today.
    (`openForm(draftFromBooking(b))`) and the draft itself. Deleting the voucher row's
    seed fails that test and four characterization tests. CLAUDE.md's "A new per-booking
    FIELD" row says where a field goes now (phase 8 rewrites it with the guard).
+
+4. **`applyEdit` and `editWindow`: the edit's save as a plan (`src/lib/booking-save.js`).**
+   `doSaveEdit`'s decisions moved out of `BookingApp` verbatim apart from where the
+   values come from, with the comments that explain each rule. `applyEdit(input)`
+   returns either the refusal Save shows (`{message, field}`, in the same order; `field`
+   only for the date) or the plan:
+   - `next`, the replayable transform, memoised by `prev` identity;
+   - `fin`;
+   - `changed`, the undo gate;
+   - `flash` and `seatNote`.
+
+   App's `doSaveEdit` keeps the effects, in their old order: dispatch, the WhatsApp
+   completion, the toast, the undo, the guard, the close, the seat note. `memoByPrev`
+   moved with it, and App's delete and cancel transforms import it.
+
+   `editWindow(orig, draft)` is the part of the window that doesn't need the clock: the
+   planned length, `needsR`, the un-seat restore, the revival, `recheck`, and the time,
+   length and scheduled time the save writes. The seat shift and the completion's
+   truncation stay in `applyEdit`, layered on top. Each of the three needs a different
+   status, so moving the un-seat ahead of the other two cannot change a value, and the
+   snapshots confirm it. `applyEdit` reads the size, phone and hand-picked tables from
+   the draft itself, so `doSave` no longer passes them; the edit never used its `v`.
+   Two things are deliberately unchanged:
+   - `getUser` is asked as each history entry is made, including the seat-shift entry
+     inside `next` on every replay;
+   - the completion reads the wall clock at Save, while the seat shift reads App's
+     `nowMins`.
+
+   **Tests.** The characterization snapshots did not move. Seven checks read the moved
+   source:
+   - Five in `booking-logic.test.js` now run `applyEdit`. They cover the clash
+     re-placement gated on `recheck` with the optimiser off, `recheck`'s three routes,
+     a hand-placed booking keeping its tables through a time change, the hand-kept
+     refusal only when the window moved, and the edit writing `voucherCode`.
+   - The two wiring checks read the wrapper: both views passed as parameters, and the
+     toast's note (`seating-preference.test.js`).
+
+   The `deposit:`/`voucherCode:` pairing scan reads `booking-save.js` too, and the
+   count-label records list follows the un-seat entry. Five sabotages of
+   `booking-save.js` were each caught:
+   - gating on `needsR` (1 failure);
+   - `recheck` narrowed to `needsR` (4);
+   - `pinned` as `tablesPinned` (6);
+   - the hand refusal ungated (1);
+   - the edit write without `voucherCode` (4).

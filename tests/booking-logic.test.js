@@ -35,6 +35,7 @@ import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
+import { applyEdit, editWindow } from "../src/lib/booking-save.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -47,6 +48,18 @@ function mk(o) {
     duration: 90, preference: "auto", status: "confirmed", tables: [],
     _locked: false, _manual: false, preferredTables: [], history: [],
   }, o);
+}
+
+// v18.3.4: the edit form's Save, run (`applyEdit`): booking `id` in `list`,
+// opened in the form (`draftFromBooking`) and saved with `change` on top. The
+// optimiser is on unless `o` says otherwise; `o` overrides any input.
+function saveEdit(list, id, change, o) {
+  const b = list.find((x) => x.id === id);
+  return applyEdit(Object.assign({
+    list, live: list, id, draft: Object.assign(draftFromBooking(b), change),
+    blocks: [], swap: null, autoOptimizer: true, today, nowMins: 12 * 60,
+    phonePrefix: "+34", getUser: () => "t",
+  }, o));
 }
 
 describe("seed sanity", () => {
@@ -1940,7 +1953,6 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
 
   // Each entry is a fragment unique to one site, so a failure names WHICH.
   const SITES = [
-    ["doSaveEdit — writes the edit", /Object\.assign\(\{\},b,\{name:f\.name[\s\S]{0,400}?voucherCode:/],
     ["doSaveNew — writes the create", /const nb=\{id:newId[\s\S]{0,400}?voucherCode:/],
   ];
 
@@ -1948,6 +1960,14 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
     it(name + " carries voucherCode", () => {
       expect(re.test(APP)).toBe(true);
     });
+  });
+
+  it("doSaveEdit — the edit writes voucherCode (v18.3.4: applyEdit)", () => {
+    const b = mk({ id: "v", time: "19:00" });
+    const plan = saveEdit([b], "v", { voucherCode: "abcd-2345", deposit: "20" });
+    const saved = plan.fin.find((x) => x.id === "v");
+    expect(saved.voucherCode).toBe("ABCD2345");
+    expect(saved.deposit).toBe(20);
   });
 
   it("openEdit — the form draft carries voucherCode (v18.3.4: the table's draft)", () => {
@@ -1961,11 +1981,14 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
   it("every `deposit:` in a booking-shaped literal has a voucherCode beside it", () => {
     // The general form of the rule, so the NEXT field added is caught too.
     // A booking literal is one that sets `deposit:` and `status:` together.
-    const lines = APP.split("\n");
-    const offenders = lines
-      .map((l, i) => ({ l, n: i + 1 }))
-      .filter(({ l }) => /deposit:/.test(l) && /status:/.test(l) && !/voucherCode:/.test(l))
-      .map(({ n }) => n);
+    // v18.3.4: the edit's write moved to lib/booking-save.js, so both files.
+    const SAVE = readFileSync(new URL("../src/lib/booking-save.js", import.meta.url), "utf8");
+    const offenders = [];
+    for (const [file, text] of [["App.jsx", APP], ["lib/booking-save.js", SAVE]]) {
+      text.split("\n").forEach((l, i) => {
+        if (/deposit:/.test(l) && /status:/.test(l) && !/voucherCode:/.test(l)) offenders.push(file + ":" + (i + 1));
+      });
+    }
     expect(offenders).toEqual([]);
   });
 });
@@ -2720,20 +2743,45 @@ describe("a pinned save's window can move without needsR (v18.0.0 session 10)", 
   });
 });
 
-// The pure facts above are only worth having if `doSaveEdit` calls it on the
-// right condition, and that is a closure this suite does not run — so the gate
-// is pinned by reading the source, the way the preview row's wiring is.
-describe("doSaveEdit calls replacePinnedClashes on `recheck` (v18.0.0 session 10)", () => {
-  const APP = stripComments(
-    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+// The pure facts above are only worth having if the save calls it on the right
+// condition. That save was a closure in App this suite could not run, so the
+// gate was pinned by reading the source; since v18.3.4 it is `applyEdit`, and
+// the gate is pinned by what the save writes.
+describe("the edit's save re-places a pinned booking's clashes on `recheck` (v18.0.0 session 10)", () => {
+  const T = todayStr();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(T + "T19:30:00"));
+  });
+  afterEach(() => { vi.useRealTimers(); });
 
-  it("the gate is recheck, never needsR", () => {
-    expect(/if\(pinned&&recheck\) out=replacePinnedClashes\(/.test(APP)).toBe(true);
-    expect(/if\(pinned&&needsR\) out=replacePinnedClashes\(/.test(APP)).toBe(false);
+  const seatedOn2 = () => mk({ id: "A", name: "Seated", date: T, time: "19:00", scheduledTime: "19:00", duration: 90, originalDuration: 90, status: "seated", tables: ["2"] });
+  const laterOn2 = () => mk({ id: "B", name: "Later", date: T, time: "20:45", scheduledTime: "20:45", duration: 90, originalDuration: 90, status: "confirmed", tables: ["2"], updatedAt: 5 });
+  // Today with the toggle off: the optimiser-OFF path, where this gate is all
+  // that moves anybody.
+  const lengthen = (list) => saveEdit(list, "A", { customDur: 150 }, { today: T, nowMins: 19 * 60 + 30, autoOptimizer: false });
+
+  it("the gate is recheck, never needsR: lengthening a seated booking moves the party it now overlaps", () => {
+    const list = [seatedOn2(), laterOn2()];
+    const plan = lengthen(list);
+    expect(plan.refusal).toBeUndefined();
+    expect(findClashes(plan.fin, T), "the clash R3 used to save").toHaveLength(0);
+    expect(plan.fin.find((b) => b.id === "A").tables, "the seated party never moves").toEqual(["2"]);
+    expect(plan.fin.find((b) => b.id === "B").tables).not.toEqual(["2"]);
   });
 
-  it("and `recheck` is still the union that makes that gate wider than needsR", () => {
-    expect(/const recheck=needsR\|\|planChanged\|\|revived\|\|!!unseat;/.test(APP)).toBe(true);
+  it("and `recheck` is the union that makes that gate wider than needsR", () => {
+    const a = seatedOn2();
+    const w = editWindow(a, Object.assign(draftFromBooking(a), { customDur: 150 }));
+    expect(w.needsR, "nothing the tables were chosen for changed").toBe(false);
+    expect(w.planChanged).toBe(true);
+    expect(w.recheck).toBe(true);
+    const c = mk({ id: "C", date: T, time: "19:00", status: "cancelled", tables: ["2"] });
+    const r = editWindow(c, Object.assign(draftFromBooking(c), { status: "confirmed" }));
+    expect([r.needsR, r.revived, r.recheck], "a revival moves the window too").toEqual([false, true, true]);
+    const s = mk({ id: "S", date: T, time: "19:15", scheduledTime: "19:30", duration: 105, originalDuration: 105, status: "seated", tables: ["2"] });
+    const u = editWindow(s, Object.assign(draftFromBooking(s), { status: "confirmed" }));
+    expect([u.needsR, !!u.unseat, u.recheck], "and so does an un-seat").toEqual([false, true, true]);
   });
 });
 
@@ -2975,14 +3023,28 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
   const FORM = stripComments(
     readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
 
-  it("doSaveEdit's `pinned` is tablesKept over the stored booking and the draft", () => {
-    expect(/const pinned=tablesKept\(orig,\{status:f\.status,size:size,date:f\.date,preference:f\.preference,preferredTables:f\.preferredTables\},mt\.length>0,clearM\);/.test(APP)).toBe(true);
-    expect(/const pinned=tablesPinned\(/.test(APP)).toBe(false);
+  // v18.3.4: the save is `applyEdit`, run here rather than read.
+  const placed = (o) => mk(Object.assign({ id: "x", name: "Placed", time: "19:00", scheduledTime: "19:00", tables: ["3"], _locked: true, _manual: true }, o));
+
+  it("the save keeps a hand-placed booking's tables when only its time moves (tablesKept, not tablesPinned)", () => {
+    // The v18.3.2 report: dragged onto 3, moved to 20:00, saved on 1A.
+    const plan = saveEdit([placed()], "x", { time: "20:00" });
+    const saved = plan.fin.find((b) => b.id === "x");
+    expect(saved.tables).toEqual(["3"]);
+    expect([saved._locked, saved._manual, saved.status]).toEqual([true, true, "confirmed"]);
+    // …and a new size is what the tables were chosen FOR, so it is re-placed.
+    expect(saveEdit([placed()], "x", { time: "20:00", size: 4 }).fin.find((b) => b.id === "x").tables).not.toEqual(["3"]);
   });
 
   it("and refuses what the pass could not move, only when the window moved", () => {
-    expect(/if\(handKept&&recheck\)\{\s*const handRefusal=handKeptRefusal\(fin,f\.date,editId,tableBlocks\);/.test(APP)).toBe(true);
-    expect(/const keptRefusal=/.test(APP), "no local shadows the exported keptRefusal").toBe(false);
+    const rita = () => mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true });
+    expect(saveEdit([placed(), rita()], "x", { time: "20:00" }).refusal).toEqual(
+      { message: "Table 3 is also held by Rita at 20:00, who is locked to it. Assign different tables." });
+    // The clash already stands and the window does not move: not this save's.
+    const both = [placed({ time: "20:00", scheduledTime: "20:00" }), rita()];
+    expect(saveEdit(both, "x", { notes: "window seat" }).refusal).toBeUndefined();
+    const SAVE = stripComments(readFileSync(new URL("../src/lib/booking-save.js", import.meta.url), "utf8")).join("\n");
+    expect(/const keptRefusal=/.test(APP) || /const keptRefusal=/.test(SAVE), "no local shadows the exported keptRefusal").toBe(false);
   });
 
   it("the form's availability scan and its Tables row read the same function", () => {
@@ -3045,10 +3107,13 @@ describe("doSave hands the seat a list with the cleared party completed (v18.0.0
   });
 
   it("doSaveEdit takes both views as parameters and doSave passes the patched pair", () => {
-    expect(/function doSaveEdit\(f,v,bookings,liveBookings\)/.test(APP)).toBe(true);
+    expect(/function doSaveEdit\(f,bookings,liveBookings\)/.test(APP)).toBe(true);
     expect(/const saveBks=withClearedSeats\(bookings\);/.test(APP)).toBe(true);
     expect(/const saveLive=withClearedSeats\(liveBookings\);/.test(APP)).toBe(true);
-    expect(/doSaveEdit\(f,\{[^}]*\},saveBks,saveLive\)/.test(APP)).toBe(true);
+    expect(/doSaveEdit\(f,saveBks,saveLive\)/.test(APP)).toBe(true);
+    // v18.3.4: and hands both to the plan, which the seat shift and the
+    // refusals read.
+    expect(/applyEdit\(\{list:bookings,live:liveBookings,/.test(APP)).toBe(true);
   });
 
   it("the manual-table guard and the seat-clash gate read the patched list too", () => {
