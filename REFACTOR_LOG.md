@@ -30276,3 +30276,186 @@ Not changed:
 | 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one through its confirm: it folds all the way too, not vanishing part-way. Undo: it comes back at full height and the card below slides down |
 | 7 | Android tablet | List view on a day with bookings: screen off for a minute, complete one of them from another device, screen on. When "Reconnected" shows, the card is simply gone, with no fold playing |
 | 8 | Android tablet | On a DEV tab (`adb reverse`, as phase 5's check), Timeline on today: remove a table that has a booking today in Settings → Layout, then put it back. The Unplaced row eases open, and the table rows, their labels and their blocks move down together with nothing jumping; the booking stays where it was as it moves into the row. Putting the table back eases it shut the same way |
+
+## v18.3.3 — the second bug sweep
+
+**Date:** 2026-10-01 · **Branch:** `fix/v18.3.3-bug-sweep` ·
+**Behavioural change:** yes, each phase below says what moves.
+
+Patryk asked for as many bugs as one patch could carry. The ROADMAP held one (the
+kept-tables preview), so the hot paths were read for more: `doSaveEdit` / `doSaveNew`,
+the recurring generator, drag-drop, the walk-in save and undo, plus 13 of the 20
+`set-state-in-effect` lint advisories and a sample of the `refs` and `purity` ones.
+Each candidate was reproduced on DEV or stated as found by reading. The advisories read
+held no bug beyond phase 5's: they are deliberate idioms (a cached last value in a ref,
+the wipe animations' `Date.now` clocks, a draft re-synced from its prop). ROADMAP #13,
+the one field table, was split off as v18.3.4 (Patryk's call), since it prevents a bug
+class rather than fixing a bug and touches booking data.
+
+### Phases
+
+1. **"Repeat weekly" writes its rule only once the save cannot be refused.** `doSaveNew`
+   called `addRule` before its two capacity refusals ("Could not assign a table",
+   "Not enough capacity"), so a refused save left the rule behind; the generator then
+   created the booking the form had refused, with no table and `_conflict`, and each
+   further tap on Save added another rule. **Measured on DEV before the fix** (headless
+   pane, the real form; rows tagged `v1833-`): a 25-guest booking filled 13 Oct 19:00,
+   a 12-guest repeat booking at the same time was refused, and the database held its
+   rule plus two generated bookings, 6 Oct (placed) and 13 Oct (no table). The next tap
+   on Save raised "Kitchen may be busy" because of that generated booking, and its
+   Confirm wrote a second rule. Now only the rule's id is minted up front (the first
+   booking is stamped with it) and `addRule({id, …})` runs after the refusals, right
+   before the booking write, where the old call's position relative to the write was.
+   **After it**, same rig on 27 Oct: refused twice, no rule and no booking written; a
+   repeat booking that fits (tonight 21:30) wrote one rule, its own booking carried the
+   rule's id, and the generator added 8 and 15 Oct only. `tests/recurring.test.js` pins
+   the order (fails on the old code: 2 of 3).
+
+2. **A standing booking starts where its first booking is.** A rule had no start: the
+   generator walked every matching weekday from TODAY across the horizon. **Measured on
+   DEV before the fix**: "Repeat weekly" on Thu 22 Oct also booked the party tonight
+   (1 Oct), 8 and 15 Oct. The decision moved out of the effect into
+   `dueOccurrences(rules, bookings, today, horizonDays)` (`lib/recurring.js`, the v17.8.0
+   rule), and a rule now carries `startDate` (the form's date, written with the rule;
+   `sanitizeRule` keeps it, omitted when absent). An older rule takes the date of the
+   earliest booking the form stamped with it (Patryk's choice), derived so every device
+   agrees with nothing written; a rule with neither keeps the old behaviour. **The start
+   is exclusive, and the first DEV run is why.** With an inclusive start the form's own
+   date was still generated, as a second booking beside the form's (`r<rule>_<date>`
+   next to its `genId()` booking), on all four DEV runs (10, 11, 9 and 12 Oct). A capture of this tab's outgoing frames, then a run with this tab's generator
+   switched off (no duplicate), placed the cause on the device that wrote it holding the
+   rule before the booking: they are two writes to two nodes, and the ids differ, so
+   nothing converges the pair. Which client that was is not established (presence
+   listed only this Mac's tab and its previous load; no other dev server was
+   listening). The generator now never makes the start date, which holds whatever order
+   the two writes arrive in. **One more test moved with it**: the loop let a rule book any
+   time up to the close (`sm > close*60`), so after the day's hours were shortened it
+   could create a booking the form refuses; it asks `lastStartMins(close)`, the minute
+   the form, its Time field and `findTimes` name. **After it**, on DEV: repeat bookings
+   on 3, 7 and 14 Oct wrote the form's booking and only the later weeks inside the
+   horizon (10 Oct, 14 Oct, none), no duplicate in any; the first rule kept `startDate`
+   through the two whole-node writes after it. `tests/recurring.test.js`: `ruleStart`,
+   `dueOccurrences` (the race, the backfill, the derived start, skips, a closed day, the
+   last start) and the wiring; removing the start check fails 2 and testing the close
+   again fails 1.
+
+3. **A walk-in after closing is refused.** A walk-in is created seated on today, and
+   `saveWalkin` refused a closed DAY but not a passed close, while the close-time
+   auto-complete flips every seated booking whose day's close has passed. So a walk-in
+   added after closing was written and turned into a completed visit of 15 minutes
+   (`max(15, close − start)`) on the next 15s tick. Found by reading; the other four
+   ways to seat a party have refused then since v17.16.12 (`seatingClosed`). Patryk
+   chose a refusal. `walkinRefusal(date, today, nowMins)` (`booking-logic.js`) holds
+   both sentences, the closed day's (moved from `useWalkin`) and "It's past closing —
+   walk-ins can't be seated now.", and both doors ask it: `saveWalkin` before the
+   kitchen confirm, and `doSaveWalkin`, which that confirm re-enters directly.
+   **Measured on DEV**, the page's clock shifted 8 hours to 22:52: Seat showed the
+   refusal and wrote nothing; at the real time (14:54) a walk-in on i4 saved seated.
+   The shift itself tripped the stale gate and held the next write, which is now a row
+   in `mgt-measurement-traps`. `tests/walkin.test.js` (removing the past-close line
+   fails it).
+
+4. **A save error clears when its remedy is applied.** The booking form's error is
+   cleared by an effect watching the fields it can be about, and it watched seven
+   (name, phone, time, size, date, preference, length). An error whose remedy lay
+   outside them stayed up after the remedy. **Measured on DEV**: a confirmed booking
+   moved to another date and set to Seated was refused with "A seated booking can't be
+   moved to another date — change the status first.", and the message stayed after the
+   status went back to Confirmed. By reading, "Could not assign a table — try manual
+   assignment." did the same after a manual assignment. The status, the hand-picked
+   tables, Clear and the preferred tables join the list; the voucher does not, since no
+   save error is about it (its picker refuses for itself). Nothing writes these fields
+   during a save, so a save cannot clear its own error. **After it**, same booking: the
+   refusal was still up 1.5s after Save and went the moment the status changed.
+   `tests/form-error.test.js` reads the list.
+
+5. **The form says when Save will refuse the tables it keeps.** A booking whose tables
+   the save carries through (`tablesKept`: seated, or placed by hand with only its time
+   or length changed) was previewed as fine, and Save then refused it when a locked or
+   seated party, or a table block, held one of those tables in the new window. The
+   ROADMAP item left by v18.3.2's `/code-review`; Patryk chose the refusal in the
+   availability line. `keptRefusal(list, orig, draft, blocks)` (`booking-logic.js`) is
+   the save's question asked of the day as it stands: the draft's window applied to the
+   booking (the plan length when the form changed it, otherwise the stored one, and an
+   un-seat's restored start), its tables kept, then `handKeptRefusal` for a hand-kept
+   booking and the locked-clash refusal for a seated one. No optimiser pass, since the
+   save's pass moves neither a locked party nor a block. A hand-kept booking is asked
+   only when its window moved, as `doSaveEdit`'s `recheck` asks it; a seated one moved
+   to another date is left to Save's own date refusal. `availScan` returns the sentence,
+   and the line shows it in the warning tone with no times offered, since its way out is
+   "Assign different tables"; Save stays enabled. **Measured on DEV** (22 Oct, both
+   bookings locked on table 3, one at 17:00 and one at 20:00): moving the first to 20:00
+   showed "Table 3 is also held by B1 Rita at 20:00, who is locked to it. Assign
+   different tables." in the line, Save refused with the same sentence and wrote
+   nothing, and 18:00 cleared the line and saved on table 3, still locked.
+   `tests/booking-logic.test.js` runs each case through the save's own path as well and
+   expects the same sentence; removing the unmoved-window gate fails 1 and an
+   always-null function fails 4.
+
+6. **A folding row is drawn closed by the commit its holds follow.** v18.3.2 measured a
+   List card on the tablet folding 107 → 3px and then pruned, the cause not
+   established. The prune and `Reveal`'s unmount start on the frame after their
+   effect (`afterFrame`), but the fold began later: the diff effect takes a departed id
+   out of `openIds` with a `setState`, so the row's `Reveal` gets `show={false}` a
+   render later, and closes on its own `setOpen(false)` a render after that. A busy
+   main thread puts frames between those renders. **Measured headless** (Playwright,
+   1280×800, a booking cancelled through the database, every frame sampled):
+   unthrottled, the card reached 0 one frame before the unmount; at 4× CPU, three runs
+   of three were unmounted with 0.3–0.7px still to fold, the fold having begun ~55ms
+   after the prune's clock. `Reveal`'s wrappers now draw `show && open` and
+   `show && revealed`, and `useRevealRows` returns `openIds` without the ids that have
+   left, in the render that loses them. **After it**: at 4× CPU, 0px 80–100ms before
+   the unmount in three runs of three; unthrottled, 67ms (it was ~17). With `Reveal`'s
+   half alone it was still cut, at 0.08–0.28px, so both halves stay. The Browser pane
+   could not take this measurement (frames ~2s apart while it was visible). Pinned in
+   `tests/motion.test.js`; `tests/wa-sandbox-integrity.test.js`'s two inner-track pins
+   read the renamed `isRevealed`.
+
+### /code-review fixes
+
+The ship run's review raised six findings. Each fix is its own commit.
+
+- **`keptRefusal` gives a seated party's fit refusal too.** It asked a seated booking
+  only about locked clashes, while `doSaveEdit` asks first whether the party still fits
+  its tables (`seatedFitRefusal`). A party of 2 edited to 6 on table 3 showed the table
+  as kept in the form, then Save refused it with "Party of 6 doesn't fit table 3 (seats 2).".
+  Reproduced in node before the fix (`keptRefusal` returned null). It now returns the fit
+  sentence before the clash, in Save's order. There is a new test, and the test fails
+  with the fit check removed.
+
+- **`doSaveEdit`'s local `keptRefusal` is `handRefusal`.** The local string shared its
+  name with the exported function, and ROADMAP's v18.3.4 has App read that function, at
+  which point the local would shadow the import. The wiring test now also fails on a
+  local of that name. Same bundle bytes (the minifier renames locals).
+
+- **The past-midnight walk-in test tests 00:30.** It was named "00:30 is still
+  yesterday's service" and asserted only 23:30. It now asserts both: with a 01:00 close,
+  23:30 seats, and so does 00:30. At 00:30 the walk-in is filed under the new date, as
+  it always was.
+
+- **The `startDate` rollout caveat is written down.** A device still on v18.3.2
+  rewrites `recurring` through its old `sanitizeRule` whitelist on any rule write and
+  drops `startDate` from every rule, and its own generator still has no start. The note
+  is in `src/hooks/CLAUDE.md` (useRecurring), and it is the first row of the device
+  checks below.
+
+- **Two findings went to ROADMAP rather than being built, since both change shipped
+  behaviour:** "Repeat weekly" is not gated on `recurringManage`, so with roles enforced
+  the rule is refused while its booking saves; and the rule's write is not tied to its
+  booking's, so a parked booking write that is later discarded leaves the rule behind.
+  Both predate this version.
+
+### Gate
+
+At the ship run: main bundle 123.58 kB gz (v18.3.2: 123.31) · 2293 tests (+48) · lint 0
+errors, 63 warnings (unchanged) · `check:style` OK. No rules change, so no `test:rules`
+run.
+
+### Check on the devices after merge
+
+| Phase | Device | Check |
+|---|---|---|
+| 2 | Every device | Refresh every device after the deploy (the tablet, the phones), so none on v18.3.2 rewrites `recurring` and drops `startDate`, or generates a rule's earlier weeks itself |
+| 3 | Android tablet | After closing time, Walk-in → Seat: "It's past closing — walk-ins can't be seated now." and nothing is written |
+| 5 | Android tablet | Drag a booking onto a table, give another booking on that table a lock (Assign), then move the first one's time onto it: the availability line says "Table N is also held by …" in amber before Save |
+| 6 | Android tablet | List view: delete a card through ⋯ and its confirm, and cancel another. Each folds all the way to nothing and the cards below follow it up, with no cut at the end (v18.3.2's 3px) |

@@ -1112,14 +1112,25 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // one caller for which they are not. The opacity rides along on the same
   // timing so the two land together.
   const ease = M[speed];
+  // v18.3.3: closed from the render that receives `show={false}`, not from the
+  // one after the effect's `setOpen(false)`. The fold has to start no later
+  // than the frame the holds time from, and those holds (this one, and the
+  // prune of a `useRevealRows` row around it) start after THIS commit. Read
+  // from state, the fold began a render later, which a busy main thread
+  // pushes frames later: measured headless at 4× CPU, a List card's fold began
+  // ~55ms after its prune's clock and was cut with ~35ms of it left, and the
+  // tablet cut one at 3px (v18.3.2). `isOpen` and `isRevealed` are what the
+  // wrappers draw; the state still drives a re-open.
+  const isOpen = show && open;
+  const isRevealed = show && revealed;
   const track = horizontal
-    ? { display: "inline-grid", gridTemplateColumns: open ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
-    : { display: "grid", gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
+    ? { display: "inline-grid", gridTemplateColumns: isOpen ? "1fr" : "0fr", transition: "grid-template-columns " + ease + ", opacity " + ease }
+    : { display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows " + ease + ", opacity " + ease };
   // v16.1.1: the horizontal inner track is a flex box (align-items:center) so the
   // revealed child is vertically centred without an inherited-font line-box strut
   // dropping it below its flex-row siblings (the timeline chip-vs-name misalign).
   const innerStyle = horizontal
-    ? { overflow: revealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
+    ? { overflow: isRevealed ? "visible" : "hidden", minWidth: 0, minHeight: 0, display: "flex", alignItems: "center" }
     // `minWidth: 0` is the horizontal counterpart of the `minHeight: 0` beside
     // it, and it is load-bearing: the inner track is a GRID ITEM, whose default
     // `min-width: auto` resolves to its content's MIN-CONTENT width. Wrap
@@ -1136,9 +1147,9 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     // file, including hunks that never conflicted. Prod's Reveal has never
     // needed this line, so nothing upstream would ever reintroduce it. Guarded
     // now by tests/wa-sandbox-integrity.test.js.
-    : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
+    : { overflow: isRevealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
-    <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
+    <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: isOpen ? 1 : 0, ...(style || {}) }}>
       <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
   );

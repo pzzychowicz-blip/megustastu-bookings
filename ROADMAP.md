@@ -90,7 +90,10 @@ evidence for each.
   `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version.
+  first. This is a data-touching patch version. **Next: v18.3.4** (Patryk, 2026-10-01,
+  split off from v18.3.3's bug sweep), at max effort. v18.3.3 added `keptRefusal`, a
+  ninth reader of the edit's window (`formPlan`, `planChanged`, the un-seat restore)
+  beside `doSaveEdit`'s, so `applyEdit` should own that window and both should read it.
 
 - **In-range dependency updates, and whether to automate them (#14).** Still in range on
   2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`
@@ -106,14 +109,15 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **What the booking form previews for tables a save keeps (v18.3.2's `/code-review`).**
-  A booking whose tables the save carries through (seated, or placed by hand with only
-  its time or length changed) previews them as fine, but Save refuses when a locked or
-  seated party, or a table block, holds one at the new time (`handKeptRefusal`,
-  `pinnedClashRefusal`). Decide what the form shows then. The refusal's own sentence,
-  where the availability line goes, is the likely answer. Then have `availScan` ask the
-  save's question. It needs no optimiser pass, because the save's pass moves neither a
-  locked party nor a block.
+- **Two gaps in how "Repeat weekly" writes its rule (v18.3.3's `/code-review`).** Both
+  predate v18.3.3. (1) The form's toggle is not gated on `recurringManage`. With roles
+  enforced, a staff account without it saves the booking stamped with the rule's id,
+  while `database.rules.json` refuses the rule, and the banner blames out-of-date data.
+  Every other rule change asks `refused("recurringManage")`. Decide whether to hide the
+  toggle or refuse the save. (2) The rule is dispatched beside its first booking and is
+  not tied to that write. If the booking write is parked and then discarded from the
+  banner, the rule is left, and it books the weeks after its start. Writing the rule only
+  once the booking lands needs the retry queue to report that, so it is a write-path change.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at

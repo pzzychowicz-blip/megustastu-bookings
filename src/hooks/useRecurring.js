@@ -9,7 +9,7 @@
 // Node shape:
 //   { v:1, enabled:true, horizonWeeks:4, rules:[ {
 //       id, name, phone, size, weekday(0-6, UTC getUTCDay), time, preference,
-//       notes, active, skipDates:[…ISO dates…], createdAt
+//       notes, active, skipDates:[…ISO dates…], createdAt, startDate?
 //   } … ] }
 // `v:1` is the presence marker (RTDB drops empty objects — the priorities
 // lesson). `enabled` is the master switch (the generator no-ops when false).
@@ -41,6 +41,8 @@ function clampInt(n, def, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 function sanitizeRule(r) {
   if (!r || typeof r !== "object") return null;
   return {
@@ -54,7 +56,12 @@ function sanitizeRule(r) {
     notes: r.notes || "",
     active: r.active !== false,
     skipDates: Array.isArray(r.skipDates) ? r.skipDates.filter(Boolean) : [],
-    createdAt: Number(r.createdAt) || Date.now()
+    createdAt: Number(r.createdAt) || Date.now(),
+    // v18.3.3: the first date the rule books (the date "Repeat weekly" was
+    // ticked on). Absent on older rules, which `ruleStart` (lib/recurring.js)
+    // derives from their first booking instead. A whitelist, so it must be
+    // listed here or the next write to `recurring` deletes it.
+    ...(ISO_DAY.test(r.startDate || "") ? { startDate: r.startDate } : {})
   };
 }
 

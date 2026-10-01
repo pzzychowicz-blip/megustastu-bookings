@@ -86,6 +86,7 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
+import { dueOccurrences } from "./lib/recurring";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -398,7 +399,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.2",
+  version:"18.3.3",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1166,8 +1167,17 @@ function BookingApp({uid}){
   // can be wrong.
   // v18.2.0 phase 19: form.phone joins the list — Save can now refuse a number
   // without a country code, and picking one has to clear that message.
+  // v18.3.3: and every other field a save error can be about. The list held
+  // seven, so an error whose remedy was outside it stayed on screen after the
+  // remedy: "A seated booking can't be moved to another date — change the
+  // status first." outlived the status change (measured on DEV), and "Could not
+  // assign a table — try manual assignment." would outlive a manual assignment
+  // (by reading). Status, the hand-picked tables, Clear and the preferred tables
+  // join it; no save error is about the voucher, whose picker refuses for
+  // itself. Nothing else writes these during a save (doSave applies its phone
+  // rewrite to a copy for the reason above), so a save never clears its own error.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- a field change clears it; watching `error` would clear each error the moment it is set
-  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur]);
+  useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur,form.status,form.manualTables,form._clearManual,form.preferredTables]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
   // overlapWarnings derivation, applySeatedShift inside doSave, updateStatus's
@@ -2265,28 +2275,10 @@ function BookingApp({uid}){
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     if(!recurring.enabled||!recurring.rules.length) return;
-    const today=todayStr();
-    const horizonDays=recurring.horizonWeeks*7;
-    const existing={};
-    bookings.forEach(function(b){ if(b.recurringId&&b.recurringDate) existing[b.recurringId+"|"+b.recurringDate]=true; });
-    const toCreate=[];
-    recurring.rules.forEach(function(rule){
-      if(!rule.active) return;
-      const skip=rule.skipDates||[];
-      for(let i=0;i<=horizonDays;i++){
-        const d=new Date(today+"T00:00:00Z");
-        d.setUTCDate(d.getUTCDate()+i);
-        if(d.getUTCDay()!==rule.weekday) continue;
-        const ds=d.toISOString().slice(0,10);
-        if(skip.indexOf(ds)!==-1) continue;
-        const h=hoursFor(ds);
-        if(h.closed) continue;
-        const sm=toMins(rule.time);
-        if(sm<h.open*60||sm>h.close*60) continue;
-        if(existing[rule.id+"|"+ds]) continue;
-        toCreate.push({rule:rule,date:ds});
-      }
-    });
+    // v18.3.3: which occurrences are due is `dueOccurrences` (lib/recurring.js),
+    // pure and tested; it adds the rule's start (a rule booked the weeks before
+    // its first booking) and tests the last start rather than the close.
+    const toCreate=dueOccurrences(recurring.rules,bookings,todayStr(),recurring.horizonWeeks*7);
     if(!toCreate.length) return;
     saveBookings(function(prev){
       let next=prev;
@@ -2965,8 +2957,10 @@ function BookingApp({uid}){
         // (`recheck`): an edit that leaves it alone is not held hostage to a
         // clash it did not cause.
         if(handKept&&recheck){
-          const keptRefusal=handKeptRefusal(fin,f.date,editId,tableBlocks);
-          if(keptRefusal){setError(keptRefusal);return;}
+          // v18.3.3 (/code-review): `handRefusal`, not `keptRefusal`, which is
+          // now the exported preview function (booking-logic.js).
+          const handRefusal=handKeptRefusal(fin,f.date,editId,tableBlocks);
+          if(handRefusal){setError(handRefusal);return;}
         }
         if(!mt.length&&recheck){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
@@ -3040,11 +3034,14 @@ function BookingApp({uid}){
         // fields (weekday from the booking date, UTC) and stamp THIS first
         // occurrence with the rule's id + date so the generator dedupes it. Done
         // once here (outside buildNext) so a retry replay never makes a 2nd rule.
-        let recStampId=null;
-        if(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time){
-          const rule=addRule({name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
-          recStampId=rule.id;
-        }
+        // v18.3.3: only the rule's ID is minted here. The rule itself is written
+        // below, after the capacity refusals: it was written HERE, so a save
+        // refused with "Could not assign a table" left the rule behind, the
+        // generator then created the very booking the form had refused (with no
+        // table), and every further tap on Save added another rule. Measured on
+        // DEV: one refused save, then Confirm on the "Kitchen may be busy" its
+        // generated booking raised, gave two rules and a table-less booking.
+        const recStampId=(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time)?genId():null;
         // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
         // confirmed, OR pending via the "Save pending" button (status override).
         const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
@@ -3088,6 +3085,10 @@ function BookingApp({uid}){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
+        // v18.3.3: the standing rule, now that nothing above can refuse the save.
+        // Before the booking write, as it always was: the generator effect runs
+        // on the commit both land in, and finds the first occurrence stamped.
+        if(recStampId) addRule({id:recStampId,startDate:f.date,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
         const ok=saveBookings(buildNextMemo);

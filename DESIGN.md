@@ -1755,6 +1755,18 @@ after a delete's confirm the first frame came 382ms late, so the prune took the
 card at 61px of 108. They start on the same `afterFrame` now. With the first
 frame forced 300ms late, the fold runs to 0px, where the old timing cut it at
 71px.
+**A frame-timed hold still needs the exit DRAWN by the commit it follows**
+(v18.3.3). The tablet went on cutting a List card at 3px: the prune started
+after the commit that dropped the booking, but the fold began two renders later
+(`useRevealRows`' `setOpenIds`, then `Reveal`'s `setOpen(false)`), and a busy
+main thread puts frames between renders. Measured headless at 4× CPU: the fold
+began ~55ms after the prune's clock and the card went with ~35ms of it left.
+`Reveal` now draws closed from the render that receives `show={false}`, and
+`useRevealRows` drops a departed id from the open set in the render that loses
+it. Both halves are needed (with `Reveal`'s alone, still cut at 0.08–0.28px);
+with both, the card sits at 0 for 80–100ms before it goes. The rule is
+`usePresenceLifecycle`'s: a hold starts from an effect on the state that draws
+the exit, never beside the `setState` that will.
 
 **The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
 A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design

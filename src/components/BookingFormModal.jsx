@@ -49,6 +49,8 @@ import {
   // v18.0.0 session 8 (item 3): what the form previews must agree with.
   // v18.3.2: `tablesKept` is the save's own question (status OR hand-placed).
   tablesPinned, tablesKept,
+  // v18.3.3: and what the save will say about the tables it keeps.
+  keptRefusal,
   // v18.0.0 session 9: …and the other half of agreeing with it — `doSaveEdit`
   // keeps the tables it has when they are still free for the new window, so the
   // preview has to ask the SAME question with the SAME helper.
@@ -411,7 +413,12 @@ export function BookingFormModal({
     // only its window — `tablesKept` is the save's own predicate.
     if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
-      if(cur&&(cur.tables||[]).length&&tablesKept(cur,form,false,!!form._clearManual)) return {ok:true,tables:cur.tables,sugg:null};
+      // v18.3.3: and when Save will refuse the tables it keeps, the line says
+      // so in Save's own words (`keptRefusal`), rather than promising them.
+      if(cur&&(cur.tables||[]).length&&tablesKept(cur,form,false,!!form._clearManual)){
+        const refusal=keptRefusal(bookings,cur,form,tableBlocks);
+        return refusal?{ok:false,tables:null,sugg:null,refusal:refusal}:{ok:true,tables:cur.tables,sugg:null};
+      }
     }
     const noResh=!optimizerActiveFor(form.date,autoOptimizer);
     const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
@@ -638,8 +645,12 @@ export function BookingFormModal({
   // edited booking already exists; waitlisting it would double-track the party).
   // v18.3.1: no "(indoor preference)" suffix. A preference is a wish now, so
   // the other zone is tried too, and a refusal means no zone had room.
+  // v18.3.3: a refusal of kept tables (`keptRefusal`) is Save's own sentence,
+  // in the warning colour, with no times offered: its way out is the sentence's
+  // own ("Assign different tables"), not another time.
   const availBanner=formAvail&&!formAvail.ok?<><AvailBanner
-    msg="No tables available."
+    msg={formAvail.refusal||"No tables available."}
+    warn={!!formAvail.refusal}
     sugg={formAvail.sugg}
     onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
       className="mgt-hover-scale"

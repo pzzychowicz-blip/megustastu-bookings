@@ -262,6 +262,18 @@ export function pastCloseMins(dateStr,todayS,nowMins){
 export function seatingClosed(dateStr,todayS,nowMins){
   return pastCloseMins(dateStr,todayS,nowMins)!==null;
 }
+// v18.3.3: why a walk-in cannot be seated now, or null. A walk-in is created
+// SEATED on today, so it is the fifth door to the question above, and the one
+// that did not ask it: after closing the walk-in was written, and the close-time
+// auto-complete flipped it to completed on the next 15s tick with a 15-minute
+// duration (`max(15, close − start)`), so a party sitting down read as a visit
+// that had already ended. The closed-day sentence moved here from useWalkin so
+// the two refusals are one function, asked by both of its doors.
+export function walkinRefusal(dateStr,todayS,nowMins){
+  if(hoursFor(dateStr).closed) return "Closed today — walk-ins can't be added. Open today in Settings → Opening hours if this is wrong.";
+  if(seatingClosed(dateStr,todayS,nowMins)) return "It's past closing — walk-ins can't be seated now.";
+  return null;
+}
 // v18.2.0 phase 67: where a day's bookings START — the earliest start of the
 // day's bookings that are not cancelled (completed count: they happened), or
 // Infinity for an empty day. The Timeline opens a non-today day scrolled to it
@@ -1400,6 +1412,50 @@ export function handKeptRefusal(list,date,id,blocks){
   const blocked=blockedTablesAt(b.tables,blocks,date,s,s+(Number(b.duration)||90));
   if(blocked.length) return (blocked.length>1?"Tables "+blocked.join("+")+" are":"Table "+blocked[0]+" is")+" blocked at that time. Assign different tables.";
   const locked=pinnedClashParties(list,date,id).locked;
+  return locked.length?pinnedClashRefusal(locked[0]):null;
+}
+// ── v18.3.3: what Save will say about tables it keeps, asked BEFORE Save ────
+// The form previewed a kept booking's tables as fine (`tablesKept`), and Save
+// then refused them when a locked or seated party, or a table block, held one
+// in the new window: `handKeptRefusal` for a booking placed by hand, the
+// locked-clash refusal for one saved as seated. The preview and the save
+// disagreeing is the defect `tablesKept` was written to end (v18.3.2's
+// /code-review left this half on the ROADMAP).
+//
+// This is the save's question asked of the day as it stands, with the draft's
+// window applied to the booking and its tables kept. No optimiser pass: the
+// save's pass moves neither a locked party nor a block, which are the only
+// things these refusals name, so they read the same before it as after it. The
+// window is the save's: the plan length when the form changed it, otherwise
+// the stored one, and an un-seat's restored start. A hand-kept booking is asked
+// only when the window moved (`recheck` in `doSaveEdit`); a seated one always,
+// as `doSaveEdit` asks it. Seating a booking (it was not seated) is left out:
+// the seat-clash prompt asks about that table before any save. So is a seated
+// booking moved to another date: Save refuses that first, on the Date field.
+export function keptRefusal(list,orig,draft,blocks){
+  if(!orig||!draft) return null;
+  var size=Number(draft.size)||2;
+  var hand=keepsHandTables(orig,draft);
+  var seated=draft.status==="seated"&&orig.status==="seated"&&draft.date===orig.date;
+  if(!hand&&!seated) return null;
+  var formPlan=draft.customDur||getDur(size);
+  var planChanged=formPlan!==(orig.originalDuration||orig.duration||90);
+  var time=draft.time,dur=planChanged?formPlan:(orig.duration||90);
+  var timeUntouched=draft.time===orig.time&&draft.date===orig.date;
+  var unseat=(orig.status==="seated"&&(draft.status==="confirmed"||draft.status==="pending")&&timeUntouched)?unseatRestore(orig,size):null;
+  if(unseat){time=unseat.time;if(!planChanged) dur=unseat.duration;}
+  var revived=(orig.status==="cancelled"||orig.status==="completed")&&draft.status!=="cancelled"&&draft.status!=="completed";
+  if(hand&&!(draft.time!==orig.time||planChanged||revived||!!unseat)) return null;
+  var day=(list||[]).map(function(b){
+    return b.id===orig.id?Object.assign({},b,{time:time,duration:dur,status:draft.status,tables:orig.tables}):b;
+  });
+  if(hand) return handKeptRefusal(day,draft.date,orig.id,blocks);
+  // v18.3.3 (/code-review): a seated party that has outgrown its tables is
+  // refused before its clashes, in `doSaveEdit`'s order. Left out, a party of 2
+  // edited to 6 previewed table 3 as fine and Save refused it.
+  var fit=seatedFitRefusal(size,orig.tables);
+  if(fit) return fit;
+  var locked=pinnedClashParties(day,draft.date,orig.id).locked;
   return locked.length?pinnedClashRefusal(locked[0]):null;
 }
 // C3: seating never asked whether the table still had somebody at it. The two

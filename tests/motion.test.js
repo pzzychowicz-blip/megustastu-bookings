@@ -128,6 +128,28 @@ describe("exit holds outlast their animations", () => {
     expect(body, "no hold started in the effect").not.toMatch(/setTimeout\(/);
   });
 
+  // v18.3.3: those holds start after a commit, so the fold has to be drawn BY
+  // that commit. Read from state, it began a render later (two, for a
+  // useRevealRows row), which a busy main thread pushes frames later: measured
+  // headless at 4× CPU, a cancelled List card was unmounted with ~35ms of its
+  // fold left, and the tablet cut one at 3px. Both halves read `show` itself.
+  it("Reveal draws closed from the render that receives show={false}", () => {
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const body = atoms.slice(atoms.indexOf("export function Reveal("), atoms.indexOf("export function AutoHeight("));
+    expect(body).toMatch(/const isOpen = show && open;/);
+    expect(body).toMatch(/const isRevealed = show && revealed;/);
+    expect(body).toMatch(/gridTemplateRows: isOpen \? "1fr" : "0fr"/);
+    expect(body).toMatch(/gridTemplateColumns: isOpen \? "1fr" : "0fr"/);
+    expect(body).toMatch(/opacity: isOpen \? 1 : 0/);
+    expect(body.match(/overflow: isRevealed \?/g)).toHaveLength(2);
+    expect(body, "no wrapper reads the state alone").not.toMatch(/[(:] open \?|overflow: revealed \?/);
+  });
+  it("useRevealRows reports a departed id closed in the render that loses it", () => {
+    const src = code(join(ROOT, "src/hooks/useRevealRows.js"), "utf8");
+    expect(src).toMatch(/return \{ renderIds, openIds: openNow \};/);
+    expect(src).toMatch(/const openNow = gone \? new Set\(Array\.from\(openIds\)\.filter\(function \(id\) \{ return ids\.indexOf\(id\) !== -1; \}\)\) : openIds;/);
+  });
+
   // v18.3.0 (O1): the timeline's arrivals and departures. Both holds clear the
   // entrance/exit classes, so a short one cancels the entrance (a class removed
   // mid-animation snaps to full) or unmounts the leaving copy mid-fade.
