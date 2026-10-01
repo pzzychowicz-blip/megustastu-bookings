@@ -1875,7 +1875,7 @@ function BookingApp({uid}){
     // the toggle keeps it: leaving an active split is state, not storage.
     if(userPrefs.splitEnabled===false) setSplit(null);
     if(Object.keys(seed).length) saveUserPrefs(seed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per account, when its prefs load: it reads this device's values at that moment, on purpose (above)
   },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
   const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
@@ -1899,8 +1899,7 @@ function BookingApp({uid}){
   // window dragged narrow.
   useEffect(function(){
     if(isMobile&&split) applySplit(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[isMobile]);
+  },[isMobile,split]);
   // v17.11.0: the width the two panes actually divide — the app is clamped to
   // the per-device App-width setting, so the WINDOW is not what a pane gets.
   const shellW=Math.min(winW,appWidth);
@@ -2046,8 +2045,8 @@ function BookingApp({uid}){
       setSelectedListId(null);setShowFinished(false);
     }
     resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[viewDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a day change, not a data change: watching `bookings` would drop the List's selection on every save
+  },[viewDate,resetDismissed]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
@@ -2244,7 +2243,7 @@ function BookingApp({uid}){
     // v16.3.0: the transition-to-available cue is the in-flow WaitAvailBanner
     // (persistent + actionable), not a 6-second toast — so the prev-set diff
     // that fired the old toast is gone. waitAvail alone drives the banner.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `bookings` and the 15-minute `nowQuarter`, not on `liveBookings` / `nowMins`, which move every 15s tick; a run reads both as they are then
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter,generalSettings.waitMatchWin]);
 
   // ── v16.3.0: Recurring-booking generator ────────────────────────────────────
@@ -2305,7 +2304,7 @@ function BookingApp({uid}){
       });
       return next;
     },true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- firstLoadCount is a ref; saveBookings is new each render and reads only refs, and watching it would run the generator on every render
   },[bookings,recurring,tableBlocks,autoOptimizer,resyncing,nowQuarter]);
 
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the

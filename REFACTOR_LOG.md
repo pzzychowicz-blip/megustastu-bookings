@@ -29975,13 +29975,27 @@ won't-fix.
      because every exit hold starts on the next animation frame, so Discard looked broken
      until a screenshot forced one.
    - **Where it ends.** No `exhaustive-deps` warning is left: lint 90 → 64, and the 64 are
-     the React Compiler advisories. Thirteen older directives that suppress the rule
-     without a reason were never among the 25 and are not touched here; they join the
-     `--max-warnings` decision in ROADMAP #10.
+     the React Compiler advisories. Thirteen older directives that suppressed the rule
+     without a reason were never among the 25; Patryk had them done in this version too,
+     below.
    - **And one directive that suppressed nothing.** App's split-orientation repair carried a
      bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
      already complete (`applySplit` calls only a state setter and `localStorage`, and
      `tlPaneOk` is module-level), which the lint reported as unused. It is gone.
+   - **The thirteen bare directives, one commit per file.** Each was taken out, the lint
+     asked what it would flag, and the site was fixed or kept with a `-- <reason>`. **App
+     (five).** The split-collapse on a phone lists `split` now: no path sets a split on a
+     phone today, so nothing runs differently, but a future one would be collapsed too
+     (checked on DEV: a stored split survived at 1280px and collapsed at 375px, its key
+     removed). The day-change effect lists `resetDismissed`, a `useCallback` with no
+     dependencies, and keeps a reason for `bookings`: it is a day change, and watching the
+     bookings would drop the List's selection on every save. Kept, with reasons: the
+     prefs seeding runs once per account when its prefs load (`setUP` and
+     `setPrefsLoaded` land in one render, so it reads the loaded prefs); the waitlist
+     matcher is keyed on the 15-minute `nowQuarter`, not on `nowMins` / `liveBookings`,
+     which move every 15s tick; the recurring generator leaves out `firstLoadCount` (a
+     ref) and `saveBookings` (new each render, reading only refs), as the reconciliation
+     effect above it does.
 7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
    left blinked out in one frame while the ones below slid or jumped up. Two decisions came
    first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)
