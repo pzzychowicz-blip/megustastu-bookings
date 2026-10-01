@@ -30423,6 +30423,11 @@ The ship run's review raised six findings. Each fix is its own commit.
   sentence before the clash, in Save's order. There is a new test, and the test fails
   with the fit check removed.
 
+- **`doSaveEdit`'s local `keptRefusal` is `handRefusal`.** The local string shared its
+  name with the exported function, and ROADMAP's v18.3.4 has App read that function, at
+  which point the local would shadow the import. The wiring test now also fails on a
+  local of that name. Same bundle bytes (the minifier renames locals).
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |

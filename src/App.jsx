@@ -2957,8 +2957,10 @@ function BookingApp({uid}){
         // (`recheck`): an edit that leaves it alone is not held hostage to a
         // clash it did not cause.
         if(handKept&&recheck){
-          const keptRefusal=handKeptRefusal(fin,f.date,editId,tableBlocks);
-          if(keptRefusal){setError(keptRefusal);return;}
+          // v18.3.3 (/code-review): `handRefusal`, not `keptRefusal`, which is
+          // now the exported preview function (booking-logic.js).
+          const handRefusal=handKeptRefusal(fin,f.date,editId,tableBlocks);
+          if(handRefusal){setError(handRefusal);return;}
         }
         if(!mt.length&&recheck){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});

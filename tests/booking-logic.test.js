@@ -2970,7 +2970,8 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
   });
 
   it("and refuses what the pass could not move, only when the window moved", () => {
-    expect(/if\(handKept&&recheck\)\{\s*const keptRefusal=handKeptRefusal\(fin,f\.date,editId,tableBlocks\);/.test(APP)).toBe(true);
+    expect(/if\(handKept&&recheck\)\{\s*const handRefusal=handKeptRefusal\(fin,f\.date,editId,tableBlocks\);/.test(APP)).toBe(true);
+    expect(/const keptRefusal=/.test(APP), "no local shadows the exported keptRefusal").toBe(false);
   });
 
   it("the form's availability scan and its Tables row read the same function", () => {
