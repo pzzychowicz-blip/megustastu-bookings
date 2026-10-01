@@ -30853,6 +30853,22 @@ commit; the others are deferred to the ROADMAP; none was disproved.
    history reads "edited: saved (no field changes)". CLAUDE.md's field row and
    GLOSSARY's form-handoff rule name the two doors.
 
+2. **The guard did not check that an edit says what it changed (fixed).** It checked
+   that a field the form edits is stored, but not that changing it alone names it in
+   the history line and arms Undo. A row with no `clause`, or with `undo: false`,
+   passed every test, while an edit of that field read "saved (no field changes)" and
+   offered no Undo. Each change in `CHANGES` must now set `changed`, name itself in
+   history, and leave an Undo snapshot of the booking. The snapshot is measured
+   against the same draft saved unchanged: on the optimiser's day every save
+   re-places the booking (3 → 1A in the fixture), so against the stored row the
+   tables alone would arm one. `guestId` is the one field marked `quiet`, with the
+   reason: a join on its own has always been neither named nor undone, and its row
+   says so.
+
+   Three sabotages of the table, each caught by one test: the `notes` row without its
+   clause, the `deposit` row with `undo: false`, and a clause added to `guestId`. The
+   guard as it stood passed the first two.
+
 ### Gate
 
 Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
@@ -30871,6 +30887,7 @@ commit (`git archive`).
 | phase 7 | 124.30 kB | 2397 | 0 errors, 63 warnings | OK |
 | phase 8 | 124.30 kB | 2444 | 0 errors, 63 warnings | OK |
 | `/code-review` 1 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
+| `/code-review` 2 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
 
 The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
 App. No rules change, so no `test:rules` run.

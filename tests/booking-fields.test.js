@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { BOOKING_FIELDS, sanitize, draftFromBooking } from "../src/lib/booking-fields.js";
 import { applyEdit, buildBooking, walkinBooking, occurrenceBooking } from "../src/lib/booking-save.js";
+import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 import { normalizeCode } from "../src/lib/vouchers.js";
 import { addDays, todayStr } from "../src/lib/day.js";
@@ -177,7 +178,8 @@ describe("every edit form opens the table's draft", () => {
 // then hold: `to` is the draft's new value, `field` the stored key (the draft's
 // own by default), `stored` the value written (`to` by default). One entry per
 // key the form's draft has, so a new draft key fails the coverage test until it
-// is decided. `edit` / `skip` name a save that deliberately does not write it.
+// is decided. `edit` / `skip` name a save that deliberately does not write it;
+// `quiet` a field the edit writes without naming it in history or arming Undo.
 const CHANGES = {
   name: { to: "Bea Gil" },
   phone: { to: "+44 7911 123456" },
@@ -193,7 +195,7 @@ const CHANGES = {
   manualTables: { to: ["5A"], field: "tables" },
   preferredTables: { to: ["6"] },
   returnOf: { to: "src9", edit: "an edit never writes it: Book Again sets it on the booking it creates" },
-  guestId: { to: "gbea" },
+  guestId: { to: "gbea", quiet: "a join on its own is not undone: its row has `undo: false` and no clause, as before v18.3.4 (the row says what that means)" },
   guestSeed: { to: "seed1", skip: "not a field of this booking: it names the booking picked from the name list, which the same write stamps with the guest id" },
 };
 // A placed, confirmed booking with nothing set: what each change is made to.
@@ -203,6 +205,10 @@ const NEW_FORM = () => Object.assign({}, EMPTY_FORM, { name: "Ana Ruiz", phone: 
 
 describe("a field the form edits is written by both saves", () => {
   const draftKeys = Object.keys(draftFromBooking(PLAIN));
+  // PLAIN saved with nothing changed: what each change's Undo is measured
+  // against. On the optimiser's day every save re-places the booking (3 → 1A
+  // here), so measured against PLAIN itself the tables alone would arm one.
+  const SAME = edit([PLAIN], "plain", draftFromBooking(PLAIN)).fin;
 
   it("every key of the form's draft is decided here", () => {
     expect(Object.keys(CHANGES).sort()).toEqual([...draftKeys].sort());
@@ -232,6 +238,21 @@ describe("a field the form edits is written by both saves", () => {
       }
       expect(PLAIN[field]).not.toStrictEqual(stored);
       expect(saved[field]).toStrictEqual(stored);
+      // And the save says so (v18.3.4's /code-review): the history line names
+      // the change, and Undo is armed to put it back. `changed` is the gate, and
+      // the snapshot exists only when a field undo compares has moved, so the
+      // row needs a `clause` and `undo: true`. Without either, the field is
+      // stored, every check above passes, and the edit reads "saved (no field
+      // changes)" with no Undo.
+      const said = saved.history[saved.history.length - 1].action;
+      const undoes = undoSnapshots(SAME, plan.fin).map((b) => b.id);
+      if (c.quiet) {
+        expect([plan.changed, said, undoes]).toStrictEqual([false, "edited: saved (no field changes)", []]);
+        return;
+      }
+      expect(plan.changed).toBe(true);
+      expect(said).not.toBe("edited: saved (no field changes)");
+      expect(undoes).toEqual(["plain"]);
     });
 
     it(key + " — the create", () => {
