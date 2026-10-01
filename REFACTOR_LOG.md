@@ -30892,6 +30892,14 @@ commit; the others are deferred to the ROADMAP; none was disproved.
    question then. Both displacement snapshots stayed the same. A helper that finds
    nobody fails both of them, and so does a sentence that is always plural.
 
+5. **`booking-fields.js` gave the wrong reason for importing only leaves (fixed).**
+   Its header said `booking-logic.js` reads `UNDO_FIELDS` at module scope. It doesn't:
+   it reads it only inside `undoKey`, at call time, and a scan of its top level finds
+   no read of this file. So a reader trusting the comment would expect a back-edge to
+   fail at load today, and it wouldn't. What makes one dangerous is the next
+   module-scope read added on either side, which the header now says, along with
+   where the reads actually are. Comment only.
+
 ### Gate
 
 Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
@@ -30913,6 +30921,7 @@ commit (`git archive`).
 | `/code-review` 2 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
 | `/code-review` 3 | 124.21 kB | 2449 | 0 errors, 63 warnings | OK |
 | `/code-review` 4 | 124.22 kB | 2449 | 0 errors, 63 warnings | OK |
+| `/code-review` 5 | 124.22 kB | 2449 | 0 errors, 63 warnings | OK |
 
 The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
 App. No rules change, so no `test:rules` run.

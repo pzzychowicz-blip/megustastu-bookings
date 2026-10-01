@@ -31,10 +31,17 @@
 // been decided for it.
 //
 // ── Imports: leaves only ─────────────────────────────────────────────────────
-// `booking-logic.js` imports this file and reads `UNDO_FIELDS` at module scope,
-// so an import from here back into it would close a cycle in which one of the two
-// is read before it exists. `constants.js` imports only `day.js`, and `vouchers.js`
-// only `day.js`, so neither edge can close one. Explicit ".js" specifiers: this
+// `booking-logic.js` imports this file, so an import from here back into it
+// would close a cycle. In a cycle one module's body runs before the other's, and
+// whatever it reads from the other at MODULE scope is not initialised yet: a TDZ
+// ReferenceError at load, in every importer. Neither file reads the other at
+// module scope today (`booking-logic.js` reads `UNDO_FIELDS` only inside
+// `undoKey`, at call time, and the derivations below read only this table), so
+// such an edge would not fail at once; the next module-scope read added on either
+// side would. Leaves only keeps that from being a question: `constants.js` and
+// `vouchers.js` each import only `day.js`, which imports nothing. (v18.3.4's
+// /code-review: this said `booking-logic.js` reads `UNDO_FIELDS` at module scope,
+// which it does not.) Explicit ".js" specifiers: this
 // file is on the WhatsApp backend's Node ESM chain (api/* → whatsapp.js →
 // customers.js → booking-logic.js → here), and Node does not add the extension
 // the way Vite does (`tests/wa-sandbox-integrity.test.js` walks it).
