@@ -64,3 +64,20 @@ describe("A6: the tape snaps once the browser says the scroll is over", () => {
     expect(Tape).not.toMatch(/scrollSnapType|scrollSnapAlign/);
   });
 });
+
+// v18.3.2 — the re-centre follows the tape's scale as well as the request.
+// Keyed on the request alone, a new opening hour moved every time on the tape
+// while its scroll stayed put: measured on DEV, the scrubber on 17:00 and
+// Thursday's open moved from 13 to 12, and the badge said 17:00 over a tape
+// showing 16:00. A later close moves nothing (1.6px a minute either way), so it
+// must not re-centre a tape somebody is scrubbing.
+describe("the tape re-centres when its scale moves under the selection", () => {
+  it("keys the re-centre on the request, the opening minute and the scale", () => {
+    expect(Tape).toMatch(/const pxPerMin = trackW \/ totalMins;/);
+    expect(Tape).toMatch(/centre\(selected, autoScrollSmooth\);\s*\}, \[autoScrollKey, openM, pxPerMin\]\);/);
+  });
+
+  it("never on the selection itself, which a scrub moves", () => {
+    expect(Tape).not.toMatch(/\}, \[[^\]]*\bselected\b[^\]]*\]\);/);
+  });
+});

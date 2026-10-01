@@ -88,6 +88,10 @@ export function TimeAxis({
   const totalMins = (GRID_CLOSE - OPEN) * 60;
   const trackW = Math.max(320, QUARTER_HOURS.length * PX_PER_QUARTER);
   const openM = OPEN * 60;
+  // v18.3.2: the tape's scale, for the re-centre below. 1.6 on any grid longer
+  // than three hours, so a later close (the grid stretched to a late booking)
+  // leaves it alone; only the 320px floor makes it move.
+  const pxPerMin = trackW / totalMins;
 
   const xOf = (m) => ((m - openM) / totalMins) * trackW;
   const minsAt = (x) => openM + (x / trackW) * totalMins;
@@ -135,10 +139,16 @@ export function TimeAxis({
   // clock follow stay instant. A per-minute follow step is ~1.6px, where a glide
   // would be indistinguishable from a jump but would keep the snap guard armed
   // for 320ms every minute.
+  //
+  // v18.3.2: and when the tape moves under the selection, which only a new
+  // opening hour does (or the floor above). Keyed on the request alone, the tape
+  // kept its scroll while every time on it moved: measured on DEV, Thursday's
+  // open moved from 13 to 12 with the scrubber on 17:00, and the badge and the
+  // floor plan said 17:00 while the tape showed 16:00 under its marker.
   useLayoutEffect(() => {
     centre(selected, autoScrollSmooth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoScrollKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a request, or the scale moving: PlanView sets `selected` and `smooth` in the batch that bumps the key, watching `selected` would yank the tape under a finger mid-scrub, and `centre` is new each render
+  }, [autoScrollKey, openM, pxPerMin]);
 
   useEffect(() => () => {
     window.clearTimeout(snapTimer.current);

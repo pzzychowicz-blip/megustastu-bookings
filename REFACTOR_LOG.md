@@ -30017,7 +30017,22 @@ won't-fix.
      purity advisory in the same component is still reported. Kept, with a reason: the
      focus effect is keyed on `focusReq`, a request; every bump sets `selectedId` in the
      same batch, and watching the selection would scroll a card somebody clicked out
-     from under the finger.
+     from under the finger. **TimeAxis (one), fixed.** The Plan tape's re-centre was
+     keyed on PlanView's request alone, and the lint asked for `centre`, which closes
+     over the tape's scale. That hid a real case: a new opening hour moves every time on
+     the tape while its scroll stays put. Measured on DEV with the scrubber on 17:00:
+     Thursday's open moved from 13 to 12, and the badge and the floor plan said 17:00
+     over a tape showing 16:00 under its marker, until the next scrub. The effect is
+     keyed on `openM` and the tape's px-per-minute as well now. A later close moves
+     nothing (1.6px a minute on any grid longer than three hours; only the 320px floor
+     changes it), so stretching the grid to a late booking does not re-centre a tape
+     somebody is scrubbing. Measured: a close moved 22 → 24 and back made no `scrollTo`,
+     an open moved 13 → 12 and back made one each with 17:00 under the marker, and a
+     scrub with a finger's pointerdown followed as before. The directive stays, with a
+     reason, for `selected` (a scrub moves it, and watching it would yank the tape under
+     the finger), `autoScrollSmooth` (it arrives in the batch that bumps the key) and
+     `centre` (new each render). `tests/time-axis.test.js` pins the key, and fails on the
+     old file.
 7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
    left blinked out in one frame while the ones below slid or jumped up. Two decisions came
    first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)
