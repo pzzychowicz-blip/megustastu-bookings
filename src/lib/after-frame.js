@@ -44,3 +44,15 @@ export function afterFrame(fn, ms) {
   const r = requestAnimationFrame(function () { t = setTimeout(fn, ms); });
   return function () { cancelAnimationFrame(r); clearTimeout(t); };
 }
+
+// `everyFrame(fn)` (v18.3.2, O4): run `fn` on every animation frame until the
+// returned function cancels it (an effect's cleanup). TimelineView re-bases its
+// flip on it while the Unplaced row moves. It lives here, not in the effect,
+// because the loop re-assigns its frame id from inside a nested function, and
+// written in the component that silenced the React Compiler's reports on
+// TimelineView: lint fell from 22 warnings to 19, the missing three being
+// advisories on code that had not changed, and they came back once it moved.
+export function everyFrame(fn) {
+  let r = requestAnimationFrame(function step() { fn(); r = requestAnimationFrame(step); });
+  return function () { cancelAnimationFrame(r); };
+}

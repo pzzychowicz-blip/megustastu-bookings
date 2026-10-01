@@ -30101,6 +30101,69 @@ won't-fix.
      modal or a toast still waits and plays its exit when the tab is shown, v18.3.0's rule,
      unchanged here.
 
+8. **The Unplaced row eases open and shut (O4).** Measured on DEV first, as the ROADMAP
+   asked. The row mounted at full height, so every table row and its label jumped
+   lanes × 44px plus the 4px gap in one frame. And when a booking's tables changed in the
+   same commit, `useFlip` read the shift as a move: a block on 1B started over 1A and slid
+   down into its own row (−48px, −16 by 165ms, 0 at 385ms). With `_conflict` (no table
+   change, so no FLIP) everything jumped 48px together. Patryk picked "ease it open and
+   shut". The design:
+   - **One always-mounted box per column, its height easing on `--t-shift`.** The box
+     starts each change from where it was, so at the commit nothing below has moved yet,
+     and the pass `useFlip` runs then animates only the bookings whose tables changed.
+     `unplacedRow` (TimelineView) holds the lanes the row is heading for, whether it is
+     moving, and which way. It also keeps `held`: the most lanes drawn since the row last
+     stood still, so a shrinking row keeps its lanes. A change that lands mid-way carries on
+     from there. The first version compared the target with the height the row last
+     SETTLED at, which reads an open-then-empty inside the 385ms as "no change" and snaps
+     the row shut. A replacement goes straight to the new height, as `useEnterLeave`
+     treats one: a date change or the first load, a catch-up (`catchingUp`), or a page
+     that is hidden. `unplacedHeight` (`lib/unplaced.js`) gives the height.
+   - **The row's edge follows the box less its gap**: one overlay holding the dashed line
+     and (in the grid) the grid lines, so the line travels with the table rows, and the
+     semi-transparent grid lines are never drawn twice over theirs. The overlay clips, so
+     under 1px the line is gone rather than lying on the header's edge. The label column
+     clips while the row moves, so "Unplaced" never draws over the 1A label sliding under
+     it.
+   - **The grid column never clips.** The first version did, and a booking that lost its
+     table on 1A vanished at the commit (the box starts at 0) and wiped back in where it
+     already stood. A booking coming up from a lower row would have been hidden for most
+     of its slide. While the row grows, its blocks paint over the table rows
+     (`zIndex: 1`), or 1A's grid lines cross the booking that just arrived. Not while it
+     shrinks: the booking that left the row is on a table row then, and with the lift the
+     emptying row's lines crossed it (measured: a hit test at its centre found the row).
+   - **`useFlip` follows the row.** `ref.rebase()` (atoms, beside `ref.seed`) re-measures
+     the baseline without animating. TimelineView calls it every frame while the row moves
+     (`everyFrame`, `lib/after-frame.js`), and one quiet pass re-measures when the row
+     settles. Measured before the rebase: a second table change 217ms into an opening
+     made every block below the row jump 43.9px in one frame, because the pass measured
+     from where the rows had STARTED.
+   - **`tableForClientY` reads the box's live bottom**, since mid-way the target height is
+     not where the rows are.
+   - **`everyFrame` lives in the lib because of the lint.** Written in the component, the
+     loop re-assigns its frame id from inside a nested function, and lint fell from 64
+     warnings to 61. The missing three were TimelineView's own React Compiler advisories,
+     on lines the change never touched. They came back once the loop moved (the
+     measurement-traps skill has the row).
+   - **Measured on DEV**, 1280×800 with the pane visible. Opening (F loses its table on 1A):
+     the box went 0 → 48px in ~365ms. In every frame the label column matched it, row 1A
+     sat at the box's bottom, the dashed line sat 5px above row 1A, and G on 1B rode its
+     row with no transform. F stayed at y 27, on top and hit-testable. Closing (F back on
+     1A): F's FLIP matched the box exactly (−48 → 0), so F stayed at 27 and G rode its row
+     up. Interrupted (empty again 217ms in): the box turned back from 43.8px with no snap;
+     G went on with its row with no transform, and F stayed within 1.8px of 27 (a reversed
+     CSS transition is shortened, the FLIP is not). Hidden (`visibilityState` reading
+     hidden): straight to 48px with `transition: none`, and nothing played once shown.
+     `_conflict` on G, a copy in the row with no table change: the row opened with G and F
+     riding their rows. A table move once it had settled FLIPped F alone (−88 → 0), with
+     G at 0, so the settle had re-based. At rest, measured against HEAD with one booking
+     unplaced, nothing moved: the word "Unplaced" (39.75–51.25px), the dashed line
+     (67–68px in both columns), the 11 hour lines (24–68px), F, G, row 1A and the 1A
+     label.
+   - **Not done:** a copy drawn for a `_conflict` booking still appears and leaves without
+     a fade, as before O4. It is a duplicate of a block that stays on its row, so nothing
+     travels, and fading it means tracking the row's cells the way the ghosts are tracked.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
@@ -30112,3 +30175,4 @@ won't-fix.
 | 7 | Android tablet | Waitlist with three parties: remove the middle one. Its row folds away and the one below follows it up, with no jump at the end. Remove the rest: the last row turns into "No one on the waitlist for this day." in one move |
 | 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one through its confirm: it folds all the way too, not vanishing part-way. Undo: it comes back at full height and the card below slides down |
 | 7 | Android tablet | List view on a day with bookings: screen off for a minute, complete one of them from another device, screen on. When "Reconnected" shows, the card is simply gone, with no fold playing |
+| 8 | Android tablet | On a DEV tab (`adb reverse`, as phase 5's check), Timeline on today: remove a table that has a booking today in Settings → Layout, then put it back. The Unplaced row eases open, and the table rows, their labels and their blocks move down together with nothing jumping; the booking stays where it was as it moves into the row. Putting the table back eases it shut the same way |

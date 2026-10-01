@@ -1651,6 +1651,16 @@ export function reduceMotionOn() {
 // seed is consumed like any top, and nothing animates.
 // Attached in an effect, never during render: writing to a ref in render is
 // what the React-Compiler refs rule forbids.
+//
+// v18.3.2 (O4): `ref.rebase()` — re-measure every top as the baseline, now,
+// without animating: `isQuiet`'s re-sync, on the caller's clock instead of on
+// a pass. For items that something else is moving while a pass may land: the
+// timeline's Unplaced row eases the table rows below it, and a second table
+// change inside those 385ms was measured from where the rows had STARTED, so
+// every block below jumped the distance the row had covered (43.9px in one
+// frame on DEV). Re-based every frame while the row moves, a pass slides only
+// what its own change moved. It measures as the pass does: container-relative,
+// as drawn (a running flip's transform included).
 export function useFlip(deps, isQuiet) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
@@ -1659,6 +1669,16 @@ export function useFlip(deps, isQuiet) {
     ref.seed = function (id, top) {
       seeds.current.set(id, top);
       requestAnimationFrame(function () { seeds.current.delete(id); });
+    };
+    ref.rebase = function () {
+      const container = ref.current;
+      if (!container) return;
+      const originTop = container.getBoundingClientRect().top;
+      const next = new Map();
+      container.querySelectorAll("[data-flip-id]").forEach(function (el) {
+        next.set(el.getAttribute("data-flip-id"), el.getBoundingClientRect().top - originTop);
+      });
+      prevTops.current = next;
     };
   }, []);
   useLayoutEffect(function () {

@@ -1700,6 +1700,22 @@ relative is also what the hook MEANS: it animates a row change, which is
 movement inside the container; a whole-container move is the page reflowing
 around it, which the browser has already drawn.
 
+**…and a sibling that eases the rows INSIDE the container moves the baseline
+too** (v18.3.2, O4). The timeline's Unplaced row eases its height on
+`--t-shift`, which carries every table row below it with no table changing.
+The transition starts from where the row was, so at the commit that starts it
+nothing has moved yet, and that commit's pass animates only the bookings whose
+tables changed. While the row moves, `useFlip`'s `ref.rebase()` re-measures the
+baseline every frame, so a second change landing mid-way slides only what it
+moved (measured before: every block below jumped 43.9px in one frame). When the
+row settles, one quiet pass takes the final tops. The row's edge, its dashed
+line and grid lines, follows the box less its gap, so the line travels with the
+rows and the semi-transparent grid lines are never drawn twice over theirs. The
+label column clips while the row moves; the grid column never clips (clipped,
+it hid a booking that had just lost its table on 1A and had not moved) and
+paints over the table rows only while it grows. A drop reads the row's LIVE
+bottom, because mid-way its target height is not where the rows are.
+
 **A dropped block settles from where the finger LEFT it** (v18.3.0). A drop
 re-parents the block into its new row, and `useFlip` animated it from the top it
 recorded before the drag began: on the first frame after release the block was

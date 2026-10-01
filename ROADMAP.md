@@ -108,11 +108,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **The Unplaced row's mount (O4).** Mounting it pushes every table row down by
-  lanes × 44px plus the gap, in one frame. Measure frame by frame first: `useFlip` may
-  already move the blocks while the labels jump. And `tableForClientY` would need the row's
-  live height during a reveal, or a drop lands rows off.
-
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the
