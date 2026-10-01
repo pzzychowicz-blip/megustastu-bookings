@@ -29995,7 +29995,12 @@ won't-fix.
      matcher is keyed on the 15-minute `nowQuarter`, not on `nowMins` / `liveBookings`,
      which move every 15s tick; the recurring generator leaves out `firstLoadCount` (a
      ref) and `saveBookings` (new each render, reading only refs), as the reconciliation
-     effect above it does.
+     effect above it does. **PlanView (three), all kept.** The scrubber re-anchors on a
+     date change, follows the first booking when it moves, and follows the clock once a
+     minute; each reads `isToday` and `sliderTouched` at that moment. `dayStart` and
+     `clampExact` are new functions every render, and listing one would do worse than
+     re-run the effect: `reCentre` always sets a new object, so an untouched scrubber on
+     another day would re-render without end.
 7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
    left blinked out in one frame while the ones below slid or jumped up. Two decisions came
    first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)
