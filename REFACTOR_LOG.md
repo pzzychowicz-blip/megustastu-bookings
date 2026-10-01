@@ -30459,3 +30459,78 @@ run.
 | 3 | Android tablet | After closing time, Walk-in → Seat: "It's past closing — walk-ins can't be seated now." and nothing is written |
 | 5 | Android tablet | Drag a booking onto a table, give another booking on that table a lock (Assign), then move the first one's time onto it: the availability line says "Table N is also held by …" in amber before Save |
 | 6 | Android tablet | List view: delete a card through ⋯ and its confirm, and cancel another. Each folds all the way to nothing and the cards below follow it up, with no cut at the end (v18.3.2's 3px) |
+
+
+## v18.3.4 — one field table for a booking
+
+**Date:** 2026-10-01 · **Branch:** `refactor/v18.3.4-booking-field-table` ·
+**Behavioural change:** none. `tests/save-path.test.js` (phase 1) is the proof, since
+none of its snapshots moves after the commit that took them.
+
+ROADMAP #13, as v18.3.3 left it. A booking's fields are written out by hand in eight
+places: `sanitize`, `UNDO_FIELDS` and `diffBooking` (`booking-logic.js`); `openEdit`,
+`doSaveNew`, `doSaveEdit` (355 lines) and the weekly generator (`App.jsx`); and the
+walk-in (`useWalkin.js`). A field missing from one of them is silently wiped or never
+written, which is how v18.0.0 lost `voucherCode` with every test passing. The only
+guard was a grep pairing `deposit:` with the new field, blind to `useWalkin.js`. And
+v18.3.3 added a ninth copy of the edit's window: `keptRefusal` recomputes the plan
+length, the un-seat restore and the revival on its own. It is also #17's first
+domain, since the save path leaves `BookingApp`.
+
+Scope (Patryk, 2026-10-01): #13 only, with no behaviour change. The two "Repeat weekly"
+findings stay on the ROADMAP. The characterization tests run App's own code. One table
+derives the field lists, the builders stay explicit code checked against it by a test,
+and every save writes exactly the fields it writes today.
+
+### Phases
+
+1. **Characterization first: the save path, run as it is.** No test could call the
+   code this version moves: it is closures inside `BookingApp` and `useWalkin`, and the
+   suite has no DOM on purpose. `tests/save-path.test.js` lifts the functions out of the
+   comment-stripped source: `doSave`, `doSaveEdit`, `doSaveNew`, `openEdit`, their App
+   helpers, `doSaveWalkin`, and the generator's effect callback, found by its
+   `dueOccurrences(` marker. It compiles them in one scope that binds the names their
+   file imports from `src/lib/` (the same module objects) plus recorded stubs for the
+   React half. **Every free name must be bound before anything runs**: ESLint's own
+   `no-undef` lists them, so a stub that goes missing fails the compile, not just the
+   scenario that reaches it, and a stub nothing reads fails too. The clock is frozen at
+   local times with TZ set to the restaurant's zone, and `Math.random` is a counter, so
+   ids and history stamps are reproducible.
+
+   103 tests. 97 are inline snapshots covering:
+   - `doSave`'s refusals and prompts;
+   - edits on a day the optimiser owns, and today after the cutoff;
+   - seat, complete and un-seat;
+   - hand-placed tables, Clear and the swap;
+   - new bookings, including Book Again, Repeat weekly, guest seeds, the waitlist and
+     a held write;
+   - `openEdit`, the walk-in and the generator;
+   - the three field lists, pinned by behaviour: `sanitize`'s 29 keys in order, which
+     fields undo and the reconciliation signature compare, and each `diffBooking`
+     clause.
+
+   Each snapshot records every call in order with its arguments, and the rows the write
+   would touch. A created row is one line of JSON in its own key order (`contentKey` is
+   order-sensitive); a changed row is listed field by field. Each also records the
+   v15.7.0 replay contract: the same `prev` returns the same object, and a fresh one
+   gives an equal result. Every snapshot was reviewed against the source as it was
+   written.
+
+   **The harness was mutation-tested before it was trusted.** Five plausible slips were
+   applied to v18.3.3 one at a time and the file went red on each:
+   - the edit write losing `voucherCode` (2 failures);
+   - the new booking's `deposit` and `voucherCode` keys swapping places (14);
+   - the walk-in losing `_locked` (2);
+   - `openEdit` dropping `guestId` (4);
+   - the generator's history author changing (3).
+
+   **Three findings, recorded and not fixed (the scope is no behaviour change):**
+   - A form walk-back from a no-show keeps `noShow: true`, so the guest's no-show count
+     includes a visit that happened. Found by reading during planning; a scenario now
+     pins it.
+   - The generator writes an occurrence it creates for today after the 15:00 cutoff
+     with `tables: []` and `_conflict: false`. `bookingsAfterAction` takes the
+     optimiser-off branch, and with no `changedId` that branch copies every row as it
+     is.
+   - An edit saved after another device deleted that booking flashes as saved, writes
+     nothing for it, and re-places the rest of its day.
