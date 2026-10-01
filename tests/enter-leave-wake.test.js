@@ -42,7 +42,10 @@ describe("useRevealRows: a quiet or hidden diff is a replacement (v18.3.2, O3)",
     // During render, as the resetKey re-seed is: the first committed dom is the new list.
     expect(hook).toMatch(/const \[seenSig, setSeenSig\] = useState\(sig\);/);
     expect(hook).toMatch(/if \(sig !== seenSig\) \{\s*setSeenSig\(sig\);\s*if \(quiet \|\| pageHidden\(\)\) \{\s*setRenderIds\(ids\.slice\(\)\);\s*setOpenIds\(new Set\(ids\)\);\s*setQuietResets\(quietResets \+ 1\);\s*\}\s*\}/);
-    expect(hook).toMatch(/useLayoutEffect\(function \(\) \{\s*if \(!quietResets\) return;\s*prevKeys\.current = ids\.slice\(\);\s*cancelAll\(timers\);/);
+    // ONE layout effect does the bookkeeping for both re-seeds (v18.3.2's
+    // /code-review): the quiet re-seed's own copy of it is gone.
+    expect(hook).toMatch(/useLayoutEffect\(function \(\) \{\s*prevKeys\.current = ids\.slice\(\);\s*cancelAll\(timers\);[^}]*\}, \[prevReset, quietResets\]\);/);
+    expect(hook.match(/prevKeys\.current = ids\.slice\(\);/g), "one copy of the re-seed bookkeeping").toHaveLength(1);
   });
   it("the List's cards and the waitlist's rows pass the catch-up window", () => {
     expect(read("components/ListView.jsx")).toMatch(/useRevealRows\(activeIds, date, \{ speed: ROW_FOLD, instantIn: true, quiet: catchingUp \}\)/);

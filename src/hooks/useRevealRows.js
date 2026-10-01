@@ -142,9 +142,34 @@ export function useRevealRows(ids, resetKey, opts) {
     }
   }
 
-  // The bookkeeping that re-seed implies, done where a ref may legally be
-  // written: after the commit, before paint. Both halves have to happen, and
-  // neither may happen a moment later than this.
+  const sig = ids.slice().sort().join(",");
+
+  // ── A change nobody watched is a replacement too (v18.3.2, O3) ─────────────
+  // `opts.quiet` (the header): a membership change inside the caller's catch-up
+  // window, or while the page is hidden (v18.3.2: the prune waits for a frame,
+  // so a fold started then would play on wake), re-seeds exactly as a resetKey
+  // change does, and DURING RENDER for
+  // the same reason, so the first committed dom is already the new list. From
+  // the diff effect below it landed a commit late, and that commit drew the
+  // departed card once more, inert (measured: 22ms on DEV). `seenSig` is the
+  // membership the last render saw, kept through every change so that turning
+  // quiet on re-seeds nothing by itself: a fold that began before the window
+  // runs to the end, unless another change lands inside it. `quietResets`
+  // counts these re-seeds, for the bookkeeping effect below.
+  const [seenSig, setSeenSig] = useState(sig);
+  const [quietResets, setQuietResets] = useState(0);
+  if (sig !== seenSig) {
+    setSeenSig(sig);
+    if (quiet || pageHidden()) {
+      setRenderIds(ids.slice());
+      setOpenIds(new Set(ids));
+      setQuietResets(quietResets + 1);
+    }
+  }
+
+  // The bookkeeping either re-seed implies (a resetKey change, or a quiet one),
+  // done where a ref may legally be written: after the commit, before paint.
+  // Both halves have to happen, and neither may happen a moment later than this.
   //
   //   prevKeys  is what the membership diff below reads as "the list last
   //             seen". Left describing the day we just left, that effect would
@@ -162,42 +187,16 @@ export function useRevealRows(ids, resetKey, opts) {
   // The first version wrote both during render, next to the setState calls. It
   // worked, and it is still the wrong place: a render may be discarded and
   // re-run, and a ref written there survives that.
+  //
+  // ONE effect for both re-seeds (v18.3.2's /code-review): the quiet re-seed
+  // first had a copy of this body of its own, and a change to what a re-seed
+  // resets would have had to land in both. It also runs on mount, which the
+  // resetKey re-seed's effect always did.
   useLayoutEffect(function () {
     prevKeys.current = ids.slice();
     cancelAll(timers);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ids` is read live; this fires on a reset, never on a content change
-  }, [prevReset]);
-
-  const sig = ids.slice().sort().join(",");
-
-  // ── A change nobody watched is a replacement too (v18.3.2, O3) ─────────────
-  // `opts.quiet` (the header): a membership change inside the caller's catch-up
-  // window, or while the page is hidden (v18.3.2: the prune waits for a frame,
-  // so a fold started then would play on wake), re-seeds exactly as a resetKey
-  // change does, and DURING RENDER for
-  // the same reason, so the first committed dom is already the new list. From
-  // the diff effect below it landed a commit late, and that commit drew the
-  // departed card once more, inert (measured: 22ms on DEV). `seenSig` is the
-  // membership the last render saw, kept through every change so that turning
-  // quiet on re-seeds nothing by itself: a fold that began before the window
-  // runs to the end, unless another change lands inside it. `quietResets`
-  // drives the same ref bookkeeping as the resetKey block's layout effect.
-  const [seenSig, setSeenSig] = useState(sig);
-  const [quietResets, setQuietResets] = useState(0);
-  if (sig !== seenSig) {
-    setSeenSig(sig);
-    if (quiet || pageHidden()) {
-      setRenderIds(ids.slice());
-      setOpenIds(new Set(ids));
-      setQuietResets(quietResets + 1);
-    }
-  }
-  useLayoutEffect(function () {
-    if (!quietResets) return;
-    prevKeys.current = ids.slice();
-    cancelAll(timers);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ids` is read live; this fires on a quiet re-seed, never on a content change
-  }, [quietResets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ids` is read live; this fires on a re-seed, never on a content change
+  }, [prevReset, quietResets]);
 
   // ── Membership diff: add newcomers, collapse + prune departures ────────────
   useEffect(function () {

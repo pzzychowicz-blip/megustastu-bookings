@@ -30236,6 +30236,13 @@ plugin-react 6.1 (#14), and closing the drop freeze (M1) as won't-fix.
   CLAUDE.md's "Never `var` in new code" (the file's own exception covers the vars
   Phase A left). `tests/leaving-order.test.js` pinned the `var` spelling and pins
   `const` now.
+- **One bookkeeping effect in `useRevealRows`.** O3's quiet re-seed came with a
+  layout effect of its own whose body (`prevKeys` to the new ids, every pending
+  prune cancelled) was the `resetKey` effect's word for word. It is one effect
+  keyed on `[prevReset, quietResets]` now. Both bodies were idempotent and both ran
+  before any passive effect, so nothing runs differently; what goes is the second
+  copy a change to the re-seed would have had to reach. The test pins the one
+  effect and counts the bookkeeping line.
 
 ### Check on the devices after merge
 
