@@ -30630,3 +30630,29 @@ and every save writes exactly the fields it writes today.
    - `pinned` as `tablesPinned` (6);
    - the hand refusal ungated (1);
    - the edit write without `voucherCode` (4).
+
+5. **`keptRefusal` reads the save's window.** v18.3.3's preview of Save's refusal kept
+   its own copy of the window: the plan length, the un-seat restore and the revival.
+   It now reads `editWindow`, and it moved to `booking-save.js` beside the save it
+   previews. `BookingFormModal` imports it from there. `booking-logic.js` does not
+   re-export it, because `booking-save.js` imports `booking-logic.js` and the
+   re-export would close a cycle.
+
+   Its moved-window test keeps its exact terms: `recheck` less the Clear term.
+   - A hand-kept draft has changed nothing else `needsR` reads.
+   - A Clear is never kept, and the form asks only when `tablesKept`.
+
+   So the function answers as it did for every draft. The proof is a fuzz of the old
+   function against the new one on 100,000 random days, drafts and blocks: 0
+   differences, and 2,842 of the answers were refusals.
+
+   The `keptRefusal` tests compared the preview with a hand-built copy of the save's
+   path (`bookingsAfterAction`, then `handKeptRefusal`). They now run the save itself
+   (`applyEdit`), and they gained the cases that copy couldn't express:
+   - Save's date refusal on a seated booking;
+   - the fit refusal;
+   - two drafts that don't keep their tables.
+
+   Bundle: the entry grew 0.15 kB gz while the shared `atoms` chunk, where
+   `booking-logic.js` lives, shrank 0.23 kB gz. The function changed chunks, and the
+   total is 0.33 kB raw smaller.

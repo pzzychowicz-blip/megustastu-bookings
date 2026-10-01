@@ -25,7 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
-  keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal, keptRefusal,
+  keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
   optimizerActiveFor,
@@ -35,7 +35,7 @@ import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
-import { applyEdit, editWindow } from "../src/lib/booking-save.js";
+import { applyEdit, editWindow, keptRefusal } from "../src/lib/booking-save.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -2940,24 +2940,27 @@ describe("what a save does with hand-placed tables when the time moves (v18.3.2)
 
 // v18.3.3 (B1): the form previewed kept tables as available and Save then
 // refused them. `keptRefusal` is Save's refusal asked of the day as it stands,
-// so each case below also runs the save's own path (`bookingsAfterAction` then
-// `handKeptRefusal`) and expects the two sentences to be the same one.
+// so each case below also runs the save and expects the same sentence.
+// v18.3.4: "the save" is the save itself now (`applyEdit`, `saveEdit` above),
+// where it was a copy of its path (`bookingsAfterAction` then
+// `handKeptRefusal`), and the preview reads the save's window (`editWindow`).
 describe("keptRefusal — what Save will say about the tables it keeps (v18.3.3)", () => {
   const placed = (o) => mk(Object.assign(
     { id: "x", name: "Placed", time: "19:00", scheduledTime: "19:00", tables: ["3"], _locked: true, _manual: true }, o));
   const draftOf = (b, o) => Object.assign(
     { status: b.status, size: b.size, date: b.date, time: b.time, preference: b.preference,
       preferredTables: b.preferredTables, customDur: null }, o);
-  const saved = (day, blocks) => {
-    const moved = day.map((b) => b.id === "x" ? Object.assign({}, b, { time: "20:00", scheduledTime: "20:00" }) : b);
-    return handKeptRefusal(bookingsAfterAction(moved, D, blocks, "x", false, true), D, "x", blocks);
+  // What the save refuses with, or null: booking "x" saved with `change`.
+  const saved = (day, change, blocks) => {
+    const plan = saveEdit(day, "x", change, { blocks: blocks || [] });
+    return plan.refusal ? plan.refusal.message : null;
   };
 
   it("a locked party at the new time: the same sentence Save refuses with", () => {
     const day = [placed(), mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true })];
     const want = "Table 3 is also held by Rita at 20:00, who is locked to it. Assign different tables.";
     expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00" }), [])).toBe(want);
-    expect(saved(day, [])).toBe(want);
+    expect(saved(day, { time: "20:00" }, [])).toBe(want);
   });
 
   it("a table block over the new time", () => {
@@ -2965,37 +2968,44 @@ describe("keptRefusal — what Save will say about the tables it keeps (v18.3.3)
     const day = [placed()];
     const want = "Table 3 is blocked at that time. Assign different tables.";
     expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00" }), blocks)).toBe(want);
-    expect(saved(day, blocks)).toBe(want);
+    expect(saved(day, { time: "20:00" }, blocks)).toBe(want);
   });
 
   it("an UNLOCKED party in the way is not a refusal: the save's pass moves it", () => {
     const day = [placed(), mk({ id: "y", name: "InTheWay", time: "20:00", tables: ["3"] })];
     expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00" }), [])).toBe(null);
-    expect(saved(day, [])).toBe(null);
+    expect(saved(day, { time: "20:00" }, [])).toBe(null);
   });
 
   it("a hand-kept booking whose window did not move is not asked, as Save does not ask it", () => {
     // The clash already stands; Save's `recheck` is false, so it saves.
     const day = [placed(), mk({ id: "z", name: "Rita", time: "19:00", tables: ["3"], _locked: true, _manual: true })];
     expect(keptRefusal(day, day[0], draftOf(day[0], {}), [])).toBe(null);
+    expect(saved(day, {})).toBe(null);
     expect(keptRefusal(day, day[0], draftOf(day[0], { status: "pending" })), "a status change alone").toBe(null);
+    expect(saved(day, { status: "pending" })).toBe(null);
   });
 
   it("a longer plan is a moved window", () => {
     const day = [placed(), mk({ id: "z", name: "Rita", time: "20:45", tables: ["3"], _locked: true, _manual: true })];
     expect(keptRefusal(day, day[0], draftOf(day[0], {}), [])).toBe(null);
     expect(keptRefusal(day, day[0], draftOf(day[0], { customDur: 150 }), [])).toMatch(/^Table 3 is also held by Rita at 20:45/);
+    expect(saved(day, { customDur: 150 })).toBe(keptRefusal(day, day[0], draftOf(day[0], { customDur: 150 }), []));
   });
 
   it("a SEATED booking is asked about its locked clashes whatever moved", () => {
     // customDur is what openEdit puts in the form for a 150-minute plan.
     const s = mk({ id: "x", name: "Sat", time: "19:00", status: "seated", tables: ["3"], duration: 150, originalDuration: 150 });
     const day = [s, mk({ id: "z", name: "Rita", time: "20:45", tables: ["3"], _locked: true, _manual: true })];
-    expect(keptRefusal(day, s, draftOf(s, { customDur: 150 }), [])).toBe(
-      "Table 3 is also held by Rita at 20:45, who is locked to it. Assign different tables.");
+    const want = "Table 3 is also held by Rita at 20:45, who is locked to it. Assign different tables.";
+    expect(keptRefusal(day, s, draftOf(s, { customDur: 150 }), [])).toBe(want);
+    expect(saved(day, {})).toBe(want);
     expect(keptRefusal([s], s, draftOf(s, { customDur: 150 }), [])).toBe(null);
+    expect(saved([s], {})).toBe(null);
     // Save refuses a seated date change first, with its own field error.
     expect(keptRefusal(day, s, draftOf(s, { customDur: 150, date: "2099-06-16" }), [])).toBe(null);
+    expect(saveEdit(day, "x", { date: "2099-06-16" }).refusal).toEqual(
+      { message: "A seated booking can't be moved to another date — change the status first.", field: "date" });
   });
 
   it("a SEATED party grown past its tables: Save's fit refusal, before its clashes (/code-review)", () => {
@@ -3004,14 +3014,17 @@ describe("keptRefusal — what Save will say about the tables it keeps (v18.3.3)
     const want = seatedFitRefusal(6, ["3"]);
     expect(want).toMatch(/^Party of 6 doesn't fit table 3/);
     expect(keptRefusal([s], s, draftOf(s, { size: 6, customDur: 150 }), [])).toBe(want);
-    expect(keptRefusal(day, s, draftOf(s, { size: 6, customDur: 150 }), []), "doSaveEdit asks the fit first").toBe(want);
+    expect(keptRefusal(day, s, draftOf(s, { size: 6, customDur: 150 }), []), "the save asks the fit first").toBe(want);
+    expect(saved(day, { size: 6 })).toBe(want);
   });
 
   it("a draft that does not keep its tables is not this function's", () => {
     const day = [placed(), mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true })];
     expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00", size: 3 }), []), "a new size re-places it").toBe(null);
+    expect(saved(day, { time: "20:00", size: 3 })).toBe(null);
     const auto = mk({ id: "x", time: "19:00", tables: ["3"] });
     expect(keptRefusal([auto, day[1]], auto, draftOf(auto, { time: "20:00" }), []), "the optimiser's placement").toBe(null);
+    expect(saved([auto, day[1]], { time: "20:00" })).toBe(null);
   });
 });
 

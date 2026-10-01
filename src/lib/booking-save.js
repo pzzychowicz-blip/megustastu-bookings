@@ -25,7 +25,7 @@
 import {
   getDur, toMins, histEntry, diffBooking, isLocked, isActive, enteredPhone,
   bookingsAfterAction, seatedElapsed, seatedShiftFor, unseatRestore,
-  tablesPinned, tablesKept, tablesFreeFor, replacePinnedClashes,
+  tablesPinned, tablesKept, keepsHandTables, tablesFreeFor, replacePinnedClashes,
   seatRefusal, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, handKeptRefusal,
   offZone, offZoneNote, seatNoteFor,
 } from "./booking-logic.js";
@@ -460,4 +460,49 @@ export function applyEdit(input){
     // so a note typed in this save is shown.
     seatNote:seatNoteFor(orig&&orig.status,f.status,edited),
   };
+}
+
+// ── keptRefusal: what Save will say about tables it keeps, asked BEFORE Save ──
+// v18.3.3: the form previewed a kept booking's tables as fine (`tablesKept`),
+// and Save then refused them when a locked or seated party, or a table block,
+// held one in the new window: `handKeptRefusal` for a booking placed by hand,
+// the locked-clash refusal for one saved as seated. The preview and the save
+// disagreeing is the defect `tablesKept` was written to end (v18.3.2's
+// /code-review left this half on the ROADMAP).
+//
+// This is the save's question asked of the day as it stands, with the draft's
+// window applied to the booking and its tables kept. No optimiser pass: the
+// save's pass moves neither a locked party nor a block, which are the only
+// things these refusals name, so they read the same before it as after it. A
+// hand-kept booking is asked only when the window moved (`recheck` in
+// `applyEdit`); a seated one always, as `applyEdit` asks it. Seating a booking
+// (it was not seated) is left out: the seat-clash prompt asks about that table
+// before any save. So is a seated booking moved to another date: Save refuses
+// that first, on the Date field.
+//
+// v18.3.4: moved here from booking-logic.js, and the window is the save's own
+// (`editWindow`): the length, the un-seat's restored start and the revival were
+// a copy of `doSaveEdit`'s, the ninth copy of a booking's fields ROADMAP #13
+// counted. The moved test is `recheck` less its Clear term: a hand-kept draft
+// has changed nothing else `needsR` reads (`keepsHandTables`), and a Clear is
+// never kept, so the form, which asks only when `tablesKept`, never asks one.
+// The function answers as it did for every draft.
+export function keptRefusal(list,orig,draft,blocks){
+  if(!orig||!draft) return null;
+  const hand=keepsHandTables(orig,draft);
+  const seated=draft.status==="seated"&&orig.status==="seated"&&draft.date===orig.date;
+  if(!hand&&!seated) return null;
+  const w=editWindow(orig,draft);
+  if(hand&&!(draft.time!==orig.time||w.planChanged||w.revived||!!w.unseat)) return null;
+  const day=(list||[]).map(function(b){
+    return b.id===orig.id?Object.assign({},b,{time:w.time,duration:w.duration,status:draft.status,tables:orig.tables}):b;
+  });
+  if(hand) return handKeptRefusal(day,draft.date,orig.id,blocks);
+  // v18.3.3 (/code-review): a seated party that has outgrown its tables is
+  // refused before its clashes, in `applyEdit`'s order. Left out, a party of 2
+  // edited to 6 previewed table 3 as fine and Save refused it.
+  const fit=seatedFitRefusal(w.size,orig.tables);
+  if(fit) return fit;
+  const locked=pinnedClashParties(day,draft.date,orig.id).locked;
+  return locked.length?pinnedClashRefusal(locked[0]):null;
 }
