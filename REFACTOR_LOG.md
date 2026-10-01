@@ -30032,7 +30032,12 @@ won't-fix.
      reason, for `selected` (a scrub moves it, and watching it would yank the tape under
      the finger), `autoScrollSmooth` (it arrives in the batch that bumps the key) and
      `centre` (new each render). `tests/time-axis.test.js` pins the key, and fails on the
-     old file.
+     old file. **atoms (one), kept.** `useFlip`'s layout effect takes the caller's `deps`,
+     a list the lint cannot check, and the lint asks for `isQuiet`. A pass runs when the
+     caller's deps change and asks that render's predicate, which in all three callers
+     (the timeline, the List, the WhatsApp conversation list) reads that render's values
+     or a ref. Each predicate is new every render, so watching it would run a pass, and
+     animate, on every render.
 7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
    left blinked out in one frame while the ones below slid or jumped up. Two decisions came
    first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)

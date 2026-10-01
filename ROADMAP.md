@@ -79,9 +79,9 @@ evidence for each.
 
 - **Lint: decide a gate (#10).** There are 64 warnings on 2026-09-30, all of them React
   Compiler advisories. Decide whether CI gets `--max-warnings N`, which is a policy
-  change. Two older `eslint-disable-next-line react-hooks/exhaustive-deps`
-  directives carry no reason (atoms, useWaitlist):
-  give each a `-- <reason>`, or fix the stale closure it hides (v18.3.2 is doing them).
+  change. One older `eslint-disable-next-line react-hooks/exhaustive-deps`
+  directive carries no reason (useWaitlist):
+  give it a `-- <reason>`, or fix the stale closure it hides (v18.3.2 is doing it).
 
 - **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP

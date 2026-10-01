@@ -1712,7 +1712,7 @@ export function useFlip(deps, isQuiet) {
     });
     prevTops.current = next;
     seeds.current.clear();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the caller's trigger: a pass runs when its deps change and asks that render's isQuiet; each caller's predicate is new every render, and watching it would measure and animate on every render
   }, deps);
   return ref;
 }
