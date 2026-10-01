@@ -109,6 +109,16 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
+- **Two gaps in how "Repeat weekly" writes its rule (v18.3.3's `/code-review`).** Both
+  predate v18.3.3. (1) The form's toggle is not gated on `recurringManage`. With roles
+  enforced, a staff account without it saves the booking stamped with the rule's id,
+  while `database.rules.json` refuses the rule, and the banner blames out-of-date data.
+  Every other rule change asks `refused("recurringManage")`. Decide whether to hide the
+  toggle or refuse the save. (2) The rule is dispatched beside its first booking and is
+  not tied to that write. If the booking write is parked and then discarded from the
+  banner, the rule is left, and it books the weeks after its start. Writing the rule only
+  once the booking lands needs the retry queue to report that, so it is a write-path change.
+
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the

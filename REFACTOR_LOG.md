@@ -30439,6 +30439,12 @@ The ship run's review raised six findings. Each fix is its own commit.
   is in `src/hooks/CLAUDE.md` (useRecurring), and it is the first row of the device
   checks below.
 
+- **Two findings went to ROADMAP rather than being built, since both change shipped
+  behaviour:** "Repeat weekly" is not gated on `recurringManage`, so with roles enforced
+  the rule is refused while its booking saves; and the rule's write is not tied to its
+  booking's, so a parked booking write that is later discarded leaves the rule behind.
+  Both predate this version.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
