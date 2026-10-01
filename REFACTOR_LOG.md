@@ -30880,6 +30880,18 @@ commit; the others are deferred to the ROADMAP; none was disproved.
    helper fails three tests: the new one and both swap scenarios in
    `save-path.test.js`.
 
+4. **The displacement refusal was written out twice (fixed).** "Which parties that
+   held tables does this save leave with none" and its sentence were near-copies in
+   the two saves, so a change to the rule in one would have left the other asking the
+   old question. They are `displacedBy(before, fin, date, id)` and
+   `displaceRefusal(what, kicked)` now, and each save passes its own words ("this
+   change", "adding this booking"). One input differs, and was kept: the edit measures
+   "held tables" on the list as it was, the create on `applyBase`'s result, which has
+   a swap's release applied. The difference cannot show, because a swap always comes
+   with tables picked by hand (every Clear resets it), and neither save asks the
+   question then. Both displacement snapshots stayed the same. A helper that finds
+   nobody fails both of them, and so does a sentence that is always plural.
+
 ### Gate
 
 Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
@@ -30900,6 +30912,7 @@ commit (`git archive`).
 | `/code-review` 1 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
 | `/code-review` 2 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
 | `/code-review` 3 | 124.21 kB | 2449 | 0 errors, 63 warnings | OK |
+| `/code-review` 4 | 124.22 kB | 2449 | 0 errors, 63 warnings | OK |
 
 The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
 App. No rules change, so no `test:rules` run.

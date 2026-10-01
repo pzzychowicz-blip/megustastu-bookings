@@ -67,6 +67,25 @@ export function releaseSwapped(b,affected){
   return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
 }
 
+// ── displacedBy: who a save leaves without a table ───────────────────────────
+// The active parties on `date` that held tables in `before` and that the save's
+// result (`fin`) leaves with none, or clashing — anyone but the booking being
+// saved (`id`). Both saves refuse when there are any, naming them
+// (`displaceRefusal`), when the app is choosing the tables.
+// `before` is the edit's list as it was and the create's `applyBase` result.
+// Those differ only by a swap's release, and a swap comes with tables picked by
+// hand, when neither save asks this.
+// v18.3.4 (/code-review): written out twice, in the two saves.
+function displacedBy(before,fin,date,id){
+  const prevAssigned=before.filter(function(b){return b.date===date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==id;});
+  const displaced=fin.filter(function(b){return b.id!==id&&b.date===date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
+  return displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
+}
+// The refusal, with `what` naming the save: "this change" or "adding this booking".
+function displaceRefusal(what,kicked){
+  return "Not enough capacity — "+what+" would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".";
+}
+
 // ── editWindow: where an edit puts the booking, before the clock ─────────────
 // What the draft alone decides about the edited booking's window:
 //   size             the party size saved (`Number(draft.size) || 2`)
@@ -444,10 +463,8 @@ export function applyEdit(input){
     if(handRefusal) return refuse(handRefusal);
   }
   if(!mt.length&&recheck){
-    const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
-    const displaced=fin.filter(function(b){return b.id!==editId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-    const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
-    if(kicked.length>0) return refuse("Not enough capacity — this change would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");
+    const kicked=displacedBy(bookings,fin,f.date,editId);
+    if(kicked.length>0) return refuse(displaceRefusal("this change",kicked));
   }
   // v17.15.5 (/code-review): `!editFinished`. This guard means "the
   // optimiser could not place the booking", and a finished booking is
@@ -570,10 +587,8 @@ export function buildBooking(input){
   if(!mt.length){
     const ne=fin.find(function(b){return b.id===newId;});
     if(!ne||(ne.tables||[]).length===0) return refuse("Could not assign a table — try manual assignment.");
-    const displaced=fin.filter(function(b){return b.id!==newId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-    const prevAssigned=base.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0;});
-    const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
-    if(kicked.length>0) return refuse("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");
+    const kicked=displacedBy(base,fin,f.date,newId);
+    if(kicked.length>0) return refuse(displaceRefusal("adding this booking",kicked));
   }
   // v18.3.1: seated outside its zone, the toast says so (offZoneNote);
   // not for hand-picked tables (/code-review), as in the edit path.
