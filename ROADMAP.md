@@ -106,15 +106,6 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **What the booking form previews for tables a save keeps (v18.3.2's `/code-review`).**
-  A booking whose tables the save carries through (seated, or placed by hand with only
-  its time or length changed) previews them as fine, but Save refuses when a locked or
-  seated party, or a table block, holds one at the new time (`handKeptRefusal`,
-  `pinnedClashRefusal`). Decide what the form shows then. The refusal's own sentence,
-  where the availability line goes, is the likely answer. Then have `availScan` ask the
-  save's question. It needs no optimiser pass, because the save's pass moves neither a
-  locked party nor a block.
-
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the

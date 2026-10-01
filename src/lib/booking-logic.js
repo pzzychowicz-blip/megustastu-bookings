@@ -1414,6 +1414,45 @@ export function handKeptRefusal(list,date,id,blocks){
   const locked=pinnedClashParties(list,date,id).locked;
   return locked.length?pinnedClashRefusal(locked[0]):null;
 }
+// ── v18.3.3: what Save will say about tables it keeps, asked BEFORE Save ────
+// The form previewed a kept booking's tables as fine (`tablesKept`), and Save
+// then refused them when a locked or seated party, or a table block, held one
+// in the new window: `handKeptRefusal` for a booking placed by hand, the
+// locked-clash refusal for one saved as seated. The preview and the save
+// disagreeing is the defect `tablesKept` was written to end (v18.3.2's
+// /code-review left this half on the ROADMAP).
+//
+// This is the save's question asked of the day as it stands, with the draft's
+// window applied to the booking and its tables kept. No optimiser pass: the
+// save's pass moves neither a locked party nor a block, which are the only
+// things these refusals name, so they read the same before it as after it. The
+// window is the save's: the plan length when the form changed it, otherwise
+// the stored one, and an un-seat's restored start. A hand-kept booking is asked
+// only when the window moved (`recheck` in `doSaveEdit`); a seated one always,
+// as `doSaveEdit` asks it. Seating a booking (it was not seated) is left out:
+// the seat-clash prompt asks about that table before any save. So is a seated
+// booking moved to another date: Save refuses that first, on the Date field.
+export function keptRefusal(list,orig,draft,blocks){
+  if(!orig||!draft) return null;
+  var size=Number(draft.size)||2;
+  var hand=keepsHandTables(orig,draft);
+  var seated=draft.status==="seated"&&orig.status==="seated"&&draft.date===orig.date;
+  if(!hand&&!seated) return null;
+  var formPlan=draft.customDur||getDur(size);
+  var planChanged=formPlan!==(orig.originalDuration||orig.duration||90);
+  var time=draft.time,dur=planChanged?formPlan:(orig.duration||90);
+  var timeUntouched=draft.time===orig.time&&draft.date===orig.date;
+  var unseat=(orig.status==="seated"&&(draft.status==="confirmed"||draft.status==="pending")&&timeUntouched)?unseatRestore(orig,size):null;
+  if(unseat){time=unseat.time;if(!planChanged) dur=unseat.duration;}
+  var revived=(orig.status==="cancelled"||orig.status==="completed")&&draft.status!=="cancelled"&&draft.status!=="completed";
+  if(hand&&!(draft.time!==orig.time||planChanged||revived||!!unseat)) return null;
+  var day=(list||[]).map(function(b){
+    return b.id===orig.id?Object.assign({},b,{time:time,duration:dur,status:draft.status,tables:orig.tables}):b;
+  });
+  if(hand) return handKeptRefusal(day,draft.date,orig.id,blocks);
+  var locked=pinnedClashParties(day,draft.date,orig.id).locked;
+  return locked.length?pinnedClashRefusal(locked[0]):null;
+}
 // C3: seating never asked whether the table still had somebody at it. The two
 // parties then hold the same table with both bookings `isLocked`, which is the
 // one clash `applyOpt` cannot separate and the reconciler deliberately leaves

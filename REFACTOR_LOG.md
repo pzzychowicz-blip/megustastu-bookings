@@ -30368,3 +30368,26 @@ class rather than fixing a bug and touches booking data.
    during a save, so a save cannot clear its own error. **After it**, same booking: the
    refusal was still up 1.5s after Save and went the moment the status changed.
    `tests/form-error.test.js` reads the list.
+
+5. **The form says when Save will refuse the tables it keeps.** A booking whose tables
+   the save carries through (`tablesKept`: seated, or placed by hand with only its time
+   or length changed) was previewed as fine, and Save then refused it when a locked or
+   seated party, or a table block, held one of those tables in the new window. The
+   ROADMAP item left by v18.3.2's `/code-review`; Patryk chose the refusal in the
+   availability line. `keptRefusal(list, orig, draft, blocks)` (`booking-logic.js`) is
+   the save's question asked of the day as it stands: the draft's window applied to the
+   booking (the plan length when the form changed it, otherwise the stored one, and an
+   un-seat's restored start), its tables kept, then `handKeptRefusal` for a hand-kept
+   booking and the locked-clash refusal for a seated one. No optimiser pass, since the
+   save's pass moves neither a locked party nor a block. A hand-kept booking is asked
+   only when its window moved, as `doSaveEdit`'s `recheck` asks it; a seated one moved
+   to another date is left to Save's own date refusal. `availScan` returns the sentence,
+   and the line shows it in the warning tone with no times offered, since its way out is
+   "Assign different tables"; Save stays enabled. **Measured on DEV** (22 Oct, both
+   bookings locked on table 3, one at 17:00 and one at 20:00): moving the first to 20:00
+   showed "Table 3 is also held by B1 Rita at 20:00, who is locked to it. Assign
+   different tables." in the line, Save refused with the same sentence and wrote
+   nothing, and 18:00 cleared the line and saved on table 3, still locked.
+   `tests/booking-logic.test.js` runs each case through the save's own path as well and
+   expects the same sentence; removing the unmoved-window gate fails 1 and an
+   always-null function fails 4.

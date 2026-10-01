@@ -25,7 +25,7 @@ import {
   liveBarDur, seatedElapsed, seatedIsLive, occupancyEnd, pastCloseMins, seatingClosed,
   plannedDuration, seatNoteFor,
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
-  keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal,
+  keepsHandTables, tablesKept, blockedTablesAt, handKeptRefusal, keptRefusal,
   unseatRestore, seatRefusal, seatClashParties, completedSeatedPatch, seatedShiftFor,
   tablesFreeFor, trialFits, enteredPhone, kitchenRelevant, savedToast, lastStartMins,
   optimizerActiveFor,
@@ -2879,6 +2879,74 @@ describe("what a save does with hand-placed tables when the time moves (v18.3.2)
   });
 });
 
+// v18.3.3 (B1): the form previewed kept tables as available and Save then
+// refused them. `keptRefusal` is Save's refusal asked of the day as it stands,
+// so each case below also runs the save's own path (`bookingsAfterAction` then
+// `handKeptRefusal`) and expects the two sentences to be the same one.
+describe("keptRefusal — what Save will say about the tables it keeps (v18.3.3)", () => {
+  const placed = (o) => mk(Object.assign(
+    { id: "x", name: "Placed", time: "19:00", scheduledTime: "19:00", tables: ["3"], _locked: true, _manual: true }, o));
+  const draftOf = (b, o) => Object.assign(
+    { status: b.status, size: b.size, date: b.date, time: b.time, preference: b.preference,
+      preferredTables: b.preferredTables, customDur: null }, o);
+  const saved = (day, blocks) => {
+    const moved = day.map((b) => b.id === "x" ? Object.assign({}, b, { time: "20:00", scheduledTime: "20:00" }) : b);
+    return handKeptRefusal(bookingsAfterAction(moved, D, blocks, "x", false, true), D, "x", blocks);
+  };
+
+  it("a locked party at the new time: the same sentence Save refuses with", () => {
+    const day = [placed(), mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true })];
+    const want = "Table 3 is also held by Rita at 20:00, who is locked to it. Assign different tables.";
+    expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00" }), [])).toBe(want);
+    expect(saved(day, [])).toBe(want);
+  });
+
+  it("a table block over the new time", () => {
+    const blocks = [{ id: "bl1", tableId: "3", date: D, allDay: false, from: "19:45", to: "21:00" }];
+    const day = [placed()];
+    const want = "Table 3 is blocked at that time. Assign different tables.";
+    expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00" }), blocks)).toBe(want);
+    expect(saved(day, blocks)).toBe(want);
+  });
+
+  it("an UNLOCKED party in the way is not a refusal: the save's pass moves it", () => {
+    const day = [placed(), mk({ id: "y", name: "InTheWay", time: "20:00", tables: ["3"] })];
+    expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00" }), [])).toBe(null);
+    expect(saved(day, [])).toBe(null);
+  });
+
+  it("a hand-kept booking whose window did not move is not asked, as Save does not ask it", () => {
+    // The clash already stands; Save's `recheck` is false, so it saves.
+    const day = [placed(), mk({ id: "z", name: "Rita", time: "19:00", tables: ["3"], _locked: true, _manual: true })];
+    expect(keptRefusal(day, day[0], draftOf(day[0], {}), [])).toBe(null);
+    expect(keptRefusal(day, day[0], draftOf(day[0], { status: "pending" })), "a status change alone").toBe(null);
+  });
+
+  it("a longer plan is a moved window", () => {
+    const day = [placed(), mk({ id: "z", name: "Rita", time: "20:45", tables: ["3"], _locked: true, _manual: true })];
+    expect(keptRefusal(day, day[0], draftOf(day[0], {}), [])).toBe(null);
+    expect(keptRefusal(day, day[0], draftOf(day[0], { customDur: 150 }), [])).toMatch(/^Table 3 is also held by Rita at 20:45/);
+  });
+
+  it("a SEATED booking is asked about its locked clashes whatever moved", () => {
+    // customDur is what openEdit puts in the form for a 150-minute plan.
+    const s = mk({ id: "x", name: "Sat", time: "19:00", status: "seated", tables: ["3"], duration: 150, originalDuration: 150 });
+    const day = [s, mk({ id: "z", name: "Rita", time: "20:45", tables: ["3"], _locked: true, _manual: true })];
+    expect(keptRefusal(day, s, draftOf(s, { customDur: 150 }), [])).toBe(
+      "Table 3 is also held by Rita at 20:45, who is locked to it. Assign different tables.");
+    expect(keptRefusal([s], s, draftOf(s, { customDur: 150 }), [])).toBe(null);
+    // Save refuses a seated date change first, with its own field error.
+    expect(keptRefusal(day, s, draftOf(s, { customDur: 150, date: "2099-06-16" }), [])).toBe(null);
+  });
+
+  it("a draft that does not keep its tables is not this function's", () => {
+    const day = [placed(), mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true })];
+    expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00", size: 3 }), []), "a new size re-places it").toBe(null);
+    const auto = mk({ id: "x", time: "19:00", tables: ["3"] });
+    expect(keptRefusal([auto, day[1]], auto, draftOf(auto, { time: "20:00" }), []), "the optimiser's placement").toBe(null);
+  });
+});
+
 // The facts above are only worth having if the save and the preview ASK them,
 // and both are closures this suite does not run, so the wiring is read.
 describe("the save and the preview ask tablesKept (v18.3.2)", () => {
@@ -2900,6 +2968,12 @@ describe("the save and the preview ask tablesKept (v18.3.2)", () => {
     expect(/tablesKept\(cur,form,false,!!form\._clearManual\)/.test(FORM)).toBe(true);
     expect(/const pinnedTbl=cur&&tablesKept\(cur,form,!!mt,cleared\)\?curTbl:null;/.test(FORM)).toBe(true);
     expect(/tablesPinned\(form\.status/.test(FORM), "no site still asks the status alone").toBe(false);
+  });
+
+  it("v18.3.3: the scan asks keptRefusal and the banner shows its sentence as a warning", () => {
+    expect(/const refusal=keptRefusal\(bookings,cur,form,tableBlocks\);/.test(FORM)).toBe(true);
+    expect(/msg=\{formAvail\.refusal\|\|"No tables available\."\}/.test(FORM)).toBe(true);
+    expect(/warn=\{!!formAvail\.refusal\}/.test(FORM)).toBe(true);
   });
 });
 
