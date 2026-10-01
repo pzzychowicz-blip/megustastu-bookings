@@ -11,6 +11,10 @@
 //
 // `buildBooking` is the same for a new booking (`doSaveNew`, phase 6).
 //
+// `walkinBooking` and `occurrenceBooking` are the app's other two new bookings,
+// the walk-in form's Seat and the weekly generator's occurrence (phase 7): the
+// record each writes, with nothing to decide around it, so they return it.
+//
 // `editWindow` is the part of an edit's window the clock has no say in: the
 // planned length, the un-seat restore, the revival and whether the placement is
 // re-checked. The form's availability line asks the save's question before Save
@@ -25,7 +29,7 @@
 // backend's Node chain imports this file, and nothing this file imports imports
 // it back, so it cannot close a cycle.
 import {
-  getDur, genId, toMins, histEntry, diffBooking, isLocked, isActive, enteredPhone,
+  getDur, genId, toMins, nowTime, histEntry, diffBooking, isLocked, isActive, enteredPhone,
   bookingsAfterAction, seatedElapsed, seatedShiftFor, unseatRestore,
   tablesPinned, tablesKept, keepsHandTables, tablesFreeFor, replacePinnedClashes,
   seatRefusal, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, handKeptRefusal,
@@ -566,6 +570,39 @@ export function buildBooking(input){
     rule:recStampId?{id:recStampId,startDate:f.date,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes}:null,
     flash:{kind:null,note:!mt.length&&placedNew?offZoneNote(placedNew):""},
   };
+}
+
+// ── walkinBooking: the record the walk-in form's Seat writes ─────────────────
+// v18.3.4: `useWalkin`'s `doSaveWalkin` built it inline, and keeps everything
+// around it: the commit-once guard, the closing-time and no-table refusals, the
+// write and the close. A walk-in is a party already at its tables: seated,
+// placed by hand (`_manual`) and never moved by the optimiser (`_locked`).
+//   form   the walk-in draft; an empty `time` means now
+//   num    the day's next walk-in number (`getNextWalkinNum`)
+//   date   today
+//   user   who seated it, for the history entry
+// It writes fewer keys than a stored booking has; a read fills the rest
+// (`sanitize`).
+export function walkinBooking(form,num,date,user){
+  const t=form.time||nowTime();const size=Number(form.size)||2;const dur=form.customDur||getDur(size);
+  return {id:genId(),name:"Walk-in "+num,phone:"",date:date,time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:form.notes||"",status:"seated",tables:form.tables,customDur:form.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",user)]};
+}
+
+// ── occurrenceBooking: the record the weekly generator writes ────────────────
+// v18.3.4: App's generator effect built it inline, for one occurrence of a
+// standing rule (`recurring`) on `date`; the effect keeps which ones are due
+// (`dueOccurrences`), the existence check and the optimiser pass that places
+// it (`tables: []` until then). Confirmed, and written by "auto".
+//
+// The id is DETERMINISTIC, "r" + rule id + "_" + date, and the booking is
+// stamped with the rule and the date: two devices generating at once write the
+// same id, so the per-$id CAS turns the second create away, and the stamps are
+// how the generator knows the week is done (CLAUDE.md's row on recurring ids).
+// Never make it random. `ruleStart` (lib/recurring.js) tells the form's own
+// first booking from the generator's by this id.
+export function occurrenceBooking(rule,date){
+  const dur=getDur(rule.size);
+  return {id:"r"+rule.id+"_"+date,name:rule.name,phone:rule.phone,date:date,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,voucherCode:"",_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:date,history:[histEntry("auto-created from weekly rule","auto")]};
 }
 
 // ── keptRefusal: what Save will say about tables it keeps, asked BEFORE Save ──

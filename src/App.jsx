@@ -88,7 +88,7 @@ import { dueOccurrences } from "./lib/recurring";
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, and the memo every save
 // transform shares.
-import { applyEdit, buildBooking, memoByPrev } from "./lib/booking-save";
+import { applyEdit, buildBooking, memoByPrev, occurrenceBooking } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -2260,7 +2260,8 @@ function BookingApp({uid}){
   //   • the occurrence id is DETERMINISTIC ("r"+ruleId+"_"+date, path-safe), so
   //     two devices generating concurrently converge — the second create is
   //     rejected by the per-$id updatedAt CAS (baseUpdatedAt 0 vs stored) and
-  //     reconciles via the echo;
+  //     reconciles via the echo. v18.3.4: the record, id included, is
+  //     `occurrenceBooking` (lib/booking-save.js);
   //   • skipDates (a deleted occurrence's date) are skipped;
   //   • closed days / out-of-hours times are skipped.
   // Self-stabilising (created rows populate `existing` next pass → no-op) and
@@ -2282,8 +2283,7 @@ function BookingApp({uid}){
       Object.keys(byDate).forEach(function(ds){
         byDate[ds].forEach(function(oc){
           const rule=oc.rule;
-          const dur=getDur(rule.size);
-          const nb={id:"r"+rule.id+"_"+ds,name:rule.name,phone:rule.phone,date:ds,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,voucherCode:"",_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:ds,history:[histEntry("auto-created from weekly rule","auto")]};
+          const nb=occurrenceBooking(rule,ds);
           if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
           next=next.concat([nb]);
         });

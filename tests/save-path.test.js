@@ -469,6 +469,9 @@ describe("the harness runs the code it claims to", () => {
     expect(scope.draftFromBooking).toBe(bookingFields.draftFromBooking);
     expect(scope.syncLiveDurations).toBe(bookingLogic.syncLiveDurations);
     expect(scope.todayStr).toBe(day.todayStr);
+    // …and the other two new bookings' records (phase 7).
+    expect(importScope(WALKIN, WALKIN_SAVE.join("\n")).walkinBooking).toBe(bookingSave.walkinBooking);
+    expect(importScope(APP, APP_GENERATOR.join("\n")).occurrenceBooking).toBe(bookingSave.occurrenceBooking);
   });
   it("draftOf builds exactly the draft openEdit opens with", () => {
     [

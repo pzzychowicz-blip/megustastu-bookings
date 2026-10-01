@@ -12,7 +12,7 @@ Extracted from the root `CLAUDE.md` File Structure block (moved here so it loads
 
 - **useAutoOptimizer.js** — optimizer thermostat + daily reset (cutoff/auto-switch editable via useOptimizerSettings — v15.0.0)
 
-- **useWalkin.js** — walk-in state + handlers (v17.5.0: `walkinBaseline` STATE snapshot set in openWalkin only → returns `walkinDirty` for the unsaved-changes guard; v17.14.0: `showWalkin` moved OUT to App's modal stack and is passed in, like `confirmKitchen` — the DRAFT stays here)
+- **useWalkin.js** — walk-in state + handlers. **v18.3.4: the record a Seat writes is `walkinBooking`** (`lib/booking-save.js`), beside the app's other new bookings, where a test checks it against the field table; `doSaveWalkin` keeps the commit-once guard, both refusals, the write (`prev.concat([nb])`, which `tests/submit-guard.test.js` reads) and the close (v17.5.0: `walkinBaseline` STATE snapshot set in openWalkin only → returns `walkinDirty` for the unsaved-changes guard; v17.14.0: `showWalkin` moved OUT to App's modal stack and is passed in, like `confirmKitchen` — the DRAFT stays here)
 
 - **useWinW.js** — viewport-width hook
 

@@ -30698,3 +30698,42 @@ and every save writes exactly the fields it writes today.
      one on the start date. The rule was paused in Settings afterwards.
 
    No error in the console after a reload. Bundle: the entry grew 0.02 kB gz.
+
+7. **`walkinBooking` and `occurrenceBooking`: the app's other two new bookings.** The
+   walk-in's Seat (`useWalkin`'s `doSaveWalkin`) and the weekly generator (App's
+   effect) built their records inline. Both records now sit in `booking-save.js` beside
+   the form's two saves, moved verbatim. A script compared each literal with the
+   original after mapping the renamed inputs: identical. The callers keep everything
+   around the records:
+   - the walk-in keeps the commit-once guard, the closing-time and no-table refusals,
+     the write (`prev.concat([nb])`, which `submit-guard.test.js` reads) and the
+     close;
+   - the generator keeps which occurrences are due, the existence check and the
+     optimiser pass, and still builds each record inside its transform, so the
+     history stamp is taken when it was before.
+
+   `occurrenceBooking` owns the deterministic `r<rule>_<date>` id, and CLAUDE.md's row
+   on recurring ids now names it.
+
+   **Tests.** The characterization snapshots did not move. The harness's
+   module-binding self-test now checks that the lifted walk-in and generator bind the
+   very `walkinBooking` and `occurrenceBooking` the lib exports. Five sabotages were
+   each caught:
+   - the walk-in not `_locked` (2 failures);
+   - the walk-in dropping its typed length (1);
+   - the occurrence id with another separator (3);
+   - the occurrence authored by "staff" (3);
+   - the occurrence without `recurringDate` (3).
+
+   **On DEV**, read back from the database:
+   - A walk-in seated on table 3 with a longer length and a note. "Walk-in 2" was
+     written with exactly the literal's 17 keys plus the write path's two stamps,
+     `customDur`, `duration` and `originalDuration` all 105, and "walk-in created" by
+     the signed-in account.
+   - A Repeat weekly booking starting Saturday the 3rd. The generator wrote the 10th's
+     occurrence, `r<rule>_2026-10-10`, by "auto", stamped and placed by the optimiser.
+     A rule starting Friday the 9th wrote nothing, since the next Friday is past the
+     two-week horizon.
+
+   Both rules were paused afterwards. No new console error. Bundle: the entry is
+   0.02 kB gz smaller.
