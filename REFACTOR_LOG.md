@@ -30465,7 +30465,9 @@ run.
 
 **Date:** 2026-10-01 · **Branch:** `refactor/v18.3.4-booking-field-table` ·
 **Behavioural change:** none. `tests/save-path.test.js` (phase 1) is the proof, since
-none of its snapshots moves after the commit that took them.
+none of its snapshots moves after the commit that took them: all 97 inline snapshots,
+extracted from the file at phase 1 and at the last phase and compared, are identical,
+and the file's other changes are the harness's wiring.
 
 ROADMAP #13, as v18.3.3 left it. A booking's fields are written out by hand in eight
 places: `sanitize`, `UNDO_FIELDS` and `diffBooking` (`booking-logic.js`); `openEdit`,
@@ -30631,6 +30633,16 @@ and every save writes exactly the fields it writes today.
    - the hand refusal ungated (1);
    - the edit write without `voucherCode` (4).
 
+   **On DEV**, one booking through the edit form, each save read back from the
+   database:
+   - its notes edited;
+   - seated early (the seat shift, 21:00 → 19:03);
+   - un-seated: time and length restored, 19:03 → 21:00 and 207 → 90 min;
+   - completed, revived to confirmed, and completed again.
+
+   Each history line read as before, and the console had no error. Bundle: the entry
+   grew 0.59 kB gz.
+
 5. **`keptRefusal` reads the save's window.** v18.3.3's preview of Save's refusal kept
    its own copy of the window: the plan length, the un-seat restore and the revival.
    It now reads `editWindow`, and it moved to `booking-save.js` beside the save it
@@ -30777,3 +30789,60 @@ and every save writes exactly the fields it writes today.
    CLAUDE.md's "A new per-booking FIELD" row now says one row plus this guard, where
    it said eight places. `tests/CLAUDE.md` names both v18.3.4 guards, and says the
    characterization snapshots are never updated with `-u`.
+
+9. **ROADMAP.** #13 is deleted, since it shipped. #17 records that the save path went
+   first (`App.jsx` 5,727 → 5,340 lines), with recurring generation next. A new entry
+   holds the three behaviours phase 1 pinned and left. GLOSSARY and DESIGN don't change:
+   nothing new appears on screen.
+
+### On DEV, at the end
+
+Run on the final code (the worktree's dev server, 2026-10-01), each save read back from
+the database:
+- **A booking placed on table 4 by hand**, through the edit form's picker (`_manual`,
+  `_locked`), then saved unchanged. History reads "edited: saved (no field changes)"
+  and no Undo is offered: the guard's round trip, on the real save.
+- **Its time moved 20:00 → 20:30.** It kept table 4 ("edited: time 20:00→20:30").
+- **A party locked to table 4 at 18:00**, with tables picked in the new-booking form,
+  then the first booking moved to 18:30. Before Save the form read "Table 4 is also
+  held by v1834 lock at 18:00, who is locked to it. Assign different tables.". Save
+  refused with the same sentence and wrote nothing. This is phase 5's preview agreeing
+  with the save.
+- No console error.
+
+A drag on the timeline did not register through the Browser pane: the
+measurement-traps skill's drag trap. The picker writes the same `_manual`/`_locked`
+pair, so it stood in. The walk-in and the generator were run after phase 7, and
+nothing they call has changed since.
+
+### Gate
+
+Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
+at their commits; v18.3.3 and phases 1–5 were re-measured from a clean copy of each
+commit (`git archive`).
+
+| Commit | Bundle | Tests | Lint | Style |
+|---|---|---|---|---|
+| v18.3.3 (`504aba1`) | 123.58 kB | 2293 | 0 errors, 63 warnings | OK |
+| phase 1 | 123.58 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 2 | 123.58 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 3 | 123.56 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 4 | 124.15 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 5 | 124.30 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 6 | 124.32 kB | 2397 | 0 errors, 63 warnings | OK |
+| phase 7 | 124.30 kB | 2397 | 0 errors, 63 warnings | OK |
+| phase 8 | 124.30 kB | 2444 | 0 errors, 63 warnings | OK |
+
+The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
+App. No rules change, so no `test:rules` run.
+
+### Check on the devices after merge
+
+Nothing should look or behave differently. These are the flows whose code moved.
+
+| Phase | Device | Check |
+|---|---|---|
+| 4 | Android tablet | Seat a booking from its edit form ahead of its time: the time moves to now and history reads "seated early: time adjusted …". Un-seat it from the form and the booked time and length come back |
+| 4, 5 | Android tablet | Move a booking placed by hand (dragged) to another time: it keeps its tables. Move it onto a party locked to the same table: the amber line names that party before Save, and Save says the same |
+| 6 | Android tablet | Book Again from a completed booking: the new one reads "created via Book Again (from …)", the source "Book Again → new booking on …" |
+| 7 | Android tablet | A walk-in during service: "Walk-in N", seated on the tables picked |

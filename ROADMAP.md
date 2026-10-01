@@ -50,7 +50,7 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
-The next nine come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
+The next eight come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
@@ -85,16 +85,6 @@ evidence for each.
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
 
-- **One field table for a booking (#13).** Its fields are written out by hand in
-  eight places (CLAUDE.md's per-booking-field row), and the walk-in build in
-  `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
-  and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
-  and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version. **Next: v18.3.4** (Patryk, 2026-10-01,
-  split off from v18.3.3's bug sweep), at max effort. v18.3.3 added `keptRefusal`, a
-  ninth reader of the edit's window (`formPlan`, `planChanged`, the un-seat restore)
-  beside `doSaveEdit`'s, so `applyEdit` should own that window and both should read it.
-
 - **In-range dependency updates, and whether to automate them (#14).** Still in range on
   2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`
   9.39.5, globals 17.12 and eslint-plugin-react-refresh 0.5.7. eslint 10 and vitest 5
@@ -106,8 +96,10 @@ evidence for each.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
-  one domain per patch version: the save path (#13) first, then recurring generation,
-  backup/export and drag-drop.
+  one domain per patch version. The save path went first, in v18.3.4 (#13): its
+  decisions are `lib/booking-save.js`, App keeps the effects, and `App.jsx` is 5,340
+  lines (5,727 before it). **Next: recurring generation**, then backup/export and
+  drag-drop.
 
 - **Two gaps in how "Repeat weekly" writes its rule (v18.3.3's `/code-review`).** Both
   predate v18.3.3. (1) The form's toggle is not gated on `recurringManage`. With roles
@@ -118,6 +110,21 @@ evidence for each.
   not tied to that write. If the booking write is parked and then discarded from the
   banner, the rule is left, and it books the weeks after its start. Writing the rule only
   once the booking lands needs the retry queue to report that, so it is a write-path change.
+
+- **Three behaviours v18.3.4 pinned and left alone** (its scope was no behaviour change).
+  Each is a scenario in `tests/save-path.test.js`, so a fix moves that one snapshot, on
+  purpose, and says so. (1) **A no-show walked back keeps its flag.** Editing a cancelled
+  no-show back to confirmed leaves `noShow: true`, so the guest's no-show count
+  (`customers.js`'s `isNoShow`) includes a visit that happened. Found by reading, not yet
+  seen on DEV. Decide whether the walk-back clears it, and the "No show" line the
+  cancel appended to the notes with it. (2) **The generator's occurrence for today,
+  after the 15:00 cutoff, is written unplaced.** `bookingsAfterAction` takes the
+  optimiser-off branch, which with no `changedId` copies every row as it is, so the
+  occurrence lands with `tables: []` and `_conflict: false`: in the Unplaced row, with
+  nothing flagging it. It happens when the generator first meets today's week late in
+  the day (a rule resumed, or standing bookings switched on, after the cutoff). (3) **An
+  edit saved after another device deleted the booking** shows the saved toast, writes
+  nothing for it, and re-places the rest of its day. Decide whether Save refuses it.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
