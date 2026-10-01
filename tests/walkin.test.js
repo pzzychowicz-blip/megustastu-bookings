@@ -34,11 +34,17 @@ describe("walkinRefusal", () => {
       expect(walkinRefusal(DAY, DAY, 14 * 60)).toMatch(/^Closed today/);
     } finally { setWeekHours(DEFAULT_WEEK_HOURS); }
   });
-  it("follows a close past midnight: 00:30 is still yesterday's service", () => {
+  // v18.3.3 (/code-review): the test was named for 00:30 and asserted 23:30
+  // only. Both now. After midnight a walk-in is filed under the NEW date
+  // (`closedNow` asks with `todayStr()` for both days), which is not past its
+  // own close, so the late service keeps seating.
+  it("follows a close past midnight: 23:30 and 00:30 both seat", () => {
     try {
       const late = { open: 13, close: 25, closed: false };
       setWeekHours({ 0: late, 1: late, 2: late, 3: late, 4: late, 5: late, 6: late });
       expect(walkinRefusal(DAY, DAY, 23 * 60 + 30)).toBe(null);
+      const NEXT = "2026-10-02";
+      expect(walkinRefusal(NEXT, NEXT, 30)).toBe(null);
     } finally { setWeekHours(DEFAULT_WEEK_HOURS); }
   });
 });

@@ -30428,6 +30428,11 @@ The ship run's review raised six findings. Each fix is its own commit.
   which point the local would shadow the import. The wiring test now also fails on a
   local of that name. Same bundle bytes (the minifier renames locals).
 
+- **The past-midnight walk-in test tests 00:30.** It was named "00:30 is still
+  yesterday's service" and asserted only 23:30. It now asserts both: with a 01:00 close,
+  23:30 seats, and so does 00:30. At 00:30 the walk-in is filed under the new date, as
+  it always was.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
