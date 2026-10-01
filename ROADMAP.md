@@ -77,11 +77,9 @@ evidence for each.
 
   SECURITY.md §3 lists them as open. (The erasure item and the parse log shipped in v18.3.1.)
 
-- **Lint: decide a gate (#10).** There are 64 warnings on 2026-09-30, all of them React
+- **Lint: decide a gate (#10).** There are 63 warnings on 2026-10-01, all of them React
   Compiler advisories. Decide whether CI gets `--max-warnings N`, which is a policy
-  change. One older `eslint-disable-next-line react-hooks/exhaustive-deps`
-  directive carries no reason (useWaitlist):
-  give it a `-- <reason>`, or fix the stale closure it hides (v18.3.2 is doing it).
+  change.
 
 - **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP

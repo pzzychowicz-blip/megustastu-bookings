@@ -30037,7 +30037,17 @@ won't-fix.
      caller's deps change and asks that render's predicate, which in all three callers
      (the timeline, the List, the WhatsApp conversation list) reads that render's values
      or a ref. Each predicate is new every render, so watching it would run a pass, and
-     animate, on every render.
+     animate, on every render. **useWaitlist (one), gone without a reason.** The
+     past-date prune was keyed on `waitlist`, and the lint asked for `saveWaitlist`: new
+     every render, reading only refs, two state setters (its own, and App's
+     `setWriteWarning`, passed in) and imports, so nothing was stale. It is a
+     `useCallback` on `[setWriteWarning]` now and the effect lists it, so the lint checks
+     what a reason would only have claimed: dropping `setWriteWarning` from its list, or
+     reading a ref during render beside it, is reported (both planted and seen). Measured
+     on DEV: a past-dated entry written to the waitlist was gone within 300ms, the rev
+     advanced by the prune's one write. **No bare directive is left in `src/`.** Of the
+     thirteen, ten keep a reason and three are gone, and two hid a real defect: the
+     List's first wipe after a week-view pick, and the tape after a new opening hour.
 7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
    left blinked out in one frame while the ones below slid or jumped up. Two decisions came
    first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)
