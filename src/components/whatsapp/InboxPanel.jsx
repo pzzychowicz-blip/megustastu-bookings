@@ -348,7 +348,10 @@ export function InboxPanel({
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = orig; };
   }, []);
-  // Mark the active conversation read when selected.
+  // Mark the active conversation read when selected, and only then. A message
+  // that lands in the thread already open stays unread (Patryk's call,
+  // v18.3.2): a tablet left on an open thread cannot tell whether anyone saw
+  // it, so the badge keeps counting it until somebody taps the thread.
   useEffect(() => {
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);

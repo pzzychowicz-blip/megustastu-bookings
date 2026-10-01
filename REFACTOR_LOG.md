@@ -29965,7 +29965,9 @@ won't-fix.
      a message sent into it with `__waSim.question` made it unread again (the Inbox count
      went 7 → 8 while the thread was on screen, and the list showed it unread on the way
      back) until it was selected again. Marking a message read because it landed in the
-     open thread would change behaviour, so it is left as it was and put to Patryk.
+     open thread would change behaviour, so it was put to Patryk, and **he kept it**: a
+     tablet left on an open thread cannot tell whether anyone saw the new message, so the
+     badge keeps counting it until somebody taps the thread. The effect's comment says so.
      useWhatsApp: the auto-archive sweep calls `patchConversation`, new each render, and
      runs when what it reads changes; watching the function would run it on every render.
    - **One measurement trap found on the way**, added to the `mgt-measurement-traps`
