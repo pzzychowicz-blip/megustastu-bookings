@@ -1074,12 +1074,14 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // browsers than transitionend on grid-template-rows.)
   const [revealed, setRevealed] = useState(show === true);
   // v18.3.2 (O3): both holds start on the FRAME their transition starts on
-  // (`afterFrame`), not in this effect. Measured on DEV: deleting the List's
-  // last card through its confirm held the page ~380ms before the first frame,
-  // so the fold began then while an unmount timed from the effect fired ~80ms
-  // later and cut it at half height. And a change that lands while the page is
-  // HIDDEN snaps to its end state: no frame runs there, so the hold would wait
-  // and the transition play on wake, a change nobody watched (v18.3.1's rule).
+  // (`afterFrame`), not in this effect. Measured on DEV: after the List's last
+  // card was deleted through its confirm, the first frame came ~380ms late, the
+  // fold began there, and the row's prune, timed from an effect, cut it at 61px
+  // of 108 (useRevealRows). A hold timed from an effect can only end a fold
+  // early, so this unmount takes the frame too. And a change that lands while
+  // the page is HIDDEN snaps to its end state: no frame runs there, so the hold
+  // would wait and the transition play on wake, a change nobody watched
+  // (v18.3.1's rule).
   useEffect(function () {
     if (show) {
       setMounted(true);

@@ -41,11 +41,13 @@
 // fold started then would play on wake.
 //
 // The prune starts on the NEXT FRAME (`afterFrame`, v18.3.2), not in the
-// effect. Measured on DEV: deleting the List's last card through its confirm
-// held the page for ~380ms before the first frame, so the fold began then while
-// a prune timed from the effect fired 80ms later and cut it at half height. A
+// effect. Measured on DEV: after the List's last card was deleted through its
+// confirm, the first frame came ~380ms late, so the fold began then while a
+// prune timed from the effect fired 80ms later and cut it at 61px of 108 (what
+// held that frame back was not established). With the first frame forced 300ms
+// late, the old timing cut a card at 71px and this one runs the fold to 0. A
 // hold timed from the frame the fold starts on outlasts it by EXIT_PAD however
-// long the page is held (lib/after-frame.js, useEnterLeave's measurement).
+// late that frame is (lib/after-frame.js, useEnterLeave's measurement).
 //
 // `sig` is a stable, sorted membership signature — the effects key on it, NOT the
 // fresh-every-render ids array, so a value-only change (e.g. warn→noshow, or a
