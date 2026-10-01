@@ -290,14 +290,15 @@ export const ListView = memo(function ListView({
   // v17.0.0 round 8 (Patryk): the 🔍/⚙ pair moved OUT to App's date-nav row
   // (ViewTools.jsx) — one home for all three views. List keeps no chrome of its
   // own again; the `searchBar` element and its two buttons are gone.
-  const day = bookings
+  // v18.3.2: memoised so the status-change detector below can key on it.
+  const day = useMemo(() => bookings
     .filter((b) => b.date === date)
     .sort((a, b) => {
       const sa = statusOrder(a.status);
       const sb = statusOrder(b.status);
       if (sa !== sb) return sa - sb;
       return a.time.localeCompare(b.time);
-    });
+    }), [bookings, date]);
 
   // statusOrder already sorts completed/cancelled last, so splitting here
   // preserves the exact visual order the inline list had.
@@ -313,6 +314,13 @@ export const ListView = memo(function ListView({
   // return below (rules of hooks) — it used to sit after it, so adding the
   // day's FIRST booking without a remount (no slide bump) changed the hook
   // count between renders and crashed the view.
+  // v18.3.2: keyed on `day`, not on `bookings`. A date change that neither
+  // remounts the list nor changes a booking (the week view's day pick; the
+  // WhatsApp inbox opening a booking on its date, three ways) did not run the
+  // effect, so it kept the previous day's statuses and the first status change
+  // on the new day played no wipe (measured on DEV through the week view: 0,
+  // then 1). A save or an undo that moves the date changes `bookings` in the
+  // same render, so those paths were never stale.
   const [, bumpAnim] = useState(0);
   // v18.2.0: the booking whose ⋯ is open (the quick-status card). Up here with
   // the other hooks, above the empty-day early return (the v16.4.0 rule).
@@ -334,8 +342,7 @@ export const ListView = memo(function ListView({
     const m = {};
     day.forEach(function (b) { m[b.id] = b.status; });
     __listPrev = m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookings]);
+  }, [day]);
   function listAnimFrom(id) {
     const a = __listAnims[id];
     return wipeOpen(a, Date.now()) ? a.from : null;
@@ -468,7 +475,7 @@ export const ListView = memo(function ListView({
     const raf = requestAnimationFrame(go);
     const timers = [120, 300, 550, 850].map(function (ms) { return setTimeout(go, ms); });
     return function () { cancelAnimationFrame(raf); clearTimeout(focusRetry); timers.forEach(clearTimeout); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a request, not the selection: every bump sets selectedId in the same batch, and watching it would scroll a card somebody clicked out from under the finger (above)
   }, [focusReq]);
 
   // v17.8.0's empty-day prompt, moved to EmptyDay.jsx in v17.11.0 so Timeline

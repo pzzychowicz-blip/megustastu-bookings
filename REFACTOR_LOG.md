@@ -30000,7 +30000,24 @@ won't-fix.
      minute; each reads `isToday` and `sliderTouched` at that moment. `dayStart` and
      `clampExact` are new functions every render, and listing one would do worse than
      re-run the effect: `reCentre` always sets a new object, so an untouched scrubber on
-     another day would re-render without end.
+     another day would re-render without end. **ListView (two).** The status-change
+     detector, which plays a wipe of a card's old colour, was keyed on `bookings` and
+     read the day's list, and the directive hid a real stale closure: a date change that
+     neither remounts the list nor changes a booking (the week view's day pick, and the
+     WhatsApp inbox opening a booking on its date, three ways) did not run it, so it kept
+     the previous day's statuses and the first status change on the new day played no
+     wipe. Measured on DEV through the week view: 0 wipes, then 1 on the change after;
+     with the fix 1 and 1, and two date picks alone play none. A save or an undo that
+     moves the date changes `bookings` in the same render, so those paths were never
+     stale. The day's list is a `useMemo` on `bookings` and `date`, the effect is keyed
+     on it with no directive, and `tests/wipe-window.test.js` pins both (it fails on the
+     old file). The compiler's `react-hooks/globals` advisory on `__listPrev = m` went
+     with it (lint 64 → 63): it is reported only while the day's list is a plain
+     render-time array, measured both ways. That is not phase 8's silencing, since the
+     purity advisory in the same component is still reported. Kept, with a reason: the
+     focus effect is keyed on `focusReq`, a request; every bump sets `selectedId` in the
+     same batch, and watching the selection would scroll a card somebody clicked out
+     from under the finger.
 7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
    left blinked out in one frame while the ones below slid or jumped up. Two decisions came
    first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)

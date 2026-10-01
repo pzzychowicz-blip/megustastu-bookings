@@ -70,4 +70,14 @@ describe("the wipe window", () => {
       expect(src, f + " must not count the window from the detecting effect").not.toMatch(/until: now \+/);
     }
   });
+
+  // v18.3.2: keyed on `bookings`, the List's detector missed a date change that
+  // changed no booking (the week view's day pick), kept the previous day's
+  // statuses, and the first status change on the new day played no wipe
+  // (measured on DEV: 0, then 1).
+  it("the List's detector follows the day's list, which follows the date", () => {
+    const src = stripComments(readFileSync("src/components/ListView.jsx", "utf8")).join("\n");
+    expect(src, "the day's list must be memoised on the bookings and the date").toMatch(/const day = useMemo\(\(\) => bookings[\s\S]*?\}\), \[bookings, date\]\);/);
+    expect(src, "the detector must be keyed on the day's list").toMatch(/__listPrev = m;\s*\}, \[day\]\);/);
+  });
 });
