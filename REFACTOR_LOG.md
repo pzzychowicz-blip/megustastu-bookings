@@ -30445,6 +30445,12 @@ The ship run's review raised six findings. Each fix is its own commit.
   booking's, so a parked booking write that is later discarded leaves the rule behind.
   Both predate this version.
 
+### Gate
+
+At the ship run: main bundle 123.58 kB gz (v18.3.2: 123.31) · 2293 tests (+48) · lint 0
+errors, 63 warnings (unchanged) · `check:style` OK. No rules change, so no `test:rules`
+run.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
