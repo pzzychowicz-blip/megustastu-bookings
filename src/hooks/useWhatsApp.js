@@ -35,6 +35,9 @@ import { ref, onValue, set, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError } from "../lib/dbError";
 import { EMPTY_FORM } from "../lib/constants";
+// v18.3.4 (/code-review): what an EDIT form opens with, the field table's draft,
+// the same one `openEdit` opens (see the two linked-booking handlers below).
+import { draftFromBooking } from "../lib/booking-fields";
 // lib/day is the app's ONE answer to "what day is it". Hand-rolling it here as
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
@@ -536,15 +539,19 @@ export function useWhatsApp({
     setConfirmCancel(conv.acceptedBookingId);
   }
   // handleOpenLinkedBooking: open the linked booking in the form for editing.
+  // v18.3.4 (/code-review): with `draftFromBooking`, exactly what `openEdit`
+  // opens. This handler and `handleApplyModify` wrote the draft out by hand on
+  // top of EMPTY_FORM, so the form opened with EMPTY_FORM's deposit and voucher
+  // ("") and the booking's stored `customDur` where `openEdit` opens its planned
+  // length: Save, even with nothing changed, wrote "deposit 20→0 €, voucher
+  // ABCD-2345→none", and a completed visit's planned length became its actual
+  // stay. `tests/booking-fields.test.js` now finds every edit opener in `src/`
+  // and fails one that does not open the table's draft.
   function handleOpenLinkedBooking(conv) {
     if (!conv || !conv.acceptedBookingId) return;
     const booking = bookings.find((b) => b.id === conv.acceptedBookingId);
     if (!booking) return;
-    openForm(Object.assign({}, EMPTY_FORM, {
-      name: booking.name || "", phone: booking.phone || "+", date: booking.date || "", time: booking.time || "13:00",
-      size: booking.size || 2, preference: booking.preference || "auto", notes: booking.notes || "", status: booking.status || "confirmed",
-      customDur: booking.customDur || null, manualTables: [], preferredTables: Array.isArray(booking.preferredTables) ? booking.preferredTables.slice() : [], returnOf: null,
-    }));
+    openForm(draftFromBooking(booking));
     setEditId(booking.id); setError(""); setSwapAffected(null);
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setShowForm(true); setViewDate(booking.date || todayStr());
@@ -567,11 +574,10 @@ export function useWhatsApp({
     // A modify request that states a seating area overrides the booking's current
     // preference; otherwise ("auto"/unset) keep what the booking already had.
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
-    openForm(Object.assign({}, EMPTY_FORM, {
-      name: booking.name || "", phone: booking.phone || "+", date, time, size,
-      preference, notes: booking.notes || "", status: booking.status || "confirmed",
-      customDur: booking.customDur || null, manualTables: [], preferredTables: Array.isArray(booking.preferredTables) ? booking.preferredTables.slice() : [], returnOf: null,
-    }));
+    // v18.3.4 (/code-review): the booking's own draft (`draftFromBooking`, as
+    // `openEdit` opens it) with the requested changes on top, so a field the
+    // request does not mention keeps its value — see handleOpenLinkedBooking.
+    openForm(Object.assign(draftFromBooking(booking), { date, time, size, preference }));
     setEditId(booking.id); setError(""); setSwapAffected(null);
     modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };
     setReturnToInboxKey(conv.phoneKey);

@@ -10,6 +10,7 @@ import {
 import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
 import { phoneForSave, NO_CODE_REFUSAL } from "../src/lib/booking-logic";
+import { draftFromBooking } from "../src/lib/booking-fields";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...p), "utf8")).join("\n");
@@ -151,7 +152,11 @@ describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
 
   it("no form is seeded with the Settings prefix any more", () => {
     expect(App).not.toMatch(/phone:[^,}]*generalSettings\.phonePrefix/);
-    expect(App).toMatch(/phone:b\.phone\|\|""/);
+    // v18.3.4: the edit form opens the field table's draft, which is handed the
+    // booking and nothing else, so it cannot seed a prefix.
+    expect(App).toMatch(/openForm\(draftFromBooking\(b\)\)/);
+    expect(draftFromBooking({ name: "Ana" }).phone).toBe("");
+    expect(draftFromBooking({ name: "Ana", phone: "+34 600 111 222" }).phone).toBe("+34 600 111 222");
     expect(App).toMatch(/phone:sourceBooking\.phone\|\|""/);
     expect(App).toMatch(/phone:w\.phone\|\|""/);
     expect(App).toMatch(/EMPTY_FORM,\{date:seedDate,phone:"",/);

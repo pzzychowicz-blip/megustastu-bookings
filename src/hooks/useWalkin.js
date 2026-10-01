@@ -52,8 +52,9 @@ import { READY, DISPATCHED, mayDispatch } from "../lib/submitGuard";
 import { KITCHEN_TABLE_LIMIT } from "../lib/constants";
 import { sameDraft } from "../lib/drafts";
 import {
-  getDur, genId, histEntry, nowTime, getKitchenLoad, walkinRefusal
+  getDur, nowTime, getKitchenLoad, walkinRefusal
 } from "../lib/booking-logic";
+import { walkinBooking } from "../lib/booking-save";
 import { todayStr } from "../lib/day";
 
 // v17.14.0: `showWalkin` is now OWNED BY APP and passed in — it is one entry in
@@ -112,10 +113,12 @@ export function useWalkin({
     // unsaved-changes baseline. See src/lib/submitGuard.js, rule 3.
     walkinGuardRef.current=READY;
   }
-  // doSaveWalkin: actual write. Builds a sanitised booking object with
-  // status:"seated", _manual:true, _locked:true (walk-ins are always
-  // hand-assigned and never reshuffled), and appends it. Also forces
-  // viewDate to today so staff immediately see the new walk-in.
+  // doSaveWalkin: actual write. Appends the walk-in's record — status:"seated",
+  // _manual:true, _locked:true (walk-ins are always hand-assigned and never
+  // reshuffled) — and forces viewDate to today so staff immediately see the
+  // new walk-in. v18.3.4: the record is `walkinBooking` (lib/booking-save.js),
+  // beside the app's other new bookings; the refusals, the write and the close
+  // stay here.
   function doSaveWalkin(){
     // v17.16.0: one open of this form produces at most one walk-in. Same defect
     // and same shape as the booking form's doSave — a walk-in mints its `genId()`
@@ -128,8 +131,7 @@ export function useWalkin({
     const late=closedNow();
     if(late){setWalkinError(late);return;}
     if(!wf.tables||!wf.tables.length){setWalkinError("Please assign tables first.");return;}
-    const t=wf.time||nowTime();const size=Number(wf.size)||2;const dur=wf.customDur||getDur(size);
-    const nb={id:genId(),name:"Walk-in "+getNextWalkinNum(),phone:"",date:todayStr(),time:t,scheduledTime:t,size:size,duration:dur,originalDuration:dur,preference:"auto",notes:wf.notes||"",status:"seated",tables:wf.tables,customDur:wf.customDur||null,_manual:true,_locked:true,history:[histEntry("walk-in created",getUser())]};
+    const nb=walkinBooking(wf,getNextWalkinNum(),todayStr(),getUser());
     saveBookings(function(prev){return prev.concat([nb]);});
     // Armed after the dispatch, on the line that closes the form — the
     // "Please assign tables first" return above leaves it READY.

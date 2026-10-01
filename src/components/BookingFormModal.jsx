@@ -49,8 +49,6 @@ import {
   // v18.0.0 session 8 (item 3): what the form previews must agree with.
   // v18.3.2: `tablesKept` is the save's own question (status OR hand-placed).
   tablesPinned, tablesKept,
-  // v18.3.3: and what the save will say about the tables it keeps.
-  keptRefusal,
   // v18.0.0 session 9: …and the other half of agreeing with it — `doSaveEdit`
   // keeps the tables it has when they are still free for the new window, so the
   // preview has to ask the SAME question with the SAME helper.
@@ -62,6 +60,9 @@ import {
   // v18.2.0 phase 77: any other count and its word, joined the same way.
   countLabel
 } from "../lib/booking-logic";
+// v18.3.3: and what the save will say about the tables it keeps — v18.3.4 moved
+// it beside the save, where it reads the save's own window (`editWindow`).
+import { keptRefusal } from "../lib/booking-save";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";

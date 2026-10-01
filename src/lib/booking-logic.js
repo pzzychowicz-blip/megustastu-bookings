@@ -24,30 +24,23 @@ import {
   hoursFor,
   ZONE_OF,
   PRIORITIES,
-  DUR_TIERS,
   TURN_BUFFER
 } from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
 import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
-// v18.0.0: one voucher-code normaliser, the `normalizePhone` precedent — the
-// issue field, every redemption lookup and `sanitize` must agree on what a code
-// IS, or two spellings resolve to two vouchers. `vouchers.js` imports only
-// `formatDay` from `day.js` (v18.2.0), which imports nothing, so this edge
-// cannot close a cycle — keep it that way: an import from here into either
-// of those two files would.
-// v18.0.0 phase 5: ".js" for the same reason as the two above — this file is now
-// reachable from the serverless functions (api/* → whatsapp.js → customers.js →
-// here), and Node's ESM resolver does not add the extension the way Vite does.
-import { normalizeCode, formatCode } from "./vouchers.js";
 // v18.3.2: the phone rule's two halves, for `phoneForSave`. `phone-countries.js`
 // imports nothing, so this edge cannot close a cycle; ".js" for the ESM chain.
 import { withTypedCode, phoneHasCode } from "./phone-countries.js";
+// v18.3.4: a booking's fields are one table, `BOOKING_FIELDS` (booking-fields.js).
+// What it derives, and the helpers it needed, are re-exported from here so that no
+// import site moved. That file imports only leaves (the voucher normaliser
+// `sanitize` shares with every redemption lookup went with it), so this edge
+// cannot close a cycle; keep it that way. ".js" for the Node ESM chain — this
+// file is reachable from the serverless functions (api/* → whatsapp.js →
+// customers.js → here), and Node does not add the extension the way Vite does.
+import { UNDO_FIELDS, sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone } from "./booking-fields.js";
+export { sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone };
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
-// v16.1.0: default duration reads the DUR_TIERS live binding (settings/
-// bookingDefaults via useBookingDefaults). Seed = the historical literals
-// (≤4 → 90, else 120), so behaviour is unchanged until the setting is edited.
-// Read at call time — never capture DUR_TIERS into a local (live binding).
-export function getDur(s){var ts=DUR_TIERS.tiers||[];for(var i=0;i<ts.length;i++){if(s<=ts[i].max) return ts[i].dur;}return DUR_TIERS.restDur;}
 // v16.1.0: running-late state for a booking. Returns null | "warn" | "noshow".
 // Only a CONFIRMED booking on TODAY whose start time is ≥ warn/no-show minutes
 // in the past qualifies (seated/completed/cancelled never flag). cfg =
@@ -319,107 +312,13 @@ export function padEnd(e){return e+TURN_BUFFER;}
 // Buffered occupancy end of a booking — the drop-in for `toMins(b.time)+(b.duration||90)`
 // at every slot-building site.
 export function bookEnd(b){return toMins(b.time)+((b&&b.duration)||90)+TURN_BUFFER;}
-export function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
 // ── Booking sanitisation / diffing ────────────────────────────────────────────
-// v17.16.5 (CT-2A-03, client half): is this value a time the rest of the app can
-// READ? `sanitize` has always guarded truthiness — `b.time || "13:00"` — and
-// every consumer needs something `toMins` can take apart. The gap between the
-// two is not academic: `toMins` is `t.split(":")` at 83 call sites, so a stored
-// `time: 2000` survives sanitisation (a number is truthy), reaches the first
-// consumer and throws `t.split is not a function`. v17.16.0's error boundary
-// contains that crash; it does not make the day usable. And it is reachable
-// from the server, because v17.16.1's per-field rules deliberately check TYPE
-// and not FORMAT — the two halves of one finding, and this is the client half.
-//
-// The predicate is deliberately the CONSUMER'S requirement rather than a format
-// of its own: readable means `toMins` yields a finite number. That is the
-// narrowest possible guard — a value only stops being kept if it already throws
-// or already produces NaN today — so nothing that currently works can move. The
-// cost of that choice, stated rather than hidden: `":"` reads as 00:00 and is
-// therefore KEPT, because it is not a crash. Times outside the day (`"25:99"`
-// reads as 1599) are kept for the same reason; normalising them would rewrite a
-// record that renders, which is a different decision and not this one.
-export function isReadableTime(v){
-  if(typeof v!=="string") return false;
-  var p=v.split(":");
-  return p.length>=2&&Number.isFinite(Number(p[0]))&&Number.isFinite(Number(p[1]));
-}
-// v17.16.13: `key` is the RTDB child key this row was stored under, and it is
-// the identity of LAST RESORT — `b.id || key || genId()`. It used to be
-// `b.id || genId()` with the key not passed at all, and `sanitizeAll` mapped
-// `Object.values(node)`, which THROWS THE KEY AWAY. So a `/bookings/{key}`
-// child whose stored value carries no `id` field got a brand-new identity on
-// every single read.
-//
-// That is the v17.16.4 block-id defect (CT-2B-06) one collection over, and
-// worse: there a `genId()` mint answered "what read was this" instead of "which
-// block is this" and had to be replaced by a content hash, because a block had
-// no stored identity to recover. A booking HAS one — it is the key — and the
-// code was discarding it two lines above the mint.
-//
-// Measured live against DEV (v17.16.13, three keyless rows left by an earlier
-// rules probe): every read invented ids, the write-diff saw a create, and
-// because `stampForWrite` had no `old` it stamped `baseUpdatedAt: 0` — which
-// the per-$id rule ACCEPTS for a create. So the row landed, the original
-// keyless row was read again, a new id was minted, and the node grew by one
-// booking per pass: `total=538 → 539 → 540 → 541` across four consecutive
-// listener fires, with the reconciliation effect re-placing the phantoms each
-// time. That effect writing forever is what `ROADMAP.md` recorded as an
-// oscillating reconciler; the reconciler was doing its job on data that changed
-// underneath it every read.
-//
-// The key is preferred over a mint and NOT over `b.id`: a row that states its
-// own identity keeps it, which is every row this app has ever written (the app
-// writes `id` inside the object AND uses it as the key, so the two agree). Only
-// a row written by something else — an Admin-SDK backend, a console edit, a
-// probe — reaches the `key` arm, and for those the key is the true identity by
-// definition, since it is the path the write went to.
-export function sanitize(b,key){if(!b||typeof b!=="object") return null;var t=isReadableTime(b.time)?b.time:"13:00";return {id:b.id||key||genId(),name:b.name||"",phone:b.phone||"",date:b.date||"",time:t,scheduledTime:isReadableTime(b.scheduledTime)?b.scheduledTime:t,size:Number(b.size)||2,duration:Number(b.duration)||90,originalDuration:Number(b.originalDuration)||Number(b.duration)||90,preference:b.preference||"auto",notes:b.notes||"",status:b.status||"confirmed",tables:Array.isArray(b.tables)?b.tables:[],customDur:b.customDur||null,_manual:!!b._manual,_locked:!!b._locked,_conflict:!!b._conflict,preferredTables:Array.isArray(b.preferredTables)?b.preferredTables:[],returnOf:b.returnOf||null,history:Array.isArray(b.history)?b.history:[],
-  // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
-  // it survives reads; legacy no-shows (history entry only) are counted by
-  // customers.js isNoShow's history fallback — no migration needed.
-  noShow:!!b.noShow,
-  // v16.3.0: deposit / prepayment amount in € (0 = none). Whitelisted so it
-  // survives reads; per-booking field → covered by the existing per-$id CAS.
-  // Clamped ≥0 (/code-review): the form's min={0} only blocks the stepper —
-  // a typed "-50" would otherwise pass Number() straight through.
-  deposit:Math.max(0,Number(b.deposit)||0),
-  // v18.0.0: the gift voucher attached to this booking, "" for none. Per-booking,
-  // so the existing per-$id CAS covers it — no new node and no rules change for
-  // THIS half of the feature. Normalised on read through the same function the
-  // issue field and every redemption lookup use, so a stored "abcd-2345" and a
-  // stored "ABCD2345" can never resolve to two different vouchers. A row that
-  // needs correcting self-heals on the next save, the way `sanitize` fills every
-  // other gap.
-  voucherCode:normalizeCode(b.voucherCode),
-  // v16.3.0: recurring-occurrence stamps (null for a one-off). recurringId links
-  // to the settings/recurring rule; recurringDate is the occurrence's date. The
-  // generator dedupes on these; doDelete adds recurringDate to the rule's
-  // skipDates so a deleted occurrence is never regenerated.
-  recurringId:b.recurringId||null,
-  recurringDate:b.recurringDate||null,
-  // v17.0.0: "Delete customer" anonymizes instead of deleting — the booking
-  // stays for statistics as name "Data removed" (phone/notes/history wiped,
-  // noShow kept). The flag excludes it from the name-search/autocomplete paths.
-  anonymized:!!b.anonymized,
-  // v17.10.0: the SECOND customer-identity key, for guests who never give a
-  // phone number — `"g"+<seed booking id>`, minted only when a human joins two
-  // phone-less bookings from the name dropdown. Whitelisted so it survives
-  // reads; per-booking field, so the existing per-$id updatedAt CAS covers it
-  // and there is NO new node and no Firebase console step. See
-  // customers.js → identityKey / matchCustomerFor.
-  guestId:b.guestId||null,
-  // v17.6.0: how long the party ACTUALLY stayed, in minutes — written by the two
-  // completion paths ONLY on a real seated→completed transition (App.jsx's
-  // updateStatus + doSave). Whitelisted so it survives reads. 0/absent means
-  // "not known" (a direct confirmed→completed never sets it); read it through
-  // stayedMins() below rather than touching the field directly.
-  stayedMin:Number(b.stayedMin)||0,
-  // v15.5.0: per-booking revision stamp for the per-node write model. Carried
-  // through sanitise so it survives reads (this whitelist would otherwise drop
-  // it) — used by usePersistence's write-diff/stamp + the per-$id Security Rule.
-  updatedAt:Number(b.updatedAt)||0};}
+// v18.3.4: `sanitize`, `diffBooking` and the field set undo compares are derived
+// from one table, `BOOKING_FIELDS` in booking-fields.js, and re-exported at the
+// top of this file; `isReadableTime`, `genId`, `enteredPhone` and `getDur` moved
+// with them. Each field's history (why a read normalises it the way it does) is
+// on its row there.
 export function histEntry(action,user){return {at:new Date().toISOString(),by:user||"staff",action:action};}
 // ── v18.0.0 session 8 (C8): what the save toast is allowed to claim ─────────
 // "Tables re-optimised." was chosen from `optimizerActiveFor(viewDate, …)` —
@@ -460,22 +359,6 @@ export function kitchenRelevant(orig,f,size){
   var backOn=f.status!=="cancelled"&&f.status!=="completed";
   return wasOff&&backOn;
 }
-// ── v18.0.0 session 8 (R5): what counts as a phone somebody ENTERED ─────────
-// Empty, a bare "+", or exactly the untouched prefix seed all mean "no phone" —
-// the prefix is a typing convenience the form puts in the field, not data.
-// App's `cleanPhoneOf` has applied that rule on the SAVE path since v17.0.0.
-// `diffBooking` applied HALF of it to one side ("+" only) and NONE of it to the
-// other, so a booking with no stored phone, opened in a form that seeds "+34"
-// into the field, differed from itself on every save: history recorded "phone
-// none→+34" and the Undo pill was armed for a change that never happened, while
-// the stored phone stayed "". Measured live 2026-09-11: 4 of 4 ordinary edits.
-//
-// One rule, one place, both callers — and `phonePrefix` has to be passed in
-// because it is a restaurant SETTING and this module reads no settings.
-export function enteredPhone(p,prefix){
-  var t=p==null?"":String(p).trim();
-  return (t===""||t==="+"||t===prefix)?"":t;
-}
 // ── v18.3.2: the phone rule, for every door that stores a TYPED number ──────
 // ROADMAP #13's small half (v18.2.0's /code-review). `doSave` and
 // `addFormToWaitlist` each ran `withTypedCode` and then refused a number with no
@@ -492,7 +375,6 @@ export function phoneForSave(phone,pinned,prefix,untouched){
   const ph=enteredPhone(out,prefix);
   return {phone:out,refusal:(!untouched&&ph&&!phoneHasCode(ph))?NO_CODE_REFUSAL:null};
 }
-export function diffBooking(orig,f,size,phonePrefix){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=enteredPhone(orig.phone,phonePrefix);var formPhone=enteredPhone(f.phone,phonePrefix);if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var origVou=normalizeCode(orig.voucherCode);var formVou=normalizeCode(f.voucherCode);if(origVou!==formVou) ch.push("voucher "+(origVou?formatCode(origVou):"none")+"→"+(formVou?formatCode(formVou):"none"));var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 // v17.16.13: the keyed-object arm walks ENTRIES, not values, so each row can be
 // told the key it was stored under. `.map(sanitize)` was also passing the array
 // INDEX as sanitize's second argument all along — harmless while sanitize took
@@ -1414,50 +1296,9 @@ export function handKeptRefusal(list,date,id,blocks){
   const locked=pinnedClashParties(list,date,id).locked;
   return locked.length?pinnedClashRefusal(locked[0]):null;
 }
-// ── v18.3.3: what Save will say about tables it keeps, asked BEFORE Save ────
-// The form previewed a kept booking's tables as fine (`tablesKept`), and Save
-// then refused them when a locked or seated party, or a table block, held one
-// in the new window: `handKeptRefusal` for a booking placed by hand, the
-// locked-clash refusal for one saved as seated. The preview and the save
-// disagreeing is the defect `tablesKept` was written to end (v18.3.2's
-// /code-review left this half on the ROADMAP).
-//
-// This is the save's question asked of the day as it stands, with the draft's
-// window applied to the booking and its tables kept. No optimiser pass: the
-// save's pass moves neither a locked party nor a block, which are the only
-// things these refusals name, so they read the same before it as after it. The
-// window is the save's: the plan length when the form changed it, otherwise
-// the stored one, and an un-seat's restored start. A hand-kept booking is asked
-// only when the window moved (`recheck` in `doSaveEdit`); a seated one always,
-// as `doSaveEdit` asks it. Seating a booking (it was not seated) is left out:
-// the seat-clash prompt asks about that table before any save. So is a seated
-// booking moved to another date: Save refuses that first, on the Date field.
-export function keptRefusal(list,orig,draft,blocks){
-  if(!orig||!draft) return null;
-  var size=Number(draft.size)||2;
-  var hand=keepsHandTables(orig,draft);
-  var seated=draft.status==="seated"&&orig.status==="seated"&&draft.date===orig.date;
-  if(!hand&&!seated) return null;
-  var formPlan=draft.customDur||getDur(size);
-  var planChanged=formPlan!==(orig.originalDuration||orig.duration||90);
-  var time=draft.time,dur=planChanged?formPlan:(orig.duration||90);
-  var timeUntouched=draft.time===orig.time&&draft.date===orig.date;
-  var unseat=(orig.status==="seated"&&(draft.status==="confirmed"||draft.status==="pending")&&timeUntouched)?unseatRestore(orig,size):null;
-  if(unseat){time=unseat.time;if(!planChanged) dur=unseat.duration;}
-  var revived=(orig.status==="cancelled"||orig.status==="completed")&&draft.status!=="cancelled"&&draft.status!=="completed";
-  if(hand&&!(draft.time!==orig.time||planChanged||revived||!!unseat)) return null;
-  var day=(list||[]).map(function(b){
-    return b.id===orig.id?Object.assign({},b,{time:time,duration:dur,status:draft.status,tables:orig.tables}):b;
-  });
-  if(hand) return handKeptRefusal(day,draft.date,orig.id,blocks);
-  // v18.3.3 (/code-review): a seated party that has outgrown its tables is
-  // refused before its clashes, in `doSaveEdit`'s order. Left out, a party of 2
-  // edited to 6 previewed table 3 as fine and Save refused it.
-  var fit=seatedFitRefusal(size,orig.tables);
-  if(fit) return fit;
-  var locked=pinnedClashParties(day,draft.date,orig.id).locked;
-  return locked.length?pinnedClashRefusal(locked[0]):null;
-}
+// v18.3.4: `keptRefusal`, what Save will say about tables it keeps, asked before
+// Save, moved to lib/booking-save.js, where it reads the save's own window
+// (`editWindow`) instead of a copy of it.
 // C3: seating never asked whether the table still had somebody at it. The two
 // parties then hold the same table with both bookings `isLocked`, which is the
 // one clash `applyOpt` cannot separate and the reconciler deliberately leaves
@@ -1710,13 +1551,10 @@ function computeAfterAction(synced,date,blocks,changedId,forceReassign,autoOptim
 // bookings that `next` changed or removed; `applyUndo` puts them back. Both are
 // pure so the contract is unit-tested.
 //
-// The compared field set is deliberately explicit: `updatedAt`/`baseUpdatedAt`
-// are per-write metadata (a server echo must not read as a change), and
-// `history` grows on every write so comparing it would mark everything changed.
-var UNDO_FIELDS=["name","phone","date","time","scheduledTime","size","duration",
-  "originalDuration","customDur","preference","notes","deposit","voucherCode","status","noShow",
-  "tables","_manual","_locked","_conflict","preferredTables","returnOf",
-  "recurringId","recurringDate","anonymized"];
+// The compared field set is the table's (v18.3.4): `UNDO_FIELDS` is every row of
+// `BOOKING_FIELDS` (booking-fields.js) marked `undo`, and each row that is not
+// says why on its own line — `updatedAt` is per-write metadata (a server echo
+// must not read as a change), `history` grows on every write.
 // v17.10.2 (/code-review): the separators are ASCII control characters, not "|"
 // and "+". Those were reachable FROM THE DATA — a table id only has to avoid
 // "|" (`idOk` in LayoutSettings.jsx), so a venue naming a joined table "1+2"

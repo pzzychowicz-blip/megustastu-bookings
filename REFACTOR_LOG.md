@@ -30459,3 +30459,499 @@ run.
 | 3 | Android tablet | After closing time, Walk-in → Seat: "It's past closing — walk-ins can't be seated now." and nothing is written |
 | 5 | Android tablet | Drag a booking onto a table, give another booking on that table a lock (Assign), then move the first one's time onto it: the availability line says "Table N is also held by …" in amber before Save |
 | 6 | Android tablet | List view: delete a card through ⋯ and its confirm, and cancel another. Each folds all the way to nothing and the cards below follow it up, with no cut at the end (v18.3.2's 3px) |
+
+
+## v18.3.4 — one field table for a booking
+
+**Date:** 2026-10-01 · **Branch:** `refactor/v18.3.4-booking-field-table` ·
+**Behavioural change:** one, from the `/code-review` (below): a booking opened from the
+WhatsApp inbox opens with its deposit and its voucher, so Save no longer wipes them.
+Nothing else: `tests/save-path.test.js` (phase 1) is the proof, since none of its
+snapshots moves after the commit that took them: all 97 inline snapshots, extracted
+from the file at phase 1 and at the last phase and compared, are identical, and the
+file's other changes are the harness's wiring.
+
+ROADMAP #13, as v18.3.3 left it. A booking's fields are written out by hand in eight
+places: `sanitize`, `UNDO_FIELDS` and `diffBooking` (`booking-logic.js`); `openEdit`,
+`doSaveNew`, `doSaveEdit` (355 lines) and the weekly generator (`App.jsx`); and the
+walk-in (`useWalkin.js`). A field missing from one of them is silently wiped or never
+written, which is how v18.0.0 lost `voucherCode` with every test passing. The only
+guard was a grep pairing `deposit:` with the new field, blind to `useWalkin.js`. And
+v18.3.3 added a ninth copy of the edit's window: `keptRefusal` recomputes the plan
+length, the un-seat restore and the revival on its own. It is also #17's first
+domain, since the save path leaves `BookingApp`.
+
+Scope (Patryk, 2026-10-01): #13 only, with no behaviour change. The two "Repeat weekly"
+findings stay on the ROADMAP. The characterization tests run App's own code. One table
+derives the field lists, the builders stay explicit code checked against it by a test,
+and every save writes exactly the fields it writes today.
+
+### Phases
+
+1. **Characterization first: the save path, run as it is.** No test could call the
+   code this version moves: it is closures inside `BookingApp` and `useWalkin`, and the
+   suite has no DOM on purpose. `tests/save-path.test.js` lifts the functions out of the
+   comment-stripped source: `doSave`, `doSaveEdit`, `doSaveNew`, `openEdit`, their App
+   helpers, `doSaveWalkin`, and the generator's effect callback, found by its
+   `dueOccurrences(` marker. It compiles them in one scope that binds the names their
+   file imports from `src/lib/` (the same module objects) plus recorded stubs for the
+   React half. **Every free name must be bound before anything runs**: ESLint's own
+   `no-undef` lists them, so a stub that goes missing fails the compile, not just the
+   scenario that reaches it, and a stub nothing reads fails too. The clock is frozen at
+   local times with TZ set to the restaurant's zone, and `Math.random` is a counter, so
+   ids and history stamps are reproducible.
+
+   103 tests. 97 are inline snapshots covering:
+   - `doSave`'s refusals and prompts;
+   - edits on a day the optimiser owns, and today after the cutoff;
+   - seat, complete and un-seat;
+   - hand-placed tables, Clear and the swap;
+   - new bookings, including Book Again, Repeat weekly, guest seeds, the waitlist and
+     a held write;
+   - `openEdit`, the walk-in and the generator;
+   - the three field lists, pinned by behaviour: `sanitize`'s 29 keys in order, which
+     fields undo and the reconciliation signature compare, and each `diffBooking`
+     clause.
+
+   Each snapshot records every call in order with its arguments, and the rows the write
+   would touch. A created row is one line of JSON in its own key order (`contentKey` is
+   order-sensitive); a changed row is listed field by field. Each also records the
+   v15.7.0 replay contract: the same `prev` returns the same object, and a fresh one
+   gives an equal result. Every snapshot was reviewed against the source as it was
+   written.
+
+   **The harness was mutation-tested before it was trusted.** Five plausible slips were
+   applied to v18.3.3 one at a time and the file went red on each:
+   - the edit write losing `voucherCode` (2 failures);
+   - the new booking's `deposit` and `voucherCode` keys swapping places (14);
+   - the walk-in losing `_locked` (2);
+   - `openEdit` dropping `guestId` (4);
+   - the generator's history author changing (3).
+
+   **Three findings, recorded and not fixed (the scope is no behaviour change):**
+   - A form walk-back from a no-show keeps `noShow: true`, so the guest's no-show count
+     includes a visit that happened. Found by reading during planning; a scenario now
+     pins it.
+   - The generator writes an occurrence it creates for today after the 15:00 cutoff
+     with `tables: []` and `_conflict: false`. `bookingsAfterAction` takes the
+     optimiser-off branch, and with no `changedId` that branch copies every row as it
+     is.
+   - An edit saved after another device deleted that booking flashes as saved, writes
+     nothing for it, and re-places the rest of its day.
+
+2. **The table: `src/lib/booking-fields.js`.** `BOOKING_FIELDS` has one row per stored
+   field (29) in `sanitize`'s key order, which is the stored key order (`contentKey` is
+   order-sensitive), so rows are appended and never reordered. Each row says three
+   things:
+   - **`read`**: how a read normalises the field;
+   - **`undo`**: whether undo and the reconciliation's day signature compare it. Each
+     `false` row gives its reason (identity, the history that grows on every write,
+     per-write metadata, a join, the stay that only completion writes);
+   - **`clause`**: its clause in the edit's history line, at a position of its own,
+     because that line has always ordered its clauses differently. Clear's clause sits
+     on `_manual`, which Clear resets, and the hand-picked tables' clause on `tables`.
+
+   `sanitize`, `UNDO_FIELDS` and `diffBooking` are derived from the table. Each
+   field's comments (the v17.16.13 key, v17.16.5's readable time, deposit, voucher,
+   guest id …) moved onto its row. The four helpers the rows read (`getDur`, `genId`,
+   `isReadableTime`, `enteredPhone`) moved too, and `booking-logic.js` re-exports all
+   of it, so no import site changed. The new file imports only `constants` and
+   `vouchers`; `booking-logic.js` no longer imports `vouchers`.
+
+   **`UNDO_FIELDS` now follows the table's order.** That is safe because the key is
+   only ever compared with another built the same way, and every value is escaped
+   against the separators. **The proof of byte-identity is a fuzz, not the
+   snapshots alone:** v18.3.3's `sanitize` and `diffBooking` were compiled from git
+   HEAD beside the new ones and compared on 100,000 random rows each (garbage types,
+   absent and `undefined` keys, NaN sizes, both prefixes): 0 differences, and the same
+   24 compared fields. The characterization snapshots did not move. `api/CLAUDE.md`'s
+   ESM-chain sentence names the new file, and the `phone-countries.js` edge it had
+   missed since v18.3.2.
+
+3. **`draftFromBooking`: the edit form's draft, from the table.** `openEdit` built its
+   draft field by field, and that is the copy where a missing field does the most
+   damage: the form opens without it and Save writes the gap, wiping it from every
+   booking anybody edits. Each row the form edits now carries a **`draft`** seed at a
+   position of its own (the draft has always had its own order; `sameDraft` ignores it,
+   the snapshots do not), and `openEdit` opens `draftFromBooking(b)`. Three entries
+   belong to the form rather than to storage:
+   - `tables` seeds `manualTables` (`as`), because the form sends the tables picked by
+     hand and never `tables` itself;
+   - `returnOf` seeds null, because only Book Again sets it;
+   - `guestId` seeds itself and `guestSeed`, the booking a join stamps in the same
+     write.
+
+   Byte-identity is proven by a fuzz: v18.3.3's literal beside `draftFromBooking` on
+   200,000 random rows, raw and sanitized (400,000 comparisons): 0 differences in key
+   order, value or type, and the `preferredTables` copy never aliases the booking's
+   array. The `openEdit` snapshots did not move. `booking-logic.test.js` grepped
+   `openEdit`'s literal for `voucherCode`; it now checks the wiring
+   (`openForm(draftFromBooking(b))`) and the draft itself. Deleting the voucher row's
+   seed fails that test and four characterization tests. CLAUDE.md's "A new per-booking
+   FIELD" row says where a field goes now (phase 8 rewrites it with the guard).
+
+4. **`applyEdit` and `editWindow`: the edit's save as a plan (`src/lib/booking-save.js`).**
+   `doSaveEdit`'s decisions moved out of `BookingApp` verbatim apart from where the
+   values come from, with the comments that explain each rule. `applyEdit(input)`
+   returns either the refusal Save shows (`{message, field}`, in the same order; `field`
+   only for the date) or the plan:
+   - `next`, the replayable transform, memoised by `prev` identity;
+   - `fin`;
+   - `changed`, the undo gate;
+   - `flash` and `seatNote`.
+
+   App's `doSaveEdit` keeps the effects, in their old order: dispatch, the WhatsApp
+   completion, the toast, the undo, the guard, the close, the seat note. `memoByPrev`
+   moved with it, and App's delete and cancel transforms import it.
+
+   `editWindow(orig, draft)` is the part of the window that doesn't need the clock: the
+   planned length, `needsR`, the un-seat restore, the revival, `recheck`, and the time,
+   length and scheduled time the save writes. The seat shift and the completion's
+   truncation stay in `applyEdit`, layered on top. Each of the three needs a different
+   status, so moving the un-seat ahead of the other two cannot change a value, and the
+   snapshots confirm it. `applyEdit` reads the size, phone and hand-picked tables from
+   the draft itself, so `doSave` no longer passes them; the edit never used its `v`.
+   Two things are deliberately unchanged:
+   - `getUser` is asked as each history entry is made, including the seat-shift entry
+     inside `next` on every replay;
+   - the completion reads the wall clock at Save, while the seat shift reads App's
+     `nowMins`.
+
+   **Tests.** The characterization snapshots did not move. Seven checks read the moved
+   source:
+   - Five in `booking-logic.test.js` now run `applyEdit`. They cover the clash
+     re-placement gated on `recheck` with the optimiser off, `recheck`'s three routes,
+     a hand-placed booking keeping its tables through a time change, the hand-kept
+     refusal only when the window moved, and the edit writing `voucherCode`.
+   - The two wiring checks read the wrapper: both views passed as parameters, and the
+     toast's note (`seating-preference.test.js`).
+
+   The `deposit:`/`voucherCode:` pairing scan reads `booking-save.js` too, and the
+   count-label records list follows the un-seat entry. Five sabotages of
+   `booking-save.js` were each caught:
+   - gating on `needsR` (1 failure);
+   - `recheck` narrowed to `needsR` (4);
+   - `pinned` as `tablesPinned` (6);
+   - the hand refusal ungated (1);
+   - the edit write without `voucherCode` (4).
+
+   **On DEV**, one booking through the edit form, each save read back from the
+   database:
+   - its notes edited;
+   - seated early (the seat shift, 21:00 → 19:03);
+   - un-seated: time and length restored, 19:03 → 21:00 and 207 → 90 min;
+   - completed, revived to confirmed, and completed again.
+
+   Each history line read as before, and the console had no error. Bundle: the entry
+   grew 0.59 kB gz.
+
+5. **`keptRefusal` reads the save's window.** v18.3.3's preview of Save's refusal kept
+   its own copy of the window: the plan length, the un-seat restore and the revival.
+   It now reads `editWindow`, and it moved to `booking-save.js` beside the save it
+   previews. `BookingFormModal` imports it from there. `booking-logic.js` does not
+   re-export it, because `booking-save.js` imports `booking-logic.js` and the
+   re-export would close a cycle.
+
+   Its moved-window test keeps its exact terms: `recheck` less the Clear term.
+   - A hand-kept draft has changed nothing else `needsR` reads.
+   - A Clear is never kept, and the form asks only when `tablesKept`.
+
+   So the function answers as it did for every draft. The proof is a fuzz of the old
+   function against the new one on 100,000 random days, drafts and blocks: 0
+   differences, and 2,842 of the answers were refusals.
+
+   The `keptRefusal` tests compared the preview with a hand-built copy of the save's
+   path (`bookingsAfterAction`, then `handKeptRefusal`). They now run the save itself
+   (`applyEdit`), and they gained the cases that copy couldn't express:
+   - Save's date refusal on a seated booking;
+   - the fit refusal;
+   - two drafts that don't keep their tables.
+
+   Bundle: the entry grew 0.15 kB gz while the shared `atoms` chunk, where
+   `booking-logic.js` lives, shrank 0.23 kB gz. The function changed chunks, and the
+   total is 0.33 kB raw smaller.
+
+6. **`buildBooking`: the new booking's save as a plan.** `doSaveNew`'s decisions moved
+   beside `applyEdit`, the same way. `buildBooking(input)` returns `{refusal}` or
+   `{next, fin, id, rule, flash}`:
+   - `id` is minted once, so a replay cannot add the booking twice;
+   - `rule` is the standing rule "Repeat weekly" creates. App writes it after the
+     refusals and before the booking, as v18.3.3 ordered it, and a refused save has
+     no rule at all.
+
+   Its `genId` and `getUser` calls run in `doSaveNew`'s order, because the ids and
+   history stamps depend on it. `doSave` stopped computing the cleaned phone and lost
+   its `v` argument: both saves read the draft themselves.
+
+   **Tests.** The characterization snapshots did not move. The harness's
+   module-binding self-test names the imports the lifted code still has (`applyEdit`,
+   `buildBooking`, `draftFromBooking`). Four checks read `doSaveNew`'s source:
+   - three now run `buildBooking`: the create writing `voucherCode`, the first
+     occurrence stamped with the rule's id, and the rule's `startDate`;
+   - the toast's zone note reads the plan and both wrappers.
+
+   A new check says a refused save returns no rule. The order checks still read the
+   wrapper. Five sabotages were each
+   caught:
+   - the create without `voucherCode` (16 failures);
+   - the first occurrence unstamped (2);
+   - the rule without `startDate` (2);
+   - the displacement refusal removed (1);
+   - the rule written before the refusal check (1).
+
+   **On DEV** (the worktree's dev server, 2026-10-01), each save read back from the
+   database:
+   - a new booking, placed on 1B, and a pending one ("Save pending", table 2);
+   - Book Again from a completed booking. The new booking's history reads "created
+     via Book Again (from v1834 smoke on 2026-10-01 at 21:00)", it carries `returnOf`
+     and the source's `guestId`, and the source gained "Book Again → new booking on
+     2026-10-02 at 21:00";
+   - Repeat weekly, Thursday 2026-10-08 at 19:00. The rule was written with
+     `startDate` 2026-10-08 and weekday 4, and the form's booking carries its id as
+     `recurringId`. The generator then made only the 15th's occurrence, not a second
+     one on the start date. The rule was paused in Settings afterwards.
+
+   No error in the console after a reload. Bundle: the entry grew 0.02 kB gz.
+
+7. **`walkinBooking` and `occurrenceBooking`: the app's other two new bookings.** The
+   walk-in's Seat (`useWalkin`'s `doSaveWalkin`) and the weekly generator (App's
+   effect) built their records inline. Both records now sit in `booking-save.js` beside
+   the form's two saves, moved verbatim. A script compared each literal with the
+   original after mapping the renamed inputs: identical. The callers keep everything
+   around the records:
+   - the walk-in keeps the commit-once guard, the closing-time and no-table refusals,
+     the write (`prev.concat([nb])`, which `submit-guard.test.js` reads) and the
+     close;
+   - the generator keeps which occurrences are due, the existence check and the
+     optimiser pass, and still builds each record inside its transform, so the
+     history stamp is taken when it was before.
+
+   `occurrenceBooking` owns the deterministic `r<rule>_<date>` id, and CLAUDE.md's row
+   on recurring ids now names it.
+
+   **Tests.** The characterization snapshots did not move. The harness's
+   module-binding self-test now checks that the lifted walk-in and generator bind the
+   very `walkinBooking` and `occurrenceBooking` the lib exports. Five sabotages were
+   each caught:
+   - the walk-in not `_locked` (2 failures);
+   - the walk-in dropping its typed length (1);
+   - the occurrence id with another separator (3);
+   - the occurrence authored by "staff" (3);
+   - the occurrence without `recurringDate` (3).
+
+   **On DEV**, read back from the database:
+   - A walk-in seated on table 3 with a longer length and a note. "Walk-in 2" was
+     written with exactly the literal's 17 keys plus the write path's two stamps,
+     `customDur`, `duration` and `originalDuration` all 105, and "walk-in created" by
+     the signed-in account.
+   - A Repeat weekly booking starting Saturday the 3rd. The generator wrote the 10th's
+     occurrence, `r<rule>_2026-10-10`, by "auto", stamped and placed by the optimiser.
+     A rule starting Friday the 9th wrote nothing, since the next Friday is past the
+     two-week horizon.
+
+   Both rules were paused afterwards. No new console error. Bundle: the entry is
+   0.02 kB gz smaller.
+
+8. **The guard: `tests/booking-fields.test.js`.** The table derives the read, undo, the
+   history line and the draft, but the four builders that write a booking stay
+   explicit code (Patryk's call), so this file checks each of them against the table:
+   - **An unchanged edit rewrites nothing but its history.** The fixture holds a value
+     of its own in every field, none of them an empty row's default (`_conflict`
+     alone, which the save derives). Saving what `draftFromBooking` opens with must
+     keep every field in the table's key order, add one "edited: saved (no field
+     changes)", and arm no undo. That is the round trip that catches the wipe: a
+     field the draft does not carry comes back changed, named in history, and
+     undoable.
+   - **A field the form edits is written by both saves.** One entry per key of the
+     form's draft, each changed alone. The edit and the create must store it (the
+     voucher normalised, the hand-picked tables as `tables`), apart from two keys
+     that name their reason: `returnOf`, which an edit never writes, and
+     `guestSeed`, which names another booking. `EMPTY_FORM` must hold every draft
+     key, plus `repeatWeekly` alone.
+   - **No builder writes a key outside the table or `undefined`.**
+   - **Each create builder writes every row or names it, with the reason.**
+     `buildBooking` leaves out four, `walkinBooking` twelve, `occurrenceBooking` five.
+   - The table names each field once, and no two clauses or draft seeds share a
+     position.
+
+   It replaces the `deposit:`/`voucherCode:` scan in `booking-logic.test.js`, which
+   knew one pair of fields, could not see the walk-in, and by now found no line in
+   App at all. Ten sabotages were each caught:
+   - the voucher row losing its draft seed (5 failures);
+   - the edit not writing `voucherCode` (1);
+   - the create not writing it (2);
+   - a new stored row decided nowhere (5);
+   - a new form field the saves don't write (7);
+   - the deposit seed opening empty (3);
+   - the walk-in writing `undefined` (2);
+   - the occurrence writing a key outside the table (1);
+   - two clauses at one position (1);
+   - `EMPTY_FORM` without `voucherCode` (1).
+
+   CLAUDE.md's "A new per-booking FIELD" row now says one row plus this guard, where
+   it said eight places. `tests/CLAUDE.md` names both v18.3.4 guards, and says the
+   characterization snapshots are never updated with `-u`.
+
+9. **ROADMAP.** #13 is deleted, since it shipped. #17 records that the save path went
+   first (`App.jsx` 5,727 → 5,340 lines), with recurring generation next. A new entry
+   holds the three behaviours phase 1 pinned and left. GLOSSARY and DESIGN don't change:
+   nothing new appears on screen.
+
+### On DEV, at the end
+
+Run on the final code (the worktree's dev server, 2026-10-01), each save read back from
+the database:
+- **A booking placed on table 4 by hand**, through the edit form's picker (`_manual`,
+  `_locked`), then saved unchanged. History reads "edited: saved (no field changes)"
+  and no Undo is offered: the guard's round trip, on the real save.
+- **Its time moved 20:00 → 20:30.** It kept table 4 ("edited: time 20:00→20:30").
+- **A party locked to table 4 at 18:00**, with tables picked in the new-booking form,
+  then the first booking moved to 18:30. Before Save the form read "Table 4 is also
+  held by v1834 lock at 18:00, who is locked to it. Assign different tables.". Save
+  refused with the same sentence and wrote nothing. This is phase 5's preview agreeing
+  with the save.
+- No console error.
+
+A drag on the timeline did not register through the Browser pane: the
+measurement-traps skill's drag trap. The picker writes the same `_manual`/`_locked`
+pair, so it stood in. The walk-in and the generator were run after phase 7, and
+nothing they call has changed since.
+
+### `/code-review`
+
+Run at max effort over the branch diff, inline. Seven findings, each checked before it
+was acted on. The confirmed ones in this version's scope are fixed, each in its own
+commit; the others are deferred to the ROADMAP; none was disproved.
+
+1. **WhatsApp's two edit doors wiped a booking's deposit and voucher (fixed).**
+   `useWhatsApp.js` opens the edit form from the inbox's linked-booking card
+   (`handleOpenLinkedBooking`) and from Apply changes on a modify request
+   (`handleApplyModify`). Both built the draft by hand on `EMPTY_FORM`, so it had no
+   deposit and no voucher, and it carried the stored `customDur` where `openEdit` opens
+   the planned length. Phase 8's guard could not see either door: it checks what
+   `draftFromBooking` opens, and these never called it. The bug predates this version
+   (both doors date from v18.0.0 phase 5a, `ef243f9`). It is fixed here because this
+   version's guard and CLAUDE.md row said the class was closed.
+
+   Confirmed by running `applyEdit` on the hand-built draft of a booking holding deposit
+   20 and voucher ABCD2345. An unchanged Save stored deposit 0 and voucher "", history
+   read "edited: deposit 20→0 €, voucher ABCD-2345→none", and Undo was armed. A
+   seated-then-completed visit opened the same way saved "duration 90→47min".
+
+   Both doors now open `draftFromBooking(booking)`; the modify door lays the request's
+   date, time, size and preference on top.
+
+   **The guard now finds every edit door.** In each `src/` file that calls `openForm(`,
+   it finds every `setEditId(<id>)` other than `null` and requires the nearest
+   `openForm(` above it to open `draftFromBooking`. It finds three doors (App's
+   `openEdit` and the two WhatsApp doors), and it fails if that number moves, so a
+   fourth door gets looked at. Against the code before the fix it failed, naming both
+   WhatsApp doors.
+
+   **On DEV**: a draft accepted from a conversation was saved with deposit 20 and a
+   note. Open booking showed deposit 20. Save with nothing changed kept deposit 20, and
+   history reads "edited: saved (no field changes)". CLAUDE.md's field row and
+   GLOSSARY's form-handoff rule name the two doors.
+
+2. **The guard did not check that an edit says what it changed (fixed).** It checked
+   that a field the form edits is stored, but not that changing it alone names it in
+   the history line and arms Undo. A row with no `clause`, or with `undo: false`,
+   passed every test, while an edit of that field read "saved (no field changes)" and
+   offered no Undo. Each change in `CHANGES` must now set `changed`, name itself in
+   history, and leave an Undo snapshot of the booking. The snapshot is measured
+   against the same draft saved unchanged: on the optimiser's day every save
+   re-places the booking (3 → 1A in the fixture), so against the stored row the
+   tables alone would arm one. `guestId` is the one field marked `quiet`, with the
+   reason: a join on its own has always been neither named nor undone, and its row
+   says so.
+
+   Three sabotages of the table, each caught by one test: the `notes` row without its
+   clause, the `deposit` row with `undo: false`, and a clause added to `guestId`. The
+   guard as it stood passed the first two.
+
+3. **The swap release was written out three times (fixed).** When the table picker's
+   Swap takes tables from a party, that party keeps the rest of its tables and is
+   unlocked so the optimiser can place it again. `applyEdit` and `buildBooking` each
+   wrote this out byte for byte, and the search for the shape found a third copy in
+   App's `manualAssign` (the picker's Swap outside the form). All three call
+   `releaseSwapped(b, affected)` in `booking-save.js` now. The characterization
+   snapshots did not move. `manualAssign` had no test at all, so `booking-logic.test.js`
+   runs the helper and checks that `manualAssign` calls it. Keeping `_manual` in the
+   helper fails three tests: the new one and both swap scenarios in
+   `save-path.test.js`.
+
+4. **The displacement refusal was written out twice (fixed).** "Which parties that
+   held tables does this save leave with none" and its sentence were near-copies in
+   the two saves, so a change to the rule in one would have left the other asking the
+   old question. They are `displacedBy(before, fin, date, id)` and
+   `displaceRefusal(what, kicked)` now, and each save passes its own words ("this
+   change", "adding this booking"). One input differs, and was kept: the edit measures
+   "held tables" on the list as it was, the create on `applyBase`'s result, which has
+   a swap's release applied. The difference cannot show, because a swap always comes
+   with tables picked by hand (every Clear resets it), and neither save asks the
+   question then. Both displacement snapshots stayed the same. A helper that finds
+   nobody fails both of them, and so does a sentence that is always plural.
+
+5. **`booking-fields.js` gave the wrong reason for importing only leaves (fixed).**
+   Its header said `booking-logic.js` reads `UNDO_FIELDS` at module scope. It doesn't:
+   it reads it only inside `undoKey`, at call time, and a scan of its top level finds
+   no read of this file. So a reader trusting the comment would expect a back-edge to
+   fail at load today, and it wouldn't. What makes one dangerous is the next
+   module-scope read added on either side, which the header now says, along with
+   where the reads actually are. Comment only.
+
+6. **WhatsApp's form doors skip App's (deferred to the ROADMAP).** Accept and the two
+   edit doors open the form with `openForm`/`setEditId` and skip the rest of
+   `openNew`/`openEdit`. That leaves out the `bookingCreate`/`bookingEdit` gate, which
+   no rule enforces, and the `pendingWaitlistRef` reset, so a waitlist entry booked
+   and then abandoned is removed by the next WhatsApp draft's Save. Confirmed by
+   reading both paths. It predates this version and changes behaviour, and whether
+   Accept needs `bookingCreate` is Patryk's call: the inbox takes no capability, by
+   his decision in v18.0.0.
+
+7. **`sanitize` is slower as a loop over the table (deferred to the ROADMAP).**
+   Measured in Node on this Mac with 3,000 bookings: 0.35 ms a pass in v18.3.3, 1.4–2.3
+   ms now (`JSON.parse` of the same node takes 2.9 ms). The 29 `read` closures share
+   one call site. One call site per row measured 0.48 ms, but writes the key order
+   out a second time, the copy this version exists to remove, and the CSP forbids
+   compiling one with `new Function`. The tablet was not measured. It is ROADMAP #3's
+   question, how big `/bookings` actually is.
+
+### Gate
+
+Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
+at their commits; v18.3.3 and phases 1–5 were re-measured from a clean copy of each
+commit (`git archive`).
+
+| Commit | Bundle | Tests | Lint | Style |
+|---|---|---|---|---|
+| v18.3.3 (`504aba1`) | 123.58 kB | 2293 | 0 errors, 63 warnings | OK |
+| phase 1 | 123.58 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 2 | 123.58 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 3 | 123.56 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 4 | 124.15 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 5 | 124.30 kB | 2396 | 0 errors, 63 warnings | OK |
+| phase 6 | 124.32 kB | 2397 | 0 errors, 63 warnings | OK |
+| phase 7 | 124.30 kB | 2397 | 0 errors, 63 warnings | OK |
+| phase 8 | 124.30 kB | 2444 | 0 errors, 63 warnings | OK |
+| `/code-review` 1 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
+| `/code-review` 2 | 124.24 kB | 2446 | 0 errors, 63 warnings | OK |
+| `/code-review` 3 | 124.21 kB | 2449 | 0 errors, 63 warnings | OK |
+| `/code-review` 4 | 124.22 kB | 2449 | 0 errors, 63 warnings | OK |
+| `/code-review` 5 | 124.22 kB | 2449 | 0 errors, 63 warnings | OK |
+
+The entry grew 0.72 kB gz in all, nearly all of it in phase 4, as the edit's save left
+App. No rules change, so no `test:rules` run.
+
+### Check on the devices after merge
+
+Nothing should look or behave differently apart from the WhatsApp row. The other rows
+are the flows whose code moved.
+
+| Phase | Device | Check |
+|---|---|---|
+| 4 | Android tablet | Seat a booking from its edit form ahead of its time: the time moves to now and history reads "seated early: time adjusted …". Un-seat it from the form and the booked time and length come back |
+| 4, 5 | Android tablet | Move a booking placed by hand (dragged) to another time: it keeps its tables. Move it onto a party locked to the same table: the amber line names that party before Save, and Save says the same |
+| 6 | Android tablet | Book Again from a completed booking: the new one reads "created via Book Again (from …)", the source "Book Again → new booking on …" |
+| 7 | Android tablet | A walk-in during service: "Walk-in N", seated on the tables picked |
+| `/code-review` 1 | Android tablet, if the WhatsApp module is on | Open a booking that has a deposit from its conversation's Open booking: the form shows the deposit, and Save without changes keeps it |
