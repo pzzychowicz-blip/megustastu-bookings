@@ -30391,3 +30391,22 @@ class rather than fixing a bug and touches booking data.
    `tests/booking-logic.test.js` runs each case through the save's own path as well and
    expects the same sentence; removing the unmoved-window gate fails 1 and an
    always-null function fails 4.
+
+6. **A folding row is drawn closed by the commit its holds follow.** v18.3.2 measured a
+   List card on the tablet folding 107 → 3px and then pruned, the cause not
+   established. The prune and `Reveal`'s unmount start on the frame after their
+   effect (`afterFrame`), but the fold began later: the diff effect takes a departed id
+   out of `openIds` with a `setState`, so the row's `Reveal` gets `show={false}` a
+   render later, and closes on its own `setOpen(false)` a render after that. A busy
+   main thread puts frames between those renders. **Measured headless** (Playwright,
+   1280×800, a booking cancelled through the database, every frame sampled):
+   unthrottled, the card reached 0 one frame before the unmount; at 4× CPU, three runs
+   of three were unmounted with 0.3–0.7px still to fold, the fold having begun ~55ms
+   after the prune's clock. `Reveal`'s wrappers now draw `show && open` and
+   `show && revealed`, and `useRevealRows` returns `openIds` without the ids that have
+   left, in the render that loses them. **After it**: at 4× CPU, 0px 80–100ms before
+   the unmount in three runs of three; unthrottled, 67ms (it was ~17). With `Reveal`'s
+   half alone it was still cut, at 0.08–0.28px, so both halves stay. The Browser pane
+   could not take this measurement (frames ~2s apart while it was visible). Pinned in
+   `tests/motion.test.js`; `tests/wa-sandbox-integrity.test.js`'s two inner-track pins
+   read the renamed `isRevealed`.

@@ -269,5 +269,20 @@ export function useRevealRows(ids, resetKey, opts) {
     };
   }, []);
 
-  return { renderIds, openIds };
+  // ── A departed row closes in the render that loses it (v18.3.3) ───────────
+  // The diff effect above takes a departed id out of `openIds` AND starts its
+  // prune's clock, but the state change lands a render later, and its Reveal
+  // closes a render after that. So the fold began after the clock, by however
+  // many frames a busy main thread put between those renders. Measured headless
+  // at 4× CPU: the fold of a cancelled List card began ~55ms after its prune's
+  // clock, and the card was unmounted with ~35ms of the fold left. The tablet
+  // cut one at 3px (v18.3.2). Returned without the ids that have left, the
+  // Reveal gets `show={false}` in the commit the clock is started after (and
+  // draws closed from it, see Reveal). The same Set while nothing has left, so
+  // a consumer memoised on it is not invalidated every render.
+  let gone = false;
+  openIds.forEach(function (id) { if (ids.indexOf(id) === -1) gone = true; });
+  const openNow = gone ? new Set(Array.from(openIds).filter(function (id) { return ids.indexOf(id) !== -1; })) : openIds;
+
+  return { renderIds, openIds: openNow };
 }

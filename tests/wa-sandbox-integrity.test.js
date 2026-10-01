@@ -63,7 +63,7 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     const atoms = read("src/components/atoms.jsx");
     // The vertical branch is the one that reads `gridTemplateRows`; its inner
     // style is the `: { overflow ... }` arm of the `horizontal ? ... : ...`.
-    const vertical = atoms.match(/:\s*\{\s*overflow:\s*revealed[^}]*\}/g) || [];
+    const vertical = atoms.match(/:\s*\{\s*overflow:\s*isRevealed[^}]*\}/g) || [];
     expect(vertical.length, "Reveal's inner-style ternary changed shape — re-read this test").toBe(1);
     expect(
       /minWidth:\s*0/.test(vertical[0]),
@@ -80,7 +80,7 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     // and minHeight, the vertical one set only minHeight. Stating the symmetry
     // catches the next version of this rather than only the last one.
     const atoms = read("src/components/atoms.jsx");
-    const arms = atoms.match(/[?:]\s*\{\s*overflow:\s*revealed[^}]*\}/g) || [];
+    const arms = atoms.match(/[?:]\s*\{\s*overflow:\s*isRevealed[^}]*\}/g) || [];
     expect(arms.length, "expected exactly two Reveal inner-style arms").toBe(2);
     arms.forEach((arm) => {
       expect(/minWidth:\s*0/.test(arm) && /minHeight:\s*0/.test(arm),
