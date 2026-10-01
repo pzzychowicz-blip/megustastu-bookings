@@ -30246,7 +30246,12 @@ throughout):
   keyed on `[prevReset, quietResets]` now. Both bodies were idempotent and both ran
   before any passive effect, so nothing runs differently; what goes is the second
   copy a change to the re-seed would have had to reach. The test pins the one
-  effect and counts the bookkeeping line.
+  effect and counts the bookkeeping line. No test renders this hook, and the Mac's
+  pane reported its page hidden (where a change is a replacement, not a fold), so
+  it was measured on the tablet afterwards, sampled every frame. A List card
+  deleted through ⋯ and its confirm went inert when the delete landed. Its row
+  folded 107 → 94 → 70 → 43 → 24 → 12 → 5 → 3px over 250ms, and the prune removed
+  it at 3px. Why the last 3px are cut rather than run to 0 was not established.
 
 Not changed:
 
