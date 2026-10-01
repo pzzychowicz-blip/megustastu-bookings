@@ -90,7 +90,10 @@ evidence for each.
   `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version.
+  first. This is a data-touching patch version. **Next: v18.3.4** (Patryk, 2026-10-01,
+  split off from v18.3.3's bug sweep), at max effort. v18.3.3 added `keptRefusal`, a
+  ninth reader of the edit's window (`formPlan`, `planChanged`, the un-seat restore)
+  beside `doSaveEdit`'s, so `applyEdit` should own that window and both should read it.
 
 - **In-range dependency updates, and whether to automate them (#14).** Still in range on
   2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`

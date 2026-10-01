@@ -30410,3 +30410,11 @@ class rather than fixing a bug and touches booking data.
    could not take this measurement (frames ~2s apart while it was visible). Pinned in
    `tests/motion.test.js`; `tests/wa-sandbox-integrity.test.js`'s two inner-track pins
    read the renamed `isRevealed`.
+
+### Check on the devices after merge
+
+| Phase | Device | Check |
+|---|---|---|
+| 3 | Android tablet | After closing time, Walk-in → Seat: "It's past closing — walk-ins can't be seated now." and nothing is written |
+| 5 | Android tablet | Drag a booking onto a table, give another booking on that table a lock (Assign), then move the first one's time onto it: the availability line says "Table N is also held by …" in amber before Save |
+| 6 | Android tablet | List view: delete a card through ⋯ and its confirm, and cancel another. Each folds all the way to nothing and the cards below follow it up, with no cut at the end (v18.3.2's 3px) |
