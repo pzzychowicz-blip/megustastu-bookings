@@ -8,7 +8,9 @@
 // another rule. Measured on DEV before the fix: one refused save plus Confirm on
 // the "Kitchen may be busy" its generated booking raised = two rules. There is
 // no DOM test environment here (tests/CLAUDE.md), so the save's ORDER is pinned
-// by reading `doSaveNew` with its comments stripped.
+// by reading `doSaveNew` with its comments stripped. v18.3.4: the save's
+// decisions are `buildBooking` (src/lib/booking-save.js), run below; what is
+// still read is the order App carries them out in.
 //
 // B3: a rule had no start, so the generator booked every matching weekday from
 // TODAY. Measured on DEV before the fix: "Repeat weekly" on Thu 22 Oct also
@@ -20,7 +22,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { dueOccurrences, ruleStart } from "../src/lib/recurring.js";
-import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
+import { setWeekHours, DEFAULT_WEEK_HOURS, EMPTY_FORM, ALL_TABLES } from "../src/lib/constants.js";
+import { buildBooking } from "../src/lib/booking-save.js";
 
 const APP = stripComments(
   readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
@@ -49,10 +52,29 @@ describe("Repeat weekly writes its rule only once the save cannot be refused (B2
     expect(write).toBeGreaterThan(rule);
   });
 
+  // v18.3.4: the rule and the booking are `buildBooking`'s, so these run it.
+  const D = "2099-06-17";   // a Wednesday the optimiser owns
+  const save = (list, o) => buildBooking({
+    list, draft: Object.assign({}, EMPTY_FORM, { name: "Weekly", date: D, time: "20:00", repeatWeekly: true }, o),
+    blocks: [], swap: null, autoOptimizer: true, phonePrefix: "+34", getUser: () => "t",
+  });
+
   it("stamps the first occurrence with the id the rule is written under", () => {
-    const body = doSaveNewBody();
-    expect(body).toMatch(/addRule\(\{id:recStampId,/);
-    expect(body).toMatch(/recurringId:recStampId/);
+    const plan = save([]);
+    const first = plan.fin.find((b) => b.id === plan.id);
+    expect(plan.rule.id).toBeTruthy();
+    expect(first.recurringId).toBe(plan.rule.id);
+    expect(first.recurringDate).toBe(D);
+  });
+
+  it("a refused save has no rule to write", () => {
+    // Every table held at 20:00 by a party nobody can move.
+    const full = ALL_TABLES.map((t, i) => ({
+      id: "f" + i, name: "F" + i, date: D, time: "20:00", size: 2, duration: 90, status: "confirmed",
+      tables: [t.id], _locked: true, _manual: true, preferredTables: [], history: [],
+    }));
+    expect(save(full)).toEqual({ refusal: { message: "Could not assign a table — try manual assignment." } });
+    expect(save([], { repeatWeekly: false }).rule).toBe(null);
   });
 });
 
@@ -124,7 +146,14 @@ describe("dueOccurrences", () => {
 describe("the wiring", () => {
   it("App's generator asks dueOccurrences, and a new rule carries startDate", () => {
     expect(APP).toMatch(/const toCreate=dueOccurrences\(recurring\.rules,bookings,todayStr\(\),recurring\.horizonWeeks\*7\)/);
-    expect(doSaveNewBody()).toMatch(/addRule\(\{id:recStampId,startDate:f\.date,/);
+    // v18.3.4: the rule is `buildBooking`'s, and App writes what it is handed.
+    const plan = buildBooking({
+      list: [], draft: Object.assign({}, EMPTY_FORM, { name: "Weekly", date: "2099-06-17", time: "20:00", repeatWeekly: true }),
+      blocks: [], swap: null, autoOptimizer: true, phonePrefix: "+34", getUser: () => "t",
+    });
+    expect(plan.rule.startDate).toBe("2099-06-17");
+    expect(plan.rule.weekday, "a Wednesday").toBe(3);
+    expect(doSaveNewBody()).toMatch(/if\(plan\.rule\) addRule\(plan\.rule\);/);
   });
   it("useRecurring's whitelist keeps startDate", () => {
     const HOOK = stripComments(

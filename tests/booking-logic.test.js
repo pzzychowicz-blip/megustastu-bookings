@@ -35,7 +35,7 @@ import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
-import { applyEdit, editWindow, keptRefusal } from "../src/lib/booking-save.js";
+import { applyEdit, buildBooking, editWindow, keptRefusal } from "../src/lib/booking-save.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -1951,15 +1951,17 @@ describe("voucherCode is in all three booking-field lists (v18.0.0)", () => {
 describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
   const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 
-  // Each entry is a fragment unique to one site, so a failure names WHICH.
-  const SITES = [
-    ["doSaveNew — writes the create", /const nb=\{id:newId[\s\S]{0,400}?voucherCode:/],
-  ];
-
-  SITES.forEach(([name, re]) => {
-    it(name + " carries voucherCode", () => {
-      expect(re.test(APP)).toBe(true);
+  // v18.3.4: the three sites (the create, the edit, the draft) are
+  // `buildBooking`, `applyEdit` and `draftFromBooking`, so each is run.
+  it("doSaveNew — the create writes voucherCode (v18.3.4: buildBooking)", () => {
+    const plan = buildBooking({
+      list: [], draft: { name: "Ana", phone: "", date: D, time: "19:00", size: 2, preference: "auto", notes: "",
+        status: "confirmed", customDur: null, deposit: "20", voucherCode: "abcd-2345", manualTables: [], preferredTables: [] },
+      blocks: [], swap: null, autoOptimizer: true, phonePrefix: "+34", getUser: () => "t",
     });
+    const created = plan.fin.find((b) => b.id === plan.id);
+    expect(created.voucherCode).toBe("ABCD2345");
+    expect(created.deposit).toBe(20);
   });
 
   it("doSaveEdit — the edit writes voucherCode (v18.3.4: applyEdit)", () => {

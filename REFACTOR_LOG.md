@@ -30656,3 +30656,45 @@ and every save writes exactly the fields it writes today.
    Bundle: the entry grew 0.15 kB gz while the shared `atoms` chunk, where
    `booking-logic.js` lives, shrank 0.23 kB gz. The function changed chunks, and the
    total is 0.33 kB raw smaller.
+
+6. **`buildBooking`: the new booking's save as a plan.** `doSaveNew`'s decisions moved
+   beside `applyEdit`, the same way. `buildBooking(input)` returns `{refusal}` or
+   `{next, fin, id, rule, flash}`:
+   - `id` is minted once, so a replay cannot add the booking twice;
+   - `rule` is the standing rule "Repeat weekly" creates. App writes it after the
+     refusals and before the booking, as v18.3.3 ordered it, and a refused save has
+     no rule at all.
+
+   Its `genId` and `getUser` calls run in `doSaveNew`'s order, because the ids and
+   history stamps depend on it. `doSave` stopped computing the cleaned phone and lost
+   its `v` argument: both saves read the draft themselves.
+
+   **Tests.** The characterization snapshots did not move. The harness's
+   module-binding self-test names the imports the lifted code still has (`applyEdit`,
+   `buildBooking`, `draftFromBooking`). Four checks read `doSaveNew`'s source:
+   - three now run `buildBooking`: the create writing `voucherCode`, the first
+     occurrence stamped with the rule's id, and the rule's `startDate`;
+   - the toast's zone note reads the plan and both wrappers.
+
+   A new check says a refused save returns no rule. The order checks still read the
+   wrapper. Five sabotages were each
+   caught:
+   - the create without `voucherCode` (16 failures);
+   - the first occurrence unstamped (2);
+   - the rule without `startDate` (2);
+   - the displacement refusal removed (1);
+   - the rule written before the refusal check (1).
+
+   **On DEV** (the worktree's dev server, 2026-10-01), each save read back from the
+   database:
+   - a new booking, placed on 1B, and a pending one ("Save pending", table 2);
+   - Book Again from a completed booking. The new booking's history reads "created
+     via Book Again (from v1834 smoke on 2026-10-01 at 21:00)", it carries `returnOf`
+     and the source's `guestId`, and the source gained "Book Again → new booking on
+     2026-10-02 at 21:00";
+   - Repeat weekly, Thursday 2026-10-08 at 19:00. The rule was written with
+     `startDate` 2026-10-08 and weekday 4, and the form's booking carries its id as
+     `recurringId`. The generator then made only the 15th's occurrence, not a second
+     one on the start date. The rule was paused in Settings afterwards.
+
+   No error in the console after a reload. Bundle: the entry grew 0.02 kB gz.

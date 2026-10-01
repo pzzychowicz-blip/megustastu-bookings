@@ -463,8 +463,11 @@ describe("the harness runs the code it claims to", () => {
   });
   it("binds the very module objects the app imports", () => {
     const scope = importScope(APP, APP_SAVE.join("\n"));
-    expect(scope.bookingsAfterAction).toBe(bookingLogic.bookingsAfterAction);
-    expect(scope.normalizeCode).toBe(vouchers.normalizeCode);
+    // v18.3.4: the saves' decisions are imports now (lib/booking-save.js).
+    expect(scope.applyEdit).toBe(bookingSave.applyEdit);
+    expect(scope.buildBooking).toBe(bookingSave.buildBooking);
+    expect(scope.draftFromBooking).toBe(bookingFields.draftFromBooking);
+    expect(scope.syncLiveDurations).toBe(bookingLogic.syncLiveDurations);
     expect(scope.todayStr).toBe(day.todayStr);
   });
   it("draftOf builds exactly the draft openEdit opens with", () => {

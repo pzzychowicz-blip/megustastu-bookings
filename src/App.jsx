@@ -31,7 +31,7 @@ import {
   OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX } from "./lib/constants";
 
 import {
-  getDur, toMins, genId, sanitizeBlock,
+  getDur, toMins, sanitizeBlock,
   histEntry,
   isLocked, isActive, statusOrder,
   getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
@@ -65,7 +65,8 @@ import {
   // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
   kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
-  savedToast, offZoneNote,
+  // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
+  savedToast,
   // v18.0.0 session 8 (C7): the last minute a booking may start, and the
   // formatter for it. `toTime` was removed here as a dead import once; it has a
   // caller again.
@@ -85,9 +86,10 @@ import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences } from "./lib/recurring";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
-// v18.3.4: the edit form's save as a pure plan, and the memo its transforms share.
-import { applyEdit, memoByPrev } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
+// v18.3.4: the booking form's two saves as pure plans, and the memo every save
+// transform shares.
+import { applyEdit, buildBooking, memoByPrev } from "./lib/booking-save";
+import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -2642,15 +2644,20 @@ function BookingApp({uid}){
   // and dispatches to ONE of the two path helpers below — bodies moved
   // VERBATIM, still inside BookingApp so every closure read (bookings,
   // liveBookings, editId, swapAffected, tableBlocks, autoOptimizer, nowMins,
-  // saveBookings…) is unchanged. `v` carries the preamble-derived values.
-  // Early setError(...)+return exits inside a helper end the save exactly as
-  // before (doSave has nothing after the dispatch); helper throws are caught
-  // by doSave's try/catch. The v15.7.0 capture-intent-then-replay contract and
-  // the prev-identity buildNextMemo are untouched.
+  // saveBookings…) is unchanged. Early setError(...)+return exits inside a
+  // helper end the save exactly as before (doSave has nothing after the
+  // dispatch); helper throws are caught by doSave's try/catch. The v15.7.0
+  // capture-intent-then-replay contract and the prev-identity memo are
+  // untouched.
+  // v18.3.4: the two helpers keep only the effects. Their decisions are
+  // `applyEdit` and `buildBooking` (lib/booking-save.js), which read the size,
+  // the phone and the hand-picked tables from the draft themselves, so the
+  // preamble's `v` is gone.
 
   // v17.10.0: the guest-identity back-stamp is `stampGuestSeed` in
-  // lib/customers.js — pure, tested, and called inside buildNext/applyBase so
-  // the source booking and the new one ride ONE saveBookings call.
+  // lib/customers.js — pure, tested, and called inside each save's `next`
+  // (`applyEdit`, `buildBooking`) so the source booking and the new one ride
+  // ONE saveBookings call.
   // v18.3.4: the edit's decisions are `applyEdit` (lib/booking-save.js), a
   // plan: the refusal Save shows, or the write, and what the toast, the undo
   // and the seat note are given. This is the half with effects, in the order
@@ -2689,103 +2696,37 @@ function BookingApp({uid}){
     // leaves the form open with an error, and none of those is a seat.
     if(plan.seatNote) setSeatNote(plan.seatNote);
   }
-  function doSaveNew(f,v){
-    const size=v.size,dur=v.dur,cleanPhone=v.cleanPhone,mt=v.mt;
-        const newId=genId();
-        // v14: Book Again flow. When f.returnOf is set, the new booking links
-        // back to its source, gets a distinctive "created via Book Again" entry
-        // in its own history, and the ORIGINAL booking gets a matching entry
-        // indicating the customer re-booked.
-        // v14 p1: history references source.scheduledTime (the confirmed time)
-        // rather than source.time, so "created via Book Again (from X on YYYY-MM-DD
-        // at 20:30)" stays accurate even if the source was seated-shifted to 20:15.
-        const returnOfId=f.returnOf||null;
-        const source=returnOfId?bookings.find(function(b){return b.id===returnOfId;}):null;
-        const sourceSchedTime=source?(source.scheduledTime||source.time):"";
-        const createHist=source?histEntry("created via Book Again (from "+source.name+" on "+source.date+" at "+sourceSchedTime+")",getUser()):histEntry("created",getUser());
-        // v16.3.0: "Repeat weekly" — create a standing-booking rule from these
-        // fields (weekday from the booking date, UTC) and stamp THIS first
-        // occurrence with the rule's id + date so the generator dedupes it. Done
-        // once here (outside buildNext) so a retry replay never makes a 2nd rule.
-        // v18.3.3: only the rule's ID is minted here. The rule itself is written
-        // below, after the capacity refusals: it was written HERE, so a save
-        // refused with "Could not assign a table" left the rule behind, the
-        // generator then created the very booking the form had refused (with no
-        // table), and every further tap on Save added another rule. Measured on
-        // DEV: one refused save, then Confirm on the "Kitchen may be busy" its
-        // generated booking raised, gave two rules and a table-less booking.
-        const recStampId=(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time)?genId():null;
-        // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
-        // confirmed, OR pending via the "Save pending" button (status override).
-        const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
-        // v15.7.0: build the next state as a PURE transform of `prev` (see the edit
-        // path above) so the new-booking save joins the optimistic-show + auto-retry
-        // path. `newId`/`nb` are computed once (stable id) → a held/rejected write
-        // replayed on fresh data can never duplicate the booking (the defensive
-        // filter below also drops any stray match before re-adding it).
-        function applyBase(prev){
-          let base=stampGuestSeed(prev,f).filter(function(b){return b.id!==newId;});
-          if(swapAffected){base=base.map(function(b){const match=swapAffected.find(function(ab){return ab.id===b.id;});if(match){const remaining=(b.tables||[]).filter(function(t){return !match.tables.includes(t);});return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});}return b;});}
-          // If this is a Book Again creation, append a back-reference entry to the
-          // source booking's history (purely informational — no status/table change).
-          if(source){
-            base=base.map(function(b){
-              if(b.id!==returnOfId) return b;
-              return Object.assign({},b,{history:(b.history||[]).concat([histEntry("Book Again → new booking on "+f.date+" at "+f.time,getUser())])});
-            });
-          }
-          return base;
-        }
-        // v17.16.6 (CT-2B-08): the guest id is resolved against `prev` HERE rather
-        // than baked into `nb` above, because `nb` is built once at Save time while
-        // this runs again on every replay. The draft's id was minted when the name
-        // was picked; if the seed has been joined since — by another device, through
-        // a different booking of the same guest — adopting the seed's id is what
-        // keeps the two in one group. See `resolveGuestId` for why the seed wins.
-        // `newId` is untouched, so the stable-id property the comment above relies
-        // on is unaffected.
-        function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([Object.assign({},nb,{guestId:resolveGuestId(prev,f)})]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
-        // /code-review perf: prev-identity memo — one optimiser pass shared by
-        // the guard check + the immediate dispatch (see the edit path above).
-        const buildNextMemo=memoByPrev(buildNext);
-        const base=applyBase(bookings);
-        const fin=buildNextMemo(bookings);
-        if(!mt.length){
-          const ne=fin.find(function(b){return b.id===newId;});
-          if(!ne||(ne.tables||[]).length===0){setError("Could not assign a table — try manual assignment.");return;}
-          const displaced=fin.filter(function(b){return b.id!==newId&&b.date===f.date&&isActive(b)&&(!b.tables||!b.tables.length||b._conflict);});
-          const prevAssigned=base.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0;});
-          const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
-          if(kicked.length>0){setError("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
-        }
-        // v18.3.3: the standing rule, now that nothing above can refuse the save.
-        // Before the booking write, as it always was: the generator effect runs
-        // on the commit both land in, and finds the first occurrence stamped.
-        if(recStampId) addRule({id:recStampId,startDate:f.date,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
-        // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
-        // show + auto-retry; flash only on a real save.
-        const ok=saveBookings(buildNextMemo);
-        // WhatsApp sandbox: if this save came from accepting a draft, flip the
-        // source conversation to "accepted" + link the new booking id (no-op
-        // otherwise — draftSourceRef is only set by handleAcceptDraft).
-        wa.completeDraftAccept(newId);
-        // …and if this NEW booking's phone matches a WhatsApp conversation that
-        // isn't linked yet (booking typed manually, not via Accept & open),
-        // link it so the conversation shows the LinkedBookingCard.
-        wa.linkBookingByPhone(newId, f.phone);
-        // v18.3.1: seated outside its zone, the toast says so (offZoneNote);
-        // not for hand-picked tables (/code-review), as in the edit path.
-        const placedNew=fin.find(function(b){return b.id===newId;});
-        if(ok) flash(null,!mt.length&&placedNew?offZoneNote(placedNew):"");
-        // v16.0.0: this new booking converted a waitlist entry (Book from the
-        // panel) — remove the entry now the booking is dispatched (a held write
-        // shows optimistically + auto-retries, so the intent stands either way).
-        if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
-        // v17.16.0: armed only HERE — after the write is dispatched, on the
-        // line that closes the form. Every early return above leaves the form
-        // open with an error and the guard READY, so Save still works.
-        saveGuardRef.current=DISPATCHED;
-        setShowForm(false);setViewDate(f.date);
+  // v18.3.4: the new booking's decisions are `buildBooking`
+  // (lib/booking-save.js), as the edit's are `applyEdit`; this is the half
+  // with effects, in the order they have always run.
+  function doSaveNew(f){
+    const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
+    if(plan.refusal){setError(plan.refusal.message);return;}
+    // v18.3.3: the standing rule, now that nothing above can refuse the save.
+    // Before the booking write, as it always was: the generator effect runs
+    // on the commit both land in, and finds the first occurrence stamped.
+    if(plan.rule) addRule(plan.rule);
+    // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
+    // show + auto-retry; flash only on a real save.
+    const ok=saveBookings(plan.next);
+    // WhatsApp sandbox: if this save came from accepting a draft, flip the
+    // source conversation to "accepted" + link the new booking id (no-op
+    // otherwise — draftSourceRef is only set by handleAcceptDraft).
+    wa.completeDraftAccept(plan.id);
+    // …and if this NEW booking's phone matches a WhatsApp conversation that
+    // isn't linked yet (booking typed manually, not via Accept & open),
+    // link it so the conversation shows the LinkedBookingCard.
+    wa.linkBookingByPhone(plan.id, f.phone);
+    if(plan.flash&&ok) flash(plan.flash.kind,plan.flash.note);
+    // v16.0.0: this new booking converted a waitlist entry (Book from the
+    // panel) — remove the entry now the booking is dispatched (a held write
+    // shows optimistically + auto-retries, so the intent stands either way).
+    if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
+    // v17.16.0: armed only HERE — after the write is dispatched, on the
+    // line that closes the form. Every early return above leaves the form
+    // open with an error and the guard READY, so Save still works.
+    saveGuardRef.current=DISPATCHED;
+    setShowForm(false);setViewDate(f.date);
   }
   function doSave(){
     // v17.16.0: has this open of the form already dispatched a save? The form is
@@ -2875,7 +2816,6 @@ function BookingApp({uid}){
       if(sm>lastStartMins(fh.close)){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
       const size=Number(f.size)||2;
       const dur=f.customDur||getDur(size);
-      const cleanPhone=cleanPhoneOf(f.phone);
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
@@ -2916,7 +2856,7 @@ function BookingApp({uid}){
         }
       }
       if(editId) doSaveEdit(f,saveBks,saveLive);
-      else doSaveNew(f,{size:size,dur:dur,cleanPhone:cleanPhone,mt:mt});
+      else doSaveNew(f);
     }catch(err){setError("Error: "+err.message);}
   }
   function save(statusOverride){
