@@ -7,21 +7,14 @@ import { sortConversations, conversationOrder } from "../../lib/whatsapp";
 import { useFlip, Reveal } from "../atoms";
 import { useRevealRows } from "../../hooks/useRevealRows";
 import { ConversationRow } from "./ConversationRow";
-import { T } from "../../lib/constants";
+import { T, ROW_FOLD } from "../../lib/constants";
 
-// Per-row collapse speed (17.15.0-wa-sandbox). This was a hand-tuned `ms={365}`
-// plus a `ROW_PRUNE_MS` derived from it — 365 being the then-house 280ms Reveal
-// plus 30%, after Patryk found the "Needs action" toggle read as a snap in the
-// Inbox tab, where it removes many rows at once.
-//
-// v17.15.0 made `Reveal` take a NAME from the `M` scale instead of a number,
-// precisely so a caller cannot set a duration without the matching unmount hold.
-// `shift` is 385ms — 20ms off the tuned value, so the fold is unchanged to the
-// eye — and it is also the honest reading: a Reveal changes GEOMETRY, which is
-// what --t-shift is for. `move` (240ms) would have been FASTER than the 280 that
-// was rejected in the first place, which is how a semantic argument quietly
-// undoes a measurement.
-const ROW_SPEED = "shift";
+// Per-row collapse speed (17.15.0-wa-sandbox): lib/constants' ROW_FOLD since
+// v18.3.2, which the waitlist rows and the List's cards fold on too. This list is
+// where its value was measured: a hand-tuned 365ms, after Patryk found a 280ms
+// fold read as a snap in the Inbox tab, which "Needs action" empties many rows
+// at a time; `shift` (385ms) is that fold to the eye, and the honest token for
+// a Reveal, which changes geometry. The full note is at the constant.
 
 export function ConversationList({ conversations, activeKey, onSelect, bookings, archivedView, emptyLabel, selectMode, selected, onToggleSelect }) {
   // Shared with InboxPanel's keyboard-nav so the rendered order and the ↑/↓
@@ -44,9 +37,9 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
   // movement for what is just a filter toggle.
   // No `resetKey`: this list is EDITED (a thread arrives, a filter drops some
   // rows), never REPLACED wholesale the way the notification strip's is on a
-  // date change. The prune window comes from ROW_SPEED, so it cannot drift from
+  // date change. The prune window comes from ROW_FOLD, so it cannot drift from
   // the Reveal below it.
-  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), undefined, { speed: ROW_SPEED, instantIn: true });
+  const { renderIds, openIds } = useRevealRows(sorted.map((c) => c.phoneKey), undefined, { speed: ROW_FOLD, instantIn: true });
   // A departing row is no longer in `conversations`, so its object has to come
   // from somewhere: cache every conversation we have rendered, keyed by
   // phoneKey. Bounded by the number of conversations that have been on screen.
@@ -135,7 +128,7 @@ export function ConversationList({ conversations, activeKey, onSelect, bookings,
         <Reveal
           key={c.phoneKey}
           show={openIds.has(c.phoneKey)}
-          speed={ROW_SPEED}
+          speed={ROW_FOLD}
           /* Reveal's two wrappers sit between `role="list"` and each
              `role="listitem"`, and a list must OWN its items — measured here
              at three levels of separation, which loses the count and position

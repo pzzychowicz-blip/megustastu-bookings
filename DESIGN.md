@@ -1700,6 +1700,22 @@ relative is also what the hook MEANS: it animates a row change, which is
 movement inside the container; a whole-container move is the page reflowing
 around it, which the browser has already drawn.
 
+**…and a sibling that eases the rows INSIDE the container moves the baseline
+too** (v18.3.2, O4). The timeline's Unplaced row eases its height on
+`--t-shift`, which carries every table row below it with no table changing.
+The transition starts from where the row was, so at the commit that starts it
+nothing has moved yet, and that commit's pass animates only the bookings whose
+tables changed. While the row moves, `useFlip`'s `ref.rebase()` re-measures the
+baseline every frame, so a second change landing mid-way slides only what it
+moved (measured before: every block below jumped 43.9px in one frame). When the
+row settles, one quiet pass takes the final tops. The row's edge, its dashed
+line and grid lines, follows the box less its gap, so the line travels with the
+rows and the semi-transparent grid lines are never drawn twice over theirs. The
+label column clips while the row moves; the grid column never clips (clipped,
+it hid a booking that had just lost its table on 1A and had not moved) and
+paints over the table rows only while it grows. A drop reads the row's LIVE
+bottom, because mid-way its target height is not where the rows are.
+
 **A dropped block settles from where the finger LEFT it** (v18.3.0). A drop
 re-parents the block into its new row, and `useFlip` animated it from the top it
 recorded before the drag began: on the first frame after release the block was
@@ -1733,6 +1749,12 @@ card blocks the page for ~136ms in between, so its 240ms exit ran 170ms and the
 card vanished at opacity 0.55–0.66. It starts the hold with the same
 `afterFrame` now (`lib/after-frame.js`), from an effect on `leaving`: 251–256ms,
 to opacity 0.
+**And the list rows** (v18.3.2, found when O3 put the List's cards on them):
+`Reveal`'s unmount and `useRevealRows`' prune still timed from the effect, and
+after a delete's confirm the first frame came 382ms late, so the prune took the
+card at 61px of 108. They start on the same `afterFrame` now. With the first
+frame forced 300ms late, the fold runs to 0px, where the old timing cut it at
+71px.
 
 **The Plan view's zoom has edges that give, and its resets glide** (v18.3.0,
 A8). A pinch past 0.5× or 5× RESISTS rather than stopping dead: apple-design
@@ -1860,6 +1882,30 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   remembered index **ties** with whatever shifted up into its place, and the tie
   falls through to arrival order — so it visibly jumps before it collapses. Sort
   departed items half a step above their replacement (`rank - 0.5`).
+  **v18.3.2: that formula holds for ONE departure, not two.** It compares a
+  departed item's OLD index with the live items' NEW ones, so [A, B, C, D, E]
+  losing B and D in one commit leaves E at 2 and D (3 − 0.5) sorts after it. Anchor
+  a departed item to its PREDECESSOR instead, the nearest item drawn before it
+  last time that is still drawn: `placeLeaving` (`lib/leaving-order.js`), through
+  `useLeavingOrder`, which the waitlist rows and the List's cards use. The strip's
+  `rankOf` still ranks the old way; its sections rarely leave two at a time.
+- **A list row leaving after an action folds on `--t-shift` (v18.3.2, O3)**, the
+  WhatsApp list's fold, not `--t-move`, and every such list names it `ROW_FOLD`
+  (`lib/constants.js`): a `Reveal` changes geometry, and a 280ms
+  fold read as a snap there (Patryk). It ARRIVES at full height (`useRevealRows`'
+  `instantIn`), the rows below making room, because a row growing open as well is
+  a second motion on top of theirs. A leaving row is drawn from `Reveal`'s cached
+  children, as it last looked, and is `inert` (Reveal's prop) until it is gone.
+  A list's empty line is the other half of the same swap: its own `Reveal` on the
+  rows' speed, opened once no row is OPEN, so it eases in beside the last fold;
+  not rendered while the list has rows, so an arrival replaces it in one frame.
+  The space between two rows goes INSIDE each row's `Reveal`, as a margin, never
+  on the list as a flex `gap`: a gap stays beside a row folded to 0px, so the
+  list would jump by it at the prune (the List's `CARD_GAP`, the waitlist row's
+  8px). A FLIP on the same list stays quiet while a row folds and for the commit
+  after it, or it replays the whole fold at the prune as one jump. The empty-day
+  prompt is not a list's empty line: it belongs to the VIEW (Timeline and Plan
+  draw it too), so above the List's cards it keeps v17.15.0's `--t-reveal`.
 - **A REPLACEMENT is not a change, and a per-item lifecycle cannot tell them
   apart.** `useRevealRows` holds a departed id mounted so it can collapse and
   mounts a newcomer closed so it can ease open — right for an item arriving or
@@ -1872,6 +1918,12 @@ after, it went from the ~1.69× on screen to 1.95×, one notch).
   the old height to the new. **Retiming cannot fix a replacement animated as a
   change** — the wobble was the visible half, the stale content was the half
   that mattered.
+  A change nobody watched is a replacement too: one that lands while the page is
+  hidden, or inside App's reconnect catch-up (`catchingUp`), re-seeds like a
+  `resetKey` change (`opts.quiet`), because on wake it would otherwise play every
+  missed arrival and departure at once (v18.3.1, the timeline's blocks; v18.3.2,
+  the List's cards and the waitlist's rows, and any `Reveal`, which goes straight
+  to its end state while the page is hidden).
 - **A gesture owns ONE axis.** If two things move at once on different axes,
   no duration or curve reconciles them — co-timing them perfectly is what makes
   the diagonal *clean*, not what removes it (v17.15.0 shipped that intermediate

@@ -209,18 +209,18 @@ export const PlanView = memo(function PlanView({
   // Re-anchor when the date changes; follow the clock on today until touched.
   // Both effects key on ONE trigger on purpose — re-running them on every
   // dependency would yank the selection out from under a hand scrub.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a date change re-anchors; dayStart is read for the new date, and as a new function each render it would re-anchor on every render
   useEffect(() => { setSlider(dayStart()); setSliderTouched(false); reCentre(); }, [date]);
   // Phase 67: on a day that is not today, an UNTOUCHED scrubber follows the
   // first booking as it arrives or moves — the bookings may load after the date
   // does, or the day's first party change — the way today's follows the clock.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the first booking only when it moves, reading isToday and sliderTouched then; dayStart is new each render, and reCentre always sets new state, so watching it would re-render without end
   useEffect(() => { if (!isToday && !sliderTouched) { setSlider(dayStart()); reCentre(); } }, [firstStart]);
   // Follows per MINUTE now rather than per quarter. `nowMins` only changes value
   // once a minute (the 15s tick re-sets the same number and React bails), and
   // the occupancy pass below is one linear loop over the day — nowhere near the
   // heavy-scan class CLAUDE.md warns about.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the clock once a minute, reading isToday and sliderTouched then; clampExact is new each render, and watching it would re-centre on every render
   useEffect(() => { if (isToday && !sliderTouched) { setSlider(clampExact(nowMins)); reCentre(); } }, [nowMins]);
   const atNow = isToday && Math.abs(slider - clampExact(nowMins)) < 1;
 

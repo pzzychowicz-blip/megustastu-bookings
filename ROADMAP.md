@@ -77,10 +77,9 @@ evidence for each.
 
   SECURITY.md §3 lists them as open. (The erasure item and the parse log shipped in v18.3.1.)
 
-- **Lint: triage, then decide a gate (#10).** There are 90 warnings: about 71 when the
-  workflow skill was written, 88 on 2026-09-18, 90 on 2026-09-29. The 25 `react-hooks/exhaustive-deps` sites are where stale closures hide, so
-  fix each one or keep it with `-- <reason>`. Then decide whether CI gets
-  `--max-warnings N`, which is a policy change.
+- **Lint: decide a gate (#10).** There are 63 warnings on 2026-10-01, all of them React
+  Compiler advisories. Decide whether CI gets `--max-warnings N`, which is a policy
+  change.
 
 - **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
@@ -91,14 +90,12 @@ evidence for each.
   `useWalkin.js` is outside the pairing test's reach. Derive `sanitize`, `UNDO_FIELDS`
   and `diffBooking` from one table, and move `doSaveEdit` (327 lines, complexity 114)
   and `doSaveNew` into pure `buildBooking`/`applyEdit`. Write characterization tests
-  first. This is a data-touching patch version. The phone rule goes with it (v18.2.0's
-  `/code-review`): `doSave` and `addFormToWaitlist` each run `withTypedCode`, then refuse a
-  number with no code in the same words, which should be one helper.
+  first. This is a data-touching patch version.
 
-- **In-range dependency updates, and whether to automate them (#14).** firebase went to
-  12.19 in v18.3.1 (checked on the tablet). react 19.3 and plugin-react 6.1 are still
-  available, and eslint 10 and vitest 5 are waiting as majors. Optionally, turn on
-  Dependabot for security updates only.
+- **In-range dependency updates, and whether to automate them (#14).** Still in range on
+  2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`
+  9.39.5, globals 17.12 and eslint-plugin-react-refresh 0.5.7. eslint 10 and vitest 5
+  are waiting as majors. Optionally, turn on Dependabot for security updates only.
 
 - **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
   141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with
@@ -109,27 +106,14 @@ evidence for each.
   one domain per patch version: the save path (#13) first, then recurring generation,
   backup/export and drag-drop.
 
-- **The drop freeze (audit M1).** After a drop the block sits still with no frame painted.
-  **Measured on the tablet in v18.3.1** (a DEV build over `adb reverse`, five real drops of a
-  two-table party one or two rows, a rAF log around the release): 249, 250, 249, 249 and
-  272ms, against about 104ms on the Mac. A CPU profile of one drop splits it: the handler
-  (`dropOnTable` → `saveBookings` → the `trialFits`/`applyOpt` trials) is ~43ms, which a PROD
-  build pays too; React's render, commit and passive effects are ~290ms, much of it DEV-only
-  (`jsxDEV`, `addObjectDiffToProperties`, StrictMode's double render), and ~40ms of it is
-  `getBoundingClientRect` layout reads (the FLIP measurements), which PROD also pays. **The
-  PROD figure** (v18.3.1 phase 19, a production build against DEV on the tablet, six drops):
-  88–129ms, about 100ms, one long task each. Decide whether that is worth deferring the
-  handler's trials or the FLIP reads, or whether to close this entry as won't-fix.
-
-- **List cards and waitlist rows leave the way they arrive (O3).** `useRevealRows` with
-  `speed: "move"`, a departed row ranked at `rank − 0.5` so it holds its place, and
-  `useFlip`'s `isQuiet` while a row collapses. After v18.3.0's O1 (the timeline blocks'
-  fade) has run on the tablet.
-
-- **The Unplaced row's mount (O4).** Mounting it pushes every table row down by
-  lanes × 44px plus the gap, in one frame. Measure frame by frame first: `useFlip` may
-  already move the blocks while the labels jump. And `tableForClientY` would need the row's
-  live height during a reveal, or a drop lands rows off.
+- **What the booking form previews for tables a save keeps (v18.3.2's `/code-review`).**
+  A booking whose tables the save carries through (seated, or placed by hand with only
+  its time or length changed) previews them as fine, but Save refuses when a locked or
+  seated party, or a table block, holds one at the new time (`handKeptRefusal`,
+  `pinnedClashRefusal`). Decide what the form shows then. The refusal's own sentence,
+  where the availability line goes, is the likely answer. Then have `availScan` ask the
+  save's question. It needs no optimiser pass, because the save's pass moves neither a
+  locked party nor a block.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at

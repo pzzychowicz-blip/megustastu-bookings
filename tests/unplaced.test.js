@@ -7,12 +7,13 @@
 // header said 12, with nothing anywhere saying why. The fixtures below are that
 // day's shapes.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { unplacedReason, unplacedOf, primaryGridTable, unplacedPhrase, packLanes } from "../src/lib/unplaced.js";
+import { unplacedReason, unplacedOf, primaryGridTable, unplacedPhrase, packLanes, unplacedHeight } from "../src/lib/unplaced.js";
+import { everyFrame } from "../src/lib/after-frame.js";
 
 const GRID = new Set(["1A", "1B", "2", "3", "4", "5A", "5B", "6", "7", "i1", "i2", "i3", "i4"]);
 const bk = (over) => Object.assign({ id: "x", date: "2026-10-03", time: "20:00", size: 2, status: "confirmed", tables: ["2"], _conflict: false }, over);
@@ -125,9 +126,11 @@ describe("the surfaces read the ONE rule", () => {
     expect(body.indexOf("{unplacedGrid}"), "Unplaced row before the table rows").toBeLessThan(body.indexOf("{gridRows}"));
   });
 
-  it("the drop target skips the Unplaced row's height", () => {
-    expect(Timeline).toMatch(/getBoundingClientRect\(\)\.top \+ 24 \+ unplacedH;/);
-    expect(Timeline).toMatch(/const unplacedH = unplacedLanes\.length > 0 \? unplacedLanes\.length \* ROW_H \+ UNPLACED_GAP : 0;/);
+  it("the drop target starts the table rows at the Unplaced box's LIVE bottom (v18.3.2, O4)", () => {
+    // `unplacedH` is where the box is heading; while it eases, only its live
+    // bottom says where the rows are, or a drop lands a row off.
+    expect(Timeline).toMatch(/const top = u \? u\.getBoundingClientRect\(\)\.bottom : el\.getBoundingClientRect\(\)\.top \+ 24 \+ unplacedH;/);
+    expect(Timeline).toMatch(/const unplacedH = unplacedHeight\(unplacedLanes\.length, ROW_H, UNPLACED_GAP\);/);
   });
 
   it("no cell keys its FLIP id on tables[0] any more", () => {
@@ -164,5 +167,115 @@ describe("phase 69 — the List card's pill says a table is missing", () => {
     expect(App).toMatch(/unplacedItems\.forEach\(function\(u\)\{if\(u\.reason==="missing"\) out\[u\.b\.id\]=u\.missing;\}\);/);
     expect(App).toMatch(/<ListView\s+missingTables=\{missingTables\}/);
     expect(rd("components/ListView.jsx")).toMatch(/<TBadge key=\{t\} id=\{t\} missing=\{\(missingTables\[b\.id\] \|\| \[\]\)\.indexOf\(t\) >= 0\} \/>/);
+  });
+});
+
+// v18.3.2 (O4): the Unplaced row mounted at full height, so the table labels
+// and row lines jumped 48px in one frame, and when a booking's tables changed in
+// the same commit useFlip read the shift as a move: on DEV a block on 1B started
+// over 1A and slid down into its own row (−48px, −16 by 165ms). It eases now,
+// both columns on one box, and useFlip re-measures quietly once it settles.
+describe("the Unplaced row eases open and shut (v18.3.2, O4)", () => {
+  const SRC3 = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
+  const TL = stripComments(readFileSync(join(SRC3, "components/TimelineView.jsx"), "utf8")).join("\n");
+
+  it("unplacedHeight is the lanes plus the gap, and nothing for no lanes", () => {
+    expect(unplacedHeight(0, 44, 4)).toBe(0);
+    expect(unplacedHeight(1, 44, 4)).toBe(48);
+    expect(unplacedHeight(3, 44, 4)).toBe(136);
+  });
+
+  it("both halves are ONE always-mounted box, so they cannot ease apart", () => {
+    expect(TL.split("style={unplacedLabelBox}").length - 1).toBe(1);
+    expect(TL.split("style={unplacedGridBox}").length - 1).toBe(1);
+    expect(TL).toMatch(/<div ref=\{unplacedRef\} style=\{unplacedGridBox\}>/);
+    expect(TL).toMatch(/const unplacedLabelBox = \{ \.\.\.unplacedBox, /);
+    expect(TL).toMatch(/const unplacedGridBox = \{ \.\.\.unplacedBox, /);
+    expect(TL, "neither half mounts with its content any more").not.toMatch(/unplaced\.length > 0 \? \(/);
+  });
+
+  it("the box eases on --t-shift only while the row is moving", () => {
+    expect(TL).toMatch(/const unplacedEasing = unplacedRow\.moving;/);
+    expect(TL).toMatch(/const unplacedBox = \{\s*position: "relative",\s*height: unplacedH \+ "px",\s*transition: unplacedEasing \? "height " \+ M\.shift : "none"\s*\};/);
+  });
+
+  it("the label column clips while it eases; the grid column never does, and lifts", () => {
+    // Clipped, a booking that lost its table on 1A blinked out at the commit
+    // and wiped back in where it already stood (measured on DEV).
+    expect(TL).toMatch(/const unplacedLabelBox = \{ \.\.\.unplacedBox, overflow: unplacedEasing \? "hidden" : "visible" \};/);
+    // Lifted only while it GROWS: shrinking, the booking that left it is on a
+    // table row, and the emptying row's lines would cross it.
+    expect(TL).toMatch(/const unplacedGridBox = \{ \.\.\.unplacedBox, zIndex: unplacedEasing && unplacedRow\.grow \? 1 : undefined \};/);
+  });
+
+  it("the edge (line and grid lines) follows the eased box less the gap, and clips", () => {
+    expect(TL).toMatch(/const unplacedEdge = \{\s*position: "absolute", top: 0, left: 0, right: 0,\s*height: "calc\(100% - " \+ UNPLACED_GAP \+ "px\)",\s*overflow: "hidden"\s*\};/);
+    expect(TL).toMatch(/<div style=\{unplacedEdge\}>\{unplacedLine\}<GridLines \/><\/div>/);
+    expect(TL).toMatch(/<div style=\{unplacedEdge\}>\{unplacedLine\}<\/div>/);
+    // One set of grid lines for the row, so they never overflow onto the
+    // table rows' own (semi-transparent) lines while it eases.
+    const lane = TL.slice(TL.indexOf('<div key={"ul" + li}'));
+    expect(lane.slice(0, lane.indexOf("</div>")), "a lane draws no grid lines of its own").not.toMatch(/<GridLines \/>/);
+    // The word keeps its centre: the line's 1px used to come out of its box.
+    expect(TL).toMatch(/height: \(heldLanes \* ROW_H - 1\) \+ "px",/);
+  });
+
+  it("a replacement, a catch-up or a hidden page goes straight to the new height", () => {
+    expect(TL).toMatch(/const unplacedKey = date \+ \(bookingsReady \? "" : "\|loading"\);/);
+    expect(TL).toMatch(/if \(unplacedRow\.key !== unplacedKey \|\| \(unplacedRow\.lanes !== unplacedCount && \(catchingUp \|\| pageHidden\(\)\)\)\) \{\s*setUnplacedRow\(\{ key: unplacedKey, lanes: unplacedCount, moving: false, grow: false, held: unplacedCount \}\);/);
+  });
+
+  it("a change while it moves carries on from where it got to, never snaps", () => {
+    // Compared with where it last SETTLED, an open-then-empty inside the 385ms
+    // read as "no change" and dropped the transition mid-way.
+    expect(TL).toMatch(/\} else if \(unplacedRow\.lanes !== unplacedCount\) \{\s*setUnplacedRow\(\{ key: unplacedKey, lanes: unplacedCount, moving: true, grow: unplacedCount > unplacedRow\.lanes, held: Math\.max\(unplacedRow\.held, unplacedCount\) \}\);/);
+  });
+
+  it("it settles a frame-timed hold after the LAST change", () => {
+    expect(TL).toMatch(/return afterFrame\(function \(\) \{\s*setUnplacedRow\(function \(r\) \{ return \{ key: r\.key, lanes: r\.lanes, moving: false, grow: false, held: r\.lanes \}; \}\);\s*\}, exitHold\("shift"\)\);\s*\}, \[unplacedRow\]\);/);
+  });
+
+  it("useFlip re-measures QUIETLY when the row settles, and animates only a table change", () => {
+    expect(TL).toMatch(/const flipRef = useFlip\(\[assignSig, unplacedRow\.moving\], function \(\) \{ return flipSig\.current === assignSig; \}\);/);
+    // Written AFTER the commit's layout effects, so the pass that a table
+    // change triggers still sees the previous assignment and animates.
+    expect(TL).toMatch(/useEffect\(function \(\) \{ flipSig\.current = assignSig; \}, \[assignSig\]\);/);
+  });
+
+  it("while the row moves, useFlip's baseline follows it every frame", () => {
+    // Measured from where the rows STARTED, a second table change inside the
+    // 385ms jumped every block below the row the distance it had covered
+    // (43.9px in one frame on DEV).
+    expect(TL).toMatch(/useEffect\(function \(\) \{\s*if \(!unplacedRow\.moving\) return undefined;\s*return everyFrame\(function \(\) \{ if \(flipRef\.rebase\) flipRef\.rebase\(\); \}\);\s*\}, \[unplacedRow\.moving, flipRef\]\);/);
+    const atoms = stripComments(readFileSync(join(SRC3, "components/atoms.jsx"), "utf8")).join("\n");
+    expect(atoms).toMatch(/ref\.rebase = function \(\) \{[\s\S]*?prevTops\.current = next;\s*\};/);
+    // Written in the component, the loop's re-assigned frame id silenced the
+    // React Compiler's reports on TimelineView (lint 22 -> 19 warnings).
+    expect(TL, "no hand-written frame loop in the component").not.toMatch(/requestAnimationFrame\(function step/);
+  });
+
+  it("everyFrame runs on every frame until it is cancelled", () => {
+    const queue = [];
+    let id = 0;
+    vi.stubGlobal("requestAnimationFrame", (cb) => { queue.push({ id: ++id, cb }); return id; });
+    vi.stubGlobal("cancelAnimationFrame", (n) => { const i = queue.findIndex((q) => q.id === n); if (i >= 0) queue.splice(i, 1); });
+    try {
+      const frame = () => queue.splice(0).forEach((q) => q.cb());
+      let runs = 0;
+      const stop = everyFrame(() => { runs++; });
+      frame(); frame(); frame();
+      expect(runs).toBe(3);
+      stop();
+      frame();
+      expect(runs, "nothing runs after the cancel").toBe(3);
+      expect(queue.length).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a shrinking row keeps drawing the lanes it is leaving, empty", () => {
+    expect(TL).toMatch(/const heldLanes = Math\.max\(unplacedCount, unplacedRow\.held\);/);
+    expect(TL).toMatch(/Array\.from\(\{ length: heldLanes \}, \(_, li\) => unplacedLanes\[li\] \|\| \[\]\)/);
   });
 });

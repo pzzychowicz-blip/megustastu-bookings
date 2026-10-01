@@ -166,7 +166,13 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
     }
     window.addEventListener("keydown", onKey);
     return function(){ window.removeEventListener("keydown", onKey); };
-  }, [mode, ref, focus]);
+    // v18.3.2 (the stale-closure triage): no dependency array, so the listener
+    // is re-added on every render. The list was [mode, ref, focus], which
+    // covers the helpers' reads of those, but `goToday` reads `today`, taken
+    // at render: with the popover left open across midnight and no key
+    // pressed, T went to yesterday. Every helper is rebuilt per render, so
+    // listing them would re-run this per render anyway; this says so plainly.
+  });
 
   // ── Header: Week/Month segmented control + period label ──
   // v18.2.0 (the design critique, X3): the app's ONE segmented look — atoms'

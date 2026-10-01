@@ -122,3 +122,16 @@ export function packLanes(items) {
   });
   return lanes;
 }
+
+/**
+ * v18.3.2 (O4): the Unplaced row's height for a number of lanes. The row EASES
+ * to it (TimelineView), in both columns, so the table rows below travel with it.
+ *
+ * @param {number} lanes  how many lanes the row holds
+ * @param {number} rowH   one lane's height (a table row's)
+ * @param {number} gap    the space under the row, inside its height
+ * @returns {number} px; 0 when there are no lanes, gap included
+ */
+export function unplacedHeight(lanes, rowH, gap) {
+  return lanes > 0 ? lanes * rowH + gap : 0;
+}

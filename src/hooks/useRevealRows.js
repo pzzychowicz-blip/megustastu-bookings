@@ -27,6 +27,28 @@
 // already sliding to make room (useFlip) and the growing row added a second
 // motion on top of that.
 //
+// `opts.quiet` (v18.3.2, O3) is the caller's word that every change now is a
+// CATCH-UP nobody watched: App's `reconnectShown || resyncing`, the window in
+// which a sleeping device's missed changes arrive all at once. A membership
+// change inside it re-seeds the lifecycle, exactly like a `resetKey` change:
+// departed ids are dropped and newcomers open, with nothing folding. It is
+// useEnterLeave's `opts.quiet` (v18.3.1, measured on the tablet there), carried
+// to the lists that fold since O3. Only a CHANGE inside the window re-seeds, so
+// a fold that began before the window runs to the end, unless another change
+// lands inside it (the re-seed then drops it, as useEnterLeave's drops a fade).
+// A change that lands while the page is HIDDEN is a replacement too, whoever
+// made it: the prune below waits for a frame, and a hidden page runs none, so a
+// fold started then would play on wake.
+//
+// The prune starts on the NEXT FRAME (`afterFrame`, v18.3.2), not in the
+// effect. Measured on DEV: after the List's last card was deleted through its
+// confirm, the first frame came ~380ms late, so the fold began then while a
+// prune timed from the effect fired 80ms later and cut it at 61px of 108 (what
+// held that frame back was not established). With the first frame forced 300ms
+// late, the old timing cut a card at 71px and this one runs the fold to 0. A
+// hold timed from the frame the fold starts on outlasts it by EXIT_PAD however
+// late that frame is (lib/after-frame.js, useEnterLeave's measurement).
+//
 // `sig` is a stable, sorted membership signature — the effects key on it, NOT the
 // fresh-every-render ids array, so a value-only change (e.g. warn→noshow, or a
 // countdown tick) re-renders without churning the lifecycle. The membership diff
@@ -35,6 +57,9 @@
 
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { REVEAL_EXIT_MS, exitHold } from "../lib/constants";
+// v18.3.2 (O3): a prune starts on the frame its fold starts on (afterFrame),
+// and a change while the page is hidden is a replacement (pageHidden).
+import { afterFrame, pageHidden } from "../lib/after-frame";
 
 // v17.15.0: derived, not typed. This was 350, chosen as "> Reveal's ~300ms
 // collapse" — a literal encoding of the OLD --t-shift. `Reveal` now takes
@@ -43,6 +68,12 @@ import { REVEAL_EXIT_MS, exitHold } from "../lib/constants";
 // row must outlive the Reveal inside it, so this IS that number: same source,
 // no second copy to keep in step.
 const PRUNE_MS = REVEAL_EXIT_MS;
+
+// Cancel every pending prune: each entry of `timers` is afterFrame's cancel.
+function cancelAll(timers) {
+  Object.keys(timers.current).forEach(function (id) { timers.current[id](); });
+  timers.current = {};
+}
 
 // `opts.speed` (17.15.0-wa-sandbox) names which entry of the `M` scale the
 // caller's own <Reveal> runs on, so the prune window can be derived from the
@@ -54,6 +85,7 @@ const PRUNE_MS = REVEAL_EXIT_MS;
 export function useRevealRows(ids, resetKey, opts) {
   const speed = (opts && opts.speed) || "reveal";
   const instantIn = !!(opts && opts.instantIn);
+  const quiet = !!(opts && opts.quiet);
   const pruneMs = speed === "reveal" ? PRUNE_MS : exitHold(speed);
   const [renderIds, setRenderIds] = useState(function () { return ids.slice(); });
   const [openIds, setOpenIds] = useState(function () { return new Set(ids); });
@@ -110,9 +142,34 @@ export function useRevealRows(ids, resetKey, opts) {
     }
   }
 
-  // The bookkeeping that re-seed implies, done where a ref may legally be
-  // written: after the commit, before paint. Both halves have to happen, and
-  // neither may happen a moment later than this.
+  const sig = ids.slice().sort().join(",");
+
+  // ── A change nobody watched is a replacement too (v18.3.2, O3) ─────────────
+  // `opts.quiet` (the header): a membership change inside the caller's catch-up
+  // window, or while the page is hidden (v18.3.2: the prune waits for a frame,
+  // so a fold started then would play on wake), re-seeds exactly as a resetKey
+  // change does, and DURING RENDER for
+  // the same reason, so the first committed dom is already the new list. From
+  // the diff effect below it landed a commit late, and that commit drew the
+  // departed card once more, inert (measured: 22ms on DEV). `seenSig` is the
+  // membership the last render saw, kept through every change so that turning
+  // quiet on re-seeds nothing by itself: a fold that began before the window
+  // runs to the end, unless another change lands inside it. `quietResets`
+  // counts these re-seeds, for the bookkeeping effect below.
+  const [seenSig, setSeenSig] = useState(sig);
+  const [quietResets, setQuietResets] = useState(0);
+  if (sig !== seenSig) {
+    setSeenSig(sig);
+    if (quiet || pageHidden()) {
+      setRenderIds(ids.slice());
+      setOpenIds(new Set(ids));
+      setQuietResets(quietResets + 1);
+    }
+  }
+
+  // The bookkeeping either re-seed implies (a resetKey change, or a quiet one),
+  // done where a ref may legally be written: after the commit, before paint.
+  // Both halves have to happen, and neither may happen a moment later than this.
   //
   //   prevKeys  is what the membership diff below reads as "the list last
   //             seen". Left describing the day we just left, that effect would
@@ -130,14 +187,16 @@ export function useRevealRows(ids, resetKey, opts) {
   // The first version wrote both during render, next to the setState calls. It
   // worked, and it is still the wrong place: a render may be discarded and
   // re-run, and a ref written there survives that.
+  //
+  // ONE effect for both re-seeds (v18.3.2's /code-review): the quiet re-seed
+  // first had a copy of this body of its own, and a change to what a re-seed
+  // resets would have had to land in both. It also runs on mount, which the
+  // resetKey re-seed's effect always did.
   useLayoutEffect(function () {
     prevKeys.current = ids.slice();
-    Object.keys(timers.current).forEach(function (id) { clearTimeout(timers.current[id]); });
-    timers.current = {};
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ids` is read live; this fires on a reset, never on a content change
-  }, [prevReset]);
-
-  const sig = ids.slice().sort().join(",");
+    cancelAll(timers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `ids` is read live; this fires on a re-seed, never on a content change
+  }, [prevReset, quietResets]);
 
   // ── Membership diff: add newcomers, collapse + prune departures ────────────
   useEffect(function () {
@@ -165,7 +224,7 @@ export function useRevealRows(ids, resetKey, opts) {
       }
     }
     cur.forEach(function (id) {
-      if (timers.current[id]) { clearTimeout(timers.current[id]); delete timers.current[id]; }
+      if (timers.current[id]) { timers.current[id](); delete timers.current[id]; }
     });
     const departed = prevKeys.current.filter(function (id) { return !curSet.has(id); });
     if (departed.length) {
@@ -176,7 +235,7 @@ export function useRevealRows(ids, resetKey, opts) {
       });
       departed.forEach(function (id) {
         if (!timers.current[id]) {
-          timers.current[id] = setTimeout(function () {
+          timers.current[id] = afterFrame(function () {
             delete timers.current[id];
             setRenderIds(function (prev) { return prev.filter(function (x) { return x !== id; }); });
           }, pruneMs);
@@ -206,8 +265,7 @@ export function useRevealRows(ids, resetKey, opts) {
   // Clear pending prune timers on unmount.
   useEffect(function () {
     return function () {
-      Object.keys(timers.current).forEach(function (id) { clearTimeout(timers.current[id]); });
-      timers.current = {};
+      cancelAll(timers);
     };
   }, []);
 

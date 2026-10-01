@@ -562,6 +562,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
     return true;
   }
   // Firebase real-time listeners — read only, never write back.
+  //
+  // v18.3.2: they attach ONCE, as does the heartbeat further down, so they call
+  // the FIRST render's drainPending / resync / gapTrip / kickIfStuck. That is
+  // correct only because every function they reach reads nothing but refs,
+  // state setters and imports, so any render's copy does what the latest would.
+  // tests/stale-closures.test.js derives that and fails if one of them starts
+  // reading a prop or a state value.
   // The `bookingsLoaded.current=true` line MUST run on every callback, including
   // when val is null (truly empty DB), otherwise saves would stay blocked forever
   // on a brand-new database.
@@ -676,6 +683,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       drainPending();
     },dbError("bookings"));
     return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attached once: drainPending reads only refs and setters (the note above)
   },[]);
   useEffect(function(){
     const unsub=onValue(ref(db,"tableBlocks"),function(snap){
@@ -749,6 +757,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       }
     },dbError(".info/connected"));
     return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attached once (the note above the listeners); a re-attach would replay "connected" as a reconnect
   },[]);
   // ── v17.5.1: first-load watchdog ────────────────────────────────────────────
   // If the first bookings snapshot has not arrived after LOAD_TIMEOUT_MS, stop
@@ -858,6 +867,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       window.removeEventListener("pageshow",onResume);
       document.removeEventListener("visibilitychange",onVis);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- started once (the note above the listeners); restarting it on each render would starve the 10s beat
   },[]);
   // Auto-extend seated bookings that exceed their stored duration.
   // IMPORTANT: computes the update in a pure pass first and only calls saveBookings
@@ -890,6 +900,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     if(key===lastExtend.current) return;
     lastExtend.current=key;
     saveBookings(bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer),true); // silent — non-interactive auto-extend
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- saveBookings is a new function each render; watching it would re-run this pass on every render
   },[nowMins,tableBlocks,autoOptimizer,bookings]);
 
   // v15.1.0: Auto-complete after closing time — any booking still `seated`
@@ -922,6 +933,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
     });
     if(!needsUpdate) return;
     saveBookings(bookingsAfterAction(updated,today,tableBlocks,null,false,autoOptimizer),true); // silent — non-interactive auto-complete
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- saveBookings is a new function each render; watching it would re-run this pass on every render
   },[nowMins,tableBlocks,autoOptimizer,bookings]);
 
   return {

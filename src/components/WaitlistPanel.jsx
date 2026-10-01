@@ -34,6 +34,22 @@
 // already empty. Nothing else moves either — the text keeps its width, where it
 // lost 63px and re-wrapped (Patryk's pick over keeping it 321px at rest).
 //
+// v18.3.2 (O3): a party LEAVES the way it arrives. A row removed here, or by
+// another device, used to blink out while the rows below jumped up; now each
+// row sits in a `Reveal` and folds away on --t-shift (385ms), the WhatsApp
+// list's fold, while the rows below follow it up. A new row still arrives at
+// full height (`instantIn`), as that list's do: Patryk's call there, repeated
+// for this panel on 2026-09-30, was that a row growing open as well is too
+// much movement. The leaving row is drawn from `Reveal`'s cached children, so
+// it looks exactly as it last did (armed "Confirm — remove" included), holds
+// its place (`placeLeaving`) and is `inert` until it is gone. The numbers
+// follow the live rows at once, so for the length of a fold two rows can read
+// "#2": the leaving one keeps the number it had. The empty line is the other
+// half of the same swap and rides the same curve, so removing the last party
+// is one move from a row to the sentence rather than a fold and then a jump
+// (measured: the text under it travelled 1.2px), and a party arriving
+// replaces the sentence in one frame, the way the row itself arrives.
+//
 // Props:
 //   entries        — the day's waiting entries, sorted createdAt asc (parent)
 //   availability   — { [entryId]: {tables:[…], time:"HH:MM"} | null }
@@ -41,14 +57,19 @@
 //   onBook(entry)  — open the pre-filled booking form
 //   onRemove(id)   — delete the entry
 //   onClose()      — close the panel
+//   catchingUp     — v18.3.2 (O3): App's reconnect catch-up window; a row that
+//                    leaves or arrives then does not fold (useRevealRows' quiet)
 
 import { useState } from "react";
-import { S, BLOCK_BG, R, T, FW, IC, SP } from "../lib/constants";
+import { S, BLOCK_BG, R, T, FW, IC, SP, ROW_FOLD } from "../lib/constants";
 import { formatPhone } from "../lib/customers";
 import { formatDay } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
-import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight } from "./atoms";
+import { useRevealRows } from "../hooks/useRevealRows";
+import { useLeavingOrder } from "../hooks/useLeavingOrder";
+import { Overlay, ModalTitle, mkBtn, mkDangerBtn, AutoHeight, Reveal } from "./atoms";
 import { TrashIcon, IndoorIcon, OutdoorIcon } from "./Icons";
+
 
 // The button group's ARMED width: Book (60.3) + the 6px gap + "Confirm —
 // remove" with its trash mark (160.1; 140.1 before phase 62 gave it the mark) =
@@ -70,10 +91,15 @@ function addedLabel(ts){
   return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
 }
 
-export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose }){
+export function WaitlistPanel({ entries, availability, date, onBook, onRemove, onClose, catchingUp = false }){
   const [confirmId,setConfirmId]=useState(null);
+  // v18.3.2 (O3): the rows drawn — the live ones, and any still folding away —
+  // in the order they hold on screen (the header).
+  const ids=entries.map(function(w){return w.id;});
+  const {renderIds,openIds}=useRevealRows(ids,date,{speed:ROW_FOLD,instantIn:true,quiet:catchingUp});
+  const order=useLeavingOrder(ids,renderIds);
 
-  const rows=entries.map(function(w,i){
+  function rowFor(w,i){
     const avail=availability[w.id]||null;
     // v17.8.0: text, not a pill. WaitAvailBanner already prints this exact fact
     // ("… — table free · 19:30") as plain green text one surface away, and the
@@ -88,7 +114,6 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
     const party=who+", "+guestsLabel(w.size);
     return (
       <div
-        key={w.id}
         style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:R.card,background:"var(--bg-soft)",border:"1px solid "+(avail?"var(--suggest-border)":"var(--border-soft)"),marginBottom:8,boxShadow:"var(--shadow-input)"}}><span
           style={{fontSize: T.body,fontWeight: FW.bold,color:S.text,minWidth:20,textAlign:"center",opacity:0.6}}>{"#"+(i+1)}</span><div style={{flex:"1 1 160px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize: T.lead,fontWeight: FW.bold,color:S.text}}>{who}</span><span style={{fontSize: T.body,fontWeight: FW.bold,color:S.text}}>{guestsLabel(w.size)}</span>{/* v18.2.0 phase 68 (L-1): the
             zone the party asked for, in the List card's flag look (mark +
@@ -103,7 +128,26 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
             style={mkDangerBtn({fontSize: T.body,minHeight:36})}
             onClick={function(){if(arming){onRemove(w.id);setConfirmId(null);}else setConfirmId(w.id);}}><TrashIcon size={IC.control} />{arming?"Confirm — remove":"Remove"}</button></div></div>
     );
+  }
+
+  // A leaving row passes no children: `Reveal` draws the ones it cached, i.e.
+  // the row exactly as it last looked, and `inert` keeps its buttons out of
+  // reach while it folds. Its bottom margin sits inside the Reveal, so the gap
+  // under it folds with it.
+  const at={};
+  entries.forEach(function(w,i){at[w.id]=i;});
+  const rows=order.map(function(id){
+    const i=at[id];
+    return <Reveal key={id} show={openIds.has(id)} speed={ROW_FOLD} inert={i===undefined}>{i===undefined?null:rowFor(entries[i],i)}</Reveal>;
   });
+  // The empty line opens once no row is OPEN. On the commit the last party
+  // leaves, its row is still open (useRevealRows closes it in an effect), so the
+  // line mounts closed and eases open beside the fold: one swap. It is not
+  // rendered at all while anyone is waiting, so a party arriving replaces it
+  // in the same frame, as the row itself arrives: measured with the line on a
+  // `show` of its own, it folded for 385ms under the new row and the card grew
+  // by a row and shrank back.
+  const noneOpen=!order.some(function(id){return openIds.has(id);});
 
   const footerEl=(
     <div style={{display:"flex",justifyContent:"flex-end"}}><button
@@ -115,7 +159,10 @@ export function WaitlistPanel({ entries, availability, date, onBook, onRemove, o
   // v17.10.0: the title pill follows the button that opens it (ModalTitle's
   // colour rule), and that badge is now the pending amber.
   return (
-    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={BLOCK_BG.pending}>{"Waitlist — "+formatDay(date)}</ModalTitle>{rows.length?rows:<div
-        style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
+    <Overlay onClose={onClose} footer={footerEl}><AutoHeight><ModalTitle marginBottom={16} background={BLOCK_BG.pending}>{"Waitlist — "+formatDay(date)}</ModalTitle>{rows}{/* v18.3.2 (O3): its own Reveal on
+        the rows' speed, so the last party leaving and this line arriving are
+        one swap (DESIGN.md: one Reveal cannot animate a swap), and gone at once
+        when a party arrives (`noneOpen`, above). */}{entries.length?null:<Reveal show={noneOpen} speed={ROW_FOLD}><div
+        style={{textAlign:"center",padding:"24px 0",color:S.muted,fontSize: T.lead}}>No one on the waitlist for this day.</div></Reveal>}<div style={{fontSize: T.small,color:S.muted,textAlign:"center",marginTop:10}}>First come, first served — "Table free" means a table currently fits this party.</div></AutoHeight></Overlay>
   );
 }

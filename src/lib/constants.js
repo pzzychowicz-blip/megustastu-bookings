@@ -803,6 +803,21 @@ export function exitHold(speed) { return M.dur[speed] + EXIT_PAD; }
 export var EXIT_MS = exitHold("move");
 export var REVEAL_EXIT_MS = exitHold("reveal");
 
+// ── ROW_FOLD (v18.3.2, O3) ────────────────────────────────────────────────────
+// The `M` entry a list row folds away on when it leaves: the WhatsApp
+// conversation list's rows, the waitlist panel's and the List's cards. ONE name
+// for one decision, which was three hand-typed "shift"s. It is `shift` (385ms)
+// by measurement: the WhatsApp list's fold was a tuned 365ms, after a 280ms one
+// read as a snap in the Inbox tab, where "Needs action" removes many rows at
+// once. `move` (240ms) is faster than the 280 that was rejected, which is how a
+// semantic argument ("a row leaving is something LEAVING") quietly undoes a
+// measurement: the O3 plan made exactly that argument, on the belief that the
+// WhatsApp list used `move`, and Patryk kept `shift` for the other two on
+// 2026-09-30. It is also the honest token: a `Reveal` changes geometry. Pass it
+// as `speed` to both `useRevealRows` and each row's `Reveal`, so the prune and
+// the collapse come from the same entry.
+export const ROW_FOLD = "shift";
+
 // v17.10.0: `guestId` is the phone-less customer identity carried by the draft
 // (see customers.js → identityKey); `guestSeed` is the id of the booking that
 // still needs the same stamp written BACK to it, and is draft-only — doSave

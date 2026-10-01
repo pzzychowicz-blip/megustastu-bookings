@@ -179,10 +179,10 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   const swapTitleClr = swapBusy ? "var(--text-on-accent)" : S.text;
   const swapSubClr = swapBusy ? "var(--text-on-accent)" : S.text;
 
-  // Internal keyboard shortcuts. The deps array intentionally includes
-  // `affectedBookings` and `onSave` even though they may change every render
-  // — the listener gets re-registered, but that's the existing behaviour
-  // and changing it is out of scope for the structural extraction.
+  // Internal keyboard shortcuts. The listener is re-added on every render, so
+  // Enter always saves the current picks. v18.3.2: it already was — the list
+  // named `affectedBookings`, a new array on every render — so the list is gone
+  // and the effect says what it does (InboxPanel's and WeekView's shape).
   useEffect(() => {
     function handler(ev) {
       // v17.4.0 /code-review: bail when there is no booking. The null guard sits
@@ -214,7 +214,7 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     }
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [swapBusy, selected, ok, isSwapping, affectedBookings, onSave, booking]);
+  });
 
   if (!booking) return null; // moved below all hooks — see the note above
 

@@ -56,9 +56,10 @@ import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
-import { unplacedOf, primaryGridTable, packLanes } from "../lib/unplaced";
+import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
 import { money } from "../lib/vouchers";
 import { edgeVelocity, edgeStep, scrollParentY, scrollBounds } from "../lib/edge-scroll";
+import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
 
 // A block moves in two ways at once and they are NOT the same kind of motion:
 // left/width is the schedule changing (geometry — M.shift), transform is the
@@ -1457,7 +1458,12 @@ export const TimelineView = memo(function TimelineView({
       scrollRef.current.scrollLeft = scrollPosRef.current;
     }
     return () => cancelAnimationFrame(followRafRef.current);
-  }, [followNow, isToday, nowMins, gridW, followLeadMins]);
+    // v18.3.2 (the stale-closure triage): `totalMins` joins the list. `gridW`
+    // follows it everywhere except under its 320px floor (a grid shorter than
+    // about 4½ hours at 1×), where the hours could change with `gridW` standing
+    // still and the fraction computed from the old span. `scrollPosRef` is
+    // App's ref, the same object every render, so listing it costs nothing.
+  }, [followNow, isToday, nowMins, gridW, followLeadMins, totalMins, scrollPosRef]);
 
   function onGridScroll() {
     if (scrollRef.current && scrollPosRef) {
@@ -1572,7 +1578,82 @@ export const TimelineView = memo(function TimelineView({
   // Rows sit below the header strip AND, when it is there, below the Unplaced
   // row — `tableForClientY` needs the offset, or every drop lands rows low.
   const UNPLACED_GAP = 4;
-  const unplacedH = unplacedLanes.length > 0 ? unplacedLanes.length * ROW_H + UNPLACED_GAP : 0;
+  const unplacedH = unplacedHeight(unplacedLanes.length, ROW_H, UNPLACED_GAP);
+  // v18.3.2 (O4): the row EASES to that height, in both columns at once, so
+  // the table rows below it, their labels and their blocks travel together.
+  // Measured on DEV before: it mounted at full height, so the labels and row
+  // lines jumped 48px in one frame; and when a booking's tables changed in the
+  // same commit, useFlip read the shift as a move, so a block on 1B started
+  // over 1A and slid down into its own row (−48px, −16 by 165ms, 0 at 385ms).
+  // `unplacedRow` is how many lanes the row is heading for, whether it is on
+  // its way there (`moving`, and `grow` while the last change made it taller)
+  // and the most lanes it has drawn since it last stood still (`held`). While
+  // it moves the height transitions on --t-shift from wherever it was, so
+  // nothing below has moved yet when useFlip measures the commit that started
+  // it, and a change that lands mid-way carries on from there: a row opened
+  // and emptied again inside the 385ms closes from where it got to. (The first
+  // version compared the target with the height it last SETTLED at, which
+  // calls that second change "no change" and snaps the row shut.) It settles a
+  // frame-timed hold after the last change (`afterFrame`, then exitHold), which
+  // also re-baselines useFlip (below). A replacement goes straight to the new
+  // height, as useEnterLeave treats one: a date change or the first load (the
+  // same key), a catch-up nobody watched, or a change while the page is
+  // hidden, which would otherwise ease on wake.
+  const unplacedKey = date + (bookingsReady ? "" : "|loading");
+  const unplacedCount = unplacedLanes.length;
+  const [unplacedRow, setUnplacedRow] = useState({ key: unplacedKey, lanes: unplacedCount, moving: false, grow: false, held: unplacedCount });
+  if (unplacedRow.key !== unplacedKey || (unplacedRow.lanes !== unplacedCount && (catchingUp || pageHidden()))) {
+    setUnplacedRow({ key: unplacedKey, lanes: unplacedCount, moving: false, grow: false, held: unplacedCount });
+  } else if (unplacedRow.lanes !== unplacedCount) {
+    setUnplacedRow({ key: unplacedKey, lanes: unplacedCount, moving: true, grow: unplacedCount > unplacedRow.lanes, held: Math.max(unplacedRow.held, unplacedCount) });
+  }
+  useEffect(function () {
+    if (!unplacedRow.moving) return undefined;
+    return afterFrame(function () {
+      setUnplacedRow(function (r) { return { key: r.key, lanes: r.lanes, moving: false, grow: false, held: r.lanes }; });
+    }, exitHold("shift"));
+  }, [unplacedRow]);
+  const unplacedEasing = unplacedRow.moving;
+  // While it moves, the row keeps the lanes it is leaving: the label column
+  // clips its word away instead of dropping it first, and a booking that left
+  // the day from a held lane fades where it was. A held lane draws no live
+  // block: a booking placed again is on its table, and useFlip carries it
+  // there on the same curve as this height, so it does not move on screen.
+  const heldLanes = Math.max(unplacedCount, unplacedRow.held);
+  const unplacedBox = {
+    position: "relative",
+    height: unplacedH + "px",
+    transition: unplacedEasing ? "height " + M.shift : "none"
+  };
+  // The label column clips while the row eases, so "Unplaced" never draws over
+  // the 1A label sliding under it. The grid column does not: clipped, a booking
+  // that lost its table on 1A vanished at the commit (the box starts at 0) and
+  // wiped back in where it already stood (measured on DEV), and one coming up
+  // from a lower row was hidden for most of its slide. While the row GROWS its
+  // blocks paint over the table rows instead, or 1A's grid lines cross the one
+  // that just arrived. Not while it shrinks: the booking that left it is on a
+  // table row then, and lifted, the emptying row's lines crossed it (measured).
+  const unplacedLabelBox = { ...unplacedBox, overflow: unplacedEasing ? "hidden" : "visible" };
+  const unplacedGridBox = { ...unplacedBox, zIndex: unplacedEasing && unplacedRow.grow ? 1 : undefined };
+  // The row's edge, in both columns: its dashed line and (in the grid) its grid
+  // lines, over the box less the gap. At rest that is the lanes' height; while
+  // the row eases it follows the box, so the line travels with the table rows
+  // and the grid lines (semi-transparent) are never drawn twice over theirs. It
+  // clips, so below 1px the line is gone rather than lying on the header's edge.
+  const unplacedEdge = {
+    position: "absolute", top: 0, left: 0, right: 0,
+    height: "calc(100% - " + UNPLACED_GAP + "px)",
+    overflow: "hidden"
+  };
+  // Drawn over the last lane's last pixel, never below the lanes, so the box,
+  // the label column and `unplacedH` agree to the pixel (v18.2.0 measured: a
+  // border that added 1px put the rows 1px below where `tableForClientY` and
+  // the label column believed they were).
+  const unplacedLine = (
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, borderBottom: "1px dashed var(--tl-unassigned-border)" }} />
+  );
+  // The grid half's box: `tableForClientY` reads its live bottom.
+  const unplacedRef = useRef(null);
 
   // v16.0.0 follow-up: start-time chips are CONFIRMED-ONLY (a seated/completed
   // party has arrived — the start time is no longer at-a-glance info, so those
@@ -1654,7 +1735,22 @@ export const TimelineView = memo(function TimelineView({
   // or the Unplaced row's cell when none of its tables has a row)
   // carries data-flip-id — one element per id, no collision, animates only a real move.
   const assignSig = day.map((b) => b.id + "@" + (b.tables || []).join("-")).join(",");
-  const flipRef = useFlip([assignSig]);
+  // v18.3.2 (O4): and whether the Unplaced row is moving. That row moves the
+  // table rows INSIDE this container with no table changing, which leaves the
+  // baseline stale by its height (DESIGN.md's container note, from inside), so
+  // when it settles one QUIET pass re-measures. Quiet means no table changed
+  // since the last pass: `flipSig` is the assignment the last commit drew, and
+  // it is written in a passive effect, after useFlip's layout effect has read it.
+  const flipSig = useRef(assignSig);
+  const flipRef = useFlip([assignSig, unplacedRow.moving], function () { return flipSig.current === assignSig; });
+  useEffect(function () { flipSig.current = assignSig; }, [assignSig]);
+  // While the row moves, the baseline follows it a frame at a time (useFlip's
+  // `rebase`), so a table change landing mid-way slides only the blocks it
+  // moved; the settle pass above still takes the final tops.
+  useEffect(function () {
+    if (!unplacedRow.moving) return undefined;
+    return everyFrame(function () { if (flipRef.rebase) flipRef.rebase(); });
+  }, [unplacedRow.moving, flipRef]);
   // v18.3.0 (M1): a drop hands useFlip its release position (see useFlip's
   // `seed`). Reads the method at CALL time: it is attached in an effect, after
   // the first render.
@@ -1766,20 +1862,28 @@ export const TimelineView = memo(function TimelineView({
       }} />
       {/* v18.2.0: the Unplaced row leads, directly under the header — it holds
           the bookings the rows below cannot show, so it is the first thing to
-          read rather than the last thing below eleven rows of tables. */}
-      {unplaced.length > 0 ? (
-        <div style={{
-          height: (unplacedLanes.length * ROW_H) + "px",
-          display: "flex", alignItems: "center", justifyContent: "flex-end",
-          paddingRight: 6,
-          borderBottom: "1px dashed var(--tl-unassigned-border)",
-          marginBottom: UNPLACED_GAP, boxSizing: "border-box"
-        }}>
-          <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
-            Unplaced
-          </span>
-        </div>
-      ) : null}
+          read rather than the last thing below eleven rows of tables.
+          v18.3.2 (O4): its box is always mounted, so it can ease open and shut
+          beside the grid's (`unplacedBox`); the gap is the box's last 4px. */}
+      <div style={unplacedLabelBox}>
+        {heldLanes > 0 ? (
+          <>
+            <div style={unplacedEdge}>{unplacedLine}</div>
+            {/* Less the line's 1px, which this box's own border took when the
+                line was drawn here, so the word stays where it always was. */}
+            <div style={{
+              height: (heldLanes * ROW_H - 1) + "px",
+              display: "flex", alignItems: "center", justifyContent: "flex-end",
+              paddingRight: 6,
+              boxSizing: "border-box"
+            }}>
+              <span style={{ fontSize: T.micro, fontWeight: FW.semi, color: "var(--danger-text)" }}>
+                Unplaced
+              </span>
+            </div>
+          </>
+        ) : null}
+      </div>
       {TIMELINE_TABLES.map((tbl) => {
         const id = tbl.id;
         const indoor = isIn(id);
@@ -1828,10 +1932,13 @@ export const TimelineView = memo(function TimelineView({
   // the 24px header strip and (v18.2.0) the Unplaced row when it is shown.
   // Returns null outside the table rows (header / Unplaced row / off-grid) so a
   // drop there is a no-op snap-back.
+  // v18.3.2 (O4): the rows start at the Unplaced box's LIVE bottom, which is
+  // right while it eases too; `unplacedH` is only where it is heading.
   function tableForClientY(clientY) {
     const el = flipRef.current;
     if (!el) return null;
-    const top = el.getBoundingClientRect().top + 24 + unplacedH;
+    const u = unplacedRef.current;
+    const top = u ? u.getBoundingClientRect().bottom : el.getBoundingClientRect().top + 24 + unplacedH;
     const idx = Math.floor((clientY - top) / ROW_H);
     return idx >= 0 && idx < TIMELINE_TABLES.length ? TIMELINE_TABLES[idx].id : null;
   }
@@ -1998,28 +2105,28 @@ export const TimelineView = memo(function TimelineView({
   // here is a normal block — tap to edit, the assign handle, the quick-status
   // hold — and drags onto a table row like any other: `homeTable={null}` makes
   // every row a move target, and `tableForClientY` skips this row's height.
-  const unplacedGrid = unplaced.length > 0 ? (
-    // The HEIGHT is pinned, border-box: the dashed border then sits inside the
-    // last lane instead of adding 1px, so this, the label cell and
-    // `unplacedH` agree to the pixel (measured: unpinned, the rows below sat
-    // 1px lower than `tableForClientY` and the label column believed).
-    <div style={{
-      height: (unplacedLanes.length * ROW_H) + "px",
-      borderBottom: "1px dashed var(--tl-unassigned-border)",
-      marginBottom: UNPLACED_GAP, boxSizing: "border-box"
-    }}>
-      {unplacedLanes.map((lane, li) => (
+  // v18.3.2 (O4): always mounted inside `unplacedGridBox`, which eases its
+  // height in step with the label column's, and drawing `heldLanes` while it
+  // does. The grid lines are the edge's, one set over the whole row, so they
+  // follow the eased height; the lanes hold only the blocks.
+  const unplacedGrid = (
+    <div ref={unplacedRef} style={unplacedGridBox}>
+      {heldLanes > 0 ? (
+    <>
+      <div style={unplacedEdge}>{unplacedLine}<GridLines /></div>
+      {Array.from({ length: heldLanes }, (_, li) => unplacedLanes[li] || []).map((lane, li) => (
         <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
-          <GridLines />
           {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
-          {/* v18.3.0 (O1): a booking that left while in THIS lane. A lane that no
-              longer exists takes nobody: the row shrinking is its own mount
-              (O4), not this fade. */}
+          {/* v18.3.0 (O1): a booking that left while in THIS lane. v18.3.2
+              (O4): a lane the row is easing away from is still drawn, so the
+              last booking leaving it fades there while the row shrinks. */}
           {leavingCells.filter((s) => s.lane === li).map((s) => <TimelineBlock key={"leaving-" + s.b.id} leaving b={s.b} pxPerMin={pxPerMin} anim={null} flipId={null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={s.warnings} clash={s.clash} currency={currency} late={s.late} noShows={s.noShows} showChip={s.chip} />)}
         </div>
       ))}
+    </>
+      ) : null}
     </div>
-  ) : null;
+  );
 
   // ── Now line (today only) ────────────────────────────────────────────────
   const nowInRange = isToday && nowMins >= OPEN * 60 && nowMins <= GRID_CLOSE * 60;

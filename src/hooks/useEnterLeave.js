@@ -71,7 +71,7 @@ import { exitHold } from "../lib/constants";
 // A hold starts on the NEXT FRAME, not in the effect: this hook's measurement
 // found it (No show removed at 221 of 240ms), and the helper moved to lib so
 // usePresenceLifecycle (atoms) could share it. lib/after-frame.js has the why.
-import { afterFrame } from "../lib/after-frame";
+import { afterFrame, pageHidden } from "../lib/after-frame";
 
 // Module constants, so "nothing" is one identity and an idle list never hands
 // its caller a fresh Map or Set.
@@ -94,9 +94,7 @@ const NO_IDS = new Set();
 // reconnect (with "Reconnected — changes synced." up), while the page is
 // visible. `opts.quiet` is the caller's word for that window (TimelineView's
 // `catchingUp`), and a diff taken inside it is a replacement too.
-function pageHidden() {
-  return typeof document !== "undefined" && document.visibilityState === "hidden";
-}
+// (`pageHidden` moved to lib/after-frame.js in v18.3.2, for its other callers.)
 
 function sameDeps(a, b) {
   if (a.length !== b.length) return false;

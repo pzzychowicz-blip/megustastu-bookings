@@ -29722,3 +29722,557 @@ scroll with the page, so the strip never covers one.
 | 6 | Tablet, iPhone | Drag a block to the bottom edge: the grid scrolls, and the drop lands on the row under the finger |
 | 10 | iPad | Booking form in Safari: focus Notes with the keyboard down. The card's top stays visible and Save stays above the keyboard |
 | 16 | Android tablet | Screen off, change a booking from another device, wake: nothing fades, and the change is simply there |
+
+## v18.3.2 — the bug sweep
+
+**Date:** 2026-09-30 · **Branch:** `fix/v18.3.2-bug-sweep` ·
+**Behavioural change:** yes: picking from a booking-form dropdown by touch no longer
+activates the field underneath it, and a booking somebody placed by hand keeps its tables
+when its time is edited. The other phases are listed below.
+
+Patryk read the ROADMAP for bugs and reported two from the restaurant devices. The version
+carries both, plus six ROADMAP items: the stale-closure lint triage and the thirteen bare
+directives (#10, all but its `--max-warnings` decision), the List and waitlist exits (O3),
+the Unplaced row's mount (O4), one phone-rule helper (#13's small half), react 19.3 and
+plugin-react 6.1 (#14), and closing the drop freeze (M1) as won't-fix.
+
+### Phases
+
+1. **Picking a country code by touch no longer opens the Time picker (reported from the
+   tablet).** "When I choose country code on a tablet it jumps straight to Time and opens
+   it." `useAcRow` picks a row on `touchend`, and the pick closes the list, so the
+   mousedown, mouseup and click the browser synthesizes for the tap arrive after the row is
+   gone and land on whatever the list was covering. **Measured** in headless Chromium with
+   touch at 1280×800 (a CDP tap on DEV, a capture-phase event log): the country list's
+   first pinned row, Spain, overlaps the Time input by 17px (row 285–325, Time 258–302).
+   A tap on that overlap picked Spain, and 14ms later `mousedown`, `mouseup` and `click`
+   hit `input[type=time]`, which took focus; on Android a click on a time input opens its
+   picker. The name list did the same to Seating preference, a `<select>`, whose option
+   sheet opens on Android. The phone and voucher lists use the same hook. The 600ms
+   mousedown guard could not help, because it guards the ROW and the ghost's target is
+   something else. The fix cancels the tap's `touchend` (after checking `e.cancelable`),
+   which suppresses the synthesized events; a swipe still returns before it and scrolls.
+   The old comment said React makes touch listeners passive: only `touchstart` and
+   `touchmove`, so the rule it protected (native scroll stays free) still holds. **After
+   it**, the same tap picked Spain and nothing reached Time; a swipe scrolled the list
+   175px and picked nothing; a name pick left focus in the name box, as a mouse pick
+   always has; a desktop mouse pick still worked. The handlers moved into a pure
+   `acRowHandlersFor(ref, select)` so `tests/ac-row.test.js` can drive a tap, a swipe, a
+   non-cancelable `touchend` and the synthesized mousedown without React (the tap test
+   fails with the `preventDefault` taken out). The tablet was not connected, so the check
+   on it is in the table below.
+
+2. **A booking somebody placed keeps its tables when its time changes (reported from the
+   restaurant).** "If I have a reservation assigned but I change the time it reassigns
+   though. When Optimizer is on. It cannot work like that." Every drag-drop, Assign
+   (`ManualModal` always saves `locked: true`) and walk-in is `_locked`, and `doSaveEdit`'s
+   `unlockForOpt` cleared the lock on any save that changed a placement input, the time
+   included: the optimiser re-chose the tables, and the save locked the booking again on
+   whatever it had been given. With the optimiser off, `findFreeSlot` re-chose them.
+   **Measured on DEV first**, with the old code (bookings seeded straight into DEV, the
+   edit made through the real form in headless Chromium): a booking locked on table 3 at
+   17:30, moved to 20:00 on a future date, saved on 1A and the form previewed "(auto) · was:
+   3"; the same edit with a LOCKED party on 3 at 20:00 saved on 1A too; today, with the
+   optimiser off, a booking locked on 4 was moved to 1B. Patryk chose the rule: only a
+   hand-placed booking keeps its tables (an optimiser-placed one is re-placed on every
+   save of its day anyway); an unlocked party in the way is moved; a locked or seated one
+   refuses the save by name. `keepsHandTables(orig, draft)` (`booking-logic.js`) is true
+   for a `_locked` booking with tables, a confirmed or pending draft, and nothing its tables
+   were chosen FOR changed — the size, the date, the zone and the preferred tables, each
+   compared exactly as `needsR` compares it — so a time or length change, a revival or an
+   un-seat keeps them, and a size, date or zone change still re-places, as Clear and a new
+   pick do. `tablesKept` puts it together with `tablesPinned` as the one question, and the
+   save, the form's availability scan and its Tables row all ask it (the preview had
+   promised the move). A kept booking takes the seated rule: the optimiser's pass places
+   every unlocked party around it, or `replacePinnedClashes` does with the optimiser off,
+   and `handKeptRefusal` refuses what is left — a table block over the new window, or a
+   locked or seated party ("Table 3 is also held by Rita at 20:00, who is locked to it.
+   Assign different tables."), and only when the window moved. **After it**, same rig,
+   fresh dates: kept on 3 with the party in the way moved to 1A and the preview reading
+   "Tables 3"; the locked case refused with that sentence and wrote nothing; today, kept on
+   2 with the other party moved to 5A. It also closes a gap beside it: lengthening a
+   locked booking with the optimiser off saved the clash and left the reconciler to move
+   the other party (the OFF branch copies a locked booking's tables through and re-places
+   nobody; replayed as a test). `tests/booking-logic.test.js`
+   covers the predicate, the pass on both paths, the three refusals, and reads the three
+   call sites. The bookings the rig wrote stay in DEV (its tag is `v1832-`).
+
+3. **One phone rule (ROADMAP #13's small half, from v18.2.0's `/code-review`).** Save
+   (`doSave`) and Add to waitlist (`addFormToWaitlist`) each ran `withTypedCode` and then
+   refused a number with no country code in the same sentence, so the rule was written
+   out twice and a test existed only to check the two sentences matched.
+   `phoneForSave(phone, pinned, prefix, untouched)` (`booking-logic.js`, beside
+   `enteredPhone`) is the one copy: it returns the number to store and the refusal, if
+   any, and its fourth argument is Save's exemption for an edit that leaves the stored
+   number alone. No behaviour moves. Each door keeps its own order: Save still reads the
+   refusal after the name check, Add to waitlist before it writes. App spells neither
+   half of the rule nor the sentence any more; `tests/phone-countries.test.js` pins that,
+   the two call sites, and the helper's answers (a code typed without its plus, a British
+   mobile typed the home way, no phone at all, the exemption, and one pass being final),
+   each value measured from the function before it was written into the test.
+   **Measured on DEV after it** (headless Chromium, the real form): Save by Enter refused
+   "600 111 333" on the phone field and wrote nothing, then stored "34 600 111 666" as
+   "+34 600 111 666"; with every table held at 20:00, Add to waitlist refused the same
+   number and stored "34 600 111 777" as "+34 600 111 777". Those rows stay in DEV (tag
+   `v1832p-`). The ROADMAP entry keeps its larger half, the one field table.
+
+4. **The drop freeze (audit M1) closed as won't-fix, and deleted from ROADMAP.** No code
+   changes. After a drop the block holds still until the first frame paints. v18.3.1
+   measured it twice on the tablet: 249–272ms from the DEV server (phase 7), and 88–129ms
+   in a production build (phase 19, six drops, one long task each), so about 100ms, six
+   frames, in the build the restaurant runs. Phase 7's CPU profile says what a production
+   build still pays: the handler's trials (`dropOnTable` → `saveBookings` →
+   `trialFits`/`applyOpt`, ~43ms), which decide where the party goes, and the FLIP
+   measurements' `getBoundingClientRect` reads (~40ms), which let the other blocks glide
+   rather than jump. The rest of the DEV figure was React's DEV-only work. Taking the
+   remaining ~100ms down would mean deferring one of those two, and Patryk's call is that
+   the gap is not worth that. As with CT-2A-10 (v17.16.7), the decision is made, so the
+   entry is not pending work: it leaves ROADMAP, and both measurements stay in v18.3.1's
+   entry.
+
+5. **react 19.3 and plugin-react 6.1 (ROADMAP #14).** react and react-dom 19.2.5 → 19.3.0,
+   `@vitejs/plugin-react` 6.0.1 → 6.1.1, and `@types/react` / `@types/react-dom` to 19.3.0
+   with them. react-dom brings scheduler 0.27 → 0.28, whose code is byte-identical (only
+   its version moved). Read against what the app uses, 19.3's changelog is mostly new APIs
+   (`<ViewTransition>`, Fragment refs, `browser()`), server rendering, and fixes to
+   features this app does not use (transitions, `useDeferredValue`, `useEffectEvent`, form
+   actions, `innerHTML`, Activity). `scrollend` is wired exactly as before, still with no
+   polyfill, so TimeAxis keeps its fallback; the three places that cite the version now
+   name both. plugin-react's changes are opt-in React Compiler options, which
+   `vite.config.js` does not set. **The one change that reaches the app** is
+   facebook/react#35117: `resize` moved from discrete to continuous priority, and React
+   applies that to native listeners too, through `window.event`. **Measured** in the DEV
+   app with a stub DevTools hook, crossing the 600px breakpoint three times on each
+   version: 19.2.5 committed `useWinW`'s update at Immediate priority inside the resize
+   dispatch, before that frame's rAF; 19.3.0 commits it at UserBlocking priority in a
+   scheduler task about 24ms later, a frame late. A minimal root on the same page agrees
+   (19.2.5 within the microtasks, 19.3.0 one task later), and `flushSync` still commits at
+   once. `useWinH` and `useKeyboardInset` set state from a `resize` listener the same way,
+   so they take the frame too; the inset's `scroll` half always did. The first probe, a `MutationObserver` armed from the probe's
+   own listener, read "no change" on both versions, because the app's listener runs
+   first. That trap is now a row in `mgt-measurement-traps`, and the resize fact a row in
+   `src/CLAUDE.md`. **Size:** the entry chunk is unchanged (122.19 kB gz); `vendor-react`
+   grows 59.60 → 68.25 kB gz (189.59 → 218.84 kB), measured against a clean `npm ci`
+   build of the previous commit. **Also found:** this worktree's `node_modules` held
+   firebase 12.12.1 against a lockfile of 12.19.0, so every local gate and rig run before
+   this phase used the older SDK; the install brought it level with what CI installs.
+   **Checked after it, on DEV:** a cold load (React 19.3.0 served, no console errors or
+   warnings), the gate (2204 tests), and this version's three rigs: the tap on Spain
+   reaches nothing under the list and a swipe scrolls 184px; the kept-tables cases on
+   both optimiser paths (kept on 3 and 6, the other party moved, the locked case refused);
+   both phone doors. `npm audit`: 0. The tablet was not connected, so the check v18.3.1
+   gave firebase there is in the table below.
+
+6. **The stale-closure triage (ROADMAP #10's first half).** The 25
+   `react-hooks/exhaustive-deps` warnings, each read before it was touched and then fixed
+   or kept with a `-- <reason>`. One commit per change:
+   - **InboxPanel: Backspace and R acted on a stale selection.** The keydown effect named
+     sixteen dependencies and not the selection, and ticking a checkbox re-renders the
+     panel only. The handlers App passes are fresh closures on every App render, which
+     re-ran the effect often enough to hide it. **Reproduced on DEV** with the sandbox's
+     own `__waSim.question`: two of three conversations ticked, Backspace (bulk archive)
+     0.2s or 16s later archived nothing; with two App renders forced between the ticks and
+     the key (A twice, the needs-action filter on and off), it archived both. R, the bulk
+     restore, reads the same selection. The effect now has no dependency array, so the
+     listener is re-added per render and always current. **After**: Backspace 0.2s after
+     the ticks archived exactly the two, and R restored both from Archived; Escape still
+     leaves select mode first and closes the inbox second, because the capture phase,
+     not the order of adding, is what puts this listener ahead of the global one.
+     `tests/stale-closures.test.js` pins the shape. The module is off in production, so
+     there is no device check; the test conversations stay in DEV.
+   - **WeekView: T could go to yesterday.** The keydown effect listed `[mode, ref, focus]`,
+     which covers what its helpers read of those, but `goToday` reads `today`, taken at
+     render, so with the popover left open across midnight and no key pressed, T went to
+     the day before. Found by reading, not reproduced. Every helper is rebuilt per
+     render, so listing them would re-run the effect per render anyway: it has no
+     dependency array now, as InboxPanel's. **Measured after**, keys driven in the DEV
+     app: two → stepped two weeks, M and W switched mode around the focused day, T came
+     back, ↓ moved the day and Enter opened it.
+   - **TimelineView: Follow could divide by an old span.** Its effect computes the scroll
+     fraction from `totalMins` and watched `gridW` instead, and `gridW` is
+     `max(320, totalMins × zoom × 1.2)`, so under that floor (a grid shorter than about
+     4½ hours at 1×) an hours change left the fraction computed from the old span. Found
+     by reading. `totalMins` joins the list, and so does `scrollPosRef` (App's ref, the
+     same object every render). Outside the floor this re-runs nothing new, since
+     `gridW` changes with `totalMins` there. **Measured after**: F on today's DEV
+     timeline scrolled to 0.5166 of the grid, against (18:10 − 13:00) / 600 minutes =
+     0.5167 (now 18:40, less the 30-minute lead), and no console errors.
+   - **ConversationView: a new message's entrance was keyed on the count.** The effect that
+     plays it compares the last message's id, and re-ran only when the message COUNT moved,
+     so a change that replaced the last message without changing the count would never
+     play its entrance. It is keyed on `lastId` now. Found by reading; an appended message
+     moves both, so nothing else runs differently. **Measured after**, on DEV: a message
+     sent into the open thread with the sandbox's `__waSim.question` drew exactly one bubble
+     with `mgt-bubble-in`, the new one.
+   - **InboxPanel's drop-the-selection effect lists `activeKey`**, which it reads. Every
+     door that selects a conversation picks it from the current tab (the list, ↑/↓, a tab
+     switch, the narrow→wide pick, and an archived return key, which opens on the Archived
+     tab), so a new selection always passes and nothing runs differently. Checked on DEV:
+     archiving the open conversation from the Inbox tab dropped the selection, and
+     restoring it from the Archived tab dropped it there.
+   - **Five that only needed a value the lint could see**, no behaviour change: App's
+     return-to-inbox effect lists `setShowInbox`, which is one of `setModalFns` (memoised
+     on a `useCallback` with no deps), so it never changes and re-runs nothing.
+     `useWinW` and `useWinH` read their setter as `ws[1]` / `hs[1]`, which the lint cannot
+     recognise as a setter; they destructure it now (`useWinW` loses its `var`s with it).
+     `useCollapseState`'s re-sync effect lists `key`, the storage key it reads, where it
+     listed the `phoneKey` that key is made from; the two change together (checked on DEV
+     in the two-pane inbox, which reuses one card across conversations: collapsed on one,
+     the linked-booking card read expanded on the next and collapsed again on return).
+     `usePresence`
+     wrote `auth.currentUser && auth.currentUser.email` into its dependency list, which the
+     lint cannot check; the email is read into `authEmail` above the effect, which lists that.
+   - **ManualModal's keyboard effect already re-added its listener on every render**: its
+     list named `affectedBookings`, a new array each render. The list is gone, so the
+     effect says what it does, as InboxPanel's and WeekView's now do; nothing runs
+     differently. Checked on DEV after a reload: S turned swap mode on and a second S
+     turned it off, Escape asked about the unsaved picks, and Discard closed both.
+   - **Kept, with a reason: usePersistence's five.** The bookings listener, the connection
+     listener and the heartbeat attach once, so they call the first render's
+     `drainPending`, `resync`, `gapTrip` and `kickIfStuck`; the auto-extend and
+     auto-complete passes leave `saveBookings` out of their lists. All five are right for
+     one reason, checked function by function: the nine functions those effects reach read
+     only refs, state setters and imports, so any render's copy does what the latest would.
+     Listing them would break something each time. The listeners would re-attach on every
+     render, and a re-attached `.info/connected` answers at once with "connected", which its
+     handler takes for a reconnect and shows the reconnect toast. The heartbeat's 10s
+     interval would restart on every render, so in an app rendering more often than that it
+     would never fire, and a save made 90s after the last beat or server snapshot would read
+     as a wake from sleep and be held. The two passes would run over every booking on every
+     render. `tests/stale-closures.test.js` derives both halves from the file (the 14
+     render-scoped names, two props and twelve state values, and the nine reachable
+     functions) and fails when one reads the other; a `!nowMins` planted in `clearStale`
+     fails it.
+   - **Kept, with a reason, file by file.** App: the effect that clears a save error when a
+     form field changes reads `error` and must not watch it, or it would clear each error
+     the moment it was set; the reconciliation effect reads `firstLoadCount`, a ref, and
+     calls `saveBookings`, which is new each render and reads only refs (the test above),
+     so watching it would reconcile on every render. atoms: `useDialog` runs once per open,
+     because it takes the opener and hands focus in, and a second run would take the
+     dialog itself as the opener; `ref` and `uid` are fixed for the dialog's life.
+     AutoHeight's observer is attached once and its `watch` swap is keyed on the swap, and
+     both call `armSettle`, which (with `settle`) reads only refs, setters and module
+     values; listed, it would rebuild the observer, or probe the visible ceiling with two
+     forced layouts, on every render. The test above covers AutoHeight too now: it derives
+     the five render-scoped names and the two functions, and a `watch` planted in
+     `settle` fails it. ConversationView: the "Booking confirmed" banner's auto-dismiss
+     timer does not watch `onDismissAcceptedBadge`, a fresh closure every render, which
+     would restart the timer each render so that it never fired (its comment already said
+     so); the copy it keeps writes through `patchConversation`, which reads refs and setters.
+     InboxPanel: the narrow→wide pick is a transition, so it lists only `twoPane` and reads
+     the rest at that moment (a ref gates it to the change itself). Mark-read runs on
+     SELECTION and does not watch `conversations`. **Measured on DEV**: with a thread open,
+     a message sent into it with `__waSim.question` made it unread again (the Inbox count
+     went 7 → 8 while the thread was on screen, and the list showed it unread on the way
+     back) until it was selected again. Marking a message read because it landed in the
+     open thread would change behaviour, so it was put to Patryk, and **he kept it**: a
+     tablet left on an open thread cannot tell whether anyone saw the new message, so the
+     badge keeps counting it until somebody taps the thread. The effect's comment says so.
+     useWhatsApp: the auto-archive sweep calls `patchConversation`, new each render, and
+     runs when what it reads changes; watching the function would run it on every render.
+   - **One measurement trap found on the way**, added to the `mgt-measurement-traps`
+     skill: a modal closed in a hidden Browser pane stays in the DOM until a frame runs,
+     because every exit hold starts on the next animation frame, so Discard looked broken
+     until a screenshot forced one.
+   - **Where it ends.** No `exhaustive-deps` warning is left: lint 90 → 64, and the 64 are
+     the React Compiler advisories. Thirteen older directives that suppressed the rule
+     without a reason were never among the 25; Patryk had them done in this version too,
+     below.
+   - **And one directive that suppressed nothing.** App's split-orientation repair carried a
+     bare `eslint-disable-next-line react-hooks/exhaustive-deps` over a list that was
+     already complete (`applySplit` calls only a state setter and `localStorage`, and
+     `tlPaneOk` is module-level), which the lint reported as unused. It is gone.
+   - **The thirteen bare directives, one commit per file.** Each was taken out, the lint
+     asked what it would flag, and the site was fixed or kept with a `-- <reason>`. **App
+     (five).** The split-collapse on a phone lists `split` now: no path sets a split on a
+     phone today, so nothing runs differently, but a future one would be collapsed too
+     (checked on DEV: a stored split survived at 1280px and collapsed at 375px, its key
+     removed). The day-change effect lists `resetDismissed`, a `useCallback` with no
+     dependencies, and keeps a reason for `bookings`: it is a day change, and watching the
+     bookings would drop the List's selection on every save. Kept, with reasons: the
+     prefs seeding runs once per account when its prefs load (`setUP` and
+     `setPrefsLoaded` land in one render, so it reads the loaded prefs); the waitlist
+     matcher is keyed on the 15-minute `nowQuarter`, not on `nowMins` / `liveBookings`,
+     which move every 15s tick; the recurring generator leaves out `firstLoadCount` (a
+     ref) and `saveBookings` (new each render, reading only refs), as the reconciliation
+     effect above it does. **PlanView (three), all kept.** The scrubber re-anchors on a
+     date change, follows the first booking when it moves, and follows the clock once a
+     minute; each reads `isToday` and `sliderTouched` at that moment. `dayStart` and
+     `clampExact` are new functions every render, and listing one would do worse than
+     re-run the effect: `reCentre` always sets a new object, so an untouched scrubber on
+     another day would re-render without end. **ListView (two).** The status-change
+     detector, which plays a wipe of a card's old colour, was keyed on `bookings` and
+     read the day's list, and the directive hid a real stale closure: a date change that
+     neither remounts the list nor changes a booking (the week view's day pick, and the
+     WhatsApp inbox opening a booking on its date, three ways) did not run it, so it kept
+     the previous day's statuses and the first status change on the new day played no
+     wipe. Measured on DEV through the week view: 0 wipes, then 1 on the change after;
+     with the fix 1 and 1, and two date picks alone play none. A save or an undo that
+     moves the date changes `bookings` in the same render, so those paths were never
+     stale. The day's list is a `useMemo` on `bookings` and `date`, the effect is keyed
+     on it with no directive, and `tests/wipe-window.test.js` pins both (it fails on the
+     old file). The compiler's `react-hooks/globals` advisory on `__listPrev = m` went
+     with it (lint 64 → 63): it is reported only while the day's list is a plain
+     render-time array, measured both ways. That is not phase 8's silencing, since the
+     purity advisory in the same component is still reported. Kept, with a reason: the
+     focus effect is keyed on `focusReq`, a request; every bump sets `selectedId` in the
+     same batch, and watching the selection would scroll a card somebody clicked out
+     from under the finger. **TimeAxis (one), fixed.** The Plan tape's re-centre was
+     keyed on PlanView's request alone, and the lint asked for `centre`, which closes
+     over the tape's scale. That hid a real case: a new opening hour moves every time on
+     the tape while its scroll stays put. Measured on DEV with the scrubber on 17:00:
+     Thursday's open moved from 13 to 12, and the badge and the floor plan said 17:00
+     over a tape showing 16:00 under its marker, until the next scrub. The effect is
+     keyed on `openM` and the tape's px-per-minute as well now. A later close moves
+     nothing (1.6px a minute on any grid longer than three hours; only the 320px floor
+     changes it), so stretching the grid to a late booking does not re-centre a tape
+     somebody is scrubbing. Measured: a close moved 22 → 24 and back made no `scrollTo`,
+     an open moved 13 → 12 and back made one each with 17:00 under the marker, and a
+     scrub with a finger's pointerdown followed as before. The directive stays, with a
+     reason, for `selected` (a scrub moves it, and watching it would yank the tape under
+     the finger), `autoScrollSmooth` (it arrives in the batch that bumps the key) and
+     `centre` (new each render). `tests/time-axis.test.js` pins the key, and fails on the
+     old file. **atoms (one), kept.** `useFlip`'s layout effect takes the caller's `deps`,
+     a list the lint cannot check, and the lint asks for `isQuiet`. A pass runs when the
+     caller's deps change and asks that render's predicate, which in all three callers
+     (the timeline, the List, the WhatsApp conversation list) reads that render's values
+     or a ref. Each predicate is new every render, so watching it would run a pass, and
+     animate, on every render. **useWaitlist (one), gone without a reason.** The
+     past-date prune was keyed on `waitlist`, and the lint asked for `saveWaitlist`: new
+     every render, reading only refs, two state setters (its own, and App's
+     `setWriteWarning`, passed in) and imports, so nothing was stale. It is a
+     `useCallback` on `[setWriteWarning]` now and the effect lists it, so the lint checks
+     what a reason would only have claimed: dropping `setWriteWarning` from its list, or
+     reading a ref during render beside it, is reported (both planted and seen). Measured
+     on DEV: a past-dated entry written to the waitlist was gone within 300ms, the rev
+     advanced by the prune's one write. **No bare directive is left in `src/`.** Of the
+     thirteen, ten keep a reason and three are gone, and two hid a real defect: the
+     List's first wipe after a week-view pick, and the tape after a new opening hour.
+7. **List cards and waitlist rows leave the way they arrive (O3).** A card or a row that
+   left blinked out in one frame while the ones below slid or jumped up. Two decisions came
+   first, because the approved plan's premise was wrong: it picked `speed: "move"` (240ms)
+   "as the WhatsApp conversation list already does", and that list folds on `shift`
+   (385ms), after Patryk found a 280ms fold read as a snap. Put to him: **385ms**, and a new
+   card or row **arrives as today**, at full height with the ones below making room, the
+   WhatsApp list's asymmetric mode (his call there: a row also growing open was too much
+   movement).
+   - **The waitlist panel, first.** Each row sits in a `Reveal` on `shift` through
+     `useRevealRows(ids, date, { speed, instantIn: true })`. A leaving row passes no
+     children, so `Reveal` draws the ones it cached: the row exactly as it last looked,
+     armed "Confirm — remove" included. The row's 8px margin is inside the `Reveal`, so
+     the gap under it folds with it, and at rest the rows sit 66px apart as before.
+   - **`Reveal` takes `inert`** (atoms), for a row on its way out: one attribute keeps it
+     from a tap, a focus and a screen reader, where the WhatsApp list's departing row
+     needed `pointer-events`, a `tabIndex` and a click guard and was still announced.
+   - **Where a leaving row is drawn: `placeLeaving`** (`lib/leaving-order.js`, through
+     `hooks/useLeavingOrder.js`). DESIGN.md's rule was `rank − 0.5`, the notification
+     strip's `rankOf`. That compares a leaving row's OLD index with the live rows' NEW
+     ones, which is right for one departure and wrong for two: [A, B, C, D, E] losing B and
+     D leaves E at 2, and D (3 − 0.5) sorts after it. The List loses several cards at once
+     whenever the close-time auto-complete runs. So a leaving row goes straight after the
+     nearest row drawn before it last time that is still drawn, in the order they were last
+     drawn. For one departure that is the same answer. The previous order is kept in state,
+     adjusted during render, rather than in a ref read during render, which is what the
+     React Compiler lint warns about (a first version with a ref took lint 64 → 65).
+   - **The empty line is the other half of the same swap.** "No one on the waitlist for
+     this day." has its own `Reveal` on the rows' speed, opened once no row is open: on the
+     commit the last party leaves, its row is still open, so the line mounts closed and
+     eases open beside the fold. It is not rendered at all while anyone is waiting, so a
+     party arriving replaces it in the same frame.
+   - **Measured on DEV**, 1280×800, frames forced by screenshots (the pane draws none
+     otherwise; see the `mgt-measurement-traps` row on a hidden pane). Removing the first
+     of two rows: it went inert at once and folded from ~100ms, 66 → 26.8px by 194ms at
+     opacity 0.41, and the row below moved up by exactly the height it lost (the extra
+     1.6px by then is the centred card shrinking behind it). Removing the last row: it
+     folded 66 → 0.4px by 419ms while the empty line grew 0 → 64.1, their sum going 66 →
+     64.5, and the note under them moved 1.2px in all. Arriving, from a second tab: at the
+     first mutation holding the new row it was already open (66px, opacity 1, not inert).
+     The first version gave the empty line a `show` of its own, and there it folded for
+     385ms under the new row, so the card held both and grew by a row before settling. With
+     the fix, the line was already gone in that same mutation.
+   - **One name for the fold: `ROW_FOLD`** (`lib/constants.js`, beside the exit holds). The
+     WhatsApp list's `ROW_SPEED = "shift"` and the waitlist's copy were the same decision
+     written twice, and the List was about to write it a third time. The WhatsApp list's
+     measurement note moved onto the constant, including its sentence about a semantic
+     argument undoing a measurement, which is what the O3 plan's `move` was. No behaviour
+     change.
+   - **The List's active cards, the same way.** Each card sits in a `Reveal` on `ROW_FOLD`
+     through `useRevealRows(activeIds, date, { speed, instantIn: true })` and
+     `useLeavingOrder`, `presentational` so the list still owns its items, and a leaving
+     card is drawn from the cache and `inert`. Three things the waitlist did not need. The
+     space between cards was the list's flex `gap`, and a gap stays beside a card folded to
+     0px, so the list would have jumped 10px at every prune: it is each card's own top
+     margin now (`CARD_GAP`, `SP.mid`), inside its `Reveal`, with `-CARD_GAP` on the list
+     cancelling the first, which also removes the 10px an empty active list used to put
+     above the finished fold. FLIP is quiet while a card folds and for the commit after it
+     (`folding || wasFolding`, the WhatsApp list's `collapsing`), or it would replay the
+     whole fold at the prune as one jump; `folding` means a leaving card's `Reveal` has
+     CLOSED, not merely that it left, so an arrival still slides the cards below as before.
+     And `findCard` (the scroll to the selected card) skips a card in an `inert` inside the
+     list: the folding copy keeps its flip id while the same booking can already be in the
+     finished list below it. The finished list calls `renderCard(b)`: `.map(renderCard)`
+     would pass the index in as the gap.
+   - **Measured on DEV**, 1280×800 with the pane visible, so every frame ran. Completing the
+     first of two cards (the `c` key): inert at once, folded 108 → 0.1px by 433ms, pruned at
+     455ms, and the card below rose by exactly the height lost (its top minus the fold's
+     height read 196.0 in every frame), with no FLIP animation at any point. Walked back to
+     Confirmed in the edit form, it arrived at full height in one commit, 67ms after Save,
+     and the card below slid down by FLIP, −108px → 0 in ~390ms, as before. Two departures
+     74ms apart (complete, arrow, complete): each held its place (the second's top was the
+     first's top plus its height in every frame), neither got a FLIP animation at either
+     prune, and the fold header followed the list's bottom and ended 10px higher than
+     before, the removed gap.
+   - **Neither list folds a catch-up.** v18.3.1 made the timeline's blocks treat a change
+     inside App's reconnect window (`reconnectShown || resyncing`) as a replacement, after
+     the tablet played every missed fade at once on wake. The two lists that fold since O3
+     take the same rule: `useRevealRows` gains `opts.quiet`, and a membership change inside
+     it re-seeds as a `resetKey` change does, pending prunes included. App now defines
+     `catchingUp` once and hands it to all three (it was written inline at the timeline's
+     mount). With every card open after a re-seed, the List's FLIP slides the others into
+     place, which is how it moved on a catch-up before O3. **Measured on DEV** through a
+     real outage, `goOffline` / `goOnline` on the app's own Database with a second tab
+     completing the day's one booking in between. The first version re-seeded from the
+     diff effect: the missed change landed at 645ms, drew the card inert for one commit,
+     and at 667ms it was gone. That extra commit is what the lint's new
+     `set-state-in-effect` advisory (64 → 65) was pointing at, and the `resetKey` block had
+     recorded the same reason for re-seeding during render. Moved into render (`seenSig`,
+     the membership the last render saw, followed through every change so that turning
+     quiet on re-seeds nothing by itself), and re-measured after a reload: the reconnect
+     toast at 245ms, and at 577ms the card went from live to gone in one mutation, where a
+     fold holds it for 405ms. Lint back to 64.
+   - **A fold's hold starts on its first frame.** Deleting the day's last card through its
+     confirm cut its fold part-way. Measured on DEV: the first frame after the click came
+     382ms late, the fold began there, and the prune removed the card at ~465ms from 61px of
+     108, so the day's column went 90.9 → 43.2px between two frames. Both holds on a leaving
+     row started their clocks in an effect, `useRevealRows`' prune and `Reveal`'s unmount,
+     and React runs a click's passive effects before the paint, so a late first frame came
+     out of the fold's own time. That is v18.3.0 phase 8's finding, whose rule is that a
+     hold starts on the next animation frame (`afterFrame`), and these two had not been
+     moved to it. They are now, with `Reveal`'s un-clip after opening. What held that frame
+     back (the delete's own work or the pane) was not established, so the fix was measured
+     against a late frame forced on purpose, on the same delete of the same card: a
+     `MutationObserver` busy-waits 300ms at the commit that marks the card inert. The old
+     code removed it at 467ms, at 71px and opacity 0.66, 81ms into its fold. This one folded
+     it to 0px by 736ms and removed it at 802ms.
+   - **A hold that waits for a frame takes the hidden-page rule with it.** `afterFrame` has
+     no timeout fallback, so a card deleted while the tablet's screen is off would wait and
+     fold on wake, the change nobody watched that v18.3.1 took out of the timeline. So a
+     membership change while the page is hidden re-seeds `useRevealRows` during render, as
+     a quiet one does, and `Reveal` goes straight to its end state, open or unmounted.
+     Measured with `visibilityState` reading hidden: the card was gone 64ms after the click
+     and "Nothing booked" was at its full 164.5px 10ms later, with no frame drawn; three
+     frames later nothing had moved; and Undo put the card back at full height at 34ms and
+     removed the prompt at 44ms. `pageHidden()` moved from `useEnterLeave` to
+     `lib/after-frame.js`, since three callers ask it. `usePresenceLifecycle` does not: a
+     modal or a toast still waits and plays its exit when the tab is shown, v18.3.0's rule,
+     unchanged here.
+
+8. **The Unplaced row eases open and shut (O4).** Measured on DEV first, as the ROADMAP
+   asked. The row mounted at full height, so every table row and its label jumped
+   lanes × 44px plus the 4px gap in one frame. And when a booking's tables changed in the
+   same commit, `useFlip` read the shift as a move: a block on 1B started over 1A and slid
+   down into its own row (−48px, −16 by 165ms, 0 at 385ms). With `_conflict` (no table
+   change, so no FLIP) everything jumped 48px together. Patryk picked "ease it open and
+   shut". The design:
+   - **One always-mounted box per column, its height easing on `--t-shift`.** The box
+     starts each change from where it was, so at the commit nothing below has moved yet,
+     and the pass `useFlip` runs then animates only the bookings whose tables changed.
+     `unplacedRow` (TimelineView) holds the lanes the row is heading for, whether it is
+     moving, and which way. It also keeps `held`: the most lanes drawn since the row last
+     stood still, so a shrinking row keeps its lanes. A change that lands mid-way carries on
+     from there. The first version compared the target with the height the row last
+     SETTLED at, which reads an open-then-empty inside the 385ms as "no change" and snaps
+     the row shut. A replacement goes straight to the new height, as `useEnterLeave`
+     treats one: a date change or the first load, a catch-up (`catchingUp`), or a page
+     that is hidden. `unplacedHeight` (`lib/unplaced.js`) gives the height.
+   - **The row's edge follows the box less its gap**: one overlay holding the dashed line
+     and (in the grid) the grid lines, so the line travels with the table rows, and the
+     semi-transparent grid lines are never drawn twice over theirs. The overlay clips, so
+     under 1px the line is gone rather than lying on the header's edge. The label column
+     clips while the row moves, so "Unplaced" never draws over the 1A label sliding under
+     it.
+   - **The grid column never clips.** The first version did, and a booking that lost its
+     table on 1A vanished at the commit (the box starts at 0) and wiped back in where it
+     already stood. A booking coming up from a lower row would have been hidden for most
+     of its slide. While the row grows, its blocks paint over the table rows
+     (`zIndex: 1`), or 1A's grid lines cross the booking that just arrived. Not while it
+     shrinks: the booking that left the row is on a table row then, and with the lift the
+     emptying row's lines crossed it (measured: a hit test at its centre found the row).
+   - **`useFlip` follows the row.** `ref.rebase()` (atoms, beside `ref.seed`) re-measures
+     the baseline without animating. TimelineView calls it every frame while the row moves
+     (`everyFrame`, `lib/after-frame.js`), and one quiet pass re-measures when the row
+     settles. Measured before the rebase: a second table change 217ms into an opening
+     made every block below the row jump 43.9px in one frame, because the pass measured
+     from where the rows had STARTED.
+   - **`tableForClientY` reads the box's live bottom**, since mid-way the target height is
+     not where the rows are.
+   - **`everyFrame` lives in the lib because of the lint.** Written in the component, the
+     loop re-assigns its frame id from inside a nested function, and lint fell from 64
+     warnings to 61. The missing three were TimelineView's own React Compiler advisories,
+     on lines the change never touched. They came back once the loop moved (the
+     measurement-traps skill has the row).
+   - **Measured on DEV**, 1280×800 with the pane visible. Opening (F loses its table on 1A):
+     the box went 0 → 48px in ~365ms. In every frame the label column matched it, row 1A
+     sat at the box's bottom, the dashed line sat 5px above row 1A, and G on 1B rode its
+     row with no transform. F stayed at y 27, on top and hit-testable. Closing (F back on
+     1A): F's FLIP matched the box exactly (−48 → 0), so F stayed at 27 and G rode its row
+     up. Interrupted (empty again 217ms in): the box turned back from 43.8px with no snap;
+     G went on with its row with no transform, and F stayed within 1.8px of 27 (a reversed
+     CSS transition is shortened, the FLIP is not). Hidden (`visibilityState` reading
+     hidden): straight to 48px with `transition: none`, and nothing played once shown.
+     `_conflict` on G, a copy in the row with no table change: the row opened with G and F
+     riding their rows. A table move once it had settled FLIPped F alone (−88 → 0), with
+     G at 0, so the settle had re-based. At rest, measured against HEAD with one booking
+     unplaced, nothing moved: the word "Unplaced" (39.75–51.25px), the dashed line
+     (67–68px in both columns), the 11 hour lines (24–68px), F, G, row 1A and the 1A
+     label.
+   - **Not done:** a copy drawn for a `_conflict` booking still appears and leaves without
+     a fade, as before O4. It is a duplicate of a block that stays on its row, so nothing
+     travels, and fading it means tracking the row's cells the way the ghosts are tracked.
+
+### `/code-review` round (2026-10-01)
+
+Max effort, three findings, each checked against the code before anything
+changed. Two were fixed, one per commit, with the gate green on each (2257 tests
+throughout):
+
+- **`ROW_FOLD` is a `const`.** O3 declared it `export var`, against the root
+  CLAUDE.md's "Never `var` in new code" (the file's own exception covers the vars
+  Phase A left). `tests/leaving-order.test.js` pinned the `var` spelling and pins
+  `const` now.
+- **One bookkeeping effect in `useRevealRows`.** O3's quiet re-seed came with a
+  layout effect of its own whose body (`prevKeys` to the new ids, every pending
+  prune cancelled) was the `resetKey` effect's word for word. It is one effect
+  keyed on `[prevReset, quietResets]` now. Both bodies were idempotent and both ran
+  before any passive effect, so nothing runs differently; what goes is the second
+  copy a change to the re-seed would have had to reach. The test pins the one
+  effect and counts the bookkeeping line. No test renders this hook, and the Mac's
+  pane reported its page hidden (where a change is a replacement, not a fold), so
+  it was measured on the tablet afterwards, sampled every frame. A List card
+  deleted through ⋯ and its confirm went inert when the delete landed. Its row
+  folded 107 → 94 → 70 → 43 → 24 → 12 → 5 → 3px over 250ms, and the prune removed
+  it at 3px. Why the last 3px are cut rather than run to 0 was not established.
+
+Not changed:
+
+- **The booking form previews kept tables as fine when Save will refuse them.** Phase 2
+  gave a hand-placed booking the seated rule, refusal included: a locked or seated
+  party, or a table block, on its table at the new time stops the save by name. The
+  availability scan and the Tables row ask `tablesKept`, as the save does, but not the
+  refusal, so the form shows the tables kept and Save then says no. Seated bookings
+  have had the same gap since v18.0.0, and phase 2 widened it to every drag-drop,
+  Assign and walk-in. What the form should say instead is a design call, so it is in
+  ROADMAP rather than here.
+
+### Check on the devices after merge
+
+| Phase | Device | Check |
+|---|---|---|
+| 1 | Android tablet | New booking: tap Code, tap Spain. Spain is picked and the Time picker does not open. Pick a guest from the name suggestions: Seating preference does not open |
+| 2 | Android tablet | Drag a booking to a table, then edit its time: it keeps the table, and a party in its way moves to another |
+| 5 | Android tablet | **Checked before the push** (2026-10-01, the ship run; a DEV tab over `adb reverse`, Chrome 154). React and react-dom read 19.3.0, firebase 12.19.0 and the build 18.3.2. The day loaded (705 bookings) and stayed connected for the ~6 minutes of the check, with no `firebase:previous_websocket_failure`. A booking typed into the form by touch saved, and a second DEV client (the Mac's) received it about 0.26s after the tap (two clocks, so approximate). With the on-screen keyboard up (landscape: the viewport went from 507 to 158px), Save pending, Back, Save booking and the focused field all sat inside the visible area. A CDP touch held for 1s and moved one row down dragged the block from 1A to 1B, read back from the second client, and its confirm-delete removed it. **Still needs a finger:** a real drag (the CDP touch was paced, with none of a finger's tremble), and rotating the tablet, where the layout should switch with no visible flash |
+| 5 | iPhone | Booking form, keyboard down, tap Notes: Save sits above the keyboard's bar with no visible jump (v18.3.1's case, now a frame later by design) |
+| 7 | Android tablet | Waitlist with three parties: remove the middle one. Its row folds away and the one below follows it up, with no jump at the end. Remove the rest: the last row turns into "No one on the waitlist for this day." in one move |
+| 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one through its confirm: it folds all the way too, not vanishing part-way. Undo: it comes back at full height and the card below slides down |
+| 7 | Android tablet | List view on a day with bookings: screen off for a minute, complete one of them from another device, screen on. When "Reconnected" shows, the card is simply gone, with no fold playing |
+| 8 | Android tablet | On a DEV tab (`adb reverse`, as phase 5's check), Timeline on today: remove a table that has a booking today in Settings → Layout, then put it back. The Unplaced row eases open, and the table rows, their labels and their blocks move down together with nothing jumping; the booking stays where it was as it moves into the row. Putting the table back eases it shut the same way |

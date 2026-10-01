@@ -49,6 +49,8 @@ import {
   seatNoteFor,
   // v18.0.0 session 8 (item 3): a booking saved as seated keeps its tables.
   tablesPinned, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, replacePinnedClashes,
+  // v18.3.2: and so does a booking somebody placed by hand, when only its time moves.
+  tablesKept, handKeptRefusal,
   // v18.0.0 session 8 (C1): and leaving seated puts the booked plan back.
   unseatRestore,
   // v18.0.0 session 8 (C2): and it cannot be seated with no table at all.
@@ -61,6 +63,9 @@ import {
   tablesFreeFor,
   // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
   enteredPhone,
+  // v18.3.2 (ROADMAP #13): and one for "may this typed number be stored" —
+  // Save and Add to waitlist asked it in two copies.
+  phoneForSave,
   // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
   kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
@@ -82,9 +87,6 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
-// v18.2.0 phase 19: Save refuses a typed number that names no country code;
-// phase 20: a number typed WITH its code but no "+" gets that code first.
-import { phoneHasCode, withTypedCode } from "./lib/phone-countries";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -396,7 +398,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.1",
+  version:"18.3.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1164,6 +1166,7 @@ function BookingApp({uid}){
   // can be wrong.
   // v18.2.0 phase 19: form.phone joins the list — Save can now refuse a number
   // without a country code, and picking one has to clear that message.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a field change clears it; watching `error` would clear each error the moment it is set
   useEffect(function(){if(error){setError("");setErrorField(null);}},[form.name,form.phone,form.time,form.size,form.date,form.preference,form.customDur]);
   // ── Time tick hook ──────────────────────────────────────────────────────────
   // Real-time clock for seated duration. 15s tick. Drives liveBookings, the
@@ -1340,7 +1343,10 @@ function BookingApp({uid}){
     // The module check is the same one the button and the `I` key carry: this is
     // a third door into the inbox and gating two of three is gating none.
     if(whatsappOn&&returnToInboxKey&&!showForm&&!confirmCancel&&!showInbox){setShowInbox(true);}
-  },[whatsappOn,returnToInboxKey,showForm,confirmCancel,showInbox]);
+    // v18.3.2: `setShowInbox` is listed because the lint cannot see that it is
+    // stable (one of `setModalFns`, memoised on a `useCallback` with no deps);
+    // it never changes, so this re-runs nothing new. `closeInbox` lists it too.
+  },[whatsappOn,returnToInboxKey,showForm,confirmCancel,showInbox,setShowInbox]);
   // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
   // so the helpers always see live savers/conversations without rebinding. The
   // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).
@@ -1869,7 +1875,7 @@ function BookingApp({uid}){
     // the toggle keeps it: leaving an active split is state, not storage.
     if(userPrefs.splitEnabled===false) setSplit(null);
     if(Object.keys(seed).length) saveUserPrefs(seed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per account, when its prefs load: it reads this device's values at that moment, on purpose (above)
   },[prefsLoaded]);
   const [focusedPane,setFocusedPane]=useState("a");
   const splitMenuFor = modalOpen.splitmenu || null; // which view's SplitMenu is open
@@ -1893,8 +1899,7 @@ function BookingApp({uid}){
   // window dragged narrow.
   useEffect(function(){
     if(isMobile&&split) applySplit(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[isMobile]);
+  },[isMobile,split]);
   // v17.11.0: the width the two panes actually divide — the app is clamped to
   // the per-device App-width setting, so the WINDOW is not what a pane gets.
   const shellW=Math.min(winW,appWidth);
@@ -1910,7 +1915,6 @@ function BookingApp({uid}){
     if(!split||!tlSide) return;
     if(tlPaneOk(shellW,split.dir,split.ratio,tlSide)) return;
     applySplit(Object.assign({},split,{dir:"h"}));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[shellW,split,tlSide]);
   // ── v17.5.0: the fixed shell ────────────────────────────────────────────────
   // Normally <body> is the scrollport (see the mount effect near the top of
@@ -2041,8 +2045,8 @@ function BookingApp({uid}){
       setSelectedListId(null);setShowFinished(false);
     }
     resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[viewDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a day change, not a data change: watching `bookings` would drop the List's selection on every save
+  },[viewDate,resetDismissed]);
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
@@ -2201,6 +2205,7 @@ function BookingApp({uid}){
       return r.next;   // === prev when nothing moved, so React bails out
     },true);
     if(ok&&changed) flashSyncFix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- firstLoadCount is a ref; saveBookings is new each render, and watching it would reconcile on every render
   },[bookings,tableBlocks,autoOptimizer,resyncing]);
 
   // ── v16.0.0: Waitlist active matching ───────────────────────────────────────
@@ -2238,7 +2243,7 @@ function BookingApp({uid}){
     // v16.3.0: the transition-to-available cue is the in-flow WaitAvailBanner
     // (persistent + actionable), not a 6-second toast — so the prev-set diff
     // that fired the old toast is gone. waitAvail alone drives the banner.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on `bookings` and the 15-minute `nowQuarter`, not on `liveBookings` / `nowMins`, which move every 15s tick; a run reads both as they are then
   },[bookings,tableBlocks,waitlist,autoOptimizer,nowQuarter,generalSettings.waitMatchWin]);
 
   // ── v16.3.0: Recurring-booking generator ────────────────────────────────────
@@ -2299,7 +2304,7 @@ function BookingApp({uid}){
       });
       return next;
     },true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- firstLoadCount is a ref; saveBookings is new each render and reads only refs, and watching it would run the generator on every render
   },[bookings,recurring,tableBlocks,autoOptimizer,resyncing,nowQuarter]);
 
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
@@ -2333,12 +2338,13 @@ function BookingApp({uid}){
     // country is refused on the phone field, since the entry becomes a booking
     // and the same guest with and without "+34" is two customers. The button is
     // offered on a NEW booking only, so Save's untouched-number exemption has
-    // nothing to exempt here.
+    // nothing to exempt here. v18.3.2: both halves are `phoneForSave`, the one
+    // copy Save asks too (ROADMAP #13).
     const f0=formRef.current;
-    const typed=withTypedCode(f0.phone,generalSettings.pinnedCountries);
-    const f=typed!==f0.phone?Object.assign({},f0,{phone:typed}):f0;
+    const phoneRule=phoneForSave(f0.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,false);
+    const f=phoneRule.phone!==f0.phone?Object.assign({},f0,{phone:phoneRule.phone}):f0;
     const ph=cleanPhoneOf(f.phone);
-    if(ph&&!phoneHasCode(ph)){setErrorField("phone");setError("Choose the country code for this phone number.");return;}
+    if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
     addToWaitlist({
       name:f.name||"",
       phone:ph,
@@ -2788,7 +2794,14 @@ function BookingApp({uid}){
         // is sitting at them. `tablesPinned` is the one predicate; see its note
         // in booking-logic.js for what was measured. `editFinished` survives for
         // exactly one guard below, where the two questions genuinely differ.
-        const pinned=tablesPinned(f.status,mt.length>0,clearM);
+        // v18.3.2 (Patryk): `tablesKept`, one predicate wider — a booking
+        // somebody placed by hand (`_locked`) keeps its tables through a save
+        // that moves only its window, so a time change no longer hands it to
+        // the optimiser (`keepsHandTables`, booking-logic.js). The form's
+        // preview asks the same function. `handKept` is that half alone, for
+        // the refusals below.
+        const pinned=tablesKept(orig,{status:f.status,size:size,date:f.date,preference:f.preference,preferredTables:f.preferredTables},mt.length>0,clearM);
+        const handKept=pinned&&!tablesPinned(f.status,mt.length>0,clearM);
         // Hoisted out of buildNext: this exact expression was written twice —
         // once to unlock and once to restore — and two copies of a condition
         // that must agree is how they stop agreeing.
@@ -2942,6 +2955,18 @@ function BookingApp({uid}){
           if(fitRefusal){setError(fitRefusal);return;}
           const lockedClash=pinnedClashParties(fin,f.date,editId).locked;
           if(lockedClash.length){setError(pinnedClashRefusal(lockedClash[0]));return;}
+        }
+        // v18.3.2: hand-placed tables kept through a window change. Whoever the
+        // pass could move is already moved (`applyOpt` places every unlocked
+        // booking around a locked one; with the optimiser off,
+        // `replacePinnedClashes` above does it). What is left is a party that
+        // cannot be moved, or a table block, and the save is refused by name
+        // rather than saved on top of either. Only when the window moved
+        // (`recheck`): an edit that leaves it alone is not held hostage to a
+        // clash it did not cause.
+        if(handKept&&recheck){
+          const keptRefusal=handKeptRefusal(fin,f.date,editId,tableBlocks);
+          if(keptRefusal){setError(keptRefusal);return;}
         }
         if(!mt.length&&recheck){
           const prevAssigned=bookings.filter(function(b){return b.date===f.date&&isActive(b)&&b.tables&&b.tables.length>0&&b.id!==editId;});
@@ -3107,11 +3132,13 @@ function BookingApp({uid}){
     // Not into the form state: a `setForm` here would change `form.phone` and
     // the stale-error effect would then clear any error this same save sets.
     // An edit that leaves the stored number untouched is never rewritten —
-    // phase 19's exemption, one test for both.
+    // phase 19's exemption, one test for both. v18.3.2: the rewrite and the
+    // refusal below are ONE call, `phoneForSave`, which Add to waitlist asks
+    // too; the refusal is only read after the name check, where it always was.
     const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
     const phoneUntouched=!!origB&&cleanPhoneOf(origB.phone)===cleanPhoneOf(fIn.phone);
-    const typedPhone=phoneUntouched?fIn.phone:withTypedCode(fIn.phone,generalSettings.pinnedCountries);
-    const f=typedPhone!==fIn.phone?Object.assign({},fIn,{phone:typedPhone}):fIn;
+    const phoneRule=phoneForSave(fIn.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,phoneUntouched);
+    const f=phoneRule.phone!==fIn.phone?Object.assign({},fIn,{phone:phoneRule.phone}):fIn;
     // v17.12.0: cleared here, set only by the field-specific branches below, so
     // the form-level errors further down leave it null without having to say so.
     setErrorField(null);
@@ -3124,8 +3151,7 @@ function BookingApp({uid}){
       // link either. Checked right after the name, the field beside it.
       // An EDIT that leaves an old code-less number untouched still saves: the
       // rule is about numbers typed now, not a sweep of the stored ones.
-      {const ph=cleanPhoneOf(f.phone);
-        if(ph&&!phoneHasCode(ph)&&!phoneUntouched){setErrorField("phone");setError("Choose the country code for this phone number.");return;}}
+      if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
       // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
       // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
       if(!f.date){setErrorField("date");setError("Please set a date.");return;}
@@ -4765,8 +4791,15 @@ function BookingApp({uid}){
     });
     return out;
   },[waitlist,viewDate,waitAvail]);
+  // v18.3.2 (O3): the window in which a sleeping device's missed changes arrive
+  // all at once (the reconnect toast, or the resync after a gap). A change then
+  // is a catch-up nobody watched, so the timeline does not fade it and the List
+  // and the waitlist do not fold it (useEnterLeave's and useRevealRows' quiet).
+  // ONE definition for the three: it was written inline at the timeline's mount.
+  const catchingUp=reconnectShown||resyncing;
   const waitlistModal=<ModalPresence show={showWaitlist}>{showWaitlist?<WaitlistPanel
     entries={dayWaiting}
+    catchingUp={catchingUp}
     availability={waitAvail}
     date={viewDate}
     onBook={bookFromWaitlist}
@@ -4866,7 +4899,7 @@ function BookingApp({uid}){
   // has always been built this way, so this costs nothing.
   const timelineEl=<TimelineView
     bookings={bookings}
-    catchingUp={reconnectShown||resyncing}
+    catchingUp={catchingUp}
     date={viewDate}
     today={today}
     onEdit={VA.onEdit}
@@ -4917,6 +4950,7 @@ function BookingApp({uid}){
     vouchersByCode={vouchersByCode}
     vouchersOn={vouchersOn}
     bookings={bookings}
+    catchingUp={catchingUp}
     date={viewDate}
     today={today}
     onEdit={VA.onEdit}

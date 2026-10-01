@@ -47,7 +47,8 @@ import {
   // own helper rather than a second spelling of it.
   isLocked,
   // v18.0.0 session 8 (item 3): what the form previews must agree with.
-  tablesPinned,
+  // v18.3.2: `tablesKept` is the save's own question (status OR hand-placed).
+  tablesPinned, tablesKept,
   // v18.0.0 session 9: …and the other half of agreeing with it — `doSaveEdit`
   // keeps the tables it has when they are still free for the new window, so the
   // preview has to ask the SAME question with the SAME helper.
@@ -406,9 +407,11 @@ export function BookingFormModal({
     // question nobody asked. On a full evening it answered "No tables
     // available" over a save that was going to succeed, which is the same
     // disagreement between the preview and Save as the "(auto) · was: 3" line.
-    if(editId&&tablesPinned(form.status,false,!!form._clearManual)){
+    // v18.3.2: and so does a booking somebody placed by hand whose draft moves
+    // only its window — `tablesKept` is the save's own predicate.
+    if(editId){
       const cur=bookings.find(function(b){return b.id===editId;});
-      if(cur&&(cur.tables||[]).length) return {ok:true,tables:cur.tables,sugg:null};
+      if(cur&&(cur.tables||[]).length&&tablesKept(cur,form,false,!!form._clearManual)) return {ok:true,tables:cur.tables,sugg:null};
     }
     const noResh=!optimizerActiveFor(form.date,autoOptimizer);
     const tables=trialFits(liveBookings,form.date,form.time,size,form.preference||"auto",d,tableBlocks,editId,form.preferredTables,noResh);
@@ -513,7 +516,10 @@ export function BookingFormModal({
       // proposal for a booking it is never going to be asked about.
       // v18.0.0 session 10: both moved up from below `changed`, which now has to
       // know whether the optimiser owns this booking before it can say so.
-      const pinnedTbl=cur&&tablesPinned(form.status,!!mt,cleared)?curTbl:null;
+      // v18.3.2: `tablesKept` — also a hand-placed booking whose draft moves
+      // only its window, which the save now carries through (booking-logic's
+      // `keepsHandTables`). It read "(auto) · was: 3" over a save that keeps 3.
+      const pinnedTbl=cur&&tablesKept(cur,form,!!mt,cleared)?curTbl:null;
       // v18.0.0 session 9: a STATUS that walks the booking out of a pinned state
       // — revived from cancelled/completed, or un-seated — re-places it at Save
       // just as a time or size change does, and the preview did not know.
@@ -534,7 +540,7 @@ export function BookingFormModal({
       // the draft is still pinned (cancelled → seated) `pinnedTbl` below already
       // wins and the save does not re-place either, so the two agree by
       // construction. Two predicates that merely agree today are two predicates.
-      const unpinning=!!cur&&tablesPinned(cur.status,false,false)&&!tablesPinned(form.status,!!mt,cleared);
+      const unpinning=!!cur&&tablesPinned(cur.status,false,false)&&!tablesKept(cur,form,!!mt,cleared);
       // …and re-placing is not a foregone conclusion when it does: the save
       // keeps the tables it has if they are STILL FREE for the window
       // (`keepsWindowTables`). Asking the same question with the same helper is

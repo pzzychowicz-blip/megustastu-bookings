@@ -9,6 +9,7 @@ import {
 } from "../src/lib/phone-countries";
 import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
+import { phoneForSave, NO_CODE_REFUSAL } from "../src/lib/booking-logic";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...p), "utf8")).join("\n");
@@ -164,9 +165,11 @@ describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
     expect(name).toBeGreaterThan(-1);
     expect(phone).toBeGreaterThan(name);
     expect(phone).toBeLessThan(date);
-    // An edit that leaves an old code-less number untouched still saves.
-    expect(save).toMatch(/if\(ph&&!phoneHasCode\(ph\)&&!phoneUntouched\)\{setErrorField\("phone"\)/);
+    // An edit that leaves an old code-less number untouched still saves: it is
+    // `phoneForSave`'s fourth argument since v18.3.2.
     expect(save).toMatch(/const phoneUntouched=!!origB&&cleanPhoneOf\(origB\.phone\)===cleanPhoneOf\(fIn\.phone\);/);
+    expect(save).toMatch(/const phoneRule=phoneForSave\(fIn\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,phoneUntouched\);/);
+    expect(save).toMatch(/if\(phoneRule\.refusal\)\{setErrorField\("phone"\);setError\(phoneRule\.refusal\);return;\}/);
   });
 
   it("the phone field takes no default country", () => {
@@ -272,9 +275,11 @@ describe("where the detection runs (v18.2.0 phase 20)", () => {
 
   it("Save runs it too — into `f`, never an untouched edit's number — before the code check", () => {
     const save = App.slice(App.indexOf("function doSave(){"));
-    expect(save).toMatch(/const typedPhone=phoneUntouched\?fIn\.phone:withTypedCode\(fIn\.phone,generalSettings\.pinnedCountries\);/);
-    expect(save).toMatch(/const f=typedPhone!==fIn\.phone\?Object\.assign\(\{\},fIn,\{phone:typedPhone\}\):fIn;/);
-    expect(save.indexOf("withTypedCode(")).toBeLessThan(save.indexOf('setErrorField("phone")'));
+    // v18.3.2: through `phoneForSave`, whose fourth argument is the untouched
+    // exemption (the helper's own tests, below, pin what it does with it).
+    expect(save).toMatch(/const phoneRule=phoneForSave\(fIn\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,phoneUntouched\);/);
+    expect(save).toMatch(/const f=phoneRule\.phone!==fIn\.phone\?Object\.assign\(\{\},fIn,\{phone:phoneRule\.phone\}\):fIn;/);
+    expect(save.indexOf("phoneForSave(")).toBeLessThan(save.indexOf('setErrorField("phone")'));
     // Not written back to the form: that would clear the error this save may set.
     expect(save.slice(0, save.indexOf('setErrorField("phone")'))).not.toMatch(/setForm\(/);
   });
@@ -404,14 +409,58 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
   const App = read("src", "App.jsx");
   const add = App.slice(App.indexOf("function addFormToWaitlist(){"), App.indexOf("function addWalkinToWaitlist(){"));
   it("finds a code typed without its plus, then refuses a number that still names no country", () => {
-    expect(add).toMatch(/const typed=withTypedCode\(f0\.phone,generalSettings\.pinnedCountries\);/);
-    expect(add).toMatch(/if\(ph&&!phoneHasCode\(ph\)\)\{setErrorField\("phone"\);setError\("Choose the country code for this phone number\."\);return;\}/);
+    // v18.3.2: through `phoneForSave`, and never with Save's exemption — the
+    // button is offered on a new booking only.
+    expect(add).toMatch(/const phoneRule=phoneForSave\(f0\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,false\);/);
+    expect(add).toMatch(/const f=phoneRule\.phone!==f0\.phone\?Object\.assign\(\{\},f0,\{phone:phoneRule\.phone\}\):f0;/);
+    expect(add).toMatch(/if\(phoneRule\.refusal\)\{setErrorField\("phone"\);setError\(phoneRule\.refusal\);return;\}/);
     // The refusal comes BEFORE the write, and the stored phone is the checked one.
     expect(add.indexOf("setErrorField(\"phone\")")).toBeLessThan(add.indexOf("addToWaitlist("));
+    expect(add).toMatch(/const ph=cleanPhoneOf\(f\.phone\);/);
     expect(add).toMatch(/phone:ph,/);
   });
-  it("Save's message and this one are the same sentence", () => {
+  // v18.3.2 (ROADMAP #13): this test asked that the two sentences MATCH, which
+  // is what two copies of one rule need; one copy needs no such test. Neither
+  // door spells the sentence or either half of the rule any more.
+  it("Save and this one ask ONE helper, and App spells neither the rule nor its sentence", () => {
     const save = App.slice(App.indexOf("function doSave(){"));
-    expect(save).toMatch(/setError\("Choose the country code for this phone number\."\)/);
+    expect(save).toMatch(/phoneForSave\(/);
+    expect(App).not.toMatch(/Choose the country code/);
+    expect(App).not.toMatch(/withTypedCode|phoneHasCode/);
+    expect(App.match(/phoneForSave\(/g)).toHaveLength(2);
+  });
+});
+
+// ── phoneForSave (v18.3.2) ────────────────────────────────────────────────────
+// ROADMAP #13's small half: the phone rule both App doors ask. Values measured
+// from the function before they were written here.
+describe("phoneForSave — the phone rule, in one place (v18.3.2)", () => {
+  const P = ["ES", "GB", "DE", "FR"];
+  it("a code typed without its plus becomes the code, and is not refused", () => {
+    expect(phoneForSave("34 600 111 333", P, "+34", false)).toEqual({ phone: "+34 600 111 333", refusal: null });
+    // Phase 66's British mobile typed the home way, and a home 0 after the code.
+    expect(phoneForSave("07911 123456", P, "+34", false)).toEqual({ phone: "+44 7911 123456", refusal: null });
+    expect(phoneForSave("+44 07911 123456", P, "+34", false)).toEqual({ phone: "+44 7911 123456", refusal: null });
+  });
+  it("a number that still names no country is refused, in the one sentence", () => {
+    expect(NO_CODE_REFUSAL).toBe("Choose the country code for this phone number.");
+    expect(phoneForSave("600 111 333", P, "+34", false)).toEqual({ phone: "600 111 333", refusal: NO_CODE_REFUSAL });
+  });
+  it("no phone at all is never refused, and is handed back as it came", () => {
+    for (const p of ["", "+", "+34", null, undefined]) {
+      const r = phoneForSave(p, P, "+34", false);
+      expect(r.refusal, String(p)).toBeNull();
+      expect(r.phone, String(p)).toBe(p);
+    }
+  });
+  it("an untouched number is neither rewritten nor refused (Save's exemption)", () => {
+    expect(phoneForSave("34 600 111 333", P, "+34", true)).toEqual({ phone: "34 600 111 333", refusal: null });
+    expect(phoneForSave("600 111 333", P, "+34", true)).toEqual({ phone: "600 111 333", refusal: null });
+  });
+  it("one pass is final: what it stores comes back unchanged", () => {
+    for (const p of ["34 600 111 333", "44 (0)7911 123456", "07911 123456", "+34 600 111 333"]) {
+      const once = phoneForSave(p, P, "+34", false).phone;
+      expect(phoneForSave(once, P, "+34", false).phone, p).toBe(once);
+    }
   });
 });

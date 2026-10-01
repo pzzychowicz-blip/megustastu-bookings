@@ -28,7 +28,7 @@
 // (see memory/firebase-set-in-updater-doubling — useReminders still carries
 // the old shape; port this fix if its adds ever double).
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
@@ -45,7 +45,9 @@ export function useWaitlist({ setWriteWarning }){
   const waitlistRef=useRef([]); // mirror for updater-free saves (see gotcha above)
   const waitlistRevRef=useRef(0); // v16.0.0: revision-CAS ref (lib/revGuard.js)
 
-  function saveWaitlist(next,isSilent){
+  // v18.3.2: a useCallback, so the prune below can list it. It reads refs, two
+  // state setters and imports, and the lint now checks that it keeps to them.
+  const saveWaitlist=useCallback(function(next,isSilent){
     if(!waitlistLoaded.current){
       console.warn("[SAFE] Refused to write waitlist — initial read has not completed yet.");
       if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
@@ -65,7 +67,7 @@ export function useWaitlist({ setWriteWarning }){
       const entry=settingsWriteEntry("waitlist",prev,computed,{auto:isSilent===true});
       if(entry) emitActivity([entry]);
     });
-  }
+  },[setWriteWarning]);
 
   useEffect(function(){
     const unsub=onValue(ref(db,"waitlist"),function(snap){
@@ -87,8 +89,7 @@ export function useWaitlist({ setWriteWarning }){
     const stale=waitlist.some(function(w){return w&&w.date&&w.date<today;});
     if(!stale) return;
     saveWaitlist(function(prev){return prev.filter(function(w){return w&&(!w.date||w.date>=today);});},true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[waitlist]);
+  },[waitlist,saveWaitlist]);
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
   // addToWaitlist accepts the raw fields (typically the booking/walk-in form's

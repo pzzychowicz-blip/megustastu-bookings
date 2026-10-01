@@ -208,6 +208,7 @@ export function InboxPanel({
       const top = tab === "inbox" ? resolveInitialKey(conversations) : topKeyOfTab(conversations, tab);
       if (top) setActiveKey(top);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fires on the narrow→wide change only; activeKey, tab and conversations are read then, not watched
   }, [twoPane]);
 
   // Keyboard: Esc (close templates → back to list on mobile → close inbox), plus
@@ -328,18 +329,34 @@ export function InboxPanel({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [twoPane, activeKey, showTpl, tab, conversations, onClose, query, needsAction, selectMode, confirmBulkDelete, onAccept, onDismiss, onArchive, onUnarchive, onBulkArchive, onBulkUnarchive]);
+    // v18.3.2 (the stale-closure triage): NO dependency array, so the listener
+    // is re-added on every render and always reads this render's values. The
+    // list it had named sixteen of them and left out the selection:
+    // `selectedKeysInTab` reads `selected`, and ticking a checkbox re-renders
+    // this panel only. The handlers App passes are fresh closures on every App
+    // render, which re-ran this effect often enough to hide it, but not after a
+    // tick. Measured on DEV: two conversations ticked, Backspace 0.2s or 16s
+    // later archived NOTHING (R, the bulk restore, reads the same selection);
+    // with two App renders forced between the ticks and the key, it archived
+    // both. Re-adding a listener is cheap, and the capture phase above, which is
+    // what orders this ahead of the global handler, does not depend on when it
+    // was added.
+  });
   // Body-scroll lock while the inbox is open.
   useEffect(() => {
     const orig = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = orig; };
   }, []);
-  // Mark the active conversation read when selected.
+  // Mark the active conversation read when selected, and only then. A message
+  // that lands in the thread already open stays unread (Patryk's call,
+  // v18.3.2): a tablet left on an open thread cannot tell whether anyone saw
+  // it, so the badge keeps counting it until somebody taps the thread.
   useEffect(() => {
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (c && c.unread) onMarkRead(activeKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- marks a thread read when it is selected, not when a message lands in it while open (measured, v18.3.2)
   }, [activeKey]);
   // Remember the open thread for the next time the inbox opens. Only a real
   // selection is stored — clearing to the list (mobile back, archive) leaves the
@@ -348,13 +365,16 @@ export function InboxPanel({
     if (activeKey) writeLastConv(activeKey);
   }, [activeKey]);
   // Drop the selection if the active conversation leaves the current tab.
+  // v18.3.2: `activeKey` is listed too. Every door that selects picks from the
+  // current tab, so a new selection passes and nothing runs differently; the
+  // list now names everything the check reads.
   useEffect(() => {
     if (!activeKey) return;
     const c = conversations.find((x) => x.phoneKey === activeKey);
     if (!c) { setActiveKey(null); return; }
     const inCurrentTab = tab === "archived" ? c.archived : !c.archived;
     if (!inCurrentTab) setActiveKey(null);
-  }, [conversations, tab]);
+  }, [conversations, tab, activeKey]);
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
   const activeMessages = activeConv ? (messages[activeConv.phoneKey] || []) : [];

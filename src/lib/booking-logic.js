@@ -38,6 +38,9 @@ import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — se
 // reachable from the serverless functions (api/* → whatsapp.js → customers.js →
 // here), and Node's ESM resolver does not add the extension the way Vite does.
 import { normalizeCode, formatCode } from "./vouchers.js";
+// v18.3.2: the phone rule's two halves, for `phoneForSave`. `phone-countries.js`
+// imports nothing, so this edge cannot close a cycle; ".js" for the ESM chain.
+import { withTypedCode, phoneHasCode } from "./phone-countries.js";
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
 // v16.1.0: default duration reads the DUR_TIERS live binding (settings/
@@ -460,6 +463,22 @@ export function kitchenRelevant(orig,f,size){
 export function enteredPhone(p,prefix){
   var t=p==null?"":String(p).trim();
   return (t===""||t==="+"||t===prefix)?"":t;
+}
+// ── v18.3.2: the phone rule, for every door that stores a TYPED number ──────
+// ROADMAP #13's small half (v18.2.0's /code-review). `doSave` and
+// `addFormToWaitlist` each ran `withTypedCode` and then refused a number with no
+// code in the same words: two copies of one rule. A code typed without its plus
+// becomes the code (a save by Enter never blurs the number box, so the field's
+// own detection may not have run); a number that still names no country is
+// refused, because the same guest with and without "+34" is two customers
+// (`normalizePhone`). `untouched` is an edit that leaves the stored number as it
+// was, which is neither rewritten nor refused (v18.2.0 phase 19's exemption).
+// "No phone at all" is `enteredPhone`'s answer, so it is never refused.
+export const NO_CODE_REFUSAL="Choose the country code for this phone number.";
+export function phoneForSave(phone,pinned,prefix,untouched){
+  const out=untouched?phone:withTypedCode(phone,pinned);
+  const ph=enteredPhone(out,prefix);
+  return {phone:out,refusal:(!untouched&&ph&&!phoneHasCode(ph))?NO_CODE_REFUSAL:null};
 }
 export function diffBooking(orig,f,size,phonePrefix){var ch=[];if(orig.name!==f.name) ch.push("name "+orig.name+"→"+f.name);if(size!==orig.size) ch.push("size "+orig.size+"→"+size);if(f.time!==orig.time) ch.push("time "+orig.time+"→"+f.time);if(f.date!==orig.date) ch.push("date "+orig.date+"→"+f.date);if(f.preference!==orig.preference) ch.push("pref "+orig.preference+"→"+f.preference);var origPhone=enteredPhone(orig.phone,phonePrefix);var formPhone=enteredPhone(f.phone,phonePrefix);if(origPhone!==formPhone) ch.push("phone "+(origPhone||"none")+"→"+(formPhone||"none"));var origDur=orig.originalDuration||orig.duration||90;var formDur=f.customDur||getDur(size);if(origDur!==formDur) ch.push("duration "+origDur+"→"+formDur+"min");if(f.status!==orig.status) ch.push("status "+orig.status+"→"+f.status);if(f.notes!==(orig.notes||"")) ch.push("notes updated");var origDep=Math.max(0,Number(orig.deposit)||0);var formDep=Math.max(0,Number(f.deposit)||0);if(origDep!==formDep) ch.push("deposit "+origDep+"→"+formDep+" €");var origVou=normalizeCode(orig.voucherCode);var formVou=normalizeCode(f.voucherCode);if(origVou!==formVou) ch.push("voucher "+(origVou?formatCode(origVou):"none")+"→"+(formVou?formatCode(formVou):"none"));var mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:null;if(mt) ch.push("tables manually set: "+mt.join(", "));if(f._clearManual) ch.push("manual assignment cleared");var pt=Array.isArray(f.preferredTables)?f.preferredTables:[];var origPt=Array.isArray(orig.preferredTables)?orig.preferredTables:[];if(pt.slice().sort().join(",")!==origPt.slice().sort().join(",")) ch.push("preferred tables: "+(pt.length?pt.join(", "):"cleared"));return ch.length?ch.join(", "):"saved (no field changes)";}
 // v17.16.13: the keyed-object arm walks ENTRIES, not values, so each row can be
@@ -1322,6 +1341,66 @@ export function unseatRestore(b,size){
 export function tablesPinned(status,hasManual,cleared){
   if(hasManual||cleared) return false;
   return status==="seated"||status==="completed"||status==="cancelled";
+}
+// ── v18.3.2: tables somebody CHOSE stay chosen when only the window moves ────
+// Reported from the restaurant (Patryk, 2026-09-30): "if I have a reservation
+// assigned but I change the time it reassigns though. When Optimizer is on. It
+// cannot work like that." Every drag-drop, every Assign (ManualModal always
+// saves `locked: true`) and every walk-in is `_locked`, the flag `applyOpt`
+// reads as "copy these tables through". `doSaveEdit`'s `unlockForOpt` cleared
+// it on ANY save that changed a placement input, the time included, so the
+// optimiser re-chose the tables and the save then locked the booking again on
+// whatever it was handed. With the optimiser off, `findFreeSlot` re-chose them.
+//
+// Patryk's rule: a hand-placed booking keeps its tables through an edit that
+// moves only its WINDOW (the time, the length, a revival, an un-seat). A booking
+// in the way that the optimiser may move is moved (`replacePinnedClashes`, the
+// seated rule); a locked or seated one, or a table block, refuses the save by
+// name (`handKeptRefusal`). A change to what the tables were chosen FOR (the
+// party size, the date, the zone, the preferred tables) still re-places it, as
+// an explicit Clear or a new pick does. Optimiser-placed bookings are left to
+// the optimiser: `applyOpt` re-places every unlocked booking on every save of
+// its day, so keeping one for a single save would be undone by the next.
+//
+// Each test agrees with `needsR` in `doSaveEdit` term for term (`size` against
+// `Number(f.size)||2`, the raw preference, the sorted preferred tables), so
+// "nothing but the window moved" means the same thing to both.
+export function keepsHandTables(orig,draft){
+  if(!orig||!draft||orig._locked!==true) return false;
+  if(!(orig.tables||[]).length) return false;
+  if(draft.status!=="confirmed"&&draft.status!=="pending") return false;
+  if((Number(draft.size)||2)!==orig.size) return false;
+  if(draft.date!==orig.date||draft.preference!==orig.preference) return false;
+  function key(t){return Array.isArray(t)?t.slice().sort().join(","):"";}
+  return key(draft.preferredTables)===key(orig.preferredTables);
+}
+// THE question every site asks (the save, the form's availability scan and its
+// Tables row): will this save carry the booking's tables through? Pinned by the
+// draft's STATUS, or kept because a person placed them. One function, because
+// the preview and the save disagreeing is the defect this file keeps recording.
+export function tablesKept(orig,draft,hasManual,cleared){
+  if(tablesPinned(draft&&draft.status,hasManual,cleared)) return true;
+  if(hasManual||cleared) return false;
+  return keepsHandTables(orig,draft);
+}
+// Which of `tables` a table block covers during [s,e). Unbuffered: a block's
+// window was chosen by hand, and `getBlockSlots` is never padded.
+export function blockedTablesAt(tables,blocks,date,s,e){
+  const busy=getBusy(getBlockSlots(blocks||[],date),s,e);
+  return (tables||[]).filter(function(t){return busy.has(t);});
+}
+// Why a save that keeps hand-placed tables cannot land: a table is blocked for
+// the new window, or a party that cannot be moved holds one. Null when it can.
+// `list` is the day AFTER the save's own pass, so the parties the optimiser (or
+// `replacePinnedClashes`) could move are already gone from the clash list.
+export function handKeptRefusal(list,date,id,blocks){
+  const b=(list||[]).find(function(x){return x.id===id;});
+  if(!b) return null;
+  const s=toMins(b.time);
+  const blocked=blockedTablesAt(b.tables,blocks,date,s,s+(Number(b.duration)||90));
+  if(blocked.length) return (blocked.length>1?"Tables "+blocked.join("+")+" are":"Table "+blocked[0]+" is")+" blocked at that time. Assign different tables.";
+  const locked=pinnedClashParties(list,date,id).locked;
+  return locked.length?pinnedClashRefusal(locked[0]):null;
 }
 // C3: seating never asked whether the table still had somebody at it. The two
 // parties then hold the same table with both bookings `isLocked`, which is the

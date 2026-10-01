@@ -17,7 +17,7 @@ import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
-import { afterFrame } from "../lib/after-frame";
+import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
@@ -396,6 +396,7 @@ useEffect(() => {
       prev.focus({ preventScroll: true });
     }
   };
+// eslint-disable-next-line react-hooks/exhaustive-deps -- once per open: the opener is taken and focus handed in once; ref and uid are fixed for the dialog's life
 }, []);
 
 // Focus trap. Esc is NOT handled here on purpose — useKeyboardShortcuts owns
@@ -1054,7 +1055,14 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
 // Presentation is the right tool rather than `aria-owns`: these divs carry no
 // focus and no ARIA of their own, which is exactly the condition under which
 // the role is honoured, and it needs no ids to keep in step.
-export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false }) {
+//
+// `inert` (v18.3.2, O3) — marks the outer wrapper `inert`, for a row that is
+// LEAVING: it stays drawn for the length of its collapse, from the children
+// cached here, and a card on its way out must not take a tap, a focus or a
+// screen reader's attention. One attribute does all three, where the WA list's
+// departing row needed `pointer-events`, a `tabIndex` and a click guard, and
+// was still announced. A real boolean, for App's `anyModal` reason.
+export function Reveal({ show, children, style, horizontal = false, speed = "reveal", presentational = false, inert = false }) {
   const last = useRef(null);
   if (children) last.current = children;
   const [mounted, setMounted] = useState(show === true);
@@ -1065,20 +1073,36 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
   // ease so the collapse still clips cleanly. (Timeout-driven — more robust across
   // browsers than transitionend on grid-template-rows.)
   const [revealed, setRevealed] = useState(show === true);
+  // v18.3.2 (O3): both holds start on the FRAME their transition starts on
+  // (`afterFrame`), not in this effect. Measured on DEV: after the List's last
+  // card was deleted through its confirm, the first frame came ~380ms late, the
+  // fold began there, and the row's prune, timed from an effect, cut it at 61px
+  // of 108 (useRevealRows). A hold timed from an effect can only end a fold
+  // early, so this unmount takes the frame too. And a change that lands while
+  // the page is HIDDEN snaps to its end state: no frame runs there, so the hold
+  // would wait and the transition play on wake, a change nobody watched
+  // (v18.3.1's rule).
   useEffect(function () {
     if (show) {
       setMounted(true);
+      if (pageHidden()) { setOpen(true); setRevealed(true); return undefined; }
       // Double rAF: ensure the 0fr→1fr change lands in a separate frame from
       // the mount so the transition actually fires (a single frame can batch).
+      // `revealed` waits from the frame that draws the open, a frame after r2.
       let r2 = 0;
-      const r1 = requestAnimationFrame(function () { r2 = requestAnimationFrame(function () { setOpen(true); }); });
-      const tv = setTimeout(function () { setRevealed(true); }, exitHold(speed));
-      return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); clearTimeout(tv); };
+      let stopHold = null;
+      const r1 = requestAnimationFrame(function () {
+        r2 = requestAnimationFrame(function () {
+          setOpen(true);
+          stopHold = afterFrame(function () { setRevealed(true); }, exitHold(speed));
+        });
+      });
+      return function () { cancelAnimationFrame(r1); cancelAnimationFrame(r2); if (stopHold) stopHold(); };
     }
     setOpen(false);
     setRevealed(false);   // clip immediately so the collapse hides cleanly
-    const t = setTimeout(function () { setMounted(false); }, exitHold(speed));
-    return function () { clearTimeout(t); };
+    if (pageHidden()) { setMounted(false); return undefined; }
+    return afterFrame(function () { setMounted(false); }, exitHold(speed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `speed` is fixed per call site; re-running on it would restart a live transition
   }, [show]);
   if (!mounted) return null;
@@ -1114,7 +1138,7 @@ export function Reveal({ show, children, style, horizontal = false, speed = "rev
     // now by tests/wa-sandbox-integrity.test.js.
     : { overflow: revealed ? "visible" : "hidden", minHeight: 0, minWidth: 0 };
   return (
-    <div role={presentational ? "presentation" : undefined} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
+    <div role={presentational ? "presentation" : undefined} inert={inert === true} style={{ ...track, opacity: open ? 1 : 0, ...(style || {}) }}>
       <div role={presentational ? "presentation" : undefined} style={innerStyle}>{children || last.current}</div>
     </div>
   );
@@ -1421,6 +1445,7 @@ export function AutoHeight({ children, watch, style }) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return function () { ro.disconnect(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attached once; armSettle reads only refs and setters, and listing it would rebuild the observer on every render
   }, []);
   // v17.9.1: `watch` — an identity to re-measure on, SYNCHRONOUSLY, before paint.
   //
@@ -1497,6 +1522,7 @@ export function AutoHeight({ children, watch, style }) {
     setAnimating(true);
     armSettle();
     setH(to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the swap; armSettle reads only refs and setters, and listing it would probe the ceiling (two forced layouts) on every render
   }, [watch]);
   return (
     <div
@@ -1625,6 +1651,16 @@ export function reduceMotionOn() {
 // seed is consumed like any top, and nothing animates.
 // Attached in an effect, never during render: writing to a ref in render is
 // what the React-Compiler refs rule forbids.
+//
+// v18.3.2 (O4): `ref.rebase()` — re-measure every top as the baseline, now,
+// without animating: `isQuiet`'s re-sync, on the caller's clock instead of on
+// a pass. For items that something else is moving while a pass may land: the
+// timeline's Unplaced row eases the table rows below it, and a second table
+// change inside those 385ms was measured from where the rows had STARTED, so
+// every block below jumped the distance the row had covered (43.9px in one
+// frame on DEV). Re-based every frame while the row moves, a pass slides only
+// what its own change moved. It measures as the pass does: container-relative,
+// as drawn (a running flip's transform included).
 export function useFlip(deps, isQuiet) {
   const ref = useRef(null);
   const prevTops = useRef(new Map());
@@ -1633,6 +1669,16 @@ export function useFlip(deps, isQuiet) {
     ref.seed = function (id, top) {
       seeds.current.set(id, top);
       requestAnimationFrame(function () { seeds.current.delete(id); });
+    };
+    ref.rebase = function () {
+      const container = ref.current;
+      if (!container) return;
+      const originTop = container.getBoundingClientRect().top;
+      const next = new Map();
+      container.querySelectorAll("[data-flip-id]").forEach(function (el) {
+        next.set(el.getAttribute("data-flip-id"), el.getBoundingClientRect().top - originTop);
+      });
+      prevTops.current = next;
     };
   }, []);
   useLayoutEffect(function () {
@@ -1666,7 +1712,7 @@ export function useFlip(deps, isQuiet) {
     });
     prevTops.current = next;
     seeds.current.clear();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the caller's trigger: a pass runs when its deps change and asks that render's isQuiet; each caller's predicate is new every render, and watching it would measure and animate on every render
   }, deps);
   return ref;
 }
