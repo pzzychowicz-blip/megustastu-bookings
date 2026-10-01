@@ -14,7 +14,8 @@ this merges** — the single riskiest fact in the release, and the reason phase 
 three `wa-sim-*.js` endpoints are the simulator's and must return 404 unless
 `WA_SIM_ENABLED === "1"`. Node ESM resolves these imports, so anything under `src/lib`
 they reach must carry explicit `.js` extensions — the chain is `api/* → whatsapp.js →
-customers.js → booking-logic.js → constants/day/vouchers`. **v18.0.0 phase 5b gates the
+customers.js → booking-logic.js → booking-fields/constants/day/phone-countries`, and
+`booking-fields.js → constants/vouchers` (v18.3.4). **v18.0.0 phase 5b gates the
 three sim handlers on `simEnabled()`** (`WA_SIM_ENABLED === "1"`), as each handler's
 FIRST statement — before the method check and before staff auth, so the answer is
 indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the handler

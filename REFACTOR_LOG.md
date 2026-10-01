@@ -30534,3 +30534,32 @@ and every save writes exactly the fields it writes today.
      is.
    - An edit saved after another device deleted that booking flashes as saved, writes
      nothing for it, and re-places the rest of its day.
+
+2. **The table: `src/lib/booking-fields.js`.** `BOOKING_FIELDS` has one row per stored
+   field (29) in `sanitize`'s key order, which is the stored key order (`contentKey` is
+   order-sensitive), so rows are appended and never reordered. Each row says three
+   things:
+   - **`read`**: how a read normalises the field;
+   - **`undo`**: whether undo and the reconciliation's day signature compare it. Each
+     `false` row gives its reason (identity, the history that grows on every write,
+     per-write metadata, a join, the stay that only completion writes);
+   - **`clause`**: its clause in the edit's history line, at a position of its own,
+     because that line has always ordered its clauses differently. Clear's clause sits
+     on `_manual`, which Clear resets, and the hand-picked tables' clause on `tables`.
+
+   `sanitize`, `UNDO_FIELDS` and `diffBooking` are derived from the table. Each
+   field's comments (the v17.16.13 key, v17.16.5's readable time, deposit, voucher,
+   guest id …) moved onto its row. The four helpers the rows read (`getDur`, `genId`,
+   `isReadableTime`, `enteredPhone`) moved too, and `booking-logic.js` re-exports all
+   of it, so no import site changed. The new file imports only `constants` and
+   `vouchers`; `booking-logic.js` no longer imports `vouchers`.
+
+   **`UNDO_FIELDS` now follows the table's order.** That is safe because the key is
+   only ever compared with another built the same way, and every value is escaped
+   against the separators. **The proof of byte-identity is a fuzz, not the
+   snapshots alone:** v18.3.3's `sanitize` and `diffBooking` were compiled from git
+   HEAD beside the new ones and compared on 100,000 random rows each (garbage types,
+   absent and `undefined` keys, NaN sizes, both prefixes): 0 differences, and the same
+   24 compared fields. The characterization snapshots did not move. `api/CLAUDE.md`'s
+   ESM-chain sentence names the new file, and the `phone-countries.js` edge it had
+   missed since v18.3.2.
