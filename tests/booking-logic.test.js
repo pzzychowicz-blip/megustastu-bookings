@@ -34,6 +34,7 @@ import { TOTAL_SEATS, ALL_TABLES, setTurnBuffer, setLayout, DEFAULT_LAYOUT } fro
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { draftFromBooking } from "../src/lib/booking-fields.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -1931,12 +1932,14 @@ describe("voucherCode is in all three booking-field lists (v18.0.0)", () => {
 // grep, like the `isReadableBlock` consumer sweep, because nothing else in the
 // repo can see this class: there are no component tests, and every unit test
 // above passes with all three sites missing.
+//
+// v18.3.4: `openEdit` opens the field table's draft (`draftFromBooking`), so its
+// site is the voucher row's `draft` seed, and the check is the draft itself.
 describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
   const APP = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 
   // Each entry is a fragment unique to one site, so a failure names WHICH.
   const SITES = [
-    ["openEdit — seeds the form draft", /deposit:b\.deposit\?String\(b\.deposit\):""[^\n]*?voucherCode:/],
     ["doSaveEdit — writes the edit", /Object\.assign\(\{\},b,\{name:f\.name[\s\S]{0,400}?voucherCode:/],
     ["doSaveNew — writes the create", /const nb=\{id:newId[\s\S]{0,400}?voucherCode:/],
   ];
@@ -1945,6 +1948,14 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
     it(name + " carries voucherCode", () => {
       expect(re.test(APP)).toBe(true);
     });
+  });
+
+  it("openEdit — the form draft carries voucherCode (v18.3.4: the table's draft)", () => {
+    const code = stripComments(APP).join("\n");
+    expect(code).toMatch(/function openEdit\(b\)\{[^\n]*?openForm\(draftFromBooking\(b\)\)/);
+    const d = draftFromBooking({ name: "Ana", size: 2, status: "confirmed", deposit: 20, voucherCode: "ABCD1234" });
+    expect(d.deposit).toBe("20");
+    expect(d.voucherCode).toBe("ABCD1234");
   });
 
   it("every `deposit:` in a booking-shaped literal has a voucherCode beside it", () => {

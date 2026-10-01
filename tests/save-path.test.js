@@ -52,6 +52,7 @@ import { Linter } from "eslint";
 import globals from "globals";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import * as bookingLogic from "../src/lib/booking-logic.js";
+import * as bookingFields from "../src/lib/booking-fields.js";
 import * as constants from "../src/lib/constants.js";
 import * as customers from "../src/lib/customers.js";
 import * as vouchers from "../src/lib/vouchers.js";
@@ -65,6 +66,7 @@ import * as drafts from "../src/lib/drafts.js";
 // hook, firebase) fails the scope build loudly rather than running without it.
 const LIB = {
   "booking-logic": bookingLogic,
+  "booking-fields": bookingFields,
   "constants": constants,
   "customers": customers,
   "vouchers": vouchers,

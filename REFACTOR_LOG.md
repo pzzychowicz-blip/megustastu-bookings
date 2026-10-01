@@ -30563,3 +30563,25 @@ and every save writes exactly the fields it writes today.
    24 compared fields. The characterization snapshots did not move. `api/CLAUDE.md`'s
    ESM-chain sentence names the new file, and the `phone-countries.js` edge it had
    missed since v18.3.2.
+
+3. **`draftFromBooking`: the edit form's draft, from the table.** `openEdit` built its
+   draft field by field, and that is the copy where a missing field does the most
+   damage: the form opens without it and Save writes the gap, wiping it from every
+   booking anybody edits. Each row the form edits now carries a **`draft`** seed at a
+   position of its own (the draft has always had its own order; `sameDraft` ignores it,
+   the snapshots do not), and `openEdit` opens `draftFromBooking(b)`. Three entries
+   belong to the form rather than to storage:
+   - `tables` seeds `manualTables` (`as`), because the form sends the tables picked by
+     hand and never `tables` itself;
+   - `returnOf` seeds null, because only Book Again sets it;
+   - `guestId` seeds itself and `guestSeed`, the booking a join stamps in the same
+     write.
+
+   Byte-identity is proven by a fuzz: v18.3.3's literal beside `draftFromBooking` on
+   200,000 random rows, raw and sanitized (400,000 comparisons): 0 differences in key
+   order, value or type, and the `preferredTables` copy never aliases the booking's
+   array. The `openEdit` snapshots did not move. `booking-logic.test.js` grepped
+   `openEdit`'s literal for `voucherCode`; it now checks the wiring
+   (`openForm(draftFromBooking(b))`) and the draft itself. Deleting the voucher row's
+   seed fails that test and four characterization tests. CLAUDE.md's "A new per-booking
+   FIELD" row says where a field goes now (phase 8 rewrites it with the guard).

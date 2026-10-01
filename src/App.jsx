@@ -87,6 +87,8 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences } from "./lib/recurring";
+// v18.3.4: what the edit form opens with, from the one table of a booking's fields.
+import { draftFromBooking } from "./lib/booking-fields";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -2490,7 +2492,10 @@ function BookingApp({uid}){
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
   function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
-  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm({name:b.name,phone:b.phone||"",date:b.date,time:b.time,size:b.size,preference:b.preference,notes:b.notes||"",status:b.status,customDur:(b.originalDuration||b.duration)!==getDur(b.size)?(b.originalDuration||b.duration):null,deposit:b.deposit?String(b.deposit):"",voucherCode:b.voucherCode||"",manualTables:[],preferredTables:Array.isArray(b.preferredTables)?b.preferredTables.slice():[],returnOf:null,guestId:b.guestId||null,guestSeed:null});setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
+  // form edits cannot be left out of what it opens with — the silent wipe
+  // ROADMAP #13 named, where Save writes the gap.
+  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm(draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history

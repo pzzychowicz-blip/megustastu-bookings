@@ -14,13 +14,15 @@
 //   undo     whether undo (and the reconciliation's day signature) compares it —
 //            `UNDO_FIELDS` is the rows that say yes;
 //   clause   the clause the edit's history line gives a change, at its position
-//            in that line — `diffBooking` is the rows that have one.
+//            in that line — `diffBooking` is the rows that have one;
+//   draft    what the edit form opens with for it, at its position in the draft —
+//            `draftFromBooking` (what `openEdit` opens) is the rows that have one.
 //
 // The row ORDER is the stored key order, because `sanitize`'s object literal set
 // it and `write-path.js`'s `contentKey` is an order-sensitive JSON compare: a
 // row that moves makes every stored booking read as changed. Append; never
-// reorder. A `clause` states its position instead, because the history line has
-// always listed its clauses in an order of its own.
+// reorder. A `clause` and a `draft` state their positions instead, because the
+// history line and the form's draft have always had orders of their own.
 //
 // The builders that WRITE a booking stay explicit code (Patryk, 2026-10-01): a
 // generated builder hides the one decision worth seeing, which fields a
@@ -96,7 +98,9 @@ export function enteredPhone(p,prefix){
 // `scheduledTime` can fall back on the time already read), `key` the RTDB child
 // key it was stored under. `clause.say(orig, draft, ctx)`: this field's clause
 // in the history line, or null when it did not change; `ctx` is
-// `{ size, phonePrefix }`.
+// `{ size, phonePrefix }`. `draft.seed(b)`: the form's value for it, under the
+// row's own key unless `draft.as` names the form's (the form never edits
+// `tables` itself; it sends `manualTables`).
 export const BOOKING_FIELDS = [
   // v17.16.13: `key` is the RTDB child key this row was stored under, and it is
   // the identity of LAST RESORT — `b.id || key || genId()`. It used to be
@@ -131,19 +135,19 @@ export const BOOKING_FIELDS = [
   //
   // Not compared by undo: it is what undo matches rows BY.
   { key: "id", read: (b, out, key) => b.id || key || genId(), undo: false },
-  { key: "name", read: (b) => b.name || "", undo: true,
+  { key: "name", read: (b) => b.name || "", undo: true, draft: { at: 1, seed: (b) => b.name },
     clause: { at: 1, say: (o, f) => (o.name !== f.name ? "name " + o.name + "→" + f.name : null) } },
-  { key: "phone", read: (b) => b.phone || "", undo: true,
+  { key: "phone", read: (b) => b.phone || "", undo: true, draft: { at: 2, seed: (b) => b.phone || "" },
     clause: { at: 6, say: (o, f, c) => {
       const was = enteredPhone(o.phone, c.phonePrefix), now = enteredPhone(f.phone, c.phonePrefix);
       return was !== now ? "phone " + (was || "none") + "→" + (now || "none") : null;
     } } },
-  { key: "date", read: (b) => b.date || "", undo: true,
+  { key: "date", read: (b) => b.date || "", undo: true, draft: { at: 3, seed: (b) => b.date },
     clause: { at: 4, say: (o, f) => (f.date !== o.date ? "date " + o.date + "→" + f.date : null) } },
-  { key: "time", read: (b) => (isReadableTime(b.time) ? b.time : "13:00"), undo: true,
+  { key: "time", read: (b) => (isReadableTime(b.time) ? b.time : "13:00"), undo: true, draft: { at: 4, seed: (b) => b.time },
     clause: { at: 3, say: (o, f) => (f.time !== o.time ? "time " + o.time + "→" + f.time : null) } },
   { key: "scheduledTime", read: (b, out) => (isReadableTime(b.scheduledTime) ? b.scheduledTime : out.time), undo: true },
-  { key: "size", read: (b) => Number(b.size) || 2, undo: true,
+  { key: "size", read: (b) => Number(b.size) || 2, undo: true, draft: { at: 5, seed: (b) => b.size },
     clause: { at: 2, say: (o, f, c) => (c.size !== o.size ? "size " + o.size + "→" + c.size : null) } },
   // The length the form shows is `customDur || getDur(size)`, and the one the
   // booking was planned with is `originalDuration` (its `duration` once a seat or
@@ -154,20 +158,25 @@ export const BOOKING_FIELDS = [
       return was !== now ? "duration " + was + "→" + now + "min" : null;
     } } },
   { key: "originalDuration", read: (b) => Number(b.originalDuration) || Number(b.duration) || 90, undo: true },
-  { key: "preference", read: (b) => b.preference || "auto", undo: true,
+  { key: "preference", read: (b) => b.preference || "auto", undo: true, draft: { at: 6, seed: (b) => b.preference },
     clause: { at: 5, say: (o, f) => (f.preference !== o.preference ? "pref " + o.preference + "→" + f.preference : null) } },
-  { key: "notes", read: (b) => b.notes || "", undo: true,
+  { key: "notes", read: (b) => b.notes || "", undo: true, draft: { at: 7, seed: (b) => b.notes || "" },
     clause: { at: 9, say: (o, f) => (f.notes !== (o.notes || "") ? "notes updated" : null) } },
-  { key: "status", read: (b) => b.status || "confirmed", undo: true,
+  { key: "status", read: (b) => b.status || "confirmed", undo: true, draft: { at: 8, seed: (b) => b.status },
     clause: { at: 8, say: (o, f) => (f.status !== o.status ? "status " + o.status + "→" + f.status : null) } },
   // The form never edits `tables` directly: it sends the tables picked by hand
-  // (`manualTables`), and the history line names them.
+  // (`manualTables`), and the history line names them. It opens with none.
   { key: "tables", read: (b) => (Array.isArray(b.tables) ? b.tables : []), undo: true,
+    draft: { at: 12, as: "manualTables", seed: () => [] },
     clause: { at: 12, say: (o, f) => {
       const mt = Array.isArray(f.manualTables) && f.manualTables.length > 0 ? f.manualTables : null;
       return mt ? "tables manually set: " + mt.join(", ") : null;
     } } },
-  { key: "customDur", read: (b) => b.customDur || null, undo: true },
+  // The form's length field. It opens on the planned length (`originalDuration`,
+  // or `duration` before one existed) when that is not the default for the size,
+  // and empty — "the default" — when it is.
+  { key: "customDur", read: (b) => b.customDur || null, undo: true,
+    draft: { at: 9, seed: (b) => ((b.originalDuration || b.duration) !== getDur(b.size) ? (b.originalDuration || b.duration) : null) } },
   // Clear (`_clearManual`) is what resets the hand placement, so it is this
   // row's clause.
   { key: "_manual", read: (b) => !!b._manual, undo: true,
@@ -175,12 +184,15 @@ export const BOOKING_FIELDS = [
   { key: "_locked", read: (b) => !!b._locked, undo: true },
   { key: "_conflict", read: (b) => !!b._conflict, undo: true },
   { key: "preferredTables", read: (b) => (Array.isArray(b.preferredTables) ? b.preferredTables : []), undo: true,
+    draft: { at: 13, seed: (b) => (Array.isArray(b.preferredTables) ? b.preferredTables.slice() : []) },
     clause: { at: 14, say: (o, f) => {
       const now = Array.isArray(f.preferredTables) ? f.preferredTables : [];
       const was = Array.isArray(o.preferredTables) ? o.preferredTables : [];
       return now.slice().sort().join(",") !== was.slice().sort().join(",") ? "preferred tables: " + (now.length ? now.join(", ") : "cleared") : null;
     } } },
-  { key: "returnOf", read: (b) => b.returnOf || null, undo: true },
+  // Set only when Book Again creates a booking; the edit form opens without it,
+  // and an edit never writes it.
+  { key: "returnOf", read: (b) => b.returnOf || null, undo: true, draft: { at: 14, seed: () => null } },
   // Not compared by undo: every write appends to it, so comparing it would mark
   // every row changed.
   { key: "history", read: (b) => (Array.isArray(b.history) ? b.history : []), undo: false },
@@ -193,6 +205,7 @@ export const BOOKING_FIELDS = [
   // Clamped ≥0 (/code-review): the form's min={0} only blocks the stepper —
   // a typed "-50" would otherwise pass Number() straight through.
   { key: "deposit", read: (b) => Math.max(0, Number(b.deposit) || 0), undo: true,
+    draft: { at: 10, seed: (b) => (b.deposit ? String(b.deposit) : "") },
     clause: { at: 10, say: (o, f) => {
       const was = Math.max(0, Number(o.deposit) || 0), now = Math.max(0, Number(f.deposit) || 0);
       return was !== now ? "deposit " + was + "→" + now + " €" : null;
@@ -205,6 +218,7 @@ export const BOOKING_FIELDS = [
   // needs correcting self-heals on the next save, the way `sanitize` fills every
   // other gap.
   { key: "voucherCode", read: (b) => normalizeCode(b.voucherCode), undo: true,
+    draft: { at: 11, seed: (b) => b.voucherCode || "" },
     clause: { at: 11, say: (o, f) => {
       const was = normalizeCode(o.voucherCode), now = normalizeCode(f.voucherCode);
       return was !== now ? "voucher " + (was ? formatCode(was) : "none") + "→" + (now ? formatCode(now) : "none") : null;
@@ -231,7 +245,11 @@ export const BOOKING_FIELDS = [
   // edit offers no Undo — `tests/save-path.test.js` pins it), while an action
   // that moves a compared field too restores it with the rest, since a snapshot
   // is the whole row as it was.
-  { key: "guestId", read: (b) => b.guestId || null, undo: false },
+  //
+  // `guestSeed` is the draft's other half of a join: the booking picked from the
+  // name list, stamped with the same id in the same write. Never stored.
+  { key: "guestId", read: (b) => b.guestId || null, undo: false,
+    draft: [{ at: 15, seed: (b) => b.guestId || null }, { at: 16, as: "guestSeed", seed: () => null }] },
   // v17.6.0: how long the party ACTUALLY stayed, in minutes — written by the two
   // completion paths ONLY on a real seated→completed transition (App.jsx's
   // updateStatus + doSave). Whitelisted so it survives reads. 0/absent means
@@ -282,4 +300,21 @@ export function diffBooking(orig,f,size,phonePrefix){
   const ch=[];
   HISTORY_CLAUSES.forEach(function(h){ const s=h.say(orig,f,ctx); if(s) ch.push(s); });
   return ch.length?ch.join(", "):"saved (no field changes)";
+}
+
+// ── Derived: what the edit form opens with ───────────────────────────────────
+// `openEdit`'s draft, in the order it has always had: the form's baseline for
+// the unsaved-changes guard (`sameDraft`) is this object, and every field of it
+// that the save reads back is one a row seeds. A field the draft leaves out is
+// the silent wipe ROADMAP #13 named — the form opens without it and Save writes
+// the gap.
+const DRAFT_SEEDS = BOOKING_FIELDS.reduce(function(all,row){
+  if(!row.draft) return all;
+  return all.concat([].concat(row.draft).map(function(d){ return {key:d.as||row.key, at:d.at, seed:d.seed}; }));
+},[]).sort(function(a,b){ return a.at-b.at; });
+
+export function draftFromBooking(b){
+  const d={};
+  DRAFT_SEEDS.forEach(function(s){ d[s.key]=s.seed(b); });
+  return d;
 }
