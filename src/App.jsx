@@ -86,6 +86,7 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
+import { dueOccurrences } from "./lib/recurring";
 import { normalizePhone, hasRealPhone, matchesIdentity, stampGuestSeed, resolveGuestId } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -2265,28 +2266,10 @@ function BookingApp({uid}){
   useEffect(function(){
     if(resyncing||firstLoadCount.current===null) return;
     if(!recurring.enabled||!recurring.rules.length) return;
-    const today=todayStr();
-    const horizonDays=recurring.horizonWeeks*7;
-    const existing={};
-    bookings.forEach(function(b){ if(b.recurringId&&b.recurringDate) existing[b.recurringId+"|"+b.recurringDate]=true; });
-    const toCreate=[];
-    recurring.rules.forEach(function(rule){
-      if(!rule.active) return;
-      const skip=rule.skipDates||[];
-      for(let i=0;i<=horizonDays;i++){
-        const d=new Date(today+"T00:00:00Z");
-        d.setUTCDate(d.getUTCDate()+i);
-        if(d.getUTCDay()!==rule.weekday) continue;
-        const ds=d.toISOString().slice(0,10);
-        if(skip.indexOf(ds)!==-1) continue;
-        const h=hoursFor(ds);
-        if(h.closed) continue;
-        const sm=toMins(rule.time);
-        if(sm<h.open*60||sm>h.close*60) continue;
-        if(existing[rule.id+"|"+ds]) continue;
-        toCreate.push({rule:rule,date:ds});
-      }
-    });
+    // v18.3.3: which occurrences are due is `dueOccurrences` (lib/recurring.js),
+    // pure and tested; it adds the rule's start (a rule booked the weeks before
+    // its first booking) and tests the last start rather than the close.
+    const toCreate=dueOccurrences(recurring.rules,bookings,todayStr(),recurring.horizonWeeks*7);
     if(!toCreate.length) return;
     saveBookings(function(prev){
       let next=prev;
@@ -3094,7 +3077,7 @@ function BookingApp({uid}){
         // v18.3.3: the standing rule, now that nothing above can refuse the save.
         // Before the booking write, as it always was: the generator effect runs
         // on the commit both land in, and finds the first occurrence stamped.
-        if(recStampId) addRule({id:recStampId,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
+        if(recStampId) addRule({id:recStampId,startDate:f.date,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
         const ok=saveBookings(buildNextMemo);

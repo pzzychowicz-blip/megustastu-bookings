@@ -30310,3 +30310,31 @@ class rather than fixing a bug and touches booking data.
    repeat booking that fits (tonight 21:30) wrote one rule, its own booking carried the
    rule's id, and the generator added 8 and 15 Oct only. `tests/recurring.test.js` pins
    the order (fails on the old code: 2 of 3).
+
+2. **A standing booking starts where its first booking is.** A rule had no start: the
+   generator walked every matching weekday from TODAY across the horizon. **Measured on
+   DEV before the fix**: "Repeat weekly" on Thu 22 Oct also booked the party tonight
+   (1 Oct), 8 and 15 Oct. The decision moved out of the effect into
+   `dueOccurrences(rules, bookings, today, horizonDays)` (`lib/recurring.js`, the v17.8.0
+   rule), and a rule now carries `startDate` (the form's date, written with the rule;
+   `sanitizeRule` keeps it, omitted when absent). An older rule takes the date of the
+   earliest booking the form stamped with it (Patryk's choice), derived so every device
+   agrees with nothing written; a rule with neither keeps the old behaviour. **The start
+   is exclusive, and the first DEV run is why.** With an inclusive start the form's own
+   date was still generated, as a second booking beside the form's (`r<rule>_<date>`
+   next to its `genId()` booking), on all four DEV runs (10, 11, 9 and 12 Oct). A capture of this tab's outgoing frames, then a run with this tab's generator
+   switched off (no duplicate), placed the cause on the device that wrote it holding the
+   rule before the booking: they are two writes to two nodes, and the ids differ, so
+   nothing converges the pair. Which client that was is not established (presence
+   listed only this Mac's tab and its previous load; no other dev server was
+   listening). The generator now never makes the start date, which holds whatever order
+   the two writes arrive in. **One more test moved with it**: the loop let a rule book any
+   time up to the close (`sm > close*60`), so after the day's hours were shortened it
+   could create a booking the form refuses; it asks `lastStartMins(close)`, the minute
+   the form, its Time field and `findTimes` name. **After it**, on DEV: repeat bookings
+   on 3, 7 and 14 Oct wrote the form's booking and only the later weeks inside the
+   horizon (10 Oct, 14 Oct, none), no duplicate in any; the first rule kept `startDate`
+   through the two whole-node writes after it. `tests/recurring.test.js`: `ruleStart`,
+   `dueOccurrences` (the race, the backfill, the derived start, skips, a closed day, the
+   last start) and the wiring; removing the start check fails 2 and testing the close
+   again fails 1.
