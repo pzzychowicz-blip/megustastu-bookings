@@ -30433,10 +30433,17 @@ The ship run's review raised six findings. Each fix is its own commit.
   23:30 seats, and so does 00:30. At 00:30 the walk-in is filed under the new date, as
   it always was.
 
+- **The `startDate` rollout caveat is written down.** A device still on v18.3.2
+  rewrites `recurring` through its old `sanitizeRule` whitelist on any rule write and
+  drops `startDate` from every rule, and its own generator still has no start. The note
+  is in `src/hooks/CLAUDE.md` (useRecurring), and it is the first row of the device
+  checks below.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |
 |---|---|---|
+| 2 | Every device | Refresh every device after the deploy (the tablet, the phones), so none on v18.3.2 rewrites `recurring` and drops `startDate`, or generates a rule's earlier weeks itself |
 | 3 | Android tablet | After closing time, Walk-in → Seat: "It's past closing — walk-ins can't be seated now." and nothing is written |
 | 5 | Android tablet | Drag a booking onto a table, give another booking on that table a lock (Assign), then move the first one's time onto it: the availability line says "Table N is also held by …" in amber before Save |
 | 6 | Android tablet | List view: delete a card through ⋯ and its confirm, and cancel another. Each folds all the way to nothing and the cards below follow it up, with no cut at the end (v18.3.2's 3px) |
