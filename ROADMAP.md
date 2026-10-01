@@ -126,6 +126,26 @@ evidence for each.
   edit saved after another device deleted the booking** shows the saved toast, writes
   nothing for it, and re-places the rest of its day. Decide whether Save refuses it.
 
+- **Two findings from v18.3.4's `/code-review`, each waiting on a decision.**
+  (1) **WhatsApp opens the booking form by its own doors.** `useWhatsApp.js`'s
+  Accept and its two edit doors call `openForm`/`setEditId` directly, skipping the
+  rest of App's `openNew`/`openEdit`:
+  - They don't ask `refused("bookingCreate"/"bookingEdit")`, and
+    `database.rules.json` enforces neither, so a staff account without
+    `bookingEdit` can edit a booking from the inbox.
+  - They don't clear `pendingWaitlistRef`. Book a waitlist entry, close the form
+    unsaved, then Accept a draft and Save: the entry leaves the waitlist although
+    nobody booked it.
+
+  The fix is to hand App's doors to the hook. Whether Accept needs `bookingCreate`
+  is a permission call, since the inbox takes no capability.
+
+  (2) **`sanitize` is 4–6.6× slower as a loop over the table**, on every booking of
+  every `/bookings` snapshot. Measured in Node on a Mac with 3,000 bookings: 0.35 ms
+  before, 1.4–2.3 ms after. One call site per row measured 0.48 ms, but it writes
+  the key order out again, which v18.3.4 removed (and the CSP rules out compiling
+  it). Measure it on the tablet at #3's real size before choosing.
+
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the

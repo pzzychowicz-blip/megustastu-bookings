@@ -30900,6 +30900,23 @@ commit; the others are deferred to the ROADMAP; none was disproved.
    module-scope read added on either side, which the header now says, along with
    where the reads actually are. Comment only.
 
+6. **WhatsApp's form doors skip App's (deferred to the ROADMAP).** Accept and the two
+   edit doors open the form with `openForm`/`setEditId` and skip the rest of
+   `openNew`/`openEdit`. That leaves out the `bookingCreate`/`bookingEdit` gate, which
+   no rule enforces, and the `pendingWaitlistRef` reset, so a waitlist entry booked
+   and then abandoned is removed by the next WhatsApp draft's Save. Confirmed by
+   reading both paths. It predates this version and changes behaviour, and whether
+   Accept needs `bookingCreate` is Patryk's call: the inbox takes no capability, by
+   his decision in v18.0.0.
+
+7. **`sanitize` is slower as a loop over the table (deferred to the ROADMAP).**
+   Measured in Node on this Mac with 3,000 bookings: 0.35 ms a pass in v18.3.3, 1.4–2.3
+   ms now (`JSON.parse` of the same node takes 2.9 ms). The 29 `read` closures share
+   one call site. One call site per row measured 0.48 ms, but writes the key order
+   out a second time, the copy this version exists to remove, and the CSP forbids
+   compiling one with `new Function`. The tablet was not measured. It is ROADMAP #3's
+   question, how big `/bookings` actually is.
+
 ### Gate
 
 Per commit: main bundle gz · tests · lint · `check:style`. Phases 6–8 were measured
