@@ -30232,6 +30232,10 @@ plugin-react 6.1 (#14), and closing the drop freeze (M1) as won't-fix.
 
 ### `/code-review` round (2026-10-01)
 
+Max effort, three findings, each checked against the code before anything
+changed. Two were fixed, one per commit, with the gate green on each (2257 tests
+throughout):
+
 - **`ROW_FOLD` is a `const`.** O3 declared it `export var`, against the root
   CLAUDE.md's "Never `var` in new code" (the file's own exception covers the vars
   Phase A left). `tests/leaving-order.test.js` pinned the `var` spelling and pins
@@ -30243,6 +30247,17 @@ plugin-react 6.1 (#14), and closing the drop freeze (M1) as won't-fix.
   before any passive effect, so nothing runs differently; what goes is the second
   copy a change to the re-seed would have had to reach. The test pins the one
   effect and counts the bookkeeping line.
+
+Not changed:
+
+- **The booking form previews kept tables as fine when Save will refuse them.** Phase 2
+  gave a hand-placed booking the seated rule, refusal included: a locked or seated
+  party, or a table block, on its table at the new time stops the save by name. The
+  availability scan and the Tables row ask `tablesKept`, as the save does, but not the
+  refusal, so the form shows the tables kept and Save then says no. Seated bookings
+  have had the same gap since v18.0.0, and phase 2 widened it to every drag-drop,
+  Assign and walk-in. What the form should say instead is a design call, so it is in
+  ROADMAP rather than here.
 
 ### Check on the devices after merge
 
