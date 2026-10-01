@@ -30411,6 +30411,18 @@ class rather than fixing a bug and touches booking data.
    `tests/motion.test.js`; `tests/wa-sandbox-integrity.test.js`'s two inner-track pins
    read the renamed `isRevealed`.
 
+### /code-review fixes
+
+The ship run's review raised six findings. Each fix is its own commit.
+
+- **`keptRefusal` gives a seated party's fit refusal too.** It asked a seated booking
+  only about locked clashes, while `doSaveEdit` asks first whether the party still fits
+  its tables (`seatedFitRefusal`). A party of 2 edited to 6 on table 3 showed the table
+  as kept in the form, then Save refused it with "Party of 6 doesn't fit table 3 (seats 2).".
+  Reproduced in node before the fix (`keptRefusal` returned null). It now returns the fit
+  sentence before the clash, in Save's order. There is a new test, and the test fails
+  with the fit check removed.
+
 ### Check on the devices after merge
 
 | Phase | Device | Check |

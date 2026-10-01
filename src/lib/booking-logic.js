@@ -1450,6 +1450,11 @@ export function keptRefusal(list,orig,draft,blocks){
     return b.id===orig.id?Object.assign({},b,{time:time,duration:dur,status:draft.status,tables:orig.tables}):b;
   });
   if(hand) return handKeptRefusal(day,draft.date,orig.id,blocks);
+  // v18.3.3 (/code-review): a seated party that has outgrown its tables is
+  // refused before its clashes, in `doSaveEdit`'s order. Left out, a party of 2
+  // edited to 6 previewed table 3 as fine and Save refused it.
+  var fit=seatedFitRefusal(size,orig.tables);
+  if(fit) return fit;
   var locked=pinnedClashParties(day,draft.date,orig.id).locked;
   return locked.length?pinnedClashRefusal(locked[0]):null;
 }

@@ -2939,6 +2939,15 @@ describe("keptRefusal — what Save will say about the tables it keeps (v18.3.3)
     expect(keptRefusal(day, s, draftOf(s, { customDur: 150, date: "2099-06-16" }), [])).toBe(null);
   });
 
+  it("a SEATED party grown past its tables: Save's fit refusal, before its clashes (/code-review)", () => {
+    const s = mk({ id: "x", name: "Sat", time: "19:00", status: "seated", tables: ["3"], duration: 150, originalDuration: 150 });
+    const day = [s, mk({ id: "z", name: "Rita", time: "20:45", tables: ["3"], _locked: true, _manual: true })];
+    const want = seatedFitRefusal(6, ["3"]);
+    expect(want).toMatch(/^Party of 6 doesn't fit table 3/);
+    expect(keptRefusal([s], s, draftOf(s, { size: 6, customDur: 150 }), [])).toBe(want);
+    expect(keptRefusal(day, s, draftOf(s, { size: 6, customDur: 150 }), []), "doSaveEdit asks the fit first").toBe(want);
+  });
+
   it("a draft that does not keep its tables is not this function's", () => {
     const day = [placed(), mk({ id: "z", name: "Rita", time: "20:00", tables: ["3"], _locked: true, _manual: true })];
     expect(keptRefusal(day, day[0], draftOf(day[0], { time: "20:00", size: 3 }), []), "a new size re-places it").toBe(null);
