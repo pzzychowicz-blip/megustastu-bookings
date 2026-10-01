@@ -398,7 +398,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.2",
+  version:"18.3.3",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -3040,11 +3040,14 @@ function BookingApp({uid}){
         // fields (weekday from the booking date, UTC) and stamp THIS first
         // occurrence with the rule's id + date so the generator dedupes it. Done
         // once here (outside buildNext) so a retry replay never makes a 2nd rule.
-        let recStampId=null;
-        if(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time){
-          const rule=addRule({name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
-          recStampId=rule.id;
-        }
+        // v18.3.3: only the rule's ID is minted here. The rule itself is written
+        // below, after the capacity refusals: it was written HERE, so a save
+        // refused with "Could not assign a table" left the rule behind, the
+        // generator then created the very booking the form had refused (with no
+        // table), and every further tap on Save added another rule. Measured on
+        // DEV: one refused save, then Confirm on the "Kitchen may be busy" its
+        // generated booking raised, gave two rules and a table-less booking.
+        const recStampId=(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time)?genId():null;
         // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
         // confirmed, OR pending via the "Save pending" button (status override).
         const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
@@ -3088,6 +3091,10 @@ function BookingApp({uid}){
           const kicked=displaced.filter(function(d){return prevAssigned.some(function(p){return p.id===d.id;});});
           if(kicked.length>0){setError("Not enough capacity — adding this booking would displace "+kicked.length+" existing booking"+(kicked.length>1?"s":"")+": "+kicked.map(function(k){return k.name;}).join(", ")+".");return;}
         }
+        // v18.3.3: the standing rule, now that nothing above can refuse the save.
+        // Before the booking write, as it always was: the generator effect runs
+        // on the commit both land in, and finds the first occurrence stamped.
+        if(recStampId) addRule({id:recStampId,name:f.name,phone:cleanPhone,size:size,weekday:new Date(f.date).getUTCDay(),time:f.time,preference:f.preference,notes:f.notes});
         // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
         // show + auto-retry; flash only on a real save.
         const ok=saveBookings(buildNextMemo);

@@ -30276,3 +30276,37 @@ Not changed:
 | 7 | Android tablet | List view with three cards: complete the middle one (its button, or the `C` key). It folds away and the card below follows it up with no jump at the end. Delete the next one through its confirm: it folds all the way too, not vanishing part-way. Undo: it comes back at full height and the card below slides down |
 | 7 | Android tablet | List view on a day with bookings: screen off for a minute, complete one of them from another device, screen on. When "Reconnected" shows, the card is simply gone, with no fold playing |
 | 8 | Android tablet | On a DEV tab (`adb reverse`, as phase 5's check), Timeline on today: remove a table that has a booking today in Settings → Layout, then put it back. The Unplaced row eases open, and the table rows, their labels and their blocks move down together with nothing jumping; the booking stays where it was as it moves into the row. Putting the table back eases it shut the same way |
+
+## v18.3.3 — the second bug sweep
+
+**Date:** 2026-10-01 · **Branch:** `fix/v18.3.3-bug-sweep` ·
+**Behavioural change:** yes, each phase below says what moves.
+
+Patryk asked for as many bugs as one patch could carry. The ROADMAP held one (the
+kept-tables preview), so the hot paths were read for more: `doSaveEdit` / `doSaveNew`,
+the recurring generator, drag-drop, the walk-in save and undo, plus 13 of the 20
+`set-state-in-effect` lint advisories and a sample of the `refs` and `purity` ones.
+Each candidate was reproduced on DEV or stated as found by reading. The advisories read
+held no bug beyond phase 5's: they are deliberate idioms (a cached last value in a ref,
+the wipe animations' `Date.now` clocks, a draft re-synced from its prop). ROADMAP #13,
+the one field table, was split off as v18.3.4 (Patryk's call), since it prevents a bug
+class rather than fixing a bug and touches booking data.
+
+### Phases
+
+1. **"Repeat weekly" writes its rule only once the save cannot be refused.** `doSaveNew`
+   called `addRule` before its two capacity refusals ("Could not assign a table",
+   "Not enough capacity"), so a refused save left the rule behind; the generator then
+   created the booking the form had refused, with no table and `_conflict`, and each
+   further tap on Save added another rule. **Measured on DEV before the fix** (headless
+   pane, the real form; rows tagged `v1833-`): a 25-guest booking filled 13 Oct 19:00,
+   a 12-guest repeat booking at the same time was refused, and the database held its
+   rule plus two generated bookings, 6 Oct (placed) and 13 Oct (no table). The next tap
+   on Save raised "Kitchen may be busy" because of that generated booking, and its
+   Confirm wrote a second rule. Now only the rule's id is minted up front (the first
+   booking is stamped with it) and `addRule({id, …})` runs after the refusals, right
+   before the booking write, where the old call's position relative to the write was.
+   **After it**, same rig on 27 Oct: refused twice, no rule and no booking written; a
+   repeat booking that fits (tonight 21:30) wrote one rule, its own booking carried the
+   rule's id, and the generator added 8 and 15 Oct only. `tests/recurring.test.js` pins
+   the order (fails on the old code: 2 of 3).
