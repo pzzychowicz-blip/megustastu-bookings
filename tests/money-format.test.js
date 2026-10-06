@@ -73,7 +73,7 @@ describe("every amount on screen goes through money", () => {
   const sites = [
     ["components/ListView.jsx", /title=\{"Deposit " \+ money\(Number\(b\.deposit\), currency \|\| "€"\)\}/],
     ["components/ListView.jsx", /<DepositIcon size=\{IC\.control\} \/>\{money\(Number\(b\.deposit\), currency \|\| "€"\)\}/],
-    ["components/TimelineView.jsx", /title: "Deposit " \+ money\(depositAmt, currency\),/],
+    ["components/blockFlags.jsx", /title: "Deposit " \+ money\(depositAmt, currency\),/],
     ["components/DaySheet.jsx", /\(Number\(b\.deposit\) \|\| 0\) > 0 \? money\(Number\(b\.deposit\), currency \|\| "€"\) : null,/],
     ["components/UnsettledBanner.jsx", /" still unrecorded — " \+ money\(left, currency\) \+ " on it\."/],
     ["components/VoucherCarryModal.jsx", /money\(carry\.amount, currency\) \+ " is left on voucher "/],

@@ -133,7 +133,9 @@ describe("the fixture matches the component (v18.2.0 phase 22)", () => {
   // order is the kind of thing that drifts: this reads the component's own
   // keys and priorities, in rail order, and compares.
   const tv = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
-  const body = tv.slice(tv.indexOf("function railFlagsOf("), tv.indexOf("function chipRoomFor("));
+  // v18.4.0: the list is in blockFlags.jsx, which the printed timeline reads too.
+  const bf = stripComments(readFileSync(new URL("../src/components/blockFlags.jsx", import.meta.url), "utf8")).join("\n");
+  const body = bf.slice(bf.indexOf("function railFlagsOf("));
 
   it("same keys, same order, same drop priority", () => {
     const found = [...body.matchAll(/\{ k: "(\w+)", keep: (\d+)/g)].map((m) => ({ k: m[1], keep: Number(m[2]) }));
@@ -143,5 +145,10 @@ describe("the fixture matches the component (v18.2.0 phase 22)", () => {
   it("the chip's room is counted from the SAME list the rail draws", () => {
     expect(tv).toMatch(/function chipRoomFor\(b, noShows, warn, clash\) \{\s*const flags = railFlagsOf\(b, noShows, warn, ""\)\.length;/);
     expect(tv).toMatch(/const allFlags = railFlagsOf\(b, noShows, warn, currency\);/);
+  });
+
+  it("there is ONE list, in its own module, and the grid imports it", () => {
+    expect(tv).not.toMatch(/function railFlagsOf\(/);
+    expect(tv).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
   });
 });

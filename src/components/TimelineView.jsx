@@ -43,21 +43,21 @@ import {
   ROW_H, LABEL_W, STATUS_COLORS, BLOCK_BG, BLOCK_INK,
   S, TBL, BTN, TIMELINE_TABLES, R, M, T, FW, IC, RIM_SOLID, exitHold } from "../lib/constants";
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
-import { toMins, toTime, isLocked, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
+import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
+import { railFlagsOf } from "./blockFlags";
 import { noShowMap, identityKey } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useEnterLeave } from "../hooks/useEnterLeave";
 // v17.9.0: OverlapIcon is a REUSE, not a near-duplicate — the block's ex-"!!"
 // and the notification strip's Overlap section render the same `warnings` entry.
-import { StarIcon, WaitIcon, LockIcon, NoShowIcon, DepositIcon, OverlapIcon, ClashIcon, AssignIcon, StatusIcon, IndoorIcon, OutdoorIcon, AlertIcon } from "./Icons";
+import { WaitIcon, ClashIcon, AssignIcon, StatusIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
 import { beginHold } from "../lib/holdSelection";
 import { EmptyDay } from "./EmptyDay";
 import { hourLabelAt, isHourMark } from "../lib/time-grid";
 import { visibleRail } from "../lib/block-layout";
 import { unplacedOf, primaryGridTable, packLanes, unplacedHeight } from "../lib/unplaced";
-import { money } from "../lib/vouchers";
 import { edgeVelocity, edgeStep, scrollParentY, scrollBounds } from "../lib/edge-scroll";
 import { afterFrame, everyFrame, pageHidden } from "../lib/after-frame";
 
@@ -146,31 +146,8 @@ const NAME_MIN_PX = 55;  // ~6 characters and an ellipsis
 // no-show, which still outrank the preferred-tables star. Overstaying stays on
 // top — a party sitting in the next booking's table, the one mark a host acts on
 // before anything else.
-function railFlagsOf(b, noShows, warn, currency) {
-  const depositAmt = Number(b.deposit) || 0;
-  const zone = b.preference === "indoor" || b.preference === "outdoor" ? b.preference : null;
-  const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
-  return [
-    depositAmt > 0
-      ? { k: "dep", keep: 2, title: "Deposit " + money(depositAmt, currency), icon: <DepositIcon size={IC.control} /> } : null,
-    // v18.3.1: seated outside the zone it asked for (a preference is a wish
-    // now), the zone mark gives way to the alert mark, in the same slot, at the
-    // same size, in the same BlockFlag (Patryk: a flag like the others). Warning
-    // ink cannot sit on the block's status fill, so the mark says it instead.
-    zone
-      ? { k: "zone", keep: 3, title: offZone(b) ? offZoneLabel(b) : (zone === "indoor" ? "Prefers indoor" : "Prefers outdoor"),
-          icon: offZone(b) ? <AlertIcon size={IC.control} /> : zone === "indoor" ? <IndoorIcon size={IC.control} /> : <OutdoorIcon size={IC.control} /> } : null,
-    hasPrefT
-      ? { k: "pref", keep: 6, title: "Preferred tables: " + b.preferredTables.join(", "), icon: <StarIcon size={IC.control} /> } : null,
-    isLocked(b)
-      ? { k: "lock", keep: 5, title: "Locked to these tables — the optimiser will not move it", icon: <LockIcon size={IC.control} /> } : null,
-    noShows >= 2
-      ? { k: "ns", keep: 4, title: countLabel(noShows, "past no-show", "past no-shows") + " on this number", icon: <NoShowIcon size={IC.control} /> } : null,
-    warn && warn.overdue
-      ? { k: "over", keep: 1, title: "Overstaying — " + warn.next + " needs this table at " + warn.nextTime, icon: <OverlapIcon size={IC.control} /> } : null
-  ].filter(Boolean);
-}
-
+// v18.4.0: `railFlagsOf` lives in ./blockFlags.jsx, where the printed timeline
+// (TimelineSheet) reads the same list.
 function chipRoomFor(b, noShows, warn, clash) {
   const flags = railFlagsOf(b, noShows, warn, "").length;
   return CHIP_PX + HANDLE_PX + RING_PX + NAME_MIN_PX + STATUS_PX + (clash ? CLASH_PX : 0) + FLAG_PX * flags;

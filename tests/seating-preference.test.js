@@ -77,7 +77,8 @@ describe("where it shows", () => {
   const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
   const read = (rel) => stripComments(readFileSync(join(SRC, rel), "utf8")).join("\n");
   it("the rail's zone flag becomes the alert mark, in the same entry", () => {
-    const tv = read("components/TimelineView.jsx");
+    // v18.4.0: the rail's list is components/blockFlags.jsx.
+    const tv = read("components/blockFlags.jsx");
     expect(tv).toMatch(/icon: offZone\(b\) \? <AlertIcon size=\{IC\.control\} \/> :/);
     expect(tv).toMatch(/title: offZone\(b\) \? offZoneLabel\(b\) :/);
   });

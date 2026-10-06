@@ -31165,3 +31165,9 @@ an Add to waitlist button and a suggested reply.
    v17.10.1 chose), the phone's Walk-in / + New bar, the quick-status and reminder
    editor's buttons, and the sandbox simulator. DESIGN.md's Press feedback holds the
    rule, which widens `.mgt-nopress` from "an inert control" to "no transform on press".
+3. **The block's flag list has its own module (no behaviour change).** `railFlagsOf`
+   was module-private in `TimelineView.jsx`; the printed timeline (phase 4) draws the
+   same flags, so it moved to `src/components/blockFlags.jsx` unchanged, and
+   `TimelineView` dropped the thirteen imports only that function used.
+   `tests/block-layout.test.js` reads the list from its new file and fails if
+   `TimelineView` grows a second one.
