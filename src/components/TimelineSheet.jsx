@@ -90,7 +90,13 @@ function SheetBlock({ b, pos, flags, dashed }) {
 export const TimelineSheet = memo(function TimelineSheet({ bookings, date, blocks, from, to, splitHour, restaurantName, currency }) {
   const fromM = from * 60, toM = to * 60;
   const day = useMemo(function () {
-    return (bookings || []).filter(function (b) { return b && b.date === date && b.status !== "cancelled" && isTime(b.time); });
+    // Finished visits first, so they are painted UNDER the day's live bookings:
+    // a completed booking's table is free (src/CLAUDE.md), so a later party can
+    // share its row and its minutes, and on paper the party still to come is
+    // the one that has to be readable. Array.sort is stable; the rest keep
+    // their order.
+    return (bookings || []).filter(function (b) { return b && b.date === date && b.status !== "cancelled" && isTime(b.time); })
+      .sort(function (a, b) { return (a.status === "completed" ? 0 : 1) - (b.status === "completed" ? 0 : 1); });
   }, [bookings, date]);
   const nsMap = useMemo(function () { return noShowMap(bookings); }, [bookings]);
   const s = useMemo(function () { return daySummary(bookings, date, splitHour); }, [bookings, date, splitHour]);

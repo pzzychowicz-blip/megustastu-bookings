@@ -31291,3 +31291,13 @@ an Add to waitlist button and a suggested reply.
    or blank for no preference (his choice of three: a column, a column that also lists
    preferred tables, or the word inside the Tables cell). The timeline sheet is
    unchanged. `tests/print-timeline.test.js` +1.
+8. **On the printed timeline a live booking prints over a finished one.** Found by
+   printing a DEV day with blocked tables (17.09, one of the checks left open after
+   phase 6): a completed visit's table is free, so a later party can hold the same row
+   at the same minutes, and the sheet drew bookings in stored order, which put a
+   confirmed 21:30 party UNDER a completed one's grey block, unreadable. The day's
+   bookings are sorted finished-first before drawing. Checked in the PDF: the
+   confirmed block is whole and the completed one shows behind it.
+   The same prints settled two of the open checks: a blocked span prints hatched with
+   its row's bookings beside it, and unplaced bookings print as dashed blocks in
+   "Unplaced" lanes above the tables (13.10, two lanes).

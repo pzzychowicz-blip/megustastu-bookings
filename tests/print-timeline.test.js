@@ -116,6 +116,9 @@ describe("the sheet", () => {
     expect(sheet).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
     expect(sheet).toMatch(/packLanes\(unplacedOf\(day, gridIds\)/);
   });
+  it("paints finished visits first, so a live booking on the same row prints over them", () => {
+    expect(sheet).toMatch(/\.sort\(function \(a, b\) \{ return \(a\.status === "completed" \? 0 : 1\) - \(b\.status === "completed" \? 0 : 1\); \}\)/);
+  });
   it("holds no theme token: print stays light", () => {
     expect(sheet).not.toMatch(/var\(--/);
   });
