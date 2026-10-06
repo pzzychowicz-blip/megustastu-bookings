@@ -17,6 +17,7 @@ import { BLOCK_BG, BLOCK_INK, TBL, S, R, M, T, FW, H, IC, SP, RIM_SOLID, EXIT_MS
 import { isIn, guestsLabel } from "../lib/booking-logic";
 import { weekdayShort } from "../lib/day";
 import { useKeyboardInset } from "../hooks/useKeyboardInset";
+import { useShortViewport } from "../hooks/useShortViewport";
 import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
@@ -487,6 +488,50 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   // it. Moving the boxes' edges instead let the page behind a modal show
   // through that bar (Patryk's pick, measured in the Simulator).
   const kb = useKeyboardInset();
+  // v18.4.0 (Patryk: "the keyboard squeezes the booking form"). Measured on the
+  // restaurant tablet: the keyboard leaves a footed card 208px, 78 of them its
+  // Save row, so 130px of fields; the Name field sat cut by 12px under that
+  // row and the voucher list showed one row. `tight` is "a text field of this
+  // dialog has the focus AND the visible area is short" (`useShortViewport`,
+  // which is what reacts on Android, where `kb.bottom` is 0 by design). While
+  // tight, a footed dialog does two things:
+  //   - its footer row loses its vertical padding (78 → 57px on a card);
+  //   - the focused field is put at the top of the scrolling body, its LABEL
+  //     included (the `Fld` wrapper), so what is being typed into is named and
+  //     a list that opens under it (names, phones, vouchers) has the rest of
+  //     the body to open into.
+  // `field` is the focused element, not a boolean, so moving from one field
+  // to the next places the next one. A blur towards a control INSIDE the
+  // dialog keeps it: the footer must not grow back under the finger that
+  // presses Save.
+  const short = useShortViewport();
+  const [field, setField] = useState(null);
+  const tight = short && !!field;
+  const typingProps = {
+    onFocus: function (e) {
+      const t = e.target;
+      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) setField(t);
+    },
+    onBlur: function (e) {
+      if (!(e.relatedTarget && e.currentTarget.contains(e.relatedTarget))) setField(null);
+    },
+  };
+  // The placing waits for the footer's own ease, then scrolls. It runs only
+  // where the keyboard RESIZED the layout (`kb.bottom` 0, Android). On iOS the
+  // keyboard covers the page instead and the system brings the field into
+  // view by scrolling the window or panning the visual viewport (v18.3.5's
+  // two ways); a second scroll from here would be measured against a body
+  // whose top may be off the screen, and that was not tried on a device.
+  useEffect(function () {
+    if (!tight || kb.bottom || !field) return undefined;
+    return afterFrame(function () {
+      const sc = scrollRef.current;
+      if (!sc || !sc.contains(field)) return;
+      const box = field.closest("[" + FLD_ATTR + "]") || field;
+      const d = box.getBoundingClientRect().top - sc.getBoundingClientRect().top - SP.base;
+      if (Math.abs(d) > 1) sc.scrollTo({ top: sc.scrollTop + d, behavior: reduceMotionOn() ? "auto" : "smooth" });
+    }, exitHold("shift"));
+  }, [tight, kb.bottom, field]);
 
   useEffect(() => {
     if (!mob) return;
@@ -564,11 +609,11 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
     // insets are 0 in portrait, so portrait is unchanged).
     if (footer) {
       return wrap(
-        <div ref={dialogRef} {...dialogProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
+        <div ref={dialogRef} {...dialogProps} {...typingProps} className={sheetCls} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingBottom: kb.bottom, zIndex: 200, background: "var(--bg-sheet-mobile)", display: "flex", flexDirection: "column" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", padding: "16px 18px", paddingTop: "max(16px, env(safe-area-inset-top))", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", boxSizing: "border-box" }}>
             {children}
           </div>
-          <div style={{ flexShrink: 0, padding: "12px 18px", paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: kb.bottom ? SP.wide : "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
+          <div style={{ flexShrink: 0, padding: "12px 18px", paddingTop: tight ? SP.snug : SP.wide, paddingLeft: "max(18px, env(safe-area-inset-left))", paddingRight: "max(18px, env(safe-area-inset-right))", paddingBottom: kb.bottom ? SP.wide : (tight ? SP.snug : "max(12px, env(safe-area-inset-bottom))"), transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", background: "var(--bg-sheet-mobile)", boxSizing: "border-box" }}>
             {footer}
           </div>
         </div>
@@ -603,11 +648,11 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {footer ? (
-        <div ref={dialogRef} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
+        <div ref={dialogRef} {...dialogProps} {...typingProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
-          <div style={{ flexShrink: 0, padding: "16px 24px", borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
+          <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
             {footer}
           </div>
         </div>
@@ -680,6 +725,9 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
 // match wins — BOTH dialogs announced "New booking", including the one actually
 // in front and holding focus. Overlay assigns a unique id per instance instead.
 export const MODAL_TITLE_ATTR = "data-mgt-modal-title";
+// v18.4.0: marks a `Fld`'s wrapper, the box Overlay scrolls to the top of its
+// body for a focused field, so the field's label comes with it.
+export const FLD_ATTR = "data-mgt-fld";
 
 // v18.2.0: FLAT. The pill carried `--shadow-btn` and the solid buttons' white
 // rim (RIM_SOLID), i.e. exactly what a button wears, in a button's blue, above
@@ -855,6 +903,7 @@ export function Fld({ label, req, invalid, describedBy, style, children }) {
   const attrs = single ? stateAttrs : null;
   return (
     <div
+      {...{ [FLD_ATTR]: "" }}
       role={single ? undefined : "group"}
       aria-labelledby={single ? undefined : id + "-l"}
       {...(single ? null : stateAttrs)}

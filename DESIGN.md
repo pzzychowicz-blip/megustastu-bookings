@@ -1583,6 +1583,11 @@ the keyboard goes.
   keyboard.
 - **Nothing moves under a pressing finger.** A blur towards a control inside the
   folded surface (Send) does not unfold it.
+- **A footed dialog** (`Overlay`, so every form) slims its Save row and scrolls the
+  focused field to the top of its body with its label, which is also what gives a
+  list opening under the field (names, phones, vouchers) room. The title pill is
+  not hidden: that scroll already moves it out of view. The scroll runs only where
+  the keyboard resized the layout (Android); iOS places the field itself.
 - **The WhatsApp inbox** folds its title bar, the list's toolbar, the conversation
   list (two panes), the conversation's chips and actions, the linked booking, the
   request banner and the draft. The thread and the reply box stay.

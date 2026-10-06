@@ -31242,7 +31242,46 @@ an Add to waitlist button and a suggested reply.
    name, the button and the reply box; with it down, everything as before (the title
    bar, the toolbar, the list at 320px, the cards). `tests/short-viewport.test.js`
    (11): the hook's arithmetic on the tablet's and the Simulator's numbers, and the
-   fold's wiring. Entry chunk 447.9 kB (125.6 gz), up 2.5 kB.
+   fold's wiring. Entry chunk 448.11 kB (125.61 gz), up 2.8 kB.
    **Not checked:** an iPhone and an iPad (the Simulator run is still owed), the
    home-screen app on the tablet (PROD, taller than a Chrome tab), and a finger: a CDP
    touch is the same pipeline but it is not one.
+
+6. **A footed dialog makes room while a field is typed into on a short screen (Patryk:
+   "booking / walk-in forms too"; he asked to measure first, then decide).**
+   **Measured on the tablet, the booking form with the keyboard up:** the card is 208px
+   (the visible area is 231: Chrome puts a 58px autofill strip above the keyboard for
+   an `<input>`, and none for a `<textarea>`, where it is 289 and the card 260). 78px
+   of it is the Save row, so the fields get 130. On Name, the title pill took 70 of
+   those and the field was cut by 12px under the Save row; on Gift voucher its list
+   showed less than one row. Shown the captures, he chose all three of his options:
+   hide the title pill, slim the Save row, keep the field in view.
+   Built in `Overlay`, so every footed dialog gets it, not two forms: `tight` is "a
+   text field of this dialog has the focus AND `useShortViewport()`". While tight
+   (a) the footer's vertical padding goes 16 → 6px (12 → 6 on a phone sheet), eased,
+   and (b) the focused field is scrolled to the top of the body WITH its label (`Fld`'s
+   wrapper, marked `data-mgt-fld`), after the footer's ease, smoothly unless motion is
+   reduced. A blur towards a control inside the dialog keeps `tight`, so the footer
+   does not grow back under a finger pressing Save.
+   **The title pill is NOT hidden, and that is a change from what he chose.** With the
+   label at the top of the body the pill is scrolled out of view for every field, the
+   first included (measured: body scrollTop 82 on Name), so hiding it would show
+   nothing different, and it would collapse 70px above the viewport of a scrolled body
+   and take the dialog's accessible name (the pill is the `<h2>` `useDialog` reads)
+   out of the tree while typing. Reported to him as not built, with the reason.
+   **The placing runs only where the keyboard resized the layout** (`kb.bottom` 0,
+   Android). On iOS the system places the field by scrolling the window or panning the
+   visual viewport (v18.3.5's two ways), and a second scroll from here was not tried on
+   a device, so iOS gets the slim footer only.
+   **After, on the tablet:** Save row 57px, fields 150 (203 on a textarea); on Name,
+   Phone, Notes and Gift voucher the label is 8px under the body's top and the field
+   whole; the voucher list shows a row and a half; the walk-in's Notes the same. Back,
+   tapped with a CDP touch at its slim position, closed the form. Keyboard down: the
+   footer is 77px and the card 457 again.
+   `tests/keyboard-inset.test.js` +4 (18): the tight rule, the blur rule, both footers,
+   the placing and its iOS gate.
+   **Not checked:** iOS. The Simulator's Safari is not signed in to DEV and the
+   password is Patryk's to type, so neither this nor phase 5 has run on an iPhone or an
+   iPad; what changes there is the footer's top padding while typing, and the WhatsApp
+   fold. Also not checked: Settings and the other footed dialogs with the keyboard up
+   (same code path, not opened), and whether the autofill strip can be turned off.
