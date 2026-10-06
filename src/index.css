@@ -1784,6 +1784,13 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
      bookings printed ONE page and dropped the rest, and no page break of any
      kind took effect. `!important` is what beats an inline style. */
   html, body { height: auto !important; overflow: visible !important; }
+  /* v18.4.0: and the page itself is white paper. `body` keeps its dark
+     `background-color` and its `min-height: 100dvh` in print, and Safari on
+     iOS prints backgrounds, so every sheet printed from an iPhone carried a
+     black box one screen tall under it (Patryk's PDFs; older than the printed
+     timeline). Chrome does not print a background unless asked, which is why
+     the Mac never showed it. */
+  html, body { background: #fff !important; min-height: 0 !important; }
   #root { display: none !important; }
   .mgt-edge { display: none !important; }
   .mgt-print-sheet { display: block !important; }

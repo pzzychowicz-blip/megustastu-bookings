@@ -110,6 +110,13 @@ describe("the print call", () => {
   });
 });
 
+describe("the printed page is white paper", () => {
+  it("body drops its dark fill and its screen-tall minimum in print (Safari prints backgrounds)", () => {
+    const print = css.slice(css.lastIndexOf("@media print"));
+    expect(print).toMatch(/html, body \{ background: #fff !important; min-height: 0 !important; \}/);
+  });
+});
+
 describe("the sheet", () => {
   const sheet = code("src/components/TimelineSheet.jsx");
   it("draws the screen's flags and the screen's unplaced rule", () => {
