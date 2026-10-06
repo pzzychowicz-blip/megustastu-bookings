@@ -31031,3 +31031,12 @@ with an alternative was his, asked before the work.
    with no discard confirm and returns to the inbox. **Not exercised live:** Open booking
    and Apply changes (the same `openEdit` the List card uses), and a refusal, which
    needs roles enforced on DEV.
+5. **"Repeat weekly" is hidden from an account that cannot manage standing bookings
+   (ROADMAP, v18.3.3's `/code-review`).** The form's toggle was not gated on
+   `recurringManage`. With roles enforced, a staff account without it saved the booking
+   stamped with the rule's id while `database.rules.json` refused the rule, and the
+   banner blamed out-of-date data. App's `standingEnabled` is now
+   `recurring.enabled !== false && can("recurringManage")`, so the toggle is not shown
+   (Patryk's pick over showing it and refusing the save, and over showing it disabled).
+   Found by reading; `tests/recurring.test.js` holds the prop and that the toggle is the
+   form's only writer of `repeatWeekly`. Not exercised with roles enforced on DEV.

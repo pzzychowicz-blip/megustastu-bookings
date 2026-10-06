@@ -161,3 +161,21 @@ describe("the wiring", () => {
     expect(HOOK).toMatch(/startDate: r\.startDate/);
   });
 });
+
+// v18.3.5: the form's "Repeat weekly" toggle was shown to an account without
+// `recurringManage`. With roles enforced the booking saved stamped with the
+// rule's id while `database.rules.json` refused the rule, and the banner blamed
+// out-of-date data. The toggle is hidden instead (Patryk), at the one prop the
+// form reads.
+describe("the form's Repeat weekly toggle", () => {
+  it("is offered only where standing bookings are on AND the account may manage them", () => {
+    const props = APP.match(/standingEnabled=\{([^}]*)\}/g);
+    expect(props).toEqual(['standingEnabled={recurring.enabled!==false&&can("recurringManage")}']);
+  });
+  it("is the only way the form sets repeatWeekly, behind that prop", () => {
+    const FORM = stripComments(
+      readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
+    expect(FORM.match(/repeatWeekly:/g)).toEqual(["repeatWeekly:"]);
+    expect(FORM).toMatch(/!editId&&standingEnabled\?/);
+  });
+});

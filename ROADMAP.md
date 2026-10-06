@@ -101,15 +101,11 @@ evidence for each.
   lines (5,727 before it). **Next: recurring generation**, then backup/export and
   drag-drop.
 
-- **Two gaps in how "Repeat weekly" writes its rule (v18.3.3's `/code-review`).** Both
-  predate v18.3.3. (1) The form's toggle is not gated on `recurringManage`. With roles
-  enforced, a staff account without it saves the booking stamped with the rule's id,
-  while `database.rules.json` refuses the rule, and the banner blames out-of-date data.
-  Every other rule change asks `refused("recurringManage")`. Decide whether to hide the
-  toggle or refuse the save. (2) The rule is dispatched beside its first booking and is
-  not tied to that write. If the booking write is parked and then discarded from the
-  banner, the rule is left, and it books the weeks after its start. Writing the rule only
-  once the booking lands needs the retry queue to report that, so it is a write-path change.
+- **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
+  (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then
+  discarded from the banner, the rule is left, and it books the weeks after its start.
+  Writing the rule only once the booking lands needs the retry queue to report that, so
+  it is a write-path change.
 
 - **`sanitize` is 4–6.6× slower as a loop over the table** (v18.3.4's `/code-review`), on
   every booking of every `/bookings` snapshot. Measured in Node on a Mac with 3,000
