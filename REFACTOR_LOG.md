@@ -31109,3 +31109,18 @@ branch runs once per rule due today, and twelve passes over 1,600 bookings measu
 decision or a write-path change: no-shows walked back before this version, a refusal
 toast drawn under the modal that raised it, and an edit parked then replayed after a
 remote delete. The eighth was the ROADMAP wording, counted under (c).
+
+---
+
+## v18.4.0 — the header split, quiet fold headers, the printed timeline, and room to type
+
+**Date:** 2026-10-06 · **Branch:** `feat/v18.4.0-print-timeline-keyboard-compact` ·
+**Behavioural change:** yes, each phase below says what moves.
+
+Patryk brought five ideas and was interviewed on each before any work (the plan is
+`~/.claude/plans/i-have-a-bunch-sequential-flurry.md`). Four are this version. The
+fifth, the WhatsApp draft checking availability before Accept, waits for the WhatsApp
+go-live and is a ROADMAP entry holding what he decided: a status line, nearby times,
+an Add to waitlist button and a suggested reply.
+
+### Phases

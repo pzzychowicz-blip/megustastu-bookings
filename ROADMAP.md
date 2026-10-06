@@ -50,6 +50,17 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
+- **The WhatsApp draft checks the request before Accept** (Patryk, 2026-10-06; waits
+  for go-live). Today the draft card says nothing about availability and the form
+  shows it only after Accept. Decided: (a) a status line on the draft — it fits,
+  "Kitchen may be busy at HH:MM", or "No tables for N at HH:MM"; (b) nearby times
+  that work, as the booking form lists them; (c) an **Add to waitlist** button on the
+  draft; (d) a suggested reply offering the alternatives or the waitlist. Only for a
+  draft with a usable size, date and time. The scan goes through `useDeferredCompute`,
+  never render, and reuses `findFreeSlot` → `trialFits`, `getKitchenLoad`,
+  `findTimes` / `findKitchenFriendlyTimes` and `formatSugg`; the waitlist button
+  follows `addFormToWaitlist`'s rule (`phoneForSave`); the reply is a template.
+
 The next eight come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
