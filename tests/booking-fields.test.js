@@ -160,16 +160,26 @@ const EDIT_OPENERS = sourceFiles(SRC).flatMap((file) => {
 });
 
 describe("every edit form opens the table's draft", () => {
-  it("finds the three places that open one", () => {
-    // Counted, so a new door fails here until it is looked at.
+  it("finds the one place that opens one", () => {
+    // Counted, so a new door fails here until it is looked at. v18.3.5: it was
+    // three; the WhatsApp inbox's two now call `openEdit`.
     expect(EDIT_OPENERS.map((o) => o.site)).toEqual([
       "App.jsx b.id",                        // openEdit
-      "hooks/useWhatsApp.js booking.id",     // handleOpenLinkedBooking
-      "hooks/useWhatsApp.js booking.id",     // handleApplyModify
     ]);
   });
-  it("each opens draftFromBooking", () => {
-    expect(EDIT_OPENERS.filter((o) => !/^(Object\.assign\()?draftFromBooking\(/.test(o.opens)).map((o) => o.site + ": " + o.opens)).toEqual([]);
+  it("it opens draftFromBooking, with a caller's changes on top", () => {
+    expect(EDIT_OPENERS.filter((o) => !/^(changes\?)?(Object\.assign\()?draftFromBooking\(/.test(o.opens)).map((o) => o.site + ": " + o.opens)).toEqual([]);
+  });
+  // v18.3.5: the form's doors are App's. A hook that opened the form itself
+  // skipped the capability check and left a pending waitlist entry set.
+  it("only App calls openForm", () => {
+    const callers = sourceFiles(SRC).filter((file) => /\bopenForm\(/.test(stripComments(readFileSync(file, "utf8")).join("\n"))).map((file) => relative(SRC, file));
+    expect(callers).toEqual(["App.jsx"]);
+  });
+  it("the WhatsApp doors stop when App's door refuses", () => {
+    const hook = stripComments(readFileSync(join(SRC, "hooks/useWhatsApp.js"), "utf8")).join("\n");
+    expect(hook.match(/if \(!open(New|Edit)\(/g)).toEqual(["if (!openNew(", "if (!openEdit(", "if (!openEdit("]);
+    expect(hook.match(/\bopen(New|Edit)\(/g).length).toBe(3);
   });
 });
 

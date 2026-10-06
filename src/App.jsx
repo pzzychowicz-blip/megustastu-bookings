@@ -1330,15 +1330,15 @@ function BookingApp({uid}){
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
   // draft→form seam: handleAcceptDraft pre-fills the form + flags draftSourceRef;
   // doSave calls wa.completeDraftAccept(newId) on success to flip the conversation.
-  // NB (17.5.0 sync): the hook gets `openForm`, NOT raw `setForm` — all three of
-  // its form-opening handlers (accept draft / open linked / apply modify) are
-  // OPENERS, so they must seed formBaseline like openNew/openEdit do. Passing
-  // setForm would leave the baseline stale and make an untouched WA-prefilled
-  // form read as dirty, popping "Discard unsaved changes?" on every Cancel/Esc.
+  // v18.3.5: the hook gets App's two DOORS (`openNewWith`, `openEdit`), never
+  // `openForm` or `setForm` — all three of its form-opening handlers (accept
+  // draft / open linked / apply modify) are openers, so they ask the capability
+  // the same action asks everywhere else, clear a pending waitlist entry and
+  // seed formBaseline, as every other open does.
   const wa = useWhatsApp({
     enabled: whatsappOn,
     bookings, setWriteWarning, waSettings,
-    openForm, setEditId, setError, setSwapAffected, setViewDate, setShowForm, setConfirmCancel,
+    openNew: openNewWith, openEdit, setViewDate, setConfirmCancel,
     setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
   });
   // Return-to-inbox: when an overlay opened from the WA module (the booking form
@@ -2494,11 +2494,20 @@ function BookingApp({uid}){
   // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
-  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  // v18.3.5: both doors take what a caller wants the form to open WITH (`draft`
+  // for a new booking, through `openNewWith`; `changes` on top of the booking's
+  // own draft for an edit)
+  // and answer whether they opened. The WhatsApp inbox's Accept and its two edit
+  // doors come through here now: they called `openForm`/`setEditId` themselves,
+  // so they asked no capability and left `pendingWaitlistRef` set.
+  // `openNew` itself takes nothing: it is an `onClick`, and a parameter there
+  // would be handed the click event as the draft.
+  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
+  function openNew(){openNewWith(null);}
   // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
-  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm(draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openEdit(b,changes){if(refused("bookingEdit"))return false;pendingWaitlistRef.current=null;openForm(changes?Object.assign(draftFromBooking(b),changes):draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);return true;}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history

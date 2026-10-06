@@ -31011,3 +31011,23 @@ with an alternative was his, asked before the work.
    `_conflict: true` when there is none. Days the optimiser owns keep their one pass.
    The pinned snapshot moved on purpose (`tables: []` → `["1A"]`), and a new scenario
    holds the full evening: unplaced, flagged, the rest of the day untouched.
+4. **The WhatsApp inbox opens the booking form by App's doors (ROADMAP, v18.3.4's
+   `/code-review`).** `useWhatsApp`'s Accept and its two edit doors (Open booking, Apply
+   changes) called `openForm` / `setEditId` themselves. So they asked no capability
+   (`database.rules.json` enforces neither `bookingCreate` nor `bookingEdit`, so a staff
+   account without `bookingEdit` could edit a booking from the inbox), and they left
+   `pendingWaitlistRef` set: book a waitlist entry, close the form unsaved, Accept a
+   draft and Save, and the entry left the waitlist although nobody booked it. The hook
+   now gets `openNewWith(draft)` and `openEdit(b, changes)`, which answer whether they
+   opened, and each handler stops on a refusal. Accept asks `bookingCreate` and the edit
+   doors `bookingEdit`, as the same actions do everywhere else (Patryk's pick); reading
+   and replying in the inbox still take no capability. **`openNew` itself takes no
+   parameter**: it is an `onClick` in two places and would have been handed the click
+   event as the draft, which is why the draft-taking door has its own name.
+   `tests/booking-fields.test.js` now holds that only `App.jsx` calls `openForm`, that
+   the edit form has one door, and that the hook's three calls each stop on a refusal.
+   **Verified on DEV:** + New opens the usual empty form; Accept on a draft conversation
+   opens the form prefilled (name, number, date, time, zone, notes), and Escape closes it
+   with no discard confirm and returns to the inbox. **Not exercised live:** Open booking
+   and Apply changes (the same `openEdit` the List card uses), and a refusal, which
+   needs roles enforced on DEV.

@@ -35,9 +35,6 @@ import { ref, onValue, set, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError } from "../lib/dbError";
 import { EMPTY_FORM } from "../lib/constants";
-// v18.3.4 (/code-review): what an EDIT form opens with, the field table's draft,
-// the same one `openEdit` opens (see the two linked-booking handlers below).
-import { draftFromBooking } from "../lib/booking-fields";
 // lib/day is the app's ONE answer to "what day is it". Hand-rolling it here as
 // `new Date().toISOString().slice(0,10)` gave the UTC date where every other
 // surface uses the LOCAL one — see the three call sites below.
@@ -54,12 +51,12 @@ export function useWhatsApp({
   setWriteWarning,
   // settings/whatsapp (useWaSettings) — currently just autoArchiveOnComplete.
   waSettings,
-  // form / view handoff setters (BookingApp-owned):
-  // openForm (NOT setForm) — it seeds prod's v17.5.0 formBaseline alongside the
-  // draft, so an untouched WA-prefilled form still closes without the
-  // unsaved-changes confirm. Every form-open below must go through it.
-  openForm, setEditId, setError, setSwapAffected, setViewDate,
-  setShowForm, setConfirmCancel,
+  // The booking form's two doors (BookingApp-owned). v18.3.5: every form-open
+  // below goes through one of them, never `openForm`/`setEditId` directly, so
+  // it asks the capability the same action asks everywhere else, clears a
+  // pending waitlist entry, and seeds the unsaved-changes baseline.
+  openNew, openEdit, setViewDate,
+  setConfirmCancel,
   // inbox-shell UI setters (BookingApp-owned):
   setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
 }) {
@@ -374,11 +371,14 @@ export function useWhatsApp({
     // Seating preference from the parsed message (indoor/outdoor); "auto" when
     // the customer didn't state one — the default. (See mergeDraft / mockParse.)
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : "auto";
-    openForm(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }));
-    setEditId(null); setError(""); setSwapAffected(null);
+    // v18.3.5: through App's `openNew`, which asks `bookingCreate` and clears a
+    // waitlist entry left pending by a form closed unsaved (Save would have
+    // taken that entry off the waitlist for this booking). Refused: nothing
+    // below runs, and the inbox stays open under the refusal.
+    if (!openNew(Object.assign({}, EMPTY_FORM, { name: prefilledName, phone: prefilledPhone, date, time, size, preference, notes: d.notes || "", status: "confirmed", customDur: null, manualTables: [], preferredTables: [], returnOf: null }))) return;
     draftSourceRef.current = conv.phoneKey;
     setReturnToInboxKey(conv.phoneKey);
-    setShowInbox(false); setShowForm(true); setViewDate(date);
+    setShowInbox(false); setViewDate(date);
   }
   // completeDraftAccept: called from doSave's new-booking success branch when
   // draftSourceRef is set. Flips the source conversation to accepted + links it.
@@ -539,22 +539,15 @@ export function useWhatsApp({
     setConfirmCancel(conv.acceptedBookingId);
   }
   // handleOpenLinkedBooking: open the linked booking in the form for editing.
-  // v18.3.4 (/code-review): with `draftFromBooking`, exactly what `openEdit`
-  // opens. This handler and `handleApplyModify` wrote the draft out by hand on
-  // top of EMPTY_FORM, so the form opened with EMPTY_FORM's deposit and voucher
-  // ("") and the booking's stored `customDur` where `openEdit` opens its planned
-  // length: Save, even with nothing changed, wrote "deposit 20→0 €, voucher
-  // ABCD-2345→none", and a completed visit's planned length became its actual
-  // stay. `tests/booking-fields.test.js` now finds every edit opener in `src/`
-  // and fails one that does not open the table's draft.
   function handleOpenLinkedBooking(conv) {
     if (!conv || !conv.acceptedBookingId) return;
     const booking = bookings.find((b) => b.id === conv.acceptedBookingId);
     if (!booking) return;
-    openForm(draftFromBooking(booking));
-    setEditId(booking.id); setError(""); setSwapAffected(null);
+    // v18.3.5: App's `openEdit` (it asks `bookingEdit`, and opens the table's
+    // draft, as this did by hand).
+    if (!openEdit(booking)) return;
     setReturnToInboxKey(conv.phoneKey);
-    setShowInbox(false); setShowForm(true); setViewDate(booking.date || todayStr());
+    setShowInbox(false); setViewDate(booking.date || todayStr());
   }
 
   // handleApplyModify: a customer "modify" request — open the LINKED booking in
@@ -574,14 +567,12 @@ export function useWhatsApp({
     // A modify request that states a seating area overrides the booking's current
     // preference; otherwise ("auto"/unset) keep what the booking already had.
     const preference = (d.preference === "indoor" || d.preference === "outdoor") ? d.preference : (booking.preference || "auto");
-    // v18.3.4 (/code-review): the booking's own draft (`draftFromBooking`, as
-    // `openEdit` opens it) with the requested changes on top, so a field the
-    // request does not mention keeps its value — see handleOpenLinkedBooking.
-    openForm(Object.assign(draftFromBooking(booking), { date, time, size, preference }));
-    setEditId(booking.id); setError(""); setSwapAffected(null);
+    // The booking's own draft with the requested changes on top (`openEdit`),
+    // so a field the request does not mention keeps its value.
+    if (!openEdit(booking, { date, time, size, preference })) return;
     modifyApplyRef.current = { phoneKey: conv.phoneKey, bookingId: booking.id };
     setReturnToInboxKey(conv.phoneKey);
-    setShowInbox(false); setShowForm(true); setViewDate(date);
+    setShowInbox(false); setViewDate(date);
   }
   // completeModifyApply(bookingId, ok): called from doSave's edit-success path.
   // When this edit was started via "Apply changes" (modifyApplyRef matches) AND
