@@ -24,6 +24,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
+import { useShortViewport } from "../../hooks/useShortViewport";
 import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, matchCustomerByPhone, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
@@ -44,6 +45,8 @@ import { countLabel } from "../../lib/booking-logic";
 // takes. A module const rather than an inline object: Overlay is memo-free, but
 // a fresh object per render is a fresh prop per render, and this one never
 // changes.
+// The conversation list's width in two panes.
+const LIST_W = 320;
 const INBOX_PANEL = { maxWidth: 1200, height: "min(900px, 90dvh)", background: "var(--wa-panel-bg)", blur: 16 };
 
 function isActionable(c) {
@@ -116,6 +119,42 @@ export function InboxPanel({
   // composer template chips behind a button so the message thread stays readable.
   const winH = useWinH();
   const compact = winH < INBOX_COMPACT_HEIGHT;
+  // v18.4.0 (Patryk: "the keyboard squeezes WhatsApp"): while somebody types a
+  // reply and the visible area is short, everything that is not the thread or
+  // the reply box folds away, and comes back when the keyboard goes. Measured
+  // on the restaurant tablet: the keyboard left the panel 260px, and its own
+  // title bar, the search row, the conversation's header and the reply box
+  // came to 242 of them, so no message could be read while answering one.
+  // `typing` is "the focus is in a text field of the OPEN CONVERSATION" (the
+  // search box above the list must not fold the list it searches), kept true
+  // while the focus moves to a button inside the conversation, so Send does
+  // not unfold the pane under the finger that presses it.
+  const short = useShortViewport();
+  const [typing, setTyping] = useState(false);
+  function onViewFocus(e) {
+    const t = e.target;
+    if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) setTyping(true);
+  }
+  function onViewBlur(e) {
+    if (!(e.relatedTarget && e.currentTarget.contains(e.relatedTarget))) setTyping(false);
+  }
+  // The folded header's "show" button. On a tablet the blur puts the keyboard
+  // away, the screen is tall again and everything is back. In a short window
+  // with a real keyboard nothing gets taller, and Overlay's focus trap hands
+  // the focus straight back to the reply box (measured: the pane stayed
+  // folded), so the button also sets `shown`, which holds the fold open until
+  // the screen is tall again or somebody presses a text field again.
+  const [shown, setShown] = useState(false);
+  if (shown && !short) setShown(false);
+  function unfold() {
+    setShown(true);
+    const a = document.activeElement;
+    if (a && typeof a.blur === "function") a.blur();
+  }
+  function onViewPointerDown(e) {
+    const t = e.target;
+    if (shown && t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) setShown(false);
+  }
 
   // Search + "Needs action" filter (client-only). The filtered set feeds BOTH the
   // rendered list and the ↑/↓ keyboard nav so they stay in lockstep. State is
@@ -378,23 +417,29 @@ export function InboxPanel({
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
   const activeMessages = activeConv ? (messages[activeConv.phoneKey] || []) : [];
+  const kbFold = typing && short && !shown && !!activeConv;
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
   const archivedCount = conversations.filter((c) => c.archived).length;
 
   const listEl = (
-    <div style={{ width: twoPane ? 320 : "100%", flexShrink: 0, borderRight: twoPane ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column" }}>
+    // v18.4.0: in two panes the list folds to nothing while typing (`kbFold`).
+    // Its WIDTH eases and its content keeps its own 320px, so the rows are
+    // clipped as it closes and never re-wrapped; `inert` keeps the focus out
+    // of rows nobody can see.
+    <div inert={twoPane && kbFold} style={{ width: twoPane ? (kbFold ? 0 : LIST_W) : "100%", flexShrink: 0, borderRight: twoPane && !kbFold ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column", transition: twoPane ? "width " + M.shift : undefined }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
-      <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, minWidth: twoPane ? LIST_W : 0, display: "flex", flexDirection: "column" }}>
         <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
   const viewEl = activeConv ? (
-    <div style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+    <div onFocus={onViewFocus} onBlur={onViewBlur} onPointerDown={onViewPointerDown} style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
         templates={templates} bookings={bookings} showBack={!twoPane} compact={compact}
+        kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
@@ -424,6 +469,9 @@ export function InboxPanel({
 
   return (
     <Overlay /* @static-height panel mode — the card is min(900px, 90dvh) from INBOX_PANEL and its body is a flex column that scrolls inside it, so there is no content-driven height for AutoHeight to ease */ onClose={onClose} panel={INBOX_PANEL}>
+        {/* v18.4.0: the panel's title bar and the list's toolbar fold while
+            somebody types a reply on a short screen (`kbFold`, above). */}
+        <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             {/* An <h2>, not a <span>: useDialog resolves the dialog's accessible
@@ -520,11 +568,12 @@ export function InboxPanel({
           </div>
         </div>
         ) : null}
+        </Reveal>
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one
             confirm). Select all / Cancel are always present. Eased open/closed
             with the Reveal atom — same animation as the Summary panel. */}
-        <Reveal show={selectMode}>
+        <Reveal show={selectMode && !kbFold}>
           <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--bg-soft)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
             <button
               onClick={() => { if (allVisibleSelected) clearSelection(); else selectAllVisible(); }}

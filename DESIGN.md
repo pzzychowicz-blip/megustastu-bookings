@@ -1568,6 +1568,25 @@ a `var(--…)`; every colour is a literal marked `@fixed-fill`.
 - **In print, `html` and `body` are un-clipped.** The app's scrollport does not
   fragment across pages; without this nothing paginates.
 
+### Room to type (v18.4.0)
+When the visible area is short (`useShortViewport`, under 480px, which in practice
+is a keyboard up on a phone or a landscape tablet) and somebody is typing, what is
+not the thing being typed, or the thing being answered, folds away, and returns when
+the keyboard goes.
+
+- **It is a height, not "a keyboard is up".** An iPad in portrait has room above its
+  keyboard and folds nothing.
+- **Fold, never remove.** Every piece is a `Reveal` (or an eased width), so it plays
+  out and back, and a folded piece is `inert`.
+- **What was put away is named.** The folded WhatsApp header carries one button that
+  says the most pressing thing behind it ("Change request"); pressing it closes the
+  keyboard.
+- **Nothing moves under a pressing finger.** A blur towards a control inside the
+  folded surface (Send) does not unfold it.
+- **The WhatsApp inbox** folds its title bar, the list's toolbar, the conversation
+  list (two panes), the conversation's chips and actions, the linked booking, the
+  request banner and the draft. The thread and the reply box stay.
+
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in

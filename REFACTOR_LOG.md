@@ -31200,3 +31200,49 @@ an Add to waitlist button and a suggested reply.
    **Not checked yet:** a real printer, the Android tablet and the iPhone (whether
    each honours the landscape page), and a day with blocked tables or unplaced
    bookings on paper. Those are Patryk's to print once.
+
+5. **The WhatsApp inbox folds while a reply is typed on a short screen (Patryk: "the
+   keyboard squeezes WhatsApp").** **Measured first, on the restaurant tablet** (Chrome
+   154, a DEV tab over `adb reverse`, 998 CSS px wide): the keyboard takes the visible
+   height from 507 to 289, and Android resizes the LAYOUT viewport with it, so
+   `useKeyboardInset().bottom` stays 0 there and the inbox's `compact` flag was the only
+   thing that reacted. The panel went 457 → 260px; its title bar, the search row, the
+   conversation's header, a linked booking, the request banner and the reply box came
+   to more than that, so the thread was 28px with the keyboard DOWN and off the panel
+   with it up: nobody could read the message they were answering.
+   New `useShortViewport()` (`src/hooks/`): `visualViewport.height < 480`, the one
+   number that falls on Android (layout viewport resized) and on iOS (only the visual
+   one), and a HEIGHT on purpose, so an iPad in portrait, with about 670px left above
+   its keyboard, folds nothing. `InboxPanel` folds while the focus is in a text field
+   of the open conversation AND the viewport is short (`kbFold`): its title bar and the
+   list's toolbar (one `Reveal`), the conversation list in two panes (its width eases
+   to 0 over content that keeps its 320px, `inert`), and in `ConversationView` the
+   header becomes one slim row (the name, and one button naming what was put away:
+   "Change request", "Cancellation request", "Booking draft", "Linked booking" or
+   "Details"), with the linked booking, the request banner, the draft, the parsing
+   card and the past-bookings list folded. The button blurs the field, which closes the
+   keyboard and brings everything back. Every fold is a `Reveal`, so it eases both ways.
+   **Patryk approved four folds (list, header chips, linked card, draft/intent bars);
+   the title bar and the toolbar were asked separately with the captures, because the
+   four alone left the thread about 26px, and he chose to fold both.**
+   Three things the tablet and the pane found. (a) **The thread did not follow its last
+   message.** A box that gets shorter keeps its `scrollTop`; a `ResizeObserver` now puts
+   a thread that was at its end back there. Its first version lost the place on the way
+   BACK (scrollTop 0 of 195): a `scroll` event is delivered a frame after the scroll,
+   the thread is shorter again by then, and the handler read the observer's own
+   correction as "the user scrolled away". The handler ignores a scroll at a height the
+   observer has not acted on yet (`seenH`). (b) **Send must not unfold the pane under
+   the finger**, so a blur towards a control inside the conversation keeps `typing`.
+   Measured with a CDP touch on the tablet: text typed, Send tapped at its folded
+   position, the message was sent and the thread came back at its end. (c) **In a short
+   desktop window the button did nothing**: no keyboard closes there, and `Overlay`'s
+   focus trap hands the focus back to the reply box. It also sets `shown`, which holds
+   the fold open until the window is tall again or a text field is pressed.
+   **After, on the tablet with the keyboard up:** thread 136px (two messages), the
+   name, the button and the reply box; with it down, everything as before (the title
+   bar, the toolbar, the list at 320px, the cards). `tests/short-viewport.test.js`
+   (11): the hook's arithmetic on the tablet's and the Simulator's numbers, and the
+   fold's wiring. Entry chunk 447.9 kB (125.6 gz), up 2.5 kB.
+   **Not checked:** an iPhone and an iPad (the Simulator run is still owed), the
+   home-screen app on the tablet (PROD, taller than a Chrome tab), and a finger: a CDP
+   touch is the same pipeline but it is not one.
