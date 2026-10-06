@@ -31124,3 +31124,18 @@ go-live and is a ROADMAP entry holding what he decided: a status line, nearby ti
 an Add to waitlist button and a suggested reply.
 
 ### Phases
+
+1. **The header's controls split when they take their own line (Patryk).** Where the
+   view switcher, the actions and the connection dot do not fit beside the restaurant's
+   name they wrap under it, and there they were one left-aligned run. Now the switcher
+   (and the split tools) keeps the left edge and the actions and the dot go to the right
+   one. `useSharesLine` measures whether the block is on the title's line, as the date
+   row does for the Summary; the block grows and right-aligns, which on the title's
+   line is the place `space-between` already gave it, and the actions are one inner
+   group that takes `margin-left: auto` only on a line of its own. The block's flex
+   basis is untouched, so the measurement cannot latch. **Measured** (DEV, WhatsApp on;
+   left · right edge in px): 1280 and 1024, one line, switcher 739–929 and 483–673,
+   actions ending 1264 and 1008, the same rects as before the change; 768 and 640,
+   switcher 16–207, actions 423–752 and 295–624; 375 (a phone, always its own line),
+   switcher 12–203, WhatsApp and Find 230–363. Back from 640 to 1280 it returned to one
+   line. On a resize the split lands one frame after the wrap (the observer's frame).

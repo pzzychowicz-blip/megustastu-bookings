@@ -4699,6 +4699,17 @@ function BookingApp({uid}){
   const dateNavRef=useRef(null);
   const summarySlotRef=useRef(null);
   const summaryLine=useSharesLine(dateRowRef,dateNavRef,summarySlotRef);
+  // v18.4.0 (Patryk): when the header's controls do not fit beside the title
+  // they take the next line, and there the view switcher keeps the left edge
+  // while the actions and the connection dot go to the right one. MEASURED,
+  // like the Summary above: whether the block wraps depends on the restaurant's
+  // name and on which buttons this restaurant has, so no breakpoint states it.
+  // Nothing here changes the block's flex BASIS, which is what decides the
+  // wrap, so the measurement cannot latch itself (a 100% basis would).
+  const headerRef=useRef(null);
+  const headTitleRef=useRef(null);
+  const headCtrlRef=useRef(null);
+  const headCtrlOwnLine=useSharesLine(headerRef,headTitleRef,headCtrlRef).same===false;
   // v18.2.0 phase 64 (Patryk): the view switcher no longer glides to stand
   // over the Summary card's left edge. Phase 23's `useAlignLeft` did that, and
   // in use the sideways movement did not look good; the switcher keeps its own
@@ -4829,13 +4840,14 @@ function BookingApp({uid}){
           <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
+          ref={headerRef}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
               all three now sits against them instead of across the row in a
               toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze.
               On a phone the block is the whole first row and ends with the
-              connection dot (phase 79). */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
+              connection dot (phase 79). */}<div ref={headTitleRef} style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
@@ -4843,7 +4855,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -4853,7 +4865,10 @@ function BookingApp({uid}){
               onOpenSplitMenu={setSplitMenuFor}
               onSwapSides={swapSides}
               onToggleDir={toggleSplitDir}
-              onExitSplit={exitSplit} />{/* v18.2.0: on a phone the two CREATE actions leave the header for the
+              onExitSplit={exitSplit} />{/* v18.4.0: the actions are ONE group, so on a line of their own
+              they sit right as a group and, where even that line is too short,
+              wrap under the switcher together and stay right (wrapped one by
+              one, each button would start its own line at the left). */}<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",marginLeft:headCtrlOwnLine?"auto":undefined}}>{/* v18.2.0: on a phone the two CREATE actions leave the header for the
               bottom bar below (MOBILE_BAR). They wrapped "+ New" onto a second
               header row on its own, and the header + date row took ~455 of an
               812px screen before the grid began. The design critique; Patryk
@@ -4883,7 +4898,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div>{isMobile?<div
+              wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div></div>{isMobile?<div
             role="group" aria-label="Add a booking"
             /* v18.3.1: the timeline drag's edge scroll stops its lower band
                at this bar's top (lib/edge-scroll.js, scrollBounds). */
