@@ -1551,6 +1551,23 @@ misleading. `check:style` Rule 10 (an interactive control carries
 `.mgt-hover-scale`) governs `<button>` and `[role="button"]`, so a plain anchor
 is outside it by construction — deliberately, not by omission.
 
+### Print (v16.3.0 · v18.4.0)
+Two print-only sheets, both portalled beside `#root` and both **light in any
+theme**: the day sheet (a list) and the timeline sheet (the grid). Neither uses
+a `var(--…)`; every colour is a literal marked `@fixed-fill`.
+
+- **The timeline prints in the screen's status colours** (Patryk's choice over
+  ink-saving outlines): the LIGHT theme's `--block-*` fills with white ink, the
+  status mark and the rail's flags on each block. So it needs
+  `print-color-adjust: exact`, which is on the sheet's rule.
+- **Geometry is percent of the chosen range**, so the grid fills the page it is
+  given: a landscape A4 where the browser honours the named page, a portrait one
+  where it does not.
+- **Which sheet prints is `data-print` on `<html>`**, for one print. With no
+  attribute the browser's own print is the day sheet.
+- **In print, `html` and `body` are un-clipped.** The app's scrollport does not
+  fragment across pages; without this nothing paginates.
+
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in

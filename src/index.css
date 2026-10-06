@@ -1732,6 +1732,8 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
    portalled to <body> (sibling of #root) so hiding #root doesn't hide it.
    The sheet hard-codes light colours, so print stays light in any theme. */
 .mgt-print-sheet { display: none; }
+/* v18.4.0: the printed timeline (TimelineSheet.jsx), mounted for one print. */
+.mgt-print-timeline { display: none; }
 /* v18.3.1: an installed iOS app's header was blurred (iOS 26+, measured on
    Patryk's iPhone 12 mini on iOS 27). In a home-screen web app iOS draws the
    Liquid Glass "scroll edge effect" at the top of the web view: a blur that
@@ -1775,8 +1777,37 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 }
 
 @media print {
+  /* v18.4.0: the page must be free to run on. App sets `height: 100%` and an
+     `overflow` INLINE on <html> and <body> (the body is the app's scrollport,
+     or hidden under the fixed shell), and a box that clips or scrolls does not
+     fragment across pages: measured in Chrome's PDF output, a day sheet of 120
+     bookings printed ONE page and dropped the rest, and no page break of any
+     kind took effect. `!important` is what beats an inline style. */
+  html, body { height: auto !important; overflow: visible !important; }
   #root { display: none !important; }
   .mgt-edge { display: none !important; }
   .mgt-print-sheet { display: block !important; }
   @page { margin: 12mm; }
+  /* v18.4.0: WHICH sheet prints is `data-print` on <html>, stamped by the print
+     chooser for one print and cleared on `afterprint`. No attribute is the
+     browser's own Cmd+P, which prints the day sheet as it always has.
+     - `print-color-adjust: exact`: without it a browser drops background
+       fills when printing, and every booking would be a white box with white
+       text. The status colours are the point of this sheet.
+     - The timeline asks for a LANDSCAPE page through a named page, so the day
+       sheet beside it in a "both" print keeps its portrait one (measured in
+       Chrome's PDF output: a portrait page, then an A4 landscape one). The
+       break is asked for as well, for a browser that knows no named pages;
+       one that ignores the size still prints the whole range, because the
+       grid is laid out in percent. */
+  html[data-print="timeline"] .mgt-print-sheet { display: none !important; }
+  html[data-print="timeline"] .mgt-print-timeline,
+  html[data-print="both"] .mgt-print-timeline {
+    display: block !important;
+    page: mgt-timeline;
+    break-before: page;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page mgt-timeline { size: A4 landscape; margin: 10mm; }
 }

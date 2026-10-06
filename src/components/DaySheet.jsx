@@ -39,8 +39,12 @@ function weekdayName(dateStr) {
 // other files (mgt-backup-…, mgt-activity-…), so a folder of them sorts by day;
 // a date that is not canonical (a booking's stored date can reach `viewDate`
 // verbatim) names no day rather than a broken one.
+// v18.4.0: a print of the TIMELINE alone (the chooser stamps `data-print` on
+// <html> before it prints) is named for what it is. This sheet owns the title
+// for every print because it is the one that is always mounted.
 function sheetFileName(date) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? "mgt-day-sheet-" + date : "mgt-day-sheet";
+  const stem = document.documentElement.getAttribute("data-print") === "timeline" ? "mgt-timeline" : "mgt-day-sheet";
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? stem + "-" + date : stem;
 }
 
 // Inline light-only styles (no tokens — print stays light).
@@ -73,7 +77,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
   }, [waitlist, date]);
 
   // The title carries the sheet's name only while it prints: `beforeprint` and
-  // `afterprint` fire for the Summary's "Print day sheet" AND for the browser's
+  // `afterprint` fire for the Summary's Print (the chooser, v18.4.0) AND for the browser's
   // own ⌘P, and both print this sheet (index.css hides #root in print). The
   // cleanup restores it too, should the day change or the sheet unmount mid-print.
   useEffect(function () {

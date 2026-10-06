@@ -16,6 +16,7 @@
  * Contact: pz.zychowicz@gmail.com
  */
 import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
+import { flushSync } from "react-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -346,6 +347,7 @@ import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, mo
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
+import { printRange } from "./lib/print-timeline";
 import { SeatClashModal } from "./components/SeatClashModal";
 import { VoucherCarryModal } from "./components/VoucherCarryModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
@@ -355,6 +357,11 @@ import { useRecurring } from "./hooks/useRecurring";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
+// v18.4.0: the print chooser, lazy like the two above. Its chunk also holds
+// TimelineSheet, which the chooser hands back with the job (see `doPrint`): the
+// sheet has to mount synchronously inside the Print click, so it cannot be a
+// lazy component of its own, and it is loaded by the time Print can be pressed.
+const PrintModal = lazyChunk(function(){return import("./components/PrintModal").then(function(m){return {default:m.PrintModal};});},"Print");
 const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
@@ -1056,6 +1063,20 @@ function BookingApp({uid}){
   // v18.0.0 session 7: the seat note — a SNAPSHOT from seatNoteFor, not an id.
   const seatNote = modalOpen.seatnote || null;
   const setSeatNote = setModalFns.seatnote;
+  // v18.4.0: the print chooser. Payload: the range it opens with (printRange).
+  const printAsk = modalOpen.print || null;
+  const setPrintAsk = setModalFns.print;
+  // The ONE print in flight, {kind, from, to, Sheet}: it mounts the chooser's
+  // TimelineSheet for a timeline print and is cleared on `afterprint`.
+  const [printJob, setPrintJob] = useState(null);
+  // `afterprint` ends the job whichever way the print dialog closed: the sheet
+  // unmounts and <html> loses `data-print`, so the browser's own Cmd+P is the
+  // day sheet again.
+  useEffect(function(){
+    function done(){document.documentElement.removeAttribute("data-print");setPrintJob(null);}
+    window.addEventListener("afterprint",done);
+    return function(){window.removeEventListener("afterprint",done);done();};
+  },[]);
   // v18.0.0 session 8 (C3): the seat-clash question, also a SNAPSHOT — taken
   // when the seat was refused, so the card cannot change under the reader.
   const seatClash = modalOpen.seatclash || null;
@@ -1315,6 +1336,9 @@ function BookingApp({uid}){
     return end;
   },[bookings,viewDate]);
   extendActiveGrid(viewLatestEnd);
+  // v18.4.0: the print chooser opens on the range this grid draws. Declared
+  // below `viewLatestEnd`, which it reads.
+  function openPrint(){setPrintAsk(printRange(hoursFor(viewDate),viewLatestEnd));}
   // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
@@ -3321,6 +3345,7 @@ function BookingApp({uid}){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
+    setPrintAsk:setPrintAsk,
     // WhatsApp sandbox: the I shortcut's opener, and the four setters
     // `escapeAction` names. `showInbox` is still read directly — the I key must
     // not re-open a panel that is already up.
@@ -4450,7 +4475,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -4482,7 +4507,10 @@ function BookingApp({uid}){
       // whole block layout on every keystroke: the exact failure CLAUDE.md
       // records for `liveBookings`.
       onSetZoom:function(z){R.current.setTimelineZoomManual(z);},
-      onPrint:function(){window.print();}
+      // v18.4.0: Print opens the chooser (day sheet, timeline, both).
+      // Through the ref, like every wrapper here: this object is built once,
+      // and the range it opens with is the VIEWED day's.
+      onPrint:function(){R.current.openPrint();}
     };
   });
 
@@ -4719,6 +4747,20 @@ function BookingApp({uid}){
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
+  // v18.4.0: the printed timeline, mounted for the one print that asked for it.
+  const TimelineSheet=printJob&&printJob.kind!=="sheet"?printJob.Sheet:null;
+  const timelineSheet=TimelineSheet?<TimelineSheet bookings={bookings} date={viewDate} blocks={tableBlocks} from={printJob.from} to={printJob.to} splitHour={dayShifts.split} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />:null;
+  // `flushSync` so the sheet is in the DOM before `window.print()` reads it,
+  // and the print call stays inside the click (iOS wants a user gesture).
+  // `data-print` tells the print stylesheet which sheet to show; `afterprint`
+  // (the effect below) takes both back.
+  function doPrint(job){
+    flushSync(function(){setPrintJob(job);});
+    document.documentElement.setAttribute("data-print",job.kind);
+    setPrintAsk(null);
+    window.print();
+  }
+  const printModal=<ModalPresence show={!!printAsk}>{printAsk?<Suspense fallback={null}><PrintModal range={printAsk} onPrint={doPrint} onClose={function(){setPrintAsk(null);}} /></Suspense>:null}</ModalPresence>;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -5096,7 +5138,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

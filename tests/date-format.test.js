@@ -305,7 +305,7 @@ describe("a column of dates is as wide as its widest date", () => {
 describe("phase 65 — the Day sheet prints under its own day", () => {
   const Sheet = read("components/DaySheet.jsx");
   it("names the file in the shape of the app's other files, ISO so a folder sorts by day", () => {
-    expect(Sheet).toMatch(/return \/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(date \|\| ""\) \? "mgt-day-sheet-" \+ date : "mgt-day-sheet";/);
+    expect(Sheet).toMatch(/return \/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(date \|\| ""\) \? stem \+ "-" \+ date : stem;/);
   });
   it("sets the title only while printing, for the button and for ⌘P alike, and puts it back", () => {
     expect(Sheet).toMatch(/window\.addEventListener\("beforeprint", before\);\s*window\.addEventListener\("afterprint", after\);/);

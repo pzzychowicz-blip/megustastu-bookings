@@ -31171,3 +31171,32 @@ an Add to waitlist button and a suggested reply.
    `TimelineView` dropped the thirteen imports only that function used.
    `tests/block-layout.test.js` reads the list from its new file and fails if
    `TimelineView` grows a second one.
+4. **Print the timeline (Patryk, interviewed).** The Summary's button reads **Print**
+   and opens a chooser: Day sheet, Timeline or Both. The timeline takes From and To in
+   whole hours, opening on the viewed day's opening and closing hours (or the end of
+   its last booking, if later, which is what the screen's grid draws). His choices:
+   one button then a chooser; steppers for the range; **status colours as on screen**
+   over ink-saving outlines; the Unplaced row, blocked tables, header totals and the
+   block flags all included. Not a screenshot: `TimelineSheet.jsx` is a print-only DOM
+   like `DaySheet`, in percent of the chosen range, light in any theme (`PRINT_FILL` is
+   the light `--block-*` values, held to the stylesheet by a test). It is mounted for
+   one print: `doPrint` flushes the sheet into the DOM, stamps `data-print` on
+   `<html>` and calls `window.print()` inside the click, and `afterprint` takes both
+   back, so the browser's own Cmd+P is still the day sheet. New modal id `print`.
+   The chooser is a lazy chunk and the sheet rides in it (8.76 kB, 3.20 gz); the entry
+   chunk is 445.35 kB against 443.69 (124.91 gz against 124.35).
+   **Measured** with headless Chrome on DEV (`page.pdf`, backgrounds NOT forced):
+   Timeline is one A4 landscape page with its fills printed; Both is a portrait page
+   (the list) then an A4 landscape one (the grid). In the app: the chooser opened on
+   13:00–23:00 for a day whose last booking ends 22:30; with `window.print` stubbed,
+   `data-print` was "timeline" and the sheet was in the DOM at the call; the title
+   during the print was `mgt-timeline-2026-10-06`; after `afterprint` the attribute and
+   the sheet were gone.
+   **A fault this found, which predates it: a long day sheet printed only its first
+   page.** App sets `height: 100%` and an `overflow` inline on `<html>` and `<body>`,
+   and a box that clips or scrolls does not fragment: a day sheet padded to 120
+   bookings came out as 1 page, and no page break took effect, so Both was one page
+   too. `html, body { height: auto; overflow: visible }` in print: 4 pages, and Both 2.
+   **Not checked yet:** a real printer, the Android tablet and the iPhone (whether
+   each honours the landscape page), and a day with blocked tables or unplaced
+   bookings on paper. Those are Patryk's to print once.

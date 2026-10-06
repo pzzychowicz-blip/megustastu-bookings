@@ -168,7 +168,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             </div>
           ) : null}
           {/* v17.9.0 (Patryk): the More button moved OUT of this header and
-              down beside Print day sheet in the expanded body. The header is
+              down beside Print in the expanded body. The header is
               the day's numbers plus the control that reveals them; More opens a
               different screen entirely (Week / Month), and sitting here it was
               a second, unrelated destination inside the summary's own headline.
@@ -246,7 +246,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 <button
                   onClick={onPrint}
                   className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print day sheet</button>
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
               ) : null}
               {onOpenWeek ? (
                 <button

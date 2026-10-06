@@ -37,6 +37,7 @@ import { useState, useCallback } from "react";
 export const MODAL_Z=[
   "form",        // the booking form — the bottom of every stack it takes part in
   "week",        // the More popover
+  "print",       // v18.4.0: the print chooser, the Summary's other button
   "waitlist",    // the waitlist panel
   // ── WA sandbox (17.15.0-wa-sandbox) ────────────────────────────────────────
   // The module's four surfaces, ranked rather than OR'd by hand into `anyModal`
