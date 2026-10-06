@@ -24,6 +24,7 @@ import { formatPhone } from "../lib/customers";
 import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
+import { onPrintEnd } from "../lib/print-end";
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
 // it returns the day NUMBER (0–6). Two functions, one name, incompatible return
 // types, one of them on the shared module. That is worse than a duplicate: it is
@@ -85,10 +86,13 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
     function before() { if (prev === null) prev = document.title; document.title = sheetFileName(date); }
     function after() { if (prev !== null) { document.title = prev; prev = null; } }
     window.addEventListener("beforeprint", before);
-    window.addEventListener("afterprint", after);
+    // v18.4.0: `onPrintEnd`, not a bare `afterprint`. iOS fires that before
+    // its print sheet opens, so the title was back to the app's name by the
+    // time the PDF was saved (lib/print-end.js).
+    const off = onPrintEnd(after);
     return function () {
       window.removeEventListener("beforeprint", before);
-      window.removeEventListener("afterprint", after);
+      off();
       after();
     };
   }, [date]);

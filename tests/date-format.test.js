@@ -308,8 +308,8 @@ describe("phase 65 — the Day sheet prints under its own day", () => {
     expect(Sheet).toMatch(/return \/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(date \|\| ""\) \? stem \+ "-" \+ date : stem;/);
   });
   it("sets the title only while printing, for the button and for ⌘P alike, and puts it back", () => {
-    expect(Sheet).toMatch(/window\.addEventListener\("beforeprint", before\);\s*window\.addEventListener\("afterprint", after\);/);
+    expect(Sheet).toMatch(/window\.addEventListener\("beforeprint", before\);[\s\S]*?const off = onPrintEnd\(after\);/);
     expect(Sheet).toMatch(/function after\(\) \{ if \(prev !== null\) \{ document\.title = prev; prev = null; \} \}/);
-    expect(Sheet).toMatch(/window\.removeEventListener\("afterprint", after\);\s*after\(\);/);
+    expect(Sheet).toMatch(/off\(\);\s*after\(\);/);
   });
 });

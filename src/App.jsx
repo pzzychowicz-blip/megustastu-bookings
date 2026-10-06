@@ -368,6 +368,7 @@ import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
 import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
+import { onPrintEnd } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
@@ -1069,13 +1070,14 @@ function BookingApp({uid}){
   // The ONE print in flight, {kind, from, to, Sheet}: it mounts the chooser's
   // TimelineSheet for a timeline print and is cleared on `afterprint`.
   const [printJob, setPrintJob] = useState(null);
-  // `afterprint` ends the job whichever way the print dialog closed: the sheet
-  // unmounts and <html> loses `data-print`, so the browser's own Cmd+P is the
-  // day sheet again.
+  // The end of the print ends the job whichever way the print dialog closed:
+  // the sheet unmounts and <html> loses `data-print`, so the browser's own
+  // Cmd+P is the day sheet again. `onPrintEnd` and not a bare `afterprint`:
+  // iOS fires that before its print sheet opens (lib/print-end.js).
   useEffect(function(){
     function done(){document.documentElement.removeAttribute("data-print");setPrintJob(null);}
-    window.addEventListener("afterprint",done);
-    return function(){window.removeEventListener("afterprint",done);done();};
+    const off=onPrintEnd(done);
+    return function(){off();done();};
   },[]);
   // v18.0.0 session 8 (C3): the seat-clash question, also a SNAPSHOT — taken
   // when the seat was refused, so the card cannot change under the reader.

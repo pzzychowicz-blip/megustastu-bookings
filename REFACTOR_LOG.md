@@ -31331,3 +31331,19 @@ an Add to waitlist button and a suggested reply.
    `tests/keyboard-inset.test.js` +2 (20), `tests/print-timeline.test.js` +1.
    **Not checked on the iPhone**: nothing on the Mac reproduces iOS's page move, so
    this is built from the measurements and waits for his re-test.
+11. **On an iPhone a print keeps what was chosen when the page is turned (Patryk).**
+   Whichever of the three he chose, turning the page to landscape in the iOS print
+   sheet gave one page of the day sheet. WebKit fires `beforeprint` and `afterprint`
+   back to back and then shows its sheet (the beacon: the same millisecond, six
+   prints of six), and lays the page out again from the live DOM when an option
+   changes. The job was tidied away on `afterprint`, so the re-layout found no
+   `data-print` and no TimelineSheet; the title was back too, which is why his PDFs
+   saved as "MGT Bookings 2.pdf" and not under the day's name.
+   `onPrintEnd` (`lib/print-end.js`, new) ends a print on `afterprint` when at least
+   500ms passed since `beforeprint` (a dialog was open in between: the desktop), and
+   otherwise at the first pointer or key event on the page, which cannot arrive while
+   the system's sheet is up. App's job cleanup and DaySheet's title both use it.
+   Replayed on DEV in headless Chromium with the iPhone's event order: the attribute,
+   the sheet and the title all survive the early `afterprint` and a second pair, and
+   go at the pointer event; with 700ms between the events they go at `afterprint`.
+   `tests/print-timeline.test.js` +3. **Not re-printed on the iPhone yet.**

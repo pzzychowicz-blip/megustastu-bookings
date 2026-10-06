@@ -4,9 +4,10 @@
 // chooser, the `data-print` switch in index.css).
 
 import { readFileSync } from "node:fs";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { PRINT_FILL, spanIn, printRange } from "../src/lib/print-timeline.js";
+import { onPrintEnd, PRINT_EARLY_MS } from "../src/lib/print-end.js";
 
 const raw = (rel) => readFileSync(new URL("../" + rel, import.meta.url), "utf8");
 const code = (rel) => stripComments(raw(rel)).join("\n");
@@ -93,8 +94,8 @@ describe("the print call", () => {
     expect(order.every((i) => i >= 0), "all three steps").toBe(true);
     expect(order).toEqual(order.slice().sort((a, b) => a - b));
   });
-  it("afterprint takes the attribute and the sheet back", () => {
-    expect(app).toMatch(/function done\(\)\{document\.documentElement\.removeAttribute\("data-print"\);setPrintJob\(null\);\}\s*window\.addEventListener\("afterprint",done\);/);
+  it("the end of the print takes the attribute and the sheet back", () => {
+    expect(app).toMatch(/function done\(\)\{document\.documentElement\.removeAttribute\("data-print"\);setPrintJob\(null\);\}\s*const off=onPrintEnd\(done\);/);
   });
   it("the timeline is mounted only for a print that asked for it", () => {
     expect(app).toMatch(/const TimelineSheet=printJob&&printJob\.kind!=="sheet"\?printJob\.Sheet:null;/);
@@ -137,5 +138,48 @@ describe("the sheet", () => {
   });
   it("a print of the timeline alone is named for it", () => {
     expect(code("src/components/DaySheet.jsx")).toMatch(/getAttribute\("data-print"\) === "timeline" \? "mgt-timeline" : "mgt-day-sheet"/);
+  });
+});
+
+// iOS fires `afterprint` before its print sheet opens and lays the page out
+// again from the live DOM when an option changes (lib/print-end.js).
+describe("when a print is over", () => {
+  function fakeWin() {
+    const ls = {};
+    return {
+      addEventListener(t, f) { (ls[t] = ls[t] || []).push(f); },
+      removeEventListener(t, f) { ls[t] = (ls[t] || []).filter((x) => x !== f); },
+      fire(t) { (ls[t] || []).slice().forEach((f) => f()); },
+      count(t) { return (ls[t] || []).length; },
+    };
+  }
+  it("a desktop dialog: afterprint, some time after beforeprint, ends it", () => {
+    vi.useFakeTimers();
+    const w = fakeWin(); let n = 0; onPrintEnd(() => n++, w);
+    w.fire("beforeprint"); vi.advanceTimersByTime(PRINT_EARLY_MS + 1); w.fire("afterprint");
+    expect(n).toBe(1);
+    vi.useRealTimers();
+  });
+  it("iOS: an afterprint in the same instant waits for the user to come back to the page", () => {
+    vi.useFakeTimers();
+    const w = fakeWin(); let n = 0; onPrintEnd(() => n++, w);
+    w.fire("beforeprint"); w.fire("afterprint");
+    expect(n).toBe(0);
+    // The sheet lays the page out again: the pair fires again, still waiting.
+    w.fire("beforeprint"); w.fire("afterprint");
+    expect(n).toBe(0);
+    expect(w.count("pointerdown")).toBe(1);
+    w.fire("pointerdown");
+    expect(n).toBe(1);
+    expect(w.count("pointerdown") + w.count("keydown")).toBe(0);
+    vi.useRealTimers();
+  });
+  it("the browser's own print with no beforeprint seen ends at afterprint, and unsubscribing ends nothing", () => {
+    const w = fakeWin(); let n = 0; const off = onPrintEnd(() => n++, w);
+    w.fire("afterprint");
+    expect(n).toBe(1);
+    off();
+    expect(w.count("beforeprint") + w.count("afterprint")).toBe(0);
+    expect(n).toBe(1);
   });
 });
