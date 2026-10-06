@@ -119,6 +119,12 @@ describe("the sheet", () => {
   it("holds no theme token: print stays light", () => {
     expect(sheet).not.toMatch(/var\(--/);
   });
+  it("the day sheet says what seating each party asked for, after its tables", () => {
+    const day = code("src/components/DaySheet.jsx");
+    expect(day.indexOf("<th style={th}>Seating</th>")).toBeGreaterThan(day.indexOf("<th style={th}>Tables</th>"));
+    expect(day.indexOf("<th style={th}>Seating</th>")).toBeLessThan(day.indexOf("<th style={th}>Phone</th>"));
+    expect(day).toMatch(/\{b\.preference === "indoor" \? "Indoor" : b\.preference === "outdoor" \? "Outdoor" : ""\}/);
+  });
   it("a print of the timeline alone is named for it", () => {
     expect(code("src/components/DaySheet.jsx")).toMatch(/getAttribute\("data-print"\) === "timeline" \? "mgt-timeline" : "mgt-day-sheet"/);
   });

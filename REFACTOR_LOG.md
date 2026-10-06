@@ -31285,3 +31285,9 @@ an Add to waitlist button and a suggested reply.
    iPad; what changes there is the footer's top padding while typing, and the WhatsApp
    fold. Also not checked: Settings and the other footed dialogs with the keyboard up
    (same code path, not opened), and whether the autofill strip can be turned off.
+7. **The day sheet has a Seating column (Patryk, after reading the hand-off).** The
+   printed list said where each party is put and not what it asked for, which is on
+   the List card and in the form. A narrow column after Tables: "Indoor", "Outdoor",
+   or blank for no preference (his choice of three: a column, a column that also lists
+   preferred tables, or the word inside the Tables cell). The timeline sheet is
+   unchanged. `tests/print-timeline.test.js` +1.

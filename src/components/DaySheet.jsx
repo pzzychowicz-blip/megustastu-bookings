@@ -11,7 +11,7 @@
 //
 // Content for `date`: header (restaurant, date + weekday, covers + shift totals
 // via daySummary), a time-sorted table of the day's NON-cancelled bookings
-// (Time · Name · Guests · Tables · Phone · Deposit/voucher · Notes), any table blocks, and
+// (Time · Name · Guests · Tables · Seating · Phone · Deposit/voucher · Notes), any table blocks, and
 // the day's waitlist entries.
 //
 // Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
@@ -112,6 +112,10 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
               <th style={th}>Name</th>
               <th style={th}>Guests</th>
               <th style={th}>Tables</th>
+              {/* v18.4.0 (Patryk): what the guest asked for, beside where they
+                  are put. Blank for no preference, which is most rows, so the
+                  column reads as a short list of the parties that have one. */}
+              <th style={th}>Seating</th>
               <th style={th}>Phone</th>
               {/* v18.0.0 phase 4: the column is SHARED, so with the vouchers
                   module off it does not disappear — it narrows to what is left.
@@ -130,6 +134,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                   <td style={Object.assign({}, cell, { fontWeight: FW.bold })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
+                  <td style={cell}>{b.preference === "indoor" ? "Indoor" : b.preference === "outdoor" ? "Outdoor" : ""}</td>
                   {/* v18.2.0 phase 50 (C-4): the one phone shape, as on screen. */}
                   <td style={cell}>{b.phone ? formatPhone(b.phone) : "—"}</td>
                   {/* v18.0.0: deposit and voucher share one money column. A
