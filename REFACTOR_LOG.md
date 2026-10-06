@@ -31094,3 +31094,18 @@ with an alternative was his, asked before the work.
    **Not reproduced, and not changed:** the timeline cut off half-way with the header
    gone after closing a form, and the form's Save row drawn over the discard confirm's
    buttons (ROADMAP).
+
+**`/code-review` (high), eight findings.** Fixed, three: (a) hiding the "Repeat weekly"
+toggle did not stop a rule for a draft that already had it on (the capability removed,
+or standing bookings switched off, on another device while the form was open), so
+`doSaveNew` now asks the toggle's own question (`standingOn()`) and books the one visit;
+(b) a dead `!!orig` guard in `applyEdit`'s `clearNoShow`, after phase 2's early refusal;
+(c) a fixture comment in `tests/booking-fields.test.js` that pointed at a ROADMAP entry
+phase 1 deleted, and the new ROADMAP entry's claim that a `scrollTo(0, 0)` was
+"declined", which nobody was asked. Disproved, one: "one full-list pass per generated
+occurrence" off the optimiser. `optimizerActiveFor` is false for TODAY only, so the
+branch runs once per rule due today, and twelve passes over 1,600 bookings measured
+4.19 ms on the Mac (a throwaway vitest file, not kept). To ROADMAP, three, each a
+decision or a write-path change: no-shows walked back before this version, a refusal
+toast drawn under the modal that raised it, and an edit parked then replayed after a
+remote delete. The eighth was the ROADMAP wording, counted under (c).

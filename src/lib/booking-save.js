@@ -296,7 +296,7 @@ export function applyEdit(input){
   // Decided once, from `orig`, like the rest of the edit's intent, and only
   // by the save that LEAVES cancelled: an unrelated edit of a booking walked
   // back before this version changes nothing it was not asked to.
-  const clearNoShow=!!orig&&orig.status==="cancelled"&&f.status!=="cancelled"&&isNoShow(orig);
+  const clearNoShow=orig.status==="cancelled"&&f.status!=="cancelled"&&isNoShow(orig);
   const saveNotes=clearNoShow?withoutNoShowLine(f.notes):f.notes;
   const clearM=!!f._clearManual;
   const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;

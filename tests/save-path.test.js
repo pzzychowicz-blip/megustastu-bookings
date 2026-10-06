@@ -358,6 +358,7 @@ function appEnv(opts) {
     setVoucherBack: rec("setVoucherBack"),
     setSeatClash: rec("setSeatClash"),
     refused: () => false,
+    standingOn: () => true,
     openForm: rec("openForm"),
     setEditId: rec("setEditId"),
     setSwapAffected: rec("setSwapAffected"),
@@ -2216,6 +2217,17 @@ describe("Save — a new booking", () => {
         "guard": "ready",
       }
     `);
+  });
+  // v18.3.5 (/code-review): the toggle is hidden where `standingOn()` is false,
+  // and a draft that already had it on (the capability removed while the form
+  // was open) books the one visit: no rule, no stamp on the booking.
+  it("Repeat weekly on a draft, where the toggle would not show: the one visit, no rule", () => {
+    const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), env: { standingOn: () => false } });
+    expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
+    expect(out.calls).toContain('saveBookings("<fn>")');
+    const row = Object.values(out.writes[0].rows)[0];
+    expect(row).toContain('"recurringId":null');
+    expect(row).toContain('"recurringDate":null');
   });
   it("a phone-less guest picked from the name list: the seed is stamped too", () => {
     const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["3"], status: "completed" });

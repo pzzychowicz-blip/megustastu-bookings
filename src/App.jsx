@@ -2718,7 +2718,14 @@ function BookingApp({uid}){
   // v18.3.4: the new booking's decisions are `buildBooking`
   // (lib/booking-save.js), as the edit's are `applyEdit`; this is the half
   // with effects, in the order they have always run.
-  function doSaveNew(f){
+  // v18.3.5 (/code-review): what shows the form's "Repeat weekly" toggle, asked
+  // again by the save. Hiding the toggle did not stop a rule: a draft with it
+  // already on (the capability removed, or standing bookings switched off, on
+  // another device while the form was open) still stamped the booking and
+  // wrote a rule the rules file refuses. Such a save books the one visit.
+  function standingOn(){return recurring.enabled!==false&&can("recurringManage");}
+  function doSaveNew(f0){
+    const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
     if(plan.refusal){setError(plan.refusal.message);return;}
     // v18.3.3: the standing rule, now that nothing above can refuse the save.
@@ -5074,7 +5081,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false&&can("recurringManage")} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

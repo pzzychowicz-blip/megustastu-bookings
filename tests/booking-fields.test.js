@@ -71,7 +71,8 @@ function create(draft) {
 // comes back default after a save was wiped rather than kept. A hand-placed
 // pending party (`_manual`, `_locked`: what "Save pending" with tables picked
 // by hand writes), so no optimiser pass moves it; `noShow` set on a booking
-// that is not cancelled is what a form walk-back from a no-show leaves (ROADMAP).
+// that is not cancelled is what a form walk-back from a no-show left until
+// v18.3.5, which clears it on the save that leaves cancelled (this one does not).
 const RICH_VALUES = {
   id: "rich", name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:30", scheduledTime: "20:30",
   size: 4, duration: 105, originalDuration: 105, preference: "outdoor", notes: "window seat",
