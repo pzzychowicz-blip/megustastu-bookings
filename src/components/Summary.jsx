@@ -101,6 +101,10 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
           onClick={onToggle}
           aria-expanded={open}
+          /* v18.4.0 (Patryk): no press dip, Collapsible's reason: this button
+             is the width of the headline, and at 96% its text slid inward and
+             back on every tap. The panel's own tint answers the press. */
+          className="mgt-nopress"
           style={{
             // v18.2.0: basis "auto" (its own content), where it was 200px over
             // ~138px of "14 covers  7 bookings". The date row decides whether

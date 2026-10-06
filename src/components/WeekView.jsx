@@ -260,15 +260,16 @@ export function WeekView({ bookings, viewDate, isMobile, onPick, onClose }){
           const isFocused = r.date === focus;
           const dnum = Number(r.date.slice(8, 10));
           return (
-            <button
+            <button /* @no-lift a day row as wide as the card: .mgt-ac-row tints it through --row-bg */
               key={r.date}
               onClick={function(){ onPick(r.date); }}
-              className="mgt-hover-scale"
+              // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
+              className="mgt-ac-row mgt-nopress"
               style={{
                 display: "flex", alignItems: "center", gap: 10,
                 padding: "10px 12px", borderRadius: R.inset, cursor: "pointer",
                 width: "100%", boxSizing: "border-box", textAlign: "left",
-                background: CELL,
+                "--row-bg": CELL, "--row-bg-hover": "var(--bg-hover-card)",
                 border: "1px solid " + (isFocused || isSel ? "var(--accent)" : "var(--border-input)"),
                 boxShadow: isFocused ? "0 0 0 2px var(--accent)" : "none"
               }}

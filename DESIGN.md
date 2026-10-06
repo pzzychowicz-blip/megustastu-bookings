@@ -1584,6 +1584,23 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   controls carry that class too.
 - The older `.mgt-press` brightness dim stays and composes — `filter` and
   `transform` are orthogonal.
+- **v18.4.0 (Patryk): a WIDE ROW takes the tint, and neither the lift nor the
+  dip.** Both are proportions: at 96% a row 1,000px wide pulls its text 20px in
+  from each end and back, which he reported as the "Completed & cancelled"
+  title looking sharp on a tap, and at 108% a 690px search result grows 28px a
+  side. So a `<button>` that is a row (it spans its container and you read
+  across it) carries `mgt-ac-row mgt-nopress`, its resting fill in `--row-bg`
+  and its tint in `--row-bg-hover`, with no inline `background`: every
+  `Collapsible` header, the Summary's headline, the Find a booking results, the
+  More popover's day rows, the Activity log's booking rows, the Admin tab's
+  people, and the Plan popover's bookings. This widens `.mgt-nopress` from "an
+  inert control" to "no transform on press", which is what its rules always
+  did. Compact controls keep the lift and the dip. `tests/row-press.test.js`
+  reads each of those tags.
+- **A `Collapsible`'s count and subtitle ease with its body** (v18.4.0): one
+  `Reveal` each on the body's clock, the count a horizontal one. They mounted
+  and unmounted bare, so the count vanished on the tap and the header jumped by
+  the subtitle's line while the body was still easing.
 
 ### Motion — two curves, three durations (v17.8.0)
 

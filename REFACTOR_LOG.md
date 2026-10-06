@@ -31139,3 +31139,29 @@ an Add to waitlist button and a suggested reply.
    switcher 16–207, actions 423–752 and 295–624; 375 (a phone, always its own line),
    switcher 12–203, WhatsApp and Find 230–363. Back from 640 to 1280 it returned to one
    line. On a resize the split lands one frame after the wrap (the observer's frame).
+2. **A wide row no longer shrinks under a tap, and a fold header's count fades
+   (Patryk: "the text of Completed & cancelled looks sharp").** Two causes, read in the
+   code and confirmed with him. The header row is a `<button>`, so the universal press
+   dip took a row over 1,000px wide to 96% and its title slid inward and back; and the
+   count on the right (`!open && summary`) and the subtitle (`open && subtitle`) mounted
+   and unmounted with no transition while the body eased. Now every `Collapsible` header
+   and the Summary's headline carry `mgt-nopress` (the tint still answers), and the count
+   and subtitle sit in a `Reveal` each on the body's clock. **Measured** (DEV, the List's
+   fold, 1,065px pane): at rest the header, title, count, chevron and section rects are
+   the same numbers as HEAD (header 21,375 1023×28.5; count 948.1,382.3 63.9×14);
+   opening, the count goes 1.00/63.9px → 0.47/29.8 at 143ms → 0 by 475ms and unmounts;
+   closing it returns 0.18 at 82ms → 1.00 by 499ms. The press itself cannot be forced
+   from the Browser pane (a synthetic press does not set `:active`), so what is checked
+   is that the header no longer matches the dip's selector.
+   **The scan he asked for** (every `<button>` or `role="button"` tag styled as a row,
+   20 found, 3 already opted out) left five he chose to change the same way: Find a
+   booking's results, the More popover's day rows, the Activity log's booking rows, the
+   Admin tab's people and the Plan popover's bookings. Each was a `mgt-hover-scale`
+   button, so it also grew 8% on hover (28px a side on a 690px result); each is now
+   `mgt-ac-row mgt-nopress` with its fill in `--row-bg`. Checked live on the search
+   results (670px, resting fill unchanged, no inline background, transition
+   `background-color`); the other four are read by `tests/row-press.test.js` and not
+   yet opened in the app. Left alone: the timeline block (a leaf control whose dip
+   v17.10.1 chose), the phone's Walk-in / + New bar, the quick-status and reminder
+   editor's buttons, and the sandbox simulator. DESIGN.md's Press feedback holds the
+   rule, which widens `.mgt-nopress` from "an inert control" to "no transform on press".

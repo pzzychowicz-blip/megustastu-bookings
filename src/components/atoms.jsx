@@ -954,7 +954,12 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
       <button /* @no-lift .mgt-ac-row carries its own hover treatment via --row-bg */
         type="button"
         aria-expanded={open}
-        className="mgt-ac-row"
+        /* v18.4.0 (Patryk): `mgt-nopress`. The header is a button element, so the
+           universal press dip shrank a row hundreds of px wide to 96% and its
+           title slid inward and back on every tap ("the text looks sharp").
+           The dip is for compact controls; a full-width row answers with the
+           tint, as the notification strip's lid and AlertPanel's header do. */
+        className="mgt-ac-row mgt-nopress"
         onClick={() => { if (controlled) { if (onToggle) onToggle(!open); } else { setOpen((o) => !o); } }}
         style={{
           "--row-bg": "transparent", "--row-bg-hover": "var(--bg-veil)",
@@ -967,13 +972,17 @@ export function Collapsible({ title, subtitle, summary, defaultOpen = false, ope
       >
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: T.lead, fontWeight: FW.semi, color: "var(--text-primary)" }}>{title}</div>
-          {open && subtitle ? (
-            <div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 2 }}>{subtitle}</div>
+          {/* v18.4.0: the subtitle and the count ease in and out with the body
+              (one `Reveal` each, on the body's own clock). They mounted and
+              unmounted with no transition, so the count vanished and the
+              header jumped by the subtitle's line while the body was easing. */}
+          {subtitle ? (
+            <Reveal show={open}><div style={{ fontSize: T.body, fontWeight: FW.regular, color: "var(--text-faint)", paddingTop: 2 }}>{subtitle}</div></Reveal>
           ) : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {!open && summary ? (
-            <span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span>
+          {summary ? (
+            <Reveal horizontal show={!open}><span style={{ fontSize: T.body, fontWeight: FW.medium, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{summary}</span></Reveal>
           ) : null}
           <span style={{
             fontSize: T.title, fontWeight: FW.bold, color: "var(--text-muted)", lineHeight: 1,

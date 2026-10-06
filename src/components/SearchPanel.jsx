@@ -84,14 +84,16 @@ export function SearchPanel({ bookings, todayStr, isMobile, onPick, onClose }) {
 
   const rows = results.map(function (b) {
     return (
-      <button
+      <button /* @no-lift a result row as wide as the card: .mgt-ac-row tints it through --row-bg */
         key={b.id}
         onClick={function () { onPick(b); }}
-        className="mgt-hover-scale"
+        // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
+        // At 8% a 690px row grew 28px a side, and at 96% its date slid inward.
+        className="mgt-ac-row mgt-nopress"
         style={{
           display: "flex", alignItems: "center", gap: 10, flexWrap: isMobile ? "wrap" : "nowrap", width: "100%",
           padding: "10px 12px", marginBottom: 6, borderRadius: R.inset, cursor: "pointer",
-          background: "var(--bg-soft)", border: "1px solid var(--border-soft)", textAlign: "left",
+          "--row-bg": "var(--bg-soft)", "--row-bg-hover": "var(--bg-hover-card)", border: "1px solid var(--border-soft)", textAlign: "left",
           boxShadow: "var(--shadow-input)"
         }}>
         <span style={{ ...DATE_FONT, color: S.text, width: dateCol, flexShrink: 0 }}>{formatDay(b.date)}</span>
