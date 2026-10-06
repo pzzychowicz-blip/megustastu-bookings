@@ -111,18 +111,14 @@ evidence for each.
   banner, the rule is left, and it books the weeks after its start. Writing the rule only
   once the booking lands needs the retry queue to report that, so it is a write-path change.
 
-- **Three behaviours v18.3.4 pinned and left alone** (its scope was no behaviour change).
+- **Two behaviours v18.3.4 pinned and left alone** (its scope was no behaviour change).
   Each is a scenario in `tests/save-path.test.js`, so a fix moves that one snapshot, on
-  purpose, and says so. (1) **A no-show walked back keeps its flag.** Editing a cancelled
-  no-show back to confirmed leaves `noShow: true`, so the guest's no-show count
-  (`customers.js`'s `isNoShow`) includes a visit that happened. Found by reading, not yet
-  seen on DEV. Decide whether the walk-back clears it, and the "No show" line the
-  cancel appended to the notes with it. (2) **The generator's occurrence for today,
+  purpose, and says so. (1) **The generator's occurrence for today,
   after the 15:00 cutoff, is written unplaced.** `bookingsAfterAction` takes the
   optimiser-off branch, which with no `changedId` copies every row as it is, so the
   occurrence lands with `tables: []` and `_conflict: false`: in the Unplaced row, with
   nothing flagging it. It happens when the generator first meets today's week late in
-  the day (a rule resumed, or standing bookings switched on, after the cutoff). (3) **An
+  the day (a rule resumed, or standing bookings switched on, after the cutoff). (2) **An
   edit saved after another device deleted the booking** shows the saved toast, writes
   nothing for it, and re-places the rest of its day. Decide whether Save refuses it.
 

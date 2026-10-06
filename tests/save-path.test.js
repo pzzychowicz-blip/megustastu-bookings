@@ -1100,8 +1100,9 @@ describe("Save — an edit on a day the optimiser owns", () => {
       }
     `);
   });
-  it("a no-show walked back to confirmed keeps its no-show flag", () => {
-    const b1 = bk("b1", { tables: ["1A"], status: "cancelled", noShow: true });
+  // v18.3.5: this pinned "keeps its no-show flag" until the walk-back cleared it.
+  it("a no-show walked back to confirmed is no longer a no-show", () => {
+    const b1 = bk("b1", { tables: ["1A"], status: "cancelled", noShow: true, notes: "allergy: nuts\nNo show" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1118,7 +1119,9 @@ describe("Save — an edit on a day the optimiser owns", () => {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
               "b1": {
-                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"}]",
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"},{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"no-show cleared"}]",
+                "noShow": "true → false",
+                "notes": ""allergy: nuts\\nNo show" → "allergy: nuts"",
                 "status": ""cancelled" → "confirmed"",
               },
             },

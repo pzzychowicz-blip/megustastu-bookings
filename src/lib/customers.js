@@ -30,6 +30,7 @@
 // does not resolve extensionless specifiers. Vite is indifferent to it.
 import { overlaps, toMins, getDur } from "./booking-logic.js";
 import { dialOf } from "./phone-countries.js";
+import { isNoShow } from "./booking-fields.js";
 
 export function normalizePhone(p) {
   if (!p) return "";
@@ -199,16 +200,9 @@ export function resolveGuestId(list, f) {
   return (seed && seed.guestId) ? seed.guestId : f.guestId;
 }
 
-// isNoShow — did this booking end as a no-show?
-// Primary signal: the v16.0.0 `noShow` boolean set by doCancelBooking.
-// Fallback: the pre-v16 record was only a history entry {action:"no show"} (+
-// a notes append) — checking history BACKFILLS all legacy data with zero
-// migration. Notes are NOT checked (free text, staff-editable).
-export function isNoShow(b) {
-  if (!b) return false;
-  if (b.noShow === true) return true;
-  return Array.isArray(b.history) && b.history.some(function (h) { return h && h.action === "no show"; });
-}
+// isNoShow lives in booking-fields.js (v18.3.5), so booking-logic.js can ask it
+// too; re-exported here, where its callers import it.
+export { isNoShow };
 
 // matchCustomerByPhone — look up a customer by phone across the bookings list.
 // v17.10.0: a thin alias over matchCustomerFor below. The NAME and SIGNATURE are

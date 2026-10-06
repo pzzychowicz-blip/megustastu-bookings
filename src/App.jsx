@@ -401,7 +401,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.4",
+  version:"18.3.5",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -3780,7 +3780,7 @@ function BookingApp({uid}){
     // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
     // (status/noShow/notes/tables — the whole object). Single pending slot; a
     // newer cancel replaces it.
-    function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
+    function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.noShow=true;return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo (the doSave pattern) so the delta computed for
     // undo and the dispatched write share ONE optimizer pass.
     const cancelMemo=memoByPrev(cancelTransform);

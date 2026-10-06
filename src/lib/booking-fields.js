@@ -206,7 +206,7 @@ export const BOOKING_FIELDS = [
   { key: "history", read: (b) => (Array.isArray(b.history) ? b.history : []), undo: false },
   // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
   // it survives reads; legacy no-shows (history entry only) are counted by
-  // customers.js isNoShow's history fallback — no migration needed.
+  // `isNoShow`'s history fallback, below — no migration needed.
   { key: "noShow", read: (b) => !!b.noShow, undo: true },
   // v16.3.0: deposit / prepayment amount in € (0 = none). Whitelisted so it
   // survives reads; per-booking field → covered by the existing per-$id CAS.
@@ -294,6 +294,28 @@ export function sanitize(b,key){
 // key built the same way, never stored or shown, and every value is escaped
 // against the separators, so two keys are equal exactly when every value is.
 export const UNDO_FIELDS = BOOKING_FIELDS.filter(function(row){ return row.undo; }).map(function(row){ return row.key; });
+
+// ── isNoShow: did this booking end as a no-show? ─────────────────────────────
+// The `noShow` flag (v16.0.0, set by the no-show cancel), or, for a booking from
+// before the flag, its history. v18.3.5: the history is read from its END. An
+// edit that walks a no-show back out of cancelled clears the flag and adds a
+// `NO_SHOW_CLEARED` entry, and the "no show" entry before it stays as the record
+// that it happened; "some entry says no show" kept counting a visit that took
+// place. Marked a no-show again later, the newer entry wins. Notes are not read
+// (free text). Here, a leaf, so `customers.js` (which re-exports it) and
+// `rangeStats` in booking-logic.js ask ONE rule: the second had its own copy.
+export const NO_SHOW_CLEARED = "no-show cleared";
+export function isNoShow(b) {
+  if (!b) return false;
+  if (b.noShow === true) return true;
+  const h = Array.isArray(b.history) ? b.history : [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const action = h[i] && h[i].action;
+    if (action === NO_SHOW_CLEARED) return false;
+    if (action === "no show") return true;
+  }
+  return false;
+}
 
 // ── Derived: the edit's history line ─────────────────────────────────────────
 const HISTORY_CLAUSES = BOOKING_FIELDS.filter(function(row){ return row.clause; })

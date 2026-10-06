@@ -30955,3 +30955,38 @@ are the flows whose code moved.
 | 6 | Android tablet | Book Again from a completed booking: the new one reads "created via Book Again (from …)", the source "Book Again → new booking on …" |
 | 7 | Android tablet | A walk-in during service: "Walk-in N", seated on the tables picked |
 | `/code-review` 1 | Android tablet, if the WhatsApp module is on | Open a booking that has a deposit from its conversation's Open booking: the form shows the deposit, and Save without changes keeps it |
+
+---
+
+## v18.3.5 — the third bug sweep
+
+**Date:** 2026-10-06 · **Branch:** `fix/v18.3.5-patch-bugs` ·
+**Behavioural change:** yes, each phase below says what moves.
+
+Patryk picked six entries off the ROADMAP (the three behaviours v18.3.4 pinned, the
+WhatsApp form doors, the "Repeat weekly" toggle gate and the `sanitize` measurement) and
+reported three iPhone faults from the home-screen app with screenshots. Each decision
+with an alternative was his, asked before the work.
+
+### Phases
+
+1. **A no-show walked back is no longer a no-show (ROADMAP, pinned by v18.3.4).** Editing
+   a cancelled no-show back to confirmed (or pending, seated, completed) left
+   `noShow: true`, and the history's "no show" entry counts by itself, so the guest's
+   no-show count kept a visit that took place. Found by reading in v18.3.4; the pinned
+   scenario in `tests/save-path.test.js` is the reproduction. Now the save that LEAVES
+   cancelled (`applyEdit`'s `clearNoShow`) writes `noShow: false` and adds a history
+   entry, `"no-show cleared"`, and `isNoShow` reads the history from its end: the latest
+   of "no show" and "no-show cleared" decides (Patryk's pick over "only while cancelled"
+   and over deleting the entry, so the record stays whole and a second no-show counts
+   again). **`isNoShow` had two copies**, `customers.js`'s and one inlined in
+   `rangeStats` (the More popover's no-show tile); both now ask the one in
+   `booking-fields.js`, which `customers.js` re-exports. **The no-show cancel no longer
+   appends "No show" to the notes** (Patryk: stop adding entries to notes; it was the
+   only place the app wrote into them), and the walk-back removes that line from an
+   older booking when it is still the last line. Not changed: a booking walked back
+   BEFORE this version keeps its flag until it is cancelled and walked back again,
+   because an unrelated edit must not change a field it was not asked to
+   (`tests/booking-fields.test.js`'s round trip holds exactly that booking). The pinned
+   snapshot moved on purpose: history gains the entry, `noShow` true → false, and the
+   notes lose the line.

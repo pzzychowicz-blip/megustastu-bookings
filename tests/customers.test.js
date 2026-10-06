@@ -95,6 +95,18 @@ describe("isNoShow", () => {
     expect(isNoShow({})).toBe(false);
     expect(isNoShow(null)).toBe(false);
   });
+  // v18.3.5: a walk-back out of cancelled leaves the "no show" entry as the
+  // record and adds "no-show cleared"; the history is read from its end.
+  it("stops counting once the no-show was cleared, and counts again if re-marked", () => {
+    const ns = { action: "no show" }, cleared = { action: "no-show cleared" }, edit = { action: "edited: time 20:00→20:30" };
+    expect(isNoShow({ noShow: false, history: [ns, cleared] })).toBe(false);
+    expect(isNoShow({ noShow: false, history: [ns, cleared, edit] })).toBe(false);
+    expect(isNoShow({ noShow: false, history: [ns, cleared, edit, ns] })).toBe(true);
+    // The flag is the primary signal, whatever the history says.
+    expect(isNoShow({ noShow: true, history: [ns, cleared] })).toBe(true);
+    // Unrelated entries after a legacy no-show do not clear it.
+    expect(isNoShow({ history: [ns, edit] })).toBe(true);
+  });
 });
 
 describe("matchCustomerByPhone", () => {
