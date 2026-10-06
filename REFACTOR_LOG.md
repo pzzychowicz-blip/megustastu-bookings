@@ -31347,3 +31347,19 @@ an Add to waitlist button and a suggested reply.
    the sheet and the title all survive the early `afterprint` and a second pair, and
    go at the pointer event; with 700ms between the events they go at `afterprint`.
    `tests/print-timeline.test.js` +3. **Not re-printed on the iPhone yet.**
+12. **On a phone the conversation's linked booking and request start as one line each
+   (Patryk).** With both open and the keyboard down the thread had 109px of a 664px
+   screen (his screenshot; 109 measured at 375×664). Starting them collapsed as a wide
+   pane collapses them gave 127: the action buttons stay in the header and wrap to a
+   row of their own, and the linked card's summary takes another, so that card was 5px
+   taller collapsed. He chose, of three: one line each. Under 600px (`phone`, from
+   InboxPanel) both cards default to collapsed, a collapsed card is its title row and
+   chevron, and the details and the buttons are in the body, where the existing
+   `Reveal` eases them in and out. The request is a toggle there even when it has
+   nothing else to disclose. Above 600px nothing changes. A choice already stored for
+   a conversation (`useCollapseState`) still wins.
+   **Measured** in headless Chromium at 375×664 on DEV, stored state cleared: cards
+   44 and 39px, thread 260; both opened, 132 and 110, thread 101.
+   `tests/short-viewport.test.js` +4. **Not checked on the iPhone.**
+   **Also decided:** the timeline printing upright on the tablet and the iPhone stays
+   as it is; staff pick Landscape in the print dialog.

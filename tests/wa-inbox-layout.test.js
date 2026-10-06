@@ -131,7 +131,7 @@ describe("W-1 — a wrapping pane header never draws its actions over its title"
   });
   it("is the header the linked card uses, and the intent banner whenever it has a body (phase 49)", () => {
     expect(read("components/whatsapp/LinkedBookingCard.jsx")).toMatch(/onHeaderClick=\{toggle\}/);
-    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{hasBody \? toggle : undefined\}/);
+    expect(read("components/whatsapp/IntentBanner.jsx")).toMatch(/onHeaderClick=\{opens \? toggle : undefined\}/);
   });
 });
 
@@ -145,8 +145,11 @@ describe("W-2 + W-3 — the conversation says each thing once", () => {
   });
   it("is not a toggle when it has nothing to disclose", () => {
     expect(Banner).toMatch(/const hasBody = !!subtitle \|\| !!showApply;/);
-    expect(Banner).toMatch(/onHeaderClick=\{hasBody \? toggle : undefined\}/);
-    expect(Banner).toMatch(/\{hasBody \? <span style=\{\{ color, flexShrink: 0/);
+    // v18.4.0: `opens` is `hasBody` everywhere but on a phone, where the
+    // buttons are in the body and the banner always opens onto them.
+    expect(Banner).toMatch(/const opens = hasBody \|\| !!narrow;/);
+    expect(Banner).toMatch(/onHeaderClick=\{opens \? toggle : undefined\}/);
+    expect(Banner).toMatch(/\{opens \? <span style=\{\{ color, flexShrink: 0/);
   });
   it("past bookings end at the party's size", () => {
     expect(View).not.toMatch(/guestsLabel\(b\.size\) \+ " · " \+ b\.status/);

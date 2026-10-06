@@ -90,3 +90,31 @@ describe("the inbox folds while a reply is typed on a short screen", () => {
     expect(View).toMatch(/if \(seenH\.current !== -1 && el\.clientHeight !== seenH\.current\) return;/);
   });
 });
+
+// v18.4.0 (Patryk): on a phone the linked booking and the request each start
+// as one line. Measured at 375×664 with both open: the thread had 109px, and
+// 260 with both collapsed to their title rows.
+describe("on a phone the conversation's two cards start as one line", () => {
+  const view = read("components/whatsapp/ConversationView.jsx");
+  const linked = read("components/whatsapp/LinkedBookingCard.jsx");
+  const intent = read("components/whatsapp/IntentBanner.jsx");
+  it("the inbox says it is a phone, and both cards are told", () => {
+    expect(read("components/whatsapp/InboxPanel.jsx")).toContain("phone={winW < 600}");
+    expect(view.match(/narrow=\{phone\}/g)).toHaveLength(2);
+  });
+  it("both start collapsed there", () => {
+    expect(linked).toContain('useCollapseState(phoneKey, "linked", !!defaultCollapsed || !!narrow)');
+    expect(intent).toContain('useCollapseState(phoneKey, "intent", !!narrow)');
+  });
+  it("collapsed is the title row alone: the buttons are in the body, which eases open", () => {
+    for (const card of [linked, intent]) {
+      expect(card).toContain("{narrow ? null : actionBtns}");
+      expect(card).toMatch(/\{narrow \? <AlertRow first style=\{\{ paddingBottom: 8 \}\}>\{actionBtns\}<\/AlertRow> : null\}\s*<\/Reveal>/);
+    }
+    expect(linked).toContain("{collapsed && !narrow ? <span");
+  });
+  it("the request is a toggle on a phone even with nothing else to disclose", () => {
+    expect(intent).toContain("const opens = hasBody || !!narrow;");
+    expect(intent).toContain("onHeaderClick={opens ? toggle : undefined}");
+  });
+});

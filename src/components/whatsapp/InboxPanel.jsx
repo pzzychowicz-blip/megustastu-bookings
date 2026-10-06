@@ -438,7 +438,7 @@ export function InboxPanel({
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} showBack={!twoPane} compact={compact}
+        templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}

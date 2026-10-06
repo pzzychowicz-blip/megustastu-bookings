@@ -23,7 +23,7 @@ import { guestsLabel } from "../../lib/booking-logic";
 const AT_END_SLACK = 24;
 
 export function ConversationView({
-  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
+  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
   onRecheck, regularMin, kbFold = false, onUnfold,
@@ -344,14 +344,14 @@ export function ConversationView({
       <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
       {linkedBooking ? (
         <div style={{ padding: "8px 14px 0" }}>
-          <LinkedBookingCard booking={linkedBooking} phoneKey={conv.phoneKey} defaultCollapsed={!(intent === "cancel" || intent === "modify")} onOpen={() => { if (onOpenLinkedBooking) onOpenLinkedBooking(conv); }} onCancel={() => { if (onCancelLinkedBooking) onCancelLinkedBooking(conv); }} />
+          <LinkedBookingCard booking={linkedBooking} phoneKey={conv.phoneKey} defaultCollapsed={!(intent === "cancel" || intent === "modify")} narrow={phone} onOpen={() => { if (onOpenLinkedBooking) onOpenLinkedBooking(conv); }} onCancel={() => { if (onCancelLinkedBooking) onCancelLinkedBooking(conv); }} />
         </div>
       ) : null}
       {showIntentBanner ? (
         <div style={{ padding: "0 14px" }}>
           {/* key=phoneKey: the fade's `leaving` state must die with the conversation —
               without it, switching threads mid-fade leaves the next banner invisible */}
-          <IntentBanner key={conv.phoneKey} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
+          <IntentBanner key={conv.phoneKey} narrow={phone} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
         </div>
       ) : null}
       </Reveal>

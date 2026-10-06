@@ -21,8 +21,15 @@ import { ChevronRightIcon } from "../Icons";
 // control-height decision.
 const SUMMARY_MIN = 180;
 
-export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, defaultCollapsed }) {
-  const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed);
+// v18.4.0 (Patryk) — `narrow`: a phone (under 600px, InboxPanel's `phone`). There the card
+// STARTS collapsed and a collapsed card is its title row alone; the summary
+// line and the two buttons are in the body, so they ease open with it. Measured
+// at 375×664 with this card and a change request both open: the thread had
+// 109px. Collapsing them as a wide pane does gave it 127, because the buttons
+// stay in the header and wrap to a row of their own, and the summary takes
+// another (this card was 5px TALLER collapsed).
+export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, defaultCollapsed, narrow }) {
+  const [collapsed, toggle] = useCollapseState(phoneKey, "linked", !!defaultCollapsed || !!narrow);
   if (!booking) return null;
   const canCancel = booking.status !== "cancelled" && booking.status !== "completed";
   const summary = (booking.name || "(no name)") + " · " + (formatDay(booking.date) || "?") + " · " + booking.time + " · " + guestsLabel(booking.size);
@@ -117,10 +124,10 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
             wrap — below the floor the summary takes its own full-width line
             instead of shrinking to nothing. It keeps the ellipsis for the case
             where even a full line is not enough. */}
-        {collapsed ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : null}
+        {collapsed && !narrow ? <span style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.regular, flex: "1 1 auto", minWidth: SUMMARY_MIN, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</span> : null}
       </span>}
       action={<>
-        {actionBtns}
+        {narrow ? null : actionBtns}
         <span style={{ color: "var(--success-text)", flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span>
       </>}
     >
@@ -129,6 +136,7 @@ export function LinkedBookingCard({ booking, onOpen, onCancel, phoneKey, default
           <div style={{ fontSize: T.body, color: "var(--text-primary)", fontWeight: FW.semi, marginBottom: 2 }}>{booking.name || "(no name)"}</div>
           <div style={{ fontSize: T.body, color: "var(--text-muted)" }}>{(formatDay(booking.date) || "?") + " · " + booking.time + " · " + guestsLabel(booking.size) + (booking.tables && booking.tables.length ? " · tables " + booking.tables.join(", ") : "")}</div>
         </AlertRow>
+        {narrow ? <AlertRow first style={{ paddingBottom: 8 }}>{actionBtns}</AlertRow> : null}
       </Reveal>
     </AlertPanel>
   );
