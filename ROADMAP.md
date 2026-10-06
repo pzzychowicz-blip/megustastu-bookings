@@ -67,7 +67,8 @@ evidence for each.
   subscribes to every booking ever made, each with an uncapped `history`, and a resync
   re-reads the lot. Nothing purges old bookings. First, read Firebase console →
   Realtime Database → Usage (storage, downloads a month) and set a threshold.
-  Archiving needs design, because customer history derives from all bookings.
+  Archiving needs design, because customer history derives from all bookings. One figure from v18.3.5: `sanitize` alone costs the tablet 3.2 ms per 1,000 bookings on
+  every snapshot, so it passes 8 ms at about 2,900 (PROD held about 1,600 on 2026-10-06).
 
 - **Before WhatsApp goes live (#4, #8):**
   1. Node tests for `api/wa-send.js`, `wa-recheck.js`, `wa-config.js`,
@@ -106,12 +107,6 @@ evidence for each.
   discarded from the banner, the rule is left, and it books the weeks after its start.
   Writing the rule only once the booking lands needs the retry queue to report that, so
   it is a write-path change.
-
-- **`sanitize` is 4–6.6× slower as a loop over the table** (v18.3.4's `/code-review`), on
-  every booking of every `/bookings` snapshot. Measured in Node on a Mac with 3,000
-  bookings: 0.35 ms before, 1.4–2.3 ms after. One call site per row measured 0.48 ms,
-  but it writes the key order out again, which v18.3.4 removed (and the CSP rules out
-  compiling it). Measure it on the tablet at #3's real size before choosing.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at

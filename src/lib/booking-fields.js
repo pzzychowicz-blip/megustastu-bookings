@@ -281,11 +281,64 @@ export const BOOKING_FIELDS = [
 // The rows in order, so the key order is the table's. Anything not in the table
 // is dropped, which is what makes it a whitelist: `baseUpdatedAt` and any field
 // written by something other than this app.
-export function sanitize(b,key){
+//
+// `sanitizeByTable` is the definition: a loop over the rows. `sanitize`, which
+// every read calls, is the same thing written as an object literal with one
+// call site per row (v18.3.5). The loop stores 29 keys through one keyed store
+// and calls 29 different closures from one call site, and it runs on every
+// booking of every `/bookings` snapshot: measured on the restaurant's tablet,
+// 7.4 ms per 1,000 bookings, so about 12 ms a snapshot at PROD's 1,600. The
+// literal measured 3.3x faster in Node (0.74 ms against 2.44 for 3,000).
+// Generating it from the table would need `new Function`, which the CSP
+// forbids. So the literal is a second copy of the key order, and
+// `tests/booking-fields.test.js` holds it to the table: the same keys in the
+// same order, and the same value as the loop for every row. A new row fails
+// there until it has its line here; the line calls the ROW's `read`, so what a
+// field reads as is still stated once.
+export function sanitizeByTable(b,key){
   if(!b||typeof b!=="object") return null;
   const out={};
   BOOKING_FIELDS.forEach(function(row){ out[row.key]=row.read(b,out,key); });
   return out;
+}
+const R={};
+BOOKING_FIELDS.forEach(function(row){ R[row.key]=row.read; });
+// What a later row reads of an earlier one (`scheduledTime` falls back to the
+// sanitised `time`). One holder, refilled per call; `sanitize` is synchronous.
+const SEEN={time:""};
+export function sanitize(b,key){
+  if(!b||typeof b!=="object") return null;
+  return {
+    id: R.id(b, SEEN, key),
+    name: R.name(b),
+    phone: R.phone(b),
+    date: R.date(b),
+    time: (SEEN.time = R.time(b)),
+    scheduledTime: R.scheduledTime(b, SEEN),
+    size: R.size(b),
+    duration: R.duration(b),
+    originalDuration: R.originalDuration(b),
+    preference: R.preference(b),
+    notes: R.notes(b),
+    status: R.status(b),
+    tables: R.tables(b),
+    customDur: R.customDur(b),
+    _manual: R._manual(b),
+    _locked: R._locked(b),
+    _conflict: R._conflict(b),
+    preferredTables: R.preferredTables(b),
+    returnOf: R.returnOf(b),
+    history: R.history(b),
+    noShow: R.noShow(b),
+    deposit: R.deposit(b),
+    voucherCode: R.voucherCode(b),
+    recurringId: R.recurringId(b),
+    recurringDate: R.recurringDate(b),
+    anonymized: R.anonymized(b),
+    guestId: R.guestId(b),
+    stayedMin: R.stayedMin(b),
+    updatedAt: R.updatedAt(b),
+  };
 }
 
 // ── Derived: what undo and the reconciliation compare ────────────────────────

@@ -31040,3 +31040,23 @@ with an alternative was his, asked before the work.
    (Patryk's pick over showing it and refusing the save, and over showing it disabled).
    Found by reading; `tests/recurring.test.js` holds the prop and that the toggle is the
    form's only writer of `repeatWeekly`. Not exercised with roles enforced on DEV.
+6. **`sanitize` is an object literal again, held to the field table (ROADMAP, v18.3.4's
+   `/code-review`).** v18.3.4 made it a loop over `BOOKING_FIELDS`, measured 4–6.6×
+   slower in Node, and left the choice to a tablet measurement. **Measured on the
+   restaurant's tablet** (HONOR NDL-L09, Chrome 154, a DEV tab over adb, 25 timed passes
+   after 8 warm-up passes, synthetic rows shaped like stored bookings): the loop takes
+   7.4–7.8 ms per 1,000 bookings (23.2 ms at 3,000, 96–98 ms at 10,000), on every
+   `/bookings` snapshot. PROD holds about 1,600 (Patryk), so about 12 ms, over the 8 ms
+   (half a frame) he set as the line. Two rewrites that keep the loop were measured in
+   Node and rejected: a plain `for` over pre-extracted arrays (2.40 ms against 2.44 for
+   3,000, no gain) and a pre-shaped template object (8.2 ms, slower). `sanitize` is now
+   a literal with one call site per row, each calling that ROW's `read`, so what a field
+   reads as is still stated once; only the key order has a second copy. Node: 0.74 ms
+   for 3,000. **The tablet, same harness: 3.2 ms per 1,000, 8.2 ms at 3,000, 30.4 ms at
+   10,000**, so about 5 ms at PROD's size, and the 8 ms line moves from about 1,100
+   bookings to about 2,900. The loop stays as `sanitizeByTable`, the definition, and
+   `tests/booking-fields.test.js` holds the literal to it: the same keys in the same
+   order and the same values over 1,100 rows (every field missing, and holding each of
+   18 wrong-typed values, on a full row and on an empty one), the same refusals, and one
+   `R.<key>` call per row in the source. A new row fails there until it has its line.
+   Generating the literal was not possible: the CSP forbids `new Function`.
