@@ -587,6 +587,11 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
             maxWidth: mob ? "none" : pw,
             height: mob ? "100dvh" : (kb.bottom ? "100%" : (panel.height || "min(900px, 90dvh)")),
             paddingBottom: mob ? kb.bottom : 0,
+            // v18.4.0: and by what iOS moved above the visible area, so the
+            // panel's own top row is on screen while its pinned reply box is
+            // typed into (`coveredTopOf`, useKeyboardInset.js). Padding, like
+            // the bottom: the box's edges stay where they are.
+            paddingTop: mob ? kb.top : 0,
             display: "flex",
             flexDirection: "column",
             boxShadow: "var(--shadow-sheet)",

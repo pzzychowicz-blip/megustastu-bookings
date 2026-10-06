@@ -1,6 +1,7 @@
 // src/hooks/useKeyboardInset.js
-// v18.3.0 (N1) — `useKeyboardInset()` → `{ bottom }` in px: how much of a
-// full-screen fixed box the on-screen keyboard is covering. `Overlay` is the
+// v18.3.0 (N1) — `useKeyboardInset()` → `{ bottom, top }` in px: how much of a
+// full-screen fixed box the on-screen keyboard is covering (`bottom`), and since
+// v18.4.0 how much of it iOS has moved above the visible area (`top`, below). `Overlay` is the
 // one caller, so every modal keeps its Save above the keyboard.
 //
 // Why it is needed: a `position: fixed` box and every `dvh` follow the layout
@@ -78,8 +79,31 @@ export function keyboardInsetOf(win) {
   return keyboard > KB_MIN && bottom > 0 ? { bottom: Math.round(bottom) } : NONE;
 }
 
+// v18.4.0 — how much of a full-screen fixed box is ABOVE the visible area
+// while the keyboard is up. The booking form never needed it: its body scrolls,
+// and iOS brings the focused field into view. The WhatsApp inbox does. Its
+// reply box is pinned at the bottom of a full-height panel, so iOS shows it by
+// moving the page up by the whole keyboard, and the panel's top goes with it.
+// Measured on Patryk's iPhone 12 mini (iOS 27, the DEV beacon, Safari and the
+// home-screen app): with the reply box focused the panel's rect was
+// [0, −339, 375, 664] against a visible 325 (app: −405 of 762, visible 357),
+// `pageTop` 339, and `keyboardInsetOf` 0, correctly, since the panel's bottom
+// was on the visible bottom. The conversation's header sat at −332, off the
+// screen, and a thread of three messages showed as an empty box, because its
+// messages were in the part above. `pageTop` is that distance in both of iOS's
+// ways of showing a field (v18.3.5), so it is the one read. 0 with no keyboard,
+// and on Android, where the layout viewport is the visible area.
+export function coveredTopOf(win) {
+  const vv = win ? win.visualViewport : null;
+  const root = win && win.document ? win.document.documentElement : null;
+  if (!vv || !root) return 0;
+  const top = typeof vv.pageTop === "number" ? vv.pageTop : (vv.offsetTop || 0);
+  return root.clientHeight - vv.height > KB_MIN && top > 0 ? Math.round(top) : 0;
+}
+
 function readInset() {
-  return keyboardInsetOf(typeof window !== "undefined" ? window : null);
+  const win = typeof window !== "undefined" ? window : null;
+  return { bottom: keyboardInsetOf(win).bottom, top: coveredTopOf(win) };
 }
 
 export function useKeyboardInset() {
@@ -89,7 +113,7 @@ export function useKeyboardInset() {
     if (!vv) return undefined;
     function measure() {
       const next = readInset();
-      setInset(function (prev) { return prev.bottom === next.bottom ? prev : next; });
+      setInset(function (prev) { return prev.bottom === next.bottom && prev.top === next.top ? prev : next; });
     }
     vv.addEventListener("resize", measure);
     vv.addEventListener("scroll", measure);

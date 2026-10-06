@@ -31301,3 +31301,33 @@ an Add to waitlist button and a suggested reply.
    The same prints settled two of the open checks: a blocked span prints hatched with
    its row's bookings beside it, and unplaced bookings print as dashed blocks in
    "Unplaced" lanes above the tables (13.10, two lanes).
+9. **A sheet printed from an iPhone no longer carries a black box (Patryk's PDFs).**
+   Every print from his iPhone had a dark rectangle one screen tall under the sheet.
+   `body` keeps its dark `background-color` and `min-height: 100dvh` in print, and
+   Safari on iOS prints backgrounds; Chrome does not unless asked, so the Mac never
+   showed it, and it is older than the printed timeline. The print block now sets
+   `html, body { background: #fff; min-height: 0 }`. Checked in headless Chromium at
+   375px with print media: body white, 297px (the sheet's own height), was 664 dark.
+   **Not re-printed on the iPhone yet.**
+   From the same PDFs: **iOS ignores the landscape request too**, as Android does
+   (measured on the tablet: both pages portrait, Letter). The timeline prints whole
+   on a portrait page in both, in the top third to half. What to do about it is
+   Patryk's decision and is open.
+10. **On an iPhone the WhatsApp conversation stays on screen while a reply is typed
+   (Patryk's screenshots).** With the reply box focused he saw no header, and a short
+   conversation (one with a draft: three messages) as an empty box. The beacon's
+   numbers, Safari and the home-screen app: the panel's rect was [0, −339, 375, 664]
+   against a visible 325 (app: −405 of 762, 357 visible). The reply box is pinned at
+   the bottom of a full-height panel, so iOS shows it by moving the page up by the
+   whole keyboard; `keyboardInsetOf` is 0 there, correctly, and the top 339px, with
+   phase 5's slim header (at −332) and the start of the thread, is off the screen.
+   Phase 5 was measured on Android only, where the layout viewport IS the visible
+   area, and its note that the panel "takes the visible area" was true only there.
+   `coveredTopOf` (`useKeyboardInset.js`) reads that distance (`pageTop` while the
+   keyboard is up) and the hook returns it as `top`; `Overlay`'s panel pads its top by
+   it on a phone, as it pads its bottom by the inset. The sheets and cards take no top
+   inset: their bodies scroll and iOS places the field (v18.3.1's pin, narrowed to
+   "exactly one").
+   `tests/keyboard-inset.test.js` +2 (20), `tests/print-timeline.test.js` +1.
+   **Not checked on the iPhone**: nothing on the Mac reproduces iOS's page move, so
+   this is built from the measurements and waits for his re-test.

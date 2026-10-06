@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { keyboardInsetOf } from "../src/hooks/useKeyboardInset.js";
+import { keyboardInsetOf, coveredTopOf } from "../src/hooks/useKeyboardInset.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...p) => readFileSync(join(ROOT, ...p), "utf8");
@@ -97,6 +97,25 @@ describe("N1: the keyboard's inset, from the visual viewport", () => {
     expect(keyboardInsetOf(win(780, 700, 40))).toEqual({ bottom: 0 });
   });
 
+  it("v18.4.0: says how much of a full-screen box iOS moved above the visible area", () => {
+    // Patryk's iPhone, the WhatsApp reply box focused: Safari, then the app.
+    expect(coveredTopOf(win(664, 325, 339))).toBe(339);
+    expect(coveredTopOf(win(762, 357, 405))).toBe(405);
+    // On the way there (innerHeight 392, the page 272 down).
+    expect(coveredTopOf(win(664, 325, 272))).toBe(272);
+    // Keyboard up and nothing moved; no keyboard; Android; no window.
+    expect(coveredTopOf(win(664, 325, 0))).toBe(0);
+    expect(coveredTopOf(win(780, 700, 40))).toBe(0);
+    expect(coveredTopOf(win(289, 289, 0))).toBe(0);
+    expect(coveredTopOf(null)).toBe(0);
+  });
+  it("v18.4.0: the panel on a phone pads its top by it, and the hook carries both", () => {
+    expect(Overlay).toContain("paddingTop: mob ? kb.top : 0,");
+    const hook = stripComments(read("src", "hooks", "useKeyboardInset.js")).join("\n");
+    expect(hook).toContain("return { bottom: keyboardInsetOf(win).bottom, top: coveredTopOf(win) };");
+    expect(hook).toContain("prev.bottom === next.bottom && prev.top === next.top ? prev : next");
+  });
+
   it("is nothing where the keyboard resizes the layout viewport itself (Android)", () => {
     // interactive-widget=resizes-content shrinks the root with the keyboard.
     expect(keyboardInsetOf(win(430, 430, 0))).toEqual({ bottom: 0 });
@@ -122,8 +141,9 @@ describe("N1: every Overlay branch takes the inset as padding", () => {
     // The scrims pad, so a card centres in what is visible.
     expect(Overlay).toContain("paddingBottom: SP.wide + kb.bottom");
     expect(Overlay).toContain("paddingBottom: scrimPad + (mob ? 0 : kb.bottom)");
-    // No top inset anywhere (v18.3.1: iOS's scroll is already out of innerHeight).
-    expect(Overlay).not.toMatch(/kb\.top/);
+    // One top inset, the phone panel's padding (v18.4.0, below). The sheets
+    // and cards take none: their bodies scroll and iOS places the field.
+    expect(Overlay.match(/kb\.top/g)).toHaveLength(1);
     // No fixed box moves an edge by the inset.
     expect(Overlay).not.toMatch(/position: "fixed"[^}]*\b(top|bottom): kb\./);
   });
