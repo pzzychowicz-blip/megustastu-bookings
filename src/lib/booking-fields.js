@@ -206,7 +206,7 @@ export const BOOKING_FIELDS = [
   { key: "history", read: (b) => (Array.isArray(b.history) ? b.history : []), undo: false },
   // v16.0.0: no-show flag set by doCancelBooking(id,noShow=true). Whitelisted so
   // it survives reads; legacy no-shows (history entry only) are counted by
-  // customers.js isNoShow's history fallback — no migration needed.
+  // `isNoShow`'s history fallback, below — no migration needed.
   { key: "noShow", read: (b) => !!b.noShow, undo: true },
   // v16.3.0: deposit / prepayment amount in € (0 = none). Whitelisted so it
   // survives reads; per-booking field → covered by the existing per-$id CAS.
@@ -281,11 +281,64 @@ export const BOOKING_FIELDS = [
 // The rows in order, so the key order is the table's. Anything not in the table
 // is dropped, which is what makes it a whitelist: `baseUpdatedAt` and any field
 // written by something other than this app.
-export function sanitize(b,key){
+//
+// `sanitizeByTable` is the definition: a loop over the rows. `sanitize`, which
+// every read calls, is the same thing written as an object literal with one
+// call site per row (v18.3.5). The loop stores 29 keys through one keyed store
+// and calls 29 different closures from one call site, and it runs on every
+// booking of every `/bookings` snapshot: measured on the restaurant's tablet,
+// 7.4 ms per 1,000 bookings, so about 12 ms a snapshot at PROD's 1,600. The
+// literal measured 3.3x faster in Node (0.74 ms against 2.44 for 3,000).
+// Generating it from the table would need `new Function`, which the CSP
+// forbids. So the literal is a second copy of the key order, and
+// `tests/booking-fields.test.js` holds it to the table: the same keys in the
+// same order, and the same value as the loop for every row. A new row fails
+// there until it has its line here; the line calls the ROW's `read`, so what a
+// field reads as is still stated once.
+export function sanitizeByTable(b,key){
   if(!b||typeof b!=="object") return null;
   const out={};
   BOOKING_FIELDS.forEach(function(row){ out[row.key]=row.read(b,out,key); });
   return out;
+}
+const R={};
+BOOKING_FIELDS.forEach(function(row){ R[row.key]=row.read; });
+// What a later row reads of an earlier one (`scheduledTime` falls back to the
+// sanitised `time`). One holder, refilled per call; `sanitize` is synchronous.
+const SEEN={time:""};
+export function sanitize(b,key){
+  if(!b||typeof b!=="object") return null;
+  return {
+    id: R.id(b, SEEN, key),
+    name: R.name(b),
+    phone: R.phone(b),
+    date: R.date(b),
+    time: (SEEN.time = R.time(b)),
+    scheduledTime: R.scheduledTime(b, SEEN),
+    size: R.size(b),
+    duration: R.duration(b),
+    originalDuration: R.originalDuration(b),
+    preference: R.preference(b),
+    notes: R.notes(b),
+    status: R.status(b),
+    tables: R.tables(b),
+    customDur: R.customDur(b),
+    _manual: R._manual(b),
+    _locked: R._locked(b),
+    _conflict: R._conflict(b),
+    preferredTables: R.preferredTables(b),
+    returnOf: R.returnOf(b),
+    history: R.history(b),
+    noShow: R.noShow(b),
+    deposit: R.deposit(b),
+    voucherCode: R.voucherCode(b),
+    recurringId: R.recurringId(b),
+    recurringDate: R.recurringDate(b),
+    anonymized: R.anonymized(b),
+    guestId: R.guestId(b),
+    stayedMin: R.stayedMin(b),
+    updatedAt: R.updatedAt(b),
+  };
 }
 
 // ── Derived: what undo and the reconciliation compare ────────────────────────
@@ -294,6 +347,28 @@ export function sanitize(b,key){
 // key built the same way, never stored or shown, and every value is escaped
 // against the separators, so two keys are equal exactly when every value is.
 export const UNDO_FIELDS = BOOKING_FIELDS.filter(function(row){ return row.undo; }).map(function(row){ return row.key; });
+
+// ── isNoShow: did this booking end as a no-show? ─────────────────────────────
+// The `noShow` flag (v16.0.0, set by the no-show cancel), or, for a booking from
+// before the flag, its history. v18.3.5: the history is read from its END. An
+// edit that walks a no-show back out of cancelled clears the flag and adds a
+// `NO_SHOW_CLEARED` entry, and the "no show" entry before it stays as the record
+// that it happened; "some entry says no show" kept counting a visit that took
+// place. Marked a no-show again later, the newer entry wins. Notes are not read
+// (free text). Here, a leaf, so `customers.js` (which re-exports it) and
+// `rangeStats` in booking-logic.js ask ONE rule: the second had its own copy.
+export const NO_SHOW_CLEARED = "no-show cleared";
+export function isNoShow(b) {
+  if (!b) return false;
+  if (b.noShow === true) return true;
+  const h = Array.isArray(b.history) ? b.history : [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const action = h[i] && h[i].action;
+    if (action === NO_SHOW_CLEARED) return false;
+    if (action === "no show") return true;
+  }
+  return false;
+}
 
 // ── Derived: the edit's history line ─────────────────────────────────────────
 const HISTORY_CLAUSES = BOOKING_FIELDS.filter(function(row){ return row.clause; })

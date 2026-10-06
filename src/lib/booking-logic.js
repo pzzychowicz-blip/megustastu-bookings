@@ -37,7 +37,7 @@ import { withTypedCode, phoneHasCode } from "./phone-countries.js";
 // cannot close a cycle; keep it that way. ".js" for the Node ESM chain — this
 // file is reachable from the serverless functions (api/* → whatsapp.js →
 // customers.js → here), and Node does not add the extension the way Vite does.
-import { UNDO_FIELDS, sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone } from "./booking-fields.js";
+import { UNDO_FIELDS, sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone, isNoShow } from "./booking-fields.js";
 export { sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone };
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -1849,8 +1849,7 @@ export function comboCapBest(ids){
 // Aggregate booking metrics over an inclusive date range [fromDate, toDate]
 // (ISO date strings). Pure; one pass over the bookings list. Cancelled bookings
 // are excluded from covers/bookings/table/hour tallies (matching daySummary);
-// no-shows are counted separately (the flag OR a legacy history entry — the
-// isNoShow rule, inlined here to keep booking-logic free of a customers.js dep).
+// no-shows are counted separately (`isNoShow`, booking-fields.js).
 //   totalCovers, totalBookings, avgParty
 //   activeDays (distinct dates with ≥1 booking) + avgCoversPerDay
 //   hours: [{hour, covers}] sorted busiest-first
@@ -1862,8 +1861,7 @@ export function rangeStats(bookings,fromDate,toDate){
   var totalCovers=0,totalBookings=active.length;
   var byHour={},byTable={},dates={},noShows=0;
   day.forEach(function(b){
-    var isNS=b.noShow===true||(Array.isArray(b.history)&&b.history.some(function(h){return h&&h.action==="no show";}));
-    if(isNS) noShows++;
+    if(isNoShow(b)) noShows++;
   });
   active.forEach(function(b){
     var size=Number(b.size)||2;

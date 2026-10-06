@@ -36,6 +36,7 @@ import {
   offZone, offZoneNote, seatNoteFor,
 } from "./booking-logic.js";
 import { stampGuestSeed, resolveGuestId } from "./customers.js";
+import { isNoShow, NO_SHOW_CLEARED } from "./booking-fields.js";
 import { normalizeCode } from "./vouchers.js";
 import { todayStr } from "./day.js";
 
@@ -183,6 +184,18 @@ export function editWindow(orig,f){
 }
 
 // A refusal: Save's sentence, and the field it is about (only the date has one).
+// v18.3.5: the no-show cancel appended a "No show" line to the notes until this
+// version. A walk-back takes that line off again when it is still the last one;
+// anything else in the notes is the staff's own and stays.
+const NO_SHOW_LINE="No show";
+function withoutNoShowLine(notes){
+  const s=String(notes||"");
+  if(s===NO_SHOW_LINE) return "";
+  return s.endsWith("\n"+NO_SHOW_LINE)?s.slice(0,-(NO_SHOW_LINE.length+1)):s;
+}
+
+export const DELETED_REFUSAL="This booking was deleted on another device, so it can't be saved. Make a new booking if it is still needed.";
+
 function refuse(message,field){return {refusal:field?{message:message,field:field}:{message:message}};}
 
 // ── applyEdit: the edit form's Save, as a plan ───────────────────────────────
@@ -224,6 +237,13 @@ export function applyEdit(input){
   const cleanPhone=enteredPhone(f.phone,input.phonePrefix);
   const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
   const orig=bookings.find(function(b){return b.id===editId;});
+  // v18.3.5: the booking was deleted on another device while this form was
+  // open. The save used to go on: it wrote nothing for the booking (there is
+  // no row to map over), re-placed the rest of its day, showed the saved
+  // toast and closed the form. Refused first, before any other refusal, since
+  // none of them is about a booking that exists; the form stays open, so what
+  // was typed can still be read and booked again.
+  if(!orig) return refuse(DELETED_REFUSAL);
   const w=editWindow(orig,f);
   const size=w.size,planChanged=w.planChanged,needsR=w.needsR,unseat=w.unseat,recheck=w.recheck;
   // v14: detect confirmed→seated transition here. Only auto-shift time if
@@ -270,6 +290,14 @@ export function applyEdit(input){
   // The un-seat's own entry, built here, where both halves of what was
   // actually written are known (`editWindow` restored them).
   const unseatHist=unseat?histEntry("un-seated: time restored "+orig.time+" → "+saveTime+(planChanged?"":", length "+(orig.duration||0)+" → "+saveDur+" min"),getUser()):null;
+  // v18.3.5: a no-show walked back out of cancelled is no longer one. The
+  // flag is cleared and the history gains `NO_SHOW_CLEARED`, which `isNoShow`
+  // reads; the guest's no-show count used to keep a visit that took place.
+  // Decided once, from `orig`, like the rest of the edit's intent, and only
+  // by the save that LEAVES cancelled: an unrelated edit of a booking walked
+  // back before this version changes nothing it was not asked to.
+  const clearNoShow=orig.status==="cancelled"&&f.status!=="cancelled"&&isNoShow(orig);
+  const saveNotes=clearNoShow?withoutNoShowLine(f.notes):f.notes;
   const clearM=!!f._clearManual;
   const wasSeatedLocked=orig&&isLocked(orig)&&!mt.length;
   // ── v17.15.5: a FINISHED booking's tables are a historical record ────
@@ -374,7 +402,8 @@ export function applyEdit(input){
         let h=(b.history||[]).concat([editHist]);
         if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
         if(unseatHist) h=h.concat([unseatHist]);
-        return Object.assign({},b,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+        if(clearNoShow) h=h.concat([histEntry(NO_SHOW_CLEARED,getUser())]);
+        return Object.assign({},b,clearNoShow?{noShow:false}:null,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:saveNotes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
       }
       if(swapAffected) return releaseSwapped(b,swapAffected);
       return b;

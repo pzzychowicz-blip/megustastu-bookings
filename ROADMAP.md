@@ -67,7 +67,9 @@ evidence for each.
   subscribes to every booking ever made, each with an uncapped `history`, and a resync
   re-reads the lot. Nothing purges old bookings. First, read Firebase console →
   Realtime Database → Usage (storage, downloads a month) and set a threshold.
-  Archiving needs design, because customer history derives from all bookings.
+  Archiving needs design, because customer history derives from all bookings. One
+  figure from v18.3.5: `sanitize` alone costs the tablet 3.2 ms per 1,000 bookings on
+  every snapshot, so it passes 8 ms at about 2,900 (PROD held about 1,600 on 2026-10-06).
 
 - **Before WhatsApp goes live (#4, #8):**
   1. Node tests for `api/wa-send.js`, `wa-recheck.js`, `wa-config.js`,
@@ -101,54 +103,40 @@ evidence for each.
   lines (5,727 before it). **Next: recurring generation**, then backup/export and
   drag-drop.
 
-- **Two gaps in how "Repeat weekly" writes its rule (v18.3.3's `/code-review`).** Both
-  predate v18.3.3. (1) The form's toggle is not gated on `recurringManage`. With roles
-  enforced, a staff account without it saves the booking stamped with the rule's id,
-  while `database.rules.json` refuses the rule, and the banner blames out-of-date data.
-  Every other rule change asks `refused("recurringManage")`. Decide whether to hide the
-  toggle or refuse the save. (2) The rule is dispatched beside its first booking and is
-  not tied to that write. If the booking write is parked and then discarded from the
-  banner, the rule is left, and it books the weeks after its start. Writing the rule only
-  once the booking lands needs the retry queue to report that, so it is a write-path change.
+- **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
+  (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then
+  discarded from the banner, the rule is left, and it books the weeks after its start.
+  Writing the rule only once the booking lands needs the retry queue to report that, so
+  it is a write-path change.
 
-- **Three behaviours v18.3.4 pinned and left alone** (its scope was no behaviour change).
-  Each is a scenario in `tests/save-path.test.js`, so a fix moves that one snapshot, on
-  purpose, and says so. (1) **A no-show walked back keeps its flag.** Editing a cancelled
-  no-show back to confirmed leaves `noShow: true`, so the guest's no-show count
-  (`customers.js`'s `isNoShow`) includes a visit that happened. Found by reading, not yet
-  seen on DEV. Decide whether the walk-back clears it, and the "No show" line the
-  cancel appended to the notes with it. (2) **The generator's occurrence for today,
-  after the 15:00 cutoff, is written unplaced.** `bookingsAfterAction` takes the
-  optimiser-off branch, which with no `changedId` copies every row as it is, so the
-  occurrence lands with `tables: []` and `_conflict: false`: in the Unplaced row, with
-  nothing flagging it. It happens when the generator first meets today's week late in
-  the day (a rule resumed, or standing bookings switched on, after the cutoff). (3) **An
-  edit saved after another device deleted the booking** shows the saved toast, writes
-  nothing for it, and re-places the rest of its day. Decide whether Save refuses it.
+- **Three findings from v18.3.5's `/code-review`, each waiting on a decision.**
+  (1) **A no-show walked back before v18.3.5 still counts.** Its `noShow` flag is still
+  true and it has no "no-show cleared" entry, so `isNoShow` counts a visit that
+  happened. Asking `status === "cancelled"` in `isNoShow` as well would cover them with
+  no migration; decide whether a no-show must still be cancelled to count.
+  (2) **A refusal raised from inside a modal is drawn under it.** The permission toast
+  is at z-index 60 and every `Overlay` at 200, so on a phone a refused tap in the
+  WhatsApp inbox (Accept, Open booking, Apply changes, since v18.3.5) or in Settings
+  looks like nothing happened. Read from the code; DEV does not enforce roles.
+  (3) **An edit parked by the stale gate and replayed after another device deleted the
+  booking** still writes nothing for it, with the form already closed. v18.3.5 refuses
+  only a delete the device had seen before Save. Telling the user needs the retry queue
+  to report what a replay did, like the "Repeat weekly" entry above.
 
-- **Two findings from v18.3.4's `/code-review`, each waiting on a decision.**
-  (1) **WhatsApp opens the booking form by its own doors.** `useWhatsApp.js`'s
-  Accept and its two edit doors call `openForm`/`setEditId` directly, skipping the
-  rest of App's `openNew`/`openEdit`:
-  - They don't ask `refused("bookingCreate"/"bookingEdit")`, and
-    `database.rules.json` enforces neither, so a staff account without
-    `bookingEdit` can edit a booking from the inbox.
-  - They don't clear `pendingWaitlistRef`. Book a waitlist entry, close the form
-    unsaved, then Accept a draft and Save: the entry leaves the waitlist although
-    nobody booked it.
-
-  The fix is to hand App's doors to the hook. Whether Accept needs `bookingCreate`
-  is a permission call, since the inbox takes no capability.
-
-  (2) **`sanitize` is 4–6.6× slower as a loop over the table**, on every booking of
-  every `/bookings` snapshot. Measured in Node on a Mac with 3,000 bookings: 0.35 ms
-  before, 1.4–2.3 ms after. One call site per row measured 0.48 ms, but it writes
-  the key order out again, which v18.3.4 removed (and the CSP rules out compiling
-  it). Measure it on the tablet at #3's real size before choosing.
+- **Two iPhone faults from the home-screen app that v18.3.5 could not reproduce**
+  (Patryk's screenshots, 2026-10-06; iPhone 12 mini, iOS 27). (1) After closing the
+  booking form the timeline is cut off about half-way down, blank below, and the app's
+  header is gone from the top (light and dark, two days apart). (2) The discard confirm
+  opens with the booking form's Save row drawn over its Back / Discard. In 2,000 beacon
+  samples neither appeared: the page returned to the top after every keyboard close, and
+  the confirm settled on top. Both may have followed the keyboard inset v18.3.5 fixed, so
+  first see whether they come back. If one does, catch it with the beacon (REFACTOR_LOG
+  v18.3.5 phase 7) before changing code. A defensive `scrollTo(0, 0)` on close was not
+  added, because nothing measured says the page is left scrolled; that is still open.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
-  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the
+  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1, with v18.3.5's formula), `color-scheme` (N4), the
   per-scheme `theme-color` metas plus the manifest colours and its `?v=` bump (N5),
   `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
   `prefers-contrast: more` block (A10), the popover keyframe pair for

@@ -154,7 +154,7 @@ describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
     expect(App).not.toMatch(/phone:[^,}]*generalSettings\.phonePrefix/);
     // v18.3.4: the edit form opens the field table's draft, which is handed the
     // booking and nothing else, so it cannot seed a prefix.
-    expect(App).toMatch(/openForm\(draftFromBooking\(b\)\)/);
+    expect(App).toMatch(/openForm\(changes\?Object\.assign\(draftFromBooking\(b\),changes\):draftFromBooking\(b\)\)/);
     expect(draftFromBooking({ name: "Ana" }).phone).toBe("");
     expect(draftFromBooking({ name: "Ana", phone: "+34 600 111 222" }).phone).toBe("+34 600 111 222");
     expect(App).toMatch(/phone:sourceBooking\.phone\|\|""/);

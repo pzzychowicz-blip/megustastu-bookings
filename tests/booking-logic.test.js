@@ -1974,7 +1974,7 @@ describe("a booking field reaches STORAGE, not just a read (v18.0.0)", () => {
 
   it("openEdit — the form draft carries voucherCode (v18.3.4: the table's draft)", () => {
     const code = stripComments(APP).join("\n");
-    expect(code).toMatch(/function openEdit\(b\)\{[^\n]*?openForm\(draftFromBooking\(b\)\)/);
+    expect(code).toMatch(/function openEdit\(b,changes\)\{[^\n]*?draftFromBooking\(b\)\)/);
     const d = draftFromBooking({ name: "Ana", size: 2, status: "confirmed", deposit: 20, voucherCode: "ABCD1234" });
     expect(d.deposit).toBe("20");
     expect(d.voucherCode).toBe("ABCD1234");

@@ -401,7 +401,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.4",
+  version:"18.3.5",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1330,15 +1330,15 @@ function BookingApp({uid}){
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
   // draft→form seam: handleAcceptDraft pre-fills the form + flags draftSourceRef;
   // doSave calls wa.completeDraftAccept(newId) on success to flip the conversation.
-  // NB (17.5.0 sync): the hook gets `openForm`, NOT raw `setForm` — all three of
-  // its form-opening handlers (accept draft / open linked / apply modify) are
-  // OPENERS, so they must seed formBaseline like openNew/openEdit do. Passing
-  // setForm would leave the baseline stale and make an untouched WA-prefilled
-  // form read as dirty, popping "Discard unsaved changes?" on every Cancel/Esc.
+  // v18.3.5: the hook gets App's two DOORS (`openNewWith`, `openEdit`), never
+  // `openForm` or `setForm` — all three of its form-opening handlers (accept
+  // draft / open linked / apply modify) are openers, so they ask the capability
+  // the same action asks everywhere else, clear a pending waitlist entry and
+  // seed formBaseline, as every other open does.
   const wa = useWhatsApp({
     enabled: whatsappOn,
     bookings, setWriteWarning, waSettings,
-    openForm, setEditId, setError, setSwapAffected, setViewDate, setShowForm, setConfirmCancel,
+    openNew: openNewWith, openEdit, setViewDate, setConfirmCancel,
     setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
   });
   // Return-to-inbox: when an overlay opened from the WA module (the booking form
@@ -2281,13 +2281,23 @@ function BookingApp({uid}){
       const byDate={};
       toCreate.forEach(function(oc){ (byDate[oc.date]=byDate[oc.date]||[]).push(oc); });
       Object.keys(byDate).forEach(function(ds){
+        const added=[];
         byDate[ds].forEach(function(oc){
           const rule=oc.rule;
           const nb=occurrenceBooking(rule,ds);
           if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
           next=next.concat([nb]);
+          added.push(nb.id);
         });
-        next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
+        // v18.3.5: where the optimiser owns the day, one pass places every
+        // new occurrence. Where it does not (today, after the cutoff) a pass
+        // with no `changedId` copies every row as it is, so an occurrence the
+        // generator first met late in the day was written with no table and
+        // no `_conflict`: in the Unplaced row with nothing flagging it. There
+        // each one is placed by itself, as a new booking saved then is: the
+        // best free table, nobody else moved, `_conflict` when there is none.
+        if(optimizerActiveFor(ds,autoOptimizer)) next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
+        else added.forEach(function(id){next=bookingsAfterAction(next,ds,tableBlocks,id,true,autoOptimizer);});
       });
       return next;
     },true);
@@ -2484,11 +2494,20 @@ function BookingApp({uid}){
   // an IDENTITY exactly for the dates `<input type=date>` can render. A merely
   // steppable one like "2026-8-3" normalises to a DIFFERENT day, so comparing
   // rather than assigning is what stops the form inventing a date nobody chose.
-  function openNew(){if(refused("bookingCreate"))return;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);}
+  // v18.3.5: both doors take what a caller wants the form to open WITH (`draft`
+  // for a new booking, through `openNewWith`; `changes` on top of the booking's
+  // own draft for an edit)
+  // and answer whether they opened. The WhatsApp inbox's Accept and its two edit
+  // doors come through here now: they called `openForm`/`setEditId` themselves,
+  // so they asked no capability and left `pendingWaitlistRef` set.
+  // `openNew` itself takes nothing: it is an `onClick`, and a parameter there
+  // would be handed the click event as the draft.
+  function openNewWith(draft){if(refused("bookingCreate"))return false;pendingWaitlistRef.current=null;const seedDate=stepDate(viewDate,0)===viewDate?viewDate:todayStr();openForm(draft||Object.assign({},EMPTY_FORM,{date:seedDate,phone:"",size:generalSettings.defaultBookingSize}));setEditId(null);setError("");setSwapAffected(null);setShowForm(true);return true;}
+  function openNew(){openNewWith(null);}
   // v18.3.4: the draft is the field table's (`draftFromBooking`), so a field the
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
-  function openEdit(b){if(refused("bookingEdit"))return;pendingWaitlistRef.current=null;openForm(draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);}
+  function openEdit(b,changes){if(refused("bookingEdit"))return false;pendingWaitlistRef.current=null;openForm(changes?Object.assign(draftFromBooking(b),changes):draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);return true;}
   // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
   // booking. Date starts blank so staff must pick it; time carries over. The
   // `returnOf` field links back to the source booking so we can write history
@@ -2699,7 +2718,14 @@ function BookingApp({uid}){
   // v18.3.4: the new booking's decisions are `buildBooking`
   // (lib/booking-save.js), as the edit's are `applyEdit`; this is the half
   // with effects, in the order they have always run.
-  function doSaveNew(f){
+  // v18.3.5 (/code-review): what shows the form's "Repeat weekly" toggle, asked
+  // again by the save. Hiding the toggle did not stop a rule: a draft with it
+  // already on (the capability removed, or standing bookings switched off, on
+  // another device while the form was open) still stamped the booking and
+  // wrote a rule the rules file refuses. Such a save books the one visit.
+  function standingOn(){return recurring.enabled!==false&&can("recurringManage");}
+  function doSaveNew(f0){
+    const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
     if(plan.refusal){setError(plan.refusal.message);return;}
     // v18.3.3: the standing rule, now that nothing above can refuse the save.
@@ -3780,7 +3806,7 @@ function BookingApp({uid}){
     // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
     // (status/noShow/notes/tables — the whole object). Single pending slot; a
     // newer cancel replaces it.
-    function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow){extra.noShow=true;extra.notes=(x.notes?x.notes+"\n":"")+"No show";}return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
+    function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.noShow=true;return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo (the doSave pattern) so the delta computed for
     // undo and the dispatched write share ONE optimizer pass.
     const cancelMemo=memoByPrev(cancelTransform);
@@ -5055,7 +5081,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={recurring.enabled!==false} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

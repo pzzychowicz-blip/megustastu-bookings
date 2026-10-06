@@ -30955,3 +30955,157 @@ are the flows whose code moved.
 | 6 | Android tablet | Book Again from a completed booking: the new one reads "created via Book Again (from …)", the source "Book Again → new booking on …" |
 | 7 | Android tablet | A walk-in during service: "Walk-in N", seated on the tables picked |
 | `/code-review` 1 | Android tablet, if the WhatsApp module is on | Open a booking that has a deposit from its conversation's Open booking: the form shows the deposit, and Save without changes keeps it |
+
+---
+
+## v18.3.5 — the third bug sweep
+
+**Date:** 2026-10-06 · **Branch:** `fix/v18.3.5-patch-bugs` ·
+**Behavioural change:** yes, each phase below says what moves.
+
+Patryk picked six entries off the ROADMAP (the three behaviours v18.3.4 pinned, the
+WhatsApp form doors, the "Repeat weekly" toggle gate and the `sanitize` measurement) and
+reported three iPhone faults from the home-screen app with screenshots. Each decision
+with an alternative was his, asked before the work.
+
+### Phases
+
+1. **A no-show walked back is no longer a no-show (ROADMAP, pinned by v18.3.4).** Editing
+   a cancelled no-show back to confirmed (or pending, seated, completed) left
+   `noShow: true`, and the history's "no show" entry counts by itself, so the guest's
+   no-show count kept a visit that took place. Found by reading in v18.3.4; the pinned
+   scenario in `tests/save-path.test.js` is the reproduction. Now the save that LEAVES
+   cancelled (`applyEdit`'s `clearNoShow`) writes `noShow: false` and adds a history
+   entry, `"no-show cleared"`, and `isNoShow` reads the history from its end: the latest
+   of "no show" and "no-show cleared" decides (Patryk's pick over "only while cancelled"
+   and over deleting the entry, so the record stays whole and a second no-show counts
+   again). **`isNoShow` had two copies**, `customers.js`'s and one inlined in
+   `rangeStats` (the More popover's no-show tile); both now ask the one in
+   `booking-fields.js`, which `customers.js` re-exports. **The no-show cancel no longer
+   appends "No show" to the notes** (Patryk: stop adding entries to notes; it was the
+   only place the app wrote into them), and the walk-back removes that line from an
+   older booking when it is still the last line. Not changed: a booking walked back
+   BEFORE this version keeps its flag until it is cancelled and walked back again,
+   because an unrelated edit must not change a field it was not asked to
+   (`tests/booking-fields.test.js`'s round trip holds exactly that booking). The pinned
+   snapshot moved on purpose: history gains the entry, `noShow` true → false, and the
+   notes lose the line.
+2. **An edit of a booking deleted on another device is refused (ROADMAP, pinned by
+   v18.3.4).** With the edit form open on one device and the booking deleted on another,
+   Save wrote nothing for the booking (there was no row left to change), re-placed the
+   rest of its day, showed the saved toast and closed the form. `applyEdit` now refuses
+   it first, before every other refusal: "This booking was deleted on another device, so
+   it can't be saved. Make a new booking if it is still needed." The form stays open
+   (Patryk's pick over closing it and over re-creating the booking), so what was typed
+   can be read. Not seen on DEV; the pinned scenario is the reproduction, and its
+   snapshot moved on purpose from a dispatched write to the refusal.
+3. **A standing booking generated for today after the cutoff gets a table (ROADMAP,
+   pinned by v18.3.4).** The generator ran one `bookingsAfterAction` pass per date with
+   no `changedId`. Where the optimiser owns the day that pass places everything; today
+   after the 15:00 cutoff it copies every row as it is, so an occurrence first met late
+   in the day (a rule resumed, or standing bookings switched on, after the cutoff) was
+   written with `tables: []` and `_conflict: false`: in the Unplaced row with nothing
+   flagging it. Found by reading in v18.3.4; the pinned scenario is the reproduction.
+   On such a day each new occurrence is now placed by itself, as a new booking saved
+   then is (`changedId` + `forceReassign`): the best free table, nobody else moved, and
+   `_conflict: true` when there is none. Days the optimiser owns keep their one pass.
+   The pinned snapshot moved on purpose (`tables: []` → `["1A"]`), and a new scenario
+   holds the full evening: unplaced, flagged, the rest of the day untouched.
+4. **The WhatsApp inbox opens the booking form by App's doors (ROADMAP, v18.3.4's
+   `/code-review`).** `useWhatsApp`'s Accept and its two edit doors (Open booking, Apply
+   changes) called `openForm` / `setEditId` themselves. So they asked no capability
+   (`database.rules.json` enforces neither `bookingCreate` nor `bookingEdit`, so a staff
+   account without `bookingEdit` could edit a booking from the inbox), and they left
+   `pendingWaitlistRef` set: book a waitlist entry, close the form unsaved, Accept a
+   draft and Save, and the entry left the waitlist although nobody booked it. The hook
+   now gets `openNewWith(draft)` and `openEdit(b, changes)`, which answer whether they
+   opened, and each handler stops on a refusal. Accept asks `bookingCreate` and the edit
+   doors `bookingEdit`, as the same actions do everywhere else (Patryk's pick); reading
+   and replying in the inbox still take no capability. **`openNew` itself takes no
+   parameter**: it is an `onClick` in two places and would have been handed the click
+   event as the draft, which is why the draft-taking door has its own name.
+   `tests/booking-fields.test.js` now holds that only `App.jsx` calls `openForm`, that
+   the edit form has one door, and that the hook's three calls each stop on a refusal.
+   **Verified on DEV:** + New opens the usual empty form; Accept on a draft conversation
+   opens the form prefilled (name, number, date, time, zone, notes), and Escape closes it
+   with no discard confirm and returns to the inbox. **Not exercised live:** Open booking
+   and Apply changes (the same `openEdit` the List card uses), and a refusal, which
+   needs roles enforced on DEV.
+5. **"Repeat weekly" is hidden from an account that cannot manage standing bookings
+   (ROADMAP, v18.3.3's `/code-review`).** The form's toggle was not gated on
+   `recurringManage`. With roles enforced, a staff account without it saved the booking
+   stamped with the rule's id while `database.rules.json` refused the rule, and the
+   banner blamed out-of-date data. App's `standingEnabled` is now
+   `recurring.enabled !== false && can("recurringManage")`, so the toggle is not shown
+   (Patryk's pick over showing it and refusing the save, and over showing it disabled).
+   Found by reading; `tests/recurring.test.js` holds the prop and that the toggle is the
+   form's only writer of `repeatWeekly`. Not exercised with roles enforced on DEV.
+6. **`sanitize` is an object literal again, held to the field table (ROADMAP, v18.3.4's
+   `/code-review`).** v18.3.4 made it a loop over `BOOKING_FIELDS`, measured 4–6.6×
+   slower in Node, and left the choice to a tablet measurement. **Measured on the
+   restaurant's tablet** (HONOR NDL-L09, Chrome 154, a DEV tab over adb, 25 timed passes
+   after 8 warm-up passes, synthetic rows shaped like stored bookings): the loop takes
+   7.4–7.8 ms per 1,000 bookings (23.2 ms at 3,000, 96–98 ms at 10,000), on every
+   `/bookings` snapshot. PROD holds about 1,600 (Patryk), so about 12 ms, over the 8 ms
+   (half a frame) he set as the line. Two rewrites that keep the loop were measured in
+   Node and rejected: a plain `for` over pre-extracted arrays (2.40 ms against 2.44 for
+   3,000, no gain) and a pre-shaped template object (8.2 ms, slower). `sanitize` is now
+   a literal with one call site per row, each calling that ROW's `read`, so what a field
+   reads as is still stated once; only the key order has a second copy. Node: 0.74 ms
+   for 3,000. **The tablet, same harness: 3.2 ms per 1,000, 8.2 ms at 3,000, 30.4 ms at
+   10,000**, so about 5 ms at PROD's size, and the 8 ms line moves from about 1,100
+   bookings to about 2,900. The loop stays as `sanitizeByTable`, the definition, and
+   `tests/booking-fields.test.js` holds the literal to it: the same keys in the same
+   order and the same values over 1,100 rows (every field missing, and holding each of
+   18 wrong-typed values, on a full row and on an empty one), the same refusals, and one
+   `R.<key>` call per row in the source. A new row fails there until it has its line.
+   Generating the literal was not possible: the CSP forbids `new Function`.
+7. **The form's footer sits on the iOS keyboard whichever way iOS shows the field
+   (Patryk's screenshots, the home-screen app).** In three screenshots the booking form's
+   Save row floated 201 and 252px above the keyboard, the distance iOS had moved the
+   page. **Measured** on his iPhone 12 mini (iOS 27) with a temporary DEV-only beacon
+   (viewport numbers and each dialog's rect to a LAN log on every focus, on timers after
+   it and on every viewport event): 1,652 samples in Safari and the home-screen app.
+   iOS shows a low field in two ways. (a) It scrolls the window and `innerHeight`
+   shrinks by the scroll (v18.3.1's case; here scrollY 194, `innerHeight` 762 → 568).
+   (b) It pans the visual viewport alone: scrollY 0, `innerHeight` full, `offsetTop` the
+   pan (seen settled in Safari: 664, offsetTop 26). And between states the two update
+   apart (72 samples). v18.3.1's `innerHeight − height` is right for (a) only: in (b),
+   or when the last viewport event comes before `innerHeight` moves, it over-pads by
+   the pan. **The floating state itself was not caught in the samples**; the conditions
+   that produce it were. `keyboardInsetOf` is now `clientHeight − height − pageTop` off
+   the root element, which did not move in any sample (762 in the app, 664 in Safari),
+   and reads `innerHeight` nowhere: the sheet's bottom is at `clientHeight − scrollY`
+   and the visible bottom at `pageTop − scrollY + height`, so the scroll cancels. It
+   equals the old value wherever that was right (all 667 settled sheets of the first
+   runs). **After, on the phone (367 samples, the home-screen app):** 69 of 70 settled
+   sheets end on the visible bottom, 24 of them with the keyboard up, in the no-scroll
+   and the scrolled states; the one miss was taken while the app was in the background
+   and corrected itself 170ms after it came back. Way (b) did not occur in that run, so
+   it is covered by the Safari sample's numbers in the test, not by a live sighting.
+   Patryk saw nothing covered. **Android, measured on the tablet** (a DEV tab, a CDP
+   touch on the name field): `innerHeight`, `clientHeight` and the visual viewport all
+   went 507 → 231 together, the inset read 0 and the footer ended at 219.
+   **Also: the hook measures once when it subscribes.** Its state is seeded by a read
+   during render, and a viewport event before the effect was lost: once in the first
+   run a discard confirm opened as the keyboard closed and kept a 405px inset with no
+   keyboard, its buttons at 288–357 of 762. `tests/keyboard-inset.test.js` carries the
+   device's numbers for both ways and fails if the hook reads `innerHeight` again.
+   **Not reproduced, and not changed:** the timeline cut off half-way with the header
+   gone after closing a form, and the form's Save row drawn over the discard confirm's
+   buttons (ROADMAP).
+
+**`/code-review` (high), eight findings.** Fixed, three: (a) hiding the "Repeat weekly"
+toggle did not stop a rule for a draft that already had it on (the capability removed,
+or standing bookings switched off, on another device while the form was open), so
+`doSaveNew` now asks the toggle's own question (`standingOn()`) and books the one visit;
+(b) a dead `!!orig` guard in `applyEdit`'s `clearNoShow`, after phase 2's early refusal;
+(c) a fixture comment in `tests/booking-fields.test.js` that pointed at a ROADMAP entry
+phase 1 deleted, and the new ROADMAP entry's claim that a `scrollTo(0, 0)` was
+"declined", which nobody was asked. Disproved, one: "one full-list pass per generated
+occurrence" off the optimiser. `optimizerActiveFor` is false for TODAY only, so the
+branch runs once per rule due today, and twelve passes over 1,600 bookings measured
+4.19 ms on the Mac (a throwaway vitest file, not kept). To ROADMAP, three, each a
+decision or a write-path change: no-shows walked back before this version, a refusal
+toast drawn under the modal that raised it, and an edit parked then replayed after a
+remote delete. The eighth was the ROADMAP wording, counted under (c).

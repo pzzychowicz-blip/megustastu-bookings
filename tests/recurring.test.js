@@ -161,3 +161,29 @@ describe("the wiring", () => {
     expect(HOOK).toMatch(/startDate: r\.startDate/);
   });
 });
+
+// v18.3.5: the form's "Repeat weekly" toggle was shown to an account without
+// `recurringManage`. With roles enforced the booking saved stamped with the
+// rule's id while `database.rules.json` refused the rule, and the banner blamed
+// out-of-date data. The toggle is hidden instead (Patryk), at the one prop the
+// form reads.
+describe("the form's Repeat weekly toggle", () => {
+  it("is offered only where standing bookings are on AND the account may manage them", () => {
+    const props = APP.match(/standingEnabled=\{([^}]*)\}/g);
+    expect(props).toEqual(["standingEnabled={standingOn()}"]);
+    expect(APP).toContain('function standingOn(){return recurring.enabled!==false&&can("recurringManage");}');
+  });
+  // /code-review: hiding the toggle did not stop a rule for a draft that already
+  // had it on (the capability removed while the form was open). The save asks
+  // the same question, and hands `buildBooking` a draft without it.
+  it("is asked again by the save, which drops repeatWeekly where the toggle would not show", () => {
+    expect(APP).toContain("const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;");
+    expect(APP).toMatch(/function doSaveNew\(f0\)\{\s*const f=f0\.repeatWeekly[^\n]*\n\s*const plan=buildBooking\(\{list:bookings,draft:f,/);
+  });
+  it("is the only way the form sets repeatWeekly, behind that prop", () => {
+    const FORM = stripComments(
+      readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
+    expect(FORM.match(/repeatWeekly:/g)).toEqual(["repeatWeekly:"]);
+    expect(FORM).toMatch(/!editId&&standingEnabled\?/);
+  });
+});

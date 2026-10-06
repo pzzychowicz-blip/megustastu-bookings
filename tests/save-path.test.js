@@ -358,6 +358,7 @@ function appEnv(opts) {
     setVoucherBack: rec("setVoucherBack"),
     setSeatClash: rec("setSeatClash"),
     refused: () => false,
+    standingOn: () => true,
     openForm: rec("openForm"),
     setEditId: rec("setEditId"),
     setSwapAffected: rec("setSwapAffected"),
@@ -1073,35 +1074,23 @@ describe("Save — an edit on a day the optimiser owns", () => {
       }
     `);
   });
-  it("the booking was deleted elsewhere while the form was open", () => {
+  // v18.3.5: this pinned a "saved" toast over a write that re-placed b2 only.
+  it("the booking was deleted elsewhere while the form was open: refused, the form stays open", () => {
     const b1 = bk("b1", { tables: ["1A"] });
     const b2 = bk("b2", { tables: ["3"] });
     expect(runSave({ bookings: [b2], editId: "b1", form: draftOf(b1, { notes: "late edit" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
-          "setShowForm(false)",
-          "setViewDate("2026-10-14")",
+          "setError("This booking was deleted on another device, so it can't be saved. Make a new booking if it is still needed.")",
         ],
-        "guard": "dispatched",
-        "writes": [
-          {
-            "replay": "same prev → same object; fresh prev → equal",
-            "rows": {
-              "b2": {
-                "tables": "["3"] → ["1A"]",
-              },
-            },
-          },
-        ],
+        "guard": "ready",
       }
     `);
   });
-  it("a no-show walked back to confirmed keeps its no-show flag", () => {
-    const b1 = bk("b1", { tables: ["1A"], status: "cancelled", noShow: true });
+  // v18.3.5: this pinned "keeps its no-show flag" until the walk-back cleared it.
+  it("a no-show walked back to confirmed is no longer a no-show", () => {
+    const b1 = bk("b1", { tables: ["1A"], status: "cancelled", noShow: true, notes: "allergy: nuts\nNo show" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1118,7 +1107,9 @@ describe("Save — an edit on a day the optimiser owns", () => {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
               "b1": {
-                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"}]",
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"},{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"no-show cleared"}]",
+                "noShow": "true → false",
+                "notes": ""allergy: nuts\\nNo show" → "allergy: nuts"",
                 "status": ""cancelled" → "confirmed"",
               },
             },
@@ -2227,6 +2218,17 @@ describe("Save — a new booking", () => {
       }
     `);
   });
+  // v18.3.5 (/code-review): the toggle is hidden where `standingOn()` is false,
+  // and a draft that already had it on (the capability removed while the form
+  // was open) books the one visit: no rule, no stamp on the booking.
+  it("Repeat weekly on a draft, where the toggle would not show: the one visit, no rule", () => {
+    const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), env: { standingOn: () => false } });
+    expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
+    expect(out.calls).toContain('saveBookings("<fn>")');
+    const row = Object.values(out.writes[0].rows)[0];
+    expect(row).toContain('"recurringId":null');
+    expect(row).toContain('"recurringDate":null');
+  });
   it("a phone-less guest picked from the name list: the seed is stamped too", () => {
     const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["3"], status: "completed" });
     expect(runSave({ bookings: [b2], form: newDraft({ name: "Lola", guestId: "gb2", guestSeed: "b2" }) })).toMatchInlineSnapshot(`
@@ -2590,7 +2592,9 @@ describe("the weekly generator", () => {
       }
     `);
   });
-  it("skips a week that already has its booking, by id or by stamp", () => {
+  // v18.3.5: today's occurrence, made at 19:30 with the optimiser off, was pinned
+  // with `tables: []` until the generator placed it.
+  it("skips a week that already has its booking, by id or by stamp, and places today's after the cutoff", () => {
     const bookings = [
       bk("rwk_" + T, { recurringId: "wk", recurringDate: T, tables: ["1A"] }),
       bk("form1", { date: "2026-10-21", recurringId: "wk", recurringDate: "2026-10-21", tables: ["1A"] }),
@@ -2604,7 +2608,7 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2627,6 +2631,14 @@ describe("the weekly generator", () => {
         ],
       }
     `);
+  });
+  it("today after the cutoff with every table taken: written unplaced, and flagged", () => {
+    const h = generatorEnv({ bookings: fullDay(TODAY, "20:00", true), horizonWeeks: 1, rules: [weekly({ startDate: PAST })] });
+    compile(APP, APP_GENERATOR, h.env).generate();
+    const made = h.writes[0].next.find((b) => b.id === "rwk_" + TODAY);
+    expect({ tables: made.tables, _conflict: made._conflict }).toEqual({ tables: [], _conflict: true });
+    // Nobody else on the day was moved for it.
+    expect(h.writes[0].next.filter((b) => b.date === TODAY && b.id !== made.id)).toEqual(fullDay(TODAY, "20:00", true));
   });
   it("writes nothing while disabled, resyncing or before the first load", () => {
     const rules = [weekly()];

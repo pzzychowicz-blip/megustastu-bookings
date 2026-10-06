@@ -1108,7 +1108,7 @@ export function BookingFormModal({
           carriedFrom={voucherCarriedFrom}
           suggestions={voucherSuggestions}
           currency={currency} />
-      ):null}</Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). */}{!editId&&standingEnabled?(
+      ):null}</Section>{/* v16.3.0 correction: "Repeat weekly" only shows when standing bookings are ON in Settings (new bookings only). v18.3.5: and only for an account that may manage them (`recurringManage`, in App's `standingEnabled`) — without it the booking saved stamped with a rule the rules file then refused. */}{!editId&&standingEnabled?(
         <Section>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
             <div style={{textAlign:"left"}}>

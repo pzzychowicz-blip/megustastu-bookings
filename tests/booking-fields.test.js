@@ -27,7 +27,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { BOOKING_FIELDS, sanitize, draftFromBooking } from "../src/lib/booking-fields.js";
+import { BOOKING_FIELDS, sanitize, sanitizeByTable, draftFromBooking } from "../src/lib/booking-fields.js";
 import { applyEdit, buildBooking, walkinBooking, occurrenceBooking } from "../src/lib/booking-save.js";
 import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
@@ -71,7 +71,8 @@ function create(draft) {
 // comes back default after a save was wiped rather than kept. A hand-placed
 // pending party (`_manual`, `_locked`: what "Save pending" with tables picked
 // by hand writes), so no optimiser pass moves it; `noShow` set on a booking
-// that is not cancelled is what a form walk-back from a no-show leaves (ROADMAP).
+// that is not cancelled is what a form walk-back from a no-show left until
+// v18.3.5, which clears it on the save that leaves cancelled (this one does not).
 const RICH_VALUES = {
   id: "rich", name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:30", scheduledTime: "20:30",
   size: 4, duration: 105, originalDuration: 105, preference: "outdoor", notes: "window seat",
@@ -87,6 +88,41 @@ const RICH = sanitize(RICH_VALUES, "rich");
 const DERIVED = {
   _conflict: "the save's optimiser pass sets it, and a placed booking holds false",
 };
+
+// v18.3.5: `sanitize` is an object literal with one call per row (the loop over
+// the table cost 12 ms a snapshot on the tablet), so it is a second copy of the
+// key order. It is held to `sanitizeByTable`, the loop, here.
+describe("sanitize, the literal, is the table's loop", () => {
+  const GARBAGE = [undefined, null, "", 0, 1, -5, "x", "20:30", "25:99", true, false, [], ["7"], {}, { a: 1 }, NaN, "12", 3.5];
+  const rows = [{}, RICH_VALUES, { id: "only" }];
+  // Every field, one at a time, missing and holding each wrong-typed value, on
+  // top of the rich row and on top of an empty one.
+  KEYS.forEach((k) => GARBAGE.forEach((g) => {
+    rows.push(Object.assign({}, RICH_VALUES, { [k]: g }));
+    rows.push({ [k]: g });
+  }));
+  KEYS.forEach((k) => { const r = Object.assign({}, RICH_VALUES); delete r[k]; rows.push(r); });
+  it("returns the same keys in the same order, and the same values, for " + rows.length + " rows", () => {
+    const differ = rows.filter((r) => {
+      const a = sanitize(r, "k"), b = sanitizeByTable(r, "k");
+      return Object.keys(a).join() !== KEYS.join() || JSON.stringify(a) !== JSON.stringify(b);
+    });
+    expect(differ).toEqual([]);
+  });
+  it("refuses what the loop refuses", () => {
+    [null, undefined, 0, "", "row", 7, true].forEach((v) => expect(sanitize(v, "k")).toBe(sanitizeByTable(v, "k")));
+  });
+  it("takes the row's key when the row states no id", () => {
+    expect(sanitize({}, "k1").id).toBe("k1");
+    expect(sanitize({ id: "own" }, "k1").id).toBe("own");
+  });
+  it("calls each row's own read once, and nothing else", () => {
+    const src = stripComments(readFileSync(fileURLToPath(new URL("../src/lib/booking-fields.js", import.meta.url)), "utf8")).join("\n");
+    const body = src.slice(src.indexOf("export function sanitize(b,key){"));
+    const lit = body.slice(0, body.indexOf("\n}\n"));
+    expect([...lit.matchAll(/^\s+(\w+): .*?R\.(\w+)\(b/gm)].map((m) => m[1] + "=" + m[2])).toEqual(KEYS.map((k) => k + "=" + k));
+  });
+});
 
 describe("the fixture holds every field", () => {
   it("one value per row, already what a read returns", () => {
@@ -160,16 +196,26 @@ const EDIT_OPENERS = sourceFiles(SRC).flatMap((file) => {
 });
 
 describe("every edit form opens the table's draft", () => {
-  it("finds the three places that open one", () => {
-    // Counted, so a new door fails here until it is looked at.
+  it("finds the one place that opens one", () => {
+    // Counted, so a new door fails here until it is looked at. v18.3.5: it was
+    // three; the WhatsApp inbox's two now call `openEdit`.
     expect(EDIT_OPENERS.map((o) => o.site)).toEqual([
       "App.jsx b.id",                        // openEdit
-      "hooks/useWhatsApp.js booking.id",     // handleOpenLinkedBooking
-      "hooks/useWhatsApp.js booking.id",     // handleApplyModify
     ]);
   });
-  it("each opens draftFromBooking", () => {
-    expect(EDIT_OPENERS.filter((o) => !/^(Object\.assign\()?draftFromBooking\(/.test(o.opens)).map((o) => o.site + ": " + o.opens)).toEqual([]);
+  it("it opens draftFromBooking, with a caller's changes on top", () => {
+    expect(EDIT_OPENERS.filter((o) => !/^(changes\?)?(Object\.assign\()?draftFromBooking\(/.test(o.opens)).map((o) => o.site + ": " + o.opens)).toEqual([]);
+  });
+  // v18.3.5: the form's doors are App's. A hook that opened the form itself
+  // skipped the capability check and left a pending waitlist entry set.
+  it("only App calls openForm", () => {
+    const callers = sourceFiles(SRC).filter((file) => /\bopenForm\(/.test(stripComments(readFileSync(file, "utf8")).join("\n"))).map((file) => relative(SRC, file));
+    expect(callers).toEqual(["App.jsx"]);
+  });
+  it("the WhatsApp doors stop when App's door refuses", () => {
+    const hook = stripComments(readFileSync(join(SRC, "hooks/useWhatsApp.js"), "utf8")).join("\n");
+    expect(hook.match(/if \(!open(New|Edit)\(/g)).toEqual(["if (!openNew(", "if (!openEdit(", "if (!openEdit("]);
+    expect(hook.match(/\bopen(New|Edit)\(/g).length).toBe(3);
   });
 });
 
