@@ -2580,7 +2580,9 @@ describe("the weekly generator", () => {
       }
     `);
   });
-  it("skips a week that already has its booking, by id or by stamp", () => {
+  // v18.3.5: today's occurrence, made at 19:30 with the optimiser off, was pinned
+  // with `tables: []` until the generator placed it.
+  it("skips a week that already has its booking, by id or by stamp, and places today's after the cutoff", () => {
     const bookings = [
       bk("rwk_" + T, { recurringId: "wk", recurringDate: T, tables: ["1A"] }),
       bk("form1", { date: "2026-10-21", recurringId: "wk", recurringDate: "2026-10-21", tables: ["1A"] }),
@@ -2594,7 +2596,7 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2617,6 +2619,14 @@ describe("the weekly generator", () => {
         ],
       }
     `);
+  });
+  it("today after the cutoff with every table taken: written unplaced, and flagged", () => {
+    const h = generatorEnv({ bookings: fullDay(TODAY, "20:00", true), horizonWeeks: 1, rules: [weekly({ startDate: PAST })] });
+    compile(APP, APP_GENERATOR, h.env).generate();
+    const made = h.writes[0].next.find((b) => b.id === "rwk_" + TODAY);
+    expect({ tables: made.tables, _conflict: made._conflict }).toEqual({ tables: [], _conflict: true });
+    // Nobody else on the day was moved for it.
+    expect(h.writes[0].next.filter((b) => b.date === TODAY && b.id !== made.id)).toEqual(fullDay(TODAY, "20:00", true));
   });
   it("writes nothing while disabled, resyncing or before the first load", () => {
     const rules = [weekly()];

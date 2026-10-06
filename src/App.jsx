@@ -2281,13 +2281,23 @@ function BookingApp({uid}){
       const byDate={};
       toCreate.forEach(function(oc){ (byDate[oc.date]=byDate[oc.date]||[]).push(oc); });
       Object.keys(byDate).forEach(function(ds){
+        const added=[];
         byDate[ds].forEach(function(oc){
           const rule=oc.rule;
           const nb=occurrenceBooking(rule,ds);
           if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
           next=next.concat([nb]);
+          added.push(nb.id);
         });
-        next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
+        // v18.3.5: where the optimiser owns the day, one pass places every
+        // new occurrence. Where it does not (today, after the cutoff) a pass
+        // with no `changedId` copies every row as it is, so an occurrence the
+        // generator first met late in the day was written with no table and
+        // no `_conflict`: in the Unplaced row with nothing flagging it. There
+        // each one is placed by itself, as a new booking saved then is: the
+        // best free table, nobody else moved, `_conflict` when there is none.
+        if(optimizerActiveFor(ds,autoOptimizer)) next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
+        else added.forEach(function(id){next=bookingsAfterAction(next,ds,tableBlocks,id,true,autoOptimizer);});
       });
       return next;
     },true);

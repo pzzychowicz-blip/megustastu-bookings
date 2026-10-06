@@ -30999,3 +30999,15 @@ with an alternative was his, asked before the work.
    (Patryk's pick over closing it and over re-creating the booking), so what was typed
    can be read. Not seen on DEV; the pinned scenario is the reproduction, and its
    snapshot moved on purpose from a dispatched write to the refusal.
+3. **A standing booking generated for today after the cutoff gets a table (ROADMAP,
+   pinned by v18.3.4).** The generator ran one `bookingsAfterAction` pass per date with
+   no `changedId`. Where the optimiser owns the day that pass places everything; today
+   after the 15:00 cutoff it copies every row as it is, so an occurrence first met late
+   in the day (a rule resumed, or standing bookings switched on, after the cutoff) was
+   written with `tables: []` and `_conflict: false`: in the Unplaced row with nothing
+   flagging it. Found by reading in v18.3.4; the pinned scenario is the reproduction.
+   On such a day each new occurrence is now placed by itself, as a new booking saved
+   then is (`changedId` + `forceReassign`): the best free table, nobody else moved, and
+   `_conflict: true` when there is none. Days the optimiser owns keep their one pass.
+   The pinned snapshot moved on purpose (`tables: []` → `["1A"]`), and a new scenario
+   holds the full evening: unplaced, flagged, the rest of the day untouched.
