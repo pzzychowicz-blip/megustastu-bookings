@@ -25,12 +25,36 @@
 // under the ⌃⌄✓ bar. Reached Name first, iOS did not scroll and it was right,
 // which is why it looked intermittent.
 //
+// v18.3.5: it is `clientHeight − visualViewport.height − pageTop`, read off
+// the root element, and `innerHeight` is no longer read at all. Measured again
+// on the same iPhone (1,652 samples, Safari and the home-screen app, a DEV
+// beacon on focus, on a timer after it and on every viewport event): iOS shows
+// a low field in TWO ways. (a) It scrolls the window, and `innerHeight` shrinks
+// by that scroll (v18.3.1's case: scrollY 194, innerHeight 762 → 568). (b) It
+// pans the visual viewport alone: scrollY stays 0 and `innerHeight` stays full
+// while `offsetTop` is the pan (Safari: innerHeight 664, offsetTop 26). And on
+// the way between states the two update apart (72 samples, e.g. innerHeight
+// back at 664 while offsetTop still read 195). v18.3.1's `innerHeight − height`
+// is right for (a) only; in (b), and whenever a viewport event arrives before
+// `innerHeight` has moved with no event after it, it over-pads by the pan and
+// the footer floats that far above the keyboard (Patryk's screenshots, 201 and
+// 252px). The root's `clientHeight` does not move in any of these (762 in the
+// app, 664 in Safari, throughout), the sheet's bottom is at `clientHeight −
+// scrollY` in client coordinates and the visible bottom at `pageTop − scrollY +
+// height`, so the covered part is their difference and the scroll cancels: one
+// expression for both ways, and it equals v18.3.1's wherever that was right
+// (all 667 settled sheets in the samples). On Android the keyboard resizes the
+// layout viewport, `clientHeight` shrinks with it and this still reads 0.
+//
+// The effect also measures once when it subscribes. The state is seeded by a
+// read during render, and a viewport event between that read and the effect is
+// lost: a discard confirm opened as the keyboard closed kept a 405px inset with
+// no keyboard, its buttons mid-screen (measured, the home-screen app).
+//
 // The number is 0 unless the gap is a keyboard (over KB_MIN), so a browser
 // toolbar showing or hiding never moves a dialog. The state is replaced only
 // when a number changes: `scroll` fires per frame while iOS pans the visual
 // viewport, and an unchanged inset must not re-render the modal each time.
-// Seeded by a read at mount (not a setState in the effect), so a modal that
-// opens with the keyboard already up starts in the right place.
 
 import { useState, useEffect } from "react";
 
@@ -39,15 +63,18 @@ const KB_MIN = 100;
 const NONE = { bottom: 0 };
 
 // The arithmetic, pure over a window-shaped object so tests/keyboard-inset.test.js
-// can hand it the numbers the Simulator measured.
+// can hand it the numbers the devices measured.
 export function keyboardInsetOf(win) {
   const vv = win ? win.visualViewport : null;
-  if (!vv) return NONE;
-  // WHETHER the keyboard is up is judged on its whole height, the scroll added
-  // back (the Notes case above is 96px of inset for a 339px keyboard); HOW MUCH
-  // to pad is what is left of it below the visible area.
-  const keyboard = win.innerHeight + vv.offsetTop - vv.height;
-  const bottom = win.innerHeight - vv.height;
+  const root = win && win.document ? win.document.documentElement : null;
+  if (!vv || !root) return NONE;
+  const full = root.clientHeight;
+  // WHETHER the keyboard is up is judged on its whole height (a 96px remainder
+  // of a 339px keyboard is under the toolbar threshold by itself); HOW MUCH to
+  // pad is what is left of it below the visible area.
+  const keyboard = full - vv.height;
+  const top = typeof vv.pageTop === "number" ? vv.pageTop : (vv.offsetTop || 0);
+  const bottom = full - vv.height - top;
   return keyboard > KB_MIN && bottom > 0 ? { bottom: Math.round(bottom) } : NONE;
 }
 
@@ -66,6 +93,8 @@ export function useKeyboardInset() {
     }
     vv.addEventListener("resize", measure);
     vv.addEventListener("scroll", measure);
+    // An event between the render's read and this subscription is lost.
+    measure();
     return function () {
       vv.removeEventListener("resize", measure);
       vv.removeEventListener("scroll", measure);

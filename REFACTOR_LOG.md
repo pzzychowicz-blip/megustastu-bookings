@@ -31060,3 +31060,37 @@ with an alternative was his, asked before the work.
    18 wrong-typed values, on a full row and on an empty one), the same refusals, and one
    `R.<key>` call per row in the source. A new row fails there until it has its line.
    Generating the literal was not possible: the CSP forbids `new Function`.
+7. **The form's footer sits on the iOS keyboard whichever way iOS shows the field
+   (Patryk's screenshots, the home-screen app).** In three screenshots the booking form's
+   Save row floated 201 and 252px above the keyboard, the distance iOS had moved the
+   page. **Measured** on his iPhone 12 mini (iOS 27) with a temporary DEV-only beacon
+   (viewport numbers and each dialog's rect to a LAN log on every focus, on timers after
+   it and on every viewport event): 1,652 samples in Safari and the home-screen app.
+   iOS shows a low field in two ways. (a) It scrolls the window and `innerHeight`
+   shrinks by the scroll (v18.3.1's case; here scrollY 194, `innerHeight` 762 → 568).
+   (b) It pans the visual viewport alone: scrollY 0, `innerHeight` full, `offsetTop` the
+   pan (seen settled in Safari: 664, offsetTop 26). And between states the two update
+   apart (72 samples). v18.3.1's `innerHeight − height` is right for (a) only: in (b),
+   or when the last viewport event comes before `innerHeight` moves, it over-pads by
+   the pan. **The floating state itself was not caught in the samples**; the conditions
+   that produce it were. `keyboardInsetOf` is now `clientHeight − height − pageTop` off
+   the root element, which did not move in any sample (762 in the app, 664 in Safari),
+   and reads `innerHeight` nowhere: the sheet's bottom is at `clientHeight − scrollY`
+   and the visible bottom at `pageTop − scrollY + height`, so the scroll cancels. It
+   equals the old value wherever that was right (all 667 settled sheets of the first
+   runs). **After, on the phone (367 samples, the home-screen app):** 69 of 70 settled
+   sheets end on the visible bottom, 24 of them with the keyboard up, in the no-scroll
+   and the scrolled states; the one miss was taken while the app was in the background
+   and corrected itself 170ms after it came back. Way (b) did not occur in that run, so
+   it is covered by the Safari sample's numbers in the test, not by a live sighting.
+   Patryk saw nothing covered. **Android, measured on the tablet** (a DEV tab, a CDP
+   touch on the name field): `innerHeight`, `clientHeight` and the visual viewport all
+   went 507 → 231 together, the inset read 0 and the footer ended at 219.
+   **Also: the hook measures once when it subscribes.** Its state is seeded by a read
+   during render, and a viewport event before the effect was lost: once in the first
+   run a discard confirm opened as the keyboard closed and kept a 405px inset with no
+   keyboard, its buttons at 288–357 of 762. `tests/keyboard-inset.test.js` carries the
+   device's numbers for both ways and fails if the hook reads `innerHeight` again.
+   **Not reproduced, and not changed:** the timeline cut off half-way with the header
+   gone after closing a form, and the form's Save row drawn over the discard confirm's
+   buttons (ROADMAP).

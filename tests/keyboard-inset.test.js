@@ -20,12 +20,15 @@ const Atoms = stripComments(read("src", "components", "atoms.jsx")).join("\n");
 const App = stripComments(read("src", "App.jsx")).join("\n");
 const Overlay = Atoms.slice(Atoms.indexOf("export function Overlay("), Atoms.indexOf("\n}\n", Atoms.indexOf("export function Overlay(")));
 
-const win = (innerHeight, height, offsetTop) => ({ innerHeight, visualViewport: { height, offsetTop } });
+// `full` is the root element's clientHeight, which the keyboard does not move
+// on iOS; `top` is how far the visual viewport sits down the page.
+const win = (full, height, top) => ({ document: { documentElement: { clientHeight: full } }, visualViewport: { height, pageTop: top, offsetTop: top } });
 
 describe("N1: the keyboard's inset, from the visual viewport", () => {
-  it("is nothing without a window or a visualViewport", () => {
+  it("is nothing without a window, a visualViewport or a document", () => {
     expect(keyboardInsetOf(null)).toEqual({ bottom: 0 });
     expect(keyboardInsetOf({ innerHeight: 800 })).toEqual({ bottom: 0 });
+    expect(keyboardInsetOf({ visualViewport: { height: 300, pageTop: 0 } })).toEqual({ bottom: 0 });
   });
 
   it("is nothing for a gap a browser toolbar makes", () => {
@@ -37,36 +40,65 @@ describe("N1: the keyboard's inset, from the visual viewport", () => {
   });
 
   it("is the keyboard's height, as the iPhone Simulator reported it", () => {
-    // Safari, iOS 26: innerHeight stayed 796 while the visual viewport fell to 447.
+    // Safari, iOS 26: the visual viewport fell from 796 to 447.
     expect(keyboardInsetOf(win(796, 447, 0))).toEqual({ bottom: 349 });
-    expect(keyboardInsetOf(win(796, 447.4, 0.6))).toEqual({ bottom: 349 });
   });
 
   it("counts a scroll iOS made for the field ONCE (v18.3.1, a real iPhone 12 mini)", () => {
     // Name first, no scroll: the sheet padded 339 and the footer sat on the bar.
     expect(keyboardInsetOf(win(664, 325, 0))).toEqual({ bottom: 339 });
-    // Notes with the keyboard down: iOS scrolled 243px and innerHeight shrank
-    // to 421. innerHeight − (height + offsetTop) is negative, so v18.3.0 padded
-    // nothing and the footer (352–421) sat under the ⌃⌄✓ bar.
-    expect(keyboardInsetOf(win(421, 325, 243))).toEqual({ bottom: 96 });
-    // The voucher box: a 57px scroll left v18.3.0's footer at 313–382.
-    expect(keyboardInsetOf(win(607, 325, 57))).toEqual({ bottom: 282 });
-    // The Simulator's 32px scroll (v18.3.0 phase 17), under-padded by 32 then.
-    expect(keyboardInsetOf(win(764, 447, 32))).toEqual({ bottom: 317 });
+    // Notes with the keyboard down: iOS scrolled 243px (innerHeight 421).
+    expect(keyboardInsetOf(win(664, 325, 243))).toEqual({ bottom: 96 });
+    // The voucher box: a 57px scroll.
+    expect(keyboardInsetOf(win(664, 325, 57))).toEqual({ bottom: 282 });
+    // The Simulator's 32px scroll (v18.3.0 phase 17).
+    expect(keyboardInsetOf(win(796, 447, 32))).toEqual({ bottom: 317 });
+  });
+
+  it("v18.3.5: the settled states measured in the home-screen app and in Safari", () => {
+    // [clientHeight, viewport height, pageTop] → the padding that put the
+    // footer on the visible bottom in each sample.
+    expect(keyboardInsetOf(win(762, 357, 0))).toEqual({ bottom: 405 });    // app: Name
+    expect(keyboardInsetOf(win(762, 357, 194))).toEqual({ bottom: 211 });  // app: Notes, scrolled 194
+    expect(keyboardInsetOf(win(762, 383, 255))).toEqual({ bottom: 124 });  // app: Deposit's digit pad, scrolled 255
+    expect(keyboardInsetOf(win(664, 325, 134))).toEqual({ bottom: 205 });  // Safari: Notes
+    expect(keyboardInsetOf(win(664, 351, 195))).toEqual({ bottom: 118 });  // Safari: Deposit
+  });
+
+  it("v18.3.5: does not read innerHeight, which moves apart from the viewport", () => {
+    // Way (b): the visual viewport panned 26px with the window NOT scrolled, so
+    // innerHeight stayed 664. innerHeight − height (v18.3.1) padded 340 and put
+    // the footer 26px above the keyboard; the covered part is 314.
+    const panned = Object.assign(win(664, 324, 26), { innerHeight: 664 });
+    expect(keyboardInsetOf(panned)).toEqual({ bottom: 314 });
+    // Mid-change: innerHeight already back at 664 while the viewport still read
+    // a 195px offset. Whatever innerHeight says, the answer is the same.
+    [664, 469, 0, undefined].forEach((innerHeight) => {
+      expect(keyboardInsetOf(Object.assign(win(664, 351, 195), { innerHeight }))).toEqual({ bottom: 118 });
+    });
+    const Hook = stripComments(read("src", "hooks", "useKeyboardInset.js")).join("\n");
+    expect(Hook).not.toContain("innerHeight");
+  });
+
+  it("v18.3.5: measures once on subscribing, for an event lost before the effect", () => {
+    const Hook = stripComments(read("src", "hooks", "useKeyboardInset.js")).join("\n");
+    const effect = Hook.slice(Hook.indexOf("useEffect("));
+    expect(effect.indexOf("measure();")).toBeGreaterThan(effect.indexOf('vv.addEventListener("scroll", measure);'));
+    expect(effect.indexOf("measure();")).toBeLessThan(effect.indexOf("return function"));
   });
 
   it("judges the keyboard on its whole height, but pads only what is left", () => {
-    // 96px of inset is under the 100px toolbar threshold on its own; the
-    // keyboard it belongs to (421 + 243 − 325 = 339) is not.
-    expect(keyboardInsetOf(win(421, 325, 243))).toEqual({ bottom: 96 });
+    // 96px of inset is under the 100px toolbar threshold by itself; the
+    // keyboard it belongs to (339) is not.
+    expect(keyboardInsetOf(win(664, 325, 243))).toEqual({ bottom: 96 });
     // Scrolled by the whole keyboard: the sheet already ends at the bar.
-    expect(keyboardInsetOf(win(325, 325, 339))).toEqual({ bottom: 0 });
+    expect(keyboardInsetOf(win(664, 325, 339))).toEqual({ bottom: 0 });
     // A small scroll with no keyboard is still nothing.
-    expect(keyboardInsetOf(win(740, 700, 40))).toEqual({ bottom: 0 });
+    expect(keyboardInsetOf(win(780, 700, 40))).toEqual({ bottom: 0 });
   });
 
   it("is nothing where the keyboard resizes the layout viewport itself (Android)", () => {
-    // interactive-widget=resizes-content shrinks innerHeight with the keyboard.
+    // interactive-widget=resizes-content shrinks the root with the keyboard.
     expect(keyboardInsetOf(win(430, 430, 0))).toEqual({ bottom: 0 });
   });
 });

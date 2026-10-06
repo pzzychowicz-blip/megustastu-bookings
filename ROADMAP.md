@@ -108,9 +108,19 @@ evidence for each.
   Writing the rule only once the booking lands needs the retry queue to report that, so
   it is a write-path change.
 
+- **Two iPhone faults from the home-screen app that v18.3.5 could not reproduce**
+  (Patryk's screenshots, 2026-10-06; iPhone 12 mini, iOS 27). (1) After closing the
+  booking form the timeline is cut off about half-way down, blank below, and the app's
+  header is gone from the top (light and dark, two days apart). (2) The discard confirm
+  opens with the booking form's Save row drawn over its Back / Discard. In 2,000 beacon
+  samples neither appeared: the page returned to the top after every keyboard close, and
+  the confirm settled on top. Both may have followed the keyboard inset v18.3.5 fixed, so
+  first see whether they come back. If one does, catch it with the beacon (REFACTOR_LOG
+  v18.3.5 phase 7) before changing code; a blind `scrollTo(0, 0)` was declined twice.
+
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
-  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1), `color-scheme` (N4), the
+  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1, with v18.3.5's formula), `color-scheme` (N4), the
   per-scheme `theme-color` metas plus the manifest colours and its `?v=` bump (N5),
   `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
   `prefers-contrast: more` block (A10), the popover keyframe pair for
