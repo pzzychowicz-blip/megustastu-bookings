@@ -194,6 +194,8 @@ function withoutNoShowLine(notes){
   return s.endsWith("\n"+NO_SHOW_LINE)?s.slice(0,-(NO_SHOW_LINE.length+1)):s;
 }
 
+export const DELETED_REFUSAL="This booking was deleted on another device, so it can't be saved. Make a new booking if it is still needed.";
+
 function refuse(message,field){return {refusal:field?{message:message,field:field}:{message:message}};}
 
 // ── applyEdit: the edit form's Save, as a plan ───────────────────────────────
@@ -235,6 +237,13 @@ export function applyEdit(input){
   const cleanPhone=enteredPhone(f.phone,input.phonePrefix);
   const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
   const orig=bookings.find(function(b){return b.id===editId;});
+  // v18.3.5: the booking was deleted on another device while this form was
+  // open. The save used to go on: it wrote nothing for the booking (there is
+  // no row to map over), re-placed the rest of its day, showed the saved
+  // toast and closed the form. Refused first, before any other refusal, since
+  // none of them is about a booking that exists; the form stays open, so what
+  // was typed can still be read and booked again.
+  if(!orig) return refuse(DELETED_REFUSAL);
   const w=editWindow(orig,f);
   const size=w.size,planChanged=w.planChanged,needsR=w.needsR,unseat=w.unseat,recheck=w.recheck;
   // v14: detect confirmed→seated transition here. Only auto-shift time if

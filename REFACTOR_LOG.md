@@ -30990,3 +30990,12 @@ with an alternative was his, asked before the work.
    (`tests/booking-fields.test.js`'s round trip holds exactly that booking). The pinned
    snapshot moved on purpose: history gains the entry, `noShow` true → false, and the
    notes lose the line.
+2. **An edit of a booking deleted on another device is refused (ROADMAP, pinned by
+   v18.3.4).** With the edit form open on one device and the booking deleted on another,
+   Save wrote nothing for the booking (there was no row left to change), re-placed the
+   rest of its day, showed the saved toast and closed the form. `applyEdit` now refuses
+   it first, before every other refusal: "This booking was deleted on another device, so
+   it can't be saved. Make a new booking if it is still needed." The form stays open
+   (Patryk's pick over closing it and over re-creating the booking), so what was typed
+   can be read. Not seen on DEV; the pinned scenario is the reproduction, and its
+   snapshot moved on purpose from a dispatched write to the refusal.

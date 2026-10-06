@@ -1073,30 +1073,17 @@ describe("Save — an edit on a day the optimiser owns", () => {
       }
     `);
   });
-  it("the booking was deleted elsewhere while the form was open", () => {
+  // v18.3.5: this pinned a "saved" toast over a write that re-placed b2 only.
+  it("the booking was deleted elsewhere while the form was open: refused, the form stays open", () => {
     const b1 = bk("b1", { tables: ["1A"] });
     const b2 = bk("b2", { tables: ["3"] });
     expect(runSave({ bookings: [b2], editId: "b1", form: draftOf(b1, { notes: "late edit" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeModifyApply("b1", true)",
-          "flash(null, "")",
-          "setShowForm(false)",
-          "setViewDate("2026-10-14")",
+          "setError("This booking was deleted on another device, so it can't be saved. Make a new booking if it is still needed.")",
         ],
-        "guard": "dispatched",
-        "writes": [
-          {
-            "replay": "same prev → same object; fresh prev → equal",
-            "rows": {
-              "b2": {
-                "tables": "["3"] → ["1A"]",
-              },
-            },
-          },
-        ],
+        "guard": "ready",
       }
     `);
   });
