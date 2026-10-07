@@ -32065,3 +32065,29 @@ warnings are fixed passes.
 same tree exits 1.
 
 **Gate:** build 127.35 kB gz (main chunk) · 2688 tests passed (2 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 8 — Dependabot, security updates only (#14)
+
+**Files:** `.github/dependabot.yml` (new)
+
+`open-pull-requests-limit: 0` for npm turns version updates off; a security update is not
+counted against the limit. **It does nothing yet:** on 2026-10-07 the repository had
+Dependabot alerts off (`GET …/vulnerability-alerts` → 404) and security updates off
+(`automated-security-fixes` → `enabled: false`). Switching them on is a repository
+setting and is Patryk's. The five high `@grpc/grpc-js` advisories will get no pull
+request, because their only fix is a firebase downgrade.
+
+### Commit 9 — eslint 10 (#14)
+
+**Files:** `package.json` · `package-lock.json` · `api/_lib/env.js`
+
+`eslint` 9.39.5 → 10.12.0 and `@eslint/js` 9.39.5 → 10.0.1. The two plugins already
+allowed it (`eslint-plugin-react-hooks` 7.1.1, `eslint-plugin-react-refresh` 0.5.7), and
+`eslint.config.js` runs unchanged.
+
+**What it changed, measured by diffing `eslint -f json` by file, rule and severity:** one
+finding, a new ERROR. `preserve-caught-error` joined the recommended set and flagged
+`serviceAccount()`'s rethrow of a JSON parse failure. Fixed with `{ cause: e }`; the
+message is the same. The 63 warnings are the same 63.
+
+**Gate:** build 127.37 kB gz (main chunk) · 2688 tests passed · lint 63 problems, 0 errors · `check:style` OK.
