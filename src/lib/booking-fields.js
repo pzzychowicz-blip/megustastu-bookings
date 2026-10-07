@@ -355,11 +355,16 @@ export const UNDO_FIELDS = BOOKING_FIELDS.filter(function(row){ return row.undo;
 // `NO_SHOW_CLEARED` entry, and the "no show" entry before it stays as the record
 // that it happened; "some entry says no show" kept counting a visit that took
 // place. Marked a no-show again later, the newer entry wins. Notes are not read
-// (free text). Here, a leaf, so `customers.js` (which re-exports it) and
+// (free text). v18.4.5 (Patryk): it must also still BE cancelled. A no-show is
+// written as a cancellation, so every real one is; a booking walked back out of
+// cancelled before v18.3.5 kept its flag and has no cleared entry, and counted
+// a visit that happened. Asking the status covers those with no migration.
+// Here, a leaf, so `customers.js` (which re-exports it) and
 // `rangeStats` in booking-logic.js ask ONE rule: the second had its own copy.
 export const NO_SHOW_CLEARED = "no-show cleared";
 export function isNoShow(b) {
   if (!b) return false;
+  if (b.status !== "cancelled") return false;
   if (b.noShow === true) return true;
   const h = Array.isArray(b.history) ? b.history : [];
   for (let i = h.length - 1; i >= 0; i--) {

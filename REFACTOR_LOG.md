@@ -31980,3 +31980,27 @@ first, the single read at a time and the routing after Settings closes are the s
 **Gate:** build 127.25 kB gz (main chunk, +0.19: the hook and the helper are in the entry,
 as the handler was) · 2676 tests passed (5 net new) · lint 63 problems, 0 errors ·
 `check:style` OK.
+
+### Commit 5 — a no-show counts only while the booking is still cancelled
+
+**Files:** `src/lib/booking-fields.js` · `tests/customers.test.js` (2 new, 4 fixtures given
+their status) · `src/CLAUDE.md` · `ROADMAP.md` (entry removed)
+
+**Behavioural change, Patryk's decision (2026-10-07).** `isNoShow(b)` answers false unless
+`b.status === "cancelled"`. A no-show is written as a cancellation, so every real one
+passes. What stops counting: a booking marked no-show and then walked back to confirmed,
+seated, completed or pending before v18.3.5, which kept `noShow: true` and has no "no-show
+cleared" entry. No migration and no stored value changes. Everything that counts no-shows
+asks this one function (`customerIndex`, `noShowMap`, `matchCustomerFor`, `rangeStats`), so
+the form's chip, the List tag, the timeline flag, Settings → Customers and the Stats tile
+move together.
+
+**Tests.** Four existing cases built a no-show with no status, which is not a shape the app
+stores (`sanitize` writes one); they say "cancelled" now. New: every other status answers
+false with the flag, with the history entry and with both, and a walked-back no-show leaves
+`noShowMap`'s tally.
+
+**Not measured:** how many bookings in PROD this changes. It needs a read of PROD, which
+Claude does not do.
+
+**Gate:** build 127.26 kB gz (main chunk) · 2678 tests passed (2 new) · lint 63 problems, 0 errors · `check:style` OK.

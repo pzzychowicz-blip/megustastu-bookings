@@ -128,11 +128,7 @@ evidence for each.
   Writing the rule only once the booking lands needs the retry queue to report that, so
   it is a write-path change.
 
-- **Three findings from v18.3.5's `/code-review`, each waiting on a decision.**
-  (1) **A no-show walked back before v18.3.5 still counts.** Its `noShow` flag is still
-  true and it has no "no-show cleared" entry, so `isNoShow` counts a visit that
-  happened. Asking `status === "cancelled"` in `isNoShow` as well would cover them with
-  no migration; decide whether a no-show must still be cancelled to count.
+- **Two findings from v18.3.5's `/code-review`.**
   (2) **A refusal raised from inside a modal is drawn under it.** The permission toast
   is at z-index 60 and every `Overlay` at 200, so on a phone a refused tap in the
   WhatsApp inbox (Accept, Open booking, Apply changes, since v18.3.5) or in Settings
