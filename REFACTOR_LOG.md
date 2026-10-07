@@ -32105,3 +32105,37 @@ earlier, with `tests/save-path.test.js`' inline snapshots unchanged. `npm run te
 (the emulator suite, which vitest also runs): 294 passed.
 
 **Gate:** build 127.37 kB gz (main chunk) · 2688 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 11 — the timeline drop out of BookingApp (#17)
+
+**Files:** `src/lib/drop-plan.js` (new, 187 lines) · `src/App.jsx` (5,361 → 5,210 lines) ·
+`tests/drop-plan.test.js` (new, 14) · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**No behaviour change.** `dropOnTable`'s body moved to `planDrop(ctx)` statement for
+statement, by a script that replaced only the exits: each `flashDragMsg(text); return;`
+became `return {refuse: text}`, each `saveBookings(fn)` plus its success toast became
+`return {transform: fn, done: text}`, and the two bare `return`s became `return null`.
+App's `dropOnTable` is the capability gate, the call, and the two side effects. The success
+toast is still gated on `saveBookings`' boolean. Six imports left `App.jsx` with it.
+
+**Verified old against new.** A throwaway test lifted the old `dropOnTable` out of the
+previous commit's `App.jsx`, compiled it with the real `booking-logic` functions and stub
+`saveBookings` / `flashDragMsg`, and ran both on generated days (3–15 bookings, mixed
+statuses, locks, table blocks, optimiser on and off, today and later days), dropping every
+booking on every table: **70,538 drops, the same toast and the same written list each
+time**, history entries included (clock frozen). All nine outcomes were reached: nothing
+23,780 · move 24,442 · displace 10,419 · swap 1,015 · five refusals 10,882. Sabotage: the
+swap locking the other party failed it at the second seed. The test is not committed,
+because it reads the old code from git.
+
+**What stays:** `tests/drop-plan.test.js`, one case per outcome, asserting what is written
+and what the toast says, and that App's function is still only the gate, the plan and the
+side effects.
+
+**Measured on DEV (1 trial).** `onDropOnTable` called from TimelineView's props on a
+confirmed party of 2: 1A → 2, toast "… moved to 2.", stored `tables: ["2"]`,
+`_locked: true`, history "moved to 2 (drag)"; then back to 1A the same way. **Not done:** a
+real finger drag. The Browser pane cannot arm one (`mgt-measurement-traps`), and the
+gesture code in `TimelineView` did not change.
+
+**Gate:** build 127.44 kB gz (main chunk, +0.07) · 2702 tests passed (14 new) · lint 63 problems, 0 errors · `check:style` OK.

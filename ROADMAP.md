@@ -117,7 +117,9 @@ evidence for each.
   decisions are `lib/booking-save.js`, App keeps the effects, and `App.jsx` is 5,340
   lines (5,727 before it). Recurring generation followed in v18.4.4 (`withOccurrences`,
   `lib/recurring.js`; `App.jsx` 5,410 lines), and backup/export in v18.4.5 (`runBackup` in
-  `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines). **Next: drag-drop.**
+  `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
+  drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines). **Next: manual table assignment**
+  (`manualAssign`), which shares the displacement recipe with the drop.
 
 - **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
   (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then
