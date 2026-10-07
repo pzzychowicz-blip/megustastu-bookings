@@ -19,6 +19,16 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **A no-show that was walked back before v18.3.5 and later cancelled normally still
+  counts as a no-show** (v18.4.5 `/code-review`). Such a booking kept `noShow: true` and
+  has no "no-show cleared" entry, and a plain cancel does not write `noShow: false`, so
+  once it is cancelled again `isNoShow` (`src/lib/booking-fields.js`) is true. Measured:
+  `{status: "cancelled", noShow: true, history: [no show, edited, cancelled]}` → true.
+  Bookings walked back since v18.3.5 are not affected. Not built in the ship run because
+  the fix is in the cancel writer (`doCancelBooking` in `App.jsx`), outside that diff:
+  a plain cancel would write `noShow: false` and the cleared entry when the booking
+  carries a stale mark. How many PROD bookings are in this state is not known.
+
 - **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send

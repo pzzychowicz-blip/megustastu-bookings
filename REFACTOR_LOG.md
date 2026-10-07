@@ -32139,3 +32139,42 @@ real finger drag. The Browser pane cannot arm one (`mgt-measurement-traps`), and
 gesture code in `TimelineView` did not change.
 
 **Gate:** build 127.44 kB gz (main chunk, +0.07) · 2702 tests passed (14 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+#### `/code-review` (high) — seven findings, four fixed, one deferred, two left
+
+Files: `src/components/Shortcuts.jsx` · `src/lib/shortcuts.js` ·
+`src/components/whatsapp/WaSimulator.jsx` · `src/lib/wa-backend-sim.js` ·
+`tests/shortcuts.test.js` · `tests/shortcuts-tab.test.js` · `tests/wa-sim-feedback.test.js` ·
+`ROADMAP.md`
+
+**Fixed.**
+- **The Shortcuts tab's order list could drop or break a table section.** `SECTION_ORDER`
+  in `Shortcuts.jsx` is typed by hand, and nothing held it to `DOC_SECTIONS`: a renamed
+  section gave `undefined` and the tab threw on `sec.when`, and a new section passed every
+  test without being listed. A missing title is skipped and an unnamed table section is
+  drawn after the rest. The test calls `ShortcutsContent` and asks for every table title.
+- **`shortcutDocs` merged rows by label alone**, keeping the first row's gate. No two rows
+  do this today. The merge needs the same gate too. Test: a gated row pushed into the table
+  beside "Jump to today" comes out as its own line; without the fix it fails.
+- **The simulator's footer asked the toggle's state, the sender asks `backendEnabled()`.**
+  Where they disagree (storage blocked, the flag cleared in another tab) the message is
+  written client-side, `onBackend` is never called and the line stayed on "Sending…".
+  Both ask `backendEnabled()`. Not reproduced live; read from the two code paths.
+- **Deployed, an unreachable server showed "Failed to fetch".** `simErrorText` explained
+  it only in DEV. It now says the server could not be reached. Test fails without the line.
+
+**Deferred to ROADMAP.** A no-show walked back before v18.3.5 and later cancelled normally
+still counts (`isNoShow` measured true on that shape). The fix is in the cancel writer,
+outside this diff. Before this version such a booking counted even while confirmed, so
+this is a remainder of the old rule and not something this version introduced.
+
+**Left as they are.**
+- The refusal toast's box is read once, when the refusal is raised, so it does not follow
+  a rotation or resize in the 3.5 s it shows. Cosmetic, and following it means a resize
+  listener for a toast.
+- `REFUSAL_Z = 400` is a constant in `RefusalToast.jsx`, with 300 / 301 as literals in
+  three other files. `tests/refusal-toast.test.js` scans every z-index under `src/` and
+  fails on one at or above it, which is the guard; moving the popups' numbers into one
+  table is a refactor of files this version did not touch.
+
+**Gate:** build 127.45 kB gz (main chunk, +0.01) · 2706 tests passed (4 new) · lint 63 problems, 0 errors · `check:style` OK.
