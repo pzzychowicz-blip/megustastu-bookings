@@ -19,6 +19,16 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **A no-show that was walked back before v18.3.5 and later cancelled normally still
+  counts as a no-show** (v18.4.5 `/code-review`). Such a booking kept `noShow: true` and
+  has no "no-show cleared" entry, and a plain cancel does not write `noShow: false`, so
+  once it is cancelled again `isNoShow` (`src/lib/booking-fields.js`) is true. Measured:
+  `{status: "cancelled", noShow: true, history: [no show, edited, cancelled]}` → true.
+  Bookings walked back since v18.3.5 are not affected. Not built in the ship run because
+  the fix is in the cancel writer (`doCancelBooking` in `App.jsx`), outside that diff:
+  a plain cancel would write `noShow: false` and the cleared entry when the booking
+  carries a stale mark. How many PROD bookings are in this state is not known.
+
 - **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send
@@ -92,40 +102,34 @@ evidence for each.
   figure from v18.3.5: `sanitize` alone costs the tablet 3.2 ms per 1,000 bookings on
   every snapshot, so it passes 8 ms at about 2,900 (PROD held about 1,600 on 2026-10-06).
 
-- **Before WhatsApp goes live (#4, #8):**
-  1. Node tests for `api/wa-send.js`, `wa-recheck.js`, `wa-config.js`,
-     `_lib/inbound-core.js` and `_lib/meta.js`. No test runs any of them.
-  2. Load a conversation's messages when it opens (`messages/$phoneKey`) instead of
-     every device subscribing to all of `/messages`, and set a retention period.
-
-  SECURITY.md §3 lists them as open. (The erasure item and the parse log shipped in v18.3.1.)
-
-- **Lint: decide a gate (#10).** There are 63 warnings on 2026-10-01, all of them React
-  Compiler advisories. Decide whether CI gets `--max-warnings N`, which is a policy
-  change.
+- **Before WhatsApp goes live (#8):** load a conversation's messages when it opens
+  (`messages/$phoneKey`) instead of every device subscribing to all of `/messages`, and
+  set a retention period (SECURITY.md §3 lists the retention as open). Still without a
+  test that runs them: `api/wa-inbound.js` (the public webhook: its raw-body read, the
+  signature gate, the `statuses[]` branch, the timestamp clamp) and the three
+  `api/wa-sim-*.js` handlers. (#4's five files are run by `tests/api-handlers.test.js`
+  since v18.4.5.)
 
 - **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
 
-- **Dependency majors, and whether to automate updates (#14).** The in-range updates
-  shipped in v18.4.4. Waiting as majors: eslint and `@eslint/js` 10, vitest 5. Optionally,
-  turn on Dependabot for security updates only. `npm audit` still lists 5 high advisories
-  on 2026-10-07, all one chain (`@grpc/grpc-js` under `@firebase/firestore`, which the app
-  does not import); their only offered fix is `--force`, which downgrades firebase to 9.
-
-- **The Shortcuts tab lists its keys by hand** (v18.4.4's `/code-review`). Settings →
-  Shortcuts renders `SHORTCUT_SECTIONS` (`Shortcuts.jsx`), and the keys themselves are
-  `SHORTCUT_LAYERS` (`lib/shortcuts.js`); only the I and X gates are checked against each
-  other. Give each table row its label and derive the tab, or test that every key in one
-  is in the other.
+- **Dependabot is configured but switched off (#14).** `.github/dependabot.yml` (v18.4.5)
+  limits it to security updates. It does nothing until Dependabot alerts and Dependabot
+  security updates are turned on in the repository's settings. `npm audit` still lists 5
+  high advisories on 2026-10-07, all one chain (`@grpc/grpc-js` under
+  `@firebase/firestore`, which the app does not import); their only offered fix is
+  `--force`, which downgrades firebase to 9, so Dependabot will open nothing for them.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
   one domain per patch version. The save path went first, in v18.3.4 (#13): its
   decisions are `lib/booking-save.js`, App keeps the effects, and `App.jsx` is 5,340
   lines (5,727 before it). Recurring generation followed in v18.4.4 (`withOccurrences`,
-  `lib/recurring.js`; `App.jsx` 5,410 lines). **Next: backup/export**, then drag-drop.
+  `lib/recurring.js`; `App.jsx` 5,410 lines), and backup/export in v18.4.5 (`runBackup` in
+  `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
+  drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines). **Next: manual table assignment**
+  (`manualAssign`), which shares the displacement recipe with the drop.
 
 - **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
   (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then
@@ -133,16 +137,8 @@ evidence for each.
   Writing the rule only once the booking lands needs the retry queue to report that, so
   it is a write-path change.
 
-- **Three findings from v18.3.5's `/code-review`, each waiting on a decision.**
-  (1) **A no-show walked back before v18.3.5 still counts.** Its `noShow` flag is still
-  true and it has no "no-show cleared" entry, so `isNoShow` counts a visit that
-  happened. Asking `status === "cancelled"` in `isNoShow` as well would cover them with
-  no migration; decide whether a no-show must still be cancelled to count.
-  (2) **A refusal raised from inside a modal is drawn under it.** The permission toast
-  is at z-index 60 and every `Overlay` at 200, so on a phone a refused tap in the
-  WhatsApp inbox (Accept, Open booking, Apply changes, since v18.3.5) or in Settings
-  looks like nothing happened. Read from the code; DEV does not enforce roles.
-  (3) **An edit parked by the stale gate and replayed after another device deleted the
+- **A finding from v18.3.5's `/code-review`.**
+  **An edit parked by the stale gate and replayed after another device deleted the
   booking** still writes nothing for it, with the form already closed. v18.3.5 refuses
   only a delete the device had seen before Save. Telling the user needs the retry queue
   to report what a replay did, like the "Repeat weekly" entry above.

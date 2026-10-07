@@ -293,7 +293,7 @@ npm run build 2>&1 | tail -3 && npm test 2>&1 | grep -E "Tests +[0-9]" && npm ru
 Four lines out, in order: main-bundle gz size · test count · lint problem count · the
 style verdict. Measured on this repo: **0.1s · 1.8s · 4.0s · 0.3s** — about six seconds
 for all four, so run them per commit; a `git bisect` should never land on a broken one.
-`lint` is a **hard** gate at 0 errors (warnings don't block; most are the React-Compiler advisories kept as warnings on purpose — read the count off the `✖ N problems` line, never a number written here).
+`lint` is a **hard** gate at 0 errors, and since 2026-10-07 at no more than 63 warnings (`--max-warnings 63` in the `lint` script: a NEW warning fails the run; lower the number when warnings are fixed, never raise it without asking. Most are the React-Compiler advisories kept as warnings on purpose — read the count off the `✖ N problems` line, never a number written here).
 
 **`set -o pipefail` is load-bearing — without it this line lies.** A pipeline's exit
 status is its LAST element's, and every stage here ends in a filter that succeeds on

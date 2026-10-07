@@ -51,8 +51,17 @@ export function simulateInbound(params, ctx) {
   // Backend mode: hand the message to the real pipeline (DEV harness or the
   // online staff-auth sim endpoint) and stop — the server parses with Gemini.
   if (backendEnabled()) {
+    // v18.4.5: the caller hears how the post ended (`ctx.onBackend(error|null)`).
+    // It used to hear nothing, so the panel said "Sent via backend" for a post
+    // the server had refused, with the reason only in the console. Two-argument
+    // `then`, so a throwing report is not caught below and reported as a failed
+    // post (the `.then` after a `.catch` trap, the other way round).
+    const report = ctx && typeof ctx.onBackend === "function" ? ctx.onBackend : null;
     backendInbound({ phone: params.phone, text: params.text || "", name: params.parse && params.parse.name, windowAgeMs: params.windowAgeMs || 0 })
-      .catch(function (e) { console.warn("[waSim] backend inbound post failed:", e.message); });
+      .then(
+        function () { if (report) report(null); },
+        function (e) { console.warn("[waSim] backend inbound post failed:", e.message); if (report) report(e); }
+      );
     return normalizePhone(params.phone);
   }
   const { conversations } = ctx;

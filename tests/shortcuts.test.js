@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { resolveShortcut, SHORTCUT_LAYERS, SUMMARY_KEY, WEEK_KEY } from "../src/lib/shortcuts";
+import { resolveShortcut, shortcutDocs, SHORTCUT_LAYERS, SHORTCUT_GATES, SUMMARY_KEY, WEEK_KEY } from "../src/lib/shortcuts";
 import { todayStr, addDays } from "../src/lib/day";
 
 const TODAY = todayStr();
@@ -317,5 +317,69 @@ describe("the hook carries the decision out and decides nothing itself", () => {
     expect(hook).toContain("today:todayStr()");
     expect(hook).toMatch(/settingsTabs:function\(\)\{return visibleTabs\(K\.can,K\.hasModule\)/);
     expect(hook).toContain("if(typing) return;");
+  });
+});
+
+// ── The Shortcuts tab is drawn from the table (v18.4.5) ──────────────────────
+// Settings → Shortcuts listed its keys by hand, held to the table by nothing.
+// It reads `shortcutDocs()` now, so these hold the table to being listable.
+describe("every key in the table is listed on the Shortcuts tab", () => {
+  const docs = shortcutDocs();
+  const rows = SHORTCUT_LAYERS.flatMap((l) => l.rows.map((r) => Object.assign({ layer: l.name }, r)));
+
+  it("every row says how it is printed: keycaps and a label", () => {
+    const bare = rows.filter((r) => !(Array.isArray(r.caps) && r.caps.length && r.caps.every((c) => typeof c === "string" && c) && typeof r.label === "string" && r.label));
+    expect(bare.map((r) => r.layer + ":" + r.keys.join(","))).toEqual([]);
+  });
+
+  // /code-review: rows merge into one line only when they share the gate too,
+  // or a gated key is listed wherever the ungated one is.
+  it("a gated row does not join an ungated line with the same label", () => {
+    const global = SHORTCUT_LAYERS.find((l) => l.name === "global");
+    global.rows.push({ keys: ["q"], caps: ["Q"], label: "Jump to today", gate: "whatsapp", run: () => null });
+    try {
+      const lines = shortcutDocs().find((d) => d.title === "Navigation").rows.filter((r) => r.label === "Jump to today");
+      expect(lines.map((r) => [r.keys, r.when])).toEqual([[["D"], undefined], [["Q"], "whatsapp"]]);
+    } finally { global.rows.pop(); }
+  });
+
+  it("every layer is in exactly one section", () => {
+    const placed = docs.flatMap((sec) => sec.layers);
+    expect(placed.slice().sort()).toEqual(SHORTCUT_LAYERS.map((l) => l.name).sort());
+  });
+
+  it("every row's label is a line of its layer's section, carrying its caps and its gate", () => {
+    rows.forEach((r) => {
+      const sec = docs.find((d) => d.layers.includes(r.layer));
+      const line = sec.rows.find((d) => d.label === r.label);
+      expect(line, r.layer + ": " + r.label).toBeTruthy();
+      r.caps.forEach((c) => expect(line.keys).toContain(c));
+      expect(line.when).toBe(r.gate);
+    });
+  });
+
+  it("rows sharing a label are one line: the two arrows, the two app-width keys", () => {
+    const nav = docs.find((d) => d.title === "Navigation").rows;
+    expect(nav.find((r) => r.label === "Previous / next day").keys).toEqual(["←", "→"]);
+    expect(nav.find((r) => r.label === "Adjust app width (±50 px)").keys).toEqual(["⇧+", "⇧−"]);
+    expect(new Set(nav.map((r) => r.label)).size).toBe(nav.length);
+  });
+
+  it("a gate is one of the two the table knows, and is what stops the key", () => {
+    const gated = rows.filter((r) => r.gate);
+    expect(gated.map((r) => r.gate).sort()).toEqual(["sandbox", "whatsapp"]);
+    gated.forEach((r) => expect(typeof SHORTCUT_GATES[r.gate]).toBe("function"));
+    const K = (on) => ({ hasModule: (id) => on && id === "whatsapp" });
+    const env = (sandbox) => ({ sandbox, today: "2026-01-01", settingsTabs: () => [] });
+    expect(resolveShortcut({ key: "i" }, K(false), env(true))).toBe(null);
+    expect(resolveShortcut({ key: "i" }, K(true), env(false))).not.toBe(null);
+    expect(resolveShortcut({ key: "x" }, K(true), env(false))).toBe(null);
+    expect(resolveShortcut({ key: "x" }, K(false), env(true))).not.toBe(null);
+  });
+
+  it("a letter prints as its capital, so the cap on the tab is the key that is pressed", () => {
+    rows.filter((r) => r.keys.every((k) => /^[a-z]$/.test(k)) && r.keys.length === 1).forEach((r) => {
+      expect(r.caps, r.label).toEqual([(r.shift ? "⇧" : "") + r.keys[0].toUpperCase()]);
+    });
   });
 });

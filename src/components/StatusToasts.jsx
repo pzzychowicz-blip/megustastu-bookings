@@ -43,10 +43,8 @@
 //                    the only cue that the optimizer moved OTHER bookings.
 //                    App passes it when a reshuffle actually happened.
 //  dragMsg         — v17.0.0 {text, good} | null (timeline drag&drop feedback)
-//  permMsg         — v18.0.0 string | null (a refusal: a capability the account
-//                    lacks, or ⇧D while Automatic dark mode is on). Ranked ABOVE
-//                    dragMsg: it is the answer to something the user just did,
-//                    and it must not be hidden by feedback about something else.
+//  (permMsg left in v18.4.5: a refusal has its own layer, RefusalToast, above
+//   every modal — in here it was drawn under the dialog it was raised from.)
 //  reshuffled      — the post-save flag
 //  reshuffledMsg   — "Tables re-optimised." / "Booking saved." (computed in
 //                    App — it reads optimizerActiveFor(viewDate, autoOptimizer))
@@ -54,20 +52,8 @@
 //                    signal — see the loadBannerShown gotcha in CLAUDE.md)
 //  loadMsg         — "Connected to the server — N bookings loaded."
 
-import { mkBtn, Toast } from "./atoms";
-import { BTN, R, T, FW, H } from "../lib/constants";
-
-// v17.10.0: `--shadow-popover`, the token for a FLOATING surface — the same one
-// QuickStatusPopup uses, which is what a toast is. It carries no white inset (a
-// floating card is not a raised control) and it IS theme-split, so the depth
-// deepens over a dark page the way the hand-written 0.18 never did.
-//
-// Worth noting how this one was found: the sweep that tokenised the other 17
-// drop-shadow literals grepped for `boxShadow: "0 …`, and this literal sits
-// behind a const, so the property-name pattern walked straight past it. Same
-// shape as the v17.9.0 lesson about an HTML entity being invisible to a glyph
-// scan — grep for the VALUE's shape, not for the property it ends up on.
-const toastShadow="var(--shadow-popover)";
+import { mkBtn, Toast, ToastPill } from "./atoms";
+import { BTN, T, H } from "../lib/constants";
 
 // ── v17.8.0: ONE toast surface ───────────────────────────────────────────────
 // These nine toasts used to be nine hand-written style objects, each a
@@ -86,32 +72,18 @@ const toastShadow="var(--shadow-popover)";
 // `tone` is deliberately drawn from the STATUS dot tokens for anything
 // connection-shaped, so "Reconnected" and the header dot are literally the
 // same green.
+// v18.4.5: the pane itself is the `ToastPill` atom, so the refusal toast, which
+// left this layer for one above the modals (RefusalToast), draws the same pill
+// from the same definition.
 function toast(tone, body, opts) {
   // `busy` is a behaviour flag, not a style — destructured OUT so it can never
   // reach the style object (React would warn about an unknown CSS property and
   // the DOM would carry a junk attribute). Everything else in `opts` IS style.
   const { busy, ...styleOverrides } = opts || {};
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8, textAlign: "left",
-      background: "var(--bg-ac-menu)",
-      border: "1px solid var(--border-card)",
-      borderRadius: R.card,
-      padding: "8px 14px",
-      fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)",
-      boxShadow: toastShadow,
-      ...styleOverrides
-    }}>
-      <span
-        aria-hidden="true"
-        className={busy ? "mgt-dot-pulse" : undefined}
-        style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0 }} />
-      <span style={{ minWidth: 0 }}>{body}</span>
-    </div>
-  );
+  return <ToastPill tone={tone} busy={busy} style={styleOverrides}>{body}</ToastPill>;
 }
 
-export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,permMsg,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
+export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown,syncFix,waitAddedShown,undoInfo,onUndo,undoNote,dragMsg,reshuffled,reshuffledMsg,loadShown,loadMsg}){
   // v17.8.0: the "Couldn't load bookings" node USED to live here. It moved to
   // NotificationStrip (see appBannerSections) in the strip audit: it is the one
   // message this layer carried that neither passes on its own nor can be acted
@@ -149,8 +121,6 @@ export function StatusToasts({bookingsReady,loadStalled,resyncing,reconnectShown
           className="mgt-hover-scale mgt-press"
           style={mkBtn({fontSize: T.body,minHeight:H.compact,padding:"4px 12px",background:BTN.nav})}>Undo</button>
       </span>,{pointerEvents:"auto",padding:"6px 10px 6px 14px"})},
-    {key:"permmsg",on:!!permMsg,
-      node:toast("var(--warn-text)",permMsg||"")},
     {key:"dragmsg",on:!!dragMsg,
       node:toast(dragMsg&&dragMsg.good?"var(--success-text)":"var(--warn-text)",dragMsg?dragMsg.text:"")},
     {key:"reshuffled",on:reshuffled,

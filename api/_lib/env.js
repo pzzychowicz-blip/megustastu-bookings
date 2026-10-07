@@ -101,6 +101,8 @@ export function serviceAccount() {
   const raw = env("FIREBASE_SERVICE_ACCOUNT", null);
   if (!raw) return null;
   try { return JSON.parse(raw); } catch (e) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT is set but is not valid JSON: " + e.message);
+    // `cause` keeps the parser's own error on the one thrown (eslint 10's
+    // `preserve-caught-error`); the message already quotes it for the log line.
+    throw new Error("FIREBASE_SERVICE_ACCOUNT is set but is not valid JSON: " + e.message, { cause: e });
   }
 }

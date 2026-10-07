@@ -100,33 +100,43 @@ function clearFormTables(K) {
   });
 }
 
+// ── Gates (v18.4.5) ──────────────────────────────────────────────────────────
+// A row that works only where something is switched on names the gate, and the
+// SAME tag decides whether the Shortcuts tab lists it (`shortcutShown` there
+// asks the same two questions of Settings' props). One tag, so a key cannot be
+// listed where it does nothing.
+export const SHORTCUT_GATES = {
+  whatsapp: (K) => !!(K.hasModule && K.hasModule("whatsapp")),
+  sandbox: (K, env) => !!(env && env.sandbox),
+};
+
 export const SHORTCUT_LAYERS = [
   // ── Global, even over a modal (v16.4.0): they never close what is open ──────
   // Shift +/− is matched on every key value the physical keys give under Shift
   // across layouts: US "+", ES/DE "*", and "_" everywhere.
   { name: "always", rows: [
-    { keys: ["d"], shift: true, run: () => hit((K) => K.onToggleDark()) },
-    { keys: ["+", "=", "*"], shift: true, run: () => hit((K) => K.onSetAppWidth(K.appWidth + 50)) },
-    { keys: ["_", "-"], shift: true, run: () => hit((K) => K.onSetAppWidth(K.appWidth - 50)) },
-    { keys: ["?"], run: () => hit((K) => K.setShowSettings(true)) },
+    { keys: ["d"], shift: true, caps: ["⇧D"], label: "Toggle dark / light mode", run: () => hit((K) => K.onToggleDark()) },
+    { keys: ["+", "=", "*"], shift: true, caps: ["⇧+"], label: "Adjust app width (±50 px)", run: () => hit((K) => K.onSetAppWidth(K.appWidth + 50)) },
+    { keys: ["_", "-"], shift: true, caps: ["⇧−"], label: "Adjust app width (±50 px)", run: () => hit((K) => K.onSetAppWidth(K.appWidth - 50)) },
+    { keys: ["?"], caps: ["?"], label: "Show this help", run: () => hit((K) => K.setShowSettings(true)) },
   ] },
 
   // ── Settings is the TOP layer: ←/→ cycle its tabs, N adds a reminder ────────
   // The cycle runs over the VISIBLE tabs (capability and module gates), or an
   // arrow lands on a tab the render side refuses to show.
   { name: "settings", active: (K) => K.topModalId === "settings", rows: [
-    { keys: ["ArrowLeft", "ArrowRight"], run: (K, ev, env) => {
+    { keys: ["ArrowLeft", "ArrowRight"], caps: ["←", "→"], label: "Switch between tabs", run: (K, ev, env) => {
       const tabs = env.settingsTabs();
       let cur = tabs.indexOf(K.settingsTab); if (cur < 0) cur = 0;
       const next = ev.key === "ArrowLeft" ? (cur - 1 + tabs.length) % tabs.length : (cur + 1) % tabs.length;
       return hit((K2) => K2.setSettingsTab(tabs[next]));
     } },
-    { keys: ["n"], when: (K) => K.settingsTab === "reminders", run: () => hit((K) => K.openNewReminder()) },
+    { keys: ["n"], caps: ["N"], label: "New reminder (Reminders tab)", when: (K) => K.settingsTab === "reminders", run: () => hit((K) => K.openNewReminder()) },
   ] },
 
   // ── The preferred-table picker: C clears, and no other letter gets past ─────
   { name: "prefpicker", active: (K) => !!K.showPrefPicker, terminal: true, rows: [
-    { keys: ["c"], run: (K) => {
+    { keys: ["c"], caps: ["C"], label: "Clear preferred tables", run: (K) => {
       const prefs = Array.isArray(K.form && K.form.preferredTables) ? K.form.preferredTables : [];
       if (prefs.length === 0) return SWALLOW;
       return hit((K2) => K2.setForm((f) => Object.assign({}, f, { preferredTables: [] })));
@@ -136,15 +146,15 @@ export const SHORTCUT_LAYERS = [
   // ── The booking form is the TOP layer ───────────────────────────────────────
   // A / P / C in new and edit; B (book again) and H (history) only when editing.
   { name: "form", active: (K) => K.topModalId === "form", rows: [
-    { keys: ["a"], run: () => hit((K) => K.setManualTarget(K.editId || "__new__")) },
-    { keys: ["p"], run: () => hit((K) => K.setShowPrefPicker(true)) },
-    { keys: ["c"], run: clearFormTables },
-    { keys: ["b"], when: (K) => !!K.editId, run: (K) => {
+    { keys: ["a"], caps: ["A"], label: "Manual table assignment", run: () => hit((K) => K.setManualTarget(K.editId || "__new__")) },
+    { keys: ["p"], caps: ["P"], label: "Preferred tables", run: () => hit((K) => K.setShowPrefPicker(true)) },
+    { keys: ["c"], caps: ["C"], label: "Clear tables assignment", run: clearFormTables },
+    { keys: ["b"], caps: ["B"], label: "Book Again (edit only, seated / completed)", when: (K) => !!K.editId, run: (K) => {
       const cur = editing(K);
       if (!cur || (cur.status !== "seated" && cur.status !== "completed")) return SWALLOW;
       return hit((K2) => K2.bookAgain(cur));
     } },
-    { keys: ["h"], when: (K) => !!K.editId, run: (K) => {
+    { keys: ["h"], caps: ["H"], label: "View history (edit only)", when: (K) => !!K.editId, run: (K) => {
       const cur = editing(K);
       if (!cur || !cur.history || cur.history.length === 0) return SWALLOW;
       return hit((K2) => K2.setShowHistory(true));
@@ -153,14 +163,14 @@ export const SHORTCUT_LAYERS = [
 
   // ── Everything below is suppressed while ANY modal is open ──────────────────
   { name: "search", stop: (K) => !!K.anyModal, rows: [
-    { keys: ["/"], run: () => hit((K) => K.setShowSearch(true)) },
+    { keys: ["/"], caps: ["/"], label: "Find a booking (any date)", run: () => hit((K) => K.setShowSearch(true)) },
   ] },
 
   // ── List view: ↑/↓ move the focus ring, the letters act on the focused card ─
   // Ahead of the global letters, so D deletes only while a card is focused and
   // S seats it rather than toggling the Summary.
   { name: "list", active: (K) => K.view === "list", rows: [
-    { keys: ["ArrowDown", "ArrowUp"], run: (K, ev) => {
+    { keys: ["ArrowDown", "ArrowUp"], caps: ["↑", "↓"], label: "Select previous / next booking", run: (K, ev) => {
       const list = K.listDay || [];
       if (!list.length) return TAKEN;
       const down = ev.key === "ArrowDown";
@@ -169,60 +179,63 @@ export const SHORTCUT_LAYERS = [
       const id = list[ni].id;
       return hit((K2) => { K2.setSelectedListId(id); K2.bumpListFocus(); });
     } },
-    { keys: ["a"], when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.setManualTarget(sel.id)); } },
-    { keys: ["e"], when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.openEdit(sel)); } },
+    { keys: ["a"], caps: ["A"], label: "Assign tables", when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.setManualTarget(sel.id)); } },
+    { keys: ["e"], caps: ["E"], label: "Edit booking", when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.openEdit(sel)); } },
     // A PENDING card can only be confirmed or cancelled, so S and C do nothing
     // on it; and S does nothing on a day whose close has passed, where the
     // auto-complete would flip the booking straight back (`seatingClosed`, the
     // predicate the popup, the List card and the edit form ask).
-    { keys: ["s"], when: (K) => !!selected(K), run: (K) => {
+    { keys: ["s"], caps: ["S"], label: "Mark seated", when: (K) => !!selected(K), run: (K) => {
       const sel = selected(K);
       if (sel.status === "pending" || seatingClosed(sel.date, K.today, K.nowMins)) return TAKEN;
       return hit((K2) => K2.updateStatus(sel.id, "seated"));
     } },
-    { keys: ["c"], shift: true, when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.updateStatus(sel.id, "cancelled")); } },
-    { keys: ["c"], when: (K) => !!selected(K), run: (K) => {
+    // v18.4.5: C before ⇧C, the order the Shortcuts tab lists them in (the tab
+    // is drawn from these rows). The first matching row decides, so the plain
+    // row says "no Shift" itself where it used to rely on ⇧C standing above it.
+    { keys: ["c"], caps: ["C"], label: "Mark completed", when: (K, ev) => !ev.shiftKey && !!selected(K), run: (K) => {
       const sel = selected(K);
       if (sel.status === "pending") return TAKEN;
       return hit((K2) => K2.updateStatus(sel.id, "completed"));
     } },
+    { keys: ["c"], shift: true, caps: ["⇧C"], label: "Cancel booking", when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.updateStatus(sel.id, "cancelled")); } },
     // Through App's `requestDelete`, which carries the bookingDelete gate.
-    { keys: ["d"], when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.requestDelete(sel.id)); } },
+    { keys: ["d"], caps: ["D"], label: "Delete booking", when: (K) => !!selected(K), run: (K) => { const sel = selected(K); return hit((K2) => K2.requestDelete(sel.id)); } },
   ] },
 
   // ── Global ─────────────────────────────────────────────────────────────────
   { name: "global", rows: [
-    { keys: ["t"], run: () => goView("timeline") },
-    { keys: ["l"], run: () => goView("list") },
-    { keys: ["p"], run: () => goView("plan") },
-    { keys: ["d"], run: (K, ev, env) => hit((K2) => K2.goToDate(env.today)) },
-    { keys: ["n"], run: () => hit((K) => K.openNew()) },
-    { keys: ["w"], run: () => hit((K) => K.openWalkin()) },
+    { keys: ["t"], caps: ["T"], label: "Timeline view", run: () => goView("timeline") },
+    { keys: ["l"], caps: ["L"], label: "List view", run: () => goView("list") },
+    { keys: ["p"], caps: ["P"], label: "Plan (floor) view", run: () => goView("plan") },
+    { keys: ["d"], caps: ["D"], label: "Jump to today", run: (K, ev, env) => hit((K2) => K2.goToDate(env.today)) },
+    { keys: ["ArrowLeft"], caps: ["←"], label: "Previous / next day", run: () => hit((K) => K.goToDate(stepDate(K.viewDate, -1))) },
+    { keys: ["ArrowRight"], caps: ["→"], label: "Previous / next day", run: () => hit((K) => K.goToDate(stepDate(K.viewDate, 1))) },
+    { keys: ["n"], caps: ["N"], label: "New booking", run: () => hit((K) => K.openNew()) },
+    { keys: ["w"], caps: ["W"], label: "Walk-in", run: () => hit((K) => K.openWalkin()) },
+    { keys: [SUMMARY_KEY], caps: ["S"], label: "Toggle Summary panel", run: () => hit((K) => K.setSummaryOpen((o) => !o)) },
+    { keys: [WEEK_KEY], caps: ["M"], label: "Open More (Week / Month)", run: () => hit((K) => K.setShowWeek(true)) },
     // I opens the WhatsApp inbox: gated on the MODULE, like the toolbar button.
-    { keys: ["i"], when: (K) => !!(K.hasModule && K.hasModule("whatsapp")), run: () => hit((K) => K.setShowInbox(true)) },
+    { keys: ["i"], caps: ["I"], label: "Open WhatsApp inbox", gate: "whatsapp", run: () => hit((K) => K.setShowInbox(true)) },
     // X opens the simulator: sandbox builds only.
-    { keys: ["x"], when: (K, ev, env) => !!env.sandbox, run: () => hit((K) => K.setShowSim(true)) },
-    { keys: [SUMMARY_KEY], run: () => hit((K) => K.setSummaryOpen((o) => !o)) },
-    { keys: [WEEK_KEY], run: () => hit((K) => K.setShowWeek(true)) },
-    { keys: ["ArrowLeft"], run: () => hit((K) => K.goToDate(stepDate(K.viewDate, -1))) },
-    { keys: ["ArrowRight"], run: () => hit((K) => K.goToDate(stepDate(K.viewDate, 1))) },
+    { keys: ["x"], caps: ["X"], label: "Open WhatsApp simulator", gate: "sandbox", run: () => hit((K) => K.setShowSim(true)) },
   ] },
 
   // ── Timeline only ──────────────────────────────────────────────────────────
   // F, O and R act on TODAY only, and take the key either way.
   { name: "timeline", active: (K) => K.view === "timeline", rows: [
-    { keys: ["f"], run: (K, ev, env) => {
+    { keys: ["f"], caps: ["F"], label: "Toggle Follow (today only)", run: (K, ev, env) => {
       if (!isToday(K, env)) return SWALLOW;
       return hit((K2) => {
         if (!K2.followNow) { K2.setFollowNow(true); if (K2.timelineZoom < K2.tlFollowZoom) K2.setTimelineZoom(K2.tlFollowZoom); }
         else K2.setFollowNow(false);
       });
     } },
-    { keys: ["+", "="], run: () => hit((K) => K.setTimelineZoom((z) => Math.min(K.tlMaxZoom, z + 0.5))) },
-    { keys: ["-"], run: () => hit((K) => K.setTimelineZoom((z) => Math.max(1, z - 0.5))) },
-    { keys: ["0"], run: () => hit((K) => { K.setTimelineZoom(1); K.setFollowNow(false); }) },
-    { keys: ["o"], run: (K, ev, env) => (isToday(K, env) ? hit((K2) => K2.setAutoOptimizer((p) => !p)) : SWALLOW) },
-    { keys: ["r"], run: (K, ev, env) => (isToday(K, env) && !K.autoOptimizer ? hit((K2) => K2.setConfirmReshuffle(true)) : SWALLOW) },
+    { keys: ["+", "="], caps: ["="], label: "Zoom in (unshifted — ⇧+ is app width)", run: () => hit((K) => K.setTimelineZoom((z) => Math.min(K.tlMaxZoom, z + 0.5))) },
+    { keys: ["-"], caps: ["−"], label: "Zoom out", run: () => hit((K) => K.setTimelineZoom((z) => Math.max(1, z - 0.5))) },
+    { keys: ["0"], caps: ["0"], label: "Reset zoom to 1×", run: () => hit((K) => { K.setTimelineZoom(1); K.setFollowNow(false); }) },
+    { keys: ["o"], caps: ["O"], label: "Toggle Optimiser (today)", run: (K, ev, env) => (isToday(K, env) ? hit((K2) => K2.setAutoOptimizer((p) => !p)) : SWALLOW) },
+    { keys: ["r"], caps: ["R"], label: "Reshuffle (today, optimiser OFF)", run: (K, ev, env) => (isToday(K, env) && !K.autoOptimizer ? hit((K2) => K2.setConfirmReshuffle(true)) : SWALLOW) },
   ] },
 ];
 
@@ -242,10 +255,48 @@ export function resolveShortcut(ev, K, env) {
       const row = layer.rows[j];
       if (!row.keys.includes(key)) continue;
       if (row.shift && !ev.shiftKey) continue;
+      if (row.gate && !SHORTCUT_GATES[row.gate](K, env)) continue;
       if (row.when && !row.when(K, ev, env)) continue;
       return row.run(K, ev, env);
     }
     if (layer.terminal) return null;
   }
   return null;
+}
+
+// ── What the Shortcuts tab lists (v18.4.5) ───────────────────────────────────
+// Settings → Shortcuts draws these sections from the rows above: each row's
+// `caps` (the keycaps as printed) and `label`. It was a second list, typed by
+// hand in Shortcuts.jsx, held to this one by nothing but the I and X gates.
+// A section is one or more layers, in the order given; rows of a section that
+// share a label and a gate are one line with their caps side by side (← and → are two
+// rows here and one line there). Every row has a label and every layer is in
+// exactly one section: tests/shortcuts.test.js fails otherwise, so a new key
+// cannot be left off the tab.
+const DOC_SECTIONS = [
+  { title: "Navigation", layers: ["global", "search", "always"] },
+  { title: "Timeline", layers: ["timeline"] },
+  { title: "List view", layers: ["list"] },
+  { title: "Edit / New Booking", layers: ["form"] },
+  { title: "Preferred Table picker", layers: ["prefpicker"] },
+  { title: "Settings", layers: ["settings"] },
+];
+
+// → [{ title, rows: [{ keys, label, when? }] }], `when` being the row's gate.
+export function shortcutDocs() {
+  return DOC_SECTIONS.map((sec) => {
+    const rows = [];
+    sec.layers.forEach((name) => {
+      SHORTCUT_LAYERS.find((l) => l.name === name).rows.forEach((row) => {
+        // Same label AND same gate: a gated key must not join an ungated line,
+        // or it is listed where it does nothing.
+        const line = rows.find((r) => r.label === row.label && r.when === row.gate);
+        if (line) { line.keys = line.keys.concat(row.caps); return; }
+        const doc = { keys: row.caps.slice(), label: row.label };
+        if (row.gate) doc.when = row.gate;
+        rows.push(doc);
+      });
+    });
+    return { title: sec.title, layers: sec.layers, rows };
+  });
 }

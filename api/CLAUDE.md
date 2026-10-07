@@ -50,3 +50,10 @@ because it supports `require(esm)`, so a green local run proves nothing about th
 shows 5.x. The override can go when Vercel's runtime loads ESM through `require()`,
 or when `jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one
 of those is true on a deployment, not locally.
+
+**Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
+`_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules
+with an in-memory tree, so `_lib/rtdb.js` itself runs, and calls each handler with a
+request and a response object. A new handler joins its `describe.each` for the shared
+method and staff-auth gate. `wa-inbound.js` and the three `wa-sim-*` handlers are not run
+by any test yet (ROADMAP).

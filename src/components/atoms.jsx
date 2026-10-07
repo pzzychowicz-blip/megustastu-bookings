@@ -1847,6 +1847,45 @@ export function Toast({ show, children, style }) {
   );
 }
 
+// ── ToastPill — the one toast surface (v17.8.0; an atom since v18.4.5) ────────
+// The pane every toast is drawn on: `--bg-ac-menu`, a 1px border, and the
+// semantic colour carried by a leading dot (`tone`). It lived in StatusToasts
+// as a local helper until the refusal toast moved to a layer of its own
+// (RefusalToast), which made it two callers of one surface. `busy` pulses the
+// dot; `style` overrides the pane (a max width, the Undo pill's padding).
+//
+// v17.10.0: `--shadow-popover`, the token for a FLOATING surface — the same one
+// QuickStatusPopup uses, which is what a toast is. It carries no white inset (a
+// floating card is not a raised control) and it IS theme-split, so the depth
+// deepens over a dark page the way the hand-written 0.18 never did.
+//
+// Worth noting how this one was found: the sweep that tokenised the other 17
+// drop-shadow literals grepped for `boxShadow: "0 …`, and this literal sits
+// behind a const, so the property-name pattern walked straight past it. Same
+// shape as the v17.9.0 lesson about an HTML entity being invisible to a glyph
+// scan — grep for the VALUE's shape, not for the property it ends up on.
+const toastShadow="var(--shadow-popover)";
+export function ToastPill({ tone, busy, style, children }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, textAlign: "left",
+      background: "var(--bg-ac-menu)",
+      border: "1px solid var(--border-card)",
+      borderRadius: R.card,
+      padding: "8px 14px",
+      fontSize: T.body, fontWeight: FW.semi, color: "var(--text-primary)",
+      boxShadow: toastShadow,
+      ...style
+    }}>
+      <span
+        aria-hidden="true"
+        className={busy ? "mgt-dot-pulse" : undefined}
+        style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flexShrink: 0 }} />
+      <span style={{ minWidth: 0 }}>{children}</span>
+    </div>
+  );
+}
+
 // ── ModalPresence — exit animation for Overlay-based modals (v15.8.0) ──────────
 // Wraps a modal mount (`<ModalPresence show={cond}>{cond?<Modal/>:null}</…>`).
 // Keeps the modal mounted for `outMs` after close and exposes `{leaving}` via

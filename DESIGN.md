@@ -1268,6 +1268,16 @@ announcement is `notifAnnounce`, an always-mounted hidden region in `App`. Same
 rule puts the booking form's `role="alert"` wrapper permanently in the tree with
 only its child conditional.
 
+**A refusal is drawn above everything (v18.4.5).** The toast that answers a
+refused tap or key is `RefusalToast`: its own always-mounted `role="status"`
+layer at the app's root, `position: fixed`, z-index 400, above the popups (300
+and 301). It was a slot in `StatusToasts`, at z-index 60 inside the main view,
+so a refusal raised from inside a modal was drawn under the modal. It takes no
+taps and has no `backdrop-filter`. `tests/refusal-toast.test.js` reads every
+z-index under `src/` and fails if one reaches it, so **a layer added above 400
+has to decide what happens to the refusal**. It is the only toast up there: the
+other toasts are about the page, and a modal is allowed to cover them.
+
 **`role="button"` makes its children PRESENTATIONAL — never put it on a container
 of controls.** The List card holds Assign, four status changers and Delete (since v18.2.0:
 No show when due, Assign, the next status and ⋯); labelling it a button would have

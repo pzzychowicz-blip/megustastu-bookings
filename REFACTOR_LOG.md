@@ -31807,3 +31807,374 @@ Five findings. Three fixed, two skipped.
 
 **Gate, final:** build 126.37 kB gz (main chunk, +0.41 on v18.4.3) · 2605 tests passed (51
 new in this version) · lint 63 problems, 0 errors · `check:style` OK.
+
+## v18.4.5 — the simulator says when the server refused
+
+**Date:** 2026-10-07 · **Branch:** `fix/v18.4.5-sim-feedback-api-tests-shortcuts` ·
+**Behavioural change:** sandbox tooling only (the WhatsApp simulator's status line). Nothing
+a restaurant can reach.
+
+### Commit 1 — a failed server post is reported
+
+**Files:** `src/lib/wa-sim.js` · `src/lib/wa-backend-sim.js` ·
+`src/components/whatsapp/WaSimulator.jsx` · `tests/wa-sim-feedback.test.js` (9 new) ·
+`src/App.jsx` (version)
+
+**The report.** Patryk: "When I click buttons there there's no action."
+
+**What was measured.**
+
+- **On the dev server the buttons work.** v18.4.4, DEV Firebase, backend mode off: one
+  canned scenario took the conversation list from 19 to 20 and the status line to "Sent →".
+- **On the deployed sandbox the three `/api/wa-sim-*` endpoints answered 404
+  `{"error":"not found"}`**, as JSON. That is each handler's own fail-closed answer
+  (`simEnabled()`), not a missing file: an unknown path on the same host answers Vercel's
+  plain-text `NOT_FOUND`, and so do all three on production, where `.vercelignore` keeps
+  them out. The sandbox project's variables were listed: six, and no `WA_SIM_ENABLED`.
+  Patryk approved adding `WA_SIM_ENABLED=1` there (Production and Preview); it applies from
+  the next sandbox deployment.
+- **So on the sandbox:** Generate, Generate 3 and Suggest reply always failed, saying so in
+  the footer's muted grey; and with the Live pipeline switch on, every scenario, Send as
+  customer, the burst and the custom message posted to the gate's 404 while the footer said
+  "Sent via backend →". `simulateInbound` caught the rejection and wrote it to the console
+  only.
+
+**What changed.**
+
+- `simulateInbound`'s backend branch calls `ctx.onBackend(error | null)` when the post
+  settles (two-argument `then`, so a throwing callback is not reported as a failed post).
+  The console helpers pass no callback and behave as before.
+- `WaSimulator` builds the ctx per action (`sending(label)`): the line reads "Sending via
+  backend → …" until the server answers, then "Sent via backend → …" or "Failed → …: reason".
+  A burst posts several messages, so one failure stays over the successes of the same
+  action, and an answer for an earlier action is ignored. Client mode is unchanged.
+- `simErrorText` names the two failures a person meets: a failed fetch on the dev server is
+  the harness not running (`npm run wa:backend`), and the gate's 404 on a deployment is
+  `WA_SIM_ENABLED` not being 1. Generate and Suggest reply use it too.
+- A failure is drawn in `--danger-text` (a semi-bold weight was tried and took the weight
+  ratchet in `tests/style-check.test.js` under its 30% floor, so the word "Failed" and the
+  ink carry it); the line is a `role="status"` and
+  carries its full text as a `title`, since it is one ellipsised line.
+
+**Verified on DEV** (this worktree on :5186, harness not running, `el.click()`): client
+mode "Sent →" and 20 → 21 conversations; backend mode on, a scenario and the burst both end
+"Failed → …: the local backend is not running (npm run wa:backend)" in rgb(153, 27, 27); Generate ends "Generate failed: the local backend is not running …"; switched
+off again, "Sent →" in the muted ink. Not verified: the deployed 404 wording in a browser
+(the dev server cannot produce it; `simErrorText`'s deployed half is covered by its tests),
+and the success line in backend mode, which needs the harness.
+
+**Gate:** build 126.34 kB gz (main chunk; the simulator is a lazy chunk the production build strips) · 2614 tests passed (9 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — the WhatsApp backend's handlers are run by a test (ROADMAP #4)
+
+**Files:** `tests/api-handlers.test.js` (51 new) · `api/CLAUDE.md` · `ROADMAP.md`. No
+source change.
+
+**What.** `api/wa-send.js`, `api/wa-recheck.js`, `api/wa-config.js`,
+`api/_lib/inbound-core.js` and `api/_lib/meta.js` had no test that executed them. The file
+replaces the three `firebase-admin` modules with an in-memory tree (`get`, `set`, and an
+`update` in which a null deletes, as RTDB does), so `api/_lib/rtdb.js` runs for real, and
+calls each handler with a request and a recording response. `parseThread` is the one other
+stand-in; `parseMessage` and `sendText` run in mock mode, and `sendText`'s live half runs
+against a stubbed `fetch`.
+
+**Covered.** The method and staff-auth gate the three token endpoints share (405, 401,
+403 for a stranger and for an unverified allow-listed account, 503 for live sends with no
+allow-list, and no write on any refusal). `wa-send`: 400 / 404 / 410 / 502 with nothing
+stored, the stored message and its author, the un-archive, the cap applied before the send,
+a key holding `/`. `wa-recheck`: the key check before any read, the auto-ack left out of
+the thread, the pending draft as context, the last `WA_RECHECK_HISTORY` messages, the draft
+written and stamped now, the timeout's name. `wa-config`: booleans only, never a value, and
+the effective modes. `processInbound`: the first-message ack, no second ack, the
+redelivery skip, an unusable size / date / time stored as null, the caps, a failed ack
+keeping the message. `applyParse`, `injectSimInbound`, `verifySignature`, `sendText`.
+
+**Proven against six sabotages**, each restored afterwards: the 410 check removed (1 test
+red), the auto-ack filter removed (1), the redelivery check removed (1), `verifySignature`
+returning true (1), `sanitizeKey` returning its input (2), `wa-config` reporting the raw
+mode string (1).
+
+**Not covered**, and on the roadmap: `api/wa-inbound.js` and the three `api/wa-sim-*.js`
+handlers.
+
+**Gate:** build 126.34 kB gz (main chunk, unchanged) · 2665 tests passed (51 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — the Shortcuts tab is drawn from the shortcut table
+
+**Files:** `src/lib/shortcuts.js` · `src/components/Shortcuts.jsx` ·
+`tests/shortcuts.test.js` (6 new) · `tests/shortcuts-tab.test.js` · `src/lib/CLAUDE.md` ·
+`src/components/CLAUDE.md` · `ROADMAP.md` (entry removed)
+
+**What.** Settings → Shortcuts listed its keys in `SHORTCUT_SECTIONS`, typed by hand, while
+the keys themselves are `SHORTCUT_LAYERS`; v18.4.4's `/code-review` left that on the
+roadmap. Each table row now carries how it is printed (`caps`, `label`), and
+`shortcutDocs()` builds six of the tab's ten sections from the rows: a section is a list of
+layers (Navigation is `global`, `search`, `always`), and rows sharing a label are one line
+(← and →; ⇧+ and ⇧−). The four sections whose keys are handled outside the table stay
+written in `Shortcuts.jsx` (`OWN_SECTIONS`: the WhatsApp inbox, the More popover, the table
+picker, Escape / Enter), with the tab's order in `SECTION_ORDER`.
+
+**One tag gates a key and its line.** I and X carried a `when` in the table and a separate
+`when` string on the tab. A row now names its gate (`gate: "whatsapp"` / `"sandbox"`,
+`SHORTCUT_GATES`), `resolveShortcut` asks it, and the tab hides the line by the same tag.
+
+**Two changes to the table's row order, neither to what a key does.** The global layer's
+rows were reordered to the tab's order (every key in that layer is on one row, so order
+decides nothing). In the list layer C now stands above ⇧C, as the tab lists them, and says
+"no Shift" in its own `when`, where it relied on ⇧C being matched first.
+
+**Verified.**
+
+- **The rendered tab, before against after.** A temporary test dumped every section's
+  title and every row's keys, label and `last` flag for the four combinations of sandbox
+  and WhatsApp, on the old code and the new. With WhatsApp off and no sandbox (what
+  production renders today) the two are identical. **The one difference:** "I · Open
+  WhatsApp inbox" and "X · Open WhatsApp simulator" sit three lines higher in Navigation
+  (after "M", before "/"), because the `always` layer's keys (⇧D, the app width, ?) are a
+  later layer of that section. So a restaurant with WhatsApp on sees the I line moved.
+- **Four sabotages**, each restored: C without its "no Shift" (2 tests red, ⇧C completes
+  instead of cancelling), a row with no label (4), a layer in no section (5), X without its
+  gate (5).
+- **On DEV** (this worktree, :5186): Settings → Shortcuts reads T, L, P, D, ← / →, N, W, S,
+  M, I, X, /, ⇧D, ⇧+ / ⇧−, ? under Navigation, and S, C, ⇧C, D at the end of List view.
+
+**Cost.** The main chunk grew 0.72 kB gz (126.34 → 127.06): the labels and keycaps were in
+`Shortcuts.jsx`, which rides the lazy Settings chunk, and are now in `lib/shortcuts.js`,
+which the keyboard hook loads at startup. Keeping them lazy would mean a second list keyed
+to the table, which is what this commit removes.
+
+**Gate:** build 127.06 kB gz (main chunk, +0.72) · 2671 tests passed (6 new) · lint 63
+problems, 0 errors · `check:style` OK.
+
+### Commit 4 — backup and export out of `BookingApp` (#17)
+
+**Files:** `src/lib/backup.js` · `src/lib/download.js` (new) · `src/hooks/useBackup.js`
+(new) · `src/App.jsx` (5,410 → 5,354 lines) · `tests/backup.test.js` (10 new, 5 replaced) ·
+`src/hooks/CLAUDE.md` · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**What.** `doBackup` was a closure in BookingApp holding a state, two refs, the read, the
+file, and five sentences. Its flow is `runBackup` in `lib/backup.js`, with the read, the
+file saver and the report handed in; where a report is shown (under the button, the banner,
+or nowhere) is `backupReportTarget`. `useBackup` keeps the status line, the one-read-at-a-
+time ref and the "which open of Settings" counter, and App's `closeSettings` calls its
+`endBackupOpen`. The Blob-and-anchor code, written out in `doBackup` and again in the
+Activity log's `doDownloadActivity`, is `saveTextFile` in `lib/download.js`; the CSV's
+handler keeps its capability check and its banner sentence.
+
+**Behaviour.** None intended. The sentences, the filename, the capability check coming
+first, the single read at a time and the routing after Settings closes are the same.
+
+**Verified.**
+
+- **The four outcomes are run**, where five of the old tests read App's source for them:
+  the file made (and equal to `buildBackup`'s answer), the device unable to make it,
+  offline, and any other failed read; plus the routing for each kind of report, in and out
+  of the open that started it.
+- **On DEV** (this worktree, :5186, with the anchor's `click` intercepted so no file was
+  written to the Mac): Settings → Download backup read "Reading the database…", then
+  "Backup file created: mgt-backup-2026-10-07.json. Check this device's downloads.", and
+  one anchor was clicked with that name and a `blob:` address. Not checked on DEV: the CSV
+  download, the offline sentence, and a read returning after Settings closed (those two are
+  covered by the tests above).
+
+**Gate:** build 127.25 kB gz (main chunk, +0.19: the hook and the helper are in the entry,
+as the handler was) · 2676 tests passed (5 net new) · lint 63 problems, 0 errors ·
+`check:style` OK.
+
+### Commit 5 — a no-show counts only while the booking is still cancelled
+
+**Files:** `src/lib/booking-fields.js` · `tests/customers.test.js` (2 new, 4 fixtures given
+their status) · `src/CLAUDE.md` · `ROADMAP.md` (entry removed)
+
+**Behavioural change, Patryk's decision (2026-10-07).** `isNoShow(b)` answers false unless
+`b.status === "cancelled"`. A no-show is written as a cancellation, so every real one
+passes. What stops counting: a booking marked no-show and then walked back to confirmed,
+seated, completed or pending before v18.3.5, which kept `noShow: true` and has no "no-show
+cleared" entry. No migration and no stored value changes. Everything that counts no-shows
+asks this one function (`customerIndex`, `noShowMap`, `matchCustomerFor`, `rangeStats`), so
+the form's chip, the List tag, the timeline flag, Settings → Customers and the Stats tile
+move together.
+
+**Tests.** Four existing cases built a no-show with no status, which is not a shape the app
+stores (`sanitize` writes one); they say "cancelled" now. New: every other status answers
+false with the flag, with the history entry and with both, and a walked-back no-show leaves
+`noShowMap`'s tally.
+
+**Not measured:** how many bookings in PROD this changes. It needs a read of PROD, which
+Claude does not do.
+
+**Gate:** build 127.26 kB gz (main chunk) · 2678 tests passed (2 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 6 — a refusal is drawn above the modal it was raised from
+
+**Files:** `src/components/RefusalToast.jsx` (new) · `src/lib/toast-box.js` (new) ·
+`src/components/atoms.jsx` (`ToastPill`) · `src/components/StatusToasts.jsx` ·
+`src/App.jsx` · `tests/refusal-toast.test.js` (new, 8) · `DESIGN.md` · `GLOSSARY.md` ·
+`src/components/CLAUDE.md` · `ROADMAP.md` (item removed)
+
+**The defect (v18.3.5's `/code-review`, item 2).** The refusal toast was one of
+`StatusToasts`' one-slot toasts, in a layer at z-index 60 inside the main view. Every
+`Overlay` is at 200, so a tap refused from inside a modal drew its answer under the modal.
+
+**The fix, Patryk's choice (2026-10-07): its own layer above every modal.** `RefusalToast`
+is always mounted at the app's root, beside `notifAnnounce`: `position: fixed`, z-index 400
+(the popups, 300 and 301, were the top of the ladder), `pointer-events: none`, its own
+`role="status"` region, no `backdrop-filter`. Same pill, same 3.5s. The pill moved to
+`atoms.jsx` as `ToastPill`, so the two layers draw one definition.
+
+**Where it is drawn.** A fixed layer has no anchor, so `flashRefusal` reads the box of the
+wrapper `StatusToasts` floats over and stores it in the message (`toastBox`,
+`lib/toast-box.js`). With no modal open the pill is where it was. The timer turns `show`
+off and keeps the text and the box, so the pill fades out in place. In the old layer
+`permMsg||""` emptied the pill for its exit.
+
+**Two behaviours that changed with it.** The refusal no longer shares the one slot, so it
+can show at the same time as another toast (the Undo pill, "Reconnected"), drawn over it.
+And on the non-fixed shell with the page scrolled, the toast is clamped to the top of the
+viewport, where the old one scrolled away with the view.
+
+**Measured on DEV (1 trial, 817px wide, Browser pane).** ⇧D under Automatic dark mode, then
+Settings opened: the pill at 228–588 × 242–288 over the dialog (12–805 × 40–770), the
+element under its centre a child of the dialog (taps pass through), the layer outside
+`<main>` and outside any `inert` subtree. With no modal: layer top 236, the old layer's
+top. After 4s the layer was empty. The DEV account's dark-mode settings were put back.
+
+**Not verified:** a refusal raised by a real permission (DEV does not enforce roles, so
+the trigger was ⇧D), a phone-width sheet, and what a screen reader announces with an
+`aria-modal` dialog open.
+
+**Sabotage.** `REFUSAL_Z = 301` fails "is above every other z-index written under src/".
+
+**Gate:** build 127.35 kB gz (main chunk, +0.09) · 2686 tests passed (8 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 7 — the lint gate caps warnings at 63 (#10)
+
+**Files:** `package.json` · `.github/workflows/ci.yml` · `tests/lint-cap.test.js` (new, 2) ·
+`tests/CLAUDE.md` · `.claude/skills/mgt-workflow/SKILL.md` · `ROADMAP.md` (entry removed)
+
+**Policy change, Patryk's decision (2026-10-07).** The `lint` script is
+`eslint . --max-warnings 63`. Lint failed on an error before; it also fails on a 64th
+warning now. The cap is in the script, not in the workflow, so CI and the local gate run
+the same command. The 63 today are the React Compiler advisories kept as warnings.
+
+**The cap only goes down.** `tests/lint-cap.test.js` fails if the script loses the flag or
+the number rises above 63, and if CI stops running `npm run lint`. Lowering it when
+warnings are fixed passes.
+
+**Measured.** `npm run lint` exits 0 at 63 warnings. `eslint . --max-warnings 62` on the
+same tree exits 1.
+
+**Gate:** build 127.35 kB gz (main chunk) · 2688 tests passed (2 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 8 — Dependabot, security updates only (#14)
+
+**Files:** `.github/dependabot.yml` (new)
+
+`open-pull-requests-limit: 0` for npm turns version updates off; a security update is not
+counted against the limit. **It does nothing yet:** on 2026-10-07 the repository had
+Dependabot alerts off (`GET …/vulnerability-alerts` → 404) and security updates off
+(`automated-security-fixes` → `enabled: false`). Switching them on is a repository
+setting and is Patryk's. The five high `@grpc/grpc-js` advisories will get no pull
+request, because their only fix is a firebase downgrade.
+
+### Commit 9 — eslint 10 (#14)
+
+**Files:** `package.json` · `package-lock.json` · `api/_lib/env.js`
+
+`eslint` 9.39.5 → 10.12.0 and `@eslint/js` 9.39.5 → 10.0.1. The two plugins already
+allowed it (`eslint-plugin-react-hooks` 7.1.1, `eslint-plugin-react-refresh` 0.5.7), and
+`eslint.config.js` runs unchanged.
+
+**What it changed, measured by diffing `eslint -f json` by file, rule and severity:** one
+finding, a new ERROR. `preserve-caught-error` joined the recommended set and flagged
+`serviceAccount()`'s rethrow of a JSON parse failure. Fixed with `{ cause: e }`; the
+message is the same. The 63 warnings are the same 63.
+
+**Gate:** build 127.37 kB gz (main chunk) · 2688 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 10 — vitest 5 (#14)
+
+**Files:** `package.json` · `package-lock.json` · `ROADMAP.md` (#14 rewritten: both majors
+are in, what is left is switching Dependabot on)
+
+`vitest` 4.1.11 → 5.0.3. No config and no test changed. It needs Node `^22.12.0`, which
+CI's `node-version: "22"` gives; the Mac runs 24.14.1.
+
+**Measured.** `npm test`: 95 files, 2688 passed, the count vitest 4 reported one commit
+earlier, with `tests/save-path.test.js`' inline snapshots unchanged. `npm run test:rules`
+(the emulator suite, which vitest also runs): 294 passed.
+
+**Gate:** build 127.37 kB gz (main chunk) · 2688 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 11 — the timeline drop out of BookingApp (#17)
+
+**Files:** `src/lib/drop-plan.js` (new, 187 lines) · `src/App.jsx` (5,361 → 5,210 lines) ·
+`tests/drop-plan.test.js` (new, 14) · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**No behaviour change.** `dropOnTable`'s body moved to `planDrop(ctx)` statement for
+statement, by a script that replaced only the exits: each `flashDragMsg(text); return;`
+became `return {refuse: text}`, each `saveBookings(fn)` plus its success toast became
+`return {transform: fn, done: text}`, and the two bare `return`s became `return null`.
+App's `dropOnTable` is the capability gate, the call, and the two side effects. The success
+toast is still gated on `saveBookings`' boolean. Six imports left `App.jsx` with it.
+
+**Verified old against new.** A throwaway test lifted the old `dropOnTable` out of the
+previous commit's `App.jsx`, compiled it with the real `booking-logic` functions and stub
+`saveBookings` / `flashDragMsg`, and ran both on generated days (3–15 bookings, mixed
+statuses, locks, table blocks, optimiser on and off, today and later days), dropping every
+booking on every table: **70,538 drops, the same toast and the same written list each
+time**, history entries included (clock frozen). All nine outcomes were reached: nothing
+23,780 · move 24,442 · displace 10,419 · swap 1,015 · five refusals 10,882. Sabotage: the
+swap locking the other party failed it at the second seed. The test is not committed,
+because it reads the old code from git.
+
+**What stays:** `tests/drop-plan.test.js`, one case per outcome, asserting what is written
+and what the toast says, and that App's function is still only the gate, the plan and the
+side effects.
+
+**Measured on DEV (1 trial).** `onDropOnTable` called from TimelineView's props on a
+confirmed party of 2: 1A → 2, toast "… moved to 2.", stored `tables: ["2"]`,
+`_locked: true`, history "moved to 2 (drag)"; then back to 1A the same way. **Not done:** a
+real finger drag. The Browser pane cannot arm one (`mgt-measurement-traps`), and the
+gesture code in `TimelineView` did not change.
+
+**Gate:** build 127.44 kB gz (main chunk, +0.07) · 2702 tests passed (14 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+#### `/code-review` (high) — seven findings, four fixed, one deferred, two left
+
+Files: `src/components/Shortcuts.jsx` · `src/lib/shortcuts.js` ·
+`src/components/whatsapp/WaSimulator.jsx` · `src/lib/wa-backend-sim.js` ·
+`tests/shortcuts.test.js` · `tests/shortcuts-tab.test.js` · `tests/wa-sim-feedback.test.js` ·
+`ROADMAP.md`
+
+**Fixed.**
+- **The Shortcuts tab's order list could drop or break a table section.** `SECTION_ORDER`
+  in `Shortcuts.jsx` is typed by hand, and nothing held it to `DOC_SECTIONS`: a renamed
+  section gave `undefined` and the tab threw on `sec.when`, and a new section passed every
+  test without being listed. A missing title is skipped and an unnamed table section is
+  drawn after the rest. The test calls `ShortcutsContent` and asks for every table title.
+- **`shortcutDocs` merged rows by label alone**, keeping the first row's gate. No two rows
+  do this today. The merge needs the same gate too. Test: a gated row pushed into the table
+  beside "Jump to today" comes out as its own line; without the fix it fails.
+- **The simulator's footer asked the toggle's state, the sender asks `backendEnabled()`.**
+  Where they disagree (storage blocked, the flag cleared in another tab) the message is
+  written client-side, `onBackend` is never called and the line stayed on "Sending…".
+  Both ask `backendEnabled()`. Not reproduced live; read from the two code paths.
+- **Deployed, an unreachable server showed "Failed to fetch".** `simErrorText` explained
+  it only in DEV. It now says the server could not be reached. Test fails without the line.
+
+**Deferred to ROADMAP.** A no-show walked back before v18.3.5 and later cancelled normally
+still counts (`isNoShow` measured true on that shape). The fix is in the cancel writer,
+outside this diff. Before this version such a booking counted even while confirmed, so
+this is a remainder of the old rule and not something this version introduced.
+
+**Left as they are.**
+- The refusal toast's box is read once, when the refusal is raised, so it does not follow
+  a rotation or resize in the 3.5 s it shows. Cosmetic, and following it means a resize
+  listener for a toast.
+- `REFUSAL_Z = 400` is a constant in `RefusalToast.jsx`, with 300 / 301 as literals in
+  three other files. `tests/refusal-toast.test.js` scans every z-index under `src/` and
+  fails on one at or above it, which is the guard; moving the popups' numbers into one
+  table is a refactor of files this version did not touch.
+
+**Gate:** build 127.45 kB gz (main chunk, +0.01) · 2706 tests passed (4 new) · lint 63 problems, 0 errors · `check:style` OK.

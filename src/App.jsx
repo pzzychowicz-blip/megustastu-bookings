@@ -34,14 +34,14 @@ import {
 import {
   getDur, toMins, sanitizeBlock,
   histEntry,
-  isLocked, isActive, statusOrder,
-  getBlockSlots, canAssign, getBusy, overlaps, comboCapBest,
+  isLocked, statusOrder,
+  getBlockSlots, canAssign,
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
-  lateState, freeingSoon, rankCombosContaining, comboExistsFor,
+  lateState, freeingSoon,
   undoSnapshots, applyUndo,
   seatedElapsed,
   // v18.0.0 session 7: the length Book Again carries over.
@@ -97,9 +97,10 @@ import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
-// v18.1.1: what "Download backup" writes — the whole database minus a named,
-// reasoned omission list — decided in a pure module (tests/backup.test.js).
-import { buildBackup } from "./lib/backup";
+// v18.4.5: "Download backup" is this hook (the flow and the file's contents are
+// lib/backup.js, tests/backup.test.js); the CSV shares its file-saving half.
+import { useBackup } from "./hooks/useBackup";
+import { saveTextFile } from "./lib/download";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -109,6 +110,9 @@ import { buildBackup } from "./lib/backup";
 import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
+import { RefusalToast } from "./components/RefusalToast";
+import { toastBox } from "./lib/toast-box";
+import { planDrop } from "./lib/drop-plan";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
 
@@ -414,7 +418,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.4.4"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.4.5"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1023,6 +1027,7 @@ function BookingApp({uid}){
   // have stopped meaning it.
   const [permMsg, setPermMsg] = useState(null);
   const permMsgTimer = useRef(null);
+  const toastAnchorRef = useRef(null);
   const manualTarget = modalOpen.manual || null;
   const setManualTarget = setModalFns.manual;
   const [dismissedIneff, setDismissedIneff] = useState(null);
@@ -1653,14 +1658,8 @@ function BookingApp({uid}){
   // lib/activity.js; this is only the part that needs a DOM.
   function doDownloadActivity(text,filename){
     if(refused("dataExport")) return;
-    try{
-      const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;a.download=filename;
-      document.body.appendChild(a);a.click();document.body.removeChild(a);
-      setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    }catch{setWriteWarning("Couldn't create the file on this device.");}
+    try{saveTextFile(text,filename,"text/csv;charset=utf-8");}
+    catch{setWriteWarning("Couldn't create the file on this device.");}
   }
   const prunedRef=useRef(false);
   useEffect(function(){
@@ -2396,63 +2395,12 @@ function BookingApp({uid}){
   // Customers tab arms an explicit confirm before calling this. Known edge:
   // if the customer's bookings are the ENTIRE database, the empty-array
   // write-guard refuses the delete — safety wins (document, don't bypass).
-  // v16.3.0: download a JSON backup of every collection + all settings to the
-  // device. Read-only (no write-guard concerns). The Firebase free plan has NO
-  // automatic backups, so this is one-tap insurance; restore stays manual.
-  // v18.1.1: the file is now the WHOLE database, read from the server in one
-  // get(). The hand-built payload it replaces named five collections and five
-  // settings nodes and never learned about vouchers, roles, invites, the
-  // activity log or four more settings nodes, so a restore from it would have
-  // lost every gift-voucher balance. `lib/backup.js` holds the rule and the why;
-  // `database.rules.README.md` § Backups and restore holds the restore.
-  const backupInFlightRef=useRef(false);
-  // v18.3.1: the backup's outcome, shown UNDER the button in Settings. It went
-  // to the red "Couldn't save" banner, which sits behind the Settings overlay
-  // and under `inert`, so an offline press looked dead until Settings closed.
-  // null | {kind:"busy"|"done"|"error", text}. Cleared when Settings closes.
-  const [backupStatus,setBackupStatus]=useState(null);
-  // /code-review: which open of Settings a backup belongs to. Closing Settings
-  // bumps it, so a read that returns afterwards neither leaves a stale line for
-  // the next open nor loses a failure: an error then goes to the red banner,
-  // which is visible again once the overlay is gone.
-  const backupGenRef=useRef(0);
-  function doBackup(){
-    // The widest data-protection action in the app — every booking, every
-    // customer name and every phone number in one file — and the ONE gated
-    // capability with no rule behind it: the file is built client-side out of
-    // reads, and `.read` is `auth != null` at the root. `CAPABILITIES` says so
-    // rather than letting the enforced badge imply otherwise.
-    if(refused("dataExport")) return;
-    // One read at a time: a second tap while the first is out would only
-    // download the same file twice.
-    if(backupInFlightRef.current) return;
-    backupInFlightRef.current=true;
-    const gen=backupGenRef.current;
-    function report(st){
-      if(gen===backupGenRef.current) setBackupStatus(st);
-      else if(st.kind==="error") setWriteWarning(st.text);
-    }
-    setBackupStatus({kind:"busy",text:"Reading the database…"});
-    readDatabaseRoot().then(function(root){
-      const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
-      try{
-        const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url;
-        a.download="mgt-backup-"+todayStr()+".json";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function(){URL.revokeObjectURL(url);},1000);
-        report({kind:"done",text:"Backup file created: "+a.download+". Check this device's downloads."});
-      }catch{report({kind:"error",text:"Couldn't create the backup file on this device."});}
-    },function(err){
-      report({kind:"error",text:err&&err.message==="offline"
-        ?"Offline. A backup needs a connection to read the latest data. Try again once the app shows Connected."
-        :"Couldn't read the database for the backup."});
-    }).finally(function(){backupInFlightRef.current=false;});
-  }
+  // v16.3.0: download a JSON backup of the database to the device. The Firebase
+  // free plan has NO automatic backups, so this is one-tap insurance; restore
+  // stays manual (`database.rules.README.md` § Backups and restore). v18.4.5
+  // (ROADMAP #17): the flow is `runBackup` in lib/backup.js and the state is
+  // this hook's; App passes what is App's and renders the status in Settings.
+  const {backupStatus,doBackup,endBackupOpen}=useBackup({readDatabaseRoot:readDatabaseRoot,refused:refused,setWriteWarning:setWriteWarning,appVersion:__APP_SIGNATURE__.version});
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
   // no-show tile) as name "Data removed" with phone/notes/history wiped and
@@ -2645,7 +2593,7 @@ function BookingApp({uid}){
   // keeps its tab reset on BOTH paths — the clean close here and the discard
   // below — because that was part of the close behaviour before the guard, not
   // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");setBackupStatus(null);backupGenRef.current++;}
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");endBackupOpen();}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}
@@ -2986,21 +2934,8 @@ function BookingApp({uid}){
     setError("");
     if(ok) flash();
   }
-  // ── v17.0.0 correction: Timeline drag & drop (move / swap / displace) ─────
-  // Drop a dragged block on another table row. Round 3 semantics (Patryk):
-  //   1. pick the table SET the party takes at the target — the single table
-  //      if it seats them, else the smallest VALID_COMBO containing the target
-  //      that does (skipping combos with a blocked member or a seated party);
-  //   2. set free → plain move onto it;
-  //   3. exactly one overlapping booking → try the round-1 full-set SWAP first
-  //      (capacity both ways + canAssign);
-  //   4. else DISPLACE: strip the desired tables from the occupants, unlock
-  //      them, give the dragged booking the set, re-optimize (the manualAssign
-  //      Swap-busy recipe) — but commit ONLY if a trial pass re-seats every
-  //      displaced booking (no stranding; refusal toast otherwise).
-  // The dragged booking becomes _manual+_locked so the optimizer never undoes
-  // a hand-placed drag. Refusals surface via the dragMsg floating toast;
-  // success messages are gated on the saveBookings `ok` boolean (v15.4.0).
+  // ── Timeline drag & drop ───────────────────────────────────────────────────
+  // The move / swap / displace rules are in lib/drop-plan.js since v18.4.5.
   // ── v18.0.0 phase 3: the capability gate, at the ACTION ─────────────────────
   // Returns TRUE when the action must not proceed, and says so on screen. It
   // guards the action rather than each control, so the button, the keyboard
@@ -3017,10 +2952,15 @@ function BookingApp({uid}){
   // as broken, which is the v17.16.12 lesson about `seated` after close.
   // /code-review (session 7): the refusal toast on its own — `refused` is one
   // caller, and ⇧D under Automatic dark mode (onToggleDark) is the other.
+  // v18.4.5: the toast is drawn in RefusalToast's fixed layer above every modal,
+  // so the message carries the box it is drawn in — the main view's wrapper, read
+  // here, when the refusal is raised (lib/toast-box.js). The timer turns `show`
+  // off and KEEPS the text and the box, so the pill fades out where it was.
   function flashRefusal(text){
-    setPermMsg(text);
+    const el=toastAnchorRef.current;
+    setPermMsg(Object.assign({text:text,show:true},toastBox(el?el.getBoundingClientRect():null,window.innerWidth)));
     clearTimeout(permMsgTimer.current);
-    permMsgTimer.current=setTimeout(function(){setPermMsg(null);},3500);
+    permMsgTimer.current=setTimeout(function(){setPermMsg(function(m){return m?Object.assign({},m,{show:false}):m;});},3500);
   }
   function refused(cap){
     if(can(cap)) return false;
@@ -3028,153 +2968,14 @@ function BookingApp({uid}){
     return true;
   }
   function flashDragMsg(text,good){setDragMsg({text:text,good:!!good});clearTimeout(dragMsgTimer.current);dragMsgTimer.current=setTimeout(function(){setDragMsg(null);},3500);}
+  // v18.4.5 (#17): WHAT a drop does is `planDrop` (lib/drop-plan.js), which
+  // returns its conclusion. App keeps the gate and the two side effects; the
+  // success toast is still gated on `saveBookings`' boolean (v15.4.0).
   function dropOnTable(id,targetId){if(refused("bookingAssign"))return;
-    const src=liveBookings.find(function(b){return b.id===id;});
-    if(!src||src.date!==viewDate||!isActive(src)) return;
-    const cur=src.tables||[];
-    if(cur.length===1&&cur[0]===targetId) return; // dropped back on its own row
-    const size=src.size||2;
-    const s=toMins(src.time);
-    const e=Math.max(occupancyEnd(src,nowMins,today),s+1);
-    const blockSlots=getBlockSlots(tableBlocks,src.date);
-    const busyBlocked=getBusy(blockSlots,s,e);
-    if(busyBlocked.has(targetId)){flashDragMsg("Table "+targetId+" is blocked then.");return;}
-    // Day's other active bookings (completed = free, the v16.0.0 rule) + the
-    // tables held by SEATED parties over the span — those are immovable.
-    const dayActive=liveBookings.filter(function(b){return b.date===src.date&&b.id!==id&&isActive(b)&&b.status!=="completed";});
-    const isOver=function(b){return overlaps(s,e,toMins(b.time),occupancyEnd(b,nowMins,today));};
-    const seatedOn=new Set();
-    dayActive.forEach(function(b){if(b.status==="seated"&&isOver(b))(b.tables||[]).forEach(function(t){seatedOn.add(t);});});
-    // 1. Candidate table sets at the target, in PURE optimizer order (round 4,
-    //    Patryk-confirmed): the single table if it seats the party, else every
-    //    VALID_COMBO containing the target that does — ranked exactly like
-    //    findBest ranks combos (rankCombosContaining), NOT by raw capacity.
-    const cap1=(ALL_TABLES.find(function(t){return t.id===targetId;})||{}).capacity||0;
-    // v17.0.0 review fix #1: cap the candidate walk. Step 4 runs a full
-    // bookingsAfterAction TRIAL per candidate (optimise can be 70–500ms when a
-    // day has unplaceable bookings); an unbounded ~20-combo walk on a busy day
-    // could freeze the UI for seconds before the refusal toast. The top few
-    // ranked combos are the only realistic placements; deeper ones would strand
-    // more parties anyway.
-    const MAX_CAND=8;
-    const ranked=cap1>=size?[]:rankCombosContaining(targetId,size);
-    const candSets=cap1>=size
-      ?[[targetId]]
-      :ranked
-        .filter(function(c){return !c.ids.some(function(t){return busyBlocked.has(t)||seatedOn.has(t);});})
-        .map(function(c){return c.ids.slice();})
-        .slice(0,MAX_CAND);
-    // /code-review #2: name the ACTUAL reason (only reachable when cap1<size —
-    // a fitting single table always yields a candidate). "Won't fit" was a lie
-    // when a big-enough combo exists but the drag's waste/avoid rules excluded
-    // it: that's a "use Manual assign", not a dead end.
-    if(candSets.length===0){
-      flashDragMsg(ranked.length>0
-        ? "The tables needed to join with "+targetId+" are busy or blocked then."
-        : comboExistsFor(targetId,size)
-          ? "Party of "+size+" would need too many tables joined at "+targetId+" — use Manual assign."
-          : "Party of "+size+" won't fit at "+targetId+", even with joined tables.");
-      return;
-    }
-    const occOf=function(set){return dayActive.filter(function(b){return isOver(b)&&(b.tables||[]).some(function(t){return set.includes(t);});});};
-    const desired=candSets[0];
-    const occ=occOf(desired);
-    const user=getUser();
-    // 2. Free set → plain move.
-    if(occ.length===0){
-      const ok=saveBookings(function(prev){return prev.map(function(b){
-        if(b.id!==id) return b;
-        return Object.assign({},b,{tables:desired,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+desired.join("+")+" (drag)",user)])});
-      });});
-      if(ok) flashDragMsg(src.name+" moved to "+desired.join("+")+".",true);
-      return;
-    }
-    // 3. Exactly one occupant → try the straight full-set swap first.
-    if(occ.length===1&&cur.length>0&&occ[0].status!=="seated"){
-      const other=occ[0];
-      const newSrc=(other.tables||[]).slice(),newOther=cur.slice();
-      const otherSize=other.size||2;
-      if(comboCapBest(newSrc)>=size&&comboCapBest(newOther)>=otherSize){
-        const os=toMins(other.time),oe=Math.max(occupancyEnd(other,nowMins,today),os+1);
-        const slots=dayActive.filter(function(b){return b.id!==other.id&&(b.tables||[]).length>0;}).map(function(b){return {tables:b.tables,s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};}).concat(blockSlots);
-        if(canAssign(newSrc,slots,s,e)&&canAssign(newOther,slots.concat([{tables:newSrc,s:s,e:e}]),os,oe)){
-          // v17.10.0: ONLY THE BOOKING YOU DRAGGED GETS LOCKED. This branch used
-          // to write `_manual:true,_locked:true` to BOTH sides, which pinned a
-          // party nobody asked to pin — the optimizer could then never tidy the
-          // displaced booking again, and every swap quietly grew the set of
-          // hand-placed bookings. The other two paths that move an occupant out
-          // of the way (step 4's displacement below, and manualAssign's
-          // `affected` branch) have always unlocked them; this one was the odd
-          // one out.
-          //
-          // The exception is real and is the reason these two flags are read off
-          // the CAPTURED `other` rather than being written false outright: a
-          // walk-in is `_manual+_locked` BY DEFINITION and immune to the
-          // optimizer (CLAUDE.md's Gotchas table), so force-unlocking one here
-          // would let a reshuffle move a party that is physically sitting down.
-          // An already-locked booking therefore keeps its lock on its NEW tables;
-          // an ordinary confirmed booking comes out unlocked, which is the ask.
-          const otherLocked=!!other._locked,otherManual=!!other._manual;
-          const ok=saveBookings(function(prev){return prev.map(function(b){
-            if(b.id===id) return Object.assign({},b,{tables:newSrc,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+other.name+" ("+(cur.join("+")||"none")+" → "+newSrc.join("+")+")",user)])});
-            if(b.id===other.id) return Object.assign({},b,{tables:newOther,_manual:otherManual,_locked:otherLocked,_conflict:false,history:(b.history||[]).concat([histEntry("swapped tables with "+src.name+" ("+(other.tables||[]).join("+")+" → "+newOther.join("+")+")",user)])});
-            return b;
-          });});
-          if(ok) flashDragMsg(src.name+" and "+other.name+" — tables swapped.",true);
-          return;
-        }
-      }
-    }
-    // 4. Displacement — the manualAssign Swap-busy recipe, with a trial gate.
-    //    Round 4: walk the optimizer-ranked candidates in order and commit the
-    //    FIRST whose trial re-seats every displaced booking conflict-free —
-    //    a stranding top pick falls through to the next set, not to a refusal.
-    const mkTransform=function(dSet,dOcc){
-      const occIds=new Set(dOcc.map(function(b){return b.id;}));
-      return function(list){
-        const updated=list.map(function(b){
-          if(b.id===id) return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
-          if(occIds.has(b.id)){
-            const remaining=(b.tables||[]).filter(function(t){return !dSet.includes(t);});
-            return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
-          }
-          return b;
-        });
-        return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
-      };
-    };
-    for(let ci=0;ci<candSets.length;ci++){
-      const dSet=candSets[ci];
-      const dOcc=ci===0?occ:occOf(dSet);
-      if(dOcc.some(function(b){return b.status==="seated";})) continue; // seated = immovable (only reachable via the single-table set)
-      if(dOcc.length===0){
-        // a lower-ranked but FREE set (only reachable past a failed higher pick)
-        const ok=saveBookings(function(prev){return prev.map(function(b){
-          if(b.id!==id) return b;
-          return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
-        });});
-        if(ok) flashDragMsg(src.name+" moved to "+dSet.join("+")+".",true);
-        return;
-      }
-      const transform=mkTransform(dSet,dOcc);
-      // v17.0.0 review note #2: the trial runs against the CURRENT `bookings`,
-      // while the committed write re-applies `transform` to whatever fresh
-      // `prev` saveBookings hands it. `transform` itself re-runs
-      // bookingsAfterAction (the optimizer) on that fresh data, so the COMMIT is
-      // always internally consistent; a concurrent remote echo can at worst
-      // leave a displaced booking table-less (visible in the unassigned row) or
-      // overlapping (the v15.6.1 reconciliation effect then self-heals). No
-      // silent data loss — acceptable for a rare cross-device race.
-      const trial=transform(bookings);
-      const stranded=dOcc.find(function(o){const t=trial.find(function(x){return x.id===o.id;});return !t||(t.tables||[]).length===0||t._conflict;});
-      if(stranded) continue;
-      const ok=saveBookings(transform);
-      if(ok) flashDragMsg(src.name+" moved to "+dSet.join("+")+" — "+dOcc.map(function(o){return o.name;}).join(", ")+" reassigned.",true);
-      return;
-    }
-    const seatedOcc=occ.find(function(b){return b.status==="seated";});
-    if(seatedOcc){flashDragMsg(seatedOcc.name+" is seated on "+targetId+"'s tables — can't move them.");return;}
-    flashDragMsg("Can't re-seat the parties there without stranding one — use Manual assign.");
+    const plan=planDrop({id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
+    if(!plan) return;
+    if(plan.refuse){flashDragMsg(plan.refuse);return;}
+    if(saveBookings(plan.transform)) flashDragMsg(plan.done,true);
   }
   // The confirm dialog's ONE door. `delBooking` below is the guarantee; this is
   // so a staff member is refused at the point of intent rather than after
@@ -5050,7 +4851,7 @@ function BookingApp({uid}){
                   thing `inert` is meant to describe. This is the same finding
                   as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal speed="move" show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div ref={toastAnchorRef} style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
@@ -5060,7 +4861,6 @@ function BookingApp({uid}){
                 undoInfo={undoInfo}
                 onUndo={undoLastAction}
                 undoNote={undoInfo&&undoInfo.note?undoInfo.note:""}
-                permMsg={permMsg}
                 dragMsg={dragMsg}
                 reshuffled={reshuffled}
                 reshuffledMsg={reshuffledMsg}
@@ -5091,7 +4891,7 @@ function BookingApp({uid}){
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection
         dropping, a double-booking appearing) are exactly the ones a modal must
-        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
+        not suppress. Always mounted; see notifAnnounce. */}<RefusalToast msg={permMsg} /><div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
         one above. They answer different questions and can change in the same
         commit — a date change that also brings a clash into view would have one
         overwrite the other inside a single region, and whichever won would be

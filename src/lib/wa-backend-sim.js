@@ -132,3 +132,21 @@ export async function generateScenario({ hint, count } = {}) {
   if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
   return data;
 }
+
+// v18.4.5 — what the panel says when one of the calls above fails. The two
+// failures a person actually meets each had a message that named nothing: the
+// dev server with no harness running rejects with the browser's "Failed to
+// fetch", and a deployment whose WA_SIM_ENABLED is not "1" answers the gate's
+// 404 `{error: "not found"}`, which is all three endpoints at once. Any other
+// message is the server's own and is passed through. `dev` is a parameter so
+// both halves can be tested.
+export function simErrorText(e, dev = import.meta.env.DEV) {
+  const msg = (e && e.message) || "unknown error";
+  const unreachable = /failed to fetch|load failed|networkerror/i.test(msg);
+  if (dev) return unreachable ? "the local backend is not running (npm run wa:backend)" : msg;
+  // /code-review: deployed, the same three browser messages mean the server
+  // was not reached at all, which on a phone is the connection.
+  if (unreachable) return "the server could not be reached (check this device's connection)";
+  if (msg === "not found" || msg === "HTTP 404") return "the simulator endpoints are off on this deployment (WA_SIM_ENABLED is not 1)";
+  return msg;
+}

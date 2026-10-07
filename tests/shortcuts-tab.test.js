@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { resolveShortcut } from "../src/lib/shortcuts";
+import { resolveShortcut, shortcutDocs } from "../src/lib/shortcuts";
 
 vi.mock("../src/lib/waSandbox", () => ({ WA_SANDBOX: false }));
 const { ShortcutsContent } = await import("../src/components/Shortcuts.jsx");
@@ -37,6 +37,21 @@ function textsOf(node, out = []) {
   textsOf(p.children, out);
   return out;
 }
+
+// /code-review: the tab's ORDER is a hand-typed list of titles in Shortcuts.jsx.
+// A table section it does not name is still drawn, and one it names that the
+// table no longer has does not break the tab.
+describe("every section of the shortcut table is drawn", () => {
+  it("lists each table section's title", () => {
+    const t = textsOf(ShortcutsContent({ whatsappOn: true }));
+    shortcutDocs().forEach((sec) => expect(t, sec.title).toContain(sec.title));
+  });
+  it("draws a section the order does not name, and survives a title it no longer has", () => {
+    const src = read("components/Shortcuts.jsx");
+    expect(src).toMatch(/\.filter\(Boolean\)/);
+    expect(src).toMatch(/!SECTION_ORDER\.includes\(sec\.title\)/);
+  });
+});
 
 describe("a key is listed only where it works", () => {
   it("a production build without WhatsApp: no simulator, no inbox", () => {
@@ -69,8 +84,11 @@ describe("a key is listed only where it works", () => {
     const sc = read("components/Shortcuts.jsx");
     expect(sc).toMatch(/if \(when === "sandbox"\) return WA_SANDBOX;/);
     expect(sc).toMatch(/if \(when === "whatsapp"\) return whatsappOn === true;/);
-    expect(sc).toMatch(/\{ keys: \["X"\],\s*label: "Open WhatsApp simulator", when: "sandbox" \}/);
-    expect(sc).toMatch(/\{ keys: \["I"\],\s*label: "Open WhatsApp inbox", when: "whatsapp" \}/);
+    // v18.4.5: the two rows are the TABLE's, so the tag that lists a key is the
+    // tag that gates it. The inbox section is still written in the tab.
+    const nav = shortcutDocs().find((sec) => sec.title === "Navigation").rows;
+    expect(nav.find((r) => r.label === "Open WhatsApp simulator")).toEqual({ keys: ["X"], label: "Open WhatsApp simulator", when: "sandbox" });
+    expect(nav.find((r) => r.label === "Open WhatsApp inbox")).toEqual({ keys: ["I"], label: "Open WhatsApp inbox", when: "whatsapp" });
     expect(sc).toMatch(/\{ title: "WhatsApp Inbox", when: "whatsapp", rows: \[/);
   });
 

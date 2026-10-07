@@ -89,23 +89,41 @@ describe("normalizePhone / formatPhone / hasRealPhone", () => {
 
 describe("isNoShow", () => {
   it("true for the flag OR a legacy history entry", () => {
-    expect(isNoShow({ noShow: true })).toBe(true);
-    expect(isNoShow({ history: [{ action: "no show" }] })).toBe(true);
+    expect(isNoShow({ status: "cancelled", noShow: true })).toBe(true);
+    expect(isNoShow({ status: "cancelled", history: [{ action: "no show" }] })).toBe(true);
     expect(isNoShow({ status: "cancelled" })).toBe(false);
     expect(isNoShow({})).toBe(false);
     expect(isNoShow(null)).toBe(false);
+  });
+  // v18.4.5 (Patryk): a no-show is a cancellation, so one that is no longer
+  // cancelled is a visit that happened. Covers a booking walked back before
+  // v18.3.5, whose flag is still true and whose history has no cleared entry.
+  it("counts only while the booking is still cancelled", () => {
+    const ns = { action: "no show" };
+    ["confirmed", "seated", "completed", "pending", undefined].forEach((status) => {
+      expect(isNoShow({ status, noShow: true }), String(status)).toBe(false);
+      expect(isNoShow({ status, noShow: true, history: [ns] }), String(status)).toBe(false);
+      expect(isNoShow({ status, history: [ns] }), String(status)).toBe(false);
+    });
+    expect(isNoShow({ status: "cancelled", noShow: true, history: [ns] })).toBe(true);
+  });
+  it("a walked-back no-show leaves the customer's tally and the day's stats", () => {
+    const old = bk({ id: "w1", phone: "+34600555666", name: "Wal", status: "completed", noShow: true, history: [{ action: "no show" }] });
+    const real = bk({ id: "w2", phone: "+34600555666", name: "Wal", date: "2099-02-01", status: "cancelled", noShow: true });
+    expect(noShowMap([old, real])["+34600555666"]).toBe(1);
+    expect(noShowMap([old])["+34600555666"] || 0).toBe(0);
   });
   // v18.3.5: a walk-back out of cancelled leaves the "no show" entry as the
   // record and adds "no-show cleared"; the history is read from its end.
   it("stops counting once the no-show was cleared, and counts again if re-marked", () => {
     const ns = { action: "no show" }, cleared = { action: "no-show cleared" }, edit = { action: "edited: time 20:00→20:30" };
-    expect(isNoShow({ noShow: false, history: [ns, cleared] })).toBe(false);
-    expect(isNoShow({ noShow: false, history: [ns, cleared, edit] })).toBe(false);
-    expect(isNoShow({ noShow: false, history: [ns, cleared, edit, ns] })).toBe(true);
+    expect(isNoShow({ status: "cancelled", noShow: false, history: [ns, cleared] })).toBe(false);
+    expect(isNoShow({ status: "cancelled", noShow: false, history: [ns, cleared, edit] })).toBe(false);
+    expect(isNoShow({ status: "cancelled", noShow: false, history: [ns, cleared, edit, ns] })).toBe(true);
     // The flag is the primary signal, whatever the history says.
-    expect(isNoShow({ noShow: true, history: [ns, cleared] })).toBe(true);
+    expect(isNoShow({ status: "cancelled", noShow: true, history: [ns, cleared] })).toBe(true);
     // Unrelated entries after a legacy no-show do not clear it.
-    expect(isNoShow({ history: [ns, edit] })).toBe(true);
+    expect(isNoShow({ status: "cancelled", history: [ns, edit] })).toBe(true);
   });
 });
 
@@ -194,8 +212,8 @@ describe("customerIndex / noShowMap", () => {
 
   it("splits no-shows nowhere — the repeat-offender flag sees the whole tally", () => {
     const list = [
-      bk({ id: "a", phone: "", name: "Ann", date: "2099-01-01", noShow: true, guestId: "gA" }),
-      bk({ id: "b", phone: "+34600111222", name: "Ann", date: "2099-03-01", noShow: true, guestId: "gA" }),
+      bk({ id: "a", phone: "", name: "Ann", date: "2099-01-01", status: "cancelled", noShow: true, guestId: "gA" }),
+      bk({ id: "b", phone: "+34600111222", name: "Ann", date: "2099-03-01", status: "cancelled", noShow: true, guestId: "gA" }),
     ];
     const map = noShowMap(list);
     // Both spellings of the identity resolve to the same total, so the call
@@ -421,9 +439,9 @@ describe("identityKey / matchCustomerFor (guestId)", () => {
   });
 
   it("noShowMap counts a joined phone-less offender, and skips an unjoined one", () => {
-    const n1 = bk({ id: "n1", phone: "", noShow: true, guestId: "gN" });
-    const n2 = bk({ id: "n2", phone: "", noShow: true, guestId: "gN" });
-    const loose = bk({ id: "n3", phone: "", noShow: true });
+    const n1 = bk({ id: "n1", phone: "", status: "cancelled", noShow: true, guestId: "gN" });
+    const n2 = bk({ id: "n2", phone: "", status: "cancelled", noShow: true, guestId: "gN" });
+    const loose = bk({ id: "n3", phone: "", status: "cancelled", noShow: true });
     const map = noShowMap([n1, n2, loose]);
     expect(map.gN).toBe(2);
     expect(Object.keys(map)).toEqual(["gN"]);   // the unjoined booking has no identity
