@@ -72,7 +72,10 @@ describe("the generated sandbox branch", () => {
     expect(versions.length, "more than one version line in App.jsx").toBe(1);
     expect(versions[0].trim()).toMatch(/^version:"\d+\.\d+\.\d+"\+\(SANDBOX_DEPLOY\?"-sandbox":""\),$/);
     // Narrower than WA_SANDBOX on purpose: the dev server is not a deployment.
-    expect(stripComments(read("src/lib/waSandbox.js")).join("\n"))
-      .toContain('export const SANDBOX_DEPLOY = import.meta.env.VITE_FB_TARGET === "dev";');
+    // And the env var is read ONCE: WA_SANDBOX is built from SANDBOX_DEPLOY.
+    const flags = stripComments(read("src/lib/waSandbox.js")).join("\n");
+    expect(flags).toContain('export const SANDBOX_DEPLOY = import.meta.env.VITE_FB_TARGET === "dev";');
+    expect(flags).toContain("export const WA_SANDBOX = SANDBOX_DEPLOY || import.meta.env.DEV;");
+    expect(flags.split("VITE_FB_TARGET").length - 1).toBe(1);
   });
 });
