@@ -97,11 +97,17 @@ const SECTION_ORDER = [
   "Edit / New Booking", "Preferred Table picker", "Manual Table Assignment", "Settings", "Universal",
 ];
 
+// /code-review: the order above is typed by hand, so it must not be able to
+// drop or break a section of the table. A title it names that the table no
+// longer has is skipped, and a table section it does not name is listed after
+// the rest (tests/shortcuts-tab.test.js asks for every table section).
 function shortcutSections() {
   const fromTable = shortcutDocs();
-  return SECTION_ORDER.map(function (title) {
+  const ordered = SECTION_ORDER.map(function (title) {
     return OWN_SECTIONS[title] || fromTable.find(function (sec) { return sec.title === title; });
-  });
+  }).filter(Boolean);
+  const unnamed = fromTable.filter(function (sec) { return !SECTION_ORDER.includes(sec.title); });
+  return ordered.concat(unnamed);
 }
 
 // Is the key behind this `when` live here? Module-private: a component file

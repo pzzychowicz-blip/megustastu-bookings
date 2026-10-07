@@ -269,7 +269,7 @@ export function resolveShortcut(ev, K, env) {
 // `caps` (the keycaps as printed) and `label`. It was a second list, typed by
 // hand in Shortcuts.jsx, held to this one by nothing but the I and X gates.
 // A section is one or more layers, in the order given; rows of a section that
-// share a label are one line with their caps side by side (← and → are two
+// share a label and a gate are one line with their caps side by side (← and → are two
 // rows here and one line there). Every row has a label and every layer is in
 // exactly one section: tests/shortcuts.test.js fails otherwise, so a new key
 // cannot be left off the tab.
@@ -288,7 +288,9 @@ export function shortcutDocs() {
     const rows = [];
     sec.layers.forEach((name) => {
       SHORTCUT_LAYERS.find((l) => l.name === name).rows.forEach((row) => {
-        const line = rows.find((r) => r.label === row.label);
+        // Same label AND same gate: a gated key must not join an ungated line,
+        // or it is listed where it does nothing.
+        const line = rows.find((r) => r.label === row.label && r.when === row.gate);
         if (line) { line.keys = line.keys.concat(row.caps); return; }
         const doc = { keys: row.caps.slice(), label: row.label };
         if (row.gate) doc.when = row.gate;

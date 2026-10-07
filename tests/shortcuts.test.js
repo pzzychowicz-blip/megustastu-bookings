@@ -332,6 +332,17 @@ describe("every key in the table is listed on the Shortcuts tab", () => {
     expect(bare.map((r) => r.layer + ":" + r.keys.join(","))).toEqual([]);
   });
 
+  // /code-review: rows merge into one line only when they share the gate too,
+  // or a gated key is listed wherever the ungated one is.
+  it("a gated row does not join an ungated line with the same label", () => {
+    const global = SHORTCUT_LAYERS.find((l) => l.name === "global");
+    global.rows.push({ keys: ["q"], caps: ["Q"], label: "Jump to today", gate: "whatsapp", run: () => null });
+    try {
+      const lines = shortcutDocs().find((d) => d.title === "Navigation").rows.filter((r) => r.label === "Jump to today");
+      expect(lines.map((r) => [r.keys, r.when])).toEqual([[["D"], undefined], [["Q"], "whatsapp"]]);
+    } finally { global.rows.pop(); }
+  });
+
   it("every layer is in exactly one section", () => {
     const placed = docs.flatMap((sec) => sec.layers);
     expect(placed.slice().sort()).toEqual(SHORTCUT_LAYERS.map((l) => l.name).sort());

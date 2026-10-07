@@ -38,6 +38,21 @@ function textsOf(node, out = []) {
   return out;
 }
 
+// /code-review: the tab's ORDER is a hand-typed list of titles in Shortcuts.jsx.
+// A table section it does not name is still drawn, and one it names that the
+// table no longer has does not break the tab.
+describe("every section of the shortcut table is drawn", () => {
+  it("lists each table section's title", () => {
+    const t = textsOf(ShortcutsContent({ whatsappOn: true }));
+    shortcutDocs().forEach((sec) => expect(t, sec.title).toContain(sec.title));
+  });
+  it("draws a section the order does not name, and survives a title it no longer has", () => {
+    const src = read("components/Shortcuts.jsx");
+    expect(src).toMatch(/\.filter\(Boolean\)/);
+    expect(src).toMatch(/!SECTION_ORDER\.includes\(sec\.title\)/);
+  });
+});
+
 describe("a key is listed only where it works", () => {
   it("a production build without WhatsApp: no simulator, no inbox", () => {
     const t = textsOf(ShortcutsContent({ whatsappOn: false }));
