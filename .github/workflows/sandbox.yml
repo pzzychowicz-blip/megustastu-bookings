@@ -1,0 +1,69 @@
+name: Sandbox
+
+# Rebuilds the `sandbox` branch as main + ONE line, on every push to main.
+#
+# The sandbox is a separate Vercel project (megustastu-bookings-wa-sandbox) whose
+# production branch is `sandbox`. Everything that makes a build "the sandbox" is
+# that project's VITE_FB_TARGET=dev: DEV Firebase (src/firebase.js), the
+# simulator kept in the bundle (vite.config.js' stripSimulator) and the
+# `-sandbox` version suffix (src/lib/waSandbox.js). The one thing an environment
+# variable cannot do is change .vercelignore, which keeps the three simulator
+# endpoints (api/wa-sim-*.js) off the restaurant's deployment — so the branch
+# exists to carry exactly that re-include, and nothing else.
+#
+# Until v18.4.3 the branch was long-lived and merged from main by hand, and it
+# sat 335 commits behind. A generated branch cannot fall behind and has no merge
+# to get wrong.
+#
+# FORCE-pushed, on purpose: the branch is machine-owned output, not history.
+# Never commit to it by hand — the next push to main discards the commit.
+#
+# This is the ONE standing exception to "every push needs Patryk's approval"
+# (his call, 2026-10-07). It is bounded by what it can write: `contents: write`
+# on a workflow whose only push names `sandbox`.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# The newest main wins; a run overtaken by a later merge has nothing to add.
+concurrency:
+  group: sandbox-branch
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      # `ref: main` and not the default: a manual run started from another
+      # branch must still build the sandbox from main.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Rebuild sandbox as main + the simulator re-include
+        run: |
+          set -euo pipefail
+          # The re-include only means something AFTER the exclusion it negates.
+          # If main ever drops the exclusion this fails loudly rather than
+          # appending a line that does nothing.
+          grep -qxF 'api/wa-sim-*.js' .vercelignore
+          # And main must never carry the re-include itself: that would ship
+          # the simulator endpoints to production (tests/sandbox-branch.test.js
+          # is the same check, earlier).
+          if grep -qxF '!api/wa-sim-*.js' .vercelignore; then
+            echo "main's .vercelignore already re-includes api/wa-sim-*.js" >&2
+            exit 1
+          fi
+          printf '\n# Appended by .github/workflows/sandbox.yml: the sandbox deployment keeps the simulator endpoints.\n!api/wa-sim-*.js\n' >> .vercelignore
+          # Authored as main's head commit is: Vercel can refuse to deploy a
+          # commit whose author it does not recognise as a project member.
+          git config user.name "$(git log -1 --format=%an)"
+          git config user.email "$(git log -1 --format=%ae)"
+          SHA="$(git rev-parse --short HEAD)"
+          git checkout -B sandbox
+          git commit -am "sandbox: main at ${SHA} + the simulator endpoints re-included"
+          git push --force origin sandbox

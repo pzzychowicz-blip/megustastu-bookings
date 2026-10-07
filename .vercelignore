@@ -16,21 +16,22 @@
 # Deployed, they are one stray environment variable away from live. Not
 # deployed, WA_SIM_ENABLED does nothing at all on production.
 #
-# ── The wa-sandbox branch MUST re-include them ───────────────────────────────
+# ── The `sandbox` branch re-includes them, and nothing else may ──────────────
 # The deployed sandbox calls these same-origin (`WA_BACKEND_URL` is "" outside
 # the dev server), so excluding them there breaks its whole backend mode. The
-# sandbox branch APPENDS one line below:
+# `sandbox` branch is main plus ONE appended line:
 #
 #     !api/wa-sim-*.js
 #
-# Appending rather than deleting the exclusion is deliberate: a prod-sync merge
-# silently reinstates a deleted line — that is the failure
-# `tests/wa-sandbox-integrity.test.js` exists to catch, after it happened twice —
-# while an appended line survives the merge untouched. Check it after every sync.
+# Since v18.4.3 that branch is GENERATED: .github/workflows/sandbox.yml rebuilds
+# it from main on every push to main and force-pushes it, so nobody merges into
+# it and it cannot fall behind. The line is never written HERE — on main it
+# would ship the three handlers to production — and tests/sandbox-branch.test.js
+# fails the build if it appears in this file.
+
 # Claude's notes for this directory — not part of the deployment. Deliberately
-# ABOVE the wa-sim line: the wa-sandbox branch appends its `!api/wa-sim-*.js`
-# re-include at EOF, and two branches editing the same end of this file is a
-# merge conflict in the one file that branch depends on.
+# ABOVE the wa-sim line: the sandbox workflow asserts that exclusion is present
+# and appends its `!api/wa-sim-*.js` re-include at EOF, after it.
 api/CLAUDE.md
 
 api/wa-sim-*.js

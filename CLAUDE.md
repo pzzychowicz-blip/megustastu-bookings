@@ -274,6 +274,11 @@ Four rules stay here, because each one ships a bug from code that is not visual:
 - **Skip the server** for pure-logic/hook changes with no visual surface, doc-only commits, and planning/exploration (start it once edits begin).
 - DEV sign-in `auth/invalid-credential` on localhost is almost always environmental, not a code bug.
 
+### The sandbox deployment follows `main` by itself (v18.4.3)
+- `megustastu-bookings-wa-sandbox.vercel.app` is a separate Vercel project on **DEV Firebase** with the WhatsApp simulator: the test environment that is reachable from any device. Its `VITE_FB_TARGET=dev` is what makes a build the sandbox, and it must never be removed.
+- It deploys the **`sandbox` branch, which is GENERATED**: `.github/workflows/sandbox.yml` rebuilds it as `main` + one appended `.vercelignore` line on every push to `main` and force-pushes it. Never commit to it, merge into it or branch from it. That workflow is the one standing exception to "every push needs approval" (Patryk, 2026-10-07).
+- The version there reads `<version>-sandbox`, derived at build time (`SANDBOX_DEPLOY`, `src/lib/waSandbox.js`). `tests/sandbox-branch.test.js` holds the workflow, `.vercelignore` and the version line together.
+
 ### Trigger phrases — see the `mgt-workflow` skill
 Already lazy-loaded and covers the exact same phrases ("give me the deployment version", "give me changelog", "sum up this thread") with the same file-naming rules. A thread summary goes to `/Users/patrykzychowicz/Desktop/megustastu-bookings context`, which holds summaries and design docs ONLY: no copy of this file, `REFACTOR_LOG.md` or `ROADMAP.md` belongs there — one copy of each, in the repo.
 

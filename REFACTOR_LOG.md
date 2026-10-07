@@ -31578,3 +31578,77 @@ Six findings. Four fixed, one skipped, one needed no change.
 - **No change — the lock's count is module state** and splits across a hot reload of
   `scroll-lock.js`. DEV only, and a page reload clears it.
 
+
+## v18.4.3 — the sandbox follows main by itself
+
+**Date:** 2026-10-07 · **Branch:** `fix/v18.4.3-sandbox-follows-main` · **Behavioural
+change:** none in production. The deployed sandbox reports `18.4.3-sandbox`.
+
+**Files:** `.github/workflows/sandbox.yml` (new) · `tests/sandbox-branch.test.js` (new) ·
+`src/lib/waSandbox.js` · `src/App.jsx` · `.vercelignore` · `CLAUDE.md`
+
+**Why.** The WhatsApp module shipped to main in v18.0.0, so the separate sandbox no
+longer holds anything main lacks. Patryk wants to keep it as a test environment that is
+reachable from any device: main's code, DEV Firebase, the simulator. The existing
+`wa-sandbox-v18` branch was merged from main by hand and sat at 18.0.0, 335 commits
+behind (`git rev-list --left-right --count origin/main...origin/wa-sandbox-v18`).
+
+**What made it a branch at all.** Measured with `git diff origin/main...origin/wa-sandbox-v18`:
+two files. One appended `.vercelignore` line (`!api/wa-sim-*.js`), and a hand-edited
+version marker in `App.jsx`. Everything else that makes a build the sandbox already comes
+from the Vercel project's `VITE_FB_TARGET=dev`.
+
+**Decisions (Patryk, 2026-10-07, each asked):**
+
+- **The branch is generated, not merged.** `sandbox.yml` runs on every push to main (and
+  by hand), checks out main, appends the one line, commits and force-pushes `sandbox`.
+  Rejected: deploying through the Vercel CLI from the Action (a Vercel token as a secret
+  in a public repository), and removing the `.vercelignore` exclusion so the sandbox
+  project could track main (it would upload the three simulator handlers to production,
+  reversing the v18.0.0 phase 5 decision).
+- **The version suffix is derived.** `SANDBOX_DEPLOY` (`waSandbox.js`) is
+  `VITE_FB_TARGET === "dev"`, narrower than `WA_SANDBOX` so the dev server keeps the bare
+  number. A generated branch cannot carry a source edit, so the marker had to move into
+  main. The old `sandbox:` field on `__APP_SIGNATURE__` is not carried over: it existed
+  only on the branch, and the suffix says the same thing.
+- **Renamed `wa-sandbox-v18` → `sandbox`, suffix `-wa-sandbox` → `-sandbox`**, since it is
+  a general test environment now. The old branches stay as archived refs.
+- **The workflow pushes without asking**, the one standing exception to the push rule. It
+  is bounded by what it can write: the test fails if the workflow has any push other than
+  `git push --force origin sandbox`.
+- **Main only**, and the shared DEV database: no branch-on-demand, no third Firebase
+  project, no on-screen badge.
+
+**The workflow's two guards.** It fails rather than appends if main's `.vercelignore` has
+lost the `api/wa-sim-*.js` exclusion (the re-include would do nothing), or already holds
+the re-include (the simulator would be on production). `tests/sandbox-branch.test.js`
+asks the second of main on every gate run, and also that the appended text is exactly the
+negation, after the exclusion.
+
+**Verified.**
+
+- The workflow's `run` block, extracted from the YAML and run twice against a throwaway
+  repository with a bare remote: both runs exit 0, `sandbox` is main + 3 lines, the second
+  run force-replaces the first, and the commit carries main's head author.
+- Two builds of the same tree. `npm run build`: the entry chunk holds ``version:`18.4.3` `` and
+  no `WaSimulator` chunk. `VITE_FB_TARGET=dev vite build` into a scratch directory:
+  ``version:`18.4.3-sandbox` `` and the `WaSimulator` chunk is there.
+- Sabotage: the re-include appended to main's `.vercelignore` fails
+  `tests/sandbox-branch.test.js` (1 of its 4 tests, the one about main's file).
+- The dev server (this worktree, checked by fetching `waSandbox.js`): `window.__MGT_BUILD__.version`
+  is `18.4.3`, no suffix, no console errors.
+
+**Not verified, and cannot be from here.** That the push made by the Action's
+`GITHUB_TOKEN` triggers the Vercel project's deployment, and that GitHub accepts it on a
+later run where main changed a workflow file (a `GITHUB_TOKEN` may not create or update
+workflow files; whether a force-update of a branch whose new commits already exist on
+main counts is not something a local rehearsal shows). The first run after merge answers
+both.
+
+**Patryk's steps after merge:** point the sandbox Vercel project's production branch at
+`sandbox`; on the PRODUCTION Vercel project, skip builds of the `sandbox` branch (Ignored
+Build Step), since a push to any branch makes a preview there with production's
+environment, the 2026-07-16 incident's route.
+
+**Gate:** build 125.96 kB gz (main chunk, −0.01 on v18.4.2) · 2554 tests passed (4 new) ·
+lint 63 problems, 0 errors · `check:style` OK.
