@@ -19,8 +19,8 @@
 //   FIREBASE_SERVICE_ACCOUNT One-line JSON of the service-account key (kept in
 //                            .env.local, which is gitignored via *.local).
 //   GEMINI_API_KEY           Google AI Studio key (free tier).
-//   GEMINI_MODEL             Model id; default "gemini-3.1-flash-lite" (the
-//                            default lives in gemini.js's liveParse, with why;
+//   GEMINI_MODEL             Model id; default "gemini-3.5-flash-lite" (the
+//                            default is gemini.js's DEFAULT_MODEL, with why;
 //                            confirm availability in AI Studio or /dev/models
 //                            on the local harness).
 //   WA_LLM_MODE              "live" | "mock"  (default mock — no network).

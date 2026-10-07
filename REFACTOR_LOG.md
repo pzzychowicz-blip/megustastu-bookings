@@ -31399,3 +31399,45 @@ Eight findings; each was checked before anything was changed.
 - *`Overlay`'s `field` can outlive a field unmounted while focused.* It only
   matters while the viewport is short, which on a tablet or phone means a keyboard
   is up for a field that still exists; the footer is slim until the next focus.
+
+---
+
+## v18.4.1 — the WhatsApp parse moves to `gemini-3.5-flash-lite`
+
+**Date:** 2026-10-07 · **Branch:** `fix/v18.4.1-gemini-3.5-flash-lite` ·
+**Behavioural change:** yes, on the server only: a deployment that does not set
+`GEMINI_MODEL` now calls `gemini-3.5-flash-lite` where it called
+`gemini-3.1-flash-lite`. One that sets the variable is unchanged.
+
+**Files:** `api/_lib/gemini.js` · `api/_lib/env.js` · `.env.local.example` ·
+`src/App.jsx` (version) · `ROADMAP.md`.
+
+Patryk asked whether Google's 9 October 2026 free-tier change touched the go-live
+plan. It does not: Google's notice covers Gemini Apps on a personal account and does
+not mention the API, and the API pricing page still lists both Flash-Lite ids as free
+of charge (read 2026-10-07). The same reading found that
+`gemini-3.1-flash-lite`, the default here, has a shutdown date of **7 May 2027** on
+Google's deprecations page, with `gemini-3.5-flash-lite` named as the replacement.
+His call: move now, not in May.
+
+- **The default is one constant, `DEFAULT_MODEL`.** It was the same string literal
+  typed three times (`liveParse`, `generateCustomerReply`, `generateScenarioMessage`).
+- **`api/_lib/env.js`'s header and `.env.local.example` name the new default.** The
+  example file still said `gemini-3-flash`, a default two changes old.
+
+**Not verified, and recorded as such:** the new default was not run against a live
+key. No `.env.local` exists in this checkout, so neither accuracy nor time per parse
+against the 15 s cap was measured; the 2026-06-05 benchmark in the code comment is of
+the model being replaced. Which model the deployments call is also unknown from here:
+`GEMINI_MODEL` on Vercel overrides the default. Both are a ROADMAP entry.
+
+**Gate:** build 125.80 kB gz (main chunk) · 2529 tests passed · lint 63 problems, 0 errors ·
+`check:style` OK.
+
+**`/code-review` (2026-10-07):** one finding, confirmed and fixed. The comment on
+`TIMEOUT_MS` said "flash-lite normally answers in <1s", a figure measured on 3.1 that
+now read as a claim about 3.5; it names the model and the date, and says 3.5 is
+untimed. The review also read what a model id that stops answering does, which the
+entry above had left open: `liveParse` logs `[gemini] API error <status>` and returns
+null, so the message is saved without a draft and staff handle it by hand. Read from
+the code (`api/_lib/gemini.js`, the `!res.ok` branch), not triggered against the API.
