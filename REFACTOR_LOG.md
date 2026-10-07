@@ -31945,3 +31945,38 @@ to the table, which is what this commit removes.
 
 **Gate:** build 127.06 kB gz (main chunk, +0.72) · 2671 tests passed (6 new) · lint 63
 problems, 0 errors · `check:style` OK.
+
+### Commit 4 — backup and export out of `BookingApp` (#17)
+
+**Files:** `src/lib/backup.js` · `src/lib/download.js` (new) · `src/hooks/useBackup.js`
+(new) · `src/App.jsx` (5,410 → 5,354 lines) · `tests/backup.test.js` (10 new, 5 replaced) ·
+`src/hooks/CLAUDE.md` · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**What.** `doBackup` was a closure in BookingApp holding a state, two refs, the read, the
+file, and five sentences. Its flow is `runBackup` in `lib/backup.js`, with the read, the
+file saver and the report handed in; where a report is shown (under the button, the banner,
+or nowhere) is `backupReportTarget`. `useBackup` keeps the status line, the one-read-at-a-
+time ref and the "which open of Settings" counter, and App's `closeSettings` calls its
+`endBackupOpen`. The Blob-and-anchor code, written out in `doBackup` and again in the
+Activity log's `doDownloadActivity`, is `saveTextFile` in `lib/download.js`; the CSV's
+handler keeps its capability check and its banner sentence.
+
+**Behaviour.** None intended. The sentences, the filename, the capability check coming
+first, the single read at a time and the routing after Settings closes are the same.
+
+**Verified.**
+
+- **The four outcomes are run**, where five of the old tests read App's source for them:
+  the file made (and equal to `buildBackup`'s answer), the device unable to make it,
+  offline, and any other failed read; plus the routing for each kind of report, in and out
+  of the open that started it.
+- **On DEV** (this worktree, :5186, with the anchor's `click` intercepted so no file was
+  written to the Mac): Settings → Download backup read "Reading the database…", then
+  "Backup file created: mgt-backup-2026-10-07.json. Check this device's downloads.", and
+  one anchor was clicked with that name and a `blob:` address. Not checked on DEV: the CSV
+  download, the offline sentence, and a read returning after Settings closed (those two are
+  covered by the tests above).
+
+**Gate:** build 127.25 kB gz (main chunk, +0.19: the hook and the helper are in the entry,
+as the handler was) · 2676 tests passed (5 net new) · lint 63 problems, 0 errors ·
+`check:style` OK.

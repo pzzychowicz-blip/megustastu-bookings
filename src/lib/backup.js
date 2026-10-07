@@ -77,3 +77,46 @@ export function buildBackup(root, meta) {
 // answered from an incomplete cache — measured offline on DEV, it stays pending
 // until the socket returns — and `usePersistence`'s `readDatabaseRoot` refuses
 // up front when the device is offline.
+
+// ── The download, as a flow (v18.4.5, ROADMAP #17) ───────────────────────────
+// What "Download backup" does and SAYS, moved out of BookingApp with everything
+// it touches handed in, so its four outcomes can be run by a test: the file was
+// made, the device could not make it, the app is offline, the read failed. The
+// hook (`hooks/useBackup.js`) keeps the state and the two refs.
+//
+// `report` is called with `{kind: "busy" | "done" | "error", text}`: once with
+// "busy" before the read, and once more when it ends. Returns the promise, which
+// always resolves (the outcome is the report).
+export const BACKUP_MIME = "application/json";
+
+export function backupFilename(day) { return "mgt-backup-" + day + ".json"; }
+
+export function backupErrorText(err) {
+  return err && err.message === "offline"
+    ? "Offline. A backup needs a connection to read the latest data. Try again once the app shows Connected."
+    : "Couldn't read the database for the backup.";
+}
+
+export function runBackup({ readRoot, save, report, appVersion, day, exportedAt }) {
+  report({ kind: "busy", text: "Reading the database…" });
+  return readRoot().then(function (root) {
+    const payload = buildBackup(root, { exportedAt: exportedAt, appVersion: appVersion });
+    const filename = backupFilename(day);
+    try {
+      save(JSON.stringify(payload, null, 2), filename, BACKUP_MIME);
+      report({ kind: "done", text: "Backup file created: " + filename + ". Check this device's downloads." });
+    } catch { report({ kind: "error", text: "Couldn't create the backup file on this device." }); }
+  }, function (err) {
+    report({ kind: "error", text: backupErrorText(err) });
+  });
+}
+
+// Where an outcome is shown. A backup belongs to the open of Settings it was
+// started in: while that one is still open, under the button (the red banner is
+// behind the overlay and under `inert`). After it closed, a failure goes to the
+// banner, which is visible again, and anything else is dropped rather than left
+// as a stale line for the next open.
+export function backupReportTarget(st, sameOpen) {
+  if (sameOpen) return "status";
+  return st && st.kind === "error" ? "banner" : "drop";
+}

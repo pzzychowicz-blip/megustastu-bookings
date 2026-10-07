@@ -97,9 +97,10 @@ import { hourLabel, spanZoom } from "./lib/time-grid";
 // v17.8.0: the waitlist placement pass — pure, extracted from this file so it
 // can be unit-tested (tests/waitlist-match.test.js).
 import { placeWaitlist } from "./lib/waitlist-match";
-// v18.1.1: what "Download backup" writes — the whole database minus a named,
-// reasoned omission list — decided in a pure module (tests/backup.test.js).
-import { buildBackup } from "./lib/backup";
+// v18.4.5: "Download backup" is this hook (the flow and the file's contents are
+// lib/backup.js, tests/backup.test.js); the CSV shares its file-saving half.
+import { useBackup } from "./hooks/useBackup";
+import { saveTextFile } from "./lib/download";
 
 
 // ── Phase B1 (v15-refactor): UI atoms extracted to ./components/atoms.jsx ──
@@ -1653,14 +1654,8 @@ function BookingApp({uid}){
   // lib/activity.js; this is only the part that needs a DOM.
   function doDownloadActivity(text,filename){
     if(refused("dataExport")) return;
-    try{
-      const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement("a");
-      a.href=url;a.download=filename;
-      document.body.appendChild(a);a.click();document.body.removeChild(a);
-      setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    }catch{setWriteWarning("Couldn't create the file on this device.");}
+    try{saveTextFile(text,filename,"text/csv;charset=utf-8");}
+    catch{setWriteWarning("Couldn't create the file on this device.");}
   }
   const prunedRef=useRef(false);
   useEffect(function(){
@@ -2396,63 +2391,12 @@ function BookingApp({uid}){
   // Customers tab arms an explicit confirm before calling this. Known edge:
   // if the customer's bookings are the ENTIRE database, the empty-array
   // write-guard refuses the delete — safety wins (document, don't bypass).
-  // v16.3.0: download a JSON backup of every collection + all settings to the
-  // device. Read-only (no write-guard concerns). The Firebase free plan has NO
-  // automatic backups, so this is one-tap insurance; restore stays manual.
-  // v18.1.1: the file is now the WHOLE database, read from the server in one
-  // get(). The hand-built payload it replaces named five collections and five
-  // settings nodes and never learned about vouchers, roles, invites, the
-  // activity log or four more settings nodes, so a restore from it would have
-  // lost every gift-voucher balance. `lib/backup.js` holds the rule and the why;
-  // `database.rules.README.md` § Backups and restore holds the restore.
-  const backupInFlightRef=useRef(false);
-  // v18.3.1: the backup's outcome, shown UNDER the button in Settings. It went
-  // to the red "Couldn't save" banner, which sits behind the Settings overlay
-  // and under `inert`, so an offline press looked dead until Settings closed.
-  // null | {kind:"busy"|"done"|"error", text}. Cleared when Settings closes.
-  const [backupStatus,setBackupStatus]=useState(null);
-  // /code-review: which open of Settings a backup belongs to. Closing Settings
-  // bumps it, so a read that returns afterwards neither leaves a stale line for
-  // the next open nor loses a failure: an error then goes to the red banner,
-  // which is visible again once the overlay is gone.
-  const backupGenRef=useRef(0);
-  function doBackup(){
-    // The widest data-protection action in the app — every booking, every
-    // customer name and every phone number in one file — and the ONE gated
-    // capability with no rule behind it: the file is built client-side out of
-    // reads, and `.read` is `auth != null` at the root. `CAPABILITIES` says so
-    // rather than letting the enforced badge imply otherwise.
-    if(refused("dataExport")) return;
-    // One read at a time: a second tap while the first is out would only
-    // download the same file twice.
-    if(backupInFlightRef.current) return;
-    backupInFlightRef.current=true;
-    const gen=backupGenRef.current;
-    function report(st){
-      if(gen===backupGenRef.current) setBackupStatus(st);
-      else if(st.kind==="error") setWriteWarning(st.text);
-    }
-    setBackupStatus({kind:"busy",text:"Reading the database…"});
-    readDatabaseRoot().then(function(root){
-      const payload=buildBackup(root,{exportedAt:new Date().toISOString(),appVersion:__APP_SIGNATURE__.version});
-      try{
-        const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement("a");
-        a.href=url;
-        a.download="mgt-backup-"+todayStr()+".json";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function(){URL.revokeObjectURL(url);},1000);
-        report({kind:"done",text:"Backup file created: "+a.download+". Check this device's downloads."});
-      }catch{report({kind:"error",text:"Couldn't create the backup file on this device."});}
-    },function(err){
-      report({kind:"error",text:err&&err.message==="offline"
-        ?"Offline. A backup needs a connection to read the latest data. Try again once the app shows Connected."
-        :"Couldn't read the database for the backup."});
-    }).finally(function(){backupInFlightRef.current=false;});
-  }
+  // v16.3.0: download a JSON backup of the database to the device. The Firebase
+  // free plan has NO automatic backups, so this is one-tap insurance; restore
+  // stays manual (`database.rules.README.md` § Backups and restore). v18.4.5
+  // (ROADMAP #17): the flow is `runBackup` in lib/backup.js and the state is
+  // this hook's; App passes what is App's and renders the status in Settings.
+  const {backupStatus,doBackup,endBackupOpen}=useBackup({readDatabaseRoot:readDatabaseRoot,refused:refused,setWriteWarning:setWriteWarning,appVersion:__APP_SIGNATURE__.version});
   // v17.0.0: "Delete customer" now ANONYMIZES instead of deleting — the
   // bookings remain for statistics (covers, day/range stats, phone-less
   // no-show tile) as name "Data removed" with phone/notes/history wiped and
@@ -2645,7 +2589,7 @@ function BookingApp({uid}){
   // keeps its tab reset on BOTH paths — the clean close here and the discard
   // below — because that was part of the close behaviour before the guard, not
   // part of the guard.
-  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");setBackupStatus(null);backupGenRef.current++;}
+  function closeSettings(){setShowSettings(false);setSettingsTab("general");setCustomerSeek("");endBackupOpen();}
   function requestCloseReminderEditor(){if(reminderDirty) setConfirmDiscard("reminder");else setReminderEditor(null);}
   function requestCloseBlock(){if(blockDirty) setConfirmDiscard("block");else setBlockTarget(null);}
   function requestCloseSettings(){if(settingsDirty) setConfirmDiscard("settings");else closeSettings();}

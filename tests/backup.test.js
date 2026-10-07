@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { buildBackup, BACKUP_OMIT, BACKUP_META_KEY } from "../src/lib/backup.js";
+import { buildBackup, runBackup, backupErrorText, backupReportTarget, BACKUP_OMIT, BACKUP_META_KEY } from "../src/lib/backup.js";
 
 const ROOT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RULES = JSON.parse(readFileSync(join(ROOT_DIR, "database.rules.json"), "utf8")).rules;
@@ -135,42 +135,96 @@ describe("the file's own metadata", () => {
   });
 });
 
-describe("App's doBackup goes through the builder", () => {
-  // Read STRIPPED (tests/test-hygiene.test.js): the comment above doBackup
-  // describes the hand-built payload it replaced, and a raw read would match it.
-  const app = stripComments(readFileSync(join(ROOT_DIR, "src", "App.jsx"), "utf8")).join("\n");
-  const start = app.indexOf("function doBackup(");
-  const end = app.indexOf("\n  function ", start + 1);
-  const body = app.slice(start, end);
+// v18.4.5 (ROADMAP #17): the flow left BookingApp for `runBackup`, so its four
+// outcomes are RUN here where the old checks read App's source for them.
+describe("runBackup: what Download backup does and says", () => {
+  const meta = { appVersion: "9.9.9", day: "2026-10-07", exportedAt: "2026-10-07T10:00:00.000Z" };
+  const run = (over) => {
+    const reports = [];
+    const saved = [];
+    const deps = Object.assign({
+      readRoot: () => Promise.resolve({ bookings: { a: { id: "a" } }, presence: { k: 1 } }),
+      save: (text, filename, type) => { saved.push({ text, filename, type }); },
+      report: (st) => reports.push(st),
+    }, meta, over);
+    return runBackup(deps).then(() => ({ reports, saved }));
+  };
 
-  it("finds the function", () => {
-    expect(start).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(start);
+  it("says it is reading, then saves the built file under the day's name", async () => {
+    const { reports, saved } = await run();
+    expect(reports.map((r) => r.kind)).toEqual(["busy", "done"]);
+    expect(reports[1].text).toBe("Backup file created: mgt-backup-2026-10-07.json. Check this device's downloads.");
+    expect(saved).toHaveLength(1);
+    expect([saved[0].filename, saved[0].type]).toEqual(["mgt-backup-2026-10-07.json", "application/json"]);
+    // the file is buildBackup's answer, not a payload of its own
+    expect(JSON.parse(saved[0].text)).toEqual(buildBackup({ bookings: { a: { id: "a" } }, presence: { k: 1 } }, meta));
+    expect(JSON.parse(saved[0].text).presence).toBeUndefined();
   });
 
-  it("reads the root, then builds with buildBackup", () => {
-    expect(body).toContain("readDatabaseRoot(");
-    expect(body).toContain("buildBackup(");
-    expect(body).toContain('refused("dataExport")');
+  it("a device that cannot make the file says so, as an error", async () => {
+    const { reports } = await run({ save: () => { throw new Error("no blob"); } });
+    expect(reports.map((r) => r.kind)).toEqual(["busy", "error"]);
+    expect(reports[1].text).toBe("Couldn't create the backup file on this device.");
   });
 
-  it("no longer hand-builds a payload from in-memory state", () => {
-    expect(body).not.toMatch(/\bbookings:bookings\b/);
-    expect(body).not.toMatch(/\boperatingHours:weekHours\b/);
+  it("offline is named, and saves nothing", async () => {
+    const { reports, saved } = await run({ readRoot: () => Promise.reject(new Error("offline")) });
+    expect(reports.map((r) => r.kind)).toEqual(["busy", "error"]);
+    expect(reports[1].text).toMatch(/^Offline\. A backup needs a connection/);
+    expect(saved).toEqual([]);
   });
-  // v18.3.1: every outcome is reported under the button while Settings is
-  // open, because the red banner sits behind its overlay and under inert.
-  it("reports every outcome under the button while Settings is open", () => {
-    expect(body).toMatch(/setBackupStatus\(\{kind:"busy"/);
-    expect(body.match(/report\(\{kind:"(done|error)"/g)).toHaveLength(3);
-    expect(body).toMatch(/if\(gen===backupGenRef\.current\) setBackupStatus\(st\);/);
+
+  it("any other failed read is a failed read", async () => {
+    const { reports, saved } = await run({ readRoot: () => Promise.reject(new Error("permission_denied")) });
+    expect(reports[1]).toEqual({ kind: "error", text: "Couldn't read the database for the backup." });
+    expect(saved).toEqual([]);
+    expect(backupErrorText(null)).toBe("Couldn't read the database for the backup.");
   });
-  // /code-review: a read that returns after Settings closed belongs to no open
-  // of it. It must not leave a stale line for the next open, and a failure
-  // must still be seen: the banner, visible once the overlay is gone.
-  it("a read returning after Settings closed goes to the banner, errors only", () => {
-    expect(body).toMatch(/else if\(st\.kind==="error"\) setWriteWarning\(st\.text\);/);
-    expect(app).toMatch(/function closeSettings\(\)\{[^}]*setBackupStatus\(null\);backupGenRef\.current\+\+;\}/);
+
+  it("always resolves: the outcome is the report", async () => {
+    await expect(runBackup(Object.assign({ readRoot: () => Promise.reject(new Error("x")), save: () => {}, report: () => {} }, meta))).resolves.toBeUndefined();
+  });
+});
+
+// A read that returns after Settings closed belongs to no open of it. It must
+// not leave a stale line for the next open, and a failure must still be seen:
+// the banner, visible once the overlay is gone.
+describe("backupReportTarget: where an outcome is shown", () => {
+  it("under the button while the Settings that started it is open", () => {
+    ["busy", "done", "error"].forEach((kind) => expect(backupReportTarget({ kind }, true)).toBe("status"));
+  });
+  it("after it closed: a failure to the banner, the rest nowhere", () => {
+    expect(backupReportTarget({ kind: "error" }, false)).toBe("banner");
+    expect(backupReportTarget({ kind: "done" }, false)).toBe("drop");
+    expect(backupReportTarget({ kind: "busy" }, false)).toBe("drop");
+  });
+});
+
+describe("the hook and App are wired to the flow", () => {
+  const strip = (rel) => stripComments(readFileSync(join(ROOT_DIR, "src", rel), "utf8")).join("\n");
+  const hook = strip("hooks/useBackup.js");
+  const app = strip("App.jsx");
+
+  it("the hook asks the capability first, then runs the flow with the root read and the file saver", () => {
+    const body = hook.slice(hook.indexOf("function doBackup("));
+    expect(body.indexOf('refused("dataExport")')).toBeGreaterThan(-1);
+    expect(body.indexOf('refused("dataExport")')).toBeLessThan(body.indexOf("runBackup("));
+    expect(body).toMatch(/readRoot: readDatabaseRoot,/);
+    expect(body).toMatch(/save: saveTextFile,/);
+  });
+
+  it("the hook routes each report through backupReportTarget, by which open it belongs to", () => {
+    expect(hook).toMatch(/backupReportTarget\(st, open === openRef\.current\)/);
+    expect(hook).toMatch(/if \(target === "status"\) setBackupStatus\(st\);/);
+    expect(hook).toMatch(/else if \(target === "banner"\) setWriteWarning\(st\.text\);/);
+    expect(hook).toMatch(/function endBackupOpen\(\) \{ setBackupStatus\(null\); openRef\.current\+\+; \}/);
+  });
+
+  it("App uses the hook, ends the open when Settings closes, and builds no payload of its own", () => {
+    expect(app).toMatch(/useBackup\(\{readDatabaseRoot:readDatabaseRoot,refused:refused,setWriteWarning:setWriteWarning,appVersion:__APP_SIGNATURE__\.version\}\)/);
+    expect(app).toMatch(/function closeSettings\(\)\{[^}]*endBackupOpen\(\);\}/);
+    expect(app).not.toContain("buildBackup(");
+    expect(app).not.toContain("createObjectURL");
   });
 
   it("Settings keeps the status region mounted, so it can announce", () => {
