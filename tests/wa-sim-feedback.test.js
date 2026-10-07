@@ -88,6 +88,11 @@ describe("simErrorText", () => {
     // the harness answering "not found" is not the deployment's gate
     expect(simErrorText(new Error("not found"), true)).toBe("not found");
   });
+  it("deployed, a post that never reached the server says so (/code-review)", () => {
+    expect(simErrorText(new TypeError("Failed to fetch"), false)).toMatch(/could not be reached/);
+    expect(simErrorText(new TypeError("Load failed"), false)).toMatch(/could not be reached/);
+  });
+
   it("never throws on a missing error", () => {
     expect(simErrorText(null, false)).toBe("unknown error");
   });

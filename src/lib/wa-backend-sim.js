@@ -142,7 +142,11 @@ export async function generateScenario({ hint, count } = {}) {
 // both halves can be tested.
 export function simErrorText(e, dev = import.meta.env.DEV) {
   const msg = (e && e.message) || "unknown error";
-  if (dev) return /failed to fetch|load failed|networkerror/i.test(msg) ? "the local backend is not running (npm run wa:backend)" : msg;
+  const unreachable = /failed to fetch|load failed|networkerror/i.test(msg);
+  if (dev) return unreachable ? "the local backend is not running (npm run wa:backend)" : msg;
+  // /code-review: deployed, the same three browser messages mean the server
+  // was not reached at all, which on a phone is the connection.
+  if (unreachable) return "the server could not be reached (check this device's connection)";
   if (msg === "not found" || msg === "HTTP 404") return "the simulator endpoints are off on this deployment (WA_SIM_ENABLED is not 1)";
   return msg;
 }

@@ -36,8 +36,14 @@ export function WaSimulator({ ctx, onClose }) {
   // line reads "Sending…" until the server answers, a failure stays over the
   // successes of the same action, and an answer for an earlier action is ignored.
   const runRef = useRef(null);
+  // /code-review: "via the backend?" is asked of `backendEnabled()`, the same
+  // question `simulateInbound` asks, not of this panel's toggle state. Where the
+  // two disagree (storage blocked, the flag cleared in another tab) the message
+  // is written client-side and no answer ever comes, so the line stayed on
+  // "Sending…".
+  function viaBackend() { return backendEnabled(); }
   function sending(label) {
-    if (!backendOn) return ctx;
+    if (!viaBackend()) return ctx;
     const run = { failed: false };
     runRef.current = run;
     setStatus("Sending via backend → " + label + "…");
@@ -109,7 +115,7 @@ export function WaSimulator({ ctx, onClose }) {
     if (!custConv || !custText.trim()) return;
     const who = custConv.profileName || custConv.phone || custConv.phoneKey;
     simulateInbound({ phone: custConv.phone || custConv.phoneKey, language: custConv.language, text: custText.trim() }, sending("customer reply, " + who));
-    if (!backendOn) setStatus("Customer replied → " + who);
+    if (!viaBackend()) setStatus("Customer replied → " + who);
     setCustText("");
   }
   async function suggestReply() {
@@ -143,7 +149,7 @@ export function WaSimulator({ ctx, onClose }) {
       setGenBusy(false);
     }
   }
-  function runScenario(s) { s.run(sending(s.label)); if (!backendOn) setStatus("Sent → " + s.label); }
+  function runScenario(s) { s.run(sending(s.label)); if (!viaBackend()) setStatus("Sent → " + s.label); }
   function sendCustom() {
     const parse = {
       intent: form.intent,
@@ -153,7 +159,7 @@ export function WaSimulator({ ctx, onClose }) {
       confidence: form.confidence,
     };
     simulateInbound({ phone: form.phone, language: form.language, text: form.text || "(simulated message)", parse }, sending("custom, " + form.phone));
-    if (!backendOn) setStatus("Sent custom → " + form.phone + " · " + form.intent);
+    if (!viaBackend()) setStatus("Sent custom → " + form.phone + " · " + form.intent);
   }
   function onFailNext() {
     if (ctx.simFailNextSend) ctx.simFailNextSend();
@@ -162,7 +168,7 @@ export function WaSimulator({ ctx, onClose }) {
   function onSeed() { const n = seedSampleBookings(ctx); setStatus(n > 0 ? "Seeded " + n + " WA-SIM booking(s)." : "Sample bookings already present."); }
   function onClearBookings() { clearWaSimBookings(ctx); setStatus("Cleared WA-SIM bookings."); }
   function onClearConvos() { ctx.clearAllWaData(); setStatus("Cleared all conversations + messages."); }
-  function onBurst() { const n = simulateBurst(sending("burst")); if (!backendOn) setStatus("Burst: " + countLabel(n, "message", "messages") + " (ongoing follow-ups + new)."); }
+  function onBurst() { const n = simulateBurst(sending("burst")); if (!viaBackend()) setStatus("Burst: " + countLabel(n, "message", "messages") + " (ongoing follow-ups + new)."); }
 
   const upd = (k) => (e) => setForm(Object.assign({}, form, { [k]: e.target.value }));
   const groups = SCENARIOS.reduce((acc, s) => { (acc[s.group] = acc[s.group] || []).push(s); return acc; }, {});
