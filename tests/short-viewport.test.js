@@ -56,7 +56,7 @@ describe("the inbox folds while a reply is typed on a short screen", () => {
     // mid-reply (no blur fires) cannot leave the next conversation folded.
     expect(Inbox).toMatch(/const kbFold = !!activeConv && typing === activeConv\.phoneKey && short && !shown;/);
     expect(Inbox).toMatch(/if \(raisesKeyboard\(e\.target\)\) setTyping\(activeKey\);/);
-    expect(Inbox).not.toMatch(/tagName === "INPUT"/);
+    expect(Inbox).toMatch(/if \(shown && raisesKeyboard\(e\.target\)\) setShown\(false\);/);
     expect(Inbox).toMatch(/<div onFocus=\{onViewFocus\} onBlur=\{onViewBlur\} onPointerDown=\{onViewPointerDown\}/);
     // Send is inside the conversation: a blur towards it must not unfold the
     // pane under the finger.
