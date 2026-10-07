@@ -108,10 +108,11 @@ evidence for each.
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
 
-- **In-range dependency updates, and whether to automate them (#14).** Still in range on
-  2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`
-  9.39.5, globals 17.12 and eslint-plugin-react-refresh 0.5.7. eslint 10 and vitest 5
-  are waiting as majors. Optionally, turn on Dependabot for security updates only.
+- **Dependency majors, and whether to automate updates (#14).** The in-range updates
+  shipped in v18.4.4. Waiting as majors: eslint and `@eslint/js` 10, vitest 5. Optionally,
+  turn on Dependabot for security updates only. `npm audit` still lists 5 high advisories
+  on 2026-10-07, all one chain (`@grpc/grpc-js` under `@firebase/firestore`, which the app
+  does not import); their only offered fix is `--force`, which downgrades firebase to 9.
 
 - **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
   141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with

@@ -31678,3 +31678,30 @@ Five findings. Two fixed, three skipped.
 
 **Gate, final:** build 125.96 kB gz · 2554 tests passed · lint 63 problems, 0 errors ·
 `check:style` OK.
+
+## v18.4.4 — dependency updates, the shortcut table, recurring generation out of App
+
+**Date:** 2026-10-07 · **Branch:** `refactor/v18.4.4-deps-shortcuts-recurring` ·
+**Behavioural change:** none intended. Three commits, one per roadmap item (#14, #15, #17).
+
+### Commit 1 — in-range dependency updates (#14)
+
+**Files:** `package-lock.json` only (`package.json`'s ranges already allowed each one).
+
+`npm update` for the seven packages `npm outdated` listed inside their ranges: vite
+8.3.0 → 8.3.3, firebase-admin 14.4.0 → 14.5.0, eslint and `@eslint/js` 9.39.4 → 9.39.5,
+globals 17.6.0 → 17.13.0, eslint-plugin-react-refresh 0.5.2 → 0.5.7, `@vitejs/plugin-react`
+6.1.1 → 6.1.2. Then a plain `npm audit fix` (never `--force`): `npm audit` went from 7
+high advisories to 5, the same 7 that `main`'s lockfile reports. The two cleared are
+`@fastify/busboy` (firebase-admin's chain) and `source-map-js` (the build's). The 5 left
+are one chain, `@grpc/grpc-js` under `@firebase/firestore`, whose only offered fix
+downgrades firebase to 9; on the roadmap.
+
+**Checked:** `jose` still resolves to 5.10.0 under firebase-admin (the `ERR_REQUIRE_ESM`
+override), and `api/_lib/rtdb.js` imports under Node. eslint 10 and vitest 5 stay majors.
+
+**Gate:** build 125.99 kB gz (main chunk, +0.03 on v18.4.3, from the vite patch) · 2554
+tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+**After merge:** one call to a deployed function (firebase-admin moved), as after the
+2026-09-23 audit fix.
