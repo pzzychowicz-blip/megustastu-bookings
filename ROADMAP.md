@@ -114,6 +114,12 @@ evidence for each.
   on 2026-10-07, all one chain (`@grpc/grpc-js` under `@firebase/firestore`, which the app
   does not import); their only offered fix is `--force`, which downgrades firebase to 9.
 
+- **The Shortcuts tab lists its keys by hand** (v18.4.4's `/code-review`). Settings →
+  Shortcuts renders `SHORTCUT_SECTIONS` (`Shortcuts.jsx`), and the keys themselves are
+  `SHORTCUT_LAYERS` (`lib/shortcuts.js`); only the I and X gates are checked against each
+  other. Give each table row its label and derive the tab, or test that every key in one
+  is in the other.
+
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
   one domain per patch version. The save path went first, in v18.3.4 (#13): its

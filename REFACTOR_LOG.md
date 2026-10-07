@@ -31717,9 +31717,9 @@ tests passed · lint 63 problems, 0 errors · `check:style` OK.
 branch's position was its precedence) is `SHORTCUT_LAYERS`, read by the pure
 `resolveShortcut(ev, K, env)`. It answers `null` or `{ prevent, act }`; the hook calls
 `preventDefault()` and `act(K)`. Escape and Enter were already tables (v17.14.0) and stay
-in the hook. eslint's `complexity` for the handler: 141 before (the roadmap's figure),
-under 20 now (run with the rule at 20: the only report in either file is `escapeAction`'s
-switch, 31).
+in the hook. eslint's `complexity` for the handler, measured on `origin/main`'s file and on
+this one: 142 → 19 (`resolveShortcut` is 13, `clearFormTables` 12; `escapeAction`'s switch
+stays 31).
 
 **Design decisions.**
 
@@ -31787,3 +31787,23 @@ and its position among BookingApp's effects is its run order; not done here.
 
 **Gate:** build 126.35 kB gz (main chunk, unchanged from commit 2) · 2605 tests passed (7
 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (2026-10-07, high: eight angles inline, no subagents)
+
+Five findings. Three fixed, two skipped.
+
+- **Fixed — the view order was written twice**, in App (`VIEW_ORD`) and in the new
+  `lib/shortcuts.js`, and App's comment asking to keep the two identical pointed at the
+  hook, where the copy no longer was. It is `VIEW_ORDER` in `lib/constants.js`; both read it.
+- **Fixed — three comments still sent a reader to the hook** for `SUMMARY_KEY`, `WEEK_KEY`
+  and the X key's gate (`App.jsx`, `Shortcuts.jsx`, `tests/shortcuts-tab.test.js`).
+- **Fixed — the handler's "141" was the roadmap's figure, quoted.** Measured: 142 before, 19
+  after; this entry and `src/hooks/CLAUDE.md` carry those.
+- **Skipped — the Shortcuts tab's rows and the key table are two lists.** Real, older than
+  this version, and deriving one from the other changes a Settings surface. On the roadmap.
+- **Skipped — the old-against-new comparison is not in the repository.** It needs the old
+  handler, which is `git show c5f8e5a6:src/hooks/useKeyboardShortcuts.js`; the method is in
+  commit 2's notes above. A permanent copy would be a second handler to keep.
+
+**Gate, final:** build 126.37 kB gz (main chunk, +0.41 on v18.4.3) · 2605 tests passed (51
+new in this version) · lint 63 problems, 0 errors · `check:style` OK.

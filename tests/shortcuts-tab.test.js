@@ -3,7 +3,7 @@
 // Settings tab uses.
 //
 // Measured before: "X · Open WhatsApp simulator" was listed in production,
-// where X does nothing (`useKeyboardShortcuts` checks `WA_SANDBOX`); and the
+// where X does nothing (its row in `lib/shortcuts.js` needs `WA_SANDBOX`); and the
 // tab was the only one drawn on the bare sheet, with blue uppercase headings.
 // The same sweep found "I · Open WhatsApp inbox" and the eleven-row inbox
 // section listed for a restaurant whose WhatsApp module is off, which is how

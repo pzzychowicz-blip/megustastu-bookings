@@ -49,7 +49,7 @@ export function ShortcutRow({ keys, label, last }) {
 //
 // v18.2.0 (the design critique, S8): a row or section whose key only works
 // behind a gate carries `when`, and is listed only where the key works — the
-// SAME gate `useKeyboardShortcuts` checks. "X · Open WhatsApp simulator" was
+// SAME gate its row in `lib/shortcuts.js` checks. "X · Open WhatsApp simulator" was
 // listed in production, where X does nothing (the simulator is `WA_SANDBOX`
 // only), and so were "I · Open WhatsApp inbox" and the whole inbox section for
 // a restaurant whose WhatsApp module is off, which is how it ships.
