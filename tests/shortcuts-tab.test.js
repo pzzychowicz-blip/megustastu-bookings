@@ -3,7 +3,7 @@
 // Settings tab uses.
 //
 // Measured before: "X · Open WhatsApp simulator" was listed in production,
-// where X does nothing (`useKeyboardShortcuts` checks `WA_SANDBOX`); and the
+// where X does nothing (its row in `lib/shortcuts.js` needs `WA_SANDBOX`); and the
 // tab was the only one drawn on the bare sheet, with blue uppercase headings.
 // The same sweep found "I · Open WhatsApp inbox" and the eleven-row inbox
 // section listed for a restaurant whose WhatsApp module is off, which is how
@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { resolveShortcut } from "../src/lib/shortcuts";
 
 vi.mock("../src/lib/waSandbox", () => ({ WA_SANDBOX: false }));
 const { ShortcutsContent } = await import("../src/components/Shortcuts.jsx");
@@ -56,9 +57,15 @@ describe("a key is listed only where it works", () => {
   });
 
   it("uses the keyboard handler's own two gates, not a guess at them", () => {
-    const kb = read("hooks/useKeyboardShortcuts.js");
-    expect(kb).toMatch(/\(k==="x"\|\|k==="X"\)&&WA_SANDBOX\)/);
-    expect(kb).toMatch(/\(k==="i"\|\|k==="I"\)&&K\.hasModule&&K\.hasModule\("whatsapp"\)\)/);
+    // v18.4.4: the handler's gates are rows in lib/shortcuts.js, so they are
+    // asked rather than read: X needs the sandbox flag, I needs the module.
+    const K = (on) => ({ hasModule: (id) => on && id === "whatsapp" });
+    const env = (sandbox) => ({ sandbox, today: "2026-01-01", settingsTabs: () => [] });
+    expect(resolveShortcut({ key: "x" }, K(true), env(false))).toBe(null);
+    expect(resolveShortcut({ key: "x" }, K(false), env(true))).not.toBe(null);
+    expect(resolveShortcut({ key: "i" }, K(false), env(true))).toBe(null);
+    expect(resolveShortcut({ key: "i" }, K(true), env(false))).not.toBe(null);
+    expect(read("hooks/useKeyboardShortcuts.js")).toContain("sandbox:WA_SANDBOX");
     const sc = read("components/Shortcuts.jsx");
     expect(sc).toMatch(/if \(when === "sandbox"\) return WA_SANDBOX;/);
     expect(sc).toMatch(/if \(when === "whatsapp"\) return whatsappOn === true;/);

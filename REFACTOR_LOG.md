@@ -31678,3 +31678,132 @@ Five findings. Two fixed, three skipped.
 
 **Gate, final:** build 125.96 kB gz · 2554 tests passed · lint 63 problems, 0 errors ·
 `check:style` OK.
+
+## v18.4.4 — dependency updates, the shortcut table, recurring generation out of App
+
+**Date:** 2026-10-07 · **Branch:** `refactor/v18.4.4-deps-shortcuts-recurring` ·
+**Behavioural change:** none intended. Three commits, one per roadmap item (#14, #15, #17).
+
+### Commit 1 — in-range dependency updates (#14)
+
+**Files:** `package-lock.json` only (`package.json`'s ranges already allowed each one).
+
+`npm update` for the seven packages `npm outdated` listed inside their ranges: vite
+8.3.0 → 8.3.3, firebase-admin 14.4.0 → 14.5.0, eslint and `@eslint/js` 9.39.4 → 9.39.5,
+globals 17.6.0 → 17.13.0, eslint-plugin-react-refresh 0.5.2 → 0.5.7, `@vitejs/plugin-react`
+6.1.1 → 6.1.2. Then a plain `npm audit fix` (never `--force`): `npm audit` went from 7
+high advisories to 5, the same 7 that `main`'s lockfile reports. The two cleared are
+`@fastify/busboy` (firebase-admin's chain) and `source-map-js` (the build's). The 5 left
+are one chain, `@grpc/grpc-js` under `@firebase/firestore`, whose only offered fix
+downgrades firebase to 9; on the roadmap.
+
+**Checked:** `jose` still resolves to 5.10.0 under firebase-admin (the `ERR_REQUIRE_ESM`
+override), and `api/_lib/rtdb.js` imports under Node. eslint 10 and vitest 5 stay majors.
+
+**Gate:** build 125.99 kB gz (main chunk, +0.03 on v18.4.3, from the vite patch) · 2554
+tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+**After merge:** one call to a deployed function (firebase-admin moved), as after the
+2026-09-23 audit fix.
+
+### Commit 2 — the shortcuts as a table (#15)
+
+**Files:** `src/lib/shortcuts.js` (new, 252 lines) · `src/hooks/useKeyboardShortcuts.js`
+(466 → 263) · `tests/shortcuts.test.js` (new, 44 tests) · `tests/modal-stack.test.js` ·
+`tests/shortcuts-tab.test.js` · `tests/wa-sandbox-integrity.test.js` · `tests/roles.test.js` ·
+`src/hooks/CLAUDE.md` · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**What.** The keydown handler's letter, symbol and arrow chain (about seventy `if`s, where a
+branch's position was its precedence) is `SHORTCUT_LAYERS`, read by the pure
+`resolveShortcut(ev, K, env)`. It answers `null` or `{ prevent, act }`; the hook calls
+`preventDefault()` and `act(K)`. Escape and Enter were already tables (v17.14.0) and stay
+in the hook. eslint's `complexity` for the handler, measured on `origin/main`'s file and on
+this one: 142 → 19 (`resolveShortcut` is 13, `clearFormTables` 12; `escapeAction`'s switch
+stays 31).
+
+**Design decisions.**
+
+- **The answer is a function of K, not a named action.** A second table mapping action
+  names to K calls would be the same list written twice.
+- **The table reads `K` itself**, not a copied snapshot: the ctx is already the state, and
+  the test that checks every name read off K against App's ctx now reads both files.
+- **`env` carries what is not App's**: the `WA_SANDBOX` constant, the wall clock's date, and
+  the visible Settings tabs as a function, since `visibleTabs` is in a component file that
+  `lib/` must not import.
+- **Four tests that read the old handler's source text now press the key instead**: the I
+  and X gates (two files), and D going through `requestDelete`.
+
+**Verified.**
+
+- **Old against new, side by side.** A temporary test mounted the previous hook and the new
+  one on a fake window and gave both the same random key and state: 300,000 cases per seed,
+  three seeds, about 20,600 of each run's cases doing something, **0 differences** in what
+  was called (updater arguments compared by applying them to probe values), whether the
+  default was prevented, or what was thrown. Four sabotages of the table each showed up: the
+  Shift+C row losing its `shift` (29 differences), the modal wall removed (39,533), the
+  picker no longer terminal (1,249), F off-today taking the key (152). The first run's 39
+  differences were the harness's own (`hasModule` undefined, a state App never produces,
+  threw in my stub before or after `preventDefault`).
+- **Every row is reachable**: all 38 rows produced an action over a small grid of states.
+- **In the DEV app**, real key presses: L → List, N → the form, Escape, ? → Settings, → moved
+  General to Layout, Escape, T → Timeline; each key was `defaultPrevented`. The Browser pane
+  was hidden, so the closing dialogs stayed in the DOM (no animation frames there); that T
+  switched the view afterwards is what shows the modal state had closed.
+
+**Gate:** build 126.35 kB gz (main chunk, +0.36: a table of objects minifies less well than
+the `if` chain) · 2598 tests passed (44 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — recurring generation out of `BookingApp` (#17)
+
+**Files:** `src/lib/recurring.js` · `src/App.jsx` (5,425 → 5,410 lines) ·
+`tests/recurring.test.js` (7 new) · `tests/save-path.test.js` · `src/lib/CLAUDE.md` ·
+`src/hooks/CLAUDE.md` · `ROADMAP.md`
+
+**What.** The generator effect made two decisions inline. Which occurrences are due moved
+to `dueOccurrences` in v18.3.3; what the write does to the list was still the body of its
+`saveBookings` updater, and is now `withOccurrences(prev, due, tableBlocks, autoOptimizer)`
+in the same file, moved verbatim. App's effect keeps the loaded and resync guard, the call
+to `dueOccurrences` and the silent dispatch, and no longer imports `occurrenceBooking`.
+
+**Scope, as the v18.3.4 extraction set it:** the decisions go to `lib/`, App keeps the
+effects. Moving the effect itself into a hook would take about 50 more lines out of App,
+and its position among BookingApp's effects is its run order; not done here.
+
+**Verified.**
+
+- **Old against new.** A temporary test ran the old updater body (cut from App's source)
+  and `withOccurrences` on the same random rules, bookings, blocks, optimiser state and
+  replayed `prev`: 4,000 cases per seed, three seeds, about 13,000 occurrences added and 900
+  replays per run, **0 differences** in the resulting list or in whether the input came back
+  by identity. Two sabotages showed up: the stamp half of the existence check removed (441
+  differences), the one-by-one placement removed (425).
+- **The first run of that test reported about 1,750 differences per seed, and every one was
+  the harness.** `occurrenceBooking` stamps its history entry with `new Date()`, so two runs
+  a millisecond apart differ. With the clock frozen: 0.
+- **`tests/save-path.test.js` already ran this code**, by lifting the effect out of App's
+  source: its generator snapshots (created ids, tables, the today-after-cutoff case) pass
+  unchanged through the extracted function. Its one edit is the import it checks the lifted
+  effect binds, `withOccurrences` where it was `occurrenceBooking`.
+
+**Gate:** build 126.35 kB gz (main chunk, unchanged from commit 2) · 2605 tests passed (7
+new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (2026-10-07, high: eight angles inline, no subagents)
+
+Five findings. Three fixed, two skipped.
+
+- **Fixed — the view order was written twice**, in App (`VIEW_ORD`) and in the new
+  `lib/shortcuts.js`, and App's comment asking to keep the two identical pointed at the
+  hook, where the copy no longer was. It is `VIEW_ORDER` in `lib/constants.js`; both read it.
+- **Fixed — three comments still sent a reader to the hook** for `SUMMARY_KEY`, `WEEK_KEY`
+  and the X key's gate (`App.jsx`, `Shortcuts.jsx`, `tests/shortcuts-tab.test.js`).
+- **Fixed — the handler's "141" was the roadmap's figure, quoted.** Measured: 142 before, 19
+  after; this entry and `src/hooks/CLAUDE.md` carry those.
+- **Skipped — the Shortcuts tab's rows and the key table are two lists.** Real, older than
+  this version, and deriving one from the other changes a Settings surface. On the roadmap.
+- **Skipped — the old-against-new comparison is not in the repository.** It needs the old
+  handler, which is `git show c5f8e5a6:src/hooks/useKeyboardShortcuts.js`; the method is in
+  commit 2's notes above. A permanent copy would be a second handler to keep.
+
+**Gate, final:** build 126.37 kB gz (main chunk, +0.41 on v18.4.3) · 2605 tests passed (51
+new in this version) · lint 63 problems, 0 errors · `check:style` OK.

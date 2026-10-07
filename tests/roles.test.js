@@ -25,6 +25,7 @@ import {
 } from "../src/lib/roles.js";
 import { sanitizeAdminSettings, DEFAULT_ADMIN_SETTINGS, inviteIdFor } from "../src/hooks/useRoles.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { resolveShortcut } from "../src/lib/shortcuts";
 
 const entry = (o = {}) => sanitizeRole(Object.assign({ uid: "u1", email: "a@b.c" }, o), "u1");
 
@@ -470,9 +471,14 @@ describe("GATED_CAPS — the capabilities a person can actually lack", () => {
     // The surface an audit of components misses, and the one this bug was
     // reported from. The `D` shortcut goes through App's `requestDelete`, which
     // carries the gate — it must not call `setConfirmDel` directly again.
-    const kb = read("src/hooks/useKeyboardShortcuts.js");
-    expect(kb).toContain("K.requestDelete(sel.id)");
-    expect(kb).not.toMatch(/K\.setConfirmDel\(sel\.id\)/);
+    // v18.4.4: the shortcut is a row in lib/shortcuts.js, so it is pressed.
+    const calls = [];
+    const day = [{ id: "b1", status: "confirmed", date: "2026-01-01" }];
+    const K = { view: "list", listDay: day, selectedListId: "b1",
+      requestDelete: (id) => calls.push(["requestDelete", id]), setConfirmDel: (id) => calls.push(["setConfirmDel", id]) };
+    const found = resolveShortcut({ key: "d" }, K, { sandbox: false, today: "2026-01-01", settingsTabs: () => [] });
+    found.act(K);
+    expect(calls).toEqual([["requestDelete", "b1"]]);
   });
 
   it("capLabel reads the capability's own label, so a refusal cannot drift", () => {

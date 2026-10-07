@@ -71,7 +71,7 @@ session and keeping it in sync.
   `findTimes` / `findKitchenFriendlyTimes` and `formatSugg`; the waitlist button
   follows `addFormToWaitlist`'s rule (`phoneForSave`); the reply is a template.
 
-The next eight come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
+The next seven come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
@@ -108,21 +108,24 @@ evidence for each.
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
 
-- **In-range dependency updates, and whether to automate them (#14).** Still in range on
-  2026-09-30 (`npm outdated`): vite 8.3.1, firebase-admin 14.5, eslint and `@eslint/js`
-  9.39.5, globals 17.12 and eslint-plugin-react-refresh 0.5.7. eslint 10 and vitest 5
-  are waiting as majors. Optionally, turn on Dependabot for security updates only.
+- **Dependency majors, and whether to automate updates (#14).** The in-range updates
+  shipped in v18.4.4. Waiting as majors: eslint and `@eslint/js` 10, vitest 5. Optionally,
+  turn on Dependabot for security updates only. `npm audit` still lists 5 high advisories
+  on 2026-10-07, all one chain (`@grpc/grpc-js` under `@firebase/firestore`, which the app
+  does not import); their only offered fix is `--force`, which downgrades firebase to 9.
 
-- **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
-  141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with
-  a pure `resolveShortcut` in `lib/` so it can be tested.
+- **The Shortcuts tab lists its keys by hand** (v18.4.4's `/code-review`). Settings →
+  Shortcuts renders `SHORTCUT_SECTIONS` (`Shortcuts.jsx`), and the keys themselves are
+  `SHORTCUT_LAYERS` (`lib/shortcuts.js`); only the I and X gates are checked against each
+  other. Give each table row its label and derive the tab, or test that every key in one
+  is in the other.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
   one domain per patch version. The save path went first, in v18.3.4 (#13): its
   decisions are `lib/booking-save.js`, App keeps the effects, and `App.jsx` is 5,340
-  lines (5,727 before it). **Next: recurring generation**, then backup/export and
-  drag-drop.
+  lines (5,727 before it). Recurring generation followed in v18.4.4 (`withOccurrences`,
+  `lib/recurring.js`; `App.jsx` 5,410 lines). **Next: backup/export**, then drag-drop.
 
 - **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
   (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then

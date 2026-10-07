@@ -4,6 +4,9 @@
 // App (v16.3.0) decided this inline; it moved here so a test can reach it
 // (tests/CLAUDE.md: logic that decides something the restaurant acts on does
 // not live in a useEffect). The effect keeps its subscription and its write.
+// v18.4.4 (ROADMAP #17): what that write does to the list moved here too,
+// `withOccurrences`, so the generator's two decisions (which are due, and where
+// each one goes) are both plain functions; App keeps the guard and the dispatch.
 //
 // The bug that moved it: a rule had NO START. The generator walked every
 // matching weekday from TODAY across the horizon, so "Repeat weekly" on a
@@ -12,7 +15,8 @@
 // bookings on 1, 8 and 15 Oct. A rule now starts where its first booking is.
 
 import { hoursFor } from "./constants.js";
-import { toMins, lastStartMins } from "./booking-logic.js";
+import { toMins, lastStartMins, optimizerActiveFor, bookingsAfterAction } from "./booking-logic.js";
+import { occurrenceBooking } from "./booking-save.js";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -79,4 +83,40 @@ export function dueOccurrences(rules, bookings, today, horizonDays) {
     }
   });
   return due;
+}
+
+// ── withOccurrences: the list with the due occurrences added and placed ──────
+// v18.4.4 (ROADMAP #17): the body of the generator's `saveBookings` updater,
+// moved out of App verbatim. `due` is `dueOccurrences`' answer, taken once by
+// the effect; `prev` is whatever list the write is applied to, which on a held
+// and replayed write is NOT the list `due` was computed from. So existence is
+// asked again here, of `prev`: an occurrence already there — by its
+// deterministic id, or by its rule and date stamps — is not added twice.
+//
+// Placement is per date, after that date's occurrences are in:
+//   · where the optimiser owns the day (`optimizerActiveFor`: every day but
+//     today after the cutoff), ONE pass places all of them;
+//   · where it does not, a pass with no `changedId` copies every row as it is,
+//     so (v18.3.5) each new occurrence is placed by itself, as a new booking
+//     saved then is: the best free table, nobody else moved, `_conflict` when
+//     there is none.
+// The optimiser's pass runs for a date even when nothing was added to it,
+// which is the effect's behaviour since v16.3.0 and is kept.
+export function withOccurrences(prev, due, tableBlocks, autoOptimizer) {
+  let next = prev;
+  const byDate = {};
+  (due || []).forEach(function (oc) { (byDate[oc.date] = byDate[oc.date] || []).push(oc); });
+  Object.keys(byDate).forEach(function (ds) {
+    const added = [];
+    byDate[ds].forEach(function (oc) {
+      const rule = oc.rule;
+      const nb = occurrenceBooking(rule, ds);
+      if (next.some(function (b) { return b.id === nb.id || (b.recurringId === rule.id && b.recurringDate === ds); })) return;
+      next = next.concat([nb]);
+      added.push(nb.id);
+    });
+    if (optimizerActiveFor(ds, autoOptimizer)) next = bookingsAfterAction(next, ds, tableBlocks, null, false, autoOptimizer);
+    else added.forEach(function (id) { next = bookingsAfterAction(next, ds, tableBlocks, id, true, autoOptimizer); });
+  });
+  return next;
 }

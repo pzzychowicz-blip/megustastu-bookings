@@ -48,6 +48,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
+import { resolveShortcut } from "../src/lib/shortcuts";
 
 // v18.0.0 phase 5: COMMENTS OFF, the `settings-tabs.test.js` convention — and
 // this file needed it more than most, because every guard below greps for a
@@ -99,14 +100,23 @@ describe("WA sandbox — edits to shared PROD files survive a sync", () => {
     const kb = read("src/hooks/useKeyboardShortcuts.js");
     expect(kb, "the WA_SANDBOX import is gone, so the X gate below cannot be honoured")
       .toContain('from "../lib/waSandbox"');
-    expect(/k==="i"\|\|k==="I"\)&&K\.hasModule/.test(kb),
-      "the `I` shortcut (open inbox) is missing or no longer gated on the whatsapp MODULE").toBe(true);
-    expect(/k==="i"\|\|k==="I"\)&&WA_SANDBOX/.test(kb),
-      "the `I` shortcut is still WA_SANDBOX-gated — that flag is false in every production " +
-      "build, so the module switch could be ON and the shortcut would still do nothing").toBe(false);
-    expect(/k==="x"\|\|k==="X"\)&&WA_SANDBOX/.test(kb),
-      "the `X` shortcut (open simulator) is missing or no longer WA_SANDBOX-gated — the " +
-      "simulator must stay structurally unreachable in production").toBe(true);
+    // v18.4.4: the two keys are rows in lib/shortcuts.js, and the hook hands
+    // the build constant over. So the gates are ASKED here, each one against
+    // the other's flag, and the hand-over is read.
+    expect(kb, "the hook no longer hands WA_SANDBOX to the shortcut table, so X is dead in the sandbox too")
+      .toContain("sandbox:WA_SANDBOX");
+    const press = (key, moduleOn, sandbox) => resolveShortcut({ key }, { hasModule: (id) => moduleOn && id === "whatsapp" },
+      { sandbox, today: "2026-01-01", settingsTabs: () => [] });
+    expect(press("i", true, false),
+      "the `I` shortcut (open inbox) is missing or no longer gated on the whatsapp MODULE").not.toBe(null);
+    expect(press("i", false, true),
+      "the `I` shortcut is WA_SANDBOX-gated — that flag is false in every production " +
+      "build, so the module switch could be ON and the shortcut would still do nothing").toBe(null);
+    expect(press("x", false, true),
+      "the `X` shortcut (open simulator) is missing").not.toBe(null);
+    expect(press("x", true, false),
+      "the `X` shortcut is no longer WA_SANDBOX-gated — the " +
+      "simulator must stay structurally unreachable in production").toBe(null);
   });
 
   it("useFlip still accepts the isQuiet predicate", () => {

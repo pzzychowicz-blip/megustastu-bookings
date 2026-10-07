@@ -10,8 +10,8 @@
 // unchanged). Pure logic, no JSX → .js.
 //
 // Contract: call once per render from BookingApp with the full context object;
-// the hook returns nothing. Adding a shortcut = add the state/handler to the
-// ctx object at the call site AND use it here via `K.<name>`.
+// the hook returns nothing. Adding a shortcut = a row in lib/shortcuts.js, plus
+// the state/handler it reads as `K.<name>` in the ctx object at the call site.
 
 import { useRef, useEffect } from "react";
 import { isTyping, activatesItself } from "../lib/keyboard";
@@ -19,27 +19,17 @@ import { validateReminderDraft } from "../lib/reminders";
 // v16.0.0 follow-up: the ←/→ Settings tab-cycle derives from SETTINGS_TABS (the
 // ONE tab list) so a newly added tab can never be skipped. Never inline ids.
 import { visibleTabs } from "../components/SettingsChrome";
-import { todayStr, stepDate } from "../lib/day";
-import { seatingClosed } from "../lib/booking-logic";
-// WA sandbox: gates the I (inbox) / X (simulator) keys, exactly like the
-// toolbar button — a non-sandbox build must expose no WhatsApp surface.
-//
-// RESTORED at the 17.15.0 sync, having been silently reverted by it. This file
-// conflicted only on the `anyModal` line, and taking prod's copy wholesale threw
-// away the two key handlers with it — the module's only keyboard entry points,
-// both documented in the mount card, neither reachable by any test. See
-// tests/wa-sandbox-integrity.test.js.
+import { todayStr } from "../lib/day";
+// v18.4.4: the letter, symbol and arrow shortcuts are a table in lib/shortcuts.js
+// (`resolveShortcut`), which decides; this hook only carries the decision out.
+// SUMMARY_KEY ("s") and WEEK_KEY ("m") moved there with their rows.
+import { resolveShortcut } from "../lib/shortcuts";
+// WA sandbox: gates the X (simulator) key. It is a build constant, so it is
+// handed to `resolveShortcut` rather than read there — and the I (inbox) key is
+// gated on the whatsapp MODULE, like the toolbar button. Both gates are pinned
+// in tests/wa-sandbox-integrity.test.js, after a merge once silently dropped
+// the two keys (17.15.0).
 import { WA_SANDBOX } from "../lib/waSandbox";
-
-// v14.6.0: keyboard shortcut for the Summary panel toggle — "S" for Summary.
-// NB: in List view with a booking focused, S marks it Seated (that check runs
-// first); everywhere else S toggles the Summary. Rebind here + the Shortcuts row.
-const SUMMARY_KEY="s";
-// v14.7.0: shortcut to open the at-a-glance popover (now Week / Month — see
-// WeekView). v14.9.0: rebound "K" → "M" to match the renamed "More" button.
-// In-popover nav (W/M switch view, ←/→ period, ↑/↓ day, T this-period, Enter
-// open) lives in WeekView. Change here + the Shortcuts "M" row to rebind.
-const WEEK_KEY="m";
 
 // ── v17.14.0: the modal keyboard tables ──────────────────────────────────────
 // Escape acts on ONE modal — the visually topmost, which App derives from
@@ -165,8 +155,7 @@ export function useKeyboardShortcuts(ctx){
   //      modal handles its own Enter internally; globally we skip it.
   //   4. Letter / symbol / arrow shortcuts — suppressed when focus is on an
   //      input / textarea / select / contenteditable so typing is never hijacked.
-  //      Suppressed as well while any modal is open, except for A/P/B/H which
-  //      fire only when the Edit Booking modal is the top layer.
+  //      Their own precedence is the layer order in lib/shortcuts.js.
   const kbRef=useRef({});
   // v17.3.3 (lint-clean change vs the App.jsx original, which assigned during
   // render): refresh the ref in a dep-less effect — it runs after EVERY commit,
@@ -227,211 +216,19 @@ export function useKeyboardShortcuts(ctx){
       }
       // ── Letter / symbol / arrow shortcuts: never hijack typing ──
       if(typing) return;
-      // v16.4.0 (Patryk): Shift+D (dark toggle) and ? (Settings/shortcuts help)
-      // are GLOBAL — they fire even while a modal is open and NEVER close it.
-      // Placed here (above the settings-arrow / prefPicker / form-letter blocks
-      // and the anyModal guard) so they always win; no form/pref shortcut uses D
-      // or ?, so nothing is shadowed. The `typing` guard above still lets you
-      // type "D"/"?" into a field. `?` opens Settings ON TOP of any open modal.
-      if((k==="d"||k==="D")&&e.shiftKey){e.preventDefault();K.onToggleDark();return;}
-      // v17.1.0: Shift +/− adjusts the per-device app width (±50px, 900–2400) —
-      // global like Shift+D, so it works with Settings open (the stepper tracks
-      // live). Matches EVERY key value the physical +/− keys produce under
-      // Shift across layouts: US Shift+"=" → "+"; ES/DE Shift+the-plus-key →
-      // "*" (/code-review fix #2 — without it, width-INCREASE was dead on the
-      // restaurant's Spanish keyboards); Shift+"-" → "_" everywhere. Deliberate
-      // side effect: Shift+"=" no longer zooms the timeline (unshifted "="/"-"
-      // still do).
-      if(e.shiftKey&&(k==="+"||k==="="||k==="*")){e.preventDefault();K.onSetAppWidth(K.appWidth+50);return;}
-      if(e.shiftKey&&(k==="_"||k==="-")){e.preventDefault();K.onSetAppWidth(K.appWidth-50);return;}
-      if(k==="?"){e.preventDefault();K.setShowSettings(true);return;}
-      // ── v14 p7: Settings tab-cycle with ←/→ ──
-      // Active only when Settings is the top layer. Takes priority over the
-      // global ←/→ day-nav shortcut below.
-      // v17.14.0: was `showSettings && !reminderEditor && !confirmReminderDel`,
-      // a hand-written exclusion list naming the two sub-modals that existed
-      // when it was written. It missed the discard confirm (v17.5.0) and the
-      // split menu, so arrows cycled Settings tabs behind both. `topModalId`
-      // asks the question the comment was already asking.
-      if(K.topModalId==="settings"){
-        if(k==="ArrowLeft"||k==="ArrowRight"){
-          e.preventDefault();
-          // v16.0.0 follow-up: derived from SETTINGS_TABS (Settings.jsx — the ONE
-          // tab list) so a newly added tab can never be skipped here again. Do
-          // NOT inline a literal id list (that's how Customers got skipped).
-          // v18.0.0 phase 3: through `visibleTabs(can)`, not the raw list. The
-          // Admin tab is capability-gated, and a cycle over the UNfiltered list
-          // would step onto a tab the render side refuses to show — the same
-          // bug as a hand-copied list, reached by filtering in only one of the
-          // two places that read it.
-          // v18.0.0 phase 4: and `hasModule`, the second gate, for the same
-          // reason — the Vouchers tab disappears with its module, and an arrow
-          // cycle that still knew about it would land on a tab that renders
-          // nothing.
-          const TABS=visibleTabs(K.can,K.hasModule).map(function(t){return t.id;});
-          let curIdx=TABS.indexOf(K.settingsTab);if(curIdx<0) curIdx=0;
-          const newIdx=k==="ArrowLeft"?(curIdx-1+TABS.length)%TABS.length:(curIdx+1)%TABS.length;
-          K.setSettingsTab(TABS[newIdx]);
-          return;
-        }
-        // v14.4.0: N → new reminder when the Reminders tab is active.
-        if((k==="n"||k==="N")&&K.settingsTab==="reminders"){e.preventDefault();K.openNewReminder();return;}
-      }
-      // ── Edit Booking modal shortcuts ──
-      // Only fire when Edit is the TOP layer (no popup on top of it).
-      // ── Preferred-table picker: captures C (= Clear). Sits ABOVE the
-      //    form-modal block so A/P/B/H don't fire while the picker is open
-      //    (which matches the user-intuitive "only the top modal responds"
-      //    precedence).
-      if(K.showPrefPicker){
-        if(k==="c"||k==="C"){
-          const prefs=Array.isArray(K.form&&K.form.preferredTables)?K.form.preferredTables:[];
-          if(prefs.length>0){
-            e.preventDefault();
-            K.setForm(function(f){return Object.assign({},f,{preferredTables:[]});});
-          }
-        }
-        return; // no other letter shortcuts propagate while picker is up
-      }
-      // ── Edit & New Booking form shortcuts ──
-      //   A / P work in BOTH new and edit (request 1). In new mode, A opens
-      //   Manual with target "__new__" to match the Assign button.
-      //   B / H remain edit-only (new bookings have no history or source).
-      //   C clears the tables assignment — logic mirrors the form's 3 Clear
-      //   buttons: if the user has set manualTables, clear those; else in
-      //   edit mode, if the stored booking has a manual assignment not yet
-      //   marked cleared, set _clearManual:true; else no-op.
-      // v17.14.0: was a ten-term `topLayer` expression, the third hand-written
-      // list of "what is above the form" in this file. It omitted the discard
-      // confirm, the pref picker, the search panel and the split menu — so
-      // A/P/B/H fired straight through them into the form underneath.
-      if(K.topModalId==="form"){
-        if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(K.editId||"__new__");return;}
-        if(k==="p"||k==="P"){e.preventDefault();K.setShowPrefPicker(true);return;}
-        if(k==="c"||k==="C"){
-          const mtLen=Array.isArray(K.form&&K.form.manualTables)?K.form.manualTables.length:0;
-          if(mtLen>0){
-            e.preventDefault();
-            K.setForm(function(f){return Object.assign({},f,{manualTables:[]});});
-            K.setSwapAffected(null);
-          } else if(K.editId){
-            const cur3=K.bookings.find(function(b){return b.id===K.editId;});
-            const isManual3=cur3&&(cur3._manual||cur3._locked)&&cur3.tables&&cur3.tables.length>0;
-            const alreadyCleared=!!(K.form&&K.form._clearManual);
-            if(isManual3&&!alreadyCleared){
-              e.preventDefault();
-              K.setForm(function(f){return Object.assign({},f,{manualTables:[],_clearManual:true});});
-              K.setSwapAffected(null);
-            }
-          }
-          return;
-        }
-        if(K.editId){
-          if(k==="b"||k==="B"){
-            const cur=K.bookings.find(function(b){return b.id===K.editId;});
-            if(cur&&(cur.status==="seated"||cur.status==="completed")){e.preventDefault();K.bookAgain(cur);}
-            return;
-          }
-          if(k==="h"||k==="H"){
-            const c2=K.bookings.find(function(b){return b.id===K.editId;});
-            if(c2&&c2.history&&c2.history.length>0){e.preventDefault();K.setShowHistory(true);}
-            return;
-          }
-        }
-      }
-      // ── Global shortcuts: suppressed while any modal is open ──
-      // v17.12.0: ONE derivation, computed in App next to the state it reads.
-      // This was the same 17-term expression written out twice in this file, and
-      // `inert` would have made it three.
-      if(K.anyModal) return;
-      // v16.3.0: "/" opens the global booking search (typing guard above keeps it
-      // out of form fields; anyModal guard keeps it from re-firing while open).
-      if(k==="/"){e.preventDefault();K.setShowSearch(true);return;}
-      // ── v14.4.0: List-view per-card shortcuts (act on the focused booking) ──
-      // ↑/↓ move the focus ring; A/E/S/C/Shift+C/Delete act on it. Placed before
-      // the global letter shortcuts so Delete wins over "jump to today" ONLY while
-      // a card is focused — with nothing focused, D still jumps to today. ←/→
-      // fall through to the global day-nav below.
-      if(K.view==="list"){
-        const list=K.listDay||[];
-        if(k==="ArrowDown"||k==="ArrowUp"){
-          e.preventDefault();
-          if(!list.length) return;
-          const idx=list.findIndex(function(b){return b.id===K.selectedListId;});
-          const ni=idx<0?(k==="ArrowDown"?0:list.length-1):(k==="ArrowDown"?Math.min(list.length-1,idx+1):Math.max(0,idx-1));
-          K.setSelectedListId(list[ni].id);
-          K.bumpListFocus();
-          return;
-        }
-        const sel=K.selectedListId?list.find(function(b){return b.id===K.selectedListId;}):null;
-        if(sel){
-          if(k==="a"||k==="A"){e.preventDefault();K.setManualTarget(sel.id);return;}
-          if(k==="e"||k==="E"){e.preventDefault();K.openEdit(sel);return;}
-          // v17.0.0: a PENDING card can only be confirmed (or cancelled) — S/C
-          // are no-ops on it, matching the List/RMB button gating.
-          // v17.16.12: …and neither can a booking on a day whose close has
-          // passed — the auto-complete would flip it straight back, so the key
-          // would look broken rather than refused. Same predicate as the popup,
-          // the List card and the edit form; this is the fourth surface, and
-          // leaving it out is exactly how the app comes to disagree with itself.
-          if(k==="s"||k==="S"){e.preventDefault();if(sel.status!=="pending"&&!seatingClosed(sel.date,K.today,K.nowMins)) K.updateStatus(sel.id,"seated");return;}
-          if((k==="c"||k==="C")&&e.shiftKey){e.preventDefault();K.updateStatus(sel.id,"cancelled");return;}
-          if(k==="c"||k==="C"){e.preventDefault();if(sel.status!=="pending") K.updateStatus(sel.id,"completed");return;}
-          // v18.0.0 phase 3: through App's `requestDelete`, which carries the
-          // bookingDelete gate. The keyboard is the surface an audit of
-          // components misses — the same reason `seated` is checked here.
-          if(k==="d"||k==="D"){e.preventDefault();K.requestDelete(sel.id);return;}
-        }
-      }
-      // v17.0.0: three views — slide direction follows the view order (T·L·P).
-      // v17.5.0: T/L/P delegate to App's pickView (passed as K.goView) — the
-      // ONE place that knows the split rules (replace the focused pane, or swap
-      // when that view is already in the other one). The local fallback keeps
-      // the original single-view behaviour if the ctx ever lacks it.
-      const VIEW_ORD=["timeline","list","plan"];
-      const goView=K.goView||function(v){if(K.view!==v){K.bumpSlide(VIEW_ORD.indexOf(v)>VIEW_ORD.indexOf(K.view)?"mgt-view-in-right":"mgt-view-in-left");}K.setView(v);};
-      if(k==="t"||k==="T"){e.preventDefault();goView("timeline");return;}
-      if(k==="l"||k==="L"){e.preventDefault();goView("list");return;}
-      if(k==="p"||k==="P"){e.preventDefault();goView("plan");return;}
-      if(k==="d"||k==="D"){e.preventDefault();K.goToDate(todayStr());return;}
-      if(k==="n"||k==="N"){e.preventDefault();K.openNew();return;}
-      if(k==="w"||k==="W"){e.preventDefault();K.openWalkin();return;}
-      // WhatsApp: I → open the inbox ("w" was taken by Walk-in). v18.0.0 phase 5
-      // gates it on the MODULE, exactly like the toolbar button — a shortcut is
-      // a second door to the same surface, and gating one door is gating none.
-      // `hasModule` is already on the ctx for the Settings tab cycle.
-      if((k==="i"||k==="I")&&K.hasModule&&K.hasModule("whatsapp")){e.preventDefault();K.setShowInbox(true);return;}
-      // WhatsApp sandbox: X → open the 🧪 simulator (sandbox builds only).
-      if((k==="x"||k==="X")&&WA_SANDBOX){e.preventDefault();K.setShowSim(true);return;}
-      // v14.6.0: toggle the Summary panel (provisional key — see SUMMARY_KEY).
-      if(k===SUMMARY_KEY||k===SUMMARY_KEY.toUpperCase()){e.preventDefault();K.setSummaryOpen(function(o){return !o;});return;}
-      if(k===WEEK_KEY||k===WEEK_KEY.toUpperCase()){e.preventDefault();K.setShowWeek(true);return;}
-      if(k==="ArrowLeft"){e.preventDefault();K.goToDate(stepDate(K.viewDate,-1));return;}
-      if(k==="ArrowRight"){e.preventDefault();K.goToDate(stepDate(K.viewDate,1));return;}
-      // ── Timeline-only shortcuts ──
-      if(K.view==="timeline"){
-        const today=todayStr();
-        const isToday=K.viewDate===today;
-        if(k==="f"||k==="F"){
-          if(isToday){
-            e.preventDefault();
-            if(!K.followNow){K.setFollowNow(true);if(K.timelineZoom<K.tlFollowZoom) K.setTimelineZoom(K.tlFollowZoom);}
-            else{K.setFollowNow(false);}
-          }
-          return;
-        }
-        if(k==="+"||k==="="){e.preventDefault();K.setTimelineZoom(function(z){return Math.min(K.tlMaxZoom,z+0.5);});return;}
-        if(k==="-"){e.preventDefault();K.setTimelineZoom(function(z){return Math.max(1,z-0.5);});return;}
-        if(k==="0"){e.preventDefault();K.setTimelineZoom(1);K.setFollowNow(false);return;}
-        if(k==="o"||k==="O"){
-          if(isToday){e.preventDefault();K.setAutoOptimizer(function(p){return !p;});}
-          return;
-        }
-        if(k==="r"||k==="R"){
-          if(isToday&&!K.autoOptimizer){e.preventDefault();K.setConfirmReshuffle(true);}
-          return;
-        }
-      }
+      // v18.4.4: a table (lib/shortcuts.js). `resolveShortcut` reads K and
+      // answers what the key means; the two things a shortcut can do are done
+      // here. The Settings tab cycle's tab list is passed as a function because
+      // `visibleTabs` lives in a component file: it runs over the VISIBLE tabs,
+      // with BOTH gates (capability, then module), never the raw list.
+      const found=resolveShortcut({key:k,shiftKey:e.shiftKey},K,{
+        sandbox:WA_SANDBOX,
+        today:todayStr(),
+        settingsTabs:function(){return visibleTabs(K.can,K.hasModule).map(function(t){return t.id;});}
+      });
+      if(!found) return;
+      if(found.prevent) e.preventDefault();
+      if(found.act) found.act(K);
     }
     window.addEventListener("keydown",handler);
     return function(){window.removeEventListener("keydown",handler);};
