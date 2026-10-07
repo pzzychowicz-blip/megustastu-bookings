@@ -22,9 +22,10 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-FOUR functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config`) and the sandbox
-branch appends `!api/wa-sim-*.js` to get its three back — APPENDING, because a merge
-silently reinstates a deleted line. The runtime gate stays: two independent answers, and
+FOUR functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config`) and the `sandbox`
+branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
+branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
+it is never written on main and never by hand. The runtime gate stays: two independent answers, and
 the 404 is the one that still holds if the ignore file is ever edited. `_lib/` is
 underscore-prefixed so Vercel does not route it. **`wa-config.js` (phase 5) answers
 "which server-side keys are configured" as a BOOLEAN PER KEY and never a value** — it is

@@ -22,5 +22,17 @@
 // (writes DEV Firebase directly). Driving the real deployed /api/ pipeline from
 // the simulator would need a server-side signature bypass on the public webhook
 // — a deliberate follow-up, not enabled here.
-export const WA_SANDBOX =
-  import.meta.env.VITE_FB_TARGET === "dev" || import.meta.env.DEV;
+
+// SANDBOX_DEPLOY (v18.4.3) — "is this the DEPLOYED sandbox?", which is narrower
+// than WA_SANDBOX: the dev server is a sandbox too, but it is not a deployment
+// anybody could mistake for the restaurant's. It suffixes the version in
+// `__APP_SIGNATURE__` (App.jsx), so the boot banner and Settings say which
+// deployment you are looking at. Until v18.4.3 that suffix was a hand edit on a
+// long-lived branch, resolved at every merge from main; it is derived now
+// because the `sandbox` branch is GENERATED from main
+// (.github/workflows/sandbox.yml) and so cannot carry a source edit of its own.
+// Folds to `false` in a production build. Declared ABOVE WA_SANDBOX, which is
+// built from it: the sandbox condition is written once in this file.
+export const SANDBOX_DEPLOY = import.meta.env.VITE_FB_TARGET === "dev";
+
+export const WA_SANDBOX = SANDBOX_DEPLOY || import.meta.env.DEV;

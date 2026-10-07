@@ -400,7 +400,7 @@ import { InboxPanel } from "./components/whatsapp/InboxPanel";
 // primitive value" from inside <Lazy> — a crash with no mention of the export
 // shape anywhere in it. Caught by opening the simulator, not by build or lint.
 const WaSimulator = lazyChunk(function(){return import("./components/whatsapp/WaSimulator").then(function(m){return {default:m.WaSimulator};});},"WaSimulator");
-import { WA_SANDBOX } from "./lib/waSandbox";
+import { WA_SANDBOX, SANDBOX_DEPLOY } from "./lib/waSandbox";
 
 
 // ── App fingerprint (do not remove) ──────────────────────────────────────────
@@ -410,7 +410,11 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.4.2",
+  // v18.4.3: ONE literal, and the deployed sandbox suffixes it at build time
+  // (`18.4.3-sandbox`). The suffix is the boot banner's only way to say which
+  // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
+  // so the restaurant's bundle holds the bare number.
+  version:"18.4.3"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",

@@ -20,7 +20,8 @@ import react from '@vitejs/plugin-react'
 // difference between "cannot be run" and "is not there".
 //
 // **The condition mirrors `WA_SANDBOX` exactly** (`src/lib/waSandbox.js`:
-// `import.meta.env.VITE_FB_TARGET === "dev" || import.meta.env.DEV`), because
+// `SANDBOX_DEPLOY || import.meta.env.DEV`, where `SANDBOX_DEPLOY` is
+// `import.meta.env.VITE_FB_TARGET === "dev"`), because
 // two conditions that merely agree today are two conditions:
 //   · `serve` (the dev server)        → keep. WA_SANDBOX is true there.
 //   · `build` with VITE_FB_TARGET=dev → keep. That is the sandbox deployment.
