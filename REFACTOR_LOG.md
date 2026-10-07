@@ -31363,3 +31363,39 @@ an Add to waitlist button and a suggested reply.
    `tests/short-viewport.test.js` +4. **Not checked on the iPhone.**
    **Also decided:** the timeline printing upright on the tablet and the iPhone stays
    as it is; staff pick Landscape in the print dialog.
+
+### `/code-review` (high: eight angles inline, no subagents)
+
+Eight findings; each was checked before anything was changed.
+
+**Fixed (5):**
+- **The inbox dialog lost its accessible name once folded, for good.** The fold
+  (phase 5) unmounts the title bar, and the dialog's name was the `<h2>` in it:
+  `useDialog` gives that element an id and points `aria-labelledby` at it once.
+  Measured in Chromium's accessibility tree (CDP `getPartialAXTree`): "WHATSAPP"
+  before, "" while folded, the target absent; the remounted heading has no id, so
+  it stayed "". The title is now an always-mounted `mgt-sr-only` `<h2>` carrying
+  `MODAL_TITLE_ATTR`, above the folding bar, and the wordmark is an `aria-hidden`
+  span. This is the very loss phase 6 named as its reason for not hiding the forms'
+  title pill, shipped one phase earlier in the inbox.
+- **A checkbox, a slider, a date or a time input counted as typing.** `Overlay`
+  and the inbox both tested the tag alone. `raisesKeyboard` (`lib/keyboard.js`)
+  is the one test now: a textarea or a text-like input.
+- **The same test was written three times** (the reuse finding): all three sites
+  call `raisesKeyboard`.
+- **`typing` could outlive the conversation it was about.** React fires no blur
+  when a focused field is unmounted. It holds the conversation's key now, and a key
+  that is not the open conversation's is nobody typing.
+- **`aria-disabled` on a roleless div** in the print chooser: removed; the steppers
+  inside are disabled themselves.
+- **Four comments still said the job clears on `afterprint`**: corrected to
+  `onPrintEnd` (index.css, App twice, TimelineSheet).
+
+**Not changed (2), with the reason:**
+- *After an iOS print, Safari's own Share → Print before touching the page reuses
+  the last choice.* Real, and inherent to phase 11: iOS gives no event when its
+  print sheet closes, so the job ends at the next touch of the page. It prints a
+  sheet he chose a moment ago, not a wrong day.
+- *`Overlay`'s `field` can outlive a field unmounted while focused.* It only
+  matters while the viewport is short, which on a tablet or phone means a keyboard
+  is up for a field that still exists; the footer is slim until the next focus.

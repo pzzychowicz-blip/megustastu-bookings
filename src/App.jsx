@@ -1068,7 +1068,7 @@ function BookingApp({uid}){
   const printAsk = modalOpen.print || null;
   const setPrintAsk = setModalFns.print;
   // The ONE print in flight, {kind, from, to, Sheet}: it mounts the chooser's
-  // TimelineSheet for a timeline print and is cleared on `afterprint`.
+  // TimelineSheet for a timeline print and is cleared when the print ends.
   const [printJob, setPrintJob] = useState(null);
   // The end of the print ends the job whichever way the print dialog closed:
   // the sheet unmounts and <html> loses `data-print`, so the browser's own
@@ -4754,8 +4754,8 @@ function BookingApp({uid}){
   const timelineSheet=TimelineSheet?<TimelineSheet bookings={bookings} date={viewDate} blocks={tableBlocks} from={printJob.from} to={printJob.to} splitHour={dayShifts.split} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />:null;
   // `flushSync` so the sheet is in the DOM before `window.print()` reads it,
   // and the print call stays inside the click (iOS wants a user gesture).
-  // `data-print` tells the print stylesheet which sheet to show; `afterprint`
-  // (the effect below) takes both back.
+  // `data-print` tells the print stylesheet which sheet to show; the end of
+  // the print (`onPrintEnd`, the effect above) takes both back.
   function doPrint(job){
     flushSync(function(){setPrintJob(job);});
     document.documentElement.setAttribute("data-print",job.kind);

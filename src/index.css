@@ -1796,7 +1796,8 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
   .mgt-print-sheet { display: block !important; }
   @page { margin: 12mm; }
   /* v18.4.0: WHICH sheet prints is `data-print` on <html>, stamped by the print
-     chooser for one print and cleared on `afterprint`. No attribute is the
+     chooser for one print and cleared when the print ends (lib/print-end.js,
+     not a bare `afterprint`: iOS fires that early). No attribute is the
      browser's own Cmd+P, which prints the day sheet as it always has.
      - `print-color-adjust: exact`: without it a browser drops background
        fills when printing, and every booking would be a white box with white

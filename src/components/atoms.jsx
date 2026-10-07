@@ -20,6 +20,7 @@ import { useKeyboardInset } from "../hooks/useKeyboardInset";
 import { useShortViewport } from "../hooks/useShortViewport";
 import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
+import { raisesKeyboard } from "../lib/keyboard";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -509,8 +510,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   const tight = short && !!field;
   const typingProps = {
     onFocus: function (e) {
-      const t = e.target;
-      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) setField(t);
+      if (raisesKeyboard(e.target)) setField(e.target);
     },
     onBlur: function (e) {
       if (!(e.relatedTarget && e.currentTarget.contains(e.relatedTarget))) setField(null);

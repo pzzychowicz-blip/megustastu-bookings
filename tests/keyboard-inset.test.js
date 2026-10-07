@@ -169,7 +169,7 @@ describe("v18.4.0: a footed dialog makes room while a field is typed into on a s
   it("is tight only for a focused text field AND a short viewport", () => {
     expect(Overlay).toMatch(/const short = useShortViewport\(\);/);
     expect(Overlay).toMatch(/const tight = short && !!field;/);
-    expect(Overlay).toMatch(/if \(t && \(t\.tagName === "TEXTAREA" \|\| t\.tagName === "INPUT"\)\) setField\(t\);/);
+    expect(Overlay).toMatch(/if \(raisesKeyboard\(e\.target\)\) setField\(e\.target\);/);
   });
 
   it("does not grow the footer back under a finger pressing Save", () => {

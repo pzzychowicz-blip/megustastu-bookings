@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { activatesItself, isTyping, stepPress } from "../src/lib/keyboard.js";
+import { activatesItself, isTyping, stepPress, raisesKeyboard } from "../src/lib/keyboard.js";
 
 function el(tagName, attrs = {}) {
   return {
@@ -73,5 +73,24 @@ describe("stepPress — a stepper that steps once per press, from a pointer OR a
     let n = 0;
     stepPress(() => { n++; }).onClick(fake({ detail: 0 }));
     expect(n).toBe(1);
+  });
+});
+
+// v18.4.0 `/code-review`: what Overlay and the WhatsApp inbox make room for.
+describe("raisesKeyboard — a field somebody types text into", () => {
+  const f = (tagName, type) => ({ tagName, type });
+  it("is a textarea and the text-like inputs", () => {
+    expect(raisesKeyboard(f("TEXTAREA"))).toBe(true);
+    for (const t of [undefined, "", "text", "search", "tel", "email", "url", "number", "password", "TEXT"]) {
+      expect(raisesKeyboard(f("INPUT", t)), String(t)).toBe(true);
+    }
+  });
+  it("is not a control that is ticked, dragged or picked from", () => {
+    for (const t of ["checkbox", "radio", "range", "date", "time", "datetime-local", "month", "week", "file", "color", "button", "submit", "reset", "hidden"]) {
+      expect(raisesKeyboard(f("INPUT", t)), t).toBe(false);
+    }
+    expect(raisesKeyboard(f("SELECT"))).toBe(false);
+    expect(raisesKeyboard(f("BUTTON"))).toBe(false);
+    expect(raisesKeyboard(null)).toBe(false);
   });
 });

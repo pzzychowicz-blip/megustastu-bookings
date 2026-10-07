@@ -75,7 +75,7 @@ export function PrintModal({ range, onPrint, onClose }) {
         })}
       </div>
       <div style={{ fontSize: T.body, color: S.muted, marginBottom: 16, minHeight: 32 }}>{SAYS[kind]}</div>
-      <div aria-disabled={!grid} style={{ opacity: grid ? 1 : PAUSED_FADE, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ opacity: grid ? 1 : PAUSED_FADE, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text }}>Hours on the timeline</div>
         <HourStep label="From" value={from} min={range.min} max={to - 1} onChange={setFrom} disabled={!grid} />
         <HourStep label="To" value={to} min={from + 1} max={range.max} onChange={setTo} disabled={!grid} />

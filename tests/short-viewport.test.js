@@ -52,11 +52,15 @@ describe("the inbox folds while a reply is typed on a short screen", () => {
   const View = read("components/whatsapp/ConversationView.jsx");
 
   it("folds only for a text field of the OPEN CONVERSATION", () => {
-    expect(Inbox).toMatch(/const kbFold = typing && short && !shown && !!activeConv;/);
+    // `/code-review`: `typing` is the conversation's key, so a view unmounted
+    // mid-reply (no blur fires) cannot leave the next conversation folded.
+    expect(Inbox).toMatch(/const kbFold = !!activeConv && typing === activeConv\.phoneKey && short && !shown;/);
+    expect(Inbox).toMatch(/if \(raisesKeyboard\(e\.target\)\) setTyping\(activeKey\);/);
+    expect(Inbox).not.toMatch(/tagName === "INPUT"/);
     expect(Inbox).toMatch(/<div onFocus=\{onViewFocus\} onBlur=\{onViewBlur\} onPointerDown=\{onViewPointerDown\}/);
     // Send is inside the conversation: a blur towards it must not unfold the
     // pane under the finger.
-    expect(Inbox).toMatch(/if \(!\(e\.relatedTarget && e\.currentTarget\.contains\(e\.relatedTarget\)\)\) setTyping\(false\);/);
+    expect(Inbox).toMatch(/if \(!\(e\.relatedTarget && e\.currentTarget\.contains\(e\.relatedTarget\)\)\) setTyping\(null\);/);
   });
 
   it("lets the show button hold the fold open where no keyboard closes", () => {
@@ -116,5 +120,19 @@ describe("on a phone the conversation's two cards start as one line", () => {
   it("the request is a toggle on a phone even with nothing else to disclose", () => {
     expect(intent).toContain("const opens = hasBody || !!narrow;");
     expect(intent).toContain("onHeaderClick={opens ? toggle : undefined}");
+  });
+});
+
+// `/code-review`: the fold unmounts the title bar, and the dialog's name was
+// the heading in it. Measured in Chromium's accessibility tree: "WHATSAPP"
+// before, "" while folded and after.
+describe("the inbox keeps its name while its title bar is folded", () => {
+  const Inbox = read("components/whatsapp/InboxPanel.jsx");
+  it("the title is an always-mounted heading above the folding bar, and the wordmark is not a second one", () => {
+    const title = Inbox.indexOf('<h2 className="mgt-sr-only" {...{ [MODAL_TITLE_ATTR]: "" }}>WhatsApp</h2>');
+    expect(title).toBeGreaterThan(-1);
+    expect(title).toBeLessThan(Inbox.indexOf("<Reveal show={!kbFold} inert={kbFold}"));
+    expect(Inbox.match(/<h2/g)).toHaveLength(1);
+    expect(Inbox).toMatch(/<span aria-hidden="true" style=\{\{[^}]*\}\}>WHATSAPP<\/span>/);
   });
 });

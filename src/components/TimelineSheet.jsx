@@ -14,8 +14,8 @@
 // white paper.
 //
 // Unlike DaySheet it is NOT permanently mounted. App mounts it for one print
-// job (`from`–`to`, whole hours, from the print chooser) and unmounts it on
-// `afterprint`: it walks every booking for the repeat-no-show flag, which a
+// job (`from`–`to`, whole hours, from the print chooser) and unmounts it when
+// the print ends (lib/print-end.js): it walks every booking for the repeat-no-show flag, which a
 // hidden, always-mounted sheet would redo on every booking write.
 //
 // Geometry is in PERCENT of the chosen range, so the grid fills whatever page
