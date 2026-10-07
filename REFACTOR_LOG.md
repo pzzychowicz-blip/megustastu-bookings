@@ -32091,3 +32091,17 @@ finding, a new ERROR. `preserve-caught-error` joined the recommended set and fla
 message is the same. The 63 warnings are the same 63.
 
 **Gate:** build 127.37 kB gz (main chunk) · 2688 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 10 — vitest 5 (#14)
+
+**Files:** `package.json` · `package-lock.json` · `ROADMAP.md` (#14 rewritten: both majors
+are in, what is left is switching Dependabot on)
+
+`vitest` 4.1.11 → 5.0.3. No config and no test changed. It needs Node `^22.12.0`, which
+CI's `node-version: "22"` gives; the Mac runs 24.14.1.
+
+**Measured.** `npm test`: 95 files, 2688 passed, the count vitest 4 reported one commit
+earlier, with `tests/save-path.test.js`' inline snapshots unchanged. `npm run test:rules`
+(the emulator suite, which vitest also runs): 294 passed.
+
+**Gate:** build 127.37 kB gz (main chunk) · 2688 tests passed · lint 63 problems, 0 errors · `check:style` OK.

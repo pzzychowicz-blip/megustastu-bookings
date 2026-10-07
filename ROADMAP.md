@@ -104,11 +104,12 @@ evidence for each.
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
 
-- **Dependency majors, and whether to automate updates (#14).** The in-range updates
-  shipped in v18.4.4. Waiting as majors: eslint and `@eslint/js` 10, vitest 5. Optionally,
-  turn on Dependabot for security updates only. `npm audit` still lists 5 high advisories
-  on 2026-10-07, all one chain (`@grpc/grpc-js` under `@firebase/firestore`, which the app
-  does not import); their only offered fix is `--force`, which downgrades firebase to 9.
+- **Dependabot is configured but switched off (#14).** `.github/dependabot.yml` (v18.4.5)
+  limits it to security updates. It does nothing until Dependabot alerts and Dependabot
+  security updates are turned on in the repository's settings. `npm audit` still lists 5
+  high advisories on 2026-10-07, all one chain (`@grpc/grpc-js` under
+  `@firebase/firestore`, which the app does not import); their only offered fix is
+  `--force`, which downgrades firebase to 9, so Dependabot will open nothing for them.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
