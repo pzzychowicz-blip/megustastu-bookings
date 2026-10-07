@@ -84,12 +84,12 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { dueOccurrences } from "./lib/recurring";
+import { dueOccurrences, withOccurrences } from "./lib/recurring";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares, and the swap release `manualAssign` shares with the saves.
-import { applyEdit, buildBooking, memoByPrev, occurrenceBooking, releaseSwapped } from "./lib/booking-save";
+import { applyEdit, buildBooking, memoByPrev, releaseSwapped } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -2296,7 +2296,8 @@ function BookingApp({uid}){
   //     two devices generating concurrently converge — the second create is
   //     rejected by the per-$id updatedAt CAS (baseUpdatedAt 0 vs stored) and
   //     reconciles via the echo. v18.3.4: the record, id included, is
-  //     `occurrenceBooking` (lib/booking-save.js);
+  //     `occurrenceBooking` (lib/booking-save.js); v18.4.4: adding and placing
+  //     them is `withOccurrences` (lib/recurring.js);
   //   • skipDates (a deleted occurrence's date) are skipped;
   //   • closed days / out-of-hours times are skipped.
   // Self-stabilising (created rows populate `existing` next pass → no-op) and
@@ -2311,31 +2312,11 @@ function BookingApp({uid}){
     // its first booking) and tests the last start rather than the close.
     const toCreate=dueOccurrences(recurring.rules,bookings,todayStr(),recurring.horizonWeeks*7);
     if(!toCreate.length) return;
-    saveBookings(function(prev){
-      let next=prev;
-      const byDate={};
-      toCreate.forEach(function(oc){ (byDate[oc.date]=byDate[oc.date]||[]).push(oc); });
-      Object.keys(byDate).forEach(function(ds){
-        const added=[];
-        byDate[ds].forEach(function(oc){
-          const rule=oc.rule;
-          const nb=occurrenceBooking(rule,ds);
-          if(next.some(function(b){return b.id===nb.id||(b.recurringId===rule.id&&b.recurringDate===ds);})) return;
-          next=next.concat([nb]);
-          added.push(nb.id);
-        });
-        // v18.3.5: where the optimiser owns the day, one pass places every
-        // new occurrence. Where it does not (today, after the cutoff) a pass
-        // with no `changedId` copies every row as it is, so an occurrence the
-        // generator first met late in the day was written with no table and
-        // no `_conflict`: in the Unplaced row with nothing flagging it. There
-        // each one is placed by itself, as a new booking saved then is: the
-        // best free table, nobody else moved, `_conflict` when there is none.
-        if(optimizerActiveFor(ds,autoOptimizer)) next=bookingsAfterAction(next,ds,tableBlocks,null,false,autoOptimizer);
-        else added.forEach(function(id){next=bookingsAfterAction(next,ds,tableBlocks,id,true,autoOptimizer);});
-      });
-      return next;
-    },true);
+    // v18.4.4: what the write does to the list is `withOccurrences`
+    // (lib/recurring.js): each due occurrence not already in `prev` is added,
+    // then placed — one optimiser pass where it owns the day, one by one where
+    // it does not (v18.3.5).
+    saveBookings(function(prev){return withOccurrences(prev,toCreate,tableBlocks,autoOptimizer);},true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- firstLoadCount is a ref; saveBookings is new each render and reads only refs, and watching it would run the generator on every render
   },[bookings,recurring,tableBlocks,autoOptimizer,resyncing,nowQuarter]);
 

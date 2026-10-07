@@ -21,7 +21,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { dueOccurrences, ruleStart } from "../src/lib/recurring.js";
+import { dueOccurrences, ruleStart, withOccurrences } from "../src/lib/recurring.js";
+import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS, EMPTY_FORM, ALL_TABLES } from "../src/lib/constants.js";
 import { buildBooking } from "../src/lib/booking-save.js";
 
@@ -143,7 +144,72 @@ describe("dueOccurrences", () => {
   });
 });
 
+// v18.4.4 (ROADMAP #17): what the generator's write does to the list. It was
+// the body of a `saveBookings` updater inside a useEffect, reachable only by
+// `tests/save-path.test.js`, which lifts the effect out of App's source and
+// runs it. Those cases still run, through the effect; these call it directly.
+describe("withOccurrences", () => {
+  const FUTURE = "2099-06-17";               // a day the optimiser owns
+  const due = (date, over) => ({ rule: rule(over), date });
+  const party = (id, over) => Object.assign({
+    id, name: id, phone: "", date: FUTURE, time: "20:00", scheduledTime: "20:00", size: 2, duration: 90,
+    originalDuration: 90, status: "confirmed", tables: [], preference: "auto", preferredTables: [], history: [],
+  }, over);
+
+  it("adds each due occurrence under its deterministic id, stamped and placed", () => {
+    const next = withOccurrences([], [due(FUTURE)], [], true);
+    expect(next.length).toBe(1);
+    expect(next[0].id).toBe("rR1_" + FUTURE);
+    expect(next[0].recurringId).toBe("R1");
+    expect(next[0].recurringDate).toBe(FUTURE);
+    expect(next[0].tables.length).toBeGreaterThan(0);
+  });
+
+  it("with nothing due it hands back the list it was given", () => {
+    const prev = [party("a", { tables: ["3"] })];
+    expect(withOccurrences(prev, [], [], true)).toBe(prev);
+  });
+
+  it("a replayed write does not add an occurrence twice: by its id, or by its stamps once it has moved", () => {
+    const first = withOccurrences([], [due(FUTURE)], [], true);
+    expect(withOccurrences(first, [due(FUTURE)], [], true).length).toBe(1);
+    // Moved to another day by hand: a different date, the same stamps.
+    const moved = [Object.assign({}, first[0], { id: "moved1", date: "2099-06-18" })];
+    const again = withOccurrences(moved, [due(FUTURE)], [], true);
+    expect(again.map((b) => b.id)).toEqual(["moved1"]);
+  });
+
+  it("two rules due on one date are both added, on different tables", () => {
+    const next = withOccurrences([], [due(FUTURE), due(FUTURE, { id: "R2", name: "Bo" })], [], true);
+    expect(next.map((b) => b.id).sort()).toEqual(["rR1_" + FUTURE, "rR2_" + FUTURE]);
+    expect(next[0].tables.some((t) => next[1].tables.includes(t))).toBe(false);
+  });
+
+  // v18.3.5: today with the optimiser OFF is the one day it does not own.
+  describe("today, after the cutoff", () => {
+    const TODAY = todayStr();
+    it("places the new occurrence by itself and moves nobody else", () => {
+      const other = party("other", { date: TODAY, tables: ["7"] });
+      const next = withOccurrences([other], [due(TODAY)], [], false);
+      const made = next.find((b) => b.id === "rR1_" + TODAY);
+      expect(made.tables.length).toBeGreaterThan(0);
+      expect(made.tables).not.toContain("7");
+      expect(next.find((b) => b.id === "other").tables).toEqual(["7"]);
+    });
+    it("with no table free it is flagged, not left silently unplaced", () => {
+      const wall = ALL_TABLES.map((t) => ({ id: "bl" + t.id, date: TODAY, tableId: t.id, allDay: true }));
+      const made = withOccurrences([], [due(TODAY)], wall, false)[0];
+      expect(made.tables).toEqual([]);
+      expect(made._conflict).toBe(true);
+    });
+  });
+});
+
 describe("the wiring", () => {
+  it("App's generator hands the write to withOccurrences and builds no occurrence itself", () => {
+    expect(APP).toContain("saveBookings(function(prev){return withOccurrences(prev,toCreate,tableBlocks,autoOptimizer);},true);");
+    expect(APP).not.toContain("occurrenceBooking");
+  });
   it("App's generator asks dueOccurrences, and a new rule carries startDate", () => {
     expect(APP).toMatch(/const toCreate=dueOccurrences\(recurring\.rules,bookings,todayStr\(\),recurring\.horizonWeeks\*7\)/);
     // v18.3.4: the rule is `buildBooking`'s, and App writes what it is handed.

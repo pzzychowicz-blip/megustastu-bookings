@@ -118,8 +118,8 @@ evidence for each.
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
   one domain per patch version. The save path went first, in v18.3.4 (#13): its
   decisions are `lib/booking-save.js`, App keeps the effects, and `App.jsx` is 5,340
-  lines (5,727 before it). **Next: recurring generation**, then backup/export and
-  drag-drop.
+  lines (5,727 before it). Recurring generation followed in v18.4.4 (`withOccurrences`,
+  `lib/recurring.js`; `App.jsx` 5,410 lines). **Next: backup/export**, then drag-drop.
 
 - **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
   (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then

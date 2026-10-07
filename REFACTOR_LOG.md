@@ -31752,3 +31752,38 @@ switch, 31).
 
 **Gate:** build 126.35 kB gz (main chunk, +0.36: a table of objects minifies less well than
 the `if` chain) · 2598 tests passed (44 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — recurring generation out of `BookingApp` (#17)
+
+**Files:** `src/lib/recurring.js` · `src/App.jsx` (5,425 → 5,410 lines) ·
+`tests/recurring.test.js` (7 new) · `tests/save-path.test.js` · `src/lib/CLAUDE.md` ·
+`src/hooks/CLAUDE.md` · `ROADMAP.md`
+
+**What.** The generator effect made two decisions inline. Which occurrences are due moved
+to `dueOccurrences` in v18.3.3; what the write does to the list was still the body of its
+`saveBookings` updater, and is now `withOccurrences(prev, due, tableBlocks, autoOptimizer)`
+in the same file, moved verbatim. App's effect keeps the loaded and resync guard, the call
+to `dueOccurrences` and the silent dispatch, and no longer imports `occurrenceBooking`.
+
+**Scope, as the v18.3.4 extraction set it:** the decisions go to `lib/`, App keeps the
+effects. Moving the effect itself into a hook would take about 50 more lines out of App,
+and its position among BookingApp's effects is its run order; not done here.
+
+**Verified.**
+
+- **Old against new.** A temporary test ran the old updater body (cut from App's source)
+  and `withOccurrences` on the same random rules, bookings, blocks, optimiser state and
+  replayed `prev`: 4,000 cases per seed, three seeds, about 13,000 occurrences added and 900
+  replays per run, **0 differences** in the resulting list or in whether the input came back
+  by identity. Two sabotages showed up: the stamp half of the existence check removed (441
+  differences), the one-by-one placement removed (425).
+- **The first run of that test reported about 1,750 differences per seed, and every one was
+  the harness.** `occurrenceBooking` stamps its history entry with `new Date()`, so two runs
+  a millisecond apart differ. With the clock frozen: 0.
+- **`tests/save-path.test.js` already ran this code**, by lifting the effect out of App's
+  source: its generator snapshots (created ids, tables, the today-after-cutoff case) pass
+  unchanged through the extracted function. Its one edit is the import it checks the lifted
+  effect binds, `withOccurrences` where it was `occurrenceBooking`.
+
+**Gate:** build 126.35 kB gz (main chunk, unchanged from commit 2) · 2605 tests passed (7
+new) · lint 63 problems, 0 errors · `check:style` OK.

@@ -472,7 +472,9 @@ describe("the harness runs the code it claims to", () => {
     expect(scope.todayStr).toBe(day.todayStr);
     // …and the other two new bookings' records (phase 7).
     expect(importScope(WALKIN, WALKIN_SAVE.join("\n")).walkinBooking).toBe(bookingSave.walkinBooking);
-    expect(importScope(APP, APP_GENERATOR.join("\n")).occurrenceBooking).toBe(bookingSave.occurrenceBooking);
+    // v18.4.4: the generator hands its write to `withOccurrences` (lib/recurring.js),
+    // which builds the record; App no longer names `occurrenceBooking`.
+    expect(importScope(APP, APP_GENERATOR.join("\n")).withOccurrences).toBe(recurringLib.withOccurrences);
   });
   it("draftOf builds exactly the draft openEdit opens with", () => {
     [
