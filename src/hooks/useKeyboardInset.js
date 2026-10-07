@@ -60,7 +60,7 @@
 import { useState, useEffect } from "react";
 
 // Below this, a gap between the two viewports is browser chrome, not a keyboard.
-const KB_MIN = 100;
+export const KB_MIN = 100;
 const NONE = { bottom: 0 };
 
 // The arithmetic, pure over a window-shaped object so tests/keyboard-inset.test.js

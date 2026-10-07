@@ -31441,3 +31441,49 @@ untimed. The review also read what a model id that stops answering does, which t
 entry above had left open: `liveParse` logs `[gemini] API error <status>` and returns
 null, so the message is saved without a draft and staff handle it by hand. Read from
 the code (`api/_lib/gemini.js`, the `!res.ok` branch), not triggered against the API.
+
+## v18.4.2 — the iPhone window that stayed scrolled
+
+**Date:** 2026-10-07 · **Branch:** `fix/v18.4.2-ios-window-scroll` ·
+**Behavioural change:** yes, on an iPhone: the discard confirm is drawn whole, and the
+app is no longer left shifted up with its header gone after a form closes.
+
+**Files:** `src/hooks/useWindowAtTop.js` (new) · `src/hooks/useKeyboardInset.js` ·
+`src/App.jsx` · `tests/window-at-top.test.js` (new) · `ROADMAP.md`
+
+Patryk's screenshots from the installed app on PROD v18.4.0 (iPhone 12 mini, iOS 27):
+"Discard unsaved changes?" cut off part-way down with the booking form's Save row
+showing under it. This is the pair of faults v18.3.5 could not reproduce and left on
+the ROADMAP; that entry is removed.
+
+**Why DEV never showed it.** It needs two things PROD had and DEV did not: "Lock
+navigation" OFF, and the page scrolled before the form is opened. With the lock on,
+`<body>` cannot scroll and the fault cannot start. The DEV account had it on.
+
+**Measured** (iPhone 18 Pro Max simulator, iOS 27, home-screen app, DEV, lock off,
+page scrolled 295px, edit a booking, type in Notes, tap Back with the keyboard up):
+`window.scrollY` was 374 with the keyboard up and stayed at **249** after it closed,
+on an 894px document whose `<html>` is `overflow: hidden`. The confirm's layout rect
+was the full 0–894 and hit-testing found its buttons, but it was painted only down to
+`clientHeight − scrollY`. So the hidden Discard still took taps. After the dialogs
+closed the app sat 249px up: header gone, blank below. One cause, both faults.
+
+- **`useWindowAtTop()`** (mounted once in `BookingApp`): when the keyboard is down
+  (`clientHeight − visualViewport.height <= KB_MIN`) and `scrollY` is not 0, it calls
+  `window.scrollTo(0, 0)`. It listens to the visual viewport's `resize` and `scroll`
+  and the window's `scroll`. It never acts while the keyboard is up, because that
+  scroll is how iOS shows the focused field. `windowStrayOf` is the pure predicate.
+- **`KB_MIN` is exported** from `useKeyboardInset.js`, so the two hooks agree on what
+  "the keyboard is up" means.
+
+**After, same steps:** `scrollY` read 249 at the viewport resize and 0 on the next
+sample; the confirm was whole; after Discard the page was where it had been
+(`<body>` scrollTop 295).
+
+**iPad (A16) simulator, iOS 27, Safari tab:** keyboard-up Back gives a centred, whole
+confirm and Discard returns to the timeline. A regression check only: an iPad gets the
+desktop card and that page did not scroll.
+
+**Not verified:** a real iPhone. The simulator reproduced the fault and the fix, and
+earlier keyboard work here found readings the simulator had and the device did not.
+
