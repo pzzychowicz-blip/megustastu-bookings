@@ -31547,6 +31547,13 @@ v18.4.0 with the lock off" is inferred from the numbers, not measured.
 **Gate (all three phases):** build 125.97 kB gz (main chunk, +0.17 on v18.4.1) · 2547 tests passed
 (18 new) · lint 63 problems, 0 errors · `check:style` OK.
 
-**Not verified:** a real iPhone. The simulator reproduced the fault and the fix, and
-earlier keyboard work here found readings the simulator had and the device did not.
+**Verified on Patryk's iPhone 12 mini** (iOS 27, home-screen app, DEV, 2026-10-07,
+his check plus the beacon's log, Lock navigation on and off). WhatsApp reply box,
+lock off: `visualViewport` 357 / `offsetTop` 405 / `pageTop` 544, the panel's rect
+[−405, 357], pad 405. The 139 between the two offsets is the band in his screenshot.
+With the lock on the two offsets were both 405. Booking form, Notes: 357 / 314 / 314,
+a 91px pad under a sheet whose bottom was at 448. After each keyboard close `scrollY`
+read 409 at the viewport resize and 0 in every later sample. He reports the confirm,
+the scroll after Discard and the conversation all correct.
 
+**Gate, final:** 2548 tests passed (19 new); the other three numbers as above.

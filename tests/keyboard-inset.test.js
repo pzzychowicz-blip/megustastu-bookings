@@ -32,6 +32,11 @@ describe("v18.4.2: a fixed box is measured against the LAYOUT viewport", () => {
   it("pads the top by offsetTop, not by pageTop", () => {
     expect(coveredTopOf(moved)).toBe(415);
   });
+  it("the same on Patryk's iPhone 12 mini (home-screen app): rect [-405, 357], pageTop 544", () => {
+    const phone = { document: { documentElement: { clientHeight: 762 } }, visualViewport: { height: 357, offsetTop: 405, pageTop: 544 } };
+    expect(coveredTopOf(phone)).toBe(405);
+    expect(keyboardInsetOf(phone)).toEqual({ bottom: 0 });
+  });
   it("and the bottom is not covered there", () => {
     expect(keyboardInsetOf(moved)).toEqual({ bottom: 0 });
   });
