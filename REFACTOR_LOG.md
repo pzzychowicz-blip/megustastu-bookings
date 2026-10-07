@@ -32046,3 +32046,22 @@ the trigger was ⇧D), a phone-width sheet, and what a screen reader announces w
 **Sabotage.** `REFUSAL_Z = 301` fails "is above every other z-index written under src/".
 
 **Gate:** build 127.35 kB gz (main chunk, +0.09) · 2686 tests passed (8 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 7 — the lint gate caps warnings at 63 (#10)
+
+**Files:** `package.json` · `.github/workflows/ci.yml` · `tests/lint-cap.test.js` (new, 2) ·
+`tests/CLAUDE.md` · `.claude/skills/mgt-workflow/SKILL.md` · `ROADMAP.md` (entry removed)
+
+**Policy change, Patryk's decision (2026-10-07).** The `lint` script is
+`eslint . --max-warnings 63`. Lint failed on an error before; it also fails on a 64th
+warning now. The cap is in the script, not in the workflow, so CI and the local gate run
+the same command. The 63 today are the React Compiler advisories kept as warnings.
+
+**The cap only goes down.** `tests/lint-cap.test.js` fails if the script loses the flag or
+the number rises above 63, and if CI stops running `npm run lint`. Lowering it when
+warnings are fixed passes.
+
+**Measured.** `npm run lint` exits 0 at 63 warnings. `eslint . --max-warnings 62` on the
+same tree exits 1.
+
+**Gate:** build 127.35 kB gz (main chunk) · 2688 tests passed (2 new) · lint 63 problems, 0 errors · `check:style` OK.

@@ -100,10 +100,6 @@ evidence for each.
   `api/wa-sim-*.js` handlers. (#4's five files are run by `tests/api-handlers.test.js`
   since v18.4.5.)
 
-- **Lint: decide a gate (#10).** There are 63 warnings on 2026-10-01, all of them React
-  Compiler advisories. Decide whether CI gets `--max-warnings N`, which is a policy
-  change.
-
 - **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
   confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
   referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
