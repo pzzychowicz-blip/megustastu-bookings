@@ -637,7 +637,9 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
             const id = r.uid || r.inviteId;
             const on = row && (row.uid || row.inviteId) === id;
             return (
-              <button className="mgt-hover-scale"
+              <button /* @no-lift a row as wide as its column: .mgt-ac-row tints it through --row-bg */
+                // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
+                className="mgt-ac-row mgt-nopress"
                 key={id}
                 onClick={function () { onSelect(id); }}
                 aria-pressed={on}
@@ -647,7 +649,8 @@ export function RolesModal({ rows, selectedUid, myUid, onSelect, onToggleCap, on
                   padding: SP.base, marginBottom: SP.tight,
                   borderRadius: R.card, cursor: "pointer",
                   border: "1px solid " + (on ? "var(--accent)" : "var(--border-soft)"),
-                  background: on ? "var(--bg-tab-active)" : "transparent",
+                  "--row-bg": on ? "var(--bg-tab-active)" : "transparent",
+                  "--row-bg-hover": on ? "var(--bg-tab-active)" : "var(--bg-veil)",
                   color: "var(--text-primary)", fontSize: T.body, fontWeight: FW.semi,
                 }}
               >

@@ -11,7 +11,7 @@
 //
 // Content for `date`: header (restaurant, date + weekday, covers + shift totals
 // via daySummary), a time-sorted table of the day's NON-cancelled bookings
-// (Time · Name · Guests · Tables · Phone · Deposit/voucher · Notes), any table blocks, and
+// (Time · Name · Guests · Tables · Seating · Phone · Deposit/voucher · Notes), any table blocks, and
 // the day's waitlist entries.
 //
 // Props: bookings, date, splitHour, waitlist, blocks, restaurantName, currency (v17.0.0 — settings/general)
@@ -24,6 +24,7 @@ import { formatPhone } from "../lib/customers";
 import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
+import { onPrintEnd } from "../lib/print-end";
 // v17.10.2: was `weekdayOf`, which is ALSO exported from lib/constants.js — where
 // it returns the day NUMBER (0–6). Two functions, one name, incompatible return
 // types, one of them on the shared module. That is worse than a duplicate: it is
@@ -39,8 +40,12 @@ function weekdayName(dateStr) {
 // other files (mgt-backup-…, mgt-activity-…), so a folder of them sorts by day;
 // a date that is not canonical (a booking's stored date can reach `viewDate`
 // verbatim) names no day rather than a broken one.
+// v18.4.0: a print of the TIMELINE alone (the chooser stamps `data-print` on
+// <html> before it prints) is named for what it is. This sheet owns the title
+// for every print because it is the one that is always mounted.
 function sheetFileName(date) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? "mgt-day-sheet-" + date : "mgt-day-sheet";
+  const stem = document.documentElement.getAttribute("data-print") === "timeline" ? "mgt-timeline" : "mgt-day-sheet";
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? stem + "-" + date : stem;
 }
 
 // Inline light-only styles (no tokens — print stays light).
@@ -73,7 +78,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
   }, [waitlist, date]);
 
   // The title carries the sheet's name only while it prints: `beforeprint` and
-  // `afterprint` fire for the Summary's "Print day sheet" AND for the browser's
+  // `afterprint` fire for the Summary's Print (the chooser, v18.4.0) AND for the browser's
   // own ⌘P, and both print this sheet (index.css hides #root in print). The
   // cleanup restores it too, should the day change or the sheet unmount mid-print.
   useEffect(function () {
@@ -81,10 +86,13 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
     function before() { if (prev === null) prev = document.title; document.title = sheetFileName(date); }
     function after() { if (prev !== null) { document.title = prev; prev = null; } }
     window.addEventListener("beforeprint", before);
-    window.addEventListener("afterprint", after);
+    // v18.4.0: `onPrintEnd`, not a bare `afterprint`. iOS fires that before
+    // its print sheet opens, so the title was back to the app's name by the
+    // time the PDF was saved (lib/print-end.js).
+    const off = onPrintEnd(after);
     return function () {
       window.removeEventListener("beforeprint", before);
-      window.removeEventListener("afterprint", after);
+      off();
       after();
     };
   }, [date]);
@@ -108,6 +116,10 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
               <th style={th}>Name</th>
               <th style={th}>Guests</th>
               <th style={th}>Tables</th>
+              {/* v18.4.0 (Patryk): what the guest asked for, beside where they
+                  are put. Blank for no preference, which is most rows, so the
+                  column reads as a short list of the parties that have one. */}
+              <th style={th}>Seating</th>
               <th style={th}>Phone</th>
               {/* v18.0.0 phase 4: the column is SHARED, so with the vouchers
                   module off it does not disappear — it narrows to what is left.
@@ -126,6 +138,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                   <td style={Object.assign({}, cell, { fontWeight: FW.bold })}>{b.name || "—"}{b.status === "seated" ? " (seated)" : b.status === "completed" ? " (done)" : b.status === "pending" ? " (pending)" : ""}</td>
                   <td style={cell}>{b.size}</td>
                   <td style={cell}>{(b.tables || []).join(", ") || "—"}</td>
+                  <td style={cell}>{b.preference === "indoor" ? "Indoor" : b.preference === "outdoor" ? "Outdoor" : ""}</td>
                   {/* v18.2.0 phase 50 (C-4): the one phone shape, as on screen. */}
                   <td style={cell}>{b.phone ? formatPhone(b.phone) : "—"}</td>
                   {/* v18.0.0: deposit and voucher share one money column. A

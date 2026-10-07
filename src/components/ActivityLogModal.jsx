@@ -381,16 +381,21 @@ export function ActivityLogModal({
                 </span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: T.body, color: S.text }}>
                   {live || goneName ? (
-                    <button
+                    <button /* @no-lift a sentence-wide row: .mgt-ac-row tints it through --row-bg */
                       type="button"
-                      className="mgt-hover-scale"
+                      // v18.4.0 (Patryk): a wide row takes the tint and neither
+                      // the lift nor the press dip (DESIGN.md, Press feedback).
+                      // The padding gives the tint a pane and the matching
+                      // negative margin keeps the sentence where it was.
+                      className="mgt-ac-row mgt-nopress"
                       title={live ? "Open this booking" : "Find " + goneName + " in Customers"}
                       onClick={function () {
                         if (live) onOpenBooking(live); else onOpenCustomer(goneName);
                       }}
                       style={mkBtn({
-                        background: "transparent", border: "none", boxShadow: "none",
-                        color: "var(--text-primary)", padding: SP.none, minHeight: 0,
+                        background: undefined, "--row-bg": "transparent", "--row-bg-hover": "var(--bg-veil)",
+                        border: "none", boxShadow: "none", borderRadius: R.inset,
+                        color: "var(--text-primary)", padding: "2px 6px", margin: "-2px -6px", minHeight: 0,
                         fontSize: T.body, fontWeight: FW.regular, textAlign: "left",
                       })}
                     >{text}</button>

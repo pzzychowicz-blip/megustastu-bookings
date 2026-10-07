@@ -31109,3 +31109,293 @@ branch runs once per rule due today, and twelve passes over 1,600 bookings measu
 decision or a write-path change: no-shows walked back before this version, a refusal
 toast drawn under the modal that raised it, and an edit parked then replayed after a
 remote delete. The eighth was the ROADMAP wording, counted under (c).
+
+---
+
+## v18.4.0 — the header split, quiet fold headers, the printed timeline, and room to type
+
+**Date:** 2026-10-06 · **Branch:** `feat/v18.4.0-print-timeline-keyboard-compact` ·
+**Behavioural change:** yes, each phase below says what moves.
+
+Patryk brought five ideas and was interviewed on each before any work (the plan is
+`~/.claude/plans/i-have-a-bunch-sequential-flurry.md`). Four are this version. The
+fifth, the WhatsApp draft checking availability before Accept, waits for the WhatsApp
+go-live and is a ROADMAP entry holding what he decided: a status line, nearby times,
+an Add to waitlist button and a suggested reply.
+
+### Phases
+
+1. **The header's controls split when they take their own line (Patryk).** Where the
+   view switcher, the actions and the connection dot do not fit beside the restaurant's
+   name they wrap under it, and there they were one left-aligned run. Now the switcher
+   (and the split tools) keeps the left edge and the actions and the dot go to the right
+   one. `useSharesLine` measures whether the block is on the title's line, as the date
+   row does for the Summary; the block grows and right-aligns, which on the title's
+   line is the place `space-between` already gave it, and the actions are one inner
+   group that takes `margin-left: auto` only on a line of its own. The block's flex
+   basis is untouched, so the measurement cannot latch. **Measured** (DEV, WhatsApp on;
+   left · right edge in px): 1280 and 1024, one line, switcher 739–929 and 483–673,
+   actions ending 1264 and 1008, the same rects as before the change; 768 and 640,
+   switcher 16–207, actions 423–752 and 295–624; 375 (a phone, always its own line),
+   switcher 12–203, WhatsApp and Find 230–363. Back from 640 to 1280 it returned to one
+   line. On a resize the split lands one frame after the wrap (the observer's frame).
+2. **A wide row no longer shrinks under a tap, and a fold header's count fades
+   (Patryk: "the text of Completed & cancelled looks sharp").** Two causes, read in the
+   code and confirmed with him. The header row is a `<button>`, so the universal press
+   dip took a row over 1,000px wide to 96% and its title slid inward and back; and the
+   count on the right (`!open && summary`) and the subtitle (`open && subtitle`) mounted
+   and unmounted with no transition while the body eased. Now every `Collapsible` header
+   and the Summary's headline carry `mgt-nopress` (the tint still answers), and the count
+   and subtitle sit in a `Reveal` each on the body's clock. **Measured** (DEV, the List's
+   fold, 1,065px pane): at rest the header, title, count, chevron and section rects are
+   the same numbers as HEAD (header 21,375 1023×28.5; count 948.1,382.3 63.9×14);
+   opening, the count goes 1.00/63.9px → 0.47/29.8 at 143ms → 0 by 475ms and unmounts;
+   closing it returns 0.18 at 82ms → 1.00 by 499ms. The press itself cannot be forced
+   from the Browser pane (a synthetic press does not set `:active`), so what is checked
+   is that the header no longer matches the dip's selector.
+   **The scan he asked for** (every `<button>` or `role="button"` tag styled as a row,
+   20 found, 3 already opted out) left five he chose to change the same way: Find a
+   booking's results, the More popover's day rows, the Activity log's booking rows, the
+   Admin tab's people and the Plan popover's bookings. Each was a `mgt-hover-scale`
+   button, so it also grew 8% on hover (28px a side on a 690px result); each is now
+   `mgt-ac-row mgt-nopress` with its fill in `--row-bg`. Checked live on the search
+   results (670px, resting fill unchanged, no inline background, transition
+   `background-color`); the other four are read by `tests/row-press.test.js` and not
+   yet opened in the app. Left alone: the timeline block (a leaf control whose dip
+   v17.10.1 chose), the phone's Walk-in / + New bar, the quick-status and reminder
+   editor's buttons, and the sandbox simulator. DESIGN.md's Press feedback holds the
+   rule, which widens `.mgt-nopress` from "an inert control" to "no transform on press".
+3. **The block's flag list has its own module (no behaviour change).** `railFlagsOf`
+   was module-private in `TimelineView.jsx`; the printed timeline (phase 4) draws the
+   same flags, so it moved to `src/components/blockFlags.jsx` unchanged, and
+   `TimelineView` dropped the thirteen imports only that function used.
+   `tests/block-layout.test.js` reads the list from its new file and fails if
+   `TimelineView` grows a second one.
+4. **Print the timeline (Patryk, interviewed).** The Summary's button reads **Print**
+   and opens a chooser: Day sheet, Timeline or Both. The timeline takes From and To in
+   whole hours, opening on the viewed day's opening and closing hours (or the end of
+   its last booking, if later, which is what the screen's grid draws). His choices:
+   one button then a chooser; steppers for the range; **status colours as on screen**
+   over ink-saving outlines; the Unplaced row, blocked tables, header totals and the
+   block flags all included. Not a screenshot: `TimelineSheet.jsx` is a print-only DOM
+   like `DaySheet`, in percent of the chosen range, light in any theme (`PRINT_FILL` is
+   the light `--block-*` values, held to the stylesheet by a test). It is mounted for
+   one print: `doPrint` flushes the sheet into the DOM, stamps `data-print` on
+   `<html>` and calls `window.print()` inside the click, and `afterprint` takes both
+   back, so the browser's own Cmd+P is still the day sheet. New modal id `print`.
+   The chooser is a lazy chunk and the sheet rides in it (8.76 kB, 3.20 gz); the entry
+   chunk is 445.35 kB against 443.69 (124.91 gz against 124.35).
+   **Measured** with headless Chrome on DEV (`page.pdf`, backgrounds NOT forced):
+   Timeline is one A4 landscape page with its fills printed; Both is a portrait page
+   (the list) then an A4 landscape one (the grid). In the app: the chooser opened on
+   13:00–23:00 for a day whose last booking ends 22:30; with `window.print` stubbed,
+   `data-print` was "timeline" and the sheet was in the DOM at the call; the title
+   during the print was `mgt-timeline-2026-10-06`; after `afterprint` the attribute and
+   the sheet were gone.
+   **A fault this found, which predates it: a long day sheet printed only its first
+   page.** App sets `height: 100%` and an `overflow` inline on `<html>` and `<body>`,
+   and a box that clips or scrolls does not fragment: a day sheet padded to 120
+   bookings came out as 1 page, and no page break took effect, so Both was one page
+   too. `html, body { height: auto; overflow: visible }` in print: 4 pages, and Both 2.
+   **Not checked yet:** a real printer, the Android tablet and the iPhone (whether
+   each honours the landscape page), and a day with blocked tables or unplaced
+   bookings on paper. Those are Patryk's to print once.
+
+5. **The WhatsApp inbox folds while a reply is typed on a short screen (Patryk: "the
+   keyboard squeezes WhatsApp").** **Measured first, on the restaurant tablet** (Chrome
+   154, a DEV tab over `adb reverse`, 998 CSS px wide): the keyboard takes the visible
+   height from 507 to 289, and Android resizes the LAYOUT viewport with it, so
+   `useKeyboardInset().bottom` stays 0 there and the inbox's `compact` flag was the only
+   thing that reacted. The panel went 457 → 260px; its title bar, the search row, the
+   conversation's header, a linked booking, the request banner and the reply box came
+   to more than that, so the thread was 28px with the keyboard DOWN and off the panel
+   with it up: nobody could read the message they were answering.
+   New `useShortViewport()` (`src/hooks/`): `visualViewport.height < 480`, the one
+   number that falls on Android (layout viewport resized) and on iOS (only the visual
+   one), and a HEIGHT on purpose, so an iPad in portrait, with about 670px left above
+   its keyboard, folds nothing. `InboxPanel` folds while the focus is in a text field
+   of the open conversation AND the viewport is short (`kbFold`): its title bar and the
+   list's toolbar (one `Reveal`), the conversation list in two panes (its width eases
+   to 0 over content that keeps its 320px, `inert`), and in `ConversationView` the
+   header becomes one slim row (the name, and one button naming what was put away:
+   "Change request", "Cancellation request", "Booking draft", "Linked booking" or
+   "Details"), with the linked booking, the request banner, the draft, the parsing
+   card and the past-bookings list folded. The button blurs the field, which closes the
+   keyboard and brings everything back. Every fold is a `Reveal`, so it eases both ways.
+   **Patryk approved four folds (list, header chips, linked card, draft/intent bars);
+   the title bar and the toolbar were asked separately with the captures, because the
+   four alone left the thread about 26px, and he chose to fold both.**
+   Three things the tablet and the pane found. (a) **The thread did not follow its last
+   message.** A box that gets shorter keeps its `scrollTop`; a `ResizeObserver` now puts
+   a thread that was at its end back there. Its first version lost the place on the way
+   BACK (scrollTop 0 of 195): a `scroll` event is delivered a frame after the scroll,
+   the thread is shorter again by then, and the handler read the observer's own
+   correction as "the user scrolled away". The handler ignores a scroll at a height the
+   observer has not acted on yet (`seenH`). (b) **Send must not unfold the pane under
+   the finger**, so a blur towards a control inside the conversation keeps `typing`.
+   Measured with a CDP touch on the tablet: text typed, Send tapped at its folded
+   position, the message was sent and the thread came back at its end. (c) **In a short
+   desktop window the button did nothing**: no keyboard closes there, and `Overlay`'s
+   focus trap hands the focus back to the reply box. It also sets `shown`, which holds
+   the fold open until the window is tall again or a text field is pressed.
+   **After, on the tablet with the keyboard up:** thread 136px (two messages), the
+   name, the button and the reply box; with it down, everything as before (the title
+   bar, the toolbar, the list at 320px, the cards). `tests/short-viewport.test.js`
+   (11): the hook's arithmetic on the tablet's and the Simulator's numbers, and the
+   fold's wiring. Entry chunk 448.11 kB (125.61 gz), up 2.8 kB.
+   **Not checked:** an iPhone and an iPad (the Simulator run is still owed), the
+   home-screen app on the tablet (PROD, taller than a Chrome tab), and a finger: a CDP
+   touch is the same pipeline but it is not one.
+
+6. **A footed dialog makes room while a field is typed into on a short screen (Patryk:
+   "booking / walk-in forms too"; he asked to measure first, then decide).**
+   **Measured on the tablet, the booking form with the keyboard up:** the card is 208px
+   (the visible area is 231: Chrome puts a 58px autofill strip above the keyboard for
+   an `<input>`, and none for a `<textarea>`, where it is 289 and the card 260). 78px
+   of it is the Save row, so the fields get 130. On Name, the title pill took 70 of
+   those and the field was cut by 12px under the Save row; on Gift voucher its list
+   showed less than one row. Shown the captures, he chose all three of his options:
+   hide the title pill, slim the Save row, keep the field in view.
+   Built in `Overlay`, so every footed dialog gets it, not two forms: `tight` is "a
+   text field of this dialog has the focus AND `useShortViewport()`". While tight
+   (a) the footer's vertical padding goes 16 → 6px (12 → 6 on a phone sheet), eased,
+   and (b) the focused field is scrolled to the top of the body WITH its label (`Fld`'s
+   wrapper, marked `data-mgt-fld`), after the footer's ease, smoothly unless motion is
+   reduced. A blur towards a control inside the dialog keeps `tight`, so the footer
+   does not grow back under a finger pressing Save.
+   **The title pill is NOT hidden, and that is a change from what he chose.** With the
+   label at the top of the body the pill is scrolled out of view for every field, the
+   first included (measured: body scrollTop 82 on Name), so hiding it would show
+   nothing different, and it would collapse 70px above the viewport of a scrolled body
+   and take the dialog's accessible name (the pill is the `<h2>` `useDialog` reads)
+   out of the tree while typing. Reported to him as not built, with the reason.
+   **The placing runs only where the keyboard resized the layout** (`kb.bottom` 0,
+   Android). On iOS the system places the field by scrolling the window or panning the
+   visual viewport (v18.3.5's two ways), and a second scroll from here was not tried on
+   a device, so iOS gets the slim footer only.
+   **After, on the tablet:** Save row 57px, fields 150 (203 on a textarea); on Name,
+   Phone, Notes and Gift voucher the label is 8px under the body's top and the field
+   whole; the voucher list shows a row and a half; the walk-in's Notes the same. Back,
+   tapped with a CDP touch at its slim position, closed the form. Keyboard down: the
+   footer is 77px and the card 457 again.
+   `tests/keyboard-inset.test.js` +4 (18): the tight rule, the blur rule, both footers,
+   the placing and its iOS gate.
+   **Not checked:** iOS. The Simulator's Safari is not signed in to DEV and the
+   password is Patryk's to type, so neither this nor phase 5 has run on an iPhone or an
+   iPad; what changes there is the footer's top padding while typing, and the WhatsApp
+   fold. Also not checked: Settings and the other footed dialogs with the keyboard up
+   (same code path, not opened), and whether the autofill strip can be turned off.
+7. **The day sheet has a Seating column (Patryk, after reading the hand-off).** The
+   printed list said where each party is put and not what it asked for, which is on
+   the List card and in the form. A narrow column after Tables: "Indoor", "Outdoor",
+   or blank for no preference (his choice of three: a column, a column that also lists
+   preferred tables, or the word inside the Tables cell). The timeline sheet is
+   unchanged. `tests/print-timeline.test.js` +1.
+8. **On the printed timeline a live booking prints over a finished one.** Found by
+   printing a DEV day with blocked tables (17.09, one of the checks left open after
+   phase 6): a completed visit's table is free, so a later party can hold the same row
+   at the same minutes, and the sheet drew bookings in stored order, which put a
+   confirmed 21:30 party UNDER a completed one's grey block, unreadable. The day's
+   bookings are sorted finished-first before drawing. Checked in the PDF: the
+   confirmed block is whole and the completed one shows behind it.
+   The same prints settled two of the open checks: a blocked span prints hatched with
+   its row's bookings beside it, and unplaced bookings print as dashed blocks in
+   "Unplaced" lanes above the tables (13.10, two lanes).
+9. **A sheet printed from an iPhone no longer carries a black box (Patryk's PDFs).**
+   Every print from his iPhone had a dark rectangle one screen tall under the sheet.
+   `body` keeps its dark `background-color` and `min-height: 100dvh` in print, and
+   Safari on iOS prints backgrounds; Chrome does not unless asked, so the Mac never
+   showed it, and it is older than the printed timeline. The print block now sets
+   `html, body { background: #fff; min-height: 0 }`. Checked in headless Chromium at
+   375px with print media: body white, 297px (the sheet's own height), was 664 dark.
+   **Not re-printed on the iPhone yet.**
+   From the same PDFs: **iOS ignores the landscape request too**, as Android does
+   (measured on the tablet: both pages portrait, Letter). The timeline prints whole
+   on a portrait page in both, in the top third to half. What to do about it is
+   Patryk's decision and is open.
+10. **On an iPhone the WhatsApp conversation stays on screen while a reply is typed
+   (Patryk's screenshots).** With the reply box focused he saw no header, and a short
+   conversation (one with a draft: three messages) as an empty box. The beacon's
+   numbers, Safari and the home-screen app: the panel's rect was [0, −339, 375, 664]
+   against a visible 325 (app: −405 of 762, 357 visible). The reply box is pinned at
+   the bottom of a full-height panel, so iOS shows it by moving the page up by the
+   whole keyboard; `keyboardInsetOf` is 0 there, correctly, and the top 339px, with
+   phase 5's slim header (at −332) and the start of the thread, is off the screen.
+   Phase 5 was measured on Android only, where the layout viewport IS the visible
+   area, and its note that the panel "takes the visible area" was true only there.
+   `coveredTopOf` (`useKeyboardInset.js`) reads that distance (`pageTop` while the
+   keyboard is up) and the hook returns it as `top`; `Overlay`'s panel pads its top by
+   it on a phone, as it pads its bottom by the inset. The sheets and cards take no top
+   inset: their bodies scroll and iOS places the field (v18.3.1's pin, narrowed to
+   "exactly one").
+   `tests/keyboard-inset.test.js` +2 (20), `tests/print-timeline.test.js` +1.
+   **Not checked on the iPhone**: nothing on the Mac reproduces iOS's page move, so
+   this is built from the measurements and waits for his re-test.
+11. **On an iPhone a print keeps what was chosen when the page is turned (Patryk).**
+   Whichever of the three he chose, turning the page to landscape in the iOS print
+   sheet gave one page of the day sheet. WebKit fires `beforeprint` and `afterprint`
+   back to back and then shows its sheet (the beacon: the same millisecond, six
+   prints of six), and lays the page out again from the live DOM when an option
+   changes. The job was tidied away on `afterprint`, so the re-layout found no
+   `data-print` and no TimelineSheet; the title was back too, which is why his PDFs
+   saved as "MGT Bookings 2.pdf" and not under the day's name.
+   `onPrintEnd` (`lib/print-end.js`, new) ends a print on `afterprint` when at least
+   500ms passed since `beforeprint` (a dialog was open in between: the desktop), and
+   otherwise at the first pointer or key event on the page, which cannot arrive while
+   the system's sheet is up. App's job cleanup and DaySheet's title both use it.
+   Replayed on DEV in headless Chromium with the iPhone's event order: the attribute,
+   the sheet and the title all survive the early `afterprint` and a second pair, and
+   go at the pointer event; with 700ms between the events they go at `afterprint`.
+   `tests/print-timeline.test.js` +3. **Not re-printed on the iPhone yet.**
+12. **On a phone the conversation's linked booking and request start as one line each
+   (Patryk).** With both open and the keyboard down the thread had 109px of a 664px
+   screen (his screenshot; 109 measured at 375×664). Starting them collapsed as a wide
+   pane collapses them gave 127: the action buttons stay in the header and wrap to a
+   row of their own, and the linked card's summary takes another, so that card was 5px
+   taller collapsed. He chose, of three: one line each. Under 600px (`phone`, from
+   InboxPanel) both cards default to collapsed, a collapsed card is its title row and
+   chevron, and the details and the buttons are in the body, where the existing
+   `Reveal` eases them in and out. The request is a toggle there even when it has
+   nothing else to disclose. Above 600px nothing changes. A choice already stored for
+   a conversation (`useCollapseState`) still wins.
+   **Measured** in headless Chromium at 375×664 on DEV, stored state cleared: cards
+   44 and 39px, thread 260; both opened, 132 and 110, thread 101.
+   `tests/short-viewport.test.js` +4. **Not checked on the iPhone.**
+   **Also decided:** the timeline printing upright on the tablet and the iPhone stays
+   as it is; staff pick Landscape in the print dialog.
+
+### `/code-review` (high: eight angles inline, no subagents)
+
+Eight findings; each was checked before anything was changed.
+
+**Fixed (5):**
+- **The inbox dialog lost its accessible name once folded, for good.** The fold
+  (phase 5) unmounts the title bar, and the dialog's name was the `<h2>` in it:
+  `useDialog` gives that element an id and points `aria-labelledby` at it once.
+  Measured in Chromium's accessibility tree (CDP `getPartialAXTree`): "WHATSAPP"
+  before, "" while folded, the target absent; the remounted heading has no id, so
+  it stayed "". The title is now an always-mounted `mgt-sr-only` `<h2>` carrying
+  `MODAL_TITLE_ATTR`, above the folding bar, and the wordmark is an `aria-hidden`
+  span. This is the very loss phase 6 named as its reason for not hiding the forms'
+  title pill, shipped one phase earlier in the inbox.
+- **A checkbox, a slider, a date or a time input counted as typing.** `Overlay`
+  and the inbox both tested the tag alone. `raisesKeyboard` (`lib/keyboard.js`)
+  is the one test now: a textarea or a text-like input.
+- **The same test was written three times** (the reuse finding): all three sites
+  call `raisesKeyboard`.
+- **`typing` could outlive the conversation it was about.** React fires no blur
+  when a focused field is unmounted. It holds the conversation's key now, and a key
+  that is not the open conversation's is nobody typing.
+- **`aria-disabled` on a roleless div** in the print chooser: removed; the steppers
+  inside are disabled themselves.
+- **Four comments still said the job clears on `afterprint`**: corrected to
+  `onPrintEnd` (index.css, App twice, TimelineSheet).
+
+**Not changed (2), with the reason:**
+- *After an iOS print, Safari's own Share → Print before touching the page reuses
+  the last choice.* Real, and inherent to phase 11: iOS gives no event when its
+  print sheet closes, so the job ends at the next touch of the page. It prints a
+  sheet he chose a moment ago, not a wrong day.
+- *`Overlay`'s `field` can outlive a field unmounted while focused.* It only
+  matters while the viewport is short, which on a tablet or phone means a keyboard
+  is up for a field that still exists; the footer is slim until the next focus.

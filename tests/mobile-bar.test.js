@@ -49,6 +49,25 @@ describe("the connection dot on a phone", () => {
     expect(App).toMatch(/\{isMobile\?<div style=\{\{marginLeft:"auto",flexShrink:0\}\}>\{connStatus\}<\/div>:null\}<\/div>/);
     expect(App).toMatch(/\{isMobile\?null:connStatus\}<\/div>/);
     // The title block takes the whole first row on a phone, so the dot ends it.
-    expect(App).toMatch(/<div style=\{\{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile\?"1 1 100%":undefined\}\}><button/);
+    // v18.4.0: it carries the ref the header's own-line measurement reads.
+    expect(App).toMatch(/<div ref=\{headTitleRef\} style=\{\{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile\?"1 1 100%":undefined\}\}><button/);
+  });
+});
+
+// v18.4.0 (Patryk): on a line of their own the controls split, the view
+// switcher left and the actions with the dot right.
+describe("the header's controls on their own line", () => {
+  it("is measured, and never by changing the block's flex basis", () => {
+    expect(App).toMatch(/const headCtrlOwnLine=useSharesLine\(headerRef,headTitleRef,headCtrlRef\)\.same===false;/);
+    const block = App.match(/<div ref=\{headCtrlRef\} style=\{\{([^}]*)\}\}><ViewSwitcher/);
+    expect(block, "the controls block").not.toBeNull();
+    // A basis of 100% would keep the block on its own line for good.
+    expect(block[1]).not.toMatch(/flexBasis|flex:/);
+    expect(block[1]).toMatch(/justifyContent:"flex-end",flexGrow:1/);
+  });
+  it("moves the actions as ONE group, right only on a line of their own", () => {
+    expect((App.match(/marginLeft:headCtrlOwnLine\?"auto":undefined/g) || []).length).toBe(1);
+    // The dot is the group's last child on a tablet.
+    expect(App).toMatch(/\{isMobile\?null:connStatus\}<\/div><\/div>\{isMobile\?<div/);
   });
 });

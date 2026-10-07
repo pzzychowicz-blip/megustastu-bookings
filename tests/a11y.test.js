@@ -576,7 +576,7 @@ describe("the bookings themselves are reachable (WCAG 2.1.1, 4.1.2)", () => {
   // end of <body> with nothing moving focus into it — a keyboard could open it
   // (Enter on the table) and do nothing with it.
   it("the table popover's bookings are buttons, and a keyboard open moves focus in", () => {
-    has(Plan, "row is a button", /<button type="button" key=\{b\.id\} className="mgt-hover-scale"/,
+    has(Plan, "row is a button", /<button\s+type="button" key=\{b\.id\} className="mgt-ac-row mgt-nopress"/,
       "a booking row opens the edit form, so it is a control");
     has(Plan, "row names its booking, time first", /aria-label=\{b\.time \+ " " \+ \(b\.name \|\| "\(no name\)"\) \+ ", " \+ guestsLabel\(b\.size\) \+ ", " \+ b\.status\}/,
       "the visible text leads (Label in Name), and the size ring's bare number is said as guests");

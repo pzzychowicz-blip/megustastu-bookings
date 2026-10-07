@@ -1551,6 +1551,47 @@ misleading. `check:style` Rule 10 (an interactive control carries
 `.mgt-hover-scale`) governs `<button>` and `[role="button"]`, so a plain anchor
 is outside it by construction — deliberately, not by omission.
 
+### Print (v16.3.0 · v18.4.0)
+Two print-only sheets, both portalled beside `#root` and both **light in any
+theme**: the day sheet (a list) and the timeline sheet (the grid). Neither uses
+a `var(--…)`; every colour is a literal marked `@fixed-fill`.
+
+- **The timeline prints in the screen's status colours** (Patryk's choice over
+  ink-saving outlines): the LIGHT theme's `--block-*` fills with white ink, the
+  status mark and the rail's flags on each block. So it needs
+  `print-color-adjust: exact`, which is on the sheet's rule.
+- **Geometry is percent of the chosen range**, so the grid fills the page it is
+  given: a landscape A4 where the browser honours the named page, a portrait one
+  where it does not.
+- **Which sheet prints is `data-print` on `<html>`**, for one print. With no
+  attribute the browser's own print is the day sheet.
+- **In print, `html` and `body` are un-clipped.** The app's scrollport does not
+  fragment across pages; without this nothing paginates.
+
+### Room to type (v18.4.0)
+When the visible area is short (`useShortViewport`, under 480px, which in practice
+is a keyboard up on a phone or a landscape tablet) and somebody is typing, what is
+not the thing being typed, or the thing being answered, folds away, and returns when
+the keyboard goes.
+
+- **It is a height, not "a keyboard is up".** An iPad in portrait has room above its
+  keyboard and folds nothing.
+- **Fold, never remove.** Every piece is a `Reveal` (or an eased width), so it plays
+  out and back, and a folded piece is `inert`.
+- **What was put away is named.** The folded WhatsApp header carries one button that
+  says the most pressing thing behind it ("Change request"); pressing it closes the
+  keyboard.
+- **Nothing moves under a pressing finger.** A blur towards a control inside the
+  folded surface (Send) does not unfold it.
+- **A footed dialog** (`Overlay`, so every form) slims its Save row and scrolls the
+  focused field to the top of its body with its label, which is also what gives a
+  list opening under the field (names, phones, vouchers) room. The title pill is
+  not hidden: that scroll already moves it out of view. The scroll runs only where
+  the keyboard resized the layout (Android); iOS places the field itself.
+- **The WhatsApp inbox** folds its title bar, the list's toolbar, the conversation
+  list (two panes), the conversation's chips and actions, the linked booking, the
+  request banner and the draft. The thread and the reply box stay.
+
 ### Press feedback — universal, opt-OUT (v17.8.0)
 Every `button` dips to `scale(0.96)` on `:active`; `.mgt-hover-scale` buttons dip
 to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
@@ -1584,6 +1625,23 @@ to `1.02` from their lifted `1.08` so the travel stays proportional. Both are in
   controls carry that class too.
 - The older `.mgt-press` brightness dim stays and composes — `filter` and
   `transform` are orthogonal.
+- **v18.4.0 (Patryk): a WIDE ROW takes the tint, and neither the lift nor the
+  dip.** Both are proportions: at 96% a row 1,000px wide pulls its text 20px in
+  from each end and back, which he reported as the "Completed & cancelled"
+  title looking sharp on a tap, and at 108% a 690px search result grows 28px a
+  side. So a `<button>` that is a row (it spans its container and you read
+  across it) carries `mgt-ac-row mgt-nopress`, its resting fill in `--row-bg`
+  and its tint in `--row-bg-hover`, with no inline `background`: every
+  `Collapsible` header, the Summary's headline, the Find a booking results, the
+  More popover's day rows, the Activity log's booking rows, the Admin tab's
+  people, and the Plan popover's bookings. This widens `.mgt-nopress` from "an
+  inert control" to "no transform on press", which is what its rules always
+  did. Compact controls keep the lift and the dip. `tests/row-press.test.js`
+  reads each of those tags.
+- **A `Collapsible`'s count and subtitle ease with its body** (v18.4.0): one
+  `Reveal` each on the body's clock, the count a horizontal one. They mounted
+  and unmounted bare, so the count vanished on the tap and the header jumped by
+  the subtitle's line while the body was still easing.
 
 ### Motion — two curves, three durations (v17.8.0)
 

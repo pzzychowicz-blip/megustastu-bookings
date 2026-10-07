@@ -19,11 +19,14 @@ import { R, T, FW, IC, H } from "../../lib/constants";
 import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 
+// Within this many px of the bottom, the thread counts as showing its end.
+const AT_END_SLACK = 24;
+
 export function ConversationView({
-  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack,
+  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
-  onRecheck, regularMin,
+  onRecheck, regularMin, kbFold = false, onUnfold,
 }) {
   // NO excludeBookingId. This used to pass conv.acceptedBookingId, which made the
   // header chip disagree with the booking form's for the same customer (Patryk:
@@ -44,9 +47,42 @@ export function ConversationView({
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
   const msgsForConv = messages || [];
+  // v18.4.0: `atEnd` is "the thread is showing its last message", kept by the
+  // thread's own scroll handler. It decides whether a RESIZE follows the end.
+  const atEnd = useRef(true);
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    atEnd.current = true;
   }, [msgsForConv.length, conv.phoneKey]);
+  // v18.4.0: the thread's height changes under it (the keyboard, the folds
+  // below, a draft card arriving), and a box that gets SHORTER keeps its
+  // scrollTop, so the newest message slid out under the reply box. If the
+  // thread was at its end before the resize, it is put back there.
+  //
+  // `seenH` is the height the observer last acted on, and the scroll handler
+  // ignores a scroll that arrives at any other height. Measured on the tablet:
+  // a `scroll` event is delivered a frame after the scroll it reports, and
+  // while a fold eases the thread is shorter again by then (more than the
+  // slack per frame), so the handler read "not at the end" from the
+  // observer's own correction and the thread stopped following: it came back
+  // from the keyboard at scrollTop 0 of 195. A scroll at a height the observer
+  // has not seen yet is one it is about to correct in the same frame.
+  const seenH = useRef(-1);
+  useEffect(() => {
+    const el = threadRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(() => {
+      seenH.current = el.clientHeight;
+      if (atEnd.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  function onThreadScroll(e) {
+    const el = e.currentTarget;
+    if (seenH.current !== -1 && el.clientHeight !== seenH.current) return;
+    atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < AT_END_SLACK;
+  }
 
   // Bubble entrance: animate ONLY a genuinely new message that arrives while the
   // conversation is open — never on a conversation switch/open (the prior
@@ -247,8 +283,30 @@ export function ConversationView({
       ? true
       : !!(conv.draftData && (conv.draftData.intent || "new_booking") === "new_booking");
 
+  // v18.4.0 (Patryk: "the keyboard squeezes WhatsApp"): while a reply is being
+  // typed on a short screen (`kbFold`, InboxPanel), the header is one slim row,
+  // the name and, on its right, ONE button naming the most pressing thing the
+  // fold put away. Tapping it puts the keyboard away, which unfolds everything.
+  // The linked booking, the request banner, the draft and the parsing card
+  // fold with the header; the thread and the reply box are all that is left.
+  const draftWaiting = !!(conv.draftData && (conv.draftData.intent || "new_booking") === "new_booking")
+    && conv.draftStatus !== "accepted" && conv.draftStatus !== "dismissed";
+  const foldedSays = showIntentBanner
+    ? (intent === "cancel" ? "Cancellation request" : intent === "modify" ? "Change request" : "Request")
+    : isParsing(conv) ? "Reading the message…"
+      : draftWaiting ? "Booking draft"
+        : linkedBooking ? "Linked booking"
+          : "Details";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0, background: "var(--wa-list-bg)" }}>
+      <Reveal show={kbFold} inert={!kbFold} style={{ flexShrink: 0 }}>
+        <div style={{ padding: "6px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: T.lead, fontWeight: FW.bold, color: "var(--text-primary)", flex: "1 1 0", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
+          <button onClick={onUnfold} title="Hide the keyboard and show the details" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })}>{foldedSays}<ChevronDownIcon size={IC.inline} /></button>
+        </div>
+      </Reveal>
+      <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
       {/* Single-row header (v15.8.2-wa-sandbox): name + phone + status pills + the
           action buttons all on one level to reclaim vertical space. The pill
           cluster wraps under the name on narrow widths; the action buttons stay
@@ -263,7 +321,8 @@ export function ConversationView({
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>
-      <Reveal show={histOpen && hasRegulars} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>
+      </Reveal>
+      <Reveal show={histOpen && hasRegulars && !kbFold} style={{ padding: "0 14px" }}><div style={{ paddingTop: 8 }}>{pastListBody}</div></Reveal>
       {/* Manual re-check result. Only needed for the "found nothing" / error
           cases — a positive finding announces itself as a draft card or intent
           banner. Eased in and self-clearing, so it never becomes chrome. */}
@@ -282,25 +341,27 @@ export function ConversationView({
           >{recheck && recheck !== "running" ? recheck.msg : ""}</InlineAlert>
         </div>
       </Reveal>
+      <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
       {linkedBooking ? (
         <div style={{ padding: "8px 14px 0" }}>
-          <LinkedBookingCard booking={linkedBooking} phoneKey={conv.phoneKey} defaultCollapsed={!(intent === "cancel" || intent === "modify")} onOpen={() => { if (onOpenLinkedBooking) onOpenLinkedBooking(conv); }} onCancel={() => { if (onCancelLinkedBooking) onCancelLinkedBooking(conv); }} />
+          <LinkedBookingCard booking={linkedBooking} phoneKey={conv.phoneKey} defaultCollapsed={!(intent === "cancel" || intent === "modify")} narrow={phone} onOpen={() => { if (onOpenLinkedBooking) onOpenLinkedBooking(conv); }} onCancel={() => { if (onCancelLinkedBooking) onCancelLinkedBooking(conv); }} />
         </div>
       ) : null}
       {showIntentBanner ? (
         <div style={{ padding: "0 14px" }}>
           {/* key=phoneKey: the fade's `leaving` state must die with the conversation —
               without it, switching threads mid-fade leaves the next banner invisible */}
-          <IntentBanner key={conv.phoneKey} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
+          <IntentBanner key={conv.phoneKey} narrow={phone} intent={intent} linkedBooking={linkedBooking} phoneKey={conv.phoneKey} draftData={conv.draftData} onMarkHandled={() => { if (onMarkIntentHandled) onMarkIntentHandled(conv.phoneKey); }} onApplyChanges={() => { if (onApplyModify) onApplyModify(conv); }} />
         </div>
       ) : null}
-      <div ref={threadRef} style={{ flex: 1, overflowY: "auto", padding: "14px" }}>
+      </Reveal>
+      <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
         {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} />)}
       </div>
       {/* Parsing/typing indicator — eased in while the inbound is being parsed
           (conv.parsing, set by the sandbox inbound path; cleared when the draft
           lands). The real DraftCard Reveals in as this Reveals out. */}
-      <Reveal show={isParsing(conv)} style={{ padding: "0 14px" }}>
+      <Reveal show={isParsing(conv) && !kbFold} style={{ padding: "0 14px" }}>
         {/* Matches the DraftCard it turns into: same pane, same rim, so the
             hand-off from "Reading the message…" to the parsed draft is a change
             of CONTENT, not of surface. --wa-draft-border stays below as the
@@ -313,7 +374,7 @@ export function ConversationView({
           </div>
         </div>
       </Reveal>
-      <Reveal show={draftCardShows} style={{ padding: "0 14px" }}>
+      <Reveal show={draftCardShows && !kbFold} style={{ padding: "0 14px" }}>
         <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact} />
       </Reveal>
       <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} />

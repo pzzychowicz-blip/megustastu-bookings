@@ -91,10 +91,12 @@ function TablePopover({ id, queue, canWalkin, popRef, onClose, onPick, onWalkinH
         // Ana, 2 guests, confirmed") — its content would have read the
         // size ring as a bare "2".
         return (
-          <button type="button" key={b.id} className="mgt-hover-scale"
+          <button /* @no-lift a row as wide as the popover: .mgt-ac-row tints it through --row-bg */
+            // v18.4.0 (Patryk): a wide row takes the tint and neither the lift nor the press dip (DESIGN.md, Press feedback).
+            type="button" key={b.id} className="mgt-ac-row mgt-nopress"
             onClick={() => { if (!leaving) { skipExit(); onPick(b); } }}
             aria-label={b.time + " " + (b.name || "(no name)") + ", " + guestsLabel(b.size) + ", " + b.status}
-            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, background: "var(--bg-input)", border: "1px solid var(--border-input)" }}>
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", font: "inherit", color: "inherit", padding: "8px 10px", borderRadius: R.inset, cursor: "pointer", marginBottom: 6, "--row-bg": "var(--bg-input)", "--row-bg-hover": "var(--bg-hover-card)", border: "1px solid var(--border-input)" }}>
             <span style={{ fontSize: T.body, fontWeight: FW.bold, color: S.text, fontVariantNumeric: "tabular-nums" }}>{b.time}</span>
             <span style={{ fontSize: T.body, fontWeight: FW.semi, color: S.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
             {/* v18.2.0 phase 43 (C2): the party size as the List card's

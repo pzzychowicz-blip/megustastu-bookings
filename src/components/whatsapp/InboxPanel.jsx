@@ -24,16 +24,18 @@
 import { useState, useEffect, useRef } from "react";
 import { useWinW } from "../../hooks/useWinW";
 import { useWinH } from "../../hooks/useWinH";
+import { useShortViewport } from "../../hooks/useShortViewport";
 import { INBOX_TWO_PANE_BREAKPOINT, INBOX_COMPACT_HEIGHT, sortConversations, matchCustomerByPhone, intentBannerVisible } from "../../lib/whatsapp";
 import { ConversationList } from "./ConversationList";
 import { ConversationView } from "./ConversationView";
 import { TemplatesEditor } from "./TemplatesEditor";
 import { SelectIcon, FlaskIcon, ArchiveIcon, RestoreIcon } from "./WaIcons";
 import { CloseIcon, EditIcon, TrashIcon } from "../Icons";
-import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal } from "../atoms";
+import { mkBtn, mkInp, mkSolidBtn, mkDangerBtn, ModalPresence, Overlay, Reveal, MODAL_TITLE_ATTR } from "../atoms";
 import { R, T, FW, M, IC, H } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
+import { raisesKeyboard } from "../../lib/keyboard";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -44,6 +46,8 @@ import { countLabel } from "../../lib/booking-logic";
 // takes. A module const rather than an inline object: Overlay is memo-free, but
 // a fresh object per render is a fresh prop per render, and this one never
 // changes.
+// The conversation list's width in two panes.
+const LIST_W = 320;
 const INBOX_PANEL = { maxWidth: 1200, height: "min(900px, 90dvh)", background: "var(--wa-panel-bg)", blur: 16 };
 
 function isActionable(c) {
@@ -116,6 +120,45 @@ export function InboxPanel({
   // composer template chips behind a button so the message thread stays readable.
   const winH = useWinH();
   const compact = winH < INBOX_COMPACT_HEIGHT;
+  // v18.4.0 (Patryk: "the keyboard squeezes WhatsApp"): while somebody types a
+  // reply and the visible area is short, everything that is not the thread or
+  // the reply box folds away, and comes back when the keyboard goes. Measured
+  // on the restaurant tablet: the keyboard left the panel 260px, and its own
+  // title bar, the search row, the conversation's header and the reply box
+  // came to 242 of them, so no message could be read while answering one.
+  // `typing` is "the focus is in a text field of the OPEN CONVERSATION" (the
+  // search box above the list must not fold the list it searches), kept true
+  // while the focus moves to a button inside the conversation, so Send does
+  // not unfold the pane under the finger that presses it.
+  const short = useShortViewport();
+  // It holds the conversation's KEY, not `true` (`/code-review`): React fires
+  // no blur when a focused field is unmounted, so a conversation archived from
+  // another device mid-reply left a bare boolean set, and the next one opened
+  // folded with nothing focused. A key that is not the open conversation's is
+  // nobody typing.
+  const [typing, setTyping] = useState(null);
+  function onViewFocus(e) {
+    if (raisesKeyboard(e.target)) setTyping(activeKey);
+  }
+  function onViewBlur(e) {
+    if (!(e.relatedTarget && e.currentTarget.contains(e.relatedTarget))) setTyping(null);
+  }
+  // The folded header's "show" button. On a tablet the blur puts the keyboard
+  // away, the screen is tall again and everything is back. In a short window
+  // with a real keyboard nothing gets taller, and Overlay's focus trap hands
+  // the focus straight back to the reply box (measured: the pane stayed
+  // folded), so the button also sets `shown`, which holds the fold open until
+  // the screen is tall again or somebody presses a text field again.
+  const [shown, setShown] = useState(false);
+  if (shown && !short) setShown(false);
+  function unfold() {
+    setShown(true);
+    const a = document.activeElement;
+    if (a && typeof a.blur === "function") a.blur();
+  }
+  function onViewPointerDown(e) {
+    if (shown && raisesKeyboard(e.target)) setShown(false);
+  }
 
   // Search + "Needs action" filter (client-only). The filtered set feeds BOTH the
   // rendered list and the ↑/↓ keyboard nav so they stay in lockstep. State is
@@ -378,23 +421,29 @@ export function InboxPanel({
 
   const activeConv = activeKey ? conversations.find((c) => c.phoneKey === activeKey) : null;
   const activeMessages = activeConv ? (messages[activeConv.phoneKey] || []) : [];
+  const kbFold = !!activeConv && typing === activeConv.phoneKey && short && !shown;
   const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
   const archivedCount = conversations.filter((c) => c.archived).length;
 
   const listEl = (
-    <div style={{ width: twoPane ? 320 : "100%", flexShrink: 0, borderRight: twoPane ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column" }}>
+    // v18.4.0: in two panes the list folds to nothing while typing (`kbFold`).
+    // Its WIDTH eases and its content keeps its own 320px, so the rows are
+    // clipped as it closes and never re-wrapped; `inert` keeps the focus out
+    // of rows nobody can see.
+    <div inert={twoPane && kbFold} style={{ width: twoPane ? (kbFold ? 0 : LIST_W) : "100%", flexShrink: 0, borderRight: twoPane && !kbFold ? "1px solid var(--wa-divider)" : "none", background: "var(--wa-list-bg)", height: "100%", overflow: "hidden", display: twoPane || !activeKey ? "flex" : "none", flexDirection: "column", transition: twoPane ? "width " + M.shift : undefined }}>
       {/* keyed by tab → Inbox⇄Archived switch crossfades the list */}
-      <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div key={tab} className="mgt-fade-in" style={{ flex: 1, minHeight: 0, minWidth: twoPane ? LIST_W : 0, display: "flex", flexDirection: "column" }}>
         <ConversationList conversations={filteredConvs} activeKey={activeKey} onSelect={setActiveKey} bookings={bookings} archivedView={tab === "archived"} emptyLabel={filtersActive ? "No matches." : undefined} selectMode={selectMode} selected={selected} onToggleSelect={toggleSelect} />
       </div>
     </div>
   );
   const viewEl = activeConv ? (
-    <div style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
+    <div onFocus={onViewFocus} onBlur={onViewBlur} onPointerDown={onViewPointerDown} style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
         onSend={(t) => onSend(activeConv.phoneKey, t)} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
-        templates={templates} bookings={bookings} showBack={!twoPane} compact={compact}
+        templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
+        kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
@@ -424,14 +473,25 @@ export function InboxPanel({
 
   return (
     <Overlay /* @static-height panel mode — the card is min(900px, 90dvh) from INBOX_PANEL and its body is a flex column that scrolls inside it, so there is no content-driven height for AutoHeight to ease */ onClose={onClose} panel={INBOX_PANEL}>
+        {/* v18.4.0: the panel's title bar and the list's toolbar fold while
+            somebody types a reply on a short screen (`kbFold`, above). */}
+        {/* The dialog's NAME, always mounted (`/code-review`). It was the
+            wordmark below, and the fold unmounts that: `useDialog` had given
+            it an id and pointed `aria-labelledby` there, so the dialog's name
+            read "" while folded (measured in Chromium's accessibility tree)
+            and stayed "" afterwards, since the remounted heading has no id.
+            The wordmark is the same word drawn, so it is hidden from the tree
+            rather than announced twice. */}
+        <h2 className="mgt-sr-only" {...{ [MODAL_TITLE_ATTR]: "" }}>WhatsApp</h2>
+        <Reveal show={!kbFold} inert={kbFold} style={{ flexShrink: 0 }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--wa-divider)", background: "var(--wa-header-bg)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            {/* An <h2>, not a <span>: useDialog resolves the dialog's accessible
-                name from the first heading in its subtree, and this badge IS the
-                panel's title. `margin: 0` because an h2 brings its own; the text
-                stays the all-caps wordmark it has always been (the 0.02em
-                letter-spacing is caps tracking and exists for it). */}
-            <h2 style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em", margin: 0 }}>WHATSAPP</h2>
+            {/* The wordmark. v18.4.0: a <span> hidden from the accessibility
+                tree; the panel's title is the always-mounted <h2> above this
+                bar, which this bar's fold cannot take away. The text stays
+                the all-caps wordmark (the 0.02em letter-spacing is caps
+                tracking and exists for it). */}
+            <span aria-hidden="true" style={{ fontSize: T.small, fontWeight: FW.bold, padding: "2px 8px", borderRadius: R.pill, background: "var(--wa-green)", color: "var(--text-on-accent)", letterSpacing: "0.02em" }}>WHATSAPP</span>
             <div style={{ display: "flex", gap: 2, background: "var(--bg-tabbar)", borderRadius: R.pill, padding: 2, border: "1px solid var(--border-soft)" }}>
               {tabBtn("inbox", "Inbox", unreadCount)}
               {tabBtn("archived", "Archived", archivedCount)}
@@ -520,11 +580,12 @@ export function InboxPanel({
           </div>
         </div>
         ) : null}
+        </Reveal>
         {/* Bulk action bar — only in select mode. Actions depend on the tab:
             Inbox → Archive; Archived → Restore + Delete (delete behind one
             confirm). Select all / Cancel are always present. Eased open/closed
             with the Reveal atom — same animation as the Summary panel. */}
-        <Reveal show={selectMode}>
+        <Reveal show={selectMode && !kbFold}>
           <div style={{ padding: "8px 14px", borderBottom: "1px solid var(--wa-divider)", background: "var(--bg-soft)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
             <button
               onClick={() => { if (allVisibleSelected) clearSelection(); else selectAllVisible(); }}

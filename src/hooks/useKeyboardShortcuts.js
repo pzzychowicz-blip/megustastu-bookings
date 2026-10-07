@@ -104,6 +104,8 @@ function escapeAction(K,id){
     case "sim":         return function(){K.setShowSim(false);};
     case "inbox":       return K.closeInbox;
     case "week":        return function(){K.setShowWeek(false);};
+    // v18.4.0: Escape is Cancel. The chooser stores nothing.
+    case "print":       return function(){K.setPrintAsk(null);};
     case "form":        return K.requestCloseForm;
     default:            return null;
   }

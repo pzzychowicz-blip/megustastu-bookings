@@ -16,6 +16,7 @@
  * Contact: pz.zychowicz@gmail.com
  */
 import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
+import { flushSync } from "react-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -346,6 +347,7 @@ import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, mo
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
+import { printRange } from "./lib/print-timeline";
 import { SeatClashModal } from "./components/SeatClashModal";
 import { VoucherCarryModal } from "./components/VoucherCarryModal";
 import { UnsettledBanner } from "./components/UnsettledBanner";
@@ -355,12 +357,18 @@ import { useRecurring } from "./hooks/useRecurring";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { WaitlistPanel } from "./components/WaitlistPanel";
 import { WaitAvailBanner } from "./components/WaitAvailBanner";
+// v18.4.0: the print chooser, lazy like the two above. Its chunk also holds
+// TimelineSheet, which the chooser hands back with the job (see `doPrint`): the
+// sheet has to mount synchronously inside the Print click, so it cannot be a
+// lazy component of its own, and it is loaded by the time Print can be pressed.
+const PrintModal = lazyChunk(function(){return import("./components/PrintModal").then(function(m){return {default:m.PrintModal};});},"Print");
 const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel").then(function(m){return {default:m.SearchPanel};});},"SearchPanel"); // v17.1.0: lazy (opened on demand)
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
 import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
+import { onPrintEnd } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
@@ -401,7 +409,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.3.5",
+  version:"18.4.0",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1056,6 +1064,21 @@ function BookingApp({uid}){
   // v18.0.0 session 7: the seat note — a SNAPSHOT from seatNoteFor, not an id.
   const seatNote = modalOpen.seatnote || null;
   const setSeatNote = setModalFns.seatnote;
+  // v18.4.0: the print chooser. Payload: the range it opens with (printRange).
+  const printAsk = modalOpen.print || null;
+  const setPrintAsk = setModalFns.print;
+  // The ONE print in flight, {kind, from, to, Sheet}: it mounts the chooser's
+  // TimelineSheet for a timeline print and is cleared when the print ends.
+  const [printJob, setPrintJob] = useState(null);
+  // The end of the print ends the job whichever way the print dialog closed:
+  // the sheet unmounts and <html> loses `data-print`, so the browser's own
+  // Cmd+P is the day sheet again. `onPrintEnd` and not a bare `afterprint`:
+  // iOS fires that before its print sheet opens (lib/print-end.js).
+  useEffect(function(){
+    function done(){document.documentElement.removeAttribute("data-print");setPrintJob(null);}
+    const off=onPrintEnd(done);
+    return function(){off();done();};
+  },[]);
   // v18.0.0 session 8 (C3): the seat-clash question, also a SNAPSHOT — taken
   // when the seat was refused, so the card cannot change under the reader.
   const seatClash = modalOpen.seatclash || null;
@@ -1315,6 +1338,9 @@ function BookingApp({uid}){
     return end;
   },[bookings,viewDate]);
   extendActiveGrid(viewLatestEnd);
+  // v18.4.0: the print chooser opens on the range this grid draws. Declared
+  // below `viewLatestEnd`, which it reads.
+  function openPrint(){setPrintAsk(printRange(hoursFor(viewDate),viewLatestEnd));}
   // ── v14.6.0: Day shifts (Firebase settings/dayShifts, shared) ────────────
   // The Afternoon/Evening split hour for the Summary panel — the app's 2nd
   // Firebase settings node. saveDayShifts is wired to the Settings General tab.
@@ -3321,6 +3347,7 @@ function BookingApp({uid}){
     // v14.6.0: Summary panel toggle (the g shortcut).
     setSummaryOpen:setSummaryOpen,
     showWeek:showWeek,setShowWeek:setShowWeek,
+    setPrintAsk:setPrintAsk,
     // WhatsApp sandbox: the I shortcut's opener, and the four setters
     // `escapeAction` names. `showInbox` is still read directly — the I key must
     // not re-open a panel that is already up.
@@ -4450,7 +4477,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -4482,7 +4509,10 @@ function BookingApp({uid}){
       // whole block layout on every keystroke: the exact failure CLAUDE.md
       // records for `liveBookings`.
       onSetZoom:function(z){R.current.setTimelineZoomManual(z);},
-      onPrint:function(){window.print();}
+      // v18.4.0: Print opens the chooser (day sheet, timeline, both).
+      // Through the ref, like every wrapper here: this object is built once,
+      // and the range it opens with is the VIEWED day's.
+      onPrint:function(){R.current.openPrint();}
     };
   });
 
@@ -4699,6 +4729,17 @@ function BookingApp({uid}){
   const dateNavRef=useRef(null);
   const summarySlotRef=useRef(null);
   const summaryLine=useSharesLine(dateRowRef,dateNavRef,summarySlotRef);
+  // v18.4.0 (Patryk): when the header's controls do not fit beside the title
+  // they take the next line, and there the view switcher keeps the left edge
+  // while the actions and the connection dot go to the right one. MEASURED,
+  // like the Summary above: whether the block wraps depends on the restaurant's
+  // name and on which buttons this restaurant has, so no breakpoint states it.
+  // Nothing here changes the block's flex BASIS, which is what decides the
+  // wrap, so the measurement cannot latch itself (a 100% basis would).
+  const headerRef=useRef(null);
+  const headTitleRef=useRef(null);
+  const headCtrlRef=useRef(null);
+  const headCtrlOwnLine=useSharesLine(headerRef,headTitleRef,headCtrlRef).same===false;
   // v18.2.0 phase 64 (Patryk): the view switcher no longer glides to stand
   // over the Summary card's left edge. Phase 23's `useAlignLeft` did that, and
   // in use the sideways movement did not look good; the switcher keeps its own
@@ -4708,6 +4749,20 @@ function BookingApp({uid}){
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
   const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
+  // v18.4.0: the printed timeline, mounted for the one print that asked for it.
+  const TimelineSheet=printJob&&printJob.kind!=="sheet"?printJob.Sheet:null;
+  const timelineSheet=TimelineSheet?<TimelineSheet bookings={bookings} date={viewDate} blocks={tableBlocks} from={printJob.from} to={printJob.to} splitHour={dayShifts.split} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />:null;
+  // `flushSync` so the sheet is in the DOM before `window.print()` reads it,
+  // and the print call stays inside the click (iOS wants a user gesture).
+  // `data-print` tells the print stylesheet which sheet to show; the end of
+  // the print (`onPrintEnd`, the effect above) takes both back.
+  function doPrint(job){
+    flushSync(function(){setPrintJob(job);});
+    document.documentElement.setAttribute("data-print",job.kind);
+    setPrintAsk(null);
+    window.print();
+  }
+  const printModal=<ModalPresence show={!!printAsk}>{printAsk?<Suspense fallback={null}><PrintModal range={printAsk} onPrint={doPrint} onClose={function(){setPrintAsk(null);}} /></Suspense>:null}</ModalPresence>;
 
   const delModal=<ModalPresence show={!!confirmDel}>{confirmDel?<Overlay /* @static-height one fixed sentence and two buttons */ onClose={function(){setConfirmDel(null);}} footer={<div style={{display:"flex",justifyContent:"flex-end",gap:8}}><button
         className="mgt-hover-scale"
@@ -4829,13 +4884,14 @@ function BookingApp({uid}){
           <a className="mgt-skip" href="#mgt-main">Skip to bookings</a><header
           /* v17.12.0: `inert` while a modal is open — see the <main> note below. */
           inert={anyModal}
+          ref={headerRef}
           style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8,flexShrink:0}}>{/* v17.9.0 (Patryk): the cog leads the title block. The two lines
               beside it ARE the restaurant's configuration read back — its name,
               its table counts, its opening hours — and the control that edits
               all three now sits against them instead of across the row in a
               toolbar. minWidth:0 so the title, not the cog, absorbs a squeeze.
               On a phone the block is the whole first row and ends with the
-              connection dot (phase 79). */}<div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
+              connection dot (phase 79). */}<div ref={headTitleRef} style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:isMobile?"1 1 100%":undefined}}><button
               onClick={function(){setShowSettings(true);}}
               title="Settings & keyboard shortcuts"
               aria-label="Settings & keyboard shortcuts"
@@ -4843,7 +4899,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><CogIcon size={IC.chrome} /></button><div style={{minWidth:0}}><h1 style={{fontSize:isMobile?T.title:T.display,fontWeight: FW.bold,margin:0}}>{generalSettings.restaurantName}</h1><div style={{fontSize: T.body,color:S.text,fontWeight: FW.medium}}>{/* v18.2.0: separators. The double spaces between the three facts were
                 collapsed by HTML to one, so it read "4 indoor 9 outdoor 13:00 -
                 22:00" — one run of numbers (the design critique). A middle dot
-                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><ViewSwitcher
+                between facts, an en dash in the range. */}{INDOOR.length+" indoor · "+OUTDOOR.length+" outdoor · "+(dayClosed?"Closed":hourLabel(OPEN)+"–"+hourLabel(CLOSE))}</div></div>{isMobile?<div style={{marginLeft:"auto",flexShrink:0}}>{connStatus}</div>:null}</div><div ref={headCtrlRef} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",flexGrow:1,minWidth:0}}><ViewSwitcher
               view={view}
               split={split}
               focusedPane={focusedPane}
@@ -4853,7 +4909,10 @@ function BookingApp({uid}){
               onOpenSplitMenu={setSplitMenuFor}
               onSwapSides={swapSides}
               onToggleDir={toggleSplitDir}
-              onExitSplit={exitSplit} />{/* v18.2.0: on a phone the two CREATE actions leave the header for the
+              onExitSplit={exitSplit} />{/* v18.4.0: the actions are ONE group, so on a line of their own
+              they sit right as a group and, where even that line is too short,
+              wrap under the switcher together and stay right (wrapped one by
+              one, each button would start its own line at the left). */}<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",justifyContent:"flex-end",marginLeft:headCtrlOwnLine?"auto":undefined}}>{/* v18.2.0: on a phone the two CREATE actions leave the header for the
               bottom bar below (MOBILE_BAR). They wrapped "+ New" onto a second
               header row on its own, and the header + date row took ~455 of an
               812px screen before the grid began. The design critique; Patryk
@@ -4883,7 +4942,7 @@ function BookingApp({uid}){
               style={CHROME_BTN}><SearchIcon size={IC.chrome} /></button>{/* v17.8.0: the Log-out button used to sit here, left of the dot.
               It now lives INSIDE this popover, on the status row — see
               ConnectionStatus. That also drops one item from a header that
-              wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div>{isMobile?<div
+              wrapped to a third row on a phone. */}{isMobile?null:connStatus}</div></div>{isMobile?<div
             role="group" aria-label="Add a booking"
             /* v18.3.1: the timeline drag's edge scroll stops its lower band
                at this bar's top (lib/edge-scroll.js, scrollBounds). */
@@ -5081,7 +5140,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{prefPickerModal}{waitlistModal}{daySheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

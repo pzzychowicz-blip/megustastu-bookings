@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { keyboardInsetOf } from "../src/hooks/useKeyboardInset.js";
+import { keyboardInsetOf, coveredTopOf } from "../src/hooks/useKeyboardInset.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...p) => readFileSync(join(ROOT, ...p), "utf8");
@@ -97,6 +97,25 @@ describe("N1: the keyboard's inset, from the visual viewport", () => {
     expect(keyboardInsetOf(win(780, 700, 40))).toEqual({ bottom: 0 });
   });
 
+  it("v18.4.0: says how much of a full-screen box iOS moved above the visible area", () => {
+    // Patryk's iPhone, the WhatsApp reply box focused: Safari, then the app.
+    expect(coveredTopOf(win(664, 325, 339))).toBe(339);
+    expect(coveredTopOf(win(762, 357, 405))).toBe(405);
+    // On the way there (innerHeight 392, the page 272 down).
+    expect(coveredTopOf(win(664, 325, 272))).toBe(272);
+    // Keyboard up and nothing moved; no keyboard; Android; no window.
+    expect(coveredTopOf(win(664, 325, 0))).toBe(0);
+    expect(coveredTopOf(win(780, 700, 40))).toBe(0);
+    expect(coveredTopOf(win(289, 289, 0))).toBe(0);
+    expect(coveredTopOf(null)).toBe(0);
+  });
+  it("v18.4.0: the panel on a phone pads its top by it, and the hook carries both", () => {
+    expect(Overlay).toContain("paddingTop: mob ? kb.top : 0,");
+    const hook = stripComments(read("src", "hooks", "useKeyboardInset.js")).join("\n");
+    expect(hook).toContain("return { bottom: keyboardInsetOf(win).bottom, top: coveredTopOf(win) };");
+    expect(hook).toContain("prev.bottom === next.bottom && prev.top === next.top ? prev : next");
+  });
+
   it("is nothing where the keyboard resizes the layout viewport itself (Android)", () => {
     // interactive-widget=resizes-content shrinks the root with the keyboard.
     expect(keyboardInsetOf(win(430, 430, 0))).toEqual({ bottom: 0 });
@@ -113,7 +132,8 @@ describe("N1: every Overlay branch takes the inset as padding", () => {
     // The footer sheet: the box stays top 0 / bottom 0 and pads by the inset,
     // and the footer drops the home-indicator inset the keyboard covers.
     expect(Overlay).toContain('position: "fixed", top: 0, left: 0, right: 0, bottom: 0, paddingBottom: kb.bottom');
-    expect(Overlay).toContain('paddingBottom: kb.bottom ? SP.wide : "max(12px, env(safe-area-inset-bottom))"');
+    // v18.4.0: with the inset it is still SP.wide; only the uncovered case slims while typing.
+    expect(Overlay).toContain('paddingBottom: kb.bottom ? SP.wide : (tight ? SP.snug : "max(12px, env(safe-area-inset-bottom))")');
     // The no-footer sheet: its scroller is absolutely placed (padding cannot
     // move it), so the scroller is inset and the sheet paints under it.
     expect(Overlay).toContain('position: "absolute", top: 0, left: 0, right: 0, bottom: kb.bottom');
@@ -121,8 +141,9 @@ describe("N1: every Overlay branch takes the inset as padding", () => {
     // The scrims pad, so a card centres in what is visible.
     expect(Overlay).toContain("paddingBottom: SP.wide + kb.bottom");
     expect(Overlay).toContain("paddingBottom: scrimPad + (mob ? 0 : kb.bottom)");
-    // No top inset anywhere (v18.3.1: iOS's scroll is already out of innerHeight).
-    expect(Overlay).not.toMatch(/kb\.top/);
+    // One top inset, the phone panel's padding (v18.4.0, below). The sheets
+    // and cards take none: their bodies scroll and iOS places the field.
+    expect(Overlay.match(/kb\.top/g)).toHaveLength(1);
     // No fixed box moves an edge by the inset.
     expect(Overlay).not.toMatch(/position: "fixed"[^}]*\b(top|bottom): kb\./);
   });
@@ -141,5 +162,33 @@ describe("N1: Android resizes the layout viewport", () => {
 
   it("index.html's viewport, which the login screen runs on, is left alone", () => {
     expect(read("index.html")).not.toContain("interactive-widget");
+  });
+});
+
+describe("v18.4.0: a footed dialog makes room while a field is typed into on a short screen", () => {
+  it("is tight only for a focused text field AND a short viewport", () => {
+    expect(Overlay).toMatch(/const short = useShortViewport\(\);/);
+    expect(Overlay).toMatch(/const tight = short && !!field;/);
+    expect(Overlay).toMatch(/if \(raisesKeyboard\(e\.target\)\) setField\(e\.target\);/);
+  });
+
+  it("does not grow the footer back under a finger pressing Save", () => {
+    expect(Overlay).toMatch(/if \(!\(e\.relatedTarget && e\.currentTarget\.contains\(e\.relatedTarget\)\)\) setField\(null\);/);
+  });
+
+  it("slims both footers, eased", () => {
+    expect(Overlay).toContain('padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift');
+    expect(Overlay).toContain('paddingTop: tight ? SP.snug : SP.wide');
+    // Both footed dialogs take the focus handlers; the panel and the bare sheet do not.
+    expect(Overlay.match(/\{\.\.\.typingProps\}/g)).toHaveLength(2);
+  });
+
+  it("places the focused field with its label, and only where the layout was resized", () => {
+    // On iOS the keyboard covers the page and the system places the field
+    // (v18.3.5's two ways); a second scroll there was not tried on a device.
+    expect(Overlay).toMatch(/if \(!tight \|\| kb\.bottom \|\| !field\) return undefined;/);
+    expect(Overlay).toMatch(/const box = field\.closest\("\[" \+ FLD_ATTR \+ "\]"\) \|\| field;/);
+    expect(Overlay).toMatch(/behavior: reduceMotionOn\(\) \? "auto" : "smooth"/);
+    expect(Atoms).toMatch(/\{\.\.\.\{ \[FLD_ATTR\]: "" \}\}\s*role=\{single \? undefined : "group"\}/);
   });
 });

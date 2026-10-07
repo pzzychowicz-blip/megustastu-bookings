@@ -101,6 +101,10 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
         <button /* @no-lift pre-existing, not reviewed for v18.0.0 */
           onClick={onToggle}
           aria-expanded={open}
+          /* v18.4.0 (Patryk): no press dip, Collapsible's reason: this button
+             is the width of the headline, and at 96% its text slid inward and
+             back on every tap. The panel's own tint answers the press. */
+          className="mgt-nopress"
           style={{
             // v18.2.0: basis "auto" (its own content), where it was 200px over
             // ~138px of "14 covers  7 bookings". The date row decides whether
@@ -164,7 +168,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
             </div>
           ) : null}
           {/* v17.9.0 (Patryk): the More button moved OUT of this header and
-              down beside Print day sheet in the expanded body. The header is
+              down beside Print in the expanded body. The header is
               the day's numbers plus the control that reveals them; More opens a
               different screen entirely (Week / Month), and sitting here it was
               a second, unrelated destination inside the summary's own headline.
@@ -242,7 +246,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 <button
                   onClick={onPrint}
                   className="mgt-hover-scale mgt-press"
-                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print day sheet</button>
+                  style={mkBtn({ fontSize: T.body, minHeight: 32, padding: "4px 12px", background: BTN.nav, display: "inline-flex", alignItems: "center", gap: 6 })}><PrintIcon size={IC.control} />Print</button>
               ) : null}
               {onOpenWeek ? (
                 <button

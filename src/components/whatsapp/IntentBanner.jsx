@@ -19,8 +19,12 @@ import { CheckIcon, ChevronRightIcon } from "../Icons";
 import { formatDay } from "../../lib/day";
 import { guestsLabel } from "../../lib/booking-logic";
 
-export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges }) {
-  const [collapsed, toggle] = useCollapseState(phoneKey, "intent", false);
+// v18.4.0 (Patryk) — `narrow`: a phone (under 600px, InboxPanel's `phone`). The banner starts
+// collapsed there and collapsed it is its title row alone, with the buttons in
+// the body (LinkedBookingCard has the measurement). So on a phone it is always
+// a toggle, body or not: the buttons are what it opens onto.
+export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMarkHandled, onApplyChanges, narrow }) {
+  const [collapsed, toggle] = useCollapseState(phoneKey, "intent", !!narrow);
   const [leaving, setLeaving] = useState(false); // fade-out in progress
   if (intent !== "cancel" && intent !== "modify") return null;
   const isCancel = intent === "cancel";
@@ -56,6 +60,7 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
   // toggle and has no chevron: a disclosure that opens onto nothing is noise.
   const subtitle = linkedBooking ? null : "No linked booking found";
   const hasBody = !!subtitle || !!showApply;
+  const opens = hasBody || !!narrow;
 
   // v15.8.2-wa-sandbox: action buttons moved up onto the header row (between the
   // title and the chevron) to reclaim the vertical space they took as their own
@@ -116,20 +121,23 @@ export function IntentBanner({ intent, linkedBooking, phoneKey, draftData, onMar
       tint={bg}
       icon={Icon}
       title={title}
-      onHeaderClick={hasBody ? toggle : undefined}
+      onHeaderClick={opens ? toggle : undefined}
       expanded={!collapsed}
       style={{ marginBottom: 10, boxShadow: "var(--shadow-soft)", opacity: leaving ? 0 : 1, transition: "opacity " + M.exit }}
       action={<>
-        {actionBtns}
-        {hasBody ? <span style={{ color, flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span> : null}
+        {narrow ? null : actionBtns}
+        {opens ? <span style={{ color, flexShrink: 0, display: "inline-flex", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform " + M.tap }}><ChevronRightIcon size={IC.control} /></span> : null}
       </>}
     >
-      {hasBody ? (
+      {opens ? (
         <Reveal show={!collapsed}>
-          <AlertRow first>
-            {subtitle ? <div style={{ color, opacity: 0.85 }}>{subtitle}</div> : null}
-            {showApply ? <div style={{ color, fontWeight: FW.semi }}>{"Requested: " + reqParts.join(" · ")}</div> : null}
-          </AlertRow>
+          {hasBody ? (
+            <AlertRow first>
+              {subtitle ? <div style={{ color, opacity: 0.85 }}>{subtitle}</div> : null}
+              {showApply ? <div style={{ color, fontWeight: FW.semi }}>{"Requested: " + reqParts.join(" · ")}</div> : null}
+            </AlertRow>
+          ) : null}
+          {narrow ? <AlertRow first style={{ paddingBottom: 8 }}>{actionBtns}</AlertRow> : null}
         </Reveal>
       ) : null}
     </AlertPanel>

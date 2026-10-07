@@ -19,6 +19,20 @@ export function isTyping(el) {
   return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
 }
 
+// v18.4.0 — `raisesKeyboard(el)`: is this a field somebody TYPES TEXT into, the
+// kind an on-screen keyboard comes up for? Narrower than `isTyping`, which is
+// about shortcuts: a checkbox, a radio, a slider, a date or a time input (a
+// picker, not a keyboard) and a `<select>` are all not it. `Overlay` and the
+// WhatsApp inbox make room on a short screen while one of these has the focus
+// (found by `/code-review`: both tested the tag alone, so ticking a checkbox
+// with the keyboard up counted as typing and was scrolled to the top).
+const NO_KEYBOARD = { checkbox: 1, radio: 1, range: 1, button: 1, submit: 1, reset: 1, file: 1, color: 1, image: 1, hidden: 1, date: 1, time: 1, "datetime-local": 1, month: 1, week: 1 };
+export function raisesKeyboard(el) {
+  if (!el) return false;
+  if (el.tagName === "TEXTAREA") return true;
+  return el.tagName === "INPUT" && !NO_KEYBOARD[String(el.type || "text").toLowerCase()];
+}
+
 // v18.2.0 — `activatesItself(el)`: does Enter on this element already DO
 // something of its own, so a global Enter handler must leave the key alone?
 //
