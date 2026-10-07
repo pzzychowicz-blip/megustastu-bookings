@@ -31864,3 +31864,37 @@ off again, "Sent →" in the muted ink. Not verified: the deployed 404 wording i
 and the success line in backend mode, which needs the harness.
 
 **Gate:** build 126.34 kB gz (main chunk; the simulator is a lazy chunk the production build strips) · 2614 tests passed (9 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — the WhatsApp backend's handlers are run by a test (ROADMAP #4)
+
+**Files:** `tests/api-handlers.test.js` (51 new) · `api/CLAUDE.md` · `ROADMAP.md`. No
+source change.
+
+**What.** `api/wa-send.js`, `api/wa-recheck.js`, `api/wa-config.js`,
+`api/_lib/inbound-core.js` and `api/_lib/meta.js` had no test that executed them. The file
+replaces the three `firebase-admin` modules with an in-memory tree (`get`, `set`, and an
+`update` in which a null deletes, as RTDB does), so `api/_lib/rtdb.js` runs for real, and
+calls each handler with a request and a recording response. `parseThread` is the one other
+stand-in; `parseMessage` and `sendText` run in mock mode, and `sendText`'s live half runs
+against a stubbed `fetch`.
+
+**Covered.** The method and staff-auth gate the three token endpoints share (405, 401,
+403 for a stranger and for an unverified allow-listed account, 503 for live sends with no
+allow-list, and no write on any refusal). `wa-send`: 400 / 404 / 410 / 502 with nothing
+stored, the stored message and its author, the un-archive, the cap applied before the send,
+a key holding `/`. `wa-recheck`: the key check before any read, the auto-ack left out of
+the thread, the pending draft as context, the last `WA_RECHECK_HISTORY` messages, the draft
+written and stamped now, the timeout's name. `wa-config`: booleans only, never a value, and
+the effective modes. `processInbound`: the first-message ack, no second ack, the
+redelivery skip, an unusable size / date / time stored as null, the caps, a failed ack
+keeping the message. `applyParse`, `injectSimInbound`, `verifySignature`, `sendText`.
+
+**Proven against six sabotages**, each restored afterwards: the 410 check removed (1 test
+red), the auto-ack filter removed (1), the redelivery check removed (1), `verifySignature`
+returning true (1), `sanitizeKey` returning its input (2), `wa-config` reporting the raw
+mode string (1).
+
+**Not covered**, and on the roadmap: `api/wa-inbound.js` and the three `api/wa-sim-*.js`
+handlers.
+
+**Gate:** build 126.34 kB gz (main chunk, unchanged) · 2665 tests passed (51 new) · lint 63 problems, 0 errors · `check:style` OK.

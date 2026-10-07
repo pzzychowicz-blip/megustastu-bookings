@@ -92,13 +92,13 @@ evidence for each.
   figure from v18.3.5: `sanitize` alone costs the tablet 3.2 ms per 1,000 bookings on
   every snapshot, so it passes 8 ms at about 2,900 (PROD held about 1,600 on 2026-10-06).
 
-- **Before WhatsApp goes live (#4, #8):**
-  1. Node tests for `api/wa-send.js`, `wa-recheck.js`, `wa-config.js`,
-     `_lib/inbound-core.js` and `_lib/meta.js`. No test runs any of them.
-  2. Load a conversation's messages when it opens (`messages/$phoneKey`) instead of
-     every device subscribing to all of `/messages`, and set a retention period.
-
-  SECURITY.md §3 lists them as open. (The erasure item and the parse log shipped in v18.3.1.)
+- **Before WhatsApp goes live (#8):** load a conversation's messages when it opens
+  (`messages/$phoneKey`) instead of every device subscribing to all of `/messages`, and
+  set a retention period (SECURITY.md §3 lists the retention as open). Still without a
+  test that runs them: `api/wa-inbound.js` (the public webhook: its raw-body read, the
+  signature gate, the `statuses[]` branch, the timestamp clamp) and the three
+  `api/wa-sim-*.js` handlers. (#4's five files are run by `tests/api-handlers.test.js`
+  since v18.4.5.)
 
 - **Lint: decide a gate (#10).** There are 63 warnings on 2026-10-01, all of them React
   Compiler advisories. Decide whether CI gets `--max-warnings N`, which is a policy
