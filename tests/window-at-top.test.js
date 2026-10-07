@@ -18,7 +18,7 @@ const read = (...p) => stripComments(readFileSync(join(ROOT, ...p), "utf8")).joi
 const App = read("src", "App.jsx");
 const Hook = read("src", "hooks", "useWindowAtTop.js");
 
-const win = (full, height, top, scrollY) => ({ scrollY, document: { documentElement: { clientHeight: full } }, visualViewport: { height, pageTop: top, offsetTop: 0 } });
+const win = (full, height, top, scrollY) => ({ scrollY, document: { documentElement: { clientHeight: full } }, visualViewport: { height, pageTop: top, offsetTop: top } });
 
 describe("the window is not left scrolled once the keyboard is down", () => {
   it("is not stray without a window, a visualViewport or a document", () => {

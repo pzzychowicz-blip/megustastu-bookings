@@ -24,6 +24,27 @@ const Overlay = Atoms.slice(Atoms.indexOf("export function Overlay("), Atoms.ind
 // on iOS; `top` is how far the visual viewport sits down the page.
 const win = (full, height, top) => ({ document: { documentElement: { clientHeight: full } }, visualViewport: { height, pageTop: top, offsetTop: top } });
 
+// v18.4.2: the layout viewport moved with the window's scroll, so the two
+// offsets differ. iOS 27 simulator, home-screen app, Lock navigation off, the
+// WhatsApp reply box focused: the panel's rect was [-415, 479].
+describe("v18.4.2: a fixed box is measured against the LAYOUT viewport", () => {
+  const moved = { document: { documentElement: { clientHeight: 894 } }, visualViewport: { height: 479, offsetTop: 415, pageTop: 614 } };
+  it("pads the top by offsetTop, not by pageTop", () => {
+    expect(coveredTopOf(moved)).toBe(415);
+  });
+  it("and the bottom is not covered there", () => {
+    expect(keyboardInsetOf(moved)).toEqual({ bottom: 0 });
+  });
+  it("counts what is covered below when the layout viewport moved part of the way", () => {
+    const part = { document: { documentElement: { clientHeight: 894 } }, visualViewport: { height: 479, offsetTop: 100, pageTop: 300 } };
+    expect(keyboardInsetOf(part)).toEqual({ bottom: 315 });
+    expect(coveredTopOf(part)).toBe(100);
+  });
+  it("falls back to pageTop where offsetTop is missing", () => {
+    expect(coveredTopOf({ document: { documentElement: { clientHeight: 664 } }, visualViewport: { height: 325, pageTop: 339 } })).toBe(339);
+  });
+});
+
 describe("N1: the keyboard's inset, from the visual viewport", () => {
   it("is nothing without a window, a visualViewport or a document", () => {
     expect(keyboardInsetOf(null)).toEqual({ bottom: 0 });

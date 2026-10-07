@@ -31509,8 +31509,43 @@ page (`<body>` scrollTop 295 to 0). Opening Settings, toggling Lock navigation t
 and closing left `auto` and a page that scrolled. The log did not record the two
 toggle taps themselves, so that case shows the end state only.
 
-**Gate (both phases):** build 125.97 kB gz (main chunk, +0.17 on v18.4.1) · 2543 tests passed
-(14 new) · lint 63 problems, 0 errors · `check:style` OK.
+### Phase 3 — the keyboard inset reads `offsetTop`, so the WhatsApp panel is not over-padded
+
+**Files:** `src/hooks/useKeyboardInset.js` · `tests/keyboard-inset.test.js`
+
+Patryk's screenshot from the phone, on this branch: a WhatsApp conversation with the
+reply box focused had a blank band above its header (about 139pt). Not caused by
+phases 1 and 2: the keyboard was up, so `useWindowAtTop` did not act.
+
+**Measured** (iPhone 18 Pro Max simulator, iOS 27, home-screen app, Lock navigation
+off, reply box focused): `scrollY` 614, `visualViewport` height 479, `offsetTop` 415,
+`pageTop` 614, and the panel's rect [−415, 479]. The layout viewport had moved 199px
+with the scroll and the fixed panel with it, so 415px of the panel was above the
+visible area. `coveredTopOf` read `pageTop` and padded 614: a 199px blank band.
+
+- **`viewportTopOf(vv)` reads `offsetTop`** (the visual viewport's place in the layout
+  viewport, which is what a fixed box is laid out in) and both `keyboardInsetOf` and
+  `coveredTopOf` use it. In every sample v18.3.1 to v18.4.0 recorded the two offsets
+  were equal, so those tests pass unchanged; four new ones carry today's numbers.
+
+**The booking form reads the same as before:** Notes focused in that state gave
+`offsetTop` 374 and `pageTop` 374, a 41px pad and the footer's rect at [416, 479], on
+the visible bottom. (Phase 1's test fixture had an invented `offsetTop: 0`; it carries
+the measured 374 now.)
+
+**After:** two runs (keyboard closed and reopened; a fresh launch) settled with a
+415px pad, the folded header at the visible top and the reply box above the keyboard
+bar. **One run did not**: the first focus after a hot code reload went on to
+`visualViewport` 547 / `offsetTop` 347 about 400ms after the pad was applied, the
+headers unfolded (547 is over `SHORT_VIEWPORT`, 479 is 1px under it on this device)
+and the reply box sat under the ⌃⌄✓ bar. Not reproduced since and not explained.
+
+**Not compared against main:** swapping main's files into the working tree to run the
+same steps was refused by the permission system, so "this was already there in
+v18.4.0 with the lock off" is inferred from the numbers, not measured.
+
+**Gate (all three phases):** build 125.97 kB gz (main chunk, +0.17 on v18.4.1) · 2547 tests passed
+(18 new) · lint 63 problems, 0 errors · `check:style` OK.
 
 **Not verified:** a real iPhone. The simulator reproduced the fault and the fix, and
 earlier keyboard work here found readings the simulator had and the device did not.
