@@ -32004,3 +32004,45 @@ false with the flag, with the history entry and with both, and a walked-back no-
 Claude does not do.
 
 **Gate:** build 127.26 kB gz (main chunk) · 2678 tests passed (2 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 6 — a refusal is drawn above the modal it was raised from
+
+**Files:** `src/components/RefusalToast.jsx` (new) · `src/lib/toast-box.js` (new) ·
+`src/components/atoms.jsx` (`ToastPill`) · `src/components/StatusToasts.jsx` ·
+`src/App.jsx` · `tests/refusal-toast.test.js` (new, 8) · `DESIGN.md` · `GLOSSARY.md` ·
+`src/components/CLAUDE.md` · `ROADMAP.md` (item removed)
+
+**The defect (v18.3.5's `/code-review`, item 2).** The refusal toast was one of
+`StatusToasts`' one-slot toasts, in a layer at z-index 60 inside the main view. Every
+`Overlay` is at 200, so a tap refused from inside a modal drew its answer under the modal.
+
+**The fix, Patryk's choice (2026-10-07): its own layer above every modal.** `RefusalToast`
+is always mounted at the app's root, beside `notifAnnounce`: `position: fixed`, z-index 400
+(the popups, 300 and 301, were the top of the ladder), `pointer-events: none`, its own
+`role="status"` region, no `backdrop-filter`. Same pill, same 3.5s. The pill moved to
+`atoms.jsx` as `ToastPill`, so the two layers draw one definition.
+
+**Where it is drawn.** A fixed layer has no anchor, so `flashRefusal` reads the box of the
+wrapper `StatusToasts` floats over and stores it in the message (`toastBox`,
+`lib/toast-box.js`). With no modal open the pill is where it was. The timer turns `show`
+off and keeps the text and the box, so the pill fades out in place. In the old layer
+`permMsg||""` emptied the pill for its exit.
+
+**Two behaviours that changed with it.** The refusal no longer shares the one slot, so it
+can show at the same time as another toast (the Undo pill, "Reconnected"), drawn over it.
+And on the non-fixed shell with the page scrolled, the toast is clamped to the top of the
+viewport, where the old one scrolled away with the view.
+
+**Measured on DEV (1 trial, 817px wide, Browser pane).** ⇧D under Automatic dark mode, then
+Settings opened: the pill at 228–588 × 242–288 over the dialog (12–805 × 40–770), the
+element under its centre a child of the dialog (taps pass through), the layer outside
+`<main>` and outside any `inert` subtree. With no modal: layer top 236, the old layer's
+top. After 4s the layer was empty. The DEV account's dark-mode settings were put back.
+
+**Not verified:** a refusal raised by a real permission (DEV does not enforce roles, so
+the trigger was ⇧D), a phone-width sheet, and what a screen reader announces with an
+`aria-modal` dialog open.
+
+**Sabotage.** `REFUSAL_Z = 301` fails "is above every other z-index written under src/".
+
+**Gate:** build 127.35 kB gz (main chunk, +0.09) · 2686 tests passed (8 new) · lint 63 problems, 0 errors · `check:style` OK.

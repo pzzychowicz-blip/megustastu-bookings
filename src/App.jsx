@@ -110,6 +110,8 @@ import { saveTextFile } from "./lib/download";
 import { DateField, Overlay, ModalTitle, mkBtn, mkSolidBtn, mkDangerConfirm, Reveal, Presence, ModalPresence, SlideView } from "./components/atoms";
 // v17.3.4: the two notification-layout render units (state stays in BookingApp).
 import { StatusToasts } from "./components/StatusToasts";
+import { RefusalToast } from "./components/RefusalToast";
+import { toastBox } from "./lib/toast-box";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
 
@@ -1024,6 +1026,7 @@ function BookingApp({uid}){
   // have stopped meaning it.
   const [permMsg, setPermMsg] = useState(null);
   const permMsgTimer = useRef(null);
+  const toastAnchorRef = useRef(null);
   const manualTarget = modalOpen.manual || null;
   const setManualTarget = setModalFns.manual;
   const [dismissedIneff, setDismissedIneff] = useState(null);
@@ -2961,10 +2964,15 @@ function BookingApp({uid}){
   // as broken, which is the v17.16.12 lesson about `seated` after close.
   // /code-review (session 7): the refusal toast on its own — `refused` is one
   // caller, and ⇧D under Automatic dark mode (onToggleDark) is the other.
+  // v18.4.5: the toast is drawn in RefusalToast's fixed layer above every modal,
+  // so the message carries the box it is drawn in — the main view's wrapper, read
+  // here, when the refusal is raised (lib/toast-box.js). The timer turns `show`
+  // off and KEEPS the text and the box, so the pill fades out where it was.
   function flashRefusal(text){
-    setPermMsg(text);
+    const el=toastAnchorRef.current;
+    setPermMsg(Object.assign({text:text,show:true},toastBox(el?el.getBoundingClientRect():null,window.innerWidth)));
     clearTimeout(permMsgTimer.current);
-    permMsgTimer.current=setTimeout(function(){setPermMsg(null);},3500);
+    permMsgTimer.current=setTimeout(function(){setPermMsg(function(m){return m?Object.assign({},m,{show:false}):m;});},3500);
   }
   function refused(cap){
     if(can(cap)) return false;
@@ -4994,7 +5002,7 @@ function BookingApp({uid}){
                   thing `inert` is meant to describe. This is the same finding
                   as notifAnnounce living outside <main>, one level down. */}<div inert={anyModal}><Reveal speed="move" show={notifSections.length>0}>{/* null, not an empty strip: Reveal caches its last truthy
                   children, so the pane fades out fully drawn instead of blanking a
-                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
+                  frame and then collapsing an empty box. */}{notifSections.length?<NotificationStrip sections={notifSections} collapseMax={generalSettings.lateCollapseMax} lidIcon={BellIcon} swapKey={viewDate} />:null}</Reveal></div><div ref={toastAnchorRef} style={shellFixed?{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column"}:{position:"relative"}}><StatusToasts
                 bookingsReady={bookingsReady}
                 loadStalled={loadStalled}
                 resyncing={resyncing}
@@ -5004,7 +5012,6 @@ function BookingApp({uid}){
                 undoInfo={undoInfo}
                 onUndo={undoLastAction}
                 undoNote={undoInfo&&undoInfo.note?undoInfo.note:""}
-                permMsg={permMsg}
                 dragMsg={dragMsg}
                 reshuffled={reshuffled}
                 reshuffledMsg={reshuffledMsg}
@@ -5035,7 +5042,7 @@ function BookingApp({uid}){
         well as from the tab order, so a live region inside an inert region goes
         SILENT — and the things this announces (a failed write, the connection
         dropping, a double-booking appearing) are exactly the ones a modal must
-        not suppress. Always mounted; see notifAnnounce. */}<div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
+        not suppress. Always mounted; see notifAnnounce. */}<RefusalToast msg={permMsg} /><div className="mgt-sr-only" role="status" aria-live="polite">{notifAnnounce}</div>{/* v17.14.0: the DAY announcer, a second region rather than a share of the
         one above. They answer different questions and can change in the same
         commit — a date change that also brings a clash into view would have one
         overwrite the other inside a single region, and whichever won would be

@@ -128,12 +128,8 @@ evidence for each.
   Writing the rule only once the booking lands needs the retry queue to report that, so
   it is a write-path change.
 
-- **Two findings from v18.3.5's `/code-review`.**
-  (2) **A refusal raised from inside a modal is drawn under it.** The permission toast
-  is at z-index 60 and every `Overlay` at 200, so on a phone a refused tap in the
-  WhatsApp inbox (Accept, Open booking, Apply changes, since v18.3.5) or in Settings
-  looks like nothing happened. Read from the code; DEV does not enforce roles.
-  (3) **An edit parked by the stale gate and replayed after another device deleted the
+- **A finding from v18.3.5's `/code-review`.**
+  **An edit parked by the stale gate and replayed after another device deleted the
   booking** still writes nothing for it, with the form already closed. v18.3.5 refuses
   only a delete the device had seen before Save. Telling the user needs the retry queue
   to report what a replay did, like the "Repeat weekly" entry above.
