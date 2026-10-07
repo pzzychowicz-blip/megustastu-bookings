@@ -148,10 +148,13 @@ describe("MODAL_Z covers every surface App can open", () => {
     // and it is checkable: every property the hook reads off `K` must appear as
     // a key of the object App passes in. Nothing else in the app cross-checks
     // those two lists, which is why one of them was short.
-    const kb = stripComments(readFileSync(new URL("../src/hooks/useKeyboardShortcuts.js", import.meta.url), "utf8")).join("\n");
+    // v18.4.4: the hook AND the shortcut table it calls. The table's rows read
+    // K too (and its actions take it as `K2`), so half the names moved there.
+    const kb = ["../src/hooks/useKeyboardShortcuts.js", "../src/lib/shortcuts.js"]
+      .map((f) => stripComments(readFileSync(new URL(f, import.meta.url), "utf8")).join("\n")).join("\n");
     const app = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
-    const used = [...new Set([...kb.matchAll(/\bK\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
-    expect(used.length, "the K.* pattern still matches").toBeGreaterThan(20);
+    const used = [...new Set([...kb.matchAll(/\bK2?\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))];
+    expect(used.length, "the K.* pattern still matches").toBeGreaterThan(60);
 
     const call = app.slice(app.indexOf("useKeyboardShortcuts({"));
     const ctxEnd = call.indexOf("\n  });");

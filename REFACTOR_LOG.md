@@ -31705,3 +31705,50 @@ tests passed · lint 63 problems, 0 errors · `check:style` OK.
 
 **After merge:** one call to a deployed function (firebase-admin moved), as after the
 2026-09-23 audit fix.
+
+### Commit 2 — the shortcuts as a table (#15)
+
+**Files:** `src/lib/shortcuts.js` (new, 252 lines) · `src/hooks/useKeyboardShortcuts.js`
+(466 → 263) · `tests/shortcuts.test.js` (new, 44 tests) · `tests/modal-stack.test.js` ·
+`tests/shortcuts-tab.test.js` · `tests/wa-sandbox-integrity.test.js` · `tests/roles.test.js` ·
+`src/hooks/CLAUDE.md` · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**What.** The keydown handler's letter, symbol and arrow chain (about seventy `if`s, where a
+branch's position was its precedence) is `SHORTCUT_LAYERS`, read by the pure
+`resolveShortcut(ev, K, env)`. It answers `null` or `{ prevent, act }`; the hook calls
+`preventDefault()` and `act(K)`. Escape and Enter were already tables (v17.14.0) and stay
+in the hook. eslint's `complexity` for the handler: 141 before (the roadmap's figure),
+under 20 now (run with the rule at 20: the only report in either file is `escapeAction`'s
+switch, 31).
+
+**Design decisions.**
+
+- **The answer is a function of K, not a named action.** A second table mapping action
+  names to K calls would be the same list written twice.
+- **The table reads `K` itself**, not a copied snapshot: the ctx is already the state, and
+  the test that checks every name read off K against App's ctx now reads both files.
+- **`env` carries what is not App's**: the `WA_SANDBOX` constant, the wall clock's date, and
+  the visible Settings tabs as a function, since `visibleTabs` is in a component file that
+  `lib/` must not import.
+- **Four tests that read the old handler's source text now press the key instead**: the I
+  and X gates (two files), and D going through `requestDelete`.
+
+**Verified.**
+
+- **Old against new, side by side.** A temporary test mounted the previous hook and the new
+  one on a fake window and gave both the same random key and state: 300,000 cases per seed,
+  three seeds, about 20,600 of each run's cases doing something, **0 differences** in what
+  was called (updater arguments compared by applying them to probe values), whether the
+  default was prevented, or what was thrown. Four sabotages of the table each showed up: the
+  Shift+C row losing its `shift` (29 differences), the modal wall removed (39,533), the
+  picker no longer terminal (1,249), F off-today taking the key (152). The first run's 39
+  differences were the harness's own (`hasModule` undefined, a state App never produces,
+  threw in my stub before or after `preventDefault`).
+- **Every row is reachable**: all 38 rows produced an action over a small grid of states.
+- **In the DEV app**, real key presses: L → List, N → the form, Escape, ? → Settings, → moved
+  General to Layout, Escape, T → Timeline; each key was `defaultPrevented`. The Browser pane
+  was hidden, so the closing dialogs stayed in the DOM (no animation frames there); that T
+  switched the view afterwards is what shows the modal state had closed.
+
+**Gate:** build 126.35 kB gz (main chunk, +0.36: a table of objects minifies less well than
+the `if` chain) · 2598 tests passed (44 new) · lint 63 problems, 0 errors · `check:style` OK.

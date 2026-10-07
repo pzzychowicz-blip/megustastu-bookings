@@ -71,7 +71,7 @@ session and keeping it in sync.
   `findTimes` / `findKitchenFriendlyTimes` and `formatSugg`; the waitlist button
   follows `addFormToWaitlist`'s rule (`phoneForSave`); the reply is a template.
 
-The next eight come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
+The next seven come from the **2026-09-23 tech-debt scan** and its `/code-review`. `#N` is the item's number
 in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
@@ -113,10 +113,6 @@ evidence for each.
   turn on Dependabot for security updates only. `npm audit` still lists 5 high advisories
   on 2026-10-07, all one chain (`@grpc/grpc-js` under `@firebase/firestore`, which the app
   does not import); their only offered fix is `--force`, which downgrades firebase to 9.
-
-- **Keyboard shortcuts as a table (#15).** `useKeyboardShortcuts`' handler has complexity
-  141, with 70 `if`s. Escape became a table in v17.14.0; do the rest the same way, with
-  a pure `resolveShortcut` in `lib/` so it can be tested.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
