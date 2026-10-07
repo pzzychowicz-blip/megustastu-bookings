@@ -31433,3 +31433,11 @@ the model being replaced. Which model the deployments call is also unknown from 
 
 **Gate:** build 125.80 kB gz (main chunk) · 2529 tests passed · lint 63 problems, 0 errors ·
 `check:style` OK.
+
+**`/code-review` (2026-10-07):** one finding, confirmed and fixed. The comment on
+`TIMEOUT_MS` said "flash-lite normally answers in <1s", a figure measured on 3.1 that
+now read as a claim about 3.5; it names the model and the date, and says 3.5 is
+untimed. The review also read what a model id that stops answering does, which the
+entry above had left open: `liveParse` logs `[gemini] API error <status>` and returns
+null, so the message is saved without a draft and staff handle it by hand. Read from
+the code (`api/_lib/gemini.js`, the `!res.ok` branch), not triggered against the API.

@@ -46,7 +46,9 @@ function waContext() {
 }
 import { mergeDraft, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
 
-// flash-lite normally answers in <1s; this generous cap catches the occasional
+// gemini-3.1-flash-lite answered in <1s when measured (2026-06-05); the default
+// since v18.4.1, 3.5-flash-lite, has not been timed (see DEFAULT_MODEL). This
+// generous cap catches the occasional
 // free-tier latency spike while still failing gracefully (timeout → null →
 // message saved with no draft, staff handles it). Since the async-parse change
 // (2026-06-13) this no longer holds up the webhook response — wa-inbound
