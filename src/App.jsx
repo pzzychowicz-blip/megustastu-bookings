@@ -29,7 +29,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX } from "./lib/constants";
+  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX, VIEW_ORDER } from "./lib/constants";
 
 import {
   getDur, toMins, sanitizeBlock,
@@ -422,9 +422,9 @@ const __APP_SIGNATURE__={
 };
 if(typeof window!=="undefined"){window.__MGT_BUILD__=__APP_SIGNATURE__;}
 
-// v17.3.3: SUMMARY_KEY ("s") and WEEK_KEY ("m") moved into
-// hooks/useKeyboardShortcuts.js with the handler that reads them — rebind there
-// (+ the Shortcuts rows).
+// SUMMARY_KEY ("s") and WEEK_KEY ("m") live in lib/shortcuts.js with their rows
+// (v18.4.4; in hooks/useKeyboardShortcuts.js from v17.3.3 until then) — rebind
+// there (+ the Shortcuts tab's rows).
 
 // v18.3.4: `memoByPrev`, the prev-identity memo every save transform shares,
 // moved to lib/booking-save.js with the edit's save.
@@ -597,9 +597,9 @@ function readPrefLS(name){
   catch{return readPrefValue(spec.store,null);}
 }
 // The canonical view order — drives the slide direction on a view switch AND
-// validates a restored split. useKeyboardShortcuts keeps its own VIEW_ORD for
-// the same purpose; keep the two identical if a view is ever added.
-const VIEW_ORD=["timeline","list","plan"];
+// validates a restored split. v18.4.4: it is `VIEW_ORDER` in lib/constants.js,
+// the one list the T / L / P shortcuts read too.
+const VIEW_ORD=VIEW_ORDER;
 // Validate HARD, and return null on anything unexpected: a hand-edited or
 // half-written key must never be able to wedge the app in a broken layout, and
 // the same view appearing twice would collide on the singleton per-view state

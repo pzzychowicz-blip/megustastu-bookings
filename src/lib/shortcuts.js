@@ -46,6 +46,7 @@
 // function giving the visible Settings tab ids — the hook supplies it from
 // `visibleTabs`, which lives in a component file this module must not import.
 
+import { VIEW_ORDER } from "./constants";
 import { stepDate } from "./day";
 import { seatingClosed } from "./booking-logic";
 
@@ -56,8 +57,6 @@ export const SUMMARY_KEY = "s";
 // v14.7.0 / v14.9.0: "M" opens the Week / Month popover ("More"). Its own keys
 // (W/M, ←/→, ↑/↓, T, Enter) live in WeekView.
 export const WEEK_KEY = "m";
-
-const VIEW_ORDER = ["timeline", "list", "plan"];
 
 // `prevent` with an action, `prevent` alone, and neither.
 const hit = (act) => ({ prevent: true, act });
