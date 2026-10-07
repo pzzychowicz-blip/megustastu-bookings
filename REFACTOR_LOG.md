@@ -31449,7 +31449,7 @@ the code (`api/_lib/gemini.js`, the `!res.ok` branch), not triggered against the
 app is no longer left shifted up with its header gone after a form closes.
 
 **Files:** `src/hooks/useWindowAtTop.js` (new) · `src/hooks/useKeyboardInset.js` ·
-`src/App.jsx` · `tests/window-at-top.test.js` (new) · `ROADMAP.md`
+`src/App.jsx` · `tests/window-at-top.test.js` (new) · `ROADMAP.md` (phase 2's are listed there)
 
 Patryk's screenshots from the installed app on PROD v18.4.0 (iPhone 12 mini, iOS 27):
 "Discard unsaved changes?" cut off part-way down with the booking form's Save row
@@ -31483,6 +31483,34 @@ sample; the confirm was whole; after Discard the page was where it had been
 **iPad (A16) simulator, iOS 27, Safari tab:** keyboard-up Back gives a centred, whole
 confirm and Discard returns to the timeline. A regression check only: an iPad gets the
 desktop card and that page did not scroll.
+
+### Phase 2 — a phone sheet's scroll lock is counted, not saved and restored
+
+**Files:** `src/lib/scroll-lock.js` (new) · `src/components/atoms.jsx` ·
+`src/index.css` · `tests/scroll-lock.test.js` (new)
+
+Found while checking phase 1: after Discard the page could not be scrolled until a
+reload. `Overlay` saved `document.body.style.overflow` when a phone sheet opened and
+wrote it back when it closed. Two sheets at once (the confirm over the form) restore
+in an order that leaves the first one's "hidden" behind, and the shell rewriting the
+value under an open sheet (Settings, toggling Lock navigation) is undone the same way.
+Measured: `overflow: hidden` on `<body>` with 0 dialogs open after Discard; and "auto"
+then "hidden" 50ms apart on closing Settings.
+
+- **`lockPageScroll(doc)`** counts the open sheets and holds the class
+  `mgt-scroll-lock` on `<html>` while the count is above 0. It returns a release that
+  is safe to call twice. Nothing reads or writes the inline style any more, so the
+  shell's own value survives a sheet.
+- **The CSS rule is `@media screen`**, because v18.4.0's print rules set
+  `overflow: visible !important` on the same element.
+
+**After:** Discard with the lock off left `overflow: auto` and a swipe scrolled the
+page (`<body>` scrollTop 295 to 0). Opening Settings, toggling Lock navigation twice
+and closing left `auto` and a page that scrolled. The log did not record the two
+toggle taps themselves, so that case shows the end state only.
+
+**Gate (both phases):** build 125.97 kB gz (main chunk, +0.17 on v18.4.1) · 2543 tests passed
+(14 new) · lint 63 problems, 0 errors · `check:style` OK.
 
 **Not verified:** a real iPhone. The simulator reproduced the fault and the fix, and
 earlier keyboard work here found readings the simulator had and the device did not.

@@ -21,6 +21,7 @@ import { useShortViewport } from "../hooks/useShortViewport";
 import { afterFrame, pageHidden } from "../lib/after-frame";
 import { openerFor } from "../lib/focus-return";
 import { raisesKeyboard } from "../lib/keyboard";
+import { lockPageScroll } from "../lib/scroll-lock";
 import { AlertIcon, ChevronRightIcon, CloseIcon, StatusIcon } from "./Icons";
 
 // ── Style-builder helpers ─────────────────────────────────────────────────────
@@ -470,7 +471,6 @@ const TOP_ANCHOR = "max(0px, calc(5dvh - 12px))";
 // the content. The phone sheet is full-screen and has no top to move.
 export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
-  const lockRef = useRef(false);
   const scrollRef = useRef(null);
   const scrollApi = useRef({ scrollToTop: function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; } });
   // v15.8.0: symmetric open/close animation. `leaving` comes from the wrapping
@@ -533,15 +533,11 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
     }, exitHold("shift"));
   }, [tight, kb.bottom, field]);
 
+  // v18.4.2: a count and a class (lib/scroll-lock.js), not a saved inline
+  // value, which went stale whenever two sheets were open at once.
   useEffect(() => {
-    if (!mob) return;
-    const orig = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    lockRef.current = true;
-    return () => {
-      document.body.style.overflow = orig;
-      lockRef.current = false;
-    };
+    if (!mob) return undefined;
+    return lockPageScroll(document);
   }, [mob]);
 
   // ── v17.9.1 (audit P1): dialog semantics ───────────────────────────────────
