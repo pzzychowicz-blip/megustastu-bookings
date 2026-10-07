@@ -31898,3 +31898,50 @@ mode string (1).
 handlers.
 
 **Gate:** build 126.34 kB gz (main chunk, unchanged) · 2665 tests passed (51 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — the Shortcuts tab is drawn from the shortcut table
+
+**Files:** `src/lib/shortcuts.js` · `src/components/Shortcuts.jsx` ·
+`tests/shortcuts.test.js` (6 new) · `tests/shortcuts-tab.test.js` · `src/lib/CLAUDE.md` ·
+`src/components/CLAUDE.md` · `ROADMAP.md` (entry removed)
+
+**What.** Settings → Shortcuts listed its keys in `SHORTCUT_SECTIONS`, typed by hand, while
+the keys themselves are `SHORTCUT_LAYERS`; v18.4.4's `/code-review` left that on the
+roadmap. Each table row now carries how it is printed (`caps`, `label`), and
+`shortcutDocs()` builds six of the tab's ten sections from the rows: a section is a list of
+layers (Navigation is `global`, `search`, `always`), and rows sharing a label are one line
+(← and →; ⇧+ and ⇧−). The four sections whose keys are handled outside the table stay
+written in `Shortcuts.jsx` (`OWN_SECTIONS`: the WhatsApp inbox, the More popover, the table
+picker, Escape / Enter), with the tab's order in `SECTION_ORDER`.
+
+**One tag gates a key and its line.** I and X carried a `when` in the table and a separate
+`when` string on the tab. A row now names its gate (`gate: "whatsapp"` / `"sandbox"`,
+`SHORTCUT_GATES`), `resolveShortcut` asks it, and the tab hides the line by the same tag.
+
+**Two changes to the table's row order, neither to what a key does.** The global layer's
+rows were reordered to the tab's order (every key in that layer is on one row, so order
+decides nothing). In the list layer C now stands above ⇧C, as the tab lists them, and says
+"no Shift" in its own `when`, where it relied on ⇧C being matched first.
+
+**Verified.**
+
+- **The rendered tab, before against after.** A temporary test dumped every section's
+  title and every row's keys, label and `last` flag for the four combinations of sandbox
+  and WhatsApp, on the old code and the new. With WhatsApp off and no sandbox (what
+  production renders today) the two are identical. **The one difference:** "I · Open
+  WhatsApp inbox" and "X · Open WhatsApp simulator" sit three lines higher in Navigation
+  (after "M", before "/"), because the `always` layer's keys (⇧D, the app width, ?) are a
+  later layer of that section. So a restaurant with WhatsApp on sees the I line moved.
+- **Four sabotages**, each restored: C without its "no Shift" (2 tests red, ⇧C completes
+  instead of cancelling), a row with no label (4), a layer in no section (5), X without its
+  gate (5).
+- **On DEV** (this worktree, :5186): Settings → Shortcuts reads T, L, P, D, ← / →, N, W, S,
+  M, I, X, /, ⇧D, ⇧+ / ⇧−, ? under Navigation, and S, C, ⇧C, D at the end of List view.
+
+**Cost.** The main chunk grew 0.72 kB gz (126.34 → 127.06): the labels and keycaps were in
+`Shortcuts.jsx`, which rides the lazy Settings chunk, and are now in `lib/shortcuts.js`,
+which the keyboard hook loads at startup. Keeping them lazy would mean a second list keyed
+to the table, which is what this commit removes.
+
+**Gate:** build 127.06 kB gz (main chunk, +0.72) · 2671 tests passed (6 new) · lint 63
+problems, 0 errors · `check:style` OK.

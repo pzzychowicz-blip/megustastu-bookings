@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { resolveShortcut } from "../src/lib/shortcuts";
+import { resolveShortcut, shortcutDocs } from "../src/lib/shortcuts";
 
 vi.mock("../src/lib/waSandbox", () => ({ WA_SANDBOX: false }));
 const { ShortcutsContent } = await import("../src/components/Shortcuts.jsx");
@@ -69,8 +69,11 @@ describe("a key is listed only where it works", () => {
     const sc = read("components/Shortcuts.jsx");
     expect(sc).toMatch(/if \(when === "sandbox"\) return WA_SANDBOX;/);
     expect(sc).toMatch(/if \(when === "whatsapp"\) return whatsappOn === true;/);
-    expect(sc).toMatch(/\{ keys: \["X"\],\s*label: "Open WhatsApp simulator", when: "sandbox" \}/);
-    expect(sc).toMatch(/\{ keys: \["I"\],\s*label: "Open WhatsApp inbox", when: "whatsapp" \}/);
+    // v18.4.5: the two rows are the TABLE's, so the tag that lists a key is the
+    // tag that gates it. The inbox section is still written in the tab.
+    const nav = shortcutDocs().find((sec) => sec.title === "Navigation").rows;
+    expect(nav.find((r) => r.label === "Open WhatsApp simulator")).toEqual({ keys: ["X"], label: "Open WhatsApp simulator", when: "sandbox" });
+    expect(nav.find((r) => r.label === "Open WhatsApp inbox")).toEqual({ keys: ["I"], label: "Open WhatsApp inbox", when: "whatsapp" });
     expect(sc).toMatch(/\{ title: "WhatsApp Inbox", when: "whatsapp", rows: \[/);
   });
 
