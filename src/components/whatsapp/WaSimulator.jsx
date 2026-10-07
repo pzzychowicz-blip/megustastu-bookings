@@ -12,7 +12,7 @@
 // (which the linked cancel/modify + Regular-chip scenarios reference) and reset
 // the conversations/messages nodes.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Overlay, ModalTitle, AutoHeight, Fld, Section, Toggle, mkInp, mkSel, mkArea, mkBtn, mkDangerBtn, DateField } from "../atoms";
 import { S, BTN, R, T, FW, IC } from "../../lib/constants";
 import { sortConversations } from "../../lib/whatsapp";
@@ -20,12 +20,33 @@ import { countLabel } from "../../lib/booking-logic";
 import { SCENARIOS, seedSampleBookings, clearWaSimBookings, simulateBurst } from "../../lib/wa-sim-scenarios";
 import { simulateInbound } from "../../lib/wa-sim";
 import { backendEnabled, setBackendEnabled, backendHealth, WA_BACKEND_URL } from "../../lib/wa-backend";
-import { suggestCustomerReply, generateScenario } from "../../lib/wa-backend-sim";
+import { suggestCustomerReply, generateScenario, simErrorText } from "../../lib/wa-backend-sim";
 import { WA_SANDBOX } from "../../lib/waSandbox";
 import { FlaskIcon, DiceIcon } from "./WaIcons";
 
 export function WaSimulator({ ctx, onClose }) {
-  const [status, setStatus] = useState("Ready.");
+  // The footer's line and whether it reports a failure (v18.4.5: a failure is
+  // drawn in the danger ink, where every outcome used to be the same muted grey).
+  const [statusLine, setStatusLine] = useState({ text: "Ready.", failed: false });
+  const status = statusLine.text;
+  function setStatus(text) { setStatusLine({ text: text, failed: false }); }
+  function setFailure(text) { setStatusLine({ text: text, failed: true }); }
+  // One ACTION (a scenario, a burst, a custom message) can post several
+  // messages through the server. `sending(label)` returns the ctx for it: the
+  // line reads "Sending…" until the server answers, a failure stays over the
+  // successes of the same action, and an answer for an earlier action is ignored.
+  const runRef = useRef(null);
+  function sending(label) {
+    if (!backendOn) return ctx;
+    const run = { failed: false };
+    runRef.current = run;
+    setStatus("Sending via backend → " + label + "…");
+    return Object.assign({}, ctx, { onBackend: function (err) {
+      if (runRef.current !== run) return;
+      if (err) { run.failed = true; setFailure("Failed → " + label + ": " + simErrorText(err)); }
+      else if (!run.failed) setStatus("Sent via backend → " + label);
+    } });
+  }
   // Backend mode: scenarios/sends go through the LOCAL Phase-1b backend
   // (scripts/wa-backend-dev.mjs on :3999) instead of client-side Firebase
   // writes. Persisted per-device; health is re-checked on open + on toggle.
@@ -86,8 +107,9 @@ export function WaSimulator({ ctx, onClose }) {
   }
   function sendAsCustomer() {
     if (!custConv || !custText.trim()) return;
-    simulateInbound({ phone: custConv.phone || custConv.phoneKey, language: custConv.language, text: custText.trim() }, ctx);
-    setStatus("Customer replied" + (backendOn ? " via backend" : "") + " → " + (custConv.profileName || custConv.phone || custConv.phoneKey));
+    const who = custConv.profileName || custConv.phone || custConv.phoneKey;
+    simulateInbound({ phone: custConv.phone || custConv.phoneKey, language: custConv.language, text: custText.trim() }, sending("customer reply, " + who));
+    if (!backendOn) setStatus("Customer replied → " + who);
     setCustText("");
   }
   async function suggestReply() {
@@ -100,7 +122,7 @@ export function WaSimulator({ ctx, onClose }) {
       setCustText(data.text || "");
       setStatus("Suggestion ready — edit if you like, then send.");
     } catch (e) {
-      setStatus("Suggest failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
+      setFailure("Suggest failed: " + simErrorText(e));
     } finally {
       setSuggesting(false);
     }
@@ -116,12 +138,12 @@ export function WaSimulator({ ctx, onClose }) {
       const eg = data.samples && data.samples[0] ? " — e.g. “" + String(data.samples[0].text).slice(0, 48) + "…”" : "";
       setStatus("Generated " + n + " scenario" + (n === 1 ? "" : "s") + eg);
     } catch (e) {
-      setStatus("Generate failed: " + e.message + (import.meta.env.DEV ? " (is the harness running? npm run wa:backend)" : ""));
+      setFailure("Generate failed: " + simErrorText(e));
     } finally {
       setGenBusy(false);
     }
   }
-  function runScenario(s) { s.run(ctx); setStatus("Sent" + (backendOn ? " via backend" : "") + " → " + s.label); }
+  function runScenario(s) { s.run(sending(s.label)); if (!backendOn) setStatus("Sent → " + s.label); }
   function sendCustom() {
     const parse = {
       intent: form.intent,
@@ -130,8 +152,8 @@ export function WaSimulator({ ctx, onClose }) {
       time: form.time || null,
       confidence: form.confidence,
     };
-    simulateInbound({ phone: form.phone, language: form.language, text: form.text || "(simulated message)", parse }, ctx);
-    setStatus("Sent custom → " + form.phone + " · " + form.intent);
+    simulateInbound({ phone: form.phone, language: form.language, text: form.text || "(simulated message)", parse }, sending("custom, " + form.phone));
+    if (!backendOn) setStatus("Sent custom → " + form.phone + " · " + form.intent);
   }
   function onFailNext() {
     if (ctx.simFailNextSend) ctx.simFailNextSend();
@@ -140,14 +162,14 @@ export function WaSimulator({ ctx, onClose }) {
   function onSeed() { const n = seedSampleBookings(ctx); setStatus(n > 0 ? "Seeded " + n + " WA-SIM booking(s)." : "Sample bookings already present."); }
   function onClearBookings() { clearWaSimBookings(ctx); setStatus("Cleared WA-SIM bookings."); }
   function onClearConvos() { ctx.clearAllWaData(); setStatus("Cleared all conversations + messages."); }
-  function onBurst() { const n = simulateBurst(ctx); setStatus("Burst: " + countLabel(n, "message", "messages") + " (ongoing follow-ups + new)."); }
+  function onBurst() { const n = simulateBurst(sending("burst")); if (!backendOn) setStatus("Burst: " + countLabel(n, "message", "messages") + " (ongoing follow-ups + new)."); }
 
   const upd = (k) => (e) => setForm(Object.assign({}, form, { [k]: e.target.value }));
   const groups = SCENARIOS.reduce((acc, s) => { (acc[s.group] = acc[s.group] || []).push(s); return acc; }, {});
 
   const footer = (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-      <span style={{ fontSize: T.body, color: "var(--text-muted)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status}</span>
+      <span role="status" title={status} style={{ fontSize: T.body, color: statusLine.failed ? "var(--danger-text)" : "var(--text-muted)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{status}</span>
       <button className="mgt-hover-scale" style={mkBtn({ minHeight: 40, padding: "8px 18px", background: "var(--app-btn-slate)" })} onClick={onClose}>Close</button>
     </div>
   );

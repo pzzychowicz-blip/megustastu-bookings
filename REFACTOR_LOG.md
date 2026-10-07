@@ -31807,3 +31807,60 @@ Five findings. Three fixed, two skipped.
 
 **Gate, final:** build 126.37 kB gz (main chunk, +0.41 on v18.4.3) · 2605 tests passed (51
 new in this version) · lint 63 problems, 0 errors · `check:style` OK.
+
+## v18.4.5 — the simulator says when the server refused
+
+**Date:** 2026-10-07 · **Branch:** `fix/v18.4.5-sim-feedback-api-tests-shortcuts` ·
+**Behavioural change:** sandbox tooling only (the WhatsApp simulator's status line). Nothing
+a restaurant can reach.
+
+### Commit 1 — a failed server post is reported
+
+**Files:** `src/lib/wa-sim.js` · `src/lib/wa-backend-sim.js` ·
+`src/components/whatsapp/WaSimulator.jsx` · `tests/wa-sim-feedback.test.js` (9 new) ·
+`src/App.jsx` (version)
+
+**The report.** Patryk: "When I click buttons there there's no action."
+
+**What was measured.**
+
+- **On the dev server the buttons work.** v18.4.4, DEV Firebase, backend mode off: one
+  canned scenario took the conversation list from 19 to 20 and the status line to "Sent →".
+- **On the deployed sandbox the three `/api/wa-sim-*` endpoints answered 404
+  `{"error":"not found"}`**, as JSON. That is each handler's own fail-closed answer
+  (`simEnabled()`), not a missing file: an unknown path on the same host answers Vercel's
+  plain-text `NOT_FOUND`, and so do all three on production, where `.vercelignore` keeps
+  them out. The sandbox project's variables were listed: six, and no `WA_SIM_ENABLED`.
+  Patryk approved adding `WA_SIM_ENABLED=1` there (Production and Preview); it applies from
+  the next sandbox deployment.
+- **So on the sandbox:** Generate, Generate 3 and Suggest reply always failed, saying so in
+  the footer's muted grey; and with the Live pipeline switch on, every scenario, Send as
+  customer, the burst and the custom message posted to the gate's 404 while the footer said
+  "Sent via backend →". `simulateInbound` caught the rejection and wrote it to the console
+  only.
+
+**What changed.**
+
+- `simulateInbound`'s backend branch calls `ctx.onBackend(error | null)` when the post
+  settles (two-argument `then`, so a throwing callback is not reported as a failed post).
+  The console helpers pass no callback and behave as before.
+- `WaSimulator` builds the ctx per action (`sending(label)`): the line reads "Sending via
+  backend → …" until the server answers, then "Sent via backend → …" or "Failed → …: reason".
+  A burst posts several messages, so one failure stays over the successes of the same
+  action, and an answer for an earlier action is ignored. Client mode is unchanged.
+- `simErrorText` names the two failures a person meets: a failed fetch on the dev server is
+  the harness not running (`npm run wa:backend`), and the gate's 404 on a deployment is
+  `WA_SIM_ENABLED` not being 1. Generate and Suggest reply use it too.
+- A failure is drawn in `--danger-text` (a semi-bold weight was tried and took the weight
+  ratchet in `tests/style-check.test.js` under its 30% floor, so the word "Failed" and the
+  ink carry it); the line is a `role="status"` and
+  carries its full text as a `title`, since it is one ellipsised line.
+
+**Verified on DEV** (this worktree on :5186, harness not running, `el.click()`): client
+mode "Sent →" and 20 → 21 conversations; backend mode on, a scenario and the burst both end
+"Failed → …: the local backend is not running (npm run wa:backend)" in rgb(153, 27, 27); Generate ends "Generate failed: the local backend is not running …"; switched
+off again, "Sent →" in the muted ink. Not verified: the deployed 404 wording in a browser
+(the dev server cannot produce it; `simErrorText`'s deployed half is covered by its tests),
+and the success line in backend mode, which needs the harness.
+
+**Gate:** build 126.34 kB gz (main chunk; the simulator is a lazy chunk the production build strips) · 2614 tests passed (9 new) · lint 63 problems, 0 errors · `check:style` OK.
