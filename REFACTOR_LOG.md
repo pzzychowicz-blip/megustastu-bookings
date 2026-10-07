@@ -31652,3 +31652,29 @@ environment, the 2026-07-16 incident's route.
 
 **Gate:** build 125.96 kB gz (main chunk, −0.01 on v18.4.2) · 2554 tests passed (4 new) ·
 lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (2026-10-07, high: eight angles inline, no subagents)
+
+Five findings. Two fixed, three skipped.
+
+- **Fixed — `api/CLAUDE.md` still described the merge-based sandbox** ("appending, because
+  a merge silently reinstates a deleted line"). It names the generated branch now.
+- **Fixed — the sandbox condition was written twice in `waSandbox.js`.** `WA_SANDBOX` is
+  `SANDBOX_DEPLOY || import.meta.env.DEV`, and the test fails a second read of
+  `VITE_FB_TARGET` in that file. The production entry chunk kept its hash
+  (`index-SoVKQvKR.js`), and the sandbox build still holds `18.4.3-sandbox` and the
+  simulator chunk.
+- **Skipped — every automated push also makes a preview on the PRODUCTION Vercel
+  project**, with the simulator handlers uploaded and only `simEnabled()` in front of
+  them. Real, and not fixable from the repository without changing `vercel.json`, which
+  both projects read. It is Patryk's Ignored Build Step on the production project, listed
+  above; do it before or straight after the merge.
+- **Skipped — the Action's `GITHUB_TOKEN` push may be refused when main changed a
+  workflow file.** Not verifiable locally; the first run answers it. If it is refused, the
+  fix is a fine-grained token with `contents` and `workflows` write on this repository,
+  stored as a secret.
+- **Skipped — the sandbox rebuilds without waiting for main's CI.** Main only changes
+  through a PR that passed the gate, and the sandbox is a test environment.
+
+**Gate, final:** build 125.96 kB gz · 2554 tests passed · lint 63 problems, 0 errors ·
+`check:style` OK.
