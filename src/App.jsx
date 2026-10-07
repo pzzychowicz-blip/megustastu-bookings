@@ -366,6 +366,7 @@ const SearchPanel = lazyChunk(function(){return import("./components/SearchPanel
 import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan view
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
+import { useWindowAtTop } from "./hooks/useWindowAtTop";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
 import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
 import { onPrintEnd } from "./lib/print-end";
@@ -409,7 +410,7 @@ import { WA_SANDBOX } from "./lib/waSandbox";
 // Forensic evidence of origin if this code appears in an unauthorized deployment.
 const __APP_SIGNATURE__={
   app:APP_NAME,
-  version:"18.4.1",
+  version:"18.4.2",
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -889,6 +890,10 @@ function BookingApp({uid}){
     document.body.style.cssText="height:100%;overflow:auto;margin:0;-webkit-overflow-scrolling:touch;overscroll-behavior:none;";
     return function(){document.documentElement.style.cssText="";document.body.style.cssText="";};
   },[]);
+  // v18.4.2: and the window itself stays at the top. Nothing above lets it
+  // scroll, but iOS scrolls it to show a focused field and can leave it there
+  // when the keyboard closes (hooks/useWindowAtTop.js).
+  useWindowAtTop();
 
   const [view, setView] = useState("timeline");
   // v15.8.0: main-view slide. `slide.k` keys the SlideView wrapper (a bump remounts

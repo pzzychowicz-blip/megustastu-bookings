@@ -31441,3 +31441,140 @@ untimed. The review also read what a model id that stops answering does, which t
 entry above had left open: `liveParse` logs `[gemini] API error <status>` and returns
 null, so the message is saved without a draft and staff handle it by hand. Read from
 the code (`api/_lib/gemini.js`, the `!res.ok` branch), not triggered against the API.
+
+## v18.4.2 — the iPhone window that stayed scrolled
+
+**Date:** 2026-10-07 · **Branch:** `fix/v18.4.2-ios-window-scroll` ·
+**Behavioural change:** yes, on an iPhone: the discard confirm is drawn whole, and the
+app is no longer left shifted up with its header gone after a form closes.
+
+**Files:** `src/hooks/useWindowAtTop.js` (new) · `src/hooks/useKeyboardInset.js` ·
+`src/App.jsx` · `tests/window-at-top.test.js` (new) · `ROADMAP.md` (phase 2's are listed there)
+
+Patryk's screenshots from the installed app on PROD v18.4.0 (iPhone 12 mini, iOS 27):
+"Discard unsaved changes?" cut off part-way down with the booking form's Save row
+showing under it. This is the pair of faults v18.3.5 could not reproduce and left on
+the ROADMAP; that entry is removed.
+
+**Why DEV never showed it.** It needs two things PROD had and DEV did not: "Lock
+navigation" OFF, and the page scrolled before the form is opened. With the lock on,
+`<body>` cannot scroll and the fault cannot start. The DEV account had it on.
+
+**Measured** (iPhone 18 Pro Max simulator, iOS 27, home-screen app, DEV, lock off,
+page scrolled 295px, edit a booking, type in Notes, tap Back with the keyboard up):
+`window.scrollY` was 374 with the keyboard up and stayed at **249** after it closed,
+on an 894px document whose `<html>` is `overflow: hidden`. The confirm's layout rect
+was the full 0–894 and hit-testing found its buttons, but it was painted only down to
+`clientHeight − scrollY`. So the hidden Discard still took taps. After the dialogs
+closed the app sat 249px up: header gone, blank below. One cause, both faults.
+
+- **`useWindowAtTop()`** (mounted once in `BookingApp`): when the keyboard is down
+  (`clientHeight − visualViewport.height <= KB_MIN`) and `scrollY` is not 0, it calls
+  `window.scrollTo(0, 0)`. It listens to the visual viewport's `resize` and `scroll`
+  and the window's `scroll`. It never acts while the keyboard is up, because that
+  scroll is how iOS shows the focused field. `windowStrayOf` is the pure predicate.
+- **`KB_MIN` is exported** from `useKeyboardInset.js`, so the two hooks agree on what
+  "the keyboard is up" means.
+
+**After, same steps:** `scrollY` read 249 at the viewport resize and 0 on the next
+sample; the confirm was whole; after Discard the page was where it had been
+(`<body>` scrollTop 295).
+
+**iPad (A16) simulator, iOS 27, Safari tab:** keyboard-up Back gives a centred, whole
+confirm and Discard returns to the timeline. A regression check only: an iPad gets the
+desktop card and that page did not scroll.
+
+### Phase 2 — a phone sheet's scroll lock is counted, not saved and restored
+
+**Files:** `src/lib/scroll-lock.js` (new) · `src/components/atoms.jsx` ·
+`src/index.css` · `tests/scroll-lock.test.js` (new)
+
+Found while checking phase 1: after Discard the page could not be scrolled until a
+reload. `Overlay` saved `document.body.style.overflow` when a phone sheet opened and
+wrote it back when it closed. Two sheets at once (the confirm over the form) restore
+in an order that leaves the first one's "hidden" behind, and the shell rewriting the
+value under an open sheet (Settings, toggling Lock navigation) is undone the same way.
+Measured: `overflow: hidden` on `<body>` with 0 dialogs open after Discard; and "auto"
+then "hidden" 50ms apart on closing Settings.
+
+- **`lockPageScroll(doc)`** counts the open sheets and holds the class
+  `mgt-scroll-lock` on `<html>` while the count is above 0. It returns a release that
+  is safe to call twice. Nothing reads or writes the inline style any more, so the
+  shell's own value survives a sheet.
+- **The CSS rule is `@media screen`**, because v18.4.0's print rules set
+  `overflow: visible !important` on the same element.
+
+**After:** Discard with the lock off left `overflow: auto` and a swipe scrolled the
+page (`<body>` scrollTop 295 to 0). Opening Settings, toggling Lock navigation twice
+and closing left `auto` and a page that scrolled. The log did not record the two
+toggle taps themselves, so that case shows the end state only.
+
+### Phase 3 — the keyboard inset reads `offsetTop`, so the WhatsApp panel is not over-padded
+
+**Files:** `src/hooks/useKeyboardInset.js` · `tests/keyboard-inset.test.js`
+
+Patryk's screenshot from the phone, on this branch: a WhatsApp conversation with the
+reply box focused had a blank band above its header (about 139pt). Not caused by
+phases 1 and 2: the keyboard was up, so `useWindowAtTop` did not act.
+
+**Measured** (iPhone 18 Pro Max simulator, iOS 27, home-screen app, Lock navigation
+off, reply box focused): `scrollY` 614, `visualViewport` height 479, `offsetTop` 415,
+`pageTop` 614, and the panel's rect [−415, 479]. The layout viewport had moved 199px
+with the scroll and the fixed panel with it, so 415px of the panel was above the
+visible area. `coveredTopOf` read `pageTop` and padded 614: a 199px blank band.
+
+- **`viewportTopOf(vv)` reads `offsetTop`** (the visual viewport's place in the layout
+  viewport, which is what a fixed box is laid out in) and both `keyboardInsetOf` and
+  `coveredTopOf` use it. In every sample v18.3.1 to v18.4.0 recorded the two offsets
+  were equal, so those tests pass unchanged; four new ones carry today's numbers.
+
+**The booking form reads the same as before:** Notes focused in that state gave
+`offsetTop` 374 and `pageTop` 374, a 41px pad and the footer's rect at [416, 479], on
+the visible bottom. (Phase 1's test fixture had an invented `offsetTop: 0`; it carries
+the measured 374 now.)
+
+**After:** two runs (keyboard closed and reopened; a fresh launch) settled with a
+415px pad, the folded header at the visible top and the reply box above the keyboard
+bar. **One run did not**: the first focus after a hot code reload went on to
+`visualViewport` 547 / `offsetTop` 347 about 400ms after the pad was applied, the
+headers unfolded (547 is over `SHORT_VIEWPORT`, 479 is 1px under it on this device)
+and the reply box sat under the ⌃⌄✓ bar. Not reproduced since and not explained.
+
+**Not compared against main:** swapping main's files into the working tree to run the
+same steps was refused by the permission system, so "this was already there in
+v18.4.0 with the lock off" is inferred from the numbers, not measured.
+
+**Gate (all three phases):** build 125.97 kB gz (main chunk, +0.17 on v18.4.1) · 2547 tests passed
+(18 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+**Verified on Patryk's iPhone 12 mini** (iOS 27, home-screen app, DEV, 2026-10-07,
+his check plus the beacon's log, Lock navigation on and off). WhatsApp reply box,
+lock off: `visualViewport` 357 / `offsetTop` 405 / `pageTop` 544, the panel's rect
+[−405, 357], pad 405. The 139 between the two offsets is the band in his screenshot.
+With the lock on the two offsets were both 405. Booking form, Notes: 357 / 314 / 314,
+a 91px pad under a sheet whose bottom was at 448. After each keyboard close `scrollY`
+read 409 at the viewport resize and 0 in every later sample. He reports the confirm,
+the scroll after Discard and the conversation all correct.
+
+**Gate, final:** 2548 tests passed (19 new); the other three numbers as above.
+
+### `/code-review` (2026-10-07, high: eight angles inline, no subagents)
+
+Six findings. Four fixed, one skipped, one needed no change.
+
+- **Fixed — the WhatsApp inbox kept the save-and-restore lock** phase 2 removed from
+  `Overlay` (`InboxPanel.jsx`). It locks through `lockPageScroll` now, and the test
+  fails a component that writes `<body>`'s overflow. Read from the code, not
+  reproduced on a device.
+- **Fixed — a negative `scrollY` counted as stray** (`Math.abs`). That is the
+  rubber-band at the top; only a scroll down the page was ever measured, so the
+  predicate is `y >= 1`.
+- **Fixed — `src/CLAUDE.md`'s keyboard row still gave the `pageTop` formula.**
+- **Fixed — `scroll-lock.js`'s header named one caller.**
+- **Skipped — a keyboard that is only an accessory bar** (a hardware keyboard, about
+  55px) reads as "keyboard down", so the hook could undo a scroll iOS made to lift a
+  field above the bar. Not measured, and lowering `KB_MIN` would make a browser
+  toolbar read as a keyboard. Left as it is until a device shows it.
+- **No change — the lock's count is module state** and splits across a hot reload of
+  `scroll-lock.js`. DEV only, and a page reload clears it.
+

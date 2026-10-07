@@ -60,8 +60,23 @@
 import { useState, useEffect } from "react";
 
 // Below this, a gap between the two viewports is browser chrome, not a keyboard.
-const KB_MIN = 100;
+export const KB_MIN = 100;
 const NONE = { bottom: 0 };
+
+// v18.4.2 — how far the visible area starts below the top of a fixed box:
+// `offsetTop`, the visual viewport's place in the LAYOUT viewport, which is what
+// a fixed box is laid out in. Until now both functions read `pageTop`, its place
+// in the page. The two were equal in every sample v18.3.1 to v18.4.0 took,
+// because the layout viewport had stayed at the top of the page. It does not
+// always: measured in the iOS 27 simulator (home-screen app, "Lock navigation"
+// off, the WhatsApp reply box focused), scrollY and `pageTop` read 614 while
+// `offsetTop` read 415 and the panel's rect was [−415, 479] against a visible
+// 479. The layout viewport had moved 199px with the scroll and the panel with
+// it, so 415 was covered and the panel padded its top by 614: a 199px blank
+// band above the conversation's header (Patryk's iPhone showed 139).
+function viewportTopOf(vv) {
+  return typeof vv.offsetTop === "number" ? vv.offsetTop : (vv.pageTop || 0);
+}
 
 // The arithmetic, pure over a window-shaped object so tests/keyboard-inset.test.js
 // can hand it the numbers the devices measured.
@@ -74,7 +89,7 @@ export function keyboardInsetOf(win) {
   // of a 339px keyboard is under the toolbar threshold by itself); HOW MUCH to
   // pad is what is left of it below the visible area.
   const keyboard = full - vv.height;
-  const top = typeof vv.pageTop === "number" ? vv.pageTop : (vv.offsetTop || 0);
+  const top = viewportTopOf(vv);
   const bottom = full - vv.height - top;
   return keyboard > KB_MIN && bottom > 0 ? { bottom: Math.round(bottom) } : NONE;
 }
@@ -90,14 +105,14 @@ export function keyboardInsetOf(win) {
 // `pageTop` 339, and `keyboardInsetOf` 0, correctly, since the panel's bottom
 // was on the visible bottom. The conversation's header sat at −332, off the
 // screen, and a thread of three messages showed as an empty box, because its
-// messages were in the part above. `pageTop` is that distance in both of iOS's
-// ways of showing a field (v18.3.5), so it is the one read. 0 with no keyboard,
+// messages were in the part above. v18.4.2 reads `offsetTop` for it
+// (`viewportTopOf`, above). 0 with no keyboard,
 // and on Android, where the layout viewport is the visible area.
 export function coveredTopOf(win) {
   const vv = win ? win.visualViewport : null;
   const root = win && win.document ? win.document.documentElement : null;
   if (!vv || !root) return 0;
-  const top = typeof vv.pageTop === "number" ? vv.pageTop : (vv.offsetTop || 0);
+  const top = viewportTopOf(vv);
   return root.clientHeight - vv.height > KB_MIN && top > 0 ? Math.round(top) : 0;
 }
 

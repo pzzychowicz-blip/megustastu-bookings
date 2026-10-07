@@ -144,17 +144,6 @@ evidence for each.
   only a delete the device had seen before Save. Telling the user needs the retry queue
   to report what a replay did, like the "Repeat weekly" entry above.
 
-- **Two iPhone faults from the home-screen app that v18.3.5 could not reproduce**
-  (Patryk's screenshots, 2026-10-06; iPhone 12 mini, iOS 27). (1) After closing the
-  booking form the timeline is cut off about half-way down, blank below, and the app's
-  header is gone from the top (light and dark, two days apart). (2) The discard confirm
-  opens with the booking form's Save row drawn over its Back / Discard. In 2,000 beacon
-  samples neither appeared: the page returned to the top after every keyboard close, and
-  the confirm settled on top. Both may have followed the keyboard inset v18.3.5 fixed, so
-  first see whether they come back. If one does, catch it with the beacon (REFACTOR_LOG
-  v18.3.5 phase 7) before changing code. A defensive `scrollTo(0, 0)` on close was not
-  added, because nothing measured says the page is left scrolled; that is still open.
-
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1, with v18.3.5's formula), `color-scheme` (N4), the

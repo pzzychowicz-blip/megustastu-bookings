@@ -904,6 +904,14 @@ html, body { margin: 0; }
 /* v18.3.0 (N8): iPhone Safari may inflate text when the phone turns to
    landscape; 100% keeps the type scale as written. */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* v18.4.2: the page behind a phone's full-screen sheet does not scroll
+   (lib/scroll-lock.js counts the open sheets and stamps the class). The app
+   sets <body>'s overflow INLINE, so `!important` is what wins. Screen only:
+   print needs `overflow: visible` on <body> to run past one page, and the
+   print chooser is a sheet that may still be mounted. */
+@media screen {
+  html.mgt-scroll-lock body { overflow: hidden !important; }
+}
 body {
   background: var(--bg-app);
   min-height: 100dvh;
