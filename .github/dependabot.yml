@@ -1,0 +1,28 @@
+# Dependabot: SECURITY updates only (ROADMAP #14, Patryk 2026-10-07).
+#
+# `open-pull-requests-limit: 0` turns VERSION updates off for the ecosystem, and
+# is GitHub's documented way to say so. A security update is not counted against
+# that limit, so what is left is: a pull request when an advisory is published
+# for a dependency in package-lock.json AND a fixed version exists in range.
+#
+# This file is half of it. It does nothing until the repository has
+#   Settings → Advanced Security → Dependabot alerts            ON
+#   Settings → Advanced Security → Dependabot security updates  ON
+# (both were off on 2026-10-07). The file is what keeps those two switches from
+# also meaning weekly version-bump pull requests.
+#
+# Three things to know before reading a Dependabot pull request:
+#  • It is a pull request like any other: CI runs on it, and Vercel builds a
+#    PREVIEW of it. Nothing merges by itself. Auto-merge is not configured.
+#  • Version bumps stay a decision made by hand, one release at a time (the
+#    majors that are waiting are in ROADMAP.md).
+#  • An advisory with no fix in range gets no pull request. The five high
+#    `@grpc/grpc-js` advisories under `@firebase/firestore` are that case on
+#    2026-10-07: their only offered fix downgrades firebase to 9.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
