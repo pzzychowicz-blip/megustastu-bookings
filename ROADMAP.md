@@ -50,6 +50,16 @@ session and keeping it in sync.
   and admin** by default, grantable to staff by an admin, like `hoursEdit` / `layoutEdit`.
   Decided 2026-09-21; the pricing analysis is § 4a of the go-live plan.
 
+- **Measure `gemini-3.5-flash-lite`, and clear `gemini-3.1-flash-lite` out before
+  7 May 2027** (v18.4.1, 2026-10-07). The code default moved to 3.5 without a live
+  run, because no key was available where it was written. Still to do, on the sandbox:
+  (a) run the simulator's canned scenarios in live mode and record accuracy and time
+  per parse against `TIMEOUT_MS` (15 s) in `api/_lib/gemini.js`; (b) check every
+  deployment's `GEMINI_MODEL` env var — one that still names `gemini-3.1-flash-lite`
+  overrides the default and stops working on 7 May 2027, the id's shutdown date;
+  (c) read the free-tier requests per minute and per day in AI Studio → Rate limits,
+  which Google no longer publishes in the docs.
+
 - **The WhatsApp draft checks the request before Accept** (Patryk, 2026-10-06; waits
   for go-live). Today the draft card says nothing about availability and the form
   shows it only after Accept. Decided: (a) a status line on the draft — it fits,

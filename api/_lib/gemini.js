@@ -54,6 +54,21 @@ import { mergeDraft, WA_PARSE_TEXT_LEN } from "../../src/lib/whatsapp.js";
 // the cap only bounds how long a draft can lag behind its message.
 const TIMEOUT_MS = 15000;
 
+// The model all three calls use unless GEMINI_MODEL says otherwise. One
+// constant because it was three hand-typed copies of the id.
+// v18.4.1 (2026-10-07): gemini-3.5-flash-lite, Google's named replacement for
+// gemini-3.1-flash-lite, which shuts down on 2027-05-07 (ai.google.dev/
+// gemini-api/docs/deprecations). Patryk's call to move now rather than wait.
+// NOT benchmarked against a live key when it was made the default: no key was
+// available where the change was written, so its accuracy and its time per
+// parse against TIMEOUT_MS are still to be measured on the sandbox (ROADMAP).
+// What was measured, on 2026-06-05, is the model it replaces: 3.1-flash-lite
+// was sub-second and honoured the never-invent rule. Rejected that day:
+// gemini-3.5-flash is accurate but its latency swings to ~20s (timeouts);
+// gemini-3-flash-preview always times out; gemini-2.0-flash 429s on free tier.
+// Confirm an id is available to the key via the harness's /dev/models.
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+
 // The strict response schema (Gemini "controlled generation"). Mirrors
 // draftData on the conversation + language detection.
 const RESPONSE_SCHEMA = {
@@ -207,13 +222,7 @@ export function mockParse(text) {
 async function liveParse(text, ctx) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { console.warn("[gemini] GEMINI_API_KEY missing — falling back to mock parse"); return mockParse(text); }
-  // Default benchmarked live (2026-06-05) against this key: gemini-3.1-flash-lite
-  // is sub-second and consistently accurate (honors the never-invent rule), and
-  // it's the Phase-1b design's stated free-tier choice. Alternatives rejected:
-  // gemini-3.5-flash is accurate but its latency swings to ~20s (timeouts);
-  // gemini-3-flash-preview always times out; gemini-2.0-flash 429s on free tier.
-  // Override with GEMINI_MODEL (confirm availability via the harness /dev/models).
-  const model = env("GEMINI_MODEL", "gemini-3.1-flash-lite");
+  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
   const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key;
   const body = {
     contents: [{ parts: [{ text: buildPrompt(text, ctx) }] }],
@@ -411,7 +420,7 @@ export async function parseThread(history, { hours, existingDraft } = {}) {
 export async function generateCustomerReply(history, language) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = env("GEMINI_MODEL", "gemini-3.1-flash-lite");
+  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
   const langName = language === "en" ? "English" : "Spanish";
   // Same rule as parseThread (CT-WA-08). This one is sandbox tooling and is
   // stripped from production, and it is fixed anyway: it had no whitespace
@@ -469,7 +478,7 @@ const SCENARIO_SCHEMA = {
 export async function generateScenarioMessage({ hint } = {}) {
   const key = env("GEMINI_API_KEY", null);
   if (!key) { const e = new Error("GEMINI_API_KEY not set"); e.status = 400; throw e; }
-  const model = env("GEMINI_MODEL", "gemini-3.1-flash-lite");
+  const model = env("GEMINI_MODEL", DEFAULT_MODEL);
   const seed = Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
   const prompt = [
     "Invent ONE realistic inbound WhatsApp message from a (potential) customer to " + waContext() + ". It is test data for a booking system — make it varied and natural.",
