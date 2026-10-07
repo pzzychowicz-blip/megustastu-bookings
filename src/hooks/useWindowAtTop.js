@@ -37,7 +37,9 @@ export function windowStrayOf(win) {
   const root = win && win.document ? win.document.documentElement : null;
   if (!vv || !root) return false;
   const y = typeof win.scrollY === "number" ? win.scrollY : 0;
-  return root.clientHeight - vv.height <= KB_MIN && Math.abs(y) >= 1;
+  // Only a scroll DOWN the page is stray. A negative scrollY is the rubber-band
+  // at the top, which iOS brings back by itself and must not be interrupted.
+  return root.clientHeight - vv.height <= KB_MIN && y >= 1;
 }
 
 export function useWindowAtTop() {

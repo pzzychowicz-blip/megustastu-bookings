@@ -1,7 +1,8 @@
 // src/lib/scroll-lock.js
-// v18.4.2 — `lockPageScroll(doc)` → `unlock()`: the page behind a phone's
-// full-screen sheet does not scroll while the sheet is open. `Overlay` is the
-// one caller.
+// v18.4.2 — `lockPageScroll(doc)` → `unlock()`: the page behind a full-screen
+// surface does not scroll while it is open. Two callers: `Overlay` (a phone's
+// sheet only; it checks the width itself) and the WhatsApp `InboxPanel` (every
+// width). The lock itself knows nothing about width.
 //
 // It is a COUNT and a class, not a saved value. Until this version each
 // Overlay read `body.style.overflow` when it mounted, wrote "hidden", and wrote

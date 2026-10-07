@@ -63,6 +63,12 @@ describe("the wiring", () => {
     expect(Atoms).not.toMatch(/document\.body\.style\.overflow/);
   });
 
+  it("the WhatsApp inbox locks through it too, and no component writes <body>'s overflow", () => {
+    const Inbox = stripComments(raw("src", "components", "whatsapp", "InboxPanel.jsx")).join("\n");
+    expect(Inbox).toMatch(/useEffect\(\(\) => lockPageScroll\(document\), \[\]\);/);
+    expect(Inbox).not.toMatch(/document\.body\.style\.overflow/);
+  });
+
   it("the rule beats the shell's inline overflow, on screen only (print needs the body to run on)", () => {
     expect(Css).toMatch(/@media screen \{\s*html\.mgt-scroll-lock body \{ overflow: hidden !important; \}\s*\}/);
     expect(Css.match(/mgt-scroll-lock/g)).toHaveLength(1);

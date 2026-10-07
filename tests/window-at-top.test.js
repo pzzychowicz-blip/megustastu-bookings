@@ -43,6 +43,10 @@ describe("the window is not left scrolled once the keyboard is down", () => {
     expect(windowStrayOf(win(894, 479, 0, 0))).toBe(false);
   });
 
+  it("leaves the rubber-band at the top alone (a negative scrollY)", () => {
+    expect(windowStrayOf(win(894, 894, 0, -40))).toBe(false);
+  });
+
   it("treats a toolbar-sized gap as no keyboard, as the inset does", () => {
     expect(windowStrayOf(win(762, 762 - KB_MIN, 50, 50))).toBe(true);
     expect(windowStrayOf(win(762, 762 - KB_MIN - 1, 50, 50))).toBe(false);

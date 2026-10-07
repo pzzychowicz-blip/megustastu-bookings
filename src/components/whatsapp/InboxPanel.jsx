@@ -36,6 +36,7 @@ import { R, T, FW, M, IC, H } from "../../lib/constants";
 // v18.2.0 /code-review: "3 selected", "Delete 3 conversations?" keep their count and word together.
 import { countLabel } from "../../lib/booking-logic";
 import { raisesKeyboard } from "../../lib/keyboard";
+import { lockPageScroll } from "../../lib/scroll-lock";
 
 // A conversation is "actionable" when it needs a staff response. For a
 // cancel/modify request that's the intent banner being VISIBLE (i.e. not yet
@@ -385,12 +386,10 @@ export function InboxPanel({
     // what orders this ahead of the global handler, does not depend on when it
     // was added.
   });
-  // Body-scroll lock while the inbox is open.
-  useEffect(() => {
-    const orig = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = orig; };
-  }, []);
+  // Body-scroll lock while the inbox is open. v18.4.2: counted
+  // (lib/scroll-lock.js), like Overlay's; a saved inline value went stale
+  // when the shell changed its own under the open panel.
+  useEffect(() => lockPageScroll(document), []);
   // Mark the active conversation read when selected, and only then. A message
   // that lands in the thread already open stays unread (Patryk's call,
   // v18.3.2): a tablet left on an open thread cannot tell whether anyone saw

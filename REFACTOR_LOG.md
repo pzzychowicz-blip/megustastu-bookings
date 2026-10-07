@@ -31557,3 +31557,24 @@ read 409 at the viewport resize and 0 in every later sample. He reports the conf
 the scroll after Discard and the conversation all correct.
 
 **Gate, final:** 2548 tests passed (19 new); the other three numbers as above.
+
+### `/code-review` (2026-10-07, high: eight angles inline, no subagents)
+
+Six findings. Four fixed, one skipped, one needed no change.
+
+- **Fixed — the WhatsApp inbox kept the save-and-restore lock** phase 2 removed from
+  `Overlay` (`InboxPanel.jsx`). It locks through `lockPageScroll` now, and the test
+  fails a component that writes `<body>`'s overflow. Read from the code, not
+  reproduced on a device.
+- **Fixed — a negative `scrollY` counted as stray** (`Math.abs`). That is the
+  rubber-band at the top; only a scroll down the page was ever measured, so the
+  predicate is `y >= 1`.
+- **Fixed — `src/CLAUDE.md`'s keyboard row still gave the `pageTop` formula.**
+- **Fixed — `scroll-lock.js`'s header named one caller.**
+- **Skipped — a keyboard that is only an accessory bar** (a hardware keyboard, about
+  55px) reads as "keyboard down", so the hook could undo a scroll iOS made to lift a
+  field above the bar. Not measured, and lowering `KB_MIN` would make a browser
+  toolbar read as a keyboard. Left as it is until a device shows it.
+- **No change — the lock's count is module state** and splits across a hot reload of
+  `scroll-lock.js`. DEV only, and a page reload clears it.
+
