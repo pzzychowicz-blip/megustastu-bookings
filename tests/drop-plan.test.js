@@ -155,7 +155,7 @@ describe("BookingApp's dropOnTable", () => {
     expect(fn).toMatch(/liveBookings:liveBookings,bookings:bookings,/);
     // The success toast is gated on the save's boolean (v15.4.0): a refused
     // write is never shown as a move.
-    expect(fn).toMatch(/if\(saveBookings\(plan\.transform\)\) flashDragMsg\(plan\.done,true\);/);
+    expect(fn).toContain("if(saveBookings(plan.transform,false,goneReport(id))) flashDragMsg(plan.done,true);");
     expect(fn.split("\n").length).toBeLessThan(12);
   });
 });

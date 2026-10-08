@@ -89,7 +89,7 @@ import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares, and the swap release `manualAssign` shares with the saves.
-import { applyEdit, buildBooking, memoByPrev, releaseSwapped } from "./lib/booking-save";
+import { applyEdit, buildBooking, memoByPrev, releaseSwapped, goneRefusal } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -2661,7 +2661,9 @@ function BookingApp({uid}){
     // fresh data (the resyncing banner informs the user). Either way the form's
     // job is done, so close it. Flash only on a real save (never claim "saved"
     // for a not-yet-persisted write — matches quick-action honesty).
-    const ok=saveBookings(plan.next);
+    // v18.4.6: and if a replay finds the booking deleted on another device,
+    // the banner says so (`plan.replayRefusal`); the form is closed by then.
+    const ok=saveBookings(plan.next,false,{replayRefusal:plan.replayRefusal});
     // WhatsApp sandbox: if this edit came from a modify request's "Apply
     // changes", auto-mark that request handled — but only on a real save.
     wa.completeModifyApply(editId, ok);
@@ -2688,6 +2690,12 @@ function BookingApp({uid}){
   // another device while the form was open) still stamped the booking and
   // wrote a rule the rules file refuses. Such a save books the one visit.
   function standingOn(){return recurring.enabled!==false&&can("recurringManage");}
+  // v18.4.6: the report every change to ONE booking hands `saveBookings`: if
+  // the write is held or refused and its replay finds the booking deleted on
+  // another device, the "Couldn't save" banner names it (`goneRefusal`).
+  // Without it the replay wrote nothing and said nothing. Not for a delete,
+  // which that leaves done, or an undo, which puts a booking back.
+  function goneReport(id){return {replayRefusal:goneRefusal(id,bookings)};}
   function doSaveNew(f0){
     const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
@@ -2934,7 +2942,7 @@ function BookingApp({uid}){
     const ok=saveBookings(function(prev){return prev.map(function(b){
       if(b.id!==id) return b;
       return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
-    });});
+    });},false,goneReport(id));
     setError("");
     if(ok) flash();
   }
@@ -2979,7 +2987,7 @@ function BookingApp({uid}){
     const plan=planDrop({id:id,targetId:targetId,liveBookings:liveBookings,bookings:bookings,viewDate:viewDate,nowMins:nowMins,today:today,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
     if(!plan) return;
     if(plan.refuse){flashDragMsg(plan.refuse);return;}
-    if(saveBookings(plan.transform)) flashDragMsg(plan.done,true);
+    if(saveBookings(plan.transform,false,goneReport(id))) flashDragMsg(plan.done,true);
   }
   // The confirm dialog's ONE door. `delBooking` below is the guarantee; this is
   // so a staff member is refused at the point of intent rather than after
@@ -3436,7 +3444,7 @@ function BookingApp({uid}){
       // Seated transitions never reshuffle others — even when optimizer is ON.
       const optState=(status==="seated")?false:autoOptimizer;
       return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
-    });
+    },false,goneReport(id));
     // C8: same at this door — `optState` is false for a seat (see below).
     if(ok&&(status==="completed"||status==="seated")) flash(status==="seated"?"saved":null);
     if(seatSnap) setSeatNote(seatSnap);
@@ -3570,7 +3578,7 @@ function BookingApp({uid}){
           history:(b.history||[]).concat([histEntry("voucher "+formatCode(c.code)+" attached (carried from the "+fromLabel+" visit)",user)])
         });
       });
-    });
+    },false,goneReport(c.to));
     if(ok) flash("saved");
   }
   // settleVoucherBack(restore) — the mirror of settleVoucher, and it keeps that
@@ -3633,7 +3641,7 @@ function BookingApp({uid}){
     // undo and the dispatched write share ONE optimizer pass.
     const cancelMemo=memoByPrev(cancelTransform);
     const post=cancelMemo(bookings);
-    const ok=saveBookings(cancelMemo);
+    const ok=saveBookings(cancelMemo,false,goneReport(id));
     wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);
     if(ok){
@@ -3734,7 +3742,7 @@ function BookingApp({uid}){
       // Re-optimize to reassign affected bookings to new tables (when optimizer active)
       if(affected&&affected.length>0) return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
       return updated;
-    });
+    },false,goneReport(bookingId));
     setManualTarget(null);
     if(ok&&affected&&affected.length>0) flash();
   }

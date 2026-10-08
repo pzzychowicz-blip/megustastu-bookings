@@ -32276,3 +32276,34 @@ which would still leave the rule when the tab closes on a held booking.
 | Held, then a change from elsewhere drains the queue | (not run) | no rule at 150ms; rule, first visit and two weeks 300ms after the drain |
 
 **Gate:** build 127.72 kB gz · 2723 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 4 — a change replayed after its booking was deleted says so
+
+**Files:** `src/lib/booking-save.js` (`goneRefusal`, `applyEdit`'s `replayRefusal`) ·
+`src/App.jsx` (`goneReport`, seven call sites) · `tests/retry-report.test.js` (15 new) ·
+`tests/save-path.test.js` (42 snapshots, one line each) · `tests/drop-plan.test.js`
+
+A change to one booking that was held or refused is replayed on fresh data. If another
+device deleted the booking meanwhile, the updater maps over a row that is not there: it
+wrote nothing for it and said nothing. v18.3.5 refused only a delete the device had seen
+BEFORE Save.
+
+- **`goneRefusal(id, list)`** takes the booking's name from the list the action was taken
+  on (when it is asked, the booking and its name are gone) and returns the write's
+  `replayRefusal`: null while the id is in the fresh list, otherwise "The change to Rita,
+  21:00 was not saved: the booking was deleted on another device."
+- **Scope is every change to ONE booking** (Patryk's choice over the form edit alone, which
+  is what the ROADMAP entry named): the form's edit, a status change, cancel and no-show,
+  reassign, the timeline drop, manual assign and the voucher carry. Not a delete (a booking
+  already gone is the delete done), not an undo (it puts bookings back), not the writes
+  that are about a day or several bookings. `tests/retry-report.test.js` lists the seven
+  and counts App's `saveBookings` calls (17), so a new one is decided, not forgotten.
+- The refusal is shown in the "Couldn't save" banner through `setWriteWarning`, with
+  Dismiss. The first wording began "Couldn't save the change to …" and repeated the
+  banner's title; seen on DEV, then reworded.
+
+**On DEV**, the reproduction's steps: an edit held, the booking removed from the server,
+the queue drained. Before: nothing. After: the banner, naming "RQ46 Edit2, 20:00". The
+same with the List card's Seated button on a second booking: the banner, naming it.
+
+**Gate:** build 127.85 kB gz · 2737 tests · lint 63 problems, 0 errors · `check:style` OK.
