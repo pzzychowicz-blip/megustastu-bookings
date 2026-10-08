@@ -135,14 +135,6 @@ evidence for each.
   press of Retry in the shared Browser pane cannot be ruled out. If it recurs: note
   whether the tab was hidden and what the activity log holds for that second.
 
-- **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
-  restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
-  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1, with v18.3.5's formula), `color-scheme` (N4), the
-  per-scheme `theme-color` metas plus the manifest colours and its `?v=` bump (N5),
-  `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
-  `prefers-contrast: more` block (A10), the popover keyframe pair for
-  `ConnectionStatus` (M9), and v18.3.1's `.mgt-edge` top strip (the iOS home-screen blur). Drop any item the device check turns back.
-
 - **The printed timeline's key can name a flag no block shows** (v18.4.6 `/code-review`).
   It lists the flags of every block it drew, and a block narrower than its time, size
   and marks clips them (`overflow: hidden`). Harmless, an explanation with nothing to
