@@ -33,7 +33,7 @@ export function railFlagsOf(b, noShows, warn, currency) {
   const hasPrefT = b.preferredTables && b.preferredTables.length > 0;
   return [
     depositAmt > 0
-      ? { k: "dep", keep: 2, legend: "Deposit paid", title: "Deposit " + money(depositAmt, currency), icon: <DepositIcon size={IC.control} /> } : null,
+      ? { k: "dep", keep: 2, legend: "Deposit taken", title: "Deposit " + money(depositAmt, currency), icon: <DepositIcon size={IC.control} /> } : null,
     // v18.3.1: seated outside the zone it asked for (a preference is a wish
     // now), the zone mark gives way to the alert mark, in the same slot, at the
     // same size, in the same BlockFlag (Patryk: a flag like the others). Warning
