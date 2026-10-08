@@ -15,12 +15,31 @@
 // form's two previews agreeing (tests/booking-logic.test.js pins both halves).
 //
 // The re-optimise runs on `viewDate`, the day on screen, as it always has —
-// not on the booking's own date.
+// not on the booking's own date. v18.4.9: and then on the day of any party the
+// Swap took tables from, when that is another day. The picker finds those
+// parties on the BOOKING's date, so a booking opened from another day released
+// a party that no pass seated again (measured on DEV: stored with no table).
+//
+// `swapSlot` / `liveSwap` (v18.4.9) tie a Swap held in the booking form to the
+// slot it was picked for. The form keeps the parties to release until Save; a
+// draft whose date, time, size or duration moved since the pick is no longer
+// asking for those tables at that time, so the swap is dropped and Save's own
+// clash check answers for the tables instead.
 //
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
 import { bookingsAfterAction, histEntry as defaultHistEntry } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
+import { getDur } from "./booking-fields.js";
+
+export function swapSlot(f){
+  const size=Number(f&&f.size)||2;
+  return [f&&f.date,f&&f.time,size,(f&&f.customDur)||getDur(size)].join("|");
+}
+export function liveSwap(affected,slot,f){
+  if(!affected||!affected.length) return null;
+  return slot===swapSlot(f)?affected:null;
+}
 
 export function planAssign(ctx){
   const bookingId=ctx.bookingId,tables=ctx.tables,locked=ctx.locked,affected=ctx.affected;
@@ -35,7 +54,16 @@ export function planAssign(ctx){
       return x;
     });
     // Re-optimize to reassign affected bookings to new tables (when optimizer active)
-    if(affected&&affected.length>0) return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+    if(affected&&affected.length>0){
+      let out=bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
+      const seen=[viewDate];
+      updated.forEach(function(x){
+        if(seen.indexOf(x.date)>=0||!affected.some(function(a){return a.id===x.id;})) return;
+        seen.push(x.date);
+        out=bookingsAfterAction(out,x.date,tableBlocks,null,false,autoOptimizer);
+      });
+      return out;
+    }
     return updated;
   },reshuffles:!!(affected&&affected.length>0)};
 }

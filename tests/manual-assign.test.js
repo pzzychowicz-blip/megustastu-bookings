@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planAssign } from "../src/lib/manual-assign.js";
+import { planAssign, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
@@ -102,6 +102,19 @@ describe("planAssign: a swap", () => {
     expect(byId(assign("a", ["3"], true, swap, { viewDate: far.date }).transform(days), "far").tables.length).toBeGreaterThan(0);
   });
 
+  it("seats a released party on its own day when that is not the day on screen (v18.4.9)", () => {
+    // The picker finds the parties it takes from on the BOOKING's date. Here
+    // the booking and the party it swaps with are a day away from the view.
+    const next = addDays(D, 1);
+    const a2 = bk("a2", "19:00", 2, ["2"], { date: next });
+    const b2 = bk("b2", "19:00", 2, ["3"], { date: next });
+    const out = assign("a2", ["3"], true, [{ id: "b2", tables: ["3"] }]).transform(list.concat([a2, b2]));
+    expect(byId(out, "a2").tables).toEqual(["3"]);
+    const moved = byId(out, "b2");
+    expect(moved.tables.length).toBeGreaterThan(0);
+    expect(moved.tables).not.toContain("3");
+  });
+
   it("answers the same for the same list, and for a fresh one (the replay)", () => {
     const plan = assign("a", ["3"], true, [{ id: "b", tables: ["3"] }]);
     expect(plan.transform(list)).toStrictEqual(plan.transform(list));
@@ -126,5 +139,51 @@ describe("App's manualAssign is the plan and its three effects", () => {
   it("writes through saveBookings with the deleted-elsewhere report, closes the picker, and flashes only when the write went and the day was reshuffled", () => {
     const flat = body.replace(/\s+/g, "");
     expect(flat).toContain("constok=saveBookings(plan.transform,false,goneReport(bookingId));setManualTarget(null);if(ok&&plan.reshuffles)flash();");
+  });
+});
+
+// v18.4.9: a Swap the booking form is holding until Save belongs to the slot it
+// was picked for.
+describe("liveSwap: a swap lasts as long as the draft stays in its slot", () => {
+  const draft = { date: D, time: "20:00", size: 2, customDur: null };
+  const swap = [{ id: "b", tables: ["3"] }];
+  const slot = swapSlot(draft);
+
+  it("is the swap while the draft is where it was picked", () => {
+    expect(liveSwap(swap, slot, Object.assign({}, draft, { name: "Ana", notes: "x" }))).toBe(swap);
+    // The size typed back as a string, and the default duration written out.
+    expect(liveSwap(swap, slot, Object.assign({}, draft, { size: "2", customDur: 90 }))).toBe(swap);
+  });
+
+  it("is nothing once the date, time, size or duration moved", () => {
+    for (const change of [{ date: addDays(D, 1) }, { time: "20:15" }, { size: 5 }, { customDur: 120 }]) {
+      expect(liveSwap(swap, slot, Object.assign({}, draft, change)), JSON.stringify(change)).toBe(null);
+    }
+  });
+
+  it("is nothing for no swap, whatever the slot", () => {
+    expect(liveSwap(null, slot, draft)).toBe(null);
+    expect(liveSwap([], slot, draft)).toBe(null);
+    expect(liveSwap(swap, null, draft)).toBe(null);
+  });
+});
+
+describe("the picker opened from the booking form fills the draft (v18.4.9)", () => {
+  const APP = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n").replace(/\s+/g, "");
+
+  it("for an edit as for a new booking, and writes nothing", () => {
+    expect(APP).toContain('consttoDraft=manualTarget==="__new__"||(showForm&&manualTarget===editId);');
+    expect(APP).toContain("if(toDraft){setForm(function(f){returnObject.assign({},f,{manualTables:tables,_clearManual:false});});setSwapAffected(affected||null);setSwapPickedFor(swapSlot(form));setManualTarget(null);}elsemanualAssign(manualBooking.id,tables,locked,affected);");
+  });
+
+  it("the saves read the swap through liveSwap, never the raw pick", () => {
+    expect(APP).toContain("constswapAffected=liveSwap(swapPicked,swapPickedFor,form);");
+    // The raw pick is named twice: the state's declaration and liveSwap's argument.
+    expect(APP.match(/\bswapPicked\b/g).length).toBe(2);
+  });
+
+  it("an assignment still needs the capability from the edit form", () => {
+    expect(APP).toContain('if(manualTarget!=="__new__"&&refused("bookingAssign"))return;');
   });
 });

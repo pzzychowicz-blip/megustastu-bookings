@@ -308,7 +308,11 @@ function saver(h, mirror, dispatchOk) {
     // does. A held one (`dispatchOk: false`) never lands here.
     const report = args[2];
     // A user write's `isSilent` is false and says nothing; `true` is recorded.
-    const rest = (args[1] ? [args[1]] : []).concat(report ? [{ report: Object.keys(report).sort() }] : []);
+    // v18.4.9: the report's CALLBACKS are what the snapshots name. `subject`
+    // (the booking the write is about, a plain id) is kept beside them in
+    // `h.subjects` and asserted by its own tests below.
+    (h.subjects = h.subjects || []).push(report ? report.subject : undefined);
+    const rest = (args[1] ? [args[1]] : []).concat(report ? [{ report: Object.keys(report).filter((k) => typeof report[k] === "function").sort() }] : []);
     h.calls.push(["saveBookings", typeof fn === "function" ? "<fn>" : "<value>"].concat(rest));
     if (report && report.onLanded && dispatchOk) (h.landings = h.landings || []).push(report.onLanded);
     // v18.4.8: a held write that is then dropped (`discarded: true`) is told
@@ -388,6 +392,8 @@ function runSave(opts) {
   const h = appEnv(opts);
   compile(APP, APP_SAVE, h.env).doSave();
   const out = reduce(h);
+  // Kept off the snapshots (non-enumerable): the tests below read it.
+  Object.defineProperty(out, "subjects", { value: h.subjects || [], enumerable: false });
   if (opts.pendingWaitlist) out.pendingWaitlistAfter = h.pendingWaitlistRef.current;
   return out;
 }
@@ -2835,5 +2841,22 @@ describe("the field lists", () => {
         "voucherCleared": "voucher ABCD-2345→none",
       }
     `);
+  });
+});
+
+// ── v18.4.9: the booking a parked write is named after ──────────────────────
+// The parked banner named the first CHANGED booking, and a save that
+// reshuffles its day changes others first. Each of the form's saves tells the
+// write which booking it is about (`report.subject`).
+describe("the form's saves name their booking to the write", () => {
+  it("an edit names the booking being edited", () => {
+    const b1 = bk("b1");
+    const out = runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { notes: "window seat" }) });
+    expect(out.subjects).toEqual(["b1"]);
+  });
+  it("a new booking names the id it was minted with", () => {
+    const out = runSave({ form: newDraft({ name: "Ana" }) });
+    expect(out.subjects.length).toBe(1);
+    expect(Object.keys(out.writes[0].rows)).toContain(out.subjects[0]);
   });
 });

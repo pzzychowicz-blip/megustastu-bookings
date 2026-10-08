@@ -4,9 +4,9 @@
 //   1. Editing an existing booking — `onSave` persists to Firebase via
 //      `manualAssign` in BookingApp, including any swap-busy reassignments.
 //
-//   2. The "manual" preference path in the new-booking form — `onSave` only
-//      updates the form's draft state (manualTables + swapAffected); the
-//      booking itself is saved later when the user submits the form.
+//   2. The booking form's Assign, for a new booking and (v18.4.9) for an edit
+//      — `onSave` only updates the form's draft state (manualTables +
+//      swapAffected); the booking itself is saved when the user submits.
 //
 // Swap-busy mode lets the host take tables from existing non-seated
 // bookings — those bookings will then be rescued via the auto optimizer in

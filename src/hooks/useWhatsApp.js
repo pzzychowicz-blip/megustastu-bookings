@@ -49,6 +49,8 @@ export function useWhatsApp({
   enabled,
   bookings,
   setWriteWarning,
+  // v18.4.9: whether the booking form is open (see the draftSourceRef effect).
+  formOpen,
   // settings/whatsapp (useWaSettings) — currently just autoArchiveOnComplete.
   waSettings,
   // The booking form's two doors (BookingApp-owned). v18.3.5: every form-open
@@ -79,6 +81,13 @@ export function useWhatsApp({
   // draftSourceRef: phoneKey whose draft is being accepted. Set by
   // handleAcceptDraft, consumed by completeDraftAccept after the booking saves.
   const draftSourceRef = useRef(null);
+  // v18.4.9: the source lasts as long as the form Accept & open opened. Only a
+  // saved new booking took it (`takeDraftSource`), so a form closed unsaved
+  // left it set, and the next new booking, from any door, marked that
+  // conversation accepted and linked itself to it (reproduced on DEV). A save
+  // takes the source in its handler, before the form closes, so this never
+  // races it; `handleAcceptDraft` sets it with the form already opening.
+  useEffect(function () { if (!formOpen) draftSourceRef.current = null; }, [formOpen]);
   // modifyApplyRef: {phoneKey, bookingId} set by handleApplyModify, consumed by
   // completeModifyApply after doSave's edit succeeds — so applying a customer's
   // requested changes auto-marks the modify request handled ONLY on a real save.

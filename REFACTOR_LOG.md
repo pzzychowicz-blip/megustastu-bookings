@@ -32693,3 +32693,146 @@ pass a function of the stored list.
 **Gate at the push:** build 128.51 kB gz (128.23 on v18.4.7) · 2777 tests (2758) · lint 63
 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
 rules suite was not run and there is no PROD rules step.
+
+---
+
+## v18.4.9 — the "Couldn't save" banner names the booking the change was about
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.9-parked-banner-names-the-change` ·
+**Behavioural change:** yes, in one line of text: which booking a parked write is named
+after. No rules change, so no console step.
+
+### Commit 1 — the banner's name
+
+**Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` · `src/App.jsx` ·
+`tests/write-path.test.js` (4 new) · `tests/retry-report.test.js` (2 new, 2 pinned
+strings) · `tests/save-path.test.js` (2 new) · `src/CLAUDE.md` · `src/lib/CLAUDE.md` ·
+`GLOSSARY.md` · `ROADMAP.md` (the entry removed)
+
+**The fault** (ROADMAP, seen on DEV in v18.4.6 and again in v18.4.8). `describeWrite`
+named the first changed booking in list order and counted the rest. A save that
+reshuffles its day changes other bookings too, and a new booking is last in the list, so
+a parked new booking "WL48 Discard, 18:00" read "v1834 weekly, 19:00 and 2 others". An
+edit or a status change that moves an earlier booking is named wrongly the same way (from
+the code; the old text was not captured for that case).
+
+**The fix.** Patryk's call (AskUserQuestion): name the booking acted on, over "new
+bookings only". A write's report carries `subject`, the id of the booking the action was
+about, and `describeWrite(prev, computed, subject)` leads with it when the write changes
+it. With no subject it leads with a created booking (the walk-in passes no report), and
+otherwise with the first changed one, as before. `goneReport(id)` sets it for the seven
+writers that use it; the form's edit and the new booking pass theirs. The hook hands
+`report.subject` to `describeWrite` at all three doors into the queue. The name is still
+the booking as it appears on screen (`prev`), and the count is unchanged.
+
+**`tests/save-path.test.js`: no snapshot changed.** The harness names a report by its
+callbacks now (`subject` is a plain id), and the subject is asserted by its own two tests.
+
+**Measured on DEV (1 trial each), the bookings `update()` forced to reject by the
+temporary switch of v18.4.8, not committed:**
+
+| Action | Banner |
+|---|---|
+| A waiting party booked at 18:00 (its save moved one other booking) | "WL48 B, 18:00 and 1 other — not saved, and undone." |
+| An edit moving "WL48 A" from 18:00 to 19:00 (two others moved) | "WL48 A, 18:00 and 2 others — not saved, and undone." |
+
+**Gate:** build 128.58 kB gz (main chunk, 128.51 on v18.4.8) · 2785 tests passed (2777) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — an accepted WhatsApp draft's source lasts as long as its form
+
+**Files:** `src/hooks/useWhatsApp.js` · `src/App.jsx` · `tests/wa-draft-source.test.js`
+(new, 5) · `src/hooks/CLAUDE.md` · `ROADMAP.md` (the entry removed)
+
+Added to this version at Patryk's choice (AskUserQuestion), from v18.4.8's review.
+`handleAcceptDraft` sets `draftSourceRef` and only a saved new booking cleared it.
+
+**Reproduced on DEV before the edit:** Accept on a conversation with a pending draft
+(+34641565745), Back out of the form, close the inbox, + New, a booking for somebody
+else, Save. The abandoned conversation read `accepted`, linked to the unrelated booking.
+
+**The fix.** The hook takes `formOpen` (App's `showForm`) and an effect clears the ref
+when the form closes. A save takes the source in its handler, before it closes the form,
+so the two cannot race. **Tried first and withdrawn:** clearing it in App's `openForm`,
+the form's one door. `openForm` is declared above `wa`, and reading `wa` there made the
+React Compiler skip `BookingApp`: lint went to 65 problems, 2 errors.
+
+**Measured on DEV after it (1 trial each):** the same steps on +447700900321 left the
+conversation `parsed` and unlinked, with the unrelated booking stored. Then Accept on it
+and Save: `accepted`, linked to the new booking's id. (The second does not separate the
+source from the link by phone number, which marks a pending draft accepted too.)
+
+**Gate:** build 128.62 kB gz (main chunk) · 2790 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — the booking form's picker fills the draft; a swap belongs to its slot
+
+**Files:** `src/App.jsx` · `src/lib/manual-assign.js` · `tests/manual-assign.test.js`
+(11 → 18) · `src/lib/CLAUDE.md` · `ROADMAP.md` (the entry removed; one added)
+
+Added at Patryk's choice, from v18.4.7's review, where it was "the picker re-optimises
+the wrong day", read from the lib. **Reproduced through the form on DEV before the edit
+(1 trial), and it was three faults:** RQ46 LandOK (8 Oct 14:00, i1), the form moved to
+9 Oct 20:00, Assign, Swap busy, 1A.
+
+1. `v1834 weekly2` (9 Oct 19:30) lost 1A and was stored with `tables: []`, unlocked.
+2. RQ46 LandOK was stored at once on 1A, locked, on its OLD day and time, where Anna
+   Priks held 1A at 14:00 (the reconcile effect later moved Anna to 1B).
+3. The form then read "i1 (auto) · was: 1A": Save would have dropped the pick.
+
+The cause: the edit form's picker shows the DRAFT's day and `manualAssign` wrote the
+STORED booking immediately. **Decision (AskUserQuestion): the picker fills the draft**,
+as it already did for a new booking, and Save writes it. `applyEdit` already took
+`manualTables` and the swap. Assign from the timeline or a banner still writes at once.
+
+**What changed.**
+- The picker's `onSave` routes to the draft when `manualTarget==="__new__"` or the form
+  is open on that booking. The `bookingAssign` capability check stays for the edit.
+- `manualBooking` shows the draft's pick when the picker is reopened.
+- **A swap belongs to the slot it was picked for** (`swapSlot`, `liveSwap`). The form
+  holds the parties to release until Save. Read from the code, the new-booking path had
+  the same hole: change the date after a Swap pick and Save released a party on the
+  other day and skipped the clash check. `swapAffected` is now derived, null once the
+  draft's date, time, size or duration left the slot, so Save's clash check answers.
+- `planAssign` also re-optimises the day of any released party that is not `viewDate`.
+  Not reachable from the form any more; it covers a picker opened on a booking of
+  another day. The pinned test ("the day on screen, not the booking's own") is unchanged.
+
+**Sabotage:** the extra pass skipped, and `liveSwap` returning the swap whatever the
+slot, each fail the new tests (1 and 3 failures).
+
+**Measured on DEV after it (1 trial each):** the same steps with 1B: Swap & Assign wrote
+nothing (three bookings read back unchanged) and the form read "1B · Clear". Time moved
+to 20:15, Save: "Selected tables are not available at this time.", nothing written.
+Back to 20:00, Save, Confirm on the kitchen prompt: RQ46 LandOK on 9 Oct 20:00, 1B,
+locked, "tables manually set: 1B"; `v1833-recG` moved 1B → 2; `v1834 weekly2` seated on
+1A. Then Assign from the timeline (RQ46 Poke → 4): stored at once, locked.
+
+**Not verified:** a second device.
+
+**Unexplained, on ROADMAP.** During commit 1's check an edit of WL48 A was parked by a
+forced rejection at 10:46:33Z and never retried by a tool call. The server holds it with
+`updatedAt` 10:47:49Z, and the activity log has "edited: time 18:00→19:00" and an AUTO
+"2 bookings re-placed" 2 ms apart at that time. Three attempts to reproduce (a parked
+edit left 105 s; left 2 min after the rejection switch was removed; the original
+timing, switch removed 7 s after the park, watched 88 s) all stayed parked. No code path replays
+a parked write without Retry (`retryParked` has one caller, the banner). A press of
+Retry in the shared Browser pane would explain it and cannot be ruled out.
+
+**Gate:** build 128.75 kB gz (main chunk, 128.62 after commit 2) · 2797 tests passed (2790) · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): five findings
+
+- **Fixed (2).** The new-booking stale swap had not been run through the form: run on
+  DEV (1 trial), "V49 StaleSwap", 9 Oct 20:00, Swap & Assign on table 2, time to 20:15,
+  Save: "Selected tables are not available at this time.", `v1833-recG` still on 2, no
+  booking stored. And the test that the saves never read the raw pick counted a text
+  fragment; it counts the identifier.
+- **No change (1).** `swapAffected` is derived from the rendered form and the saves read
+  `formRef`. Every `doSave()` caller was read: the Save button and four modal
+  round-trips, none in the tick of a change to the slot.
+- **ROADMAP (1).** The form's preview answers "ok" for hand-picked tables without
+  checking them, so a pick Save will refuse shows no warning first. Older than this
+  version; a stale swap now reaches it.
+- **Not changed (1).** `planAssign`'s extra pass re-optimises a day that is not on
+  screen under the generic flash. Chosen over leaving the party without a table.
+
+**Gate at the push:** build 128.75 kB gz (128.51 on v18.4.8) · 2797 tests (2777) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.

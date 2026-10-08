@@ -27,6 +27,8 @@ function body(name, endMarker) {
   return HOOK.slice(start, end);
 }
 const SAVE = body("saveBookings", "function saveBlocks(");
+const APP_SRC = stripComments(
+  readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
 const DRAIN = body("drainPending", "function resync(");
 
 describe("a queued bookings write keeps its report", () => {
@@ -43,6 +45,18 @@ describe("a queued bookings write keeps its report", () => {
     expect(DRAIN).toContain("replayOutcome(item,bookingsRef.current)");
     // Added to a warning already on screen, never over it: the slot is one string.
     expect(DRAIN).toMatch(/if\(refusals\.length\)\{[\s\S]*setWriteWarning\(function\(was\)\{[\s\S]*return fresh\.length\?\(was\?was\+" ":""\)\+fresh\.join\(" "\):was;/);
+  });
+});
+
+// v18.4.9: the label a queued write is parked under names `report.subject`.
+describe("a queued write is labelled for the booking its caller names", () => {
+  it("at all three doors", () => {
+    const labels = SAVE.match(/describeWrite\([^)]*\)/g) || [];
+    expect(labels.length).toBe(3);
+    labels.forEach((l) => expect(l).toMatch(/,report&&report\.subject\)$/));
+  });
+  it("and the new booking names the id it minted", () => {
+    expect(APP_SRC).toMatch(/saveBookings\(plan\.next,false,\{\s*subject:plan\.id,/);
   });
 });
 
@@ -191,7 +205,7 @@ describe("the form's edit carries it", () => {
 describe("every single-booking write in App hands saveBookings the report", () => {
   const calls = APP.match(/saveBookings\(/g) || [];
   const WITH = [
-    ["the form's edit", "saveBookings(plan.next,false,{replayRefusal:plan.replayRefusal})"],
+    ["the form's edit", "saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal})"],
     ["reassign", "},false,goneReport(id));\n    setError(\"\");"],
     ["the timeline drop", "saveBookings(plan.transform,false,goneReport(id))"],
     ["a status change", /\},false,goneReport\(id\)\);\s+if\(ok&&\(status==="completed"\|\|status==="seated"\)\)/],
@@ -202,7 +216,7 @@ describe("every single-booking write in App hands saveBookings the report", () =
   WITH.forEach(([what, code]) => it(what, () => (
     typeof code === "string" ? expect(APP).toContain(code) : expect(APP).toMatch(code))));
   it("goneReport is goneRefusal on the list the action was taken on", () => {
-    expect(APP).toContain("function goneReport(id){return {replayRefusal:goneRefusal(id,bookings)};}");
+    expect(APP).toContain("function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}");
   });
   it("and the rest are decided: 17 calls, 7 with it, 1 with onLanded", () => {
     // Without: reconciliation and recurring generation (silent, never

@@ -122,25 +122,18 @@ evidence for each.
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`). The next domain is not chosen.
 
-- **A Swap from the edit form on another date leaves the other party without a table**
-  (v18.4.7's `/code-review`; older than it). The picker's Swap releases the parties it
-  takes from on the DRAFT's date, and `planAssign` re-optimises `viewDate`, the day on
-  screen. When the two differ (the form's date changed before Assign), a released party is
-  stored unlocked with its remaining tables and nothing seats it again: run on the lib,
-  it came back with `tables: []`. Not reproduced through the form. The fix is which date
-  the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
+- **The booking form shows hand-picked tables as fine when Save will refuse them**
+  (v18.4.9's `/code-review`; older than it). The availability preview answers "ok" for any
+  `manualTables` without checking them (`BookingFormModal.jsx`), so a pick that became
+  busy, or a Swap dropped because the draft left its slot, reads as normal until Save says
+  "Selected tables are not available at this time."
 
-- **An accepted WhatsApp draft whose form is closed unsaved still claims the next new
-  booking** (v18.4.8's `/code-review`; older than it). `handleAcceptDraft` sets
-  `draftSourceRef` and only a saved new booking clears it (`takeDraftSource`). Close the
-  form, make another booking with + New, and that conversation is marked accepted and
-  linked to it. Read from the code, not reproduced. `openNewWith` clears the waitlist's
-  pending entry for the same reason (v18.3.5); the draft source needs the same.
-
-- **The parked-write banner can name the wrong booking for a create** (seen on DEV in
-  v18.4.6). `describeWrite` names the first CHANGED id, and a new booking that reshuffles
-  its day changes others first: a parked "RQ46 Reject, 18:00" read "v1834 weekly, 19:00
-  and 2 others". The create should be named.
+- **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
+  DEV). An edit parked by a forced rejection at 10:46:33Z on 2026-10-08 was on the server
+  76 s later, beside an automatic "2 bookings re-placed" line 2 ms apart. Three attempts
+  to repeat it stayed parked, and `retryParked` has one caller, the banner's button. A
+  press of Retry in the shared Browser pane cannot be ruled out. If it recurs: note
+  whether the tab was hidden and what the activity log holds for that second.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
