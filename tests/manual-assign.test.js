@@ -179,7 +179,8 @@ describe("the picker opened from the booking form fills the draft (v18.4.9)", ()
 
   it("the saves read the swap through liveSwap, never the raw pick", () => {
     expect(APP).toContain("constswapAffected=liveSwap(swapPicked,swapPickedFor,form);");
-    expect(APP.split("swapPicked,").length).toBe(3); // the state's declaration and liveSwap's argument
+    // The raw pick is named twice: the state's declaration and liveSwap's argument.
+    expect(APP.match(/\bswapPicked\b/g).length).toBe(2);
   });
 
   it("an assignment still needs the capability from the edit form", () => {
