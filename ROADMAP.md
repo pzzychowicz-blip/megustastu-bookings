@@ -122,12 +122,6 @@ evidence for each.
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`). The next domain is not chosen.
 
-- **The booking form shows hand-picked tables as fine when Save will refuse them**
-  (v18.4.9's `/code-review`; older than it). The availability preview answers "ok" for any
-  `manualTables` without checking them (`BookingFormModal.jsx`), so a pick that became
-  busy, or a Swap dropped because the draft left its slot, reads as normal until Save says
-  "Selected tables are not available at this time."
-
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history
   stamp (10:46:33.804Z) and a write stamp of 10:47:49.550Z, so the same in-page change

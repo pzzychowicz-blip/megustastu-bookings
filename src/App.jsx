@@ -35,10 +35,9 @@ import {
   getDur, toMins, sanitizeBlock,
   histEntry,
   isLocked, statusOrder,
-  getBlockSlots, canAssign,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction, occupancyEnd, padEnd,
+  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon,
@@ -89,7 +88,7 @@ import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, memoByPrev, goneRefusal } from "./lib/booking-save";
+import { applyEdit, buildBooking, memoByPrev, goneRefusal, pickedRefusal } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -419,7 +418,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.4.9"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.4.10"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2842,8 +2841,6 @@ function BookingApp({uid}){
       // keeps. Now it refuses, and the message it prints is the one the
       // field was already offering.
       if(sm>lastStartMins(fh.close)){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
-      const size=Number(f.size)||2;
-      const dur=f.customDur||getDur(size);
       const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
@@ -2854,7 +2851,10 @@ function BookingApp({uid}){
       // seat-clash prompt — see `withClearedSeats`.
       const saveBks=withClearedSeats(bookings);
       const saveLive=withClearedSeats(liveBookings);
-      if(mt.length&&!swapAffected){let ex=saveLive.filter(function(b){return b.date===f.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;}).map(function(b){return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};});ex=ex.concat(getBlockSlots(tableBlocks,f.date));if(!canAssign(mt,ex,sm,padEnd(sm+dur))){setError("Selected tables are not available at this time.");return;}}
+      // v18.4.10: the check is `pickedRefusal` (lib/booking-save.js), which
+      // the form's availability line asks too, so the two cannot disagree.
+      const pickedNo=pickedRefusal(saveLive,f,editId,tableBlocks,swapAffected,nowMins,today);
+      if(pickedNo){setError(pickedNo);return;}
       // v18.0.0: the second hook point. AFTER validation and immediately before
       // the dispatch, so a form that is about to be refused for a missing name
       // never asks a money question first. Both entries to `doSave` pass
@@ -2907,6 +2907,10 @@ function BookingApp({uid}){
     // v18.0.0 session 8 (R6): ask only about a save the kitchen would notice.
     // A notes-only edit in a busy slot raised this confirm, which trains people
     // to tap past the dialog that means something on the save after it.
+    // v18.4.10: a save its picked tables will refuse goes straight to doSave,
+    // which refuses it in its own order. The kitchen question used to come
+    // first, answered for a save that could not go through.
+    if(pickedRefusal(withClearedSeats(liveBookings),f,editId,tableBlocks,swapAffected,nowMins,today)){setConfirmKitchen(null);return doSave();}
     const kitchenOrig=editId?bookings.find(function(b){return b.id===editId;}):null;
     const load=getKitchenLoad(bookings,f.date,f.time,d,editId);
     if(kitchenRelevant(kitchenOrig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
@@ -4961,6 +4965,7 @@ function BookingApp({uid}){
               pinnedCountries={generalSettings.pinnedCountries}
               today={today}
               nowMins={nowMins}
+              swap={swapAffected}
               onSave={function(){save();}}
               onSavePending={function(){save("pending");}}
               onSaveConfirm={function(){save("confirmed");}}

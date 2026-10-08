@@ -32836,3 +32836,58 @@ Retry in the shared Browser pane would explain it and cannot be ruled out.
   screen under the generic flash. Chosen over leaving the party without a table.
 
 **Gate at the push:** build 128.75 kB gz (128.51 on v18.4.8) · 2797 tests (2777) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
+
+---
+
+## v18.4.10 — the booking form checks the tables picked by hand
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.10-form-checks-picked-tables` ·
+**Behavioural change:** yes: the form's availability line can show Save's refusal of a
+pick, and Save refuses such a pick before it asks the kitchen question. No rules change,
+so no console step.
+
+**Files:** `src/lib/booking-save.js` · `src/App.jsx` · `src/components/BookingFormModal.jsx` ·
+`tests/booking-logic.test.js` (326 → 334, one pinned string) · `src/lib/CLAUDE.md` ·
+`ROADMAP.md` (the entry removed)
+
+**The fault** (ROADMAP, from v18.4.9's `/code-review`; older than it). The form's
+availability scan returned "ok" for any `manualTables` without checking them, and the
+check lived inline in `doSave`.
+
+**Reproduced on DEV before the edit (1 trial).** New booking "V410 Picked", 17:30, 1B
+picked in the form's Assign, the time moved to 19:00 where WL48 A held 1B. The form read
+"Tables: 1B · Clear" with no warning. Save raised "Kitchen may be busy", and after
+Confirm refused with "Selected tables are not available at this time." Nothing stored.
+
+**Decisions (Patryk, AskUserQuestion).** The form shows Save's own sentence in the
+warning tone, over naming the table and over dropping the pick. Save checks the tables
+before the kitchen question.
+
+**What changed.**
+- `pickedRefusal` (and `PICKED_REFUSAL`) in `lib/booking-save.js` is the check, moved
+  out of `doSave` unchanged in what it asks: the day's live bookings less cancelled,
+  completed and the booking being edited, plus the table blocks, against the draft's
+  window with the turnaround buffer (`padEnd`). A live swap asks nothing.
+- `doSave` calls it. `save()`, the button's handler, calls it first and hands a refused
+  pick straight to `doSave`, which refuses in its usual order (a missing name still
+  comes first).
+- The form's scan calls it for a pick and returns the refusal the way `keptRefusal`'s
+  is returned, so the existing warning line shows it. The form takes `swap`
+  (`swapAffected`). "Add to waitlist" is not offered under a refusal: the way out is
+  Clear or Assign.
+- App no longer imports `canAssign`, `getBlockSlots`, `occupancyEnd` or `padEnd`.
+
+**After, on DEV (1 trial each).** The same steps: at 17:30 no warning; at 19:00 the line
+"Selected tables are not available at this time." (computed colour `rgb(138, 75, 10)`),
+no waitlist button. Save: the refusal at once, no kitchen dialog, nothing stored. Clear:
+the line gone, "Tables: 3" previewed. Save again: the kitchen question was asked (then
+Back; nothing stored).
+
+**Sabotage.** `pickedRefusal` made to return null always: 3 of the new tests fail.
+
+**Not verified:** an edit (the reproduction was a new booking; the function takes
+`editId` and a test covers it); a dropped Swap through the form (it reaches the same
+check with `swap` null); a second device.
+
+**Gate:** build 128.88 kB gz (main chunk, 128.75 on v18.4.9) · 2805 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK.
+

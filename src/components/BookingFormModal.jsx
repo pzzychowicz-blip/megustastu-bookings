@@ -62,7 +62,7 @@ import {
 } from "../lib/booking-logic";
 // v18.3.3: and what the save will say about the tables it keeps — v18.3.4 moved
 // it beside the save, where it reads the save's own window (`editWindow`).
-import { keptRefusal } from "../lib/booking-save";
+import { keptRefusal, pickedRefusal } from "../lib/booking-save";
 // v18.0.0 session 8 (C7): one weekday list — this file had two copies of it.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { stepPress } from "../lib/keyboard";
@@ -107,6 +107,7 @@ export function BookingFormModal({
   vouchers, vouchersByCode,       // v18.0.0: the list (for suggestions) + the index
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
+  swap = null,                    // v18.4.10: the live swap (`swapAffected`), for `pickedRefusal`
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -404,7 +405,12 @@ export function BookingFormModal({
     const size=Number(form.size)||2;
     const d=form.customDur||getDur(size);
     const mt=Array.isArray(form.manualTables)&&form.manualTables.length>0?form.manualTables:null;
-    if(mt) return {ok:true,tables:mt,sugg:null};
+    // v18.4.10: a pick is checked, with the save's own function. It answered
+    // "ok" for any pick, and Save refused one that had become busy.
+    if(mt){
+      const pickedNo=pickedRefusal(liveBookings,form,editId,tableBlocks,swap,nowMins,today);
+      return pickedNo?{ok:false,tables:null,sugg:null,refusal:pickedNo}:{ok:true,tables:mt,sugg:null};
+    }
     // v18.0.0 session 8 (item 3): a draft saved as seated — or as finished —
     // carries the tables it already has, so scanning for free ones answers a
     // question nobody asked. On a full evening it answered "No tables
@@ -426,7 +432,7 @@ export function BookingFormModal({
     if(tables) return {ok:true,tables:tables,sugg:null};
     const sugg=findTimes(form.date,size,form.preference,liveBookings,d,sm,tableBlocks,editId,noResh);
     return {ok:false,tables:null,sugg:formatSugg(sugg,sm)};
-  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig]);
+  },[form.time,form.date,form.size,form.customDur,form.preference,form.manualTables,form.preferredTables,form.status,form._clearManual,bookings,liveBookings,tableBlocks,editId,autoOptimizer,hoursSig,swap,nowMins,today]);
   const formAvail=availScan.value;
 
   // ── v18.0.0 session 8 (items 2b, 7): this guest's other vouchers ───────────
@@ -649,11 +655,13 @@ export function BookingFormModal({
   // v18.3.3: a refusal of kept tables (`keptRefusal`) is Save's own sentence,
   // in the warning colour, with no times offered: its way out is the sentence's
   // own ("Assign different tables"), not another time.
+  // v18.4.10: a refused PICK (`pickedRefusal`) is shown the same way, for a new
+  // booking too, and offers no waitlist: its way out is Clear or Assign.
   const availBanner=formAvail&&!formAvail.ok?<><AvailBanner
     msg={formAvail.refusal||"No tables available."}
     warn={!!formAvail.refusal}
     sugg={formAvail.sugg}
-    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
+    onTapTime={function(t){setForm(function(f){return Object.assign({},f,{time:t});});}} />{!editId&&onAddToWaitlist&&!formAvail.refusal?<div style={{display:"flex",justifyContent:"center",marginTop:-4,marginBottom:12}}><button
       className="mgt-hover-scale"
       /* v17.10.0: pending amber — the waitlist's colour, see App's badge. */
       style={mkBtn({fontSize: T.body,background:BLOCK_BG.pending,minHeight:40,padding:"8px 16px",display:"inline-flex",alignItems:"center",gap:6})}
