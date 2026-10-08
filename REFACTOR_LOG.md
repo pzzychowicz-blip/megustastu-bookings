@@ -32664,3 +32664,32 @@ linked to the stored booking's id. **Not measured:** Accept & open from the inbo
 source path), and a dropped write with a conversation attached.
 
 **Gate:** build 128.51 kB gz (main chunk, 128.23 on v18.4.7) · 2777 tests passed (2758) · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): five findings
+
+**Fixed (1), checked first:** the test for the three queue doors counted three pushes and
+three `else dropped();` separately. It now matches each door with its own `else` and the
+`markStale()` after it. Sabotage: one `else` moved below its `markStale()` behind another
+condition fails it.
+
+**Deferred to ROADMAP (1):** `draftSourceRef` is set by Accept & open and cleared only by
+a saved new booking, so a form closed unsaved leaves the next + New booking marking that
+conversation accepted. Older than this version (`completeDraftAccept` read the same ref);
+read from the code, not reproduced.
+
+**Not changed (3):**
+- A write parked on the banner leaves the waitlist party in neither list on this device
+  until Retry or Discard. Agreed in the plan; the banner cannot be dismissed.
+- A waitlist removal refused at the landing (a stale `waitlistRev`, rolled back) shows the
+  booked party as waiting again. The same refusal did that before this version.
+- `tellDiscarded` refuses a report that landed; `landed()` does not refuse one that was
+  discarded. No path drops a write with an attempt still in flight, and if one ever did,
+  a booking the server has must still take its party off the waitlist.
+
+**Checked for and not found:** a waitlist write computed from the list the hook hands out
+(which now leaves held parties out) would delete them. All four `saveWaitlist` callers
+pass a function of the stored list.
+
+**Gate at the push:** build 128.51 kB gz (128.23 on v18.4.7) · 2777 tests (2758) · lint 63
+problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
+rules suite was not run and there is no PROD rules step.

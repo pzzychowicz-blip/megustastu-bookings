@@ -130,6 +130,13 @@ evidence for each.
   it came back with `tables: []`. Not reproduced through the form. The fix is which date
   the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
 
+- **An accepted WhatsApp draft whose form is closed unsaved still claims the next new
+  booking** (v18.4.8's `/code-review`; older than it). `handleAcceptDraft` sets
+  `draftSourceRef` and only a saved new booking clears it (`takeDraftSource`). Close the
+  form, make another booking with + New, and that conversation is marked accepted and
+  linked to it. Read from the code, not reproduced. `openNewWith` clears the waitlist's
+  pending entry for the same reason (v18.3.5); the draft source needs the same.
+
 - **The parked-write banner can name the wrong booking for a create** (seen on DEV in
   v18.4.6). `describeWrite` names the first CHANGED id, and a new booking that reshuffles
   its day changes others first: a parked "RQ46 Reject, 18:00" read "v1834 weekly, 19:00
