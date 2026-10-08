@@ -32372,3 +32372,42 @@ Asked for particular tables", each with its mark. Not printed to paper or PDF.
 
 **Gate:** build 127.93 kB gz · 2739 tests · lint 63 problems, 0 errors · `check:style` OK.
 
+### Commit 8 — a print the iPhone's Home Screen app ignores is said
+
+**Files:** `src/lib/print-end.js` (`printOrReport`) · `src/App.jsx` (`doPrint`) ·
+`tests/print-timeline.test.js` (5 new) · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+Patryk: on the iPhone, printing from the Home Screen app does nothing; the print window
+does not come up.
+
+**Measured on the iOS 27 simulator** (iPhone 18 Pro Max) with a one-button page
+(`window.print()`, logging both print events), served by the dev server and not committed:
+
+| Where it ran | `navigator.standalone` | Result |
+|---|---|---|
+| A Home Screen clip | true | returned after 68ms; no sheet, no `beforeprint`, no `afterprint` |
+| A Safari tab | false | the iOS print sheet opened |
+
+So iOS drops the call in a Home Screen web app, and no code in the page can raise that
+sheet. His earlier iPhone prints (v18.4.0) were from Safari.
+
+- **`printOrReport(onIgnored)`** is how App prints now. Where `navigator.standalone` is
+  true it listens for `beforeprint` for `PRINT_IGNORED_MS` (500) after the call; none means
+  the call was dropped. App then removes `data-print`, unmounts the timeline sheet (no
+  `afterprint` will) and shows "Printing isn't available in the Home Screen app. Open the
+  app in Safari to print." in the refusal toast. Elsewhere it is `window.print()` alone: no
+  listener, no timer.
+- It asks the event and not the iOS version, so a Home Screen app that prints one day is
+  not told it cannot.
+- Patryk chose the message for this version; printing in place (a PDF through the share
+  sheet) is a ROADMAP entry.
+
+**On DEV, in the desktop pane** with `navigator.standalone` forced true and `print` stubbed:
+the sheet mounted and `data-print` was "timeline" at 150ms; at 850ms both were gone and the
+sentence was on screen. With it false: print called once, no sentence.
+
+**Not verified:** the message inside a real Home Screen app (the simulator's app clips are
+signed out of DEV), a physical iPhone, an iPad.
+
+**Gate:** build 128.10 kB gz · 2744 tests · lint 63 problems, 0 errors · `check:style` OK.
+

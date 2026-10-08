@@ -142,6 +142,13 @@ evidence for each.
   `prefers-contrast: more` block (A10), the popover keyframe pair for
   `ConnectionStatus` (M9), and v18.3.1's `.mgt-edge` top strip (the iOS home-screen blur). Drop any item the device check turns back.
 
+- **Printing from the iPhone Home Screen app** (v18.4.6). iOS ignores `window.print()`
+  there, so the app now says "open the app in Safari to print". A print that works in
+  place needs the PDF built in the app and handed to the iOS share sheet
+  (`navigator.share` with a file, which is defined there; the sheet has Print and Save to
+  Files). That means a PDF library, in a lazy chunk, and both sheets drawn a second way.
+  Not measured: whether the share sheet offers Print for a shared PDF, and an iPad.
+
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**

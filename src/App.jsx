@@ -373,7 +373,7 @@ import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWo
 import { useWindowAtTop } from "./hooks/useWindowAtTop";
 // v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
 import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
-import { onPrintEnd } from "./lib/print-end";
+import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
 import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
@@ -4563,7 +4563,13 @@ function BookingApp({uid}){
     flushSync(function(){setPrintJob(job);});
     document.documentElement.setAttribute("data-print",job.kind);
     setPrintAsk(null);
-    window.print();
+    // v18.4.6: an iPhone's Home Screen app ignores the print call. Say so and
+    // take the job down, which no `afterprint` will do for a print that never
+    // began (lib/print-end.js).
+    printOrReport(function(){
+      document.documentElement.removeAttribute("data-print");setPrintJob(null);
+      flashRefusal(PRINT_IGNORED_TEXT);
+    });
   }
   const printModal=<ModalPresence show={!!printAsk}>{printAsk?<Suspense fallback={null}><PrintModal range={printAsk} onPrint={doPrint} onClose={function(){setPrintAsk(null);}} /></Suspense>:null}</ModalPresence>;
 
