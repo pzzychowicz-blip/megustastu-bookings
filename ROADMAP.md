@@ -115,7 +115,11 @@ evidence for each.
   `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
   drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines), and manual table assignment in
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
-  shares its release, `releaseSwapped`). The next domain is not chosen.
+  shares its release, `releaseSwapped`), and status changes in v18.5.0 (`planStatus`,
+  `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines). Still in App,
+  by lines and commits measured 2026-10-08: `bookAgain` (66, 16), `delBooking` (56, 15),
+  `undoLastAction` (32, 12), `reassignBooking` (44, 9), `settleVoucher` (58, 7). The next
+  domain is not chosen.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history

@@ -208,9 +208,11 @@ describe("every single-booking write in App hands saveBookings the report", () =
     ["the form's edit", "saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal})"],
     ["reassign", "},false,goneReport(id));\n    setError(\"\");"],
     ["the timeline drop", "saveBookings(plan.transform,false,goneReport(id))"],
-    ["a status change", /\},false,goneReport\(id\)\);\s+if\(ok&&\(status==="completed"\|\|status==="seated"\)\)/],
+    // v18.5.0 (#17): the status tap and the cancel both hand over a plan's
+    // transform, so each is told apart by the line beside the call.
+    ["a status change", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+if\(ok&&plan\.flashes\)/],
     ["the voucher carry", "},false,goneReport(c.to));"],
-    ["cancel and no-show", "saveBookings(cancelMemo,false,goneReport(id))"],
+    ["cancel and no-show", /const post=plan\.transform\(bookings\);\s+const ok=saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+wa\.autoHandleCancelIntent/],
     ["manual assign", "saveBookings(plan.transform,false,goneReport(bookingId))"],
   ];
   WITH.forEach(([what, code]) => it(what, () => (

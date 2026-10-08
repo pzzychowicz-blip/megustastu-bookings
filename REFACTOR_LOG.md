@@ -32994,3 +32994,128 @@ from ROADMAP.
 
 **Gate at the push:** build 129.04 kB gz (main chunk, 128.75 on v18.4.9) · 2811 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
 
+
+---
+
+## v18.5.0 — status changes leave BookingApp
+
+**Date:** 2026-10-08 · **Branch:** `feat/v18.5.0-deposits-line-guest-tags` ·
+**Behavioural change:** none in the first section. The header is extended as the
+version's other items land.
+
+One version with a section per item (Patryk, 2026-10-08): #17's next extraction first,
+then the deposits line and guest tags, then the documentation items he chose to bundle.
+
+### Status changes are `lib/status-change.js` (ROADMAP #17)
+
+**Files:** `src/lib/status-change.js` (new, 200 lines) · `src/lib/vouchers.js` (+75) ·
+`src/App.jsx` (5,258 → 5,091 lines) · `tests/status-change.test.js` (new, 32) ·
+`tests/save-path.test.js` · `tests/retry-report.test.js` · `tests/count-label.test.js` ·
+`src/CLAUDE.md` · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**Why this domain** (Patryk chose it from four, AskUserQuestion). Measured on v18.4.10's
+`App.jsx` with `git log -L`: `updateStatus` 104 lines, 23 commits, 7 of them fixes;
+`doCancelBooking` 37, 18, 6. No test ran either (`tests/shortcuts.test.js` checks only
+that S and C call `updateStatus` by name, on a stub).
+
+**No behaviour change.** Three functions moved statement for statement, the exits
+replaced by returned conclusions:
+- `updateStatus` is `planStatus(ctx)`: `{confirmCancel}`, `{voucherAsk}`,
+  `{voucherBack}`, `{refuse}`, `{seatClash}` or `{transform, flashes, flashKind,
+  seatNote}`, in the order the function always asked.
+- `doCancelBooking` is `planCancel(ctx)`: `{voucherBack}` or `{transform}`, memoised by
+  `prev` as before.
+- The completion inside `seatAfterClearing` is `completeCleared(ctx)`.
+- `voucherToAsk`, `voucherHeldBy` and `voucherToRestore` are `voucherDue`, `voucherHeld`
+  and `voucherReturnDue` in `lib/vouchers.js`, taking what they closed over as `src`.
+  App keeps the old names as one-line wrappers, because the form's save, the delete and
+  the two settle functions call them. `seatClashSnap` moved with them; the form's save
+  imports it.
+
+App keeps the capability gate, the two "asked" refs, the modal setters, `saveBookings`
+with `goneReport`, the toast, the seat note, the undo and the WhatsApp cancel hook.
+Five imports left `App.jsx` (`seatNoteFor`, `unseatRestore`, `seatRefusal`,
+`applySeatedShift`, `seatedElapsed`) and `isRedeemedBy`.
+
+**One difference from a literal move, found by the gate.** `planCancel` takes no clock.
+The first version passed `now: Date.now()` to it as `planStatus` gets, and lint went
+from 63 warnings to 64 (`react-hooks/purity` on that call, which fails the 63 cap). The
+old cancel never read the clock (the walk-back question asks whether money was taken,
+not whether the voucher is still open), so the argument was removed, not silenced.
+
+**Verified old against new.** A throwaway test lifted the old `updateStatus`,
+`doCancelBooking`, `seatAfterClearing`, the three voucher predicates and their helpers
+out of `origin/main`'s `App.jsx` (`1bfe0179`) and the new ones out of the working
+tree's, compiled both with the real `booking-logic`, `booking-save`, `vouchers` and
+`status-change` and stubs for the gate, every setter, `saveBookings`, `flash`,
+`flashRefusal`, `goneReport`, `getUser`, `armUndo`, `doSave` and the WhatsApp hook, and
+ran both on generated days: 3,000 seeds, 3–15 bookings, all five statuses, locks,
+bookings with no table, seated parties sharing tables, early, late and overstaying
+seats, vouchers open, spent, void, expired, redeemed by some bookings and missing from
+the list, the module on and off, both refs set and unset, the permission refused, table
+blocks, the optimiser on and off, today, tomorrow and yesterday, eight clock times.
+Every booking and one unknown id went to every status and through cancel with `true`,
+`false` and no no-show argument, and each day ran four clear-and-seat answers.
+**250,696 actions: the same calls in the same order with the same arguments, the same
+return value, the same refs afterwards, the same written list, the same list on a second
+call, the same list for a replay on a changed `prev`, and the same rows returned as the
+same objects** (clock frozen, so history stamps included). The stub `saveBookings` kept
+a mirror, so the seat that follows a clearing ran on the list the clearing wrote.
+
+Reached, of 149,185 status taps: to the cancel confirm 28,666 · asks to redeem 1,545 ·
+asks to restore 1,395 · refused for no table 2,221 · seat clash asked 1,869 · permission
+refused 5,855 · written 91,933 · write held 15,701 (seated 14,265, of which 4,327 with a
+seat shift · un-seat restore 7,650 · seated to completed with the length cut 6,532 ·
+completed without having been seated 17,702 · an id not in the list 11,548 · a seat note
+4,326). Of 89,511 cancels: asks to restore 1,470 · written 75,282, each arming Undo ·
+held 12,759. Of 12,000 clear-and-seat answers: completion then the seat 6,245 · through
+the form's save 1,767 · refused for no table 519 · asks to restore 130.
+
+**The first full run proved nothing about tables, and its counts said so.** It built
+tables from `ALL_TABLES`, which holds `{id, capacity}` objects (`tests/CLAUDE.md`'s
+fixture trap), so no two bookings shared a table and "seat clash asked" was 0 of
+149,185. The run above is the second, with ids.
+
+**Sabotages, each restored afterwards.** The completion's length cut applied to a
+booking that was never seated: fails at seed 1. A seat that lets the optimiser run: seed
+1. The seat checks moved ahead of the money questions: seed 31. A re-entry that asks to
+redeem again: seed 13. The no-show flag dropped: seed 1. `completeCleared` completing a
+listed party that is not seated: seed 1. (The plan named "the two voucher gates swapped"
+as a sabotage. That one cannot fail: one gate needs the target status to be Completed
+and the other needs it not to be, so their order is unobservable.) The test is not
+committed, because it reads the old code from git.
+
+**What stays:** `tests/status-change.test.js`, 32 cases: each question, what each
+transition writes, the replay on a fresh list, the cancel's memo, the three predicates,
+and that App's three functions are still only the gate, the plan and the side effects.
+Each of the six sabotages fails exactly one of its behaviour cases.
+
+**Measured on DEV (1 trial each, real controls in List view, results read back from the
+database).** Seat from the card ("v1834 weekly", booked 19:00, tapped 17:20): `seated`,
+time 17:20, length 190, history "status → seated" and "seated early: time adjusted
+19:00 → 17:20", toast "Booking saved." The ⋯ popup's Confirmed on that seated booking:
+time 19:00, length 90, "un-seated: time restored 17:20 → 19:00, length 190 → 90 min".
+Seated again and completed from the card: `completed`, length 15, `stayedMin` 15.
+Cancel from the ⋯ popup ("Anna Priks"): the confirm, then `cancelled` with history
+"cancelled" and the pill "Booking cancelled · Undo"; Undo: `confirmed`, "cancellation
+undone". Seat onto an occupied table ("v1833-recD" on 1A, "RQ46 HeldLands" seated
+there): "That table is still occupied … 1A still has RQ46 HeldLands seated (since
+15:30)"; Complete them & seat: RQ46 HeldLands `completed`, `stayedMin` 111, "status →
+completed (table cleared to seat another party)", and v1833-recD `seated` at 17:21.
+Complete a booking holding an open voucher ("WL48 A", DH99-XKS9, 80 €): the redeem
+prompt opened with the booking still `confirmed`; Redeem & complete: `completed`, the
+voucher at 0 with a ledger entry for the booking. The ⋯ popup's Confirmed on it: the
+restore prompt; Restore to voucher: `confirmed`, the voucher at 80, one reversal.
+
+**Not verified.** The quick-status popup opened by a hold on the timeline or the plan
+(it needs a real press; the List's ⋯ opens the same component and calls the same
+`updateStatus`). The S and C keys. A second device. The DEV taps were `el.click()`, not
+a finger, and the seat tap landed while the ⋯ popup was still fading out, which a finger
+could not do. The voucher was attached by a direct DEV write, and that probe loaded a
+second copy of the Firebase SDK, which threw "Maximum call stack size exceeded" inside
+its own `update()` (the stack names the copy's URL, without the app's `?v=` hash). The
+app's own SDK logged no error.
+
+**Gate.** Build: main bundle 129.23 kB gz (129.04 recorded when v18.4.10 was pushed;
+not re-measured on `main` here). Tests: 2,843 (2,811 before the new file's 32). Lint:
+63 problems, 0 errors. `check:style`: OK.

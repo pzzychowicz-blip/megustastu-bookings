@@ -61,6 +61,7 @@ import * as day from "../src/lib/day.js";
 import * as submitGuard from "../src/lib/submitGuard.js";
 import * as recurringLib from "../src/lib/recurring.js";
 import * as drafts from "../src/lib/drafts.js";
+import * as statusChange from "../src/lib/status-change.js";
 
 // ── The lib modules the lifted code may bind, by basename ───────────────────
 // A lifted function that names an import from any OTHER module (a component, a
@@ -76,6 +77,7 @@ const LIB = {
   "submitGuard": submitGuard,
   "recurring": recurringLib,
   "drafts": drafts,
+  "status-change": statusChange,
 };
 
 const read = (rel) => stripComments(readFileSync(new URL("../" + rel, import.meta.url), "utf8")).join("\n");
@@ -183,7 +185,7 @@ function compile(fileSrc, lifted, env) {
 // v18.3.4: `memoByPrev` moved to lib/booking-save.js, so it is bound as an
 // import now rather than lifted.
 const APP_SAVE_NAMES = [
-  "cleanPhoneOf", "withClearedSeats", "seatClashSnap", "undoDelta",
+  "cleanPhoneOf", "withClearedSeats", "undoDelta",
   "doSaveEdit", "doSaveNew", "doSave", "openEdit",
 ];
 const APP_SAVE = APP_SAVE_NAMES.map((n) => liftFunction(APP, n));
