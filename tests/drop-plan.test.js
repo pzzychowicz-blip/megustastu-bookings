@@ -173,16 +173,26 @@ describe("planDrop: what a displaced party is left with", () => {
     expect(LIB).not.toContain("_locked:false");
   });
 
-  it("takes every table of the set from an occupant, and leaves it the rest", () => {
-    // `a` (4 guests) dropped on 3 needs a joined set; `b` holds 3 and 5A by hand.
-    const list = [bk("a", "19:00", 4, ["7"]), bk("b", "19:00", 2, ["3", "5A"], { _manual: true, _locked: true })];
+  it("leaves each occupant unlocked for the optimiser, which seats it off the set", () => {
+    // Two parties hold 3 over `a`'s window, so there is no swap: a displacement.
+    // `b` also holds 4 by hand; the release leaves it 4, unlocked.
+    const list = [bk("a", "19:00", 2, ["2"]),
+      bk("b", "18:00", 2, ["3", "4"], { _manual: true, _locked: true }),
+      bk("c", "20:00", 2, ["3"], { _manual: true, _locked: true })];
     const plan = drop(list, "a", "3");
-    const set = byId(plan.transform(list), "a").tables;
-    expect(set).toContain("3");
-    // before the optimiser pass: the same release, asked directly
-    const released = releaseSwapped(list[1], [{ id: "b", tables: set }]);
-    expect(released.tables).toEqual(["5A"].filter((t) => !set.includes(t)));
-    expect(released._locked).toBe(false);
-    expect(released._manual).toBe(false);
+    expect(plan.done).toBe("A moved to 3 — B, C reassigned.");
+    const out = plan.transform(list);
+    expect(byId(out, "a").tables).toEqual(["3"]);
+    for (const id of ["b", "c"]) {
+      const o = byId(out, id);
+      expect(o._locked, id).toBe(false);
+      expect(o._manual, id).toBe(false);
+      expect(o.tables.length, id).toBeGreaterThan(0);
+      expect(o.tables, id).not.toContain("3");
+      expect(o._conflict, id).toBeFalsy();
+    }
+    // and what the optimiser was handed for `b` is the picker's release
+    expect(releaseSwapped(list[1], [{ id: "b", tables: ["3"] }])).toStrictEqual(
+      Object.assign({}, list[1], { tables: ["4"], _locked: false, _manual: false }));
   });
 });
