@@ -1454,7 +1454,7 @@ function BookingApp({uid}){
     reminderBanners, reminderCount,
   } = useReminders({ nowMins, setWriteWarning, reminderEditor, setReminderEditor, setConfirmReminderDel });
   // ── v16.0.0: Waitlist state ─────────────────────────────────────────────────
-  const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist } = useWaitlist({ setWriteWarning });
+  const { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist, holdEntry: holdWaitlistEntry, releaseEntry: releaseWaitlistEntry } = useWaitlist({ setWriteWarning });
   // ── v18.0.0: Gift vouchers ──────────────────────────────────────────────────
   // The email is read during render, the way ConnectionStatus reads it — it is
   // stamped onto `issuedBy`/`by` at write time, and `BookingApp` is keyed on
@@ -2322,7 +2322,7 @@ function BookingApp({uid}){
 
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
   // returnOf pattern) and remember the entry id — doSave's new-booking path
-  // removes it once the booking is dispatched.
+  // holds it, and removes it once the booking has landed (v18.4.8).
   function bookFromWaitlist(w){if(refused("waitlistManage"))return;
     const avail=waitAvail[w.id];
     openForm(Object.assign({},EMPTY_FORM,{
@@ -2711,7 +2711,21 @@ function BookingApp({uid}){
     // the rule and the next two weeks, and no first visit). Nothing needs the
     // rule sooner: the generator starts the weeks AFTER `startDate` (v18.3.3),
     // and the first visit is this booking, already stamped with the rule's id.
-    const ok=saveBookings(plan.next,false,plan.rule?{onLanded:function(){addRule(plan.rule);}}:undefined);
+    // v18.4.8: so is the waitlist party this booking came from (Book from the
+    // panel). It was removed here, at the dispatch, and a booking that was
+    // then discarded from the banner had lost its party too (reproduced on
+    // DEV). It is HELD from now (hidden on this device, still stored), removed
+    // when the booking lands, and shown again if the write is dropped.
+    const wlId=pendingWaitlistRef.current;
+    pendingWaitlistRef.current=null;
+    if(wlId) holdWaitlistEntry(wlId);
+    const ok=saveBookings(plan.next,false,(plan.rule||wlId)?{
+      onLanded:function(){
+        if(plan.rule) addRule(plan.rule);
+        if(wlId){removeFromWaitlist(wlId);releaseWaitlistEntry(wlId);}
+      },
+      onDiscarded:function(){if(wlId) releaseWaitlistEntry(wlId);}
+    }:undefined);
     // WhatsApp sandbox: if this save came from accepting a draft, flip the
     // source conversation to "accepted" + link the new booking id (no-op
     // otherwise — draftSourceRef is only set by handleAcceptDraft).
@@ -2721,10 +2735,6 @@ function BookingApp({uid}){
     // link it so the conversation shows the LinkedBookingCard.
     wa.linkBookingByPhone(plan.id, f.phone);
     if(plan.flash&&ok) flash(plan.flash.kind,plan.flash.note);
-    // v16.0.0: this new booking converted a waitlist entry (Book from the
-    // panel) — remove the entry now the booking is dispatched (a held write
-    // shows optimistically + auto-retries, so the intent stands either way).
-    if(pendingWaitlistRef.current){removeFromWaitlist(pendingWaitlistRef.current);pendingWaitlistRef.current=null;}
     // v17.16.0: armed only HERE — after the write is dispatched, on the
     // line that closes the form. Every early return above leaves the form
     // open with an error and the guard READY, so Save still works.

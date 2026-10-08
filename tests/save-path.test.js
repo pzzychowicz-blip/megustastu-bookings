@@ -311,6 +311,9 @@ function saver(h, mirror, dispatchOk) {
     const rest = (args[1] ? [args[1]] : []).concat(report ? [{ report: Object.keys(report).sort() }] : []);
     h.calls.push(["saveBookings", typeof fn === "function" ? "<fn>" : "<value>"].concat(rest));
     if (report && report.onLanded && dispatchOk) (h.landings = h.landings || []).push(report.onLanded);
+    // v18.4.8: a held write that is then dropped (`discarded: true`) is told
+    // so at the same moment a landing would be, after the handler has run.
+    if (report && report.onDiscarded && !dispatchOk && h.discarded) (h.landings = h.landings || []).push(report.onDiscarded);
     return dispatchOk;
   };
 }
@@ -321,13 +324,15 @@ function saver(h, mirror, dispatchOk) {
 // state as values, refs as `{current}`, setters and side-effects as recorders.
 // `opts`: bookings, mirror (bookings), form, editId, blocks, autoOptimizer
 //   (false), swapAffected, at (TODAY 19:30), statusOverride, pendingWaitlist,
-//   guard (READY), dispatchOk (true), env (overrides).
+//   guard (READY), dispatchOk (true), discarded (false: a held write stays
+//   queued), env (overrides).
 function appEnv(opts) {
   const clock = freeze(opts.at || TODAY + "T19:30:00");
   const bookings = opts.bookings || [];
   const h = { calls: [], writes: [], guardRef: { current: opts.guard || submitGuard.READY } };
   const rec = (name) => (...args) => { h.calls.push([name].concat(args)); };
   h.pendingWaitlistRef = { current: opts.pendingWaitlist || null };
+  h.discarded = opts.discarded === true;
   h.env = Object.assign({
     bookings,
     liveBookings: bookingLogic.syncLiveDurations(bookings, clock.today, clock.nowMins),
@@ -356,6 +361,8 @@ function appEnv(opts) {
     setSeatNote: rec("setSeatNote"),
     addRule: (...args) => { h.calls.push(["addRule"].concat(args)); return args[0]; },
     removeFromWaitlist: rec("removeFromWaitlist"),
+    holdWaitlistEntry: rec("holdWaitlistEntry"),
+    releaseWaitlistEntry: rec("releaseWaitlistEntry"),
     wa: {
       completeModifyApply: rec("wa.completeModifyApply"),
       completeDraftAccept: rec("wa.completeDraftAccept"),
@@ -2198,7 +2205,7 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["onLanded"]})",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "wa.completeDraftAccept("muyfzww04xjv")",
           "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 000 001")",
           "flash(null, "")",
@@ -2244,7 +2251,7 @@ describe("Save — a new booking", () => {
   it("Repeat weekly, held: no rule until the booking lands", () => {
     const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), dispatchOk: false });
     expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
-    expect(out.calls).toContain('saveBookings("<fn>", {"report":["onLanded"]})');
+    expect(out.calls).toContain('saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})');
     expect(Object.values(out.writes[0].rows)[0], "the booking is still stamped for its rule").toMatch(/"recurringId":"[0-9a-z]+"/);
   });
   it("a booking that does not repeat carries no report", () => {
@@ -2361,16 +2368,47 @@ describe("Save — a new booking", () => {
       }
     `);
   });
-  it("from the waitlist: the entry is removed", () => {
+  // v18.4.8: these two snapshots changed with the behaviour, on purpose. The
+  // entry was removed at the dispatch (`removeFromWaitlist` before
+  // `setShowForm`), landed or not; it is held at the dispatch and removed
+  // when the write lands, which the harness plays after the handler.
+  it("from the waitlist: the entry is held at Save, and removed when the booking lands", () => {
     expect(runSave({ pendingWaitlist: "w9", form: newDraft({ name: "Ana" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "holdWaitlistEntry("w9")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "wa.completeDraftAccept("muyfzww04xjv")",
           "wa.linkBookingByPhone("muyfzww04xjv", "+")",
           "flash(null, "")",
+          "setShowForm(false)",
+          "setViewDate("2026-10-14")",
           "removeFromWaitlist("w9")",
+          "releaseWaitlistEntry("w9")",
+        ],
+        "guard": "dispatched",
+        "pendingWaitlistAfter": null,
+        "writes": [
+          {
+            "replay": "same prev → same object; fresh prev → equal",
+            "rows": {
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+            },
+          },
+        ],
+      }
+    `);
+  });
+  it("a save the write path holds: no flash, and the waitlist entry is held, not removed", () => {
+    expect(runSave({ pendingWaitlist: "w9", dispatchOk: false, form: newDraft({ name: "Ana" }) })).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "setErrorField(null)",
+          "holdWaitlistEntry("w9")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
+          "wa.completeDraftAccept("muyfzww04xjv")",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
         ],
@@ -2387,29 +2425,13 @@ describe("Save — a new booking", () => {
       }
     `);
   });
-  it("a save the write path holds: no flash, the waitlist entry still goes", () => {
-    expect(runSave({ pendingWaitlist: "w9", dispatchOk: false, form: newDraft({ name: "Ana" }) })).toMatchInlineSnapshot(`
-      {
-        "calls": [
-          "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
-          "removeFromWaitlist("w9")",
-          "setShowForm(false)",
-          "setViewDate("2026-10-14")",
-        ],
-        "guard": "dispatched",
-        "pendingWaitlistAfter": null,
-        "writes": [
-          {
-            "replay": "same prev → same object; fresh prev → equal",
-            "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
-            },
-          },
-        ],
-      }
+  it("a held save that is then discarded: the waitlist entry is shown again, and never removed", () => {
+    const out = runSave({ pendingWaitlist: "w9", dispatchOk: false, discarded: true, form: newDraft({ name: "Ana" }) });
+    expect(out.calls.filter((c) => /Waitlist/.test(c))).toMatchInlineSnapshot(`
+      [
+        "holdWaitlistEntry("w9")",
+        "releaseWaitlistEntry("w9")",
+      ]
     `);
   });
   it("what a new booking normalises", () => {

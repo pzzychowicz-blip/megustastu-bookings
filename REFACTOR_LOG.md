@@ -32589,3 +32589,44 @@ by Retry, is told nothing. Nothing passes `onDiscarded` yet, so this commit chan
 behaviour.
 
 **Gate:** build 128.32 kB gz (main chunk, 128.23 on v18.4.7) · 2767 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — a waitlist party is held until its booking lands
+
+**Files:** `src/hooks/useWaitlist.js` · `src/lib/waitlist-match.js` · `src/App.jsx` ·
+`tests/waitlist-match.test.js` (7 new) · `tests/save-path.test.js` (1 new, 3 snapshots) ·
+`tests/recurring.test.js` (two pinned strings) ·
+`src/CLAUDE.md` · `src/hooks/CLAUDE.md` · `src/lib/CLAUDE.md` · `GLOSSARY.md`
+
+Patryk's call (AskUserQuestion): hide and remove on landing, over "remove now, restore on
+Discard", which would still lose the party with a closed tab.
+
+- `useWaitlist` keeps a per-device list of entry ids being booked. The `waitlist` it
+  returns is `withoutHeld(stored, held)` (`lib/waitlist-match.js`), which is the stored
+  list itself when nothing is held, so the matcher's effect and the memos keyed on it see
+  no change that is not one. Saves compute from the mirror, as before.
+- `doSaveNew` holds the entry BEFORE the dispatch, removes it in the write's `onLanded`
+  (then releases the hold) and releases it in `onDiscarded`. The removal at the dispatch
+  is gone.
+- While a write sits parked (the banner up, neither button pressed) the party is in
+  neither list on this device. The banner names the change and cannot be dismissed.
+- Other devices see the entry until the booking reaches the server.
+
+**`tests/save-path.test.js`: three snapshots changed, with the behaviour.** The two
+waitlist scenarios (`removeFromWaitlist` at the dispatch → `holdWaitlistEntry` before it,
+and the removal at the landing), and "Repeat weekly", whose report now carries
+`onDiscarded` beside `onLanded`. Read line by line after `-u`; no other snapshot moved.
+
+**Measured on DEV (1 trial each), the bookings `update()` forced to reject by the same
+temporary switch:**
+
+| Case | Server waitlist | This device | Server bookings |
+|---|---|---|---|
+| Save, write parked | party still there | badge and rows gone, banner up | none |
+| then Discard | party there | badge and Book row back | none |
+| Save, parked, switch off, Retry | party removed | booking on the timeline | one, table 1A |
+| Save, parked, reload | party there | badge and Book row back, no banner | none |
+
+**Not measured:** a held write (the freshness gate) as opposed to a rejected one; a second
+device; a real offline period.
+
+**Gate:** build 128.48 kB gz (main chunk) · 2775 tests passed · lint 63 problems, 0 errors · `check:style` OK.
