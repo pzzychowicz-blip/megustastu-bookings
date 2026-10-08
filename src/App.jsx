@@ -113,7 +113,7 @@ import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop } from "./lib/drop-plan";
-import { planAssign } from "./lib/manual-assign";
+import { planAssign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
 
@@ -1065,7 +1065,12 @@ function BookingApp({uid}){
   // A ref (not an arg) because the kitchen-confirm modal + its Enter shortcut
   // call doSave() with no args after the modal round-trip.
   const statusOverrideRef=useRef(null);
-  const [swapAffected, setSwapAffected] = useState(null);
+  // v18.4.9: the swap the picker handed the form, and the slot it was picked
+  // for. `swapAffected` is what the saves read: null once the draft has left
+  // that slot (`liveSwap`, lib/manual-assign.js).
+  const [swapPicked, setSwapAffected] = useState(null);
+  const [swapPickedFor, setSwapPickedFor] = useState(null);
+  const swapAffected = liveSwap(swapPicked, swapPickedFor, form);
   const confirmKitchen = modalOpen.kitchen || null;
   const setConfirmKitchen = setModalFns.kitchen;
   // v18.0.0: the redeem prompt, raised BY a completion exactly as the kitchen
@@ -3784,7 +3789,7 @@ function BookingApp({uid}){
     if(!manualTarget) return null;
     if(manualTarget==="__new__"){return {id:"__new__",name:form.name||"New booking",size:Number(form.size)||2,time:form.time||"13:00",duration:form.customDur||getDur(Number(form.size)||2),tables:Array.isArray(form.manualTables)?form.manualTables:[],date:form.date,status:"confirmed",_locked:true};}
     let found=bookings.find(function(b){return b.id===manualTarget;})||null;
-    if(found&&manualTarget===editId){found=Object.assign({},found,{size:Number(form.size)||2,time:form.time||found.time,duration:form.customDur||getDur(Number(form.size)||2),date:form.date||found.date,preference:form.preference||found.preference});}
+    if(found&&manualTarget===editId){found=Object.assign({},found,{size:Number(form.size)||2,time:form.time||found.time,duration:form.customDur||getDur(Number(form.size)||2),date:form.date||found.date,preference:form.preference||found.preference},Array.isArray(form.manualTables)&&form.manualTables.length>0?{tables:form.manualTables}:null);}
     return found;
   })();
 
@@ -4627,7 +4632,15 @@ function BookingApp({uid}){
     booking={manualBooking}
     bookings={manualTarget==="__new__"?bookings.filter(function(b){return b.date===form.date;}):bookings}
     blocks={tableBlocks}
-    onSave={function(tables,locked,affected){if(manualTarget==="__new__"){setForm(function(f){return Object.assign({},f,{manualTables:tables});});setSwapAffected(affected||null);setManualTarget(null);}else{if(refused("bookingAssign"))return;manualAssign(manualBooking.id,tables,locked,affected);}}}
+    onSave={function(tables,locked,affected){
+      // v18.4.9: from the booking form the pick goes into the DRAFT, for an
+      // edit as for a new booking, and Save writes it. The edit form's picker
+      // wrote the stored booking at once while showing the draft's day.
+      const toDraft=manualTarget==="__new__"||(showForm&&manualTarget===editId);
+      if(manualTarget!=="__new__"&&refused("bookingAssign")) return;
+      if(toDraft){setForm(function(f){return Object.assign({},f,{manualTables:tables,_clearManual:false});});setSwapAffected(affected||null);setSwapPickedFor(swapSlot(form));setManualTarget(null);}
+      else manualAssign(manualBooking.id,tables,locked,affected);
+    }}
     onDirty={setManualDirty}
     onClose={requestCloseManual} />:null}</ModalPresence>;
 

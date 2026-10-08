@@ -122,13 +122,12 @@ evidence for each.
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`). The next domain is not chosen.
 
-- **A Swap from the edit form on another date leaves the other party without a table**
-  (v18.4.7's `/code-review`; older than it). The picker's Swap releases the parties it
-  takes from on the DRAFT's date, and `planAssign` re-optimises `viewDate`, the day on
-  screen. When the two differ (the form's date changed before Assign), a released party is
-  stored unlocked with its remaining tables and nothing seats it again: run on the lib,
-  it came back with `tables: []`. Not reproduced through the form. The fix is which date
-  the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
+- **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
+  DEV). An edit parked by a forced rejection at 10:46:33Z on 2026-10-08 was on the server
+  76 s later, beside an automatic "2 bookings re-placed" line 2 ms apart. Three attempts
+  to repeat it stayed parked, and `retryParked` has one caller, the banner's button. A
+  press of Retry in the shared Browser pane cannot be ruled out. If it recurs: note
+  whether the tab was hidden and what the activity log holds for that second.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at

@@ -32762,3 +32762,60 @@ and Save: `accepted`, linked to the new booking's id. (The second does not separ
 source from the link by phone number, which marks a pending draft accepted too.)
 
 **Gate:** build 128.62 kB gz (main chunk) · 2790 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — the booking form's picker fills the draft; a swap belongs to its slot
+
+**Files:** `src/App.jsx` · `src/lib/manual-assign.js` · `tests/manual-assign.test.js`
+(18 → 25) · `src/lib/CLAUDE.md` · `ROADMAP.md` (the entry removed; one added)
+
+Added at Patryk's choice, from v18.4.7's review, where it was "the picker re-optimises
+the wrong day", read from the lib. **Reproduced through the form on DEV before the edit
+(1 trial), and it was three faults:** RQ46 LandOK (8 Oct 14:00, i1), the form moved to
+9 Oct 20:00, Assign, Swap busy, 1A.
+
+1. `v1834 weekly2` (9 Oct 19:30) lost 1A and was stored with `tables: []`, unlocked.
+2. RQ46 LandOK was stored at once on 1A, locked, on its OLD day and time, where Anna
+   Priks held 1A at 14:00 (the reconcile effect later moved Anna to 1B).
+3. The form then read "i1 (auto) · was: 1A": Save would have dropped the pick.
+
+The cause: the edit form's picker shows the DRAFT's day and `manualAssign` wrote the
+STORED booking immediately. **Decision (AskUserQuestion): the picker fills the draft**,
+as it already did for a new booking, and Save writes it. `applyEdit` already took
+`manualTables` and the swap. Assign from the timeline or a banner still writes at once.
+
+**What changed.**
+- The picker's `onSave` routes to the draft when `manualTarget==="__new__"` or the form
+  is open on that booking. The `bookingAssign` capability check stays for the edit.
+- `manualBooking` shows the draft's pick when the picker is reopened.
+- **A swap belongs to the slot it was picked for** (`swapSlot`, `liveSwap`). The form
+  holds the parties to release until Save. Read from the code, the new-booking path had
+  the same hole: change the date after a Swap pick and Save released a party on the
+  other day and skipped the clash check. `swapAffected` is now derived, null once the
+  draft's date, time, size or duration left the slot, so Save's clash check answers.
+- `planAssign` also re-optimises the day of any released party that is not `viewDate`.
+  Not reachable from the form any more; it covers a picker opened on a booking of
+  another day. The pinned test ("the day on screen, not the booking's own") is unchanged.
+
+**Sabotage:** the extra pass skipped, and `liveSwap` returning the swap whatever the
+slot, each fail the new tests (1 and 3 failures).
+
+**Measured on DEV after it (1 trial each):** the same steps with 1B: Swap & Assign wrote
+nothing (three bookings read back unchanged) and the form read "1B · Clear". Time moved
+to 20:15, Save: "Selected tables are not available at this time.", nothing written.
+Back to 20:00, Save, Confirm on the kitchen prompt: RQ46 LandOK on 9 Oct 20:00, 1B,
+locked, "tables manually set: 1B"; `v1833-recG` moved 1B → 2; `v1834 weekly2` seated on
+1A. Then Assign from the timeline (RQ46 Poke → 4): stored at once, locked.
+
+**Not verified:** the stale swap on a NEW booking through the form (the helper is tested,
+the form path was not run); a second device.
+
+**Unexplained, on ROADMAP.** During commit 1's check an edit of WL48 A was parked by a
+forced rejection at 10:46:33Z and never retried by a tool call. The server holds it with
+`updatedAt` 10:47:49Z, and the activity log has "edited: time 18:00→19:00" and an AUTO
+"2 bookings re-placed" 2 ms apart at that time. Three attempts to reproduce (a parked
+edit left 105 s; left 2 min after the rejection switch was removed; the original
+timing, switch removed 7 s after the park, watched 88 s) all stayed parked. No code path replays
+a parked write without Retry (`retryParked` has one caller, the banner). A press of
+Retry in the shared Browser pane would explain it and cannot be ruled out.
+
+**Gate:** build 128.75 kB gz (main chunk, 128.62 after commit 2) · 2797 tests passed (2790) · lint 63 problems, 0 errors · `check:style` OK.
