@@ -32178,3 +32178,51 @@ this is a remainder of the old rule and not something this version introduced.
   table is a refactor of files this version did not touch.
 
 **Gate:** build 127.45 kB gz (main chunk, +0.01) · 2706 tests passed (4 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+## v18.4.6 — a bookings write reports what became of it
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.6-retry-queue-reporting` ·
+**Behavioural change:** yes, in the write path. "Repeat weekly" writes its rule when the
+booking lands; a change replayed after its booking was deleted elsewhere is said, in the
+"Couldn't save" banner; a refused write whose replay is identical is retried and parked
+where it used to vanish. No rules change, so no console step.
+
+**The gap.** `saveBookings` returns a boolean at the dispatch. A held or rejected
+function-form write is settled later, by the retry queue, and nothing told the caller how.
+Two ROADMAP entries (v18.3.3's and v18.3.5's reviews) waited on that.
+
+**Both reproduced on DEV on v18.4.5 before any edit**, with `Date.now` pushed 150s ahead
+for the one Save so the freshness gate held the write:
+
+- An edit of a test booking was held and the form closed. The booking was then removed
+  from the server. The queue drained on the next snapshot: no banner, no console line, the
+  booking gone from the screen.
+- A new booking with "Repeat weekly" was held and the page reloaded 120ms later. On the
+  server afterwards: the rule (`startDate` 2026-10-08), the generated bookings for
+  2026-10-15 and 2026-10-22, and no booking for the 8th.
+
+### Commit 1 — the report
+
+**Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` ·
+`tests/write-path.test.js` (7 new) · `tests/retry-report.test.js` (new, 7) ·
+`src/App.jsx` (version)
+
+- **`saveBookings(next, isSilent, report)`**, the report optional: `onLanded()` and
+  `replayRefusal(prev)`. It rides with the queued item through all three doors into the
+  queue (the stale gate, the legacy-shape hold, the rejection), the park and the banner's
+  Retry. The internal `tryN` and `carriedLabel` moved one place right; `drainPending` is
+  their only caller.
+- **`onLanded` fires once per report** (a `WeakSet`), in the write's `.then` ahead of its
+  `.catch`, in its own `try` so a throw cannot reach that `.catch` and queue a landed write
+  again. **An empty patch also counts as landed**: on a replay it means the first attempt
+  reached the server and only its answer was lost, so the fresh list already holds the
+  change. A patch skipped as a duplicate does not fire; its twin does.
+- **`replayOutcome(item, prev)`** (`lib/write-path.js`) is what `drainPending` does with
+  one item: retry, park, or refuse with the caller's sentence. The refusal is asked BEFORE
+  the cap, so a write for a deleted booking is never parked with a Retry that cannot work.
+  Refusals go to `setWriteWarning`, the banner that stays until dismissed (Patryk's choice
+  over the 3.5s toast).
+- No caller passes a report yet, so this commit changes no behaviour.
+
+**Gate:** build 127.68 kB gz (127.45 before) · 2720 tests (2706) · lint 63 problems,
+0 errors · `check:style` OK.
