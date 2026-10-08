@@ -3146,9 +3146,13 @@ describe("`_manual` implies `_locked`, which is what keeps the two previews agre
     readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
   const MANUAL = stripComments(
     readFileSync(new URL("../src/components/ManualModal.jsx", import.meta.url), "utf8")).join("\n");
+  const ASSIGN = stripComments(
+    readFileSync(new URL("../src/lib/manual-assign.js", import.meta.url), "utf8")).join("\n");
 
   it("manualAssign writes _locked from its argument and nothing else", () => {
-    expect(/_manual:true,_locked:locked===true/.test(APP)).toBe(true);
+    // v18.4.7: the write is `planAssign` (lib/manual-assign.js), which App hands `locked` as it came.
+    expect(/_manual:true,_locked:locked===true/.test(ASSIGN)).toBe(true);
+    expect(/planAssign\(\{[^}]*locked:locked,/.test(APP)).toBe(true);
   });
 
   it("every ManualModal onSave call passes the literal true", () => {
@@ -3179,8 +3183,8 @@ describe("`_manual` implies `_locked`, which is what keeps the two previews agre
 // ── releaseSwapped (v18.3.4 /code-review) ───────────────────────────────────
 // What a party keeps when the table picker's Swap takes tables from it. Three
 // doors apply it — the edit's save, the new booking's save (both run in
-// tests/save-path.test.js's swap scenarios) and App's `manualAssign`, the
-// picker's Swap outside the form, which nothing else here runs.
+// tests/save-path.test.js's swap scenarios) and `planAssign`, the picker's
+// Swap outside the form (tests/manual-assign.test.js runs it).
 describe("releaseSwapped: what a swap leaves the party it takes from", () => {
   const holder = { id: "h", name: "Ana", tables: ["5A", "5B"], _manual: true, _locked: true, status: "confirmed" };
 
@@ -3195,8 +3199,8 @@ describe("releaseSwapped: what a swap leaves the party it takes from", () => {
   });
 
   it("is what manualAssign applies", () => {
-    const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
-    const body = APP.slice(APP.indexOf("function manualAssign("), APP.indexOf("setManualTarget(null)", APP.indexOf("function manualAssign(")));
+    // v18.4.7: the picker's write is `planAssign` (lib/manual-assign.js).
+    const body = stripComments(readFileSync(new URL("../src/lib/manual-assign.js", import.meta.url), "utf8")).join("\n");
     expect(body).toContain("releaseSwapped(x,affected)");
     expect(body).not.toContain("_locked:false");
   });

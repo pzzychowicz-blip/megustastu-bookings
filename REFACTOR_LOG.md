@@ -32439,3 +32439,61 @@ means the sheet deciding which flags fit.
 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
 rules suite was not run and there is no PROD rules step.
 
+
+---
+
+## v18.4.7 — manual table assignment out of BookingApp (#17)
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.7-manual-assign-plan` ·
+**Behavioural change:** none. No rules change, so no console step.
+
+### Commit 1 — `planAssign`
+
+**Files:** `src/lib/manual-assign.js` (new, 41 lines) · `src/App.jsx` (5,228 → 5,220
+lines) · `tests/manual-assign.test.js` (new, 11) · `tests/booking-logic.test.js` ·
+`tests/retry-report.test.js` · `src/lib/booking-save.js` (a comment) · `src/lib/CLAUDE.md`
+· `ROADMAP.md`
+
+`manualAssign`'s updater moved to `planAssign(ctx)` statement for statement. It returns
+`{transform, reshuffles}`: the function `saveBookings` is handed, and whether the picker's
+Swap took tables from another party (the old `affected&&affected.length>0`, which gates
+the re-optimise and the flash). App's `manualAssign` is the plan, `saveBookings` with
+`goneReport`, `setManualTarget(null)` and the flash, in the old order. `releaseSwapped`
+left App's imports with it. `App.jsx` loses 8 lines; what the move buys is that a test can
+run the picker's write, which none could.
+
+**Verified old against new.** A throwaway test lifted the old `manualAssign` out of
+`origin/main`'s `App.jsx` (`49d13d56`) and the new one out of the working tree's, compiled
+both with the real `booking-logic`, `releaseSwapped` and `planAssign` and stub
+`saveBookings` / `setManualTarget` / `flash` / `goneReport` / `getUser`, and ran both on
+generated days (3,000 seeds, 3–15 bookings, mixed statuses and locks, table blocks,
+optimiser on and off, today and later days), twelve assignments each: **36,000
+assignments, the same calls in the same order, the same written list, and the same list
+for a replay on a changed `prev`**, history entries included (clock frozen), and the same
+rows returned as the same objects. Reached: no swap 26,421 · swap 9,579 (7,812 moved
+another party's tables) · an id not in the list 2,172 · `locked` not the literal true
+20,547 (false, undefined, `1`, `"true"`) · `saveBookings` answering false 5,336 · the
+booking on a day other than the one on screen 6,763 · optimiser switch off 17,715 · flash
+8,139. The swap list was built the way `ManualModal` builds it in about half the swap
+cases and at random (unknown ids, tables the party does not hold) in the rest.
+**Sabotages:** `_locked:true` for `locked===true` failed at seed 1; re-optimising the
+booking's own date for `viewDate` failed at seed 6. The test is not committed, because it
+reads the old code from git. (The first run finished every comparison and then hit
+vitest's 5s limit, which is where the counts were printed; the re-run with the limit
+raised passed.)
+
+**What stays:** `tests/manual-assign.test.js`, one case per outcome, and that App's
+function decides nothing. The two tests that read `manualAssign`'s text in App
+(`_locked:locked===true`, "is what manualAssign applies") read the new file; the
+caller-list entry in `tests/retry-report.test.js` names the new call.
+
+**Measured on DEV (1 trial each), through the picker.** Assign: Carlos (21:00, table 1A)
+→ table 2; stored `tables: ["2"]`, `_manual` and `_locked` true, history "tables manually
+assigned: 2". Swap busy: Carlos → 1B, held by two unlocked parties over his window;
+stored Carlos `["1B"]` locked, v1833-recD 1B → 1A, v1833-recA 1B → 2, both unlocked and
+without a conflict, the toast "Tables re-optimised.", the picker closed.
+
+**Seen and not changed.** The swap re-optimises `viewDate`, the day on screen. From an
+edit form whose date was changed that is not the booking's day. Not reproduced.
+
+**Gate:** build 128.24 kB gz (main chunk, +0.08 on v18.4.6) · 2756 tests passed (11 new) · lint 63 problems, 0 errors · `check:style` OK.
