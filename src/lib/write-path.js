@@ -248,7 +248,11 @@ export function retryDecision(tries, max) {
 // null; this file does not know what a booking is.
 export function replayOutcome(item, prev, max) {
   const ask = item && item.report && item.report.replayRefusal;
-  const why = typeof ask === "function" ? ask(prev) : null;
+  // A question that THROWS is no objection (/code-review): the drain has
+  // already emptied the queue when it asks, so a throw here would lose every
+  // write still waiting behind this one, replayed and parked by nobody.
+  let why = null;
+  if (typeof ask === "function") { try { why = ask(prev); } catch (e) { console.warn("[SAFE] a queued write's replayRefusal threw; replaying it.", e); } }
   if (why) return { action: "refuse", message: String(why) };
   const d = retryDecision(item.tries, max);
   return d.action === "retry" ? d : { action: "park", tries: d.tries };

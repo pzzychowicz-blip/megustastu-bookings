@@ -407,6 +407,13 @@ describe("replayOutcome — retry, park, or drop with a sentence", () => {
     expect(seen).toEqual([fresh]);
     expect(seen[0]).toBe(fresh);
   });
+  it("a question that throws is no objection: the write is replayed, and the drain goes on", () => {
+    const warn = console.warn; console.warn = () => {};
+    try {
+      expect(replayOutcome({ tries: 0, report: { replayRefusal: () => { throw new Error("boom"); } } }, []))
+        .toEqual({ action: "retry", tries: 1 });
+    } finally { console.warn = warn; }
+  });
   it("ignores a report that carries only onLanded", () => {
     expect(replayOutcome({ tries: 0, report: { onLanded() {} } }, []).action).toBe("retry");
   });
