@@ -112,9 +112,16 @@ export const TimelineSheet = memo(function TimelineSheet({ bookings, date, block
   const hours = [];
   for (let h = from; h <= to; h++) hours.push(h);
   const flagsOf = function (b) { return railFlagsOf(b, nsMap[identityKey(b)] || 0, null, currency || "€"); };
+  // v18.4.6: every flag a DRAWN block carries is collected for the key under
+  // the grid, first seen first, one line per meaning. Filled as the rows
+  // below render and read after them, in this one render.
+  const drawn = [];
   const blockIn = function (b, dashed) {
     const pos = spanIn(toMins(b.time), endOf(b), fromM, toM);
-    return pos ? <SheetBlock key={b.id} b={b} pos={pos} flags={flagsOf(b)} dashed={dashed} /> : null;
+    if (!pos) return null;
+    const flags = flagsOf(b);
+    flags.forEach(function (f) { if (!drawn.some(function (d) { return d.legend === f.legend; })) drawn.push(f); });
+    return <SheetBlock key={b.id} b={b} pos={pos} flags={flags} dashed={dashed} />;
   };
   const statuses = Object.keys(PRINT_FILL).filter(function (st) { return day.some(function (b) { return b.status === st; }); });
 
@@ -187,6 +194,16 @@ export const TimelineSheet = memo(function TimelineSheet({ bookings, date, block
             <span key={st} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 12, /* @canvas */ borderRadius: 3, /* @canvas */ background: PRINT_FILL[st], color: INK }}><StatusIcon status={st} size={IC.inline} /></span>
               {STATUS_WORD[st]}
+            </span>
+          );
+        })}
+        {/* v18.4.6 (Patryk): the flags, explained as the statuses are. Only the
+            ones on this page; the mark is the block's own, in the key's ink. */}
+        {drawn.map(function (f) {
+          return (
+            <span key={f.legend} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ display: "inline-flex", color: "#000" /* @fixed-fill */ }}>{f.icon}</span>
+              {f.legend}
             </span>
           );
         })}

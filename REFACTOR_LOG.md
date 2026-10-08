@@ -32348,3 +32348,27 @@ Patryk's decision: drop it. The cancel writer (`doCancelBooking`) is not changed
 is still reachable for that one booking, and for no booking walked back since v18.3.5,
 which writes the cleared entry.
 
+### Commit 7 — the printed timeline says what its flags mean
+
+**Files:** `src/components/blockFlags.jsx` · `src/components/TimelineSheet.jsx` ·
+`tests/print-timeline.test.js` (2 new) · `src/components/CLAUDE.md`
+
+Patryk: the printout must show what the flags on the booking blocks mean, as it does for
+the statuses. On screen a flag explains itself on hover; paper has none.
+
+- Each entry of `railFlagsOf` gains a `legend`: "Deposit paid", "Prefers indoor", "Prefers
+  outdoor", "Not seated in the zone asked for", "Asked for particular tables", "Locked to
+  its tables", "2 or more past no-shows" ("Overstaying" too, which print never draws: it
+  passes no warning). On the entry, so a flag added to the list cannot print unexplained.
+- The sheet's key lists the flags of the blocks it DREW (inside the chosen hours), one line
+  per meaning, after the statuses: the block's own mark in black, then the words. Like the
+  statuses, a flag that is not on the page is not in the key.
+- The day sheet (the list) draws no flags and is unchanged.
+
+**On DEV**, with `window.print` stubbed and the sheet forced visible: a day with a deposit,
+a lock, a preferred table, an outdoor wish and an off-zone seat printed the key "Confirmed ·
+Prefers outdoor · Locked to its tables · Deposit paid · Not seated in the zone asked for ·
+Asked for particular tables", each with its mark. Not printed to paper or PDF.
+
+**Gate:** build 127.93 kB gz · 2739 tests · lint 63 problems, 0 errors · `check:style` OK.
+

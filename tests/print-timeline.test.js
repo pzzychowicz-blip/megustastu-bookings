@@ -124,6 +124,22 @@ describe("the sheet", () => {
     expect(sheet).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
     expect(sheet).toMatch(/packLanes\(unplacedOf\(day, gridIds\)/);
   });
+  // v18.4.6 (Patryk): paper has no hover, so the key under the grid says what
+  // each flag means, as it does for the statuses.
+  it("every flag in the one list says what it means", () => {
+    const flags = code("src/components/blockFlags.jsx");
+    const entries = flags.match(/\{ k: "\w+", keep: \d+, [^\n]*/g) || [];
+    expect(entries.length).toBe(6);
+    entries.forEach((e) => expect(e, e.slice(0, 30)).toMatch(/^\{ k: "\w+", keep: \d+, legend: /));
+  });
+  it("the key lists the flags of the blocks it DREW, one line per meaning", () => {
+    expect(sheet).toMatch(/if \(!pos\) return null;\s+const flags = flagsOf\(b\);\s+flags\.forEach\(function \(f\) \{ if \(!drawn\.some\(function \(d\) \{ return d\.legend === f\.legend; \}\)\) drawn\.push\(f\); \}\);/);
+    const key = sheet.slice(sheet.indexOf("{statuses.map("));
+    expect(key.indexOf("{drawn.map(")).toBeGreaterThan(-1);
+    expect(key).toMatch(/\{f\.icon\}<\/span>\s+\{f\.legend\}/);
+    // After the rows that fill it: JSX evaluates in source order.
+    expect(sheet.indexOf("{drawn.map(")).toBeGreaterThan(sheet.indexOf("TIMELINE_TABLES.map("));
+  });
   it("paints finished visits first, so a live booking on the same row prints over them", () => {
     expect(sheet).toMatch(/\.sort\(function \(a, b\) \{ return \(a\.status === "completed" \? 0 : 1\) - \(b\.status === "completed" \? 0 : 1\); \}\)/);
   });
