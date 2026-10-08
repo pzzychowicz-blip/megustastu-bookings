@@ -32912,3 +32912,40 @@ library in a lazy chunk and `DaySheet` (189 lines) and `TimelineSheet` (215 line
 drawn a second time, for the installed app on an iPhone or iPad only. The "open the app
 in Safari to print" sentence stays. The entry is removed from ROADMAP.
 
+### The printed timeline draws the flags a block has room for
+
+**Files:** `src/lib/print-timeline.js` · `src/components/TimelineSheet.jsx` ·
+`tests/print-timeline.test.js` (36 → 42, one pinned string) · `src/components/CLAUDE.md` ·
+`GLOSSARY.md` · `ROADMAP.md` (the entry removed)
+
+**The fault** (ROADMAP, v18.4.6's `/code-review`). A block's flags were cut at its right
+edge when it was narrow, and the key under the grid listed every flag of every block.
+
+**Reproduced on DEV before the edit (1 trial).** Headless Chromium on the DEV app, print
+media emulated, the window 1047px wide (A4 landscape less the 10mm margins), `window.print`
+stubbed so the sheet stays mounted. A 13:00–23:00 print gave a 985px track; a 90-minute
+block was 147.8px. "Carlos" (21:00, locked, prefers outdoor) shortened to 45 minutes:
+73.9px, both flags outside the block, and the key listed "Prefers outdoor", which no other
+block carried. A block's parts, measured there: 5px edge, time 29.1–30.9px, party digit
+6.56px, status 12px, flag 14px, gaps 4px.
+
+**Decision (Patryk, AskUserQuestion):** the sheet decides by A4 landscape, over a lead-in
+for the key and over won't-fix.
+
+**What changed.** `fittingFlags(widthPct, trackPx, flags, size)` in `lib/print-timeline.js`
+turns the block's percent width into pixels of the page the stylesheet asks for
+(`PRINT_PAGE_PX`, held to `@page mgt-timeline` by a test) and hands the screen's
+`visibleRail` the print block's measured widths (`PRINT_BLOCK`). The sheet draws what it
+returns and the key collects from the same list. The name still gives way before a flag.
+
+**After, on DEV (1 trial, the same rig).** Carlos at 45 minutes: 0 flags drawn, 0 cut;
+the key no longer lists "Prefers outdoor". The 147.8px blocks kept their flag.
+
+**Sabotage.** `fittingFlags` returning every flag: 4 of the new tests fail.
+
+**Not verified:** a block that keeps some flags and drops others (tests only); paper; a
+browser that ignores the landscape rule and prints portrait, where blocks are narrower
+than assumed and a flag can still be cut.
+
+
+**Gate:** build 129.04 kB gz (main chunk, 128.88 after the form fix) · 2811 tests passed (2805) · lint 63 problems, 0 errors · `check:style` OK.

@@ -136,12 +136,6 @@ evidence for each.
   If it recurs: log clicks in the page (capture phase, `isTrusted`, the target's text),
   trace `retryParked`, and keep Vite's log line for the edit.
 
-- **The printed timeline's key can name a flag no block shows** (v18.4.6 `/code-review`).
-  It lists the flags of every block it drew, and a block narrower than its time, size
-  and marks clips them (`overflow: hidden`). Harmless, an explanation with nothing to
-  point at; fixing it means the sheet deciding which flags fit, as the screen's
-  `visibleRail` does.
-
 ## Designed, not implemented
 
 - **The doc-load split has three loose ends, all scope calls rather than defects**
