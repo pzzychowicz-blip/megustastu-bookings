@@ -380,10 +380,21 @@ export function useWhatsApp({
     setReturnToInboxKey(conv.phoneKey);
     setShowInbox(false); setViewDate(date);
   }
-  // completeDraftAccept: called from doSave's new-booking success branch when
-  // draftSourceRef is set. Flips the source conversation to accepted + links it.
-  function completeDraftAccept(bookingId) {
+  // completeDraftAccept: flips the conversation a new booking's draft came from
+  // to accepted + links it.
+  //
+  // v18.4.8: in two steps. `takeDraftSource()` at the DISPATCH reads and clears
+  // the ref, and `completeDraftAccept(bookingId, phoneKey)` runs when the
+  // booking has LANDED (the write's `onLanded`). It ran at the dispatch, so a
+  // booking that was then discarded left a conversation marked accepted and
+  // linked to a booking that does not exist. The key is taken at the dispatch
+  // because the ref can name another conversation by the time a write lands.
+  function takeDraftSource() {
     const phoneKey = draftSourceRef.current;
+    draftSourceRef.current = null;
+    return phoneKey;
+  }
+  function completeDraftAccept(bookingId, phoneKey) {
     if (!phoneKey) return;
     // Clearing acceptedBadgeDismissedAt is what makes the "Booking confirmed"
     // banner reliably show for THIS acceptance. The stamp used to be set only by
@@ -392,13 +403,12 @@ export function useWhatsApp({
     // before (then re-drafted by a later message or a manual re-check) would
     // silently skip its confirmation the second time round.
     patchConversation(phoneKey, { draftStatus: "accepted", acceptedBookingId: bookingId, acceptedBadgeDismissedAt: null });
-    draftSourceRef.current = null;
   }
 
   // linkBookingByPhone: a booking created MANUALLY (the + New form, not via
   // Accept & open) whose phone matches an existing WhatsApp conversation links
   // itself there — the conversation window then shows the LinkedBookingCard.
-  // Called from doSave's new-booking success branch, AFTER completeDraftAccept
+  // Called from the new booking's `onLanded` (v18.4.8), AFTER completeDraftAccept
   // (whose patch lands in conversationsRef synchronously, so the early-return
   // below also covers "this save WAS the draft accept").
   // Rules: never overwrite an existing link; a PENDING draft also flips to
@@ -709,7 +719,7 @@ export function useWhatsApp({
     // derived
     unreadCount,
     // draft seam (doSave calls completeDraftAccept, then linkBookingByPhone)
-    draftSourceRef, completeDraftAccept, linkBookingByPhone,
+    draftSourceRef, takeDraftSource, completeDraftAccept, linkBookingByPhone,
     // handlers
     handleSendReply, handleResend, simFailNextSend,
     handleAcceptDraft, handleDismissDraft, handleMarkRead,

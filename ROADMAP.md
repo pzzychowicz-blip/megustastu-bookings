@@ -130,14 +130,6 @@ evidence for each.
   it came back with `tables: []`. Not reproduced through the form. The fix is which date
   the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
 
-- **A new booking removes its waitlist entry before the booking lands** (found planning
-  v18.4.6). `doSaveNew` calls `removeFromWaitlist` right after the dispatch, so a held
-  booking that is then discarded from the banner has lost its waitlist party too. Moving
-  the removal to the write's `onLanded` (v18.4.6) is wrong by itself: offline, the party
-  would stay in the waitlist and could be booked twice. It needs restore-on-discard, which
-  means the queue also reporting a discard. The WhatsApp links beside it
-  (`completeDraftAccept`, `linkBookingByPhone`) have the same timing.
-
 - **The parked-write banner can name the wrong booking for a create** (seen on DEV in
   v18.4.6). `describeWrite` names the first CHANGED id, and a new booking that reshuffles
   its day changes others first: a parked "RQ46 Reject, 18:00" read "v1834 weekly, 19:00

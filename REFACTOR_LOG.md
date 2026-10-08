@@ -32630,3 +32630,37 @@ temporary switch:**
 device; a real offline period.
 
 **Gate:** build 128.48 kB gz (main chunk) · 2775 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — the WhatsApp conversation hears about a booking when it lands
+
+**Files:** `src/hooks/useWhatsApp.js` · `src/App.jsx` · `tests/save-path.test.js` (2 new,
+14 snapshots, 2 tests reworded) · `src/hooks/CLAUDE.md` · `ROADMAP.md` (the entry removed)
+
+Patryk's call (AskUserQuestion): in this version, at landing. `completeDraftAccept` and
+`linkBookingByPhone` ran on the line after the dispatch, so a discarded booking left a
+conversation marked accepted and linked to a booking id that does not exist. Both run in
+the write's `onLanded` now.
+
+- `takeDraftSource()` reads and clears `draftSourceRef` at the dispatch, and
+  `completeDraftAccept(bookingId, phoneKey)` takes the key it returned. The ref can name
+  another conversation by the time a write lands.
+- Every new booking now carries a report (`onLanded`, `onDiscarded`), where only "Repeat
+  weekly" and a waitlist booking did.
+- A dropped write tells the conversation nothing: its draft is still there to accept.
+- Until the booking lands the conversation shows its draft as pending. No hidden state,
+  unlike the waitlist.
+
+**`tests/save-path.test.js`: 14 snapshots changed, with the behaviour**, all the same
+three lines: `saveBookings("<fn>")` gains the report's two names, and the two `wa.` calls
+move from straight after the dispatch to the landing (after `setViewDate`), with
+`completeDraftAccept` taking the source as its second argument. In the one held scenario
+the two `wa.` calls are gone. Tallied from the diff: 14 removed and 13 added
+`completeDraftAccept` lines, 13 and 13 `linkBookingByPhone`. Two tests said "carries no
+report"; they say "writes no rule".
+
+**Measured on DEV (1 trial):** a new booking typed with the phone of a conversation whose
+draft was pending and unlinked; 2.5s after Save the stored conversation was `accepted` and
+linked to the stored booking's id. **Not measured:** Accept & open from the inbox (the
+source path), and a dropped write with a conversation attached.
+
+**Gate:** build 128.51 kB gz (main chunk, 128.23 on v18.4.7) · 2777 tests passed (2758) · lint 63 problems, 0 errors · `check:style` OK.

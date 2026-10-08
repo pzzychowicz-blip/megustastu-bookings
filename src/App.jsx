@@ -1370,7 +1370,8 @@ function BookingApp({uid}){
   // Owns conversations/messages/templates (DEV Firebase) + every inbox handler.
   // Form/view handoff setters flow in (controlled pattern, like useWalkin). The
   // draft→form seam: handleAcceptDraft pre-fills the form + flags draftSourceRef;
-  // doSave calls wa.completeDraftAccept(newId) on success to flip the conversation.
+  // doSave takes the source at the dispatch and calls wa.completeDraftAccept(newId, source)
+  // when the booking lands (v18.4.8), to flip the conversation.
   // v18.3.5: the hook gets App's two DOORS (`openNewWith`, `openEdit`), never
   // `openForm` or `setForm` — all three of its form-opening handlers (accept
   // draft / open linked / apply modify) are openers, so they ask the capability
@@ -2719,21 +2720,26 @@ function BookingApp({uid}){
     const wlId=pendingWaitlistRef.current;
     pendingWaitlistRef.current=null;
     if(wlId) holdWaitlistEntry(wlId);
-    const ok=saveBookings(plan.next,false,(plan.rule||wlId)?{
+    // And the two WhatsApp patches: both name this booking in a conversation,
+    // so they wait for it too. The draft's conversation is taken HERE (the
+    // ref is read and cleared at the dispatch); a dropped write leaves the
+    // conversation as it was, its draft still to accept.
+    const waSource=wa.takeDraftSource();
+    const ok=saveBookings(plan.next,false,{
       onLanded:function(){
         if(plan.rule) addRule(plan.rule);
         if(wlId){removeFromWaitlist(wlId);releaseWaitlistEntry(wlId);}
+        // If this save came from accepting a draft, flip the source
+        // conversation to "accepted" + link the new booking id (no-op
+        // otherwise: the source is only set by handleAcceptDraft).
+        wa.completeDraftAccept(plan.id,waSource);
+        // …and if this NEW booking's phone matches a WhatsApp conversation
+        // that isn't linked yet (booking typed manually, not via Accept &
+        // open), link it so the conversation shows the LinkedBookingCard.
+        wa.linkBookingByPhone(plan.id,f.phone);
       },
       onDiscarded:function(){if(wlId) releaseWaitlistEntry(wlId);}
-    }:undefined);
-    // WhatsApp sandbox: if this save came from accepting a draft, flip the
-    // source conversation to "accepted" + link the new booking id (no-op
-    // otherwise — draftSourceRef is only set by handleAcceptDraft).
-    wa.completeDraftAccept(plan.id);
-    // …and if this NEW booking's phone matches a WhatsApp conversation that
-    // isn't linked yet (booking typed manually, not via Accept & open),
-    // link it so the conversation shows the LinkedBookingCard.
-    wa.linkBookingByPhone(plan.id, f.phone);
+    });
     if(plan.flash&&ok) flash(plan.flash.kind,plan.flash.note);
     // v17.16.0: armed only HERE — after the write is dispatched, on the
     // line that closes the form. Every early return above leaves the form
