@@ -16,7 +16,7 @@
 import { describe, it, expect } from "vitest";
 import {
   contentKey, bookingChanged, stampForWrite, buildPatch,
-  patchSignature, isDuplicatePatch, isStaleGap, retryDecision,
+  patchSignature, isDuplicatePatch, isStaleGap, retryDecision, replayOutcome,
   changedIds, describeWrite,
   DEDUPE_WINDOW_MS, STALE_GAP_MS, MAX_RETRIES,
 } from "../src/lib/write-path.js";
@@ -375,3 +375,47 @@ describe("describeWrite — what the parked banner calls the change", () => {
     expect(describeWrite([], [])).toBe(null);
   });
 });
+
+// v18.4.6. What the queue does with one write when it drains. The refusal is
+// the caller's own question, asked on the fresh list; this file only orders it
+// against the retry cap.
+describe("replayOutcome — retry, park, or drop with a sentence", () => {
+  const gone = (id) => (prev) => (prev.some((b) => b.id === id) ? null : "gone");
+  it("replays a write with no report exactly as retryDecision says", () => {
+    expect(replayOutcome({ tries: 0 }, [])).toEqual({ action: "retry", tries: 1 });
+    expect(replayOutcome({ tries: MAX_RETRIES - 1 }, [])).toEqual({ action: "retry", tries: MAX_RETRIES });
+  });
+  it("parks once the automatic attempts are spent", () => {
+    expect(replayOutcome({ tries: MAX_RETRIES }, [])).toEqual({ action: "park", tries: MAX_RETRIES });
+  });
+  it("replays while the caller has no objection", () => {
+    expect(replayOutcome({ tries: 1, report: { replayRefusal: gone("a") } }, [bk({ id: "a" })]))
+      .toEqual({ action: "retry", tries: 2 });
+  });
+  it("refuses with the caller's sentence when the fresh list no longer holds the booking", () => {
+    expect(replayOutcome({ tries: 0, report: { replayRefusal: gone("a") } }, [bk({ id: "b" })]))
+      .toEqual({ action: "refuse", message: "gone" });
+  });
+  it("asks the refusal BEFORE the cap: a write for a deleted booking is not parked", () => {
+    // Parking it would offer Retry for a change that can never be written.
+    expect(replayOutcome({ tries: MAX_RETRIES, report: { replayRefusal: gone("a") } }, []).action).toBe("refuse");
+  });
+  it("hands the refusal the list it was given, not a copy of an older one", () => {
+    const seen = [];
+    const fresh = [bk({ id: "z" })];
+    replayOutcome({ tries: 0, report: { replayRefusal: (prev) => { seen.push(prev); return null; } } }, fresh);
+    expect(seen).toEqual([fresh]);
+    expect(seen[0]).toBe(fresh);
+  });
+  it("a question that throws is no objection: the write is replayed, and the drain goes on", () => {
+    const warn = console.warn; console.warn = () => {};
+    try {
+      expect(replayOutcome({ tries: 0, report: { replayRefusal: () => { throw new Error("boom"); } } }, []))
+        .toEqual({ action: "retry", tries: 1 });
+    } finally { console.warn = warn; }
+  });
+  it("ignores a report that carries only onLanded", () => {
+    expect(replayOutcome({ tries: 0, report: { onLanded() {} } }, []).action).toBe("retry");
+  });
+});
+

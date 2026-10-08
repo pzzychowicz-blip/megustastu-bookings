@@ -32178,3 +32178,264 @@ this is a remainder of the old rule and not something this version introduced.
   table is a refactor of files this version did not touch.
 
 **Gate:** build 127.45 kB gz (main chunk, +0.01) · 2706 tests passed (4 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+## v18.4.6 — a bookings write reports what became of it
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.6-retry-queue-reporting` ·
+**Behavioural change:** yes, in the write path. "Repeat weekly" writes its rule when the
+booking lands; a change replayed after its booking was deleted elsewhere is said, in the
+"Couldn't save" banner; a refused write whose replay is identical is retried and parked
+where it used to vanish. No rules change, so no console step.
+
+**The gap.** `saveBookings` returns a boolean at the dispatch. A held or rejected
+function-form write is settled later, by the retry queue, and nothing told the caller how.
+Two ROADMAP entries (v18.3.3's and v18.3.5's reviews) waited on that.
+
+**Both reproduced on DEV on v18.4.5 before any edit**, with `Date.now` pushed 150s ahead
+for the one Save so the freshness gate held the write:
+
+- An edit of a test booking was held and the form closed. The booking was then removed
+  from the server. The queue drained on the next snapshot: no banner, no console line, the
+  booking gone from the screen.
+- A new booking with "Repeat weekly" was held and the page reloaded 120ms later. On the
+  server afterwards: the rule (`startDate` 2026-10-08), the generated bookings for
+  2026-10-15 and 2026-10-22, and no booking for the 8th.
+
+### Commit 1 — the report
+
+**Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` ·
+`tests/write-path.test.js` (7 new) · `tests/retry-report.test.js` (new, 7) ·
+`src/App.jsx` (version)
+
+- **`saveBookings(next, isSilent, report)`**, the report optional: `onLanded()` and
+  `replayRefusal(prev)`. It rides with the queued item through all three doors into the
+  queue (the stale gate, the legacy-shape hold, the rejection), the park and the banner's
+  Retry. The internal `tryN` and `carriedLabel` moved one place right; `drainPending` is
+  their only caller.
+- **`onLanded` fires once per report** (a `WeakSet`), in the write's `.then` ahead of its
+  `.catch`, in its own `try` so a throw cannot reach that `.catch` and queue a landed write
+  again. **An empty patch also counts as landed**: on a replay it means the first attempt
+  reached the server and only its answer was lost, so the fresh list already holds the
+  change. A patch skipped as a duplicate does not fire; its twin does.
+- **`replayOutcome(item, prev)`** (`lib/write-path.js`) is what `drainPending` does with
+  one item: retry, park, or refuse with the caller's sentence. The refusal is asked BEFORE
+  the cap, so a write for a deleted booking is never parked with a Retry that cannot work.
+  Refusals go to `setWriteWarning`, the banner that stays until dismissed (Patryk's choice
+  over the 3.5s toast).
+- No caller passes a report yet, so this commit changes no behaviour.
+
+**Gate:** build 127.68 kB gz (127.45 before) · 2720 tests (2706) · lint 63 problems,
+0 errors · `check:style` OK.
+
+### Commit 2 — a refused write is retried, not skipped as a duplicate
+
+**Files:** `src/hooks/usePersistence.js` · `tests/retry-report.test.js` (1 new)
+
+Found while planning commit 1, and measured before it was touched. `lastPatchSigRef` (the
+v16.0.0 StrictMode dedupe) stayed armed after a REJECTION, so a replay that built an
+identical patch inside the 2s window returned at the dedupe. A stale stamp never does that
+(the fresh list gives a new base); every other refusal does: a validation or a permission
+the rules refuse.
+
+- **Before**, on DEV, with the `update()` forced to reject (a temporary switch, not
+  committed) and a new booking saved: one rejection logged, no retry, no parked banner, and
+  the booking stayed on screen from local state with nothing on the server until a reload.
+  The resync answered from the cache, so the replay came 47ms after the rejection.
+- **After**: four attempts (the first and `MAX_RETRIES` replays), then "Couldn't save …
+  not saved, and undone" with Retry and Discard, and the booking off the screen.
+
+The signature is cleared in the `.catch`, only if it is still that patch's. Without this an
+`onLanded` could wait forever on a write that was neither landed nor parked.
+
+**Gate:** build 127.70 kB gz · 2721 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+
+### Commit 3 — "Repeat weekly" writes its rule when the booking lands
+
+**Files:** `src/App.jsx` (`doSaveNew`) · `src/lib/booking-save.js` (a comment) ·
+`tests/save-path.test.js` (2 new, 1 renamed) · `tests/recurring.test.js`
+
+`doSaveNew` called `addRule(plan.rule)` and then `saveBookings`. The rule write has no
+freshness gate and went straight to the server; the booking could still be held. It is now
+the booking write's `onLanded`. Patryk chose this over "write first, remove on discard",
+which would still leave the rule when the tab closes on a held booking.
+
+- Nothing needs the rule sooner. The generator starts the weeks AFTER `startDate`
+  (v18.3.3), and the first visit is the form's own booking, stamped with the rule's id at
+  build time as before.
+- Offline, the rule waits for the reconnect with its booking.
+- The save-path harness lands a dispatched write when the run is read, after everything
+  the handler did; a held one (`dispatchOk: false`) never lands.
+
+**On DEV, the same three runs as the reproduction:**
+
+| Run | Before | After |
+|---|---|---|
+| Normal save | rule, first visit, two more weeks | the same |
+| Held, page reloaded 120ms later | rule and two weeks, no first visit | nothing: no rule, no booking |
+| Held, then a change from elsewhere drains the queue | (not run) | no rule at 150ms; rule, first visit and two weeks 300ms after the drain |
+
+**Gate:** build 127.72 kB gz · 2723 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 4 — a change replayed after its booking was deleted says so
+
+**Files:** `src/lib/booking-save.js` (`goneRefusal`, `applyEdit`'s `replayRefusal`) ·
+`src/App.jsx` (`goneReport`, seven call sites) · `tests/retry-report.test.js` (15 new) ·
+`tests/save-path.test.js` (42 snapshots, one line each) · `tests/drop-plan.test.js`
+
+A change to one booking that was held or refused is replayed on fresh data. If another
+device deleted the booking meanwhile, the updater maps over a row that is not there: it
+wrote nothing for it and said nothing. v18.3.5 refused only a delete the device had seen
+BEFORE Save.
+
+- **`goneRefusal(id, list)`** takes the booking's name from the list the action was taken
+  on (when it is asked, the booking and its name are gone) and returns the write's
+  `replayRefusal`: null while the id is in the fresh list, otherwise "The change to Rita,
+  21:00 was not saved: the booking was deleted on another device."
+- **Scope is every change to ONE booking** (Patryk's choice over the form edit alone, which
+  is what the ROADMAP entry named): the form's edit, a status change, cancel and no-show,
+  reassign, the timeline drop, manual assign and the voucher carry. Not a delete (a booking
+  already gone is the delete done), not an undo (it puts bookings back), not the writes
+  that are about a day or several bookings. `tests/retry-report.test.js` lists the seven
+  and counts App's `saveBookings` calls (17), so a new one is decided, not forgotten.
+- The refusal is shown in the "Couldn't save" banner through `setWriteWarning`, with
+  Dismiss. The first wording began "Couldn't save the change to …" and repeated the
+  banner's title; seen on DEV, then reworded.
+
+**On DEV**, the reproduction's steps: an edit held, the booking removed from the server,
+the queue drained. Before: nothing. After: the banner, naming "RQ46 Edit2, 20:00". The
+same with the List card's Seated button on a second booking: the banner, naming it.
+
+**Gate:** build 127.85 kB gz · 2737 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 5 — the docs
+
+**Files:** `ROADMAP.md` · `CLAUDE.md` · `src/CLAUDE.md` · `src/hooks/CLAUDE.md` ·
+`src/lib/CLAUDE.md` · `GLOSSARY.md`
+
+- `ROADMAP.md`: the two entries this version closes are removed ("Repeat weekly" writes its
+  rule beside its first booking; an edit replayed after a delete). Two added: the waitlist
+  entry is removed before the booking lands (Patryk's choice: recorded, not fixed here, as
+  it needs the queue to report a discard), and the parked banner can name the wrong booking
+  for a create.
+- Guard 4 gains the report: one sentence in the root file, the mechanics in `src/CLAUDE.md`.
+
+**Not verified:** a real server refusal (the rejection in commit 2 was forced in the
+client); a write whose answer was lost and whose replay finds an empty patch (read from the
+code and tested by reading it, not produced live); the freshness gate tripped by a real
+sleep, where the socket dies (here `Date.now` was moved, and the queue drained on the next
+snapshot from elsewhere).
+
+**Left on DEV:** bookings "RQ46 …" on 2026-10-08, -15 and -22, three "RQ46" standing rules
+("RQ46 Weekly", "RQ46 LandOK", "RQ46 HeldLands") plus the orphan "RQ46 Orphan" from the
+reproduction, and `bookings/rq46poke` on 2026-10-09.
+
+### Commit 6 — the re-cancelled legacy no-show is dropped from ROADMAP
+
+**Files:** `ROADMAP.md`
+
+The entry (v18.4.5's `/code-review`) said a no-show walked back before v18.3.5 and later
+cancelled normally still counts, and that the number of PROD bookings in that state was not
+known. Patryk counted them on the PROD backup of 2026-10-08, with two scripts over the
+file's `bookings`:
+
+- cancelled bookings counted as a no-show: 19, and none has a history entry after its
+  "no show" entry, so none was walked back and cancelled again. **0 affected.**
+- bookings NOT cancelled that still carry a no-show mark, the only ones that could become
+  affected if cancelled later: **1**.
+
+Patryk's decision: drop it. The cancel writer (`doCancelBooking`) is not changed. The fault
+is still reachable for that one booking, and for no booking walked back since v18.3.5,
+which writes the cleared entry.
+
+### Commit 7 — the printed timeline says what its flags mean
+
+**Files:** `src/components/blockFlags.jsx` · `src/components/TimelineSheet.jsx` ·
+`tests/print-timeline.test.js` (2 new) · `src/components/CLAUDE.md`
+
+Patryk: the printout must show what the flags on the booking blocks mean, as it does for
+the statuses. On screen a flag explains itself on hover; paper has none.
+
+- Each entry of `railFlagsOf` gains a `legend`: "Deposit paid", "Prefers indoor", "Prefers
+  outdoor", "Not seated in the zone asked for", "Asked for particular tables", "Locked to
+  its tables", "2 or more past no-shows" ("Overstaying" too, which print never draws: it
+  passes no warning). On the entry, so a flag added to the list cannot print unexplained.
+- The sheet's key lists the flags of the blocks it DREW (inside the chosen hours), one line
+  per meaning, after the statuses: the block's own mark in black, then the words. Like the
+  statuses, a flag that is not on the page is not in the key.
+- The day sheet (the list) draws no flags and is unchanged.
+
+**On DEV**, with `window.print` stubbed and the sheet forced visible: a day with a deposit,
+a lock, a preferred table, an outdoor wish and an off-zone seat printed the key "Confirmed ·
+Prefers outdoor · Locked to its tables · Deposit paid · Not seated in the zone asked for ·
+Asked for particular tables", each with its mark. Not printed to paper or PDF.
+
+**Gate:** build 127.93 kB gz · 2739 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 8 — a print the iPhone's Home Screen app ignores is said
+
+**Files:** `src/lib/print-end.js` (`printOrReport`) · `src/App.jsx` (`doPrint`) ·
+`tests/print-timeline.test.js` (5 new) · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+Patryk: on the iPhone, printing from the Home Screen app does nothing; the print window
+does not come up.
+
+**Measured on the iOS 27 simulator** (iPhone 18 Pro Max) with a one-button page
+(`window.print()`, logging both print events), served by the dev server and not committed:
+
+| Where it ran | `navigator.standalone` | Result |
+|---|---|---|
+| A Home Screen clip | true | returned after 68ms; no sheet, no `beforeprint`, no `afterprint` |
+| A Safari tab | false | the iOS print sheet opened |
+
+So iOS drops the call in a Home Screen web app, and no code in the page can raise that
+sheet. His earlier iPhone prints (v18.4.0) were from Safari.
+
+- **`printOrReport(onIgnored)`** is how App prints now. Where `navigator.standalone` is
+  true it listens for `beforeprint` for `PRINT_IGNORED_MS` (500) after the call; none means
+  the call was dropped. App then removes `data-print`, unmounts the timeline sheet (no
+  `afterprint` will) and shows "Printing isn't available in the Home Screen app. Open the
+  app in Safari to print." in the refusal toast. Elsewhere it is `window.print()` alone: no
+  listener, no timer.
+- It asks the event and not the iOS version, so a Home Screen app that prints one day is
+  not told it cannot.
+- Patryk chose the message for this version; printing in place (a PDF through the share
+  sheet) is a ROADMAP entry.
+
+**On DEV, in the desktop pane** with `navigator.standalone` forced true and `print` stubbed:
+the sheet mounted and `data-print` was "timeline" at 150ms; at 850ms both were gone and the
+sentence was on screen. With it false: print called once, no sentence.
+
+**Not verified:** the message inside a real Home Screen app (the simulator's app clips are
+signed out of DEV), a physical iPhone, an iPad.
+
+**Gate:** build 128.10 kB gz · 2744 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): seven findings
+
+**Fixed (6), each checked against the code first:**
+
+- **A `replayRefusal` that throws lost the rest of the queue.** `drainPending` empties the
+  queue and then loops, so a throw from one item's question escaped into `resync()`'s
+  `.catch` with the items behind it neither replayed nor parked. `replayOutcome` asks in a
+  `try` now; a throw is no objection and the write is replayed. 1 test.
+- **A replay's refusal replaced a warning already on screen.** `writeWarning` is one string
+  with four other writers; the drain now adds its sentence to whatever is showing (and adds
+  nothing a second time).
+- **A `WeakSet` was built on every render** (`useRef(new WeakSet())`). It is `LANDED`, at
+  module scope.
+- **`h.report` in the save-path harness was assigned and never read.** Removed. (These two
+  share a commit; they should have been two.)
+- **The printed key said "Deposit paid"**; the glossary's word for that mark is "taken".
+  It says "Deposit taken".
+- **`GLOSSARY.md` had no wording for the key's flags or for the print message.** Added to
+  the "timeline sheet" and "refusal toast" rows.
+
+**Deferred to ROADMAP (1):** the key lists the flags of every block drawn, and a narrow
+block clips its marks, so the key can explain a mark nobody can see. Harmless; fixing it
+means the sheet deciding which flags fit.
+
+**Gate at the push:** build 128.16 kB gz (127.45 on v18.4.5) · 2745 tests (2706) · lint
+63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
+rules suite was not run and there is no PROD rules step.
+

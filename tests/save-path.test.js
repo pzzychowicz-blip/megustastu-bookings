@@ -284,6 +284,7 @@ function render(c) {
   return c[0] + "(" + c.slice(1).map((a) => (typeof a === "function" ? "<fn>" : J(a))).join(", ") + ")";
 }
 function reduce(h) {
+  (h.landings || []).splice(0).forEach((land) => land());
   const out = { calls: h.calls.map(render) };
   if (h.writes.length) out.writes = h.writes.map((w) => ({ rows: written(w.prev, w.next), replay: w.replay }));
   if (h.guardRef) out.guard = h.guardRef.current;
@@ -301,7 +302,15 @@ function saver(h, mirror, dispatchOk) {
         + "; fresh prev → " + (J(fn(mirror.map((b) => Object.assign({}, b)))) === J(next) ? "equal" : "DIFFERENT");
     } else { next = fn; replay = "value form"; }
     h.writes.push({ prev: mirror, next, replay });
-    h.calls.push(["saveBookings", typeof fn === "function" ? "<fn>" : "<value>"].concat(args.slice(1)));
+    // v18.4.6: the third argument is the write's report. It is recorded by
+    // the names it carries, and a dispatched write LANDS when the run is read
+    // (`reduce`), after everything the handler did, as the server's answer
+    // does. A held one (`dispatchOk: false`) never lands here.
+    const report = args[2];
+    // A user write's `isSilent` is false and says nothing; `true` is recorded.
+    const rest = (args[1] ? [args[1]] : []).concat(report ? [{ report: Object.keys(report).sort() }] : []);
+    h.calls.push(["saveBookings", typeof fn === "function" ? "<fn>" : "<value>"].concat(rest));
+    if (report && report.onLanded && dispatchOk) (h.landings = h.landings || []).push(report.onLanded);
     return dispatchOk;
   };
 }
@@ -638,7 +647,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -665,7 +674,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -693,7 +702,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -719,7 +728,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -749,7 +758,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -777,7 +786,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -806,7 +815,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -835,7 +844,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("f01", true)",
           "flash(null, "")",
           "armUndo(["f01","f02","f03","f04","f05","f06","f07","f08","f09"], "f01", "edit", false)",
@@ -888,7 +897,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "Seated outdoor: indoor was full.")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -918,7 +927,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -946,7 +955,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -974,7 +983,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1001,7 +1010,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1029,7 +1038,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -1097,7 +1106,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1126,7 +1135,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
@@ -1157,7 +1166,7 @@ describe("Save — what an edit normalises", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1188,7 +1197,7 @@ describe("Save — what an edit normalises", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1216,7 +1225,7 @@ describe("Save — what an edit normalises", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1243,7 +1252,7 @@ describe("Save — what an edit normalises", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1274,7 +1283,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1305,7 +1314,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
@@ -1338,7 +1347,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1368,7 +1377,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1398,7 +1407,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1426,7 +1435,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1458,7 +1467,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1491,7 +1500,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1523,7 +1532,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1568,7 +1577,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash("saved", "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1638,7 +1647,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1669,7 +1678,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1697,7 +1706,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1728,7 +1737,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1757,7 +1766,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1788,7 +1797,7 @@ describe("Save — seating, completing and walking back (today)", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1824,7 +1833,7 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
@@ -1883,7 +1892,7 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
@@ -1915,7 +1924,7 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
@@ -1944,7 +1953,7 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -1974,7 +1983,7 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1"], "b1", "edit", false)",
@@ -2005,7 +2014,7 @@ describe("Save — tables somebody chose by hand", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
           "wa.completeModifyApply("b1", true)",
           "flash(null, "")",
           "armUndo(["b1","b2"], "b1", "edit", false)",
@@ -2184,18 +2193,18 @@ describe("Save — a new booking", () => {
       }
     `);
   });
-  it("Repeat weekly: the rule is written after the refusals and before the booking", () => {
+  it("Repeat weekly: the rule is written once the booking has landed", () => {
     expect(runSave({ form: newDraft({ name: "Weekly", phone: "+34 600 000 001", notes: "usual table", repeatWeekly: true }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "addRule({"id":"muyfzww09v3q","startDate":"2026-10-14","name":"Weekly","phone":"+34 600 000 001","size":2,"weekday":3,"time":"20:00","preference":"auto","notes":"usual table"})",
-          "saveBookings("<fn>")",
+          "saveBookings("<fn>", {"report":["onLanded"]})",
           "wa.completeDraftAccept("muyfzww04xjv")",
           "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 000 001")",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "addRule({"id":"muyfzww09v3q","startDate":"2026-10-14","name":"Weekly","phone":"+34 600 000 001","size":2,"weekday":3,"time":"20:00","preference":"auto","notes":"usual table"})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2226,6 +2235,20 @@ describe("Save — a new booking", () => {
   it("Repeat weekly on a draft, where the toggle would not show: the one visit, no rule", () => {
     const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), env: { standingOn: () => false } });
     expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
+    expect(out.calls).toContain('saveBookings("<fn>")');
+  });
+  // v18.4.6: a booking the freshness gate holds has not landed, and its rule
+  // is not written. It was, first and straight to the server, and a held
+  // booking discarded from the banner (or lost with the tab) left it booking
+  // every later week.
+  it("Repeat weekly, held: no rule until the booking lands", () => {
+    const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), dispatchOk: false });
+    expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
+    expect(out.calls).toContain('saveBookings("<fn>", {"report":["onLanded"]})');
+    expect(Object.values(out.writes[0].rows)[0], "the booking is still stamped for its rule").toMatch(/"recurringId":"[0-9a-z]+"/);
+  });
+  it("a booking that does not repeat carries no report", () => {
+    const out = runSave({ form: newDraft({ name: "Once" }) });
     expect(out.calls).toContain('saveBookings("<fn>")');
     const row = Object.values(out.writes[0].rows)[0];
     expect(row).toContain('"recurringId":null');

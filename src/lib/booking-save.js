@@ -196,6 +196,23 @@ function withoutNoShowLine(notes){
 
 export const DELETED_REFUSAL="This booking was deleted on another device, so it can't be saved. Make a new booking if it is still needed.";
 
+// v18.4.6: the same fact, found LATER. A change to one booking that the
+// freshness gate held, or the server refused, is replayed on fresh data, and
+// by then another device may have deleted the booking. The replay's updater
+// maps over a row that is not there: it wrote nothing for it and said nothing,
+// with the form or the popup long closed. This is the write's `replayRefusal`
+// (`saveBookings`' report, asked by `replayOutcome` before each replay): the
+// sentence for the banner, or null while the booking is still there.
+//
+// The name is taken NOW, from the list the action was taken on. When the
+// question is asked the booking is gone, and its name with it.
+export function goneRefusal(id,list){
+  const b=(list||[]).find(function(x){return x.id===id;});
+  const who=(b&&[b.name,b.time].filter(Boolean).join(", "))||"a booking";
+  const message="The change to "+who+" was not saved: the booking was deleted on another device.";
+  return function(prev){return (prev||[]).some(function(x){return x.id===id;})?null:message;};
+}
+
 function refuse(message,field){return {refusal:field?{message:message,field:field}:{message:message}};}
 
 // ── applyEdit: the edit form's Save, as a plan ───────────────────────────────
@@ -227,6 +244,7 @@ function refuse(message,field){return {refusal:field?{message:message,field:fiel
 //             alone would offer an Undo for a save that changed nothing
 //   flash     `{ kind, note }` for the save toast, or null for none
 //   seatNote  the seat note's snapshot (`seatNoteFor`), or null
+//   replayRefusal  `goneRefusal` for this booking, for the write's report
 //
 // The completion's truncation and `stayedMin` read the wall clock at Save, and
 // the seat shift reads `nowMins`, as they always have.
@@ -526,6 +544,8 @@ export function applyEdit(input){
     // v18.0.0 session 7: the seat note. The snapshot is the EDITED booking,
     // so a note typed in this save is shown.
     seatNote:seatNoteFor(orig&&orig.status,f.status,edited),
+    // v18.4.6: what a REPLAY of this edit asks first (see `goneRefusal`).
+    replayRefusal:goneRefusal(editId,bookings),
   };
 }
 
@@ -543,8 +563,9 @@ export function applyEdit(input){
 //   fin    `next(list)`
 //   id     the new booking's id, minted once, so a replay cannot add it twice
 //   rule   the standing rule "Repeat weekly" creates, or null. App writes it
-//          after the refusals and before the booking (v18.3.3): a refused save
-//          leaves no rule behind
+//          once the booking has LANDED (v18.4.6, `saveBookings`' `onLanded`):
+//          a refused save leaves no rule behind (v18.3.3), and neither does a
+//          booking that was held and never reached the server
 //   flash  `{ kind, note }` for the save toast
 export function buildBooking(input){
   const f=input.draft,bookings=input.list;

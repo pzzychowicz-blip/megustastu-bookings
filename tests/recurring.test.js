@@ -43,14 +43,15 @@ describe("Repeat weekly writes its rule only once the save cannot be refused (B2
     expect(doSaveNewBody().split("addRule(").length - 1).toBe(1);
   });
 
-  it("calls it after every refusal and before the booking write", () => {
+  // v18.4.6: and only once the booking has LANDED. The one `addRule` is the
+  // booking write's `onLanded`, so it cannot run for a refused save (nothing
+  // is dispatched) or for a booking that never reaches the server.
+  it("calls it from the booking write's onLanded, after every refusal", () => {
     const body = doSaveNewBody();
-    const rule = body.indexOf("addRule(");
     const lastRefusal = body.lastIndexOf("setError(");
-    const write = body.indexOf("saveBookings(");
+    const write = body.indexOf("saveBookings(plan.next,false,plan.rule?{onLanded:function(){addRule(plan.rule);}}:undefined)");
     expect(lastRefusal).toBeGreaterThan(-1);
-    expect(rule).toBeGreaterThan(lastRefusal);
-    expect(write).toBeGreaterThan(rule);
+    expect(write).toBeGreaterThan(lastRefusal);
   });
 
   // v18.3.4: the rule and the booking are `buildBooking`'s, so these run it.
@@ -219,7 +220,7 @@ describe("the wiring", () => {
     });
     expect(plan.rule.startDate).toBe("2099-06-17");
     expect(plan.rule.weekday, "a Wednesday").toBe(3);
-    expect(doSaveNewBody()).toMatch(/if\(plan\.rule\) addRule\(plan\.rule\);/);
+    expect(doSaveNewBody()).toContain("onLanded:function(){addRule(plan.rule);}");
   });
   it("useRecurring's whitelist keeps startDate", () => {
     const HOOK = stripComments(

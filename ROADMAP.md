@@ -19,16 +19,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **A no-show that was walked back before v18.3.5 and later cancelled normally still
-  counts as a no-show** (v18.4.5 `/code-review`). Such a booking kept `noShow: true` and
-  has no "no-show cleared" entry, and a plain cancel does not write `noShow: false`, so
-  once it is cancelled again `isNoShow` (`src/lib/booking-fields.js`) is true. Measured:
-  `{status: "cancelled", noShow: true, history: [no show, edited, cancelled]}` → true.
-  Bookings walked back since v18.3.5 are not affected. Not built in the ship run because
-  the fix is in the cancel writer (`doCancelBooking` in `App.jsx`), outside that diff:
-  a plain cancel would write `noShow: false` and the cleared entry when the booking
-  carries a stale mark. How many PROD bookings are in this state is not known.
-
 - **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send
@@ -131,17 +121,18 @@ evidence for each.
   drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines). **Next: manual table assignment**
   (`manualAssign`), which shares the displacement recipe with the drop.
 
-- **"Repeat weekly" writes its rule beside its first booking, not tied to that write**
-  (v18.3.3's `/code-review`; predates v18.3.3). If the booking write is parked and then
-  discarded from the banner, the rule is left, and it books the weeks after its start.
-  Writing the rule only once the booking lands needs the retry queue to report that, so
-  it is a write-path change.
+- **A new booking removes its waitlist entry before the booking lands** (found planning
+  v18.4.6). `doSaveNew` calls `removeFromWaitlist` right after the dispatch, so a held
+  booking that is then discarded from the banner has lost its waitlist party too. Moving
+  the removal to the write's `onLanded` (v18.4.6) is wrong by itself: offline, the party
+  would stay in the waitlist and could be booked twice. It needs restore-on-discard, which
+  means the queue also reporting a discard. The WhatsApp links beside it
+  (`completeDraftAccept`, `linkBookingByPhone`) have the same timing.
 
-- **A finding from v18.3.5's `/code-review`.**
-  **An edit parked by the stale gate and replayed after another device deleted the
-  booking** still writes nothing for it, with the form already closed. v18.3.5 refuses
-  only a delete the device had seen before Save. Telling the user needs the retry queue
-  to report what a replay did, like the "Repeat weekly" entry above.
+- **The parked-write banner can name the wrong booking for a create** (seen on DEV in
+  v18.4.6). `describeWrite` names the first CHANGED id, and a new booking that reshuffles
+  its day changes others first: a parked "RQ46 Reject, 18:00" read "v1834 weekly, 19:00
+  and 2 others". The create should be named.
 
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
@@ -150,6 +141,19 @@ evidence for each.
   `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
   `prefers-contrast: more` block (A10), the popover keyframe pair for
   `ConnectionStatus` (M9), and v18.3.1's `.mgt-edge` top strip (the iOS home-screen blur). Drop any item the device check turns back.
+
+- **The printed timeline's key can name a flag no block shows** (v18.4.6 `/code-review`).
+  It lists the flags of every block it drew, and a block narrower than its time, size
+  and marks clips them (`overflow: hidden`). Harmless, an explanation with nothing to
+  point at; fixing it means the sheet deciding which flags fit, as the screen's
+  `visibleRail` does.
+
+- **Printing from the iPhone Home Screen app** (v18.4.6). iOS ignores `window.print()`
+  there, so the app now says "open the app in Safari to print". A print that works in
+  place needs the PDF built in the app and handed to the iOS share sheet
+  (`navigator.share` with a file, which is defined there; the sheet has Print and Save to
+  Files). That means a PDF library, in a lazy chunk, and both sheets drawn a second way.
+  Not measured: whether the share sheet offers Print for a shared PDF, and an iPad.
 
 ## Designed, not implemented
 

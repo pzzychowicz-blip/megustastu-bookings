@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { describe, it, expect, vi } from "vitest";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { PRINT_FILL, spanIn, printRange } from "../src/lib/print-timeline.js";
-import { onPrintEnd, PRINT_EARLY_MS } from "../src/lib/print-end.js";
+import { onPrintEnd, PRINT_EARLY_MS, printOrReport, PRINT_IGNORED_MS, PRINT_IGNORED_TEXT } from "../src/lib/print-end.js";
 
 const raw = (rel) => readFileSync(new URL("../" + rel, import.meta.url), "utf8");
 const code = (rel) => stripComments(raw(rel)).join("\n");
@@ -90,7 +90,7 @@ describe("the print call", () => {
   const app = code("src/App.jsx");
   const fn = app.slice(app.indexOf("function doPrint(job){"), app.indexOf("const printModal="));
   it("mounts the sheet, stamps the kind, then prints, inside the click", () => {
-    const order = ["flushSync(function(){setPrintJob(job);});", 'setAttribute("data-print",job.kind)', "window.print();"].map((s) => fn.indexOf(s));
+    const order = ["flushSync(function(){setPrintJob(job);});", 'setAttribute("data-print",job.kind)', "printOrReport(function(){"].map((s) => fn.indexOf(s));
     expect(order.every((i) => i >= 0), "all three steps").toBe(true);
     expect(order).toEqual(order.slice().sort((a, b) => a - b));
   });
@@ -123,6 +123,22 @@ describe("the sheet", () => {
   it("draws the screen's flags and the screen's unplaced rule", () => {
     expect(sheet).toMatch(/import \{ railFlagsOf \} from "\.\/blockFlags";/);
     expect(sheet).toMatch(/packLanes\(unplacedOf\(day, gridIds\)/);
+  });
+  // v18.4.6 (Patryk): paper has no hover, so the key under the grid says what
+  // each flag means, as it does for the statuses.
+  it("every flag in the one list says what it means", () => {
+    const flags = code("src/components/blockFlags.jsx");
+    const entries = flags.match(/\{ k: "\w+", keep: \d+, [^\n]*/g) || [];
+    expect(entries.length).toBe(6);
+    entries.forEach((e) => expect(e, e.slice(0, 30)).toMatch(/^\{ k: "\w+", keep: \d+, legend: /));
+  });
+  it("the key lists the flags of the blocks it DREW, one line per meaning", () => {
+    expect(sheet).toMatch(/if \(!pos\) return null;\s+const flags = flagsOf\(b\);\s+flags\.forEach\(function \(f\) \{ if \(!drawn\.some\(function \(d\) \{ return d\.legend === f\.legend; \}\)\) drawn\.push\(f\); \}\);/);
+    const key = sheet.slice(sheet.indexOf("{statuses.map("));
+    expect(key.indexOf("{drawn.map(")).toBeGreaterThan(-1);
+    expect(key).toMatch(/\{f\.icon\}<\/span>\s+\{f\.legend\}/);
+    // After the rows that fill it: JSX evaluates in source order.
+    expect(sheet.indexOf("{drawn.map(")).toBeGreaterThan(sheet.indexOf("TIMELINE_TABLES.map("));
   });
   it("paints finished visits first, so a live booking on the same row prints over them", () => {
     expect(sheet).toMatch(/\.sort\(function \(a, b\) \{ return \(a\.status === "completed" \? 0 : 1\) - \(b\.status === "completed" \? 0 : 1\); \}\)/);
@@ -183,3 +199,64 @@ describe("when a print is over", () => {
     expect(n).toBe(1);
   });
 });
+
+// v18.4.6. An iPhone's Home Screen app drops `window.print()`: no sheet, no
+// events (measured on the iOS 27 simulator; a Safari tab on the same device
+// opened the sheet). The button did nothing and said nothing.
+describe("a print the device ignores is reported", () => {
+  // A window that records its listeners and timers; `fires` says whether its
+  // print() raises `beforeprint`, as a browser that prints does.
+  function fakeWin(standalone, fires) {
+    const ls = {}, timers = [];
+    const w = {
+      navigator: standalone === undefined ? {} : { standalone },
+      addEventListener: (t, f) => { (ls[t] = ls[t] || []).push(f); },
+      removeEventListener: (t, f) => { ls[t] = (ls[t] || []).filter((x) => x !== f); },
+      setTimeout: (f, ms) => { timers.push({ f, ms }); },
+      print: () => { w.printed = (w.printed || 0) + 1; if (fires) (ls.beforeprint || []).slice().forEach((f) => f()); },
+      ls, timers,
+    };
+    return w;
+  }
+  it("a Home Screen app whose print raises no event: reported, after the wait", () => {
+    const w = fakeWin(true, false); let told = 0;
+    printOrReport(() => { told++; }, w);
+    expect(w.printed).toBe(1);
+    expect(told, "not before the wait").toBe(0);
+    expect(w.timers.map((t) => t.ms)).toEqual([PRINT_IGNORED_MS]);
+    w.timers[0].f();
+    expect(told).toBe(1);
+    expect(w.ls.beforeprint, "the listener is taken back").toEqual([]);
+  });
+  it("a Home Screen app that DOES print is not told it cannot", () => {
+    const w = fakeWin(true, true); let told = 0;
+    printOrReport(() => { told++; }, w);
+    w.timers[0].f();
+    expect(told).toBe(0);
+  });
+  it("a print event that arrives during the wait counts too", () => {
+    const w = fakeWin(true, false); let told = 0;
+    printOrReport(() => { told++; }, w);
+    w.ls.beforeprint.slice().forEach((f) => f());
+    w.timers[0].f();
+    expect(told).toBe(0);
+  });
+  it("anywhere else it is print() and nothing more: no listener, no timer, no report", () => {
+    [fakeWin(false, false), fakeWin(undefined, false), fakeWin(false, true)].forEach((w) => {
+      let told = 0;
+      printOrReport(() => { told++; }, w);
+      expect(w.printed).toBe(1);
+      expect(w.timers).toEqual([]);
+      expect(w.ls.beforeprint || []).toEqual([]);
+      expect(told).toBe(0);
+    });
+  });
+  it("App prints through it, takes the job down and says the sentence", () => {
+    const app = code("src/App.jsx");
+    const fn = app.slice(app.indexOf("function doPrint(job){"), app.indexOf("const printModal="));
+    expect(fn).toMatch(/printOrReport\(function\(\)\{\s*document\.documentElement\.removeAttribute\("data-print"\);setPrintJob\(null\);\s*flashRefusal\(PRINT_IGNORED_TEXT\);\s*\}\);/);
+    expect(fn).not.toMatch(/window\.print\(\)/);
+    expect(PRINT_IGNORED_TEXT).toMatch(/Home Screen app.*Safari/);
+  });
+});
+

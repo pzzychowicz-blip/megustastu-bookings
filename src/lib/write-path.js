@@ -235,3 +235,25 @@ export function retryDecision(tries, max) {
   const cap = max == null ? MAX_RETRIES : max;
   return tries < cap ? { action: "retry", tries: tries + 1 } : { action: "give-up", tries: tries };
 }
+
+// v18.4.6: what one queued write does when the queue drains: replay it, park
+// it, or drop it with a sentence for the user. `prev` is the fresh list the
+// replay would run on.
+//
+// The REFUSAL is asked first, before the try count. A write whose booking was
+// deleted on another device has nothing to retry and nothing worth parking:
+// its updater maps over a row that is not there, so the replay wrote nothing
+// for it and said nothing (the form edit, ROADMAP from v18.3.5's review).
+// `report.replayRefusal(prev)` is the caller's own question, a sentence or
+// null; this file does not know what a booking is.
+export function replayOutcome(item, prev, max) {
+  const ask = item && item.report && item.report.replayRefusal;
+  // A question that THROWS is no objection (/code-review): the drain has
+  // already emptied the queue when it asks, so a throw here would lose every
+  // write still waiting behind this one, replayed and parked by nobody.
+  let why = null;
+  if (typeof ask === "function") { try { why = ask(prev); } catch (e) { console.warn("[SAFE] a queued write's replayRefusal threw; replaying it.", e); } }
+  if (why) return { action: "refuse", message: String(why) };
+  const d = retryDecision(item.tries, max);
+  return d.action === "retry" ? d : { action: "park", tries: d.tries };
+}

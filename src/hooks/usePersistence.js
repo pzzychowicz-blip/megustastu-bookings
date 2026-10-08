@@ -42,7 +42,7 @@ import { emitActivity } from "../lib/activitySink";
 // this hook keeps the refs, listeners, effects and setState. See its header.
 import {
   buildPatch, patchSignature, isDuplicatePatch,
-  isStaleGap, retryDecision, describeWrite, STALE_GAP_MS, MAX_RETRIES,
+  isStaleGap, replayOutcome, describeWrite, STALE_GAP_MS, MAX_RETRIES,
 } from "../lib/write-path";
 import { todayStr } from "../lib/day";
 
@@ -87,6 +87,12 @@ const RECONNECT_KICK_MAX_MS = 120000;
 // transport that can never work always will.
 const LOAD_TIMEOUT_MS = 15000;
 
+
+// v18.4.6: the reports whose `onLanded` has run (see `saveBookings`). At
+// module scope: a `useRef(new WeakSet())` builds one on every render and
+// keeps the first (/code-review), and a report is its caller's own object, so
+// nothing here is per-mount.
+const LANDED=new WeakSet();
 
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
@@ -283,13 +289,18 @@ export function usePersistence({ autoOptimizer, nowMins }){
     const queue=pendingRetriesRef.current;
     if(!queue.length) return;
     pendingRetriesRef.current=[];
+    // v18.4.6: a replay its caller refuses (`replayOutcome`) is dropped and
+    // SAID, in the red banner, which stays until dismissed. The mirror is
+    // read per item: each replay above it has already moved it.
+    const refusals=[];
     queue.forEach(function(item){
-      const d=retryDecision(item.tries);
+      const d=replayOutcome(item,bookingsRef.current);
       // The label rides along: a retry is the SAME user change, so it keeps the
       // name computed for the first attempt. That is also what closes the race
       // below — a retry is dispatched from a promise callback, where React
       // defers the render that would compute a fresh one.
-      if(d.action==="retry") saveBookings(item.fn,false,d.tries,item.label);
+      if(d.action==="retry") saveBookings(item.fn,false,item.report,d.tries,item.label);
+      else if(d.action==="refuse") refusals.push(d.message);
       // v17.16.9: PARK, don't drop. See parkedRef above for what dropping cost.
       // No `setWriteWarning` here any more: the parked banner carries the message,
       // and a dismissible red banner beside an undismissable one saying the same
@@ -297,6 +308,16 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // callers (not loaded, empty-array refusal, blocks rejected) unchanged.
       else parkedRef.current=parkedRef.current.concat([item]);
     });
+    // Added to a warning already showing, not over it (/code-review): the
+    // slot is one string, and a block edit's "please redo the change" would
+    // have gone undismissed the moment this spoke.
+    if(refusals.length){
+      const said=refusals.filter(function(m,i){return refusals.indexOf(m)===i;});
+      setWriteWarning(function(was){
+        const fresh=said.filter(function(m){return !was||was.indexOf(m)<0;});
+        return fresh.length?(was?was+" ":"")+fresh.join(" "):was;
+      });
+    }
     syncParked();
   }
   // Force-pull the server's current bookings + tableBlocks, replace local state,
@@ -382,8 +403,27 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // it was blocked by the stale gate. Callers gate their success UI (the "saved"
   // flash / closing the form) on the result so a refused write is never shown as
   // saved. `tryN` (internal) tracks auto-retry attempts; callers omit it.
-  function saveBookings(next,isSilent,tryN,carriedLabel){
+  //
+  // v18.4.6: `report` is what the boolean cannot say, since it is returned at
+  // the dispatch and a held or rejected write is settled later, by the queue.
+  // Optional, and it rides with the queued item through every retry, the park
+  // and the banner's Retry:
+  //   onLanded()          once, when the server has the write. A side effect
+  //                       that must not outlive a write that never lands goes
+  //                       here ("Repeat weekly" wrote its rule first, and a
+  //                       discarded booking left the rule booking every week)
+  //   replayRefusal(prev) asked before each REPLAY, on the fresh list: a
+  //                       sentence drops the write and shows it, null replays
+  function saveBookings(next,isSilent,report,tryN,carriedLabel){
     tryN=tryN||0;
+    // Once per report, whichever attempt lands. In its own try: this runs
+    // inside the write's `.then`, where a throw would reach the `.catch`
+    // below it and queue a write that landed for a retry.
+    function landed(){
+      if(!report||typeof report.onLanded!=="function"||LANDED.has(report)) return;
+      LANDED.add(report);
+      try{report.onLanded();}catch(e){console.warn("[SAFE] a bookings write landed, and what followed it threw.",e);}
+    }
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
@@ -422,7 +462,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // and removing a working defence is not this commit's job.
         const prevHeld=bookingsRef.current;
         const computedHeld=next(prevHeld);
-        const item={fn:next,tries:tryN,label:carriedLabel||describeWrite(prevHeld,computedHeld)};
+        const item={fn:next,tries:tryN,label:carriedLabel||describeWrite(prevHeld,computedHeld),report:report};
         pendingRetriesRef.current.push(item);
         // v15.6.0: optimistic show. Apply the user's change to LOCAL state NOW so it's
         // visible immediately — previously a held write stayed invisible until resync
@@ -455,7 +495,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // keyed shape lands (arrayShapeRef clears) the queued retry succeeds.
       if(arrayShapeRef.current){
         console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
         markStale();
         dispatched=false;return;
       }
@@ -470,7 +510,10 @@ export function usePersistence({ autoOptimizer, nowMins }){
       const built=buildPatch(prev,computed,lastStampRef.current,Date.now());
       const patch=built.patch;
       lastStampRef.current=built.lastStamp;
-      if(!Object.keys(patch).length) return; // nothing actually changed — skip the write
+      // v18.4.6: nothing to write IS landed, and on a replay it is the case
+      // that matters: the first attempt reached the server and only its
+      // answer was lost, so the fresh list already holds the change.
+      if(!Object.keys(patch).length){landed();return;} // nothing actually changed — skip the write
       // v16.0.0: StrictMode dedupe — the dev double-invoked updater calls persist()
       // twice with the same prev/computed. The two patches differ ONLY in their
       // fresh `updatedAt` stamps (contentKey excludes those, and both carry the
@@ -489,12 +532,21 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // tried to do. A retry that eventually lands logs once, when it lands.
       update(ref(db,"bookings"),patch).then(function(){
         emitActivity(bookingWriteEntries(prev,computed,{auto:isSilent===true}));
+        landed();
       }).catch(function(err){
         // v17.16.13: the error is TAKEN now. This catch used to discard it and
         // hard-code "stale per-booking revision", which is one of at least four
         // things PERMISSION_DENIED can mean here — see describeWriteError.
         console.warn(describeWriteError("bookings",err)+" Resyncing + retry.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed)});
+        // v18.4.6: a REFUSED patch is not "the same write" to skip. The
+        // signature stayed armed, so a replay that built an identical patch
+        // inside the window (any refusal that is not a stale stamp: the fresh
+        // list gives the same base) returned at the dedupe above. Measured on
+        // DEV with the write forced to reject: one rejection, no retry, no
+        // parked banner, and the booking drawn from local state with nothing
+        // on the server. Cleared only if it is still this patch's.
+        if(lastPatchSigRef.current.sig===sig) lastPatchSigRef.current={sig:"",at:0};
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
         markStale();
       });
     }
