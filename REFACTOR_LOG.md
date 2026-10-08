@@ -32439,3 +32439,116 @@ means the sheet deciding which flags fit.
 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
 rules suite was not run and there is no PROD rules step.
 
+
+---
+
+## v18.4.7 — manual table assignment out of BookingApp (#17)
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.7-manual-assign-plan` ·
+**Behavioural change:** none. No rules change, so no console step.
+
+### Commit 1 — `planAssign`
+
+**Files:** `src/lib/manual-assign.js` (new, 41 lines) · `src/App.jsx` (5,228 → 5,220
+lines) · `tests/manual-assign.test.js` (new, 11) · `tests/booking-logic.test.js` ·
+`tests/retry-report.test.js` · `src/lib/booking-save.js` (a comment) · `src/lib/CLAUDE.md`
+· `ROADMAP.md`
+
+`manualAssign`'s updater moved to `planAssign(ctx)` statement for statement. It returns
+`{transform, reshuffles}`: the function `saveBookings` is handed, and whether the picker's
+Swap took tables from another party (the old `affected&&affected.length>0`, which gates
+the re-optimise and the flash). App's `manualAssign` is the plan, `saveBookings` with
+`goneReport`, `setManualTarget(null)` and the flash, in the old order. `releaseSwapped`
+left App's imports with it. `App.jsx` loses 8 lines; what the move buys is that a test can
+run the picker's write, which none could.
+
+**Verified old against new.** A throwaway test lifted the old `manualAssign` out of
+`origin/main`'s `App.jsx` (`49d13d56`) and the new one out of the working tree's, compiled
+both with the real `booking-logic`, `releaseSwapped` and `planAssign` and stub
+`saveBookings` / `setManualTarget` / `flash` / `goneReport` / `getUser`, and ran both on
+generated days (3,000 seeds, 3–15 bookings, mixed statuses and locks, table blocks,
+optimiser on and off, today and later days), twelve assignments each: **36,000
+assignments, the same calls in the same order, the same written list, and the same list
+for a replay on a changed `prev`**, history entries included (clock frozen), and the same
+rows returned as the same objects. Reached: no swap 26,421 · swap 9,579 (7,812 moved
+another party's tables) · an id not in the list 2,172 · `locked` not the literal true
+20,547 (false, undefined, `1`, `"true"`) · `saveBookings` answering false 5,336 · the
+booking on a day other than the one on screen 6,763 · optimiser switch off 17,715 · flash
+8,139. The swap list was built the way `ManualModal` builds it in about half the swap
+cases and at random (unknown ids, tables the party does not hold) in the rest.
+**Sabotages:** `_locked:true` for `locked===true` failed at seed 1; re-optimising the
+booking's own date for `viewDate` failed at seed 6. The test is not committed, because it
+reads the old code from git. (The first run finished every comparison and then hit
+vitest's 5s limit, which is where the counts were printed; the re-run with the limit
+raised passed.)
+
+**What stays:** `tests/manual-assign.test.js`, one case per outcome, and that App's
+function decides nothing. The two tests that read `manualAssign`'s text in App
+(`_locked:locked===true`, "is what manualAssign applies") read the new file; the
+caller-list entry in `tests/retry-report.test.js` names the new call.
+
+**Measured on DEV (1 trial each), through the picker.** Assign: Carlos (21:00, table 1A)
+→ table 2; stored `tables: ["2"]`, `_manual` and `_locked` true, history "tables manually
+assigned: 2". Swap busy: Carlos → 1B, held by two unlocked parties over his window;
+stored Carlos `["1B"]` locked, v1833-recD 1B → 1A, v1833-recA 1B → 2, both unlocked and
+without a conflict, the toast "Tables re-optimised.", the picker closed.
+
+**Seen and not changed.** The swap re-optimises `viewDate`, the day on screen. From an
+edit form whose date was changed that is not the booking's day. Not reproduced.
+
+**Gate:** build 128.24 kB gz (main chunk, +0.08 on v18.4.6) · 2756 tests passed (11 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — the drop's displacement releases through `releaseSwapped`
+
+**Files:** `src/lib/drop-plan.js` · `tests/drop-plan.test.js` (2 new) ·
+`src/lib/booking-save.js` (a comment) · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+Patryk's call (AskUserQuestion): move, then unify. `planDrop`'s displacement stripped the
+set from each occupant and unlocked it in its own six lines, the fourth copy of what
+`releaseSwapped` does for the form's two saves and the picker. It now names each occupant
+with the whole set (`{id, tables: dSet}`) and calls `releaseSwapped`. **No behaviour
+change.** Only the release is shared: the dragged booking's own write stays the drop's,
+because its patch lists `_manual, _locked, _conflict` where the picker's lists `_conflict,
+_manual, _locked`, and `contentKey` compares key order.
+
+**Verified old against new.** `origin/main`'s `drop-plan.js` copied beside the new one and
+both run on generated days (600 seeds, the generator of commit 1, plus a shown list whose
+seated parties run longer than the stored one), every booking dropped on every table:
+**70,655 drops, the same answer each time**: the same null or refusal, the same toast, the
+same written list, the same list for a replay on a changed `prev`, the same rows returned
+as the same objects, and the same key order on every row. Reached: nothing 30,309 ·
+refusal 9,561 · move 24,896 · swap 401 · displace 5,488. **Sabotages:** a release that
+keeps the occupant's lock failed at seed 1; taking only the target table from an occupant
+failed at seed 9. Not committed, for commit 1's reason.
+
+**Not done:** a drag on DEV. The displacement is the only path changed and the Browser
+pane cannot arm a real drag (`mgt-measurement-traps`).
+
+**Gate:** build 128.23 kB gz (main chunk) · 2758 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): five findings
+
+**Fixed (2), each checked first:**
+
+- **The new drop test ran a swap.** Its case had one party on the target, which `planDrop`
+  answers with "A and B — tables swapped.", so it never reached the release commit 2
+  changed, and it asserted `releaseSwapped` directly. It now puts two parties on the
+  table ("A moved to 3 — B, C reassigned.") and reads what was written. Sabotage: the
+  release replaced by `return b` fails it, with the older displacement test and the
+  source check.
+- **`drop-plan.js`'s header said every statement was the moved one.** It names the one
+  that is not.
+
+**Deferred to ROADMAP (1):** a Swap confirmed from the edit form while the draft's date
+is not the day on screen. The released party is on the draft's date and the pass runs on
+`viewDate`, so it is left unlocked without a table (run on the lib: `tables: []`). Older
+than this version, kept by the move, and fixing it changes which day is re-optimised.
+
+**Not changed (2):** the swap test written three times in `planAssign` (the move is
+statement for statement, and that is what was compared against the old code); the release
+being a `find` per booking where the drop had a `Set` (occupants are a handful beside an
+optimiser pass per trial; not measured).
+
+**Gate at the push:** build 128.23 kB gz (128.16 on v18.4.6) · 2758 tests (2745) · lint 63
+problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
+rules suite was not run and there is no PROD rules step.

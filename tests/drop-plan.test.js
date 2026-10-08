@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { planDrop } from "../src/lib/drop-plan.js";
+import { releaseSwapped } from "../src/lib/booking-save.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 import { comboCapBest } from "../src/lib/booking-logic.js";
 import { todayStr, addDays } from "../src/lib/day.js";
@@ -157,5 +158,41 @@ describe("BookingApp's dropOnTable", () => {
     // write is never shown as a move.
     expect(fn).toContain("if(saveBookings(plan.transform,false,goneReport(id))) flashDragMsg(plan.done,true);");
     expect(fn.split("\n").length).toBeLessThan(12);
+  });
+});
+
+// v18.4.7: the displacement and the table picker's Swap leave an occupant the
+// same thing. The drop wrote its own copy of the release until then; it was
+// run against that copy over 70,655 generated drops when it changed
+// (REFACTOR_LOG).
+describe("planDrop: what a displaced party is left with", () => {
+  const LIB = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "drop-plan.js"), "utf8")).join("\n");
+
+  it("is releaseSwapped, not a second copy of it", () => {
+    expect(LIB).toContain("return releaseSwapped(b,taken);");
+    expect(LIB).not.toContain("_locked:false");
+  });
+
+  it("leaves each occupant unlocked for the optimiser, which seats it off the set", () => {
+    // Two parties hold 3 over `a`'s window, so there is no swap: a displacement.
+    // `b` also holds 4 by hand; the release leaves it 4, unlocked.
+    const list = [bk("a", "19:00", 2, ["2"]),
+      bk("b", "18:00", 2, ["3", "4"], { _manual: true, _locked: true }),
+      bk("c", "20:00", 2, ["3"], { _manual: true, _locked: true })];
+    const plan = drop(list, "a", "3");
+    expect(plan.done).toBe("A moved to 3 — B, C reassigned.");
+    const out = plan.transform(list);
+    expect(byId(out, "a").tables).toEqual(["3"]);
+    for (const id of ["b", "c"]) {
+      const o = byId(out, id);
+      expect(o._locked, id).toBe(false);
+      expect(o._manual, id).toBe(false);
+      expect(o.tables.length, id).toBeGreaterThan(0);
+      expect(o.tables, id).not.toContain("3");
+      expect(o._conflict, id).toBeFalsy();
+    }
+    // and what the optimiser was handed for `b` is the picker's release
+    expect(releaseSwapped(list[1], [{ id: "b", tables: ["3"] }])).toStrictEqual(
+      Object.assign({}, list[1], { tables: ["4"], _locked: false, _manual: false }));
   });
 });

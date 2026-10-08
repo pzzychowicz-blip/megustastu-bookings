@@ -88,8 +88,8 @@ import { dueOccurrences, withOccurrences } from "./lib/recurring";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
-// transform shares, and the swap release `manualAssign` shares with the saves.
-import { applyEdit, buildBooking, memoByPrev, releaseSwapped, goneRefusal } from "./lib/booking-save";
+// transform shares.
+import { applyEdit, buildBooking, memoByPrev, goneRefusal } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -113,6 +113,7 @@ import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop } from "./lib/drop-plan";
+import { planAssign } from "./lib/manual-assign";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
 
@@ -418,7 +419,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.4.6"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.4.7"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -3729,22 +3730,13 @@ function BookingApp({uid}){
       setViewDate(primary.date);
     }
   }
+  // v18.4.7 (#17): WHAT the picker's Save writes is `planAssign`
+  // (lib/manual-assign.js); this keeps the write, the close and the flash.
   function manualAssign(bookingId,tables,locked,affected){
-    const user=getUser();
-    const ok=saveBookings(function(b){
-      const updated=b.map(function(x){
-        if(x.id===bookingId) return Object.assign({},x,{tables:tables,_conflict:false,_manual:true,_locked:locked===true,history:(x.history||[]).concat([histEntry("tables manually assigned: "+tables.join(", "),user)])});
-        // If swapping, strip taken tables from affected bookings and unlock them for re-optimization
-        // (`releaseSwapped`, lib/booking-save.js, which the form's two saves share).
-        if(affected&&affected.length>0) return releaseSwapped(x,affected);
-        return x;
-      });
-      // Re-optimize to reassign affected bookings to new tables (when optimizer active)
-      if(affected&&affected.length>0) return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
-      return updated;
-    },false,goneReport(bookingId));
+    const plan=planAssign({bookingId:bookingId,tables:tables,locked:locked,affected:affected,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,user:getUser()});
+    const ok=saveBookings(plan.transform,false,goneReport(bookingId));
     setManualTarget(null);
-    if(ok&&affected&&affected.length>0) flash();
+    if(ok&&plan.reshuffles) flash();
   }
 
   function addBlock(block){if(refused("tableBlock"))return;

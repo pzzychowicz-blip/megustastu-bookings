@@ -60,7 +60,10 @@ export function memoByPrev(fn){
 // tables and is unlocked, so the optimiser pass that follows can place it
 // again. Any other booking comes back as it was, the same object.
 // v18.3.4 (/code-review): written out three times — the edit's save, the new
-// booking's save and App's `manualAssign` (the picker's Swap outside the form).
+// booking's save and App's `manualAssign` (the picker's Swap outside the form,
+// `planAssign` in lib/manual-assign.js since v18.4.7).
+// v18.4.7: a timeline drop's displacement too (`planDrop`, lib/drop-plan.js),
+// which names each occupant with the whole set the dragged booking takes.
 export function releaseSwapped(b,affected){
   const match=affected.find(function(ab){return ab.id===b.id;});
   if(!match) return b;

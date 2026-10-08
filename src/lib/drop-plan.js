@@ -3,6 +3,8 @@
 // is only what the code does with its conclusion: it used to call
 // `flashDragMsg` and `saveBookings` itself, and now RETURNS the conclusion, so
 // the decision is reachable by a test and App keeps the two side effects.
+// v18.4.7: one statement has changed since. Step 4's release of an occupant is
+// `releaseSwapped` (lib/booking-save.js), where it was written out here.
 //
 //   planDrop(ctx) → null                  nothing to do (not this day's active
 //                                         booking, or dropped on its own row)
@@ -42,6 +44,7 @@ import {
   rankCombosContaining, comboExistsFor, comboCapBest, canAssign,
   bookingsAfterAction, histEntry as defaultHistEntry,
 } from "./booking-logic.js";
+import { releaseSwapped } from "./booking-save.js";
 
 export function planDrop(ctx){
   const id=ctx.id,targetId=ctx.targetId,liveBookings=ctx.liveBookings,bookings=ctx.bookings;
@@ -142,16 +145,15 @@ export function planDrop(ctx){
   //    Round 4: walk the optimizer-ranked candidates in order and commit the
   //    FIRST whose trial re-seats every displaced booking conflict-free —
   //    a stranding top pick falls through to the next set, not to a refusal.
+  //    v18.4.7: what an occupant is left with is `releaseSwapped`
+  //    (lib/booking-save.js), the picker's Swap and the form's two saves' own
+  //    release, where this wrote it out a fourth time.
   const mkTransform=function(dSet,dOcc){
-    const occIds=new Set(dOcc.map(function(b){return b.id;}));
+    const taken=dOcc.map(function(b){return {id:b.id,tables:dSet};});
     return function(list){
       const updated=list.map(function(b){
         if(b.id===id) return Object.assign({},b,{tables:dSet,_manual:true,_locked:true,_conflict:false,history:(b.history||[]).concat([histEntry("moved to "+dSet.join("+")+" (drag)",user)])});
-        if(occIds.has(b.id)){
-          const remaining=(b.tables||[]).filter(function(t){return !dSet.includes(t);});
-          return Object.assign({},b,{tables:remaining,_locked:false,_manual:false});
-        }
-        return b;
+        return releaseSwapped(b,taken);
       });
       return bookingsAfterAction(updated,viewDate,tableBlocks,null,false,autoOptimizer);
     };

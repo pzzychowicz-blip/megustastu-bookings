@@ -118,8 +118,17 @@ evidence for each.
   lines (5,727 before it). Recurring generation followed in v18.4.4 (`withOccurrences`,
   `lib/recurring.js`; `App.jsx` 5,410 lines), and backup/export in v18.4.5 (`runBackup` in
   `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
-  drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines). **Next: manual table assignment**
-  (`manualAssign`), which shares the displacement recipe with the drop.
+  drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines), and manual table assignment in
+  v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
+  shares its release, `releaseSwapped`). The next domain is not chosen.
+
+- **A Swap from the edit form on another date leaves the other party without a table**
+  (v18.4.7's `/code-review`; older than it). The picker's Swap releases the parties it
+  takes from on the DRAFT's date, and `planAssign` re-optimises `viewDate`, the day on
+  screen. When the two differ (the form's date changed before Assign), a released party is
+  stored unlocked with its remaining tables and nothing seats it again: run on the lib,
+  it came back with `tables: []`. Not reproduced through the form. The fix is which date
+  the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
 
 - **A new booking removes its waitlist entry before the booking lands** (found planning
   v18.4.6). `doSaveNew` calls `removeFromWaitlist` right after the dispatch, so a held

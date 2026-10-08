@@ -134,7 +134,7 @@ describe("every single-booking write in App hands saveBookings the report", () =
     ["a status change", /\},false,goneReport\(id\)\);\s+if\(ok&&\(status==="completed"\|\|status==="seated"\)\)/],
     ["the voucher carry", "},false,goneReport(c.to));"],
     ["cancel and no-show", "saveBookings(cancelMemo,false,goneReport(id))"],
-    ["manual assign", "},false,goneReport(bookingId));"],
+    ["manual assign", "saveBookings(plan.transform,false,goneReport(bookingId))"],
   ];
   WITH.forEach(([what, code]) => it(what, () => (
     typeof code === "string" ? expect(APP).toContain(code) : expect(APP).toMatch(code))));

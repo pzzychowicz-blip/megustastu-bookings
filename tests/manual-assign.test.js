@@ -1,0 +1,130 @@
+// tests/manual-assign.test.js — v18.4.7 (ROADMAP #17)
+//
+// `planAssign` is what the table picker's Save writes, moved out of BookingApp.
+// When it moved it was run against the old `manualAssign` (lifted from the
+// commit before) over 36,000 generated assignments, with the same written list
+// and the same calls every time; that comparison is in REFACTOR_LOG, since it
+// needs the old code. These are the cases that stay: one per outcome, each
+// asserting what is WRITTEN.
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { planAssign } from "../src/lib/manual-assign.js";
+import { todayStr, addDays } from "../src/lib/day.js";
+import { stripComments } from "../scripts/strip-comments.mjs";
+
+const TODAY = todayStr();
+// A day that is not today: the optimiser is always on.
+const D = addDays(TODAY, 2);
+const stamp = (action, user) => ({ action, by: user });
+
+const bk = (id, time, size, tables, extra) => Object.assign(
+  { id, name: id.toUpperCase(), date: D, time, size, duration: 90, status: "confirmed", tables, history: [] }, extra || {});
+
+const assign = (bookingId, tables, locked, affected, more) => planAssign(Object.assign({
+  bookingId, tables, locked, affected, viewDate: D, tableBlocks: [], autoOptimizer: true, user: "u@x", stamp,
+}, more || {}));
+const byId = (list, id) => list.find((b) => b.id === id);
+
+describe("planAssign: a plain assignment", () => {
+  const list = [bk("a", "19:00", 2, ["2"], { _conflict: true }), bk("b", "19:00", 2, ["3"])];
+
+  it("gives the booking the tables, hand-placed and locked, with one history line", () => {
+    const plan = assign("a", ["4", "5A"], true, null);
+    expect(plan.reshuffles).toBe(false);
+    expect(byId(plan.transform(list), "a")).toStrictEqual(Object.assign({}, list[0], {
+      tables: ["4", "5A"], _conflict: false, _manual: true, _locked: true,
+      history: [{ action: "tables manually assigned: 4, 5A", by: "u@x" }],
+    }));
+  });
+
+  it("leaves every other booking the same object, and re-optimises nothing", () => {
+    for (const affected of [null, undefined, []]) {
+      const out = assign("a", ["4"], true, affected).transform(list);
+      expect(out[1]).toBe(list[1]);
+      expect(out.length).toBe(2);
+    }
+  });
+
+  it("locks only on the literal true", () => {
+    for (const locked of [false, undefined, 1, "true"]) {
+      const a = byId(assign("a", ["4"], locked, null).transform(list), "a");
+      expect(a._locked, String(locked)).toBe(false);
+      expect(a._manual).toBe(true);
+    }
+  });
+
+  it("starts a history for a booking stored without one", () => {
+    const bare = [Object.assign({}, list[0])];
+    delete bare[0].history;
+    expect(assign("a", ["4"], true, null).transform(bare)[0].history.length).toBe(1);
+  });
+
+  it("writes nothing for an id that is not in the list", () => {
+    const out = assign("nobody", ["4"], true, null).transform(list);
+    expect(out[0]).toBe(list[0]);
+    expect(out[1]).toBe(list[1]);
+  });
+});
+
+describe("planAssign: a swap", () => {
+  // `b` holds 3 by hand; `a` takes it. `b` is released and the day re-optimised.
+  const list = [bk("a", "19:00", 2, ["2"]), bk("b", "19:00", 2, ["3"], { _manual: true, _locked: true }),
+    bk("c", "19:00", 2, ["4"], { _manual: true, _locked: true })];
+
+  it("releases the party it takes from, which the optimiser then seats elsewhere", () => {
+    const plan = assign("a", ["3"], true, [{ id: "b", name: "B", tables: ["3"] }]);
+    expect(plan.reshuffles).toBe(true);
+    const out = plan.transform(list);
+    expect(byId(out, "a").tables).toEqual(["3"]);
+    expect(byId(out, "a")._locked).toBe(true);
+    const b = byId(out, "b");
+    expect(b._locked).toBe(false);
+    expect(b._manual).toBe(false);
+    expect(b.tables.length).toBeGreaterThan(0);
+    expect(b.tables).not.toContain("3");
+    expect(b._conflict).toBeFalsy();
+  });
+
+  it("does not touch a locked party the swap did not name", () => {
+    const out = assign("a", ["3"], true, [{ id: "b", tables: ["3"] }]).transform(list);
+    expect(byId(out, "c").tables).toEqual(["4"]);
+    expect(byId(out, "c")._locked).toBe(true);
+  });
+
+  it("re-optimises the day on screen, not the booking's own", () => {
+    // `far` is on another day and unplaced: only a pass over ITS day seats it.
+    const far = bk("far", "19:00", 2, [], { date: addDays(D, 1) });
+    const days = list.concat([far]);
+    const swap = [{ id: "b", tables: ["3"] }];
+    expect(byId(assign("a", ["3"], true, swap).transform(days), "far").tables).toEqual([]);
+    expect(byId(assign("a", ["3"], true, swap, { viewDate: far.date }).transform(days), "far").tables.length).toBeGreaterThan(0);
+  });
+
+  it("answers the same for the same list, and for a fresh one (the replay)", () => {
+    const plan = assign("a", ["3"], true, [{ id: "b", tables: ["3"] }]);
+    expect(plan.transform(list)).toStrictEqual(plan.transform(list));
+    const fresh = list.filter((b) => b.id !== "c");
+    expect(plan.transform(fresh).map((b) => b.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("App's manualAssign is the plan and its three effects", () => {
+  const APP = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n");
+  const at = APP.indexOf("function manualAssign(");
+  const body = APP.slice(at, APP.indexOf("function addBlock(", at));
+
+  it("decides nothing itself", () => {
+    expect(body).toContain("planAssign(");
+    for (const word of ["histEntry", "bookingsAfterAction", "releaseSwapped", "_locked", "_manual", ".map("]) {
+      expect(body, word).not.toContain(word);
+    }
+  });
+
+  it("writes through saveBookings with the deleted-elsewhere report, closes the picker, and flashes only when the write went and the day was reshuffled", () => {
+    const flat = body.replace(/\s+/g, "");
+    expect(flat).toContain("constok=saveBookings(plan.transform,false,goneReport(bookingId));setManualTarget(null);if(ok&&plan.reshuffles)flash();");
+  });
+});
