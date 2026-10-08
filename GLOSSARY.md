@@ -262,7 +262,7 @@ Where the real ambiguity lives.
 | Tables rearranging themselves | **reshuffle** (`bookingsAfterAction`, `applyOpt`) | The optimiser reassigning tables to fit more in. Never touches seated or `_locked` bookings. |
 | "Daily cutoff" in Settings | **cutoff** (`settings/optimizer.cutoff`) | The hour the optimiser stops acting on today. Off at 15:00, back on at the new day. |
 | A party that walked in | **walk-in** | `_manual: true, _locked: true` — immune to the optimiser. |
-| The ⏳ N badge in the date-nav row | **waitlist** (`useWaitlist.js`) | Parties waiting for a table, FCFS by `createdAt`. |
+| The ⏳ N badge in the date-nav row | **waitlist** (`useWaitlist.js`) | Parties waiting for a table, FCFS by `createdAt`. A party being booked is **held** (v18.4.8): off the badge, the panel and the timeline on this device from Save until its booking lands, and back if the booking is discarded. |
 | A waitlist party matched to a table | **waitlist match** (`placeWaitlist`, `lib/waitlist-match.js`) | The zone the party asked for first (the entry's `preference`, "Indoor" / "Outdoor" on its row), the other zone when it is full (v18.3.1: a preference is a wish; v18.2.0 phase 68 had it strict). **Sequential, not parallel** — each match is held as a synthetic locked booking the next scan sees. |
 | "Separation between bookings" | **turnaround buffer** (`TURN_BUFFER`, `padEnd`) | Minutes a table stays unavailable after a party leaves. Off by default. **Placement only** — it never makes an already-booked day report clashes. |
 | Tables that can be pushed together | **join group** (`joinGroups`) | Which tables are physically adjacent. A table belongs to at most one. |

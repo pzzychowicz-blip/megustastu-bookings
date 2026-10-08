@@ -163,3 +163,16 @@ export function placeWaitlist(o) {
 
   return next;
 }
+
+// ── withoutHeld: the waitlist without the parties being booked (v18.4.8) ─────
+// A party booked from the panel stays in the stored waitlist until its booking
+// LANDS (the write's `onLanded` removes it), so a booking that never lands has
+// not lost it. Until then it is held on this device: left out of everything
+// that reads the waitlist, so it cannot be booked a second time. Returns the
+// list itself when nothing in it is held, so a memo or an effect keyed on the
+// list does not see a change that is not one.
+export function withoutHeld(list, heldIds) {
+  if (!heldIds || !heldIds.length) return list;
+  const out = list.filter(function (w) { return !(w && heldIds.includes(w.id)); });
+  return out.length === list.length ? list : out;
+}

@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { placeWaitlist } from "../src/lib/waitlist-match.js";
+import { placeWaitlist, withoutHeld } from "../src/lib/waitlist-match.js";
 import { genId, isAllIn, isAllOut, offZone } from "../src/lib/booking-logic.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 
@@ -306,5 +306,55 @@ describe("phase 68 — the entry carries the zone, and the row says it", () => {
   it("the waitlist row and the Day sheet say it", () => {
     expect(read("components/WaitlistPanel.jsx")).toMatch(/\{w\.preference==="indoor"\|\|w\.preference==="outdoor"\?<span style=\{ZONE_FLAG\}>/);
     expect(read("components/DaySheet.jsx")).toMatch(/\(w\.preference === "indoor" \? " · indoor" : w\.preference === "outdoor" \? " · outdoor" : ""\)/);
+  });
+});
+
+// ── v18.4.8: a party being booked is held, not removed ──────────────────────
+// Book from the panel removed the entry as the booking was dispatched, so a
+// booking that never landed had lost its party. The entry stays stored until
+// the booking lands and is left out of what the app reads in between.
+describe("withoutHeld — the waitlist without the parties being booked", () => {
+  const list = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  it("leaves the held entries out, in order", () => {
+    expect(withoutHeld(list, ["b"])).toEqual([{ id: "a" }, { id: "c" }]);
+    expect(withoutHeld(list, ["c", "a"])).toEqual([{ id: "b" }]);
+  });
+  it("returns the list itself when nothing in it is held", () => {
+    expect(withoutHeld(list, [])).toBe(list);
+    expect(withoutHeld(list, null)).toBe(list);
+    expect(withoutHeld(list, ["gone"])).toBe(list);
+  });
+  it("does not trip on a hole in the stored list", () => {
+    expect(withoutHeld([null, { id: "a" }], ["a"])).toEqual([null]);
+  });
+});
+
+describe("useWaitlist returns the list without the held entries, and keeps the stored one for its own writes", () => {
+  const HOOK = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../src/hooks/useWaitlist.js"), "utf8")).join("\n");
+  it("what it hands out is withoutHeld of the stored list", () => {
+    expect(HOOK).toContain("const shown=useMemo(function(){return withoutHeld(waitlist,held);},[waitlist,held]);");
+    expect(HOOK).toMatch(/return \{ waitlist:shown, /);
+  });
+  it("a save computes from the mirror, which holding never touches", () => {
+    const hold = HOOK.slice(HOOK.indexOf("const holdEntry="), HOOK.indexOf("const shown="));
+    expect(hold).not.toContain("waitlistRef");
+    expect(hold).not.toContain("saveWaitlist");
+  });
+});
+
+describe("a new booking from the waitlist (App)", () => {
+  const APP = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n");
+  const fn = APP.slice(APP.indexOf("function doSaveNew("), APP.indexOf("function doSave("));
+  it("holds the entry before the dispatch, so nothing can land first", () => {
+    const hold = fn.indexOf("holdWaitlistEntry(wlId)"), save = fn.indexOf("saveBookings(plan.next");
+    expect(hold).toBeGreaterThan(-1);
+    expect(save).toBeGreaterThan(hold);
+  });
+  it("removes it only in onLanded, and releases it there and in onDiscarded", () => {
+    expect((fn.match(/removeFromWaitlist\(/g) || []).length).toBe(1);
+    expect(fn).toMatch(/onLanded:function\(\)\{[\s\S]*removeFromWaitlist\(wlId\);releaseWaitlistEntry\(wlId\);/);
+    expect(fn).toMatch(/onDiscarded:function\(\)\{[^}]*releaseWaitlistEntry\(wlId\);/);
   });
 });

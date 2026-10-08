@@ -28,7 +28,7 @@
 // (see memory/firebase-set-in-updater-doubling — useReminders still carries
 // the old shape; port this fix if its adds ever double).
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { genId } from "../lib/booking-logic";
@@ -38,6 +38,7 @@ import { dbError } from "../lib/dbError";
 import { settingsWriteEntry } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
 import { todayStr } from "../lib/day";
+import { withoutHeld } from "../lib/waitlist-match";
 
 export function useWaitlist({ setWriteWarning }){
   const waitlistLoaded=useRef(false);
@@ -114,5 +115,23 @@ export function useWaitlist({ setWriteWarning }){
     saveWaitlist(function(prev){return prev.filter(function(w){return w.id!==id;});});
   }
 
-  return { waitlist, saveWaitlist, addToWaitlist, removeFromWaitlist };
+  // ── v18.4.8: a party being booked ───────────────────────────────────────────
+  // Book from the panel used to remove the entry as the booking was
+  // dispatched, and a booking that then never landed (held, parked, discarded
+  // from the banner, or lost with the tab) had lost its party as well. The
+  // entry now stays stored until the booking lands. In between it is HELD: an
+  // id in this per-device list, left out of the `waitlist` this hook returns,
+  // so the panel, the badge and the matcher all stop offering it. Released
+  // when the booking lands (after the removal) or is discarded. A reload
+  // empties it, which is right: a booking still queued then is gone too.
+  const [held,setHeld]=useState([]);
+  const holdEntry=useCallback(function(id){
+    setHeld(function(h){return h.includes(id)?h:h.concat([id]);});
+  },[]);
+  const releaseEntry=useCallback(function(id){
+    setHeld(function(h){return h.includes(id)?h.filter(function(x){return x!==id;}):h;});
+  },[]);
+  const shown=useMemo(function(){return withoutHeld(waitlist,held);},[waitlist,held]);
+
+  return { waitlist:shown, saveWaitlist, addToWaitlist, removeFromWaitlist, holdEntry, releaseEntry };
 }

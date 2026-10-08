@@ -130,13 +130,12 @@ evidence for each.
   it came back with `tables: []`. Not reproduced through the form. The fix is which date
   the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
 
-- **A new booking removes its waitlist entry before the booking lands** (found planning
-  v18.4.6). `doSaveNew` calls `removeFromWaitlist` right after the dispatch, so a held
-  booking that is then discarded from the banner has lost its waitlist party too. Moving
-  the removal to the write's `onLanded` (v18.4.6) is wrong by itself: offline, the party
-  would stay in the waitlist and could be booked twice. It needs restore-on-discard, which
-  means the queue also reporting a discard. The WhatsApp links beside it
-  (`completeDraftAccept`, `linkBookingByPhone`) have the same timing.
+- **An accepted WhatsApp draft whose form is closed unsaved still claims the next new
+  booking** (v18.4.8's `/code-review`; older than it). `handleAcceptDraft` sets
+  `draftSourceRef` and only a saved new booking clears it (`takeDraftSource`). Close the
+  form, make another booking with + New, and that conversation is marked accepted and
+  linked to it. Read from the code, not reproduced. `openNewWith` clears the waitlist's
+  pending entry for the same reason (v18.3.5); the draft source needs the same.
 
 - **The parked-write banner can name the wrong booking for a create** (seen on DEV in
   v18.4.6). `describeWrite` names the first CHANGED id, and a new booking that reshuffles

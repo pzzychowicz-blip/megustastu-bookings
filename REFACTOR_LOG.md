@@ -32552,3 +32552,144 @@ optimiser pass per trial; not measured).
 **Gate at the push:** build 128.23 kB gz (128.16 on v18.4.6) · 2758 tests (2745) · lint 63
 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
 rules suite was not run and there is no PROD rules step.
+
+---
+
+## v18.4.8 — what a new booking does elsewhere waits for the booking
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.8-waitlist-restore-on-discard` ·
+**Behavioural change:** yes, in what a new booking does beside its own write. A waitlist
+party booked from the panel is hidden on this device at Save and removed from the
+waitlist when the booking lands; a booking discarded from the "Couldn't save" banner puts
+the party back. The WhatsApp conversation is marked accepted and linked when the booking
+lands. No rules change, so no console step.
+
+**The gap** (ROADMAP, found planning v18.4.6). `doSaveNew` removed the waitlist entry on
+the line after the dispatch. The removal went straight to the server; the booking could
+still be held or rejected.
+
+**Reproduced on DEV on v18.4.7 before any edit**, with the bookings `update()` forced to
+reject (a temporary switch, not committed): a party booked from the waitlist panel, Save.
+Six seconds later the "Couldn't save" banner was up with Retry and Discard, the server
+held no such booking, and the server's waitlist no longer held the party.
+
+### Commit 1 — the queue says when a write will never land
+
+**Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` ·
+`tests/retry-report.test.js` (9 new) · `src/App.jsx` (the version) · `src/CLAUDE.md` ·
+`src/lib/CLAUDE.md`
+
+`report.onDiscarded()`, beside v18.4.6's `onLanded`. `tellDiscarded(report, landed,
+discarded)` (`lib/write-path.js`) calls it once, never for a report that landed, and
+swallows a throw. The hook calls it at each place a write is dropped: Discard on the
+parked banner (every item), a replay its caller refuses, the two outright refusals (not
+loaded, the empty array), and a hold or rejection that has no place in the queue (value
+form or silent), at all three doors. A write that is parked, or handed back to the queue
+by Retry, is told nothing. Nothing passes `onDiscarded` yet, so this commit changes no
+behaviour.
+
+**Gate:** build 128.32 kB gz (main chunk, 128.23 on v18.4.7) · 2767 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — a waitlist party is held until its booking lands
+
+**Files:** `src/hooks/useWaitlist.js` · `src/lib/waitlist-match.js` · `src/App.jsx` ·
+`tests/waitlist-match.test.js` (7 new) · `tests/save-path.test.js` (1 new, 3 snapshots) ·
+`tests/recurring.test.js` (two pinned strings) ·
+`src/CLAUDE.md` · `src/hooks/CLAUDE.md` · `src/lib/CLAUDE.md` · `GLOSSARY.md`
+
+Patryk's call (AskUserQuestion): hide and remove on landing, over "remove now, restore on
+Discard", which would still lose the party with a closed tab.
+
+- `useWaitlist` keeps a per-device list of entry ids being booked. The `waitlist` it
+  returns is `withoutHeld(stored, held)` (`lib/waitlist-match.js`), which is the stored
+  list itself when nothing is held, so the matcher's effect and the memos keyed on it see
+  no change that is not one. Saves compute from the mirror, as before.
+- `doSaveNew` holds the entry BEFORE the dispatch, removes it in the write's `onLanded`
+  (then releases the hold) and releases it in `onDiscarded`. The removal at the dispatch
+  is gone.
+- While a write sits parked (the banner up, neither button pressed) the party is in
+  neither list on this device. The banner names the change and cannot be dismissed.
+- Other devices see the entry until the booking reaches the server.
+
+**`tests/save-path.test.js`: three snapshots changed, with the behaviour.** The two
+waitlist scenarios (`removeFromWaitlist` at the dispatch → `holdWaitlistEntry` before it,
+and the removal at the landing), and "Repeat weekly", whose report now carries
+`onDiscarded` beside `onLanded`. Read line by line after `-u`; no other snapshot moved.
+
+**Measured on DEV (1 trial each), the bookings `update()` forced to reject by the same
+temporary switch:**
+
+| Case | Server waitlist | This device | Server bookings |
+|---|---|---|---|
+| Save, write parked | party still there | badge and rows gone, banner up | none |
+| then Discard | party there | badge and Book row back | none |
+| Save, parked, switch off, Retry | party removed | booking on the timeline | one, table 1A |
+| Save, parked, reload | party there | badge and Book row back, no banner | none |
+
+**Not measured:** a held write (the freshness gate) as opposed to a rejected one; a second
+device; a real offline period.
+
+**Gate:** build 128.48 kB gz (main chunk) · 2775 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 3 — the WhatsApp conversation hears about a booking when it lands
+
+**Files:** `src/hooks/useWhatsApp.js` · `src/App.jsx` · `tests/save-path.test.js` (2 new,
+14 snapshots, 2 tests reworded) · `src/hooks/CLAUDE.md` · `ROADMAP.md` (the entry removed)
+
+Patryk's call (AskUserQuestion): in this version, at landing. `completeDraftAccept` and
+`linkBookingByPhone` ran on the line after the dispatch, so a discarded booking left a
+conversation marked accepted and linked to a booking id that does not exist. Both run in
+the write's `onLanded` now.
+
+- `takeDraftSource()` reads and clears `draftSourceRef` at the dispatch, and
+  `completeDraftAccept(bookingId, phoneKey)` takes the key it returned. The ref can name
+  another conversation by the time a write lands.
+- Every new booking now carries a report (`onLanded`, `onDiscarded`), where only "Repeat
+  weekly" and a waitlist booking did.
+- A dropped write tells the conversation nothing: its draft is still there to accept.
+- Until the booking lands the conversation shows its draft as pending. No hidden state,
+  unlike the waitlist.
+
+**`tests/save-path.test.js`: 14 snapshots changed, with the behaviour**, all the same
+three lines: `saveBookings("<fn>")` gains the report's two names, and the two `wa.` calls
+move from straight after the dispatch to the landing (after `setViewDate`), with
+`completeDraftAccept` taking the source as its second argument. In the one held scenario
+the two `wa.` calls are gone. Tallied from the diff: 14 removed and 13 added
+`completeDraftAccept` lines, 13 and 13 `linkBookingByPhone`. Two tests said "carries no
+report"; they say "writes no rule".
+
+**Measured on DEV (1 trial):** a new booking typed with the phone of a conversation whose
+draft was pending and unlinked; 2.5s after Save the stored conversation was `accepted` and
+linked to the stored booking's id. **Not measured:** Accept & open from the inbox (the
+source path), and a dropped write with a conversation attached.
+
+**Gate:** build 128.51 kB gz (main chunk, 128.23 on v18.4.7) · 2777 tests passed (2758) · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): five findings
+
+**Fixed (1), checked first:** the test for the three queue doors counted three pushes and
+three `else dropped();` separately. It now matches each door with its own `else` and the
+`markStale()` after it. Sabotage: one `else` moved below its `markStale()` behind another
+condition fails it.
+
+**Deferred to ROADMAP (1):** `draftSourceRef` is set by Accept & open and cleared only by
+a saved new booking, so a form closed unsaved leaves the next + New booking marking that
+conversation accepted. Older than this version (`completeDraftAccept` read the same ref);
+read from the code, not reproduced.
+
+**Not changed (3):**
+- A write parked on the banner leaves the waitlist party in neither list on this device
+  until Retry or Discard. Agreed in the plan; the banner cannot be dismissed.
+- A waitlist removal refused at the landing (a stale `waitlistRev`, rolled back) shows the
+  booked party as waiting again. The same refusal did that before this version.
+- `tellDiscarded` refuses a report that landed; `landed()` does not refuse one that was
+  discarded. No path drops a write with an attempt still in flight, and if one ever did,
+  a booking the server has must still take its party off the waitlist.
+
+**Checked for and not found:** a waitlist write computed from the list the hook hands out
+(which now leaves held parties out) would delete them. All four `saveWaitlist` callers
+pass a function of the stored list.
+
+**Gate at the push:** build 128.51 kB gz (128.23 on v18.4.7) · 2777 tests (2758) · lint 63
+problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
+rules suite was not run and there is no PROD rules step.

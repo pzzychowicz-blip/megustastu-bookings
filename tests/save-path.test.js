@@ -311,6 +311,9 @@ function saver(h, mirror, dispatchOk) {
     const rest = (args[1] ? [args[1]] : []).concat(report ? [{ report: Object.keys(report).sort() }] : []);
     h.calls.push(["saveBookings", typeof fn === "function" ? "<fn>" : "<value>"].concat(rest));
     if (report && report.onLanded && dispatchOk) (h.landings = h.landings || []).push(report.onLanded);
+    // v18.4.8: a held write that is then dropped (`discarded: true`) is told
+    // so at the same moment a landing would be, after the handler has run.
+    if (report && report.onDiscarded && !dispatchOk && h.discarded) (h.landings = h.landings || []).push(report.onDiscarded);
     return dispatchOk;
   };
 }
@@ -321,13 +324,15 @@ function saver(h, mirror, dispatchOk) {
 // state as values, refs as `{current}`, setters and side-effects as recorders.
 // `opts`: bookings, mirror (bookings), form, editId, blocks, autoOptimizer
 //   (false), swapAffected, at (TODAY 19:30), statusOverride, pendingWaitlist,
-//   guard (READY), dispatchOk (true), env (overrides).
+//   guard (READY), dispatchOk (true), discarded (false: a held write stays
+//   queued), env (overrides).
 function appEnv(opts) {
   const clock = freeze(opts.at || TODAY + "T19:30:00");
   const bookings = opts.bookings || [];
   const h = { calls: [], writes: [], guardRef: { current: opts.guard || submitGuard.READY } };
   const rec = (name) => (...args) => { h.calls.push([name].concat(args)); };
   h.pendingWaitlistRef = { current: opts.pendingWaitlist || null };
+  h.discarded = opts.discarded === true;
   h.env = Object.assign({
     bookings,
     liveBookings: bookingLogic.syncLiveDurations(bookings, clock.today, clock.nowMins),
@@ -356,8 +361,11 @@ function appEnv(opts) {
     setSeatNote: rec("setSeatNote"),
     addRule: (...args) => { h.calls.push(["addRule"].concat(args)); return args[0]; },
     removeFromWaitlist: rec("removeFromWaitlist"),
+    holdWaitlistEntry: rec("holdWaitlistEntry"),
+    releaseWaitlistEntry: rec("releaseWaitlistEntry"),
     wa: {
       completeModifyApply: rec("wa.completeModifyApply"),
+      takeDraftSource: () => opts.draftSource || null,
       completeDraftAccept: rec("wa.completeDraftAccept"),
       linkBookingByPhone: rec("wa.linkBookingByPhone"),
     },
@@ -2052,12 +2060,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2076,12 +2084,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2100,12 +2108,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2147,12 +2155,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2174,12 +2182,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2198,13 +2206,13 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>", {"report":["onLanded"]})",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 000 001")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
           "addRule({"id":"muyfzww09v3q","startDate":"2026-10-14","name":"Weekly","phone":"+34 600 000 001","size":2,"weekday":3,"time":"20:00","preference":"auto","notes":"usual table"})",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 000 001")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2235,7 +2243,7 @@ describe("Save — a new booking", () => {
   it("Repeat weekly on a draft, where the toggle would not show: the one visit, no rule", () => {
     const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), env: { standingOn: () => false } });
     expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
-    expect(out.calls).toContain('saveBookings("<fn>")');
+    expect(out.calls).toContain('saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})');
   });
   // v18.4.6: a booking the freshness gate holds has not landed, and its rule
   // is not written. It was, first and straight to the server, and a held
@@ -2244,12 +2252,14 @@ describe("Save — a new booking", () => {
   it("Repeat weekly, held: no rule until the booking lands", () => {
     const out = runSave({ form: newDraft({ name: "Weekly", repeatWeekly: true }), dispatchOk: false });
     expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
-    expect(out.calls).toContain('saveBookings("<fn>", {"report":["onLanded"]})');
+    expect(out.calls).toContain('saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})');
     expect(Object.values(out.writes[0].rows)[0], "the booking is still stamped for its rule").toMatch(/"recurringId":"[0-9a-z]+"/);
   });
-  it("a booking that does not repeat carries no report", () => {
+  // v18.4.8: every new booking carries a report now (the WhatsApp patches run
+  // when it lands), so "no rule" is what this can say, not "no report".
+  it("a booking that does not repeat writes no rule", () => {
     const out = runSave({ form: newDraft({ name: "Once" }) });
-    expect(out.calls).toContain('saveBookings("<fn>")');
+    expect(out.calls.filter((c) => c.startsWith("addRule"))).toEqual([]);
     const row = Object.values(out.writes[0].rows)[0];
     expect(row).toContain('"recurringId":null');
     expect(row).toContain('"recurringDate":null');
@@ -2260,12 +2270,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2288,12 +2298,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2313,12 +2323,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2342,12 +2352,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "Seated outdoor: indoor was full.")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2361,16 +2371,45 @@ describe("Save — a new booking", () => {
       }
     `);
   });
-  it("from the waitlist: the entry is removed", () => {
+  // v18.4.8: these two snapshots changed with the behaviour, on purpose. The
+  // entry was removed at the dispatch (`removeFromWaitlist` before
+  // `setShowForm`), landed or not; it is held at the dispatch and removed
+  // when the write lands, which the harness plays after the handler.
+  it("from the waitlist: the entry is held at Save, and removed when the booking lands", () => {
     expect(runSave({ pendingWaitlist: "w9", form: newDraft({ name: "Ana" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "holdWaitlistEntry("w9")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
+          "setShowForm(false)",
+          "setViewDate("2026-10-14")",
           "removeFromWaitlist("w9")",
+          "releaseWaitlistEntry("w9")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+        ],
+        "guard": "dispatched",
+        "pendingWaitlistAfter": null,
+        "writes": [
+          {
+            "replay": "same prev → same object; fresh prev → equal",
+            "rows": {
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+            },
+          },
+        ],
+      }
+    `);
+  });
+  it("a save the write path holds: no flash, and the waitlist entry is held, not removed", () => {
+    expect(runSave({ pendingWaitlist: "w9", dispatchOk: false, form: newDraft({ name: "Ana" }) })).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "setErrorField(null)",
+          "holdWaitlistEntry("w9")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
         ],
@@ -2387,42 +2426,42 @@ describe("Save — a new booking", () => {
       }
     `);
   });
-  it("a save the write path holds: no flash, the waitlist entry still goes", () => {
-    expect(runSave({ pendingWaitlist: "w9", dispatchOk: false, form: newDraft({ name: "Ana" }) })).toMatchInlineSnapshot(`
-      {
-        "calls": [
-          "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
-          "removeFromWaitlist("w9")",
-          "setShowForm(false)",
-          "setViewDate("2026-10-14")",
-        ],
-        "guard": "dispatched",
-        "pendingWaitlistAfter": null,
-        "writes": [
-          {
-            "replay": "same prev → same object; fresh prev → equal",
-            "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
-            },
-          },
-        ],
-      }
+  it("a held save that is then discarded: the waitlist entry is shown again, and never removed", () => {
+    const out = runSave({ pendingWaitlist: "w9", dispatchOk: false, discarded: true, form: newDraft({ name: "Ana" }) });
+    expect(out.calls.filter((c) => /Waitlist/.test(c))).toMatchInlineSnapshot(`
+      [
+        "holdWaitlistEntry("w9")",
+        "releaseWaitlistEntry("w9")",
+      ]
     `);
+  });
+  // v18.4.8: the WhatsApp conversation hears about the booking when it lands.
+  it("from a WhatsApp draft: the conversation is accepted and linked when the booking lands, with the source taken at Save", () => {
+    const out = runSave({ draftSource: "+34600111222", form: newDraft({ name: "Ana" }) });
+    const wa = out.calls.filter((c) => c.startsWith("wa.") || c.startsWith("setShowForm"));
+    expect(wa).toEqual([
+      "setShowForm(false)",
+      'wa.completeDraftAccept("muyfzww04xjv", "+34600111222")',
+      'wa.linkBookingByPhone("muyfzww04xjv", "+")',
+    ]);
+  });
+  it("and a held save tells the conversation nothing, discarded or not", () => {
+    for (const discarded of [false, true]) {
+      const out = runSave({ draftSource: "+34600111222", dispatchOk: false, discarded, form: newDraft({ name: "Ana" }) });
+      expect(out.calls.filter((c) => c.startsWith("wa.")), String(discarded)).toEqual([]);
+    }
   });
   it("what a new booking normalises", () => {
     expect(runSave({ form: newDraft({ name: "Big table", phone: "34 600 111 222", size: "5", customDur: 150, deposit: "-5", voucherCode: "abcd-2345", notes: "cake" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 111 222")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 111 222")",
         ],
         "guard": "dispatched",
         "writes": [
@@ -2442,12 +2481,12 @@ describe("Save — a new booking", () => {
       {
         "calls": [
           "setErrorField(null)",
-          "saveBookings("<fn>")",
-          "wa.completeDraftAccept("muyfzww04xjv")",
-          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
           "flash(null, "")",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+")",
         ],
         "guard": "dispatched",
         "writes": [
