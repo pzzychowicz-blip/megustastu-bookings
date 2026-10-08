@@ -178,8 +178,9 @@ The public `/privacy` page Meta requires draws on this section.
 
 The code, `REFACTOR_LOG.md`'s incident notes and the rules reasoning in
 `database.rules.README.md` can all be read by anyone. `LICENSE` calls the code
-"proprietary and confidential", which is a statement about rights and does not make
-the contents private. Keep that in mind when writing either.
+proprietary and published for reference only (since v18.4.10; it said "confidential"
+before), which is a statement about rights and does not make the contents private.
+Keep that in mind when writing either.
 
 - **No secrets are in the tree or the history.** Scanned on 2026-09-23 for private
   keys, Meta and GitHub tokens, and Gemini key values: none. The two Firebase web

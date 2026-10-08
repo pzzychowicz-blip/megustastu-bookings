@@ -8,7 +8,7 @@
  *
  * Copyright © 2026 Patryk Zychowicz. All rights reserved.
  *
- * This source code is proprietary and confidential.
+ * This source code is proprietary, published for reference only.
  * Unauthorized copying, distribution, modification, or use
  * is strictly prohibited. See the LICENSE file in the repo root.
  *

@@ -100,9 +100,11 @@ evidence for each.
   `api/wa-sim-*.js` handlers. (#4's five files are run by `tests/api-handlers.test.js`
   since v18.4.5.)
 
-- **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
-  confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
-  referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
+- **The public repository (#12): restrict the browser API keys by HTTP referrer**
+  (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The
+  step is Patryk's, in Google Cloud → APIs & Services → Credentials; a wrong list locks
+  every device out of sign-in until it is corrected. Still owed: the exact referrer list
+  for each key. See SECURITY.md §4.
 
 - **Dependabot is configured but switched off (#14).** `.github/dependabot.yml` (v18.4.5)
   limits it to security updates. It does nothing until Dependabot alerts and Dependabot

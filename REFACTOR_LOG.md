@@ -32949,3 +32949,12 @@ than assumed and a flag can still be cut.
 
 
 **Gate:** build 129.04 kB gz (main chunk, 128.88 after the form fix) · 2811 tests passed (2805) · lint 63 problems, 0 errors · `check:style` OK.
+
+### The licence says what is true of a public repository
+
+`LICENSE` called the code "proprietary and confidential" while anyone can read it
+(ROADMAP #12). Patryk's wording (AskUserQuestion, over leaving it, a private repository
+and MIT): "proprietary", published for reference only, no licence granted to copy,
+modify, distribute or run it. The restaurant clause is unchanged. `src/App.jsx`'s header
+and SECURITY.md §4 say the same. The referrer restriction stays on ROADMAP as decided.
+
