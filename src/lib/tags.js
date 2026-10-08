@@ -199,3 +199,78 @@ export function tagsOf(list, kind, ids) {
 export function tagLabels(list, kind, ids) {
   return tagsOf(list, kind, ids).map(function (t) { return t.label; });
 }
+
+// ── THE IDS A BOOKING CARRIES ───────────────────────────────────────────────
+// A booking holds its tags as an array of ids. Every read and every write goes
+// through `cleanTagIds`: only well-formed ids, each once, SORTED. Sorted because
+// `write-path.js` compares a stored booking with the one about to be written as
+// order-sensitive JSON, so the same tags tapped in another order must be the
+// same array. The order on screen is the list's, never this one (`tagsOf`).
+export function cleanTagIds(ids) {
+  if (!Array.isArray(ids)) return [];
+  const seen = {};
+  const out = [];
+  ids.forEach(function (id) {
+    if (typeof id !== "string" || !ID_RE.test(id) || seen[id]) return;
+    seen[id] = true;
+    out.push(id);
+  });
+  return out.sort();
+}
+
+export function sameTagIds(a, b) {
+  return cleanTagIds(a).join("|") === cleanTagIds(b).join("|");
+}
+
+export function unionTagIds(a, b) {
+  return cleanTagIds((Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []));
+}
+
+// ── GUEST TAGS IN THE FORM ARE EDITS, NOT A SET ─────────────────────────────
+// The booking form does not hold "this guest's tags". It holds what was TAPPED:
+// `["+g-allergy", "-g-vip"]`, add one, take one off. What it shows, and what a
+// save writes, is those edits applied to the guest's tags as they stand
+// (`editTagIds(base, edits)`).
+//
+// A set would be simpler and loses things in three ordinary cases:
+//   • Allergy is tapped on a new booking, and then the phone of a known guest is
+//     typed. A set is either replaced by that guest's tags (the tap is gone) or
+//     kept (the save overwrites what the guest already had).
+//   • Another device changes the same guest's tags while the form is open. A set
+//     writes its stale copy back over them.
+//   • A save is held and replayed on fresh data. The same.
+// And a form nobody tapped holds no edits, so it can never write a guest's tags
+// at all, whatever it was opened on.
+const EDIT_RE = /^[+-][A-Za-z0-9_-]{1,40}$/;
+export function cleanTagEdits(edits) {
+  if (!Array.isArray(edits)) return [];
+  const last = {};
+  edits.forEach(function (e) {
+    if (typeof e === "string" && EDIT_RE.test(e)) last[e.slice(1)] = e.charAt(0);
+  });
+  return Object.keys(last).sort().map(function (id) { return last[id] + id; });
+}
+
+// `base` with the edits applied.
+export function editTagIds(base, edits) {
+  const on = {};
+  cleanTagIds(base).forEach(function (id) { on[id] = true; });
+  cleanTagEdits(edits).forEach(function (e) {
+    if (e.charAt(0) === "+") on[e.slice(1)] = true;
+    else delete on[e.slice(1)];
+  });
+  return Object.keys(on).sort();
+}
+
+// One tap on a chip: the edits afterwards. A tap that puts a tag back to what
+// `base` already says removes its edit instead of adding the opposite one, so
+// tapping a chip twice leaves the form as it was opened (no unsaved change).
+export function toggleTagEdit(edits, base, id) {
+  if (typeof id !== "string" || !ID_RE.test(id)) return cleanTagEdits(edits);
+  const kept = cleanTagEdits(edits).filter(function (e) { return e.slice(1) !== id; });
+  const inBase = cleanTagIds(base).indexOf(id) >= 0;
+  const shown = editTagIds(base, edits).indexOf(id) >= 0;
+  const want = !shown;
+  if (want === inBase) return kept;
+  return cleanTagEdits(kept.concat([(want ? "+" : "-") + id]));
+}

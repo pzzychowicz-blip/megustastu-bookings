@@ -33260,3 +33260,118 @@ since `.blur()` in the hidden pane fired no React handler.
 (2,860 before the new file's 33). Lint: 63 problems, 0 errors. `check:style`: OK.
 Rules: 298.
 
+
+### Guest tags, part 2: the fields on a booking and the save
+
+**Files:** `src/lib/customers.js` (+221) · `src/lib/tags.js` (+75) ·
+`src/lib/booking-fields.js` (three rows) · `src/lib/booking-save.js` ·
+`src/lib/constants.js` (`EMPTY_FORM`) · `src/App.jsx` (four lines) ·
+`tests/guest-tags.test.js` (new, 60) · `tests/save-path.test.js` (+4 scenarios, 23
+snapshots moved) · `tests/booking-fields.test.js` (fixtures) · `CLAUDE.md` ·
+`src/CLAUDE.md` · `src/lib/CLAUDE.md` · `tests/CLAUDE.md`
+
+No screen shows a tag yet: this part is storage and the save. The screens are part 3.
+
+**Three fields, one row each in `BOOKING_FIELDS`.** `tags` is the booking's occasion
+tags. `guestTags` and `guestTagsAt` are a STATEMENT of the guest's tags and when it
+was made. Two flat fields and not one `{at, ids}` object, because `undoKey` serialises
+arrays and scalars only.
+
+**Where a guest's tags live** (Patryk, AskUserQuestion: "On their bookings", not a
+customers node). A customer here is derived from bookings, so their tags are held the
+way their visits are. Copying the tags onto every booking has no answer when two
+copies disagree and rewrites every booking a regular has on each change. So nearly
+every booking states nothing, the guest has what their NEWEST statement says (the id
+breaks a tie), and a tag change writes one booking.
+
+**Four things the simple version loses, each found by working a case through, and
+each now a rule (`src/CLAUDE.md`, Customer layer):**
+1. *A set in the form.* Tap Allergy on a new booking, then type a known guest's
+   number: a set is either replaced by that guest's tags (the tap is gone) or kept
+   (Save overwrites what they had). It also overwrites another device's change and
+   replays stale. The form holds TAPS (`guestTagEdits`), and what it shows and what
+   Save writes is `editTagIds(guestTagBase(…), taps)`. A form nobody tapped holds no
+   taps and cannot write a guest's tags.
+2. *The clock.* A statement stamped with a slow device's clock as it reads is older
+   than the one it replaces: saved, and never seen. A new stamp is
+   `max(now, newest + 1)`.
+3. *A booking that leaves its guest* (deleted, or given another number). If it held
+   the newest statement the guest falls back to an older one: a tag taken off comes
+   back. `rehomeGuestTags` hands the statement, stamp and all, to the most recent
+   booking of each group left behind, in the same write. App's delete and both form
+   saves go through it.
+4. *The history line.* `bookingWriteEntries` copies every history action into
+   `/activity`, which is append-only and which Delete customer can only redact a
+   name in. So the line says "guest tags updated" and never names one (Patryk,
+   AskUserQuestion). An occasion tag is named: "occasion tags: Birthday".
+
+**A booking given another guest's number carries its tags to them** (and is shown
+doing so: the form's chips are the union, so one can be tapped off before Save). This
+is what makes "tagged with no phone, number added later" keep the tag, which is the
+common case; the cost is that re-pointing a booking at a different known person adds
+the first person's tags to the second unless they are tapped off. Flagged to Patryk
+as his to overrule.
+
+**Delete customer** is `anonymizeBooking` (`lib/customers.js`, moved from App). It
+clears guest tags and occasion tags (Patryk, AskUserQuestion: "Clear them too").
+`tests/guest-tags.test.js` lists every row of `BOOKING_FIELDS` as wiped (9) or kept
+with its reason (23), so a row added later fails until it is decided.
+
+**`tests/save-path.test.js`: 23 snapshots moved, each line accounted for before any
+was updated.** The guard runs App's own save and is pinned against v18.3.3; its rule
+is that `-u` is never the fix. First run: 100 of 112 failed, because the lifted code
+now names `tagList` and the harness did not bind it. Bound: 66 failed, 43 of them
+only on `tags: <absent> → []`, because the hand-written fixture rows predate the
+field (no row the app holds lacks it: `sanitize` fills it). With the three fields in
+`bk` and the two keys in `draftOf`: 23. A script then paired every changed line with
+its old one by removing exactly the new keys: 18 created rows gain
+`"tags":[],"guestTags":[]` (14 new-booking scenarios, 4 generated occurrences), 3
+`openEdit` drafts gain `"tags":[],"guestTagEdits":[]`, 2 `sanitize` rows gain the
+three keys, 3 field-list lines read "undo sig". 0 unexplained. No edit scenario's
+snapshot moved. Four scenarios were added for App's half (the tag list reaching the
+edit, the taps reaching the save).
+
+**The generated run.** 400 seeded runs of 60 steps (24,000): 8,696 creates, 8,843
+edits (4,800 with nothing tapped), 4,964 deletes, 1,497 erasures, each save reading
+its time from a range of 40ms so stamps arrive out of order and equal. A plain record
+of what each guest should have is kept beside the list, and after every step every
+booking must show what the record says. 10,149 saves changed a guest's tags, 3,295
+of them on a clock at or behind the statement they replaced; 552 deletes handed a
+statement on. The counts are an inline snapshot, so a run that stops reaching a case
+fails. The same run on three broken copies of the code must fail, and does: no
+hand-on at a delete, a stamp taken from the clock as it reads, the taps saved as the
+whole set.
+
+**Sabotages of the real code**, one at a time, each restored and compared byte for
+byte, against the three test files (236 tests):
+
+| Broken | Fails |
+|---|---|
+| Delete customer leaves guest tags | 7 |
+| Delete customer leaves occasion tags | 3 |
+| App's delete does not hand the statement on | 1 |
+| The history line names the guest tags | 3 |
+| A save with nothing tapped ignores a changed phone | 4 |
+| The older statement wins | 15 |
+| A moved booking takes back the tags of bookings that came with it | 3 |
+| The edit form opens with the stored set as its taps | 2 |
+
+The last one passed all 234 tests on its first run. Every fixture's statement was its
+guest's newest, so re-adding it changed nothing. The case that catches it (a booking
+holding a statement since replaced, saved unchanged) was added, and the sabotage
+re-run.
+
+**Measured on DEV** (1 trial, 9 Oct 2026). The app loaded as 18.5.0 with no console
+error. "v1834 weekly2" (19:30) was opened from the timeline, a note typed and Save
+pressed: the form closed with no warning, and after a reload the booking held the
+note and its history read "edited: notes updated". That is the edit path with the
+three new fields in it, and nothing more: no screen reads or writes a tag until
+part 3.
+
+**Not verified.** A tag saved or shown in the running app (part 3). A second device.
+
+**Gate.** Build: main bundle 130.69 kB gz (130.71 at the commit before, both built
+side by side; the entry grew 0.52 kB raw, and the two history clauses are in the
+shared `atoms` chunk). Tests: 2,961 (2,893 before: the new file's 60, 4 save-path
+scenarios, 4 field-table cases for the two new draft keys). Lint: 63 problems, 0
+errors. `check:style`: OK.

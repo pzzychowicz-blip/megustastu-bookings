@@ -92,6 +92,35 @@ commit. Consumers must still handle `rawPhone: ""` — `searchGuestsByName` skip
 index entries with no phone, and anything keying UI state on `c.phone` would
 collapse every guest row onto one `""` key.)
 
+**v18.5.0 — guest tags are a customer's, so they are held the way visits are: on
+bookings.** A booking may carry a STATEMENT of its guest's tags (`guestTags`, ids, and
+`guestTagsAt`, when it was made); the guest has what their NEWEST statement says (the
+id breaks a tie, so every device agrees). Nearly every booking states nothing, so
+changing a guest's tags writes ONE booking and a new booking for a known guest shows
+their tags without holding any. Patryk chose this over a customers node (2026-10-08):
+no second collection, and Delete customer already reaches every booking. Four rules,
+each from a way the simpler shape loses a tag:
+- **Read through `guestTagMap(bookings)` + `guestTagsOf(b, map)`**, never `b.guestTags`:
+  the statement is usually on another booking. A booking that is nobody's (no phone,
+  not joined) shows its own.
+- **The form holds TAPS (`guestTagEdits`: `["+g-allergy", "-g-vip"]`), never the set.**
+  What it shows and what Save writes is `editTagIds(guestTagBase(list, id, ident), edits)`.
+  A set is overwritten by the next known phone typed into the form, overwrites another
+  device's change, and replays stale; a form nobody tapped holds no edits and can
+  never write a guest's tags. `saveGuestTags` runs on `prev` inside both transforms.
+- **A new stamp is `max(now, newest + 1)`.** Stamped with a slow device's clock as it
+  reads, a change is saved and never seen.
+- **A booking that LEAVES its guest hands its statement on** (`rehomeGuestTags`): a
+  delete, or an edit that gives it another number. Otherwise the guest falls back to
+  an older statement, and a tag taken off comes back. **Any new code path that drops a
+  booking from the list, or changes its phone or `guestId`, must go through it.**
+
+The history line says "guest tags updated" and never names one: `bookingWriteEntries`
+copies every history action into `/activity`, which is append-only and which Delete
+customer cannot rewrite. An occasion tag (`tags`, the booking's own) is named. Delete
+customer is `anonymizeBooking` (`lib/customers.js`), which clears both kinds.
+`tests/guest-tags.test.js`.
+
 ### Waitlist active matching (v16.0.0)
 `waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day.
 

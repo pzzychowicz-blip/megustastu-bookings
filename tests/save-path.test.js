@@ -215,6 +215,10 @@ function freeze(at) {
 // A stored booking, field for field as v18.3.3's `sanitize` returns it — built
 // by hand rather than BY `sanitize`, because `sanitize` is one of the things
 // this version rewrites and the inputs must not move with it.
+// v18.5.0: plus the three tag fields that version's `sanitize` returns (`tags`,
+// `guestTags`, `guestTagsAt`), as an untagged booking holds them. Without them
+// every edit here would report `tags: <absent> → []`, which is the fixture
+// being a row the app can no longer hold, and no finding about the save.
 function bk(id, o) {
   const b = Object.assign({
     id, name: "Guest " + id, phone: "", date: T, time: "20:00", scheduledTime: null,
@@ -223,6 +227,7 @@ function bk(id, o) {
     _conflict: false, preferredTables: [], returnOf: null, history: [], noShow: false,
     deposit: 0, voucherCode: "", recurringId: null, recurringDate: null,
     anonymized: false, guestId: null, stayedMin: 0, updatedAt: 1,
+    tags: [], guestTags: [], guestTagsAt: 0,
   }, o);
   if (b.scheduledTime === null) b.scheduledTime = b.time;
   if (b.originalDuration === null) b.originalDuration = b.duration;
@@ -238,6 +243,7 @@ function draftOf(b, o) {
     deposit: b.deposit ? String(b.deposit) : "", voucherCode: b.voucherCode || "",
     manualTables: [], preferredTables: Array.isArray(b.preferredTables) ? b.preferredTables.slice() : [], returnOf: null,
     guestId: b.guestId || null, guestSeed: null,
+    tags: Array.isArray(b.tags) ? b.tags.slice() : [], guestTagEdits: [],
   }, o);
 }
 // A new booking's draft, as `openNew` seeds it (`EMPTY_FORM`, phone "+").
@@ -349,6 +355,9 @@ function appEnv(opts) {
     nowMins: clock.nowMins,
     today: clock.today,
     generalSettings: { phonePrefix: "+34", pinnedCountries: ["ES", "GB"], undoSecs: 10, defaultBookingSize: 2 },
+    // v18.5.0: the tag list (`settings/tags`), which the edit hands `applyEdit`
+    // for the label in an occasion tag's history clause.
+    tagList: { v: 1, guest: [{ id: "g-allergy", label: "Allergy" }, { id: "g-vip", label: "VIP" }], occasion: [{ id: "o-birthday", label: "Birthday" }] },
     saveGuardRef: h.guardRef,
     statusOverrideRef: { current: opts.statusOverride || null },
     formRef: { current: opts.form || null },
@@ -2080,7 +2089,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2104,7 +2113,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"pending","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"pending","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2128,7 +2137,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["4"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["4"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2178,7 +2187,7 @@ describe("Save — a new booking", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"Book Again → new booking on 2026-10-14 at 20:00"}]",
               },
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created via Book Again (from Guest b1 on 2026-09-30 at 19:00)"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created via Book Again (from Guest b1 on 2026-09-30 at 19:00)"}],"_conflict":false}",
             },
           },
         ],
@@ -2202,7 +2211,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2227,7 +2236,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"usual table","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":"muyfzww09v3q","recurringDate":"2026-10-14","guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"usual table","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":"muyfzww09v3q","recurringDate":"2026-10-14","guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2293,7 +2302,7 @@ describe("Save — a new booking", () => {
               "b2": {
                 "guestId": "null → "gb2"",
               },
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gb2","history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gb2","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2318,7 +2327,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gzz","history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gzz","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2348,7 +2357,7 @@ describe("Save — a new booking", () => {
                 "_manual": "true → false",
                 "tables": "["3"] → ["1A"]",
               },
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["3"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["3"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2372,7 +2381,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"indoor","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"indoor","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2404,7 +2413,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2427,7 +2436,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2476,7 +2485,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Big table","phone":"+34 600 111 222","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":5,"duration":150,"originalDuration":150,"preference":"auto","notes":"cake","deposit":0,"voucherCode":"ABCD2345","status":"confirmed","tables":["1A","1B"],"customDur":150,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Big table","phone":"+34 600 111 222","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":5,"duration":150,"originalDuration":150,"preference":"auto","notes":"cake","deposit":0,"voucherCode":"ABCD2345","status":"confirmed","tables":["1A","1B"],"customDur":150,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2501,7 +2510,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-07","time":"21:00","scheduledTime":"21:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-07","time":"21:00","scheduledTime":"21:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2511,12 +2520,134 @@ describe("Save — a new booking", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// ── v18.5.0: tags ───────────────────────────────────────────────────────────
+// New in v18.5.0, so these four were written with the feature, not taken
+// against v18.3.3. They pin App's half: the tag list handed to the edit, and
+// the taps (`guestTagEdits`) reaching the save. What a save does to a guest's
+// tags, case by case, is tests/guest-tags.test.js.
+describe("Save — tags", () => {
+  const ANA = "+34 600 000 001";
+  const earlier = () => bk("b2", { date: PAST, status: "completed", tables: ["3"], phone: ANA, guestTags: ["g-allergy"], guestTagsAt: 100 });
+
+  it("an occasion tag and a guest tag in one edit: one history line, and this booking states the guest's tags", () => {
+    const b1 = bk("b1", { tables: ["1A"], phone: ANA });
+    expect(runSave({ bookings: [b1, earlier()], editId: "b1", form: draftOf(b1, { tags: ["o-birthday"], guestTagEdits: ["+g-vip"] }) })).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "setErrorField(null)",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "wa.completeModifyApply("b1", true)",
+          "armUndo(["b1"], "b1", "edit", false)",
+          "setShowForm(false)",
+          "setViewDate("2026-10-14")",
+        ],
+        "guard": "dispatched",
+        "writes": [
+          {
+            "replay": "same prev → same object; fresh prev → equal",
+            "rows": {
+              "b1": {
+                "guestTags": "[] → ["g-allergy","g-vip"]",
+                "guestTagsAt": "0 → 1791397800000",
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: occasion tags: Birthday, guest tags updated"}]",
+                "tags": "[] → ["o-birthday"]",
+              },
+            },
+          },
+        ],
+      }
+    `);
+  });
+  it("nothing tapped, on a tagged guest's booking: no tag field is written", () => {
+    const b1 = bk("b1", { tables: ["1A"], phone: ANA, tags: ["o-birthday"] });
+    expect(runSave({ bookings: [b1, earlier()], editId: "b1", form: draftOf(b1, { notes: "window seat" }) })).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "setErrorField(null)",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "wa.completeModifyApply("b1", true)",
+          "armUndo(["b1"], "b1", "edit", false)",
+          "setShowForm(false)",
+          "setViewDate("2026-10-14")",
+        ],
+        "guard": "dispatched",
+        "writes": [
+          {
+            "replay": "same prev → same object; fresh prev → equal",
+            "rows": {
+              "b1": {
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: notes updated"}]",
+                "notes": """ → "window seat"",
+              },
+            },
+          },
+        ],
+      }
+    `);
+  });
+  it("a new booking for a known guest, with a tag taken off: it states what is left", () => {
+    expect(runSave({ bookings: [earlier()], form: newDraft({ name: "Ana", phone: ANA, tags: ["o-birthday"], guestTagEdits: ["-g-allergy", "+g-vip"] }) })).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "setErrorField(null)",
+          "saveBookings("<fn>", {"report":["onDiscarded","onLanded"]})",
+          "flash(null, "")",
+          "setShowForm(false)",
+          "setViewDate("2026-10-14")",
+          "wa.completeDraftAccept("muyfzww04xjv", null)",
+          "wa.linkBookingByPhone("muyfzww04xjv", "+34 600 000 001")",
+        ],
+        "guard": "dispatched",
+        "writes": [
+          {
+            "replay": "same prev → same object; fresh prev → equal",
+            "rows": {
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":["o-birthday"],"guestTags":["g-vip"],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"guestTagsAt":1791397800000,"_conflict":false}",
+            },
+          },
+        ],
+      }
+    `);
+  });
+  it("the booking holding a guest's tags is given another number: the guest it leaves keeps them", () => {
+    const b1 = bk("b1", { tables: ["1A"], phone: ANA, guestTags: ["g-vip"], guestTagsAt: 200 });
+    expect(runSave({ bookings: [b1, earlier()], editId: "b1", form: draftOf(b1, { phone: "+34 600 000 009" }) })).toMatchInlineSnapshot(`
+      {
+        "calls": [
+          "setErrorField(null)",
+          "saveBookings("<fn>", {"report":["replayRefusal"]})",
+          "wa.completeModifyApply("b1", true)",
+          "armUndo(["b1","b2"], "b1", "edit", false)",
+          "setShowForm(false)",
+          "setViewDate("2026-10-14")",
+        ],
+        "guard": "dispatched",
+        "writes": [
+          {
+            "replay": "same prev → same object; fresh prev → equal",
+            "rows": {
+              "b1": {
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: phone +34 600 000 001→+34 600 000 009"}]",
+                "phone": ""+34 600 000 001" → "+34 600 000 009"",
+              },
+              "b2": {
+                "guestTags": "["g-allergy"] → ["g-vip"]",
+                "guestTagsAt": "100 → 200",
+              },
+            },
+          },
+        ],
+      }
+    `);
+  });
+});
+
 describe("openEdit — the draft the form opens with", () => {
   it("a default-length booking", () => {
     expect(runOpenEdit(bk("b1", { tables: ["3"], deposit: 20, voucherCode: "ABCD2345", preferredTables: ["3"], guestId: "gx", phone: "+34 600 000 001", notes: "n" }))).toMatchInlineSnapshot(`
       {
         "calls": [
-          "openForm({"name":"Guest b1","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","size":2,"preference":"auto","notes":"n","status":"confirmed","customDur":null,"deposit":"20","voucherCode":"ABCD2345","manualTables":[],"preferredTables":["3"],"returnOf":null,"guestId":"gx","guestSeed":null})",
+          "openForm({"name":"Guest b1","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","size":2,"preference":"auto","notes":"n","status":"confirmed","customDur":null,"deposit":"20","voucherCode":"ABCD2345","manualTables":[],"preferredTables":["3"],"returnOf":null,"guestId":"gx","guestSeed":null,"tags":[],"guestTagEdits":[]})",
           "setEditId("b1")",
           "setError("")",
           "setSwapAffected(null)",
@@ -2531,7 +2662,7 @@ describe("openEdit — the draft the form opens with", () => {
     expect(runOpenEdit(bk("b1", { time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, status: "seated", tables: ["3"] }))).toMatchInlineSnapshot(`
       {
         "calls": [
-          "openForm({"name":"Guest b1","phone":"","date":"2026-10-14","time":"19:30","size":2,"preference":"auto","notes":"","status":"seated","customDur":60,"deposit":"","voucherCode":"","manualTables":[],"preferredTables":[],"returnOf":null,"guestId":null,"guestSeed":null})",
+          "openForm({"name":"Guest b1","phone":"","date":"2026-10-14","time":"19:30","size":2,"preference":"auto","notes":"","status":"seated","customDur":60,"deposit":"","voucherCode":"","manualTables":[],"preferredTables":[],"returnOf":null,"guestId":null,"guestSeed":null,"tags":[],"guestTagEdits":[]})",
           "setEditId("b1")",
           "setError("")",
           "setSwapAffected(null)",
@@ -2546,7 +2677,7 @@ describe("openEdit — the draft the form opens with", () => {
     expect(runOpenEdit(bk("b1", { size: 6, duration: 120, phone: null, notes: undefined, deposit: 0, voucherCode: undefined, preferredTables: "x", guestId: undefined }))).toMatchInlineSnapshot(`
       {
         "calls": [
-          "openForm({"name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","size":6,"preference":"auto","notes":"","status":"confirmed","customDur":null,"deposit":"","voucherCode":"","manualTables":[],"preferredTables":[],"returnOf":null,"guestId":null,"guestSeed":null})",
+          "openForm({"name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","size":6,"preference":"auto","notes":"","status":"confirmed","customDur":null,"deposit":"","voucherCode":"","manualTables":[],"preferredTables":[],"returnOf":null,"guestId":null,"guestSeed":null,"tags":[],"guestTagEdits":[]})",
           "setEditId("b1")",
           "setError("")",
           "setSwapAffected(null)",
@@ -2656,8 +2787,8 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-14": "created {"id":"rwk_2026-10-14","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-14","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
-              "rwk_2026-10-21": "created {"id":"rwk_2026-10-21","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-21","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-21","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-14": "created {"id":"rwk_2026-10-14","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-14","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-21": "created {"id":"rwk_2026-10-21","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-21","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-21","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2680,7 +2811,7 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2697,7 +2828,7 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-14": "created {"id":"rwk_2026-10-14","name":"Weekly","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":5,"duration":120,"originalDuration":120,"preference":"indoor","notes":"birthday","status":"confirmed","tables":[],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":true,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-14","history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-14": "created {"id":"rwk_2026-10-14","name":"Weekly","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":5,"duration":120,"originalDuration":120,"preference":"indoor","notes":"birthday","status":"confirmed","tables":[],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":true,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-14","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2741,7 +2872,7 @@ describe("the weekly generator", () => {
 describe("the field lists", () => {
   it("sanitize: the shape of an empty row, in key order", () => {
     freeze(TODAY + "T19:30:00");
-    expect(J(bookingLogic.sanitize({}, "k1"))).toMatchInlineSnapshot(`"{"id":"k1","name":"","phone":"","date":"","time":"13:00","scheduledTime":"13:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"history":[],"noShow":false,"deposit":0,"voucherCode":"","recurringId":null,"recurringDate":null,"anonymized":false,"guestId":null,"stayedMin":0,"updatedAt":0}"`);
+    expect(J(bookingLogic.sanitize({}, "k1"))).toMatchInlineSnapshot(`"{"id":"k1","name":"","phone":"","date":"","time":"13:00","scheduledTime":"13:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"history":[],"noShow":false,"deposit":0,"voucherCode":"","recurringId":null,"recurringDate":null,"anonymized":false,"guestId":null,"stayedMin":0,"updatedAt":0,"tags":[],"guestTags":[],"guestTagsAt":0}"`);
   });
   it("sanitize: what it does to each field it is handed badly", () => {
     freeze(TODAY + "T19:30:00");
@@ -2752,7 +2883,7 @@ describe("the field lists", () => {
       returnOf: "", history: "h", noShow: 1, deposit: "-12", voucherCode: "abcd-2345",
       recurringId: "", recurringDate: 0, anonymized: 1, guestId: "", stayedMin: "33", updatedAt: "7",
       baseUpdatedAt: 5, foo: "dropped",
-    }))).toMatchInlineSnapshot(`"{"id":"b9","name":"","phone":"","date":"","time":"13:00","scheduledTime":"13:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"_manual":true,"_locked":false,"_conflict":true,"preferredTables":[],"returnOf":null,"history":[],"noShow":true,"deposit":0,"voucherCode":"ABCD2345","recurringId":null,"recurringDate":null,"anonymized":true,"guestId":null,"stayedMin":33,"updatedAt":7}"`);
+    }))).toMatchInlineSnapshot(`"{"id":"b9","name":"","phone":"","date":"","time":"13:00","scheduledTime":"13:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"_manual":true,"_locked":false,"_conflict":true,"preferredTables":[],"returnOf":null,"history":[],"noShow":true,"deposit":0,"voucherCode":"ABCD2345","recurringId":null,"recurringDate":null,"anonymized":true,"guestId":null,"stayedMin":33,"updatedAt":7,"tags":[],"guestTags":[],"guestTagsAt":0}"`);
   });
   it("sanitize: a full row survives unchanged", () => {
     const b = bk("b1", { phone: "+34 600 000 001", tables: ["3"], deposit: 5, voucherCode: "ABCD2345", guestId: "g1", stayedMin: 40, history: [{ at: "x", by: "y", action: "z" }] });
@@ -2779,6 +2910,8 @@ describe("the field lists", () => {
         "deposit": "undo sig",
         "duration": "undo sig",
         "guestId": "- -",
+        "guestTags": "undo sig",
+        "guestTagsAt": "undo sig",
         "history": "- -",
         "name": "undo sig",
         "noShow": "undo sig",
@@ -2795,6 +2928,7 @@ describe("the field lists", () => {
         "status": "undo sig",
         "stayedMin": "- -",
         "tables": "undo sig",
+        "tags": "undo sig",
         "time": "undo sig",
         "updatedAt": "- -",
         "voucherCode": "undo sig",

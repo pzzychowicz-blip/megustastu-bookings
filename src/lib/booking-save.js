@@ -36,7 +36,8 @@ import {
   offZone, offZoneNote, seatNoteFor,
   canAssign, occupancyEnd, getBlockSlots, padEnd,
 } from "./booking-logic.js";
-import { stampGuestSeed, resolveGuestId } from "./customers.js";
+import { stampGuestSeed, resolveGuestId, saveGuestTags, guestTagsChange } from "./customers.js";
+import { cleanTagIds } from "./tags.js";
 import { isNoShow, NO_SHOW_CLEARED } from "./booking-fields.js";
 import { normalizeCode } from "./vouchers.js";
 import { todayStr } from "./day.js";
@@ -236,6 +237,9 @@ function refuse(message,field){return {refusal:field?{message:message,field:fiel
 //   today, nowMins App's clock, which the seat shift reads
 //   phonePrefix    Settings' prefix, which counts as no number (`enteredPhone`)
 //   getUser        the history entries' author, asked as each entry is made
+//   tagList        the tag list (`settings/tags`), for the label of an occasion
+//                  tag in the history line (v18.5.0); without it the line says
+//                  "occasion tags updated"
 //
 // Returns `{ refusal: { message, field } }` in the order Save has always asked
 // (`field` only for the date), or `{ next, fin, changed, flash, seatNote }`:
@@ -396,7 +400,15 @@ export function applyEdit(input){
   const forceReassign=!mt.length&&!pinned&&(needsR||(recheck&&!keepsWindowTables));
   // v17.4.0: the diff string is computed ONCE — it feeds the history entry
   // AND the undo gate (`changed`).
-  const editDiff=orig?diffBooking(orig,f,size,input.phonePrefix):"";
+  // v18.5.0: the two things the tag clauses need that only the save knows.
+  // `guestTagsChange` is asked of the list at Save, with the identity the row
+  // below is written with; a replay on fresh data keeps the line it was given,
+  // as it keeps every other clause.
+  const tagNow=Date.now();
+  const editDiff=orig?diffBooking(orig,f,size,input.phonePrefix,{
+    tagList:input.tagList,
+    guestTagsChange:guestTagsChange(bookings,editId,{phone:cleanPhone,guestId:f.guestId||orig.guestId||null,guestSeed:f.guestSeed},f.guestTagEdits),
+  }):"";
   const editChanged=!!orig&&editDiff!=="saved (no field changes)";
   const editHist=orig?histEntry("edited: "+editDiff,getUser()):histEntry("edited",getUser());
   const saveScheduledTime=w.scheduledTime;
@@ -425,12 +437,19 @@ export function applyEdit(input){
         if(seatedShift) h=h.concat([histEntry("seated "+seatedShift.direction+": time adjusted "+seatedShift.oldTime+" → "+seatedShift.newTime,getUser())]);
         if(unseatHist) h=h.concat([unseatHist]);
         if(clearNoShow) h=h.concat([histEntry(NO_SHOW_CLEARED,getUser())]);
-        return Object.assign({},b,clearNoShow?{noShow:false}:null,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:saveNotes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],history:h});
+        return Object.assign({},b,clearNoShow?{noShow:false}:null,{name:f.name,phone:cleanPhone,date:f.date,time:saveTime,scheduledTime:saveScheduledTime,size:size,duration:saveDur,originalDuration:saveOrigDurFinal,preference:f.preference,notes:saveNotes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:unlockForOpt?"confirmed":f.status,tables:mt.length?mt:(clearM?[]:((!needsR||pinned)?b.tables:[])),customDur:saveCustDur,stayedMin:saveStayed,guestId:f.guestId||b.guestId||null,_manual:mt.length>0?true:(clearM?false:b._manual),_locked:mt.length>0?true:(clearM?false:(unlockForOpt?false:b._locked)),preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],tags:cleanTagIds(f.tags),history:h});
       }
       if(swapAffected) return releaseSwapped(b,swapAffected);
       return b;
     });
-    let out=bookingsAfterAction(upd,f.date,tableBlocks,editId,forceReassign,optStateForSave);
+    // v18.5.0: guest tags are the customer's, so they are settled against the
+    // whole list and after the row has its phone and guest id: `saveGuestTags`
+    // (lib/customers.js) writes this booking's statement only when what was
+    // tapped changes what the guest has, and hands a statement it held to the
+    // guest it leaves when the phone was changed. On `prev`, so a replay
+    // applies the taps to the tags as they are by then.
+    const tagged=saveGuestTags(prev,upd,editId,f.guestTagEdits,f.guestSeed,tagNow);
+    let out=bookingsAfterAction(tagged,f.date,tableBlocks,editId,forceReassign,optStateForSave);
     // v18.0.0 session 8 (C1): the flags go back to what they WERE, not to
     // "does it have tables now". `wasSeatedLocked` is `isLocked(orig)`,
     // which is true for any seated booking — so walking an ordinary one
@@ -604,7 +623,8 @@ export function buildBooking(input){
   const recStampId=(f.repeatWeekly&&f.name&&f.name.trim()&&f.date&&f.time)?genId():null;
   // v14 p1: scheduledTime=f.time on creation. v17.0.0: new bookings start
   // confirmed, OR pending via the "Save pending" button (status override).
-  const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,history:[createHist]};
+  const nb={id:newId,name:f.name,phone:cleanPhone,date:f.date,time:f.time,scheduledTime:f.time,size:size,duration:dur,originalDuration:dur,preference:f.preference,notes:f.notes,deposit:Math.max(0,Number(f.deposit)||0),voucherCode:normalizeCode(f.voucherCode),status:(f.status==="pending"?"pending":"confirmed"),tables:mt.length?mt:[],customDur:f.customDur||null,_manual:mt.length>0,_locked:mt.length>0,preferredTables:Array.isArray(f.preferredTables)?f.preferredTables:[],returnOf:returnOfId,recurringId:recStampId,recurringDate:recStampId?f.date:null,guestId:f.guestId||null,tags:cleanTagIds(f.tags),guestTags:[],history:[createHist]};
+  const tagNow=Date.now();
   // v15.7.0: build the next state as a PURE transform of `prev` (see
   // `applyEdit`) so the new-booking save joins the optimistic-show +
   // auto-retry path. `newId`/`nb` are computed once (stable id) → a
@@ -632,7 +652,13 @@ export function buildBooking(input){
   // keeps the two in one group. See `resolveGuestId` for why the seed wins.
   // `newId` is untouched, so the stable-id property the comment above relies
   // on is unaffected.
-  function buildNext(prev){return bookingsAfterAction(applyBase(prev).concat([Object.assign({},nb,{guestId:resolveGuestId(prev,f)})]),f.date,tableBlocks,newId,!mt.length,autoOptimizer);}
+  // v18.5.0: `saveGuestTags` as in `applyEdit`. A new booking for a known
+  // guest shows their tags without holding any: it makes a statement only when
+  // a tag was tapped in the form (so `guestTagsAt` is written only then).
+  function buildNext(prev){
+    const withNew=applyBase(prev).concat([Object.assign({},nb,{guestId:resolveGuestId(prev,f)})]);
+    return bookingsAfterAction(saveGuestTags(prev,withNew,newId,f.guestTagEdits,f.guestSeed,tagNow),f.date,tableBlocks,newId,!mt.length,autoOptimizer);
+  }
   // /code-review perf: prev-identity memo — one optimiser pass shared by
   // the guard check + the immediate dispatch (see `applyEdit`).
   const buildNextMemo=memoByPrev(buildNext);
@@ -686,7 +712,7 @@ export function walkinBooking(form,num,date,user){
 // first booking from the generator's by this id.
 export function occurrenceBooking(rule,date){
   const dur=getDur(rule.size);
-  return {id:"r"+rule.id+"_"+date,name:rule.name,phone:rule.phone,date:date,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,voucherCode:"",_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:date,history:[histEntry("auto-created from weekly rule","auto")]};
+  return {id:"r"+rule.id+"_"+date,name:rule.name,phone:rule.phone,date:date,time:rule.time,scheduledTime:rule.time,size:rule.size,duration:dur,originalDuration:dur,preference:rule.preference,notes:rule.notes,status:"confirmed",tables:[],customDur:null,deposit:0,voucherCode:"",_manual:false,_locked:false,_conflict:false,preferredTables:[],returnOf:null,recurringId:rule.id,recurringDate:date,tags:[],guestTags:[],history:[histEntry("auto-created from weekly rule","auto")]};
 }
 
 // ── keptRefusal: what Save will say about tables it keeps, asked BEFORE Save ──

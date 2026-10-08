@@ -86,7 +86,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
 import { applyEdit, buildBooking, memoByPrev, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, rehomeGuestTags } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -2426,13 +2426,17 @@ function BookingApp({uid}){
   // `guestId` is cleared alongside the personal fields: it is the only thing
   // still binding the anonymized bookings into a customer, so leaving it would
   // leave the deleted guest sitting in the list under "Data removed".
+  // v18.5.0: WHAT is wiped is `anonymizeBooking` (lib/customers.js), which also
+  // clears the tags, guest and occasion both (Patryk, 2026-10-08), and
+  // tests/guest-tags.test.js holds every row of BOOKING_FIELDS to "wiped" or
+  // "kept, because", so a field added later is decided for erasure too.
   function deleteCustomer(ident){if(refused("customerDelete")) return;
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
     saveBookings(function(prev){return prev.map(function(b){
       if(!matchesIdentity(b,o)) return b;
-      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
+      return anonymizeBooking(b);
     });});
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
     // v18.3.1: and their WhatsApp conversation and messages, stored under the
@@ -2662,7 +2666,7 @@ function BookingApp({uid}){
   // "Complete them & seat", where the completion has been dispatched but this
   // render has not happened yet. See `withClearedSeats` for what that cost.
   function doSaveEdit(f,bookings,liveBookings){
-    const plan=applyEdit({list:bookings,live:liveBookings,id:editId,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,today:today,nowMins:nowMins,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
+    const plan=applyEdit({list:bookings,live:liveBookings,id:editId,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,today:today,nowMins:nowMins,phonePrefix:generalSettings.phonePrefix,getUser:getUser,tagList:tagList});
     // A refusal leaves the form open with its message (only the date's names
     // its field) and the guard READY, so Save still works.
     if(plan.refusal){if(plan.refusal.field) setErrorField(plan.refusal.field);setError(plan.refusal.message);return;}
@@ -3058,7 +3062,11 @@ function BookingApp({uid}){
       const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
       if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return false;}
     }
-    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);}
+    // v18.5.0: a customer's guest tags are stored on ONE of their bookings (the
+    // newest statement, lib/customers.js). If that is the booking going, the
+    // statement moves to their most recent remaining one, in this same write,
+    // so deleting a booking never deletes what the guest told us.
+    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id),d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
     const delMemo=memoByPrev(delTransform);
     const postDel=delMemo(bookings);

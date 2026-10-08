@@ -81,6 +81,8 @@ const RICH_VALUES = {
   history: [{ at: "2026-09-01T10:00:00.000Z", by: "t", action: "created" }],
   noShow: true, deposit: 20, voucherCode: "ABCD2345", recurringId: "rule1", recurringDate: D,
   anonymized: true, guestId: "gana", stayedMin: 80, updatedAt: 1790000000000,
+  // v18.5.0: an occasion tag, and a statement of the guest's tags with its stamp.
+  tags: ["o-birthday"], guestTags: ["g-vip"], guestTagsAt: 1790000000001,
 };
 const RICH = sanitize(RICH_VALUES, "rich");
 // Fields whose stored value the save itself derives, so the fixture cannot hold
@@ -243,6 +245,12 @@ const CHANGES = {
   returnOf: { to: "src9", edit: "an edit never writes it: Book Again sets it on the booking it creates" },
   guestId: { to: "gbea", quiet: "a join on its own is not undone: its row has `undo: false` and no clause, as before v18.3.4 (the row says what that means)" },
   guestSeed: { to: "seed1", skip: "not a field of this booking: it names the booking picked from the name list, which the same write stamps with the guest id" },
+  // v18.5.0. Occasion tags are the booking's own. Guest tags are the guest's:
+  // the draft holds what was TAPPED (`guestTagEdits`), and the save writes the
+  // set that makes on this booking (`saveGuestTags`, lib/customers.js). The
+  // rest of that save is tests/guest-tags.test.js.
+  tags: { to: ["o-birthday"] },
+  guestTagEdits: { to: ["+g-vip"], field: "guestTags", stored: ["g-vip"] },
 };
 // A placed, confirmed booking with nothing set: what each change is made to.
 const PLAIN = sanitize({ id: "plain", name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:00", size: 2, status: "confirmed", tables: ["3"], history: [] }, "plain");
@@ -320,8 +328,9 @@ const NOT_YET = "a booking is created before anyone could fail to arrive; a read
 const ANON = "only Delete customer anonymises a booking, and it rewrites an existing one; a read fills false";
 const STAY = "the save that completes the booking writes how long the party stayed; a read fills 0";
 const STAMP = "the write path stamps it on every write (`stampForWrite`, write-path.js), not a builder";
+const SAYS = "a booking states its guest's tags only when one is tapped in the form, and `saveGuestTags` writes the stamp with them then; a read fills 0";
 const OMITS = {
-  buildBooking: { noShow: NOT_YET, anonymized: ANON, stayedMin: STAY, updatedAt: STAMP },
+  buildBooking: { noShow: NOT_YET, anonymized: ANON, stayedMin: STAY, updatedAt: STAMP, guestTagsAt: SAYS },
   walkinBooking: {
     _conflict: "its tables are the ones chosen at the door and no optimiser pass follows its write; a read fills false",
     preferredTables: "the walk-in form has no preferred tables",
@@ -331,10 +340,14 @@ const OMITS = {
     recurringId: "a walk-in is not a standing booking",
     recurringDate: "a walk-in is not a standing booking",
     guestId: "a walk-in has no phone-less identity until somebody joins it from the name list; a read fills null",
+    tags: "the walk-in form has no tags (Patryk, 2026-10-08); they are added later, from the edit form",
+    guestTags: "the walk-in form has no tags (Patryk, 2026-10-08), and a walk-in is nobody's guest until it is edited",
+    guestTagsAt: SAYS,
     noShow: NOT_YET, anonymized: ANON, stayedMin: STAY, updatedAt: STAMP,
   },
   occurrenceBooking: {
     guestId: "a standing rule carries no guest identity; a read fills null",
+    guestTagsAt: SAYS,
     noShow: NOT_YET, anonymized: ANON, stayedMin: STAY, updatedAt: STAMP,
   },
 };

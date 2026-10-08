@@ -47,6 +47,7 @@
 // the way Vite does (`tests/wa-sandbox-integrity.test.js` walks it).
 import { DUR_TIERS } from "./constants.js";
 import { normalizeCode, formatCode } from "./vouchers.js";
+import { cleanTagIds, sameTagIds, tagLabels } from "./tags.js";
 
 // ── The helpers the rows read ────────────────────────────────────────────────
 // Moved here from booking-logic.js (which re-exports them, so no import site
@@ -275,6 +276,48 @@ export const BOOKING_FIELDS = [
   // a change. (`baseUpdatedAt` is per-write metadata too, and is not a row at
   // all: a read drops it.)
   { key: "updatedAt", read: (b) => Number(b.updatedAt) || 0, undo: false },
+  // v18.5.0: OCCASION tags, about this one visit ("Birthday"): ids from
+  // `settings/tags`' occasion list, never labels (lib/tags.js says why), clean
+  // and SORTED on every read and write (`cleanTagIds`). Per-booking, so the
+  // per-$id CAS covers it and the rules need nothing. The history line NAMES
+  // them (Patryk, 2026-10-08): an occasion is about the visit, as "pref
+  // outdoor→indoor" is. `tagList` is the list at Save, for the labels; a tag
+  // the list no longer has is left out of the line.
+  { key: "tags", read: (b) => cleanTagIds(b.tags), undo: true,
+    draft: { at: 17, seed: (b) => cleanTagIds(b.tags) },
+    clause: { at: 15, say: (o, f, c) => {
+      const now = cleanTagIds(f.tags);
+      if (sameTagIds(now, o.tags)) return null;
+      if (!now.length) return "occasion tags: cleared";
+      const names = tagLabels(c.tagList, "occasion", now);
+      return names.length ? "occasion tags: " + names.join(", ") : "occasion tags updated";
+    } } },
+  // v18.5.0: GUEST tags, about the person (an allergy, VIP). They belong to the
+  // CUSTOMER, and a customer is derived from bookings, so they are held the way
+  // visits and no-shows are: on a booking. `guestTags` is one booking's
+  // statement of its guest's tags and `guestTagsAt` says when it was made; the
+  // customer's tags are the NEWEST statement among their bookings
+  // (`guestTagMap`, lib/customers.js). A booking with `guestTagsAt: 0` makes no
+  // statement, which is nearly all of them: a tag change writes ONE booking.
+  //
+  // The form does not edit the set. It holds what was tapped (`guestTagEdits`,
+  // lib/tags.js says why), and `settleGuestTags` turns that into this booking's
+  // statement at Save, only when it changes what the guest has. So the draft
+  // opens with no edits whatever the booking holds.
+  //
+  // **The history line never names a guest tag** (Patryk, 2026-10-08). History
+  // text is copied into the activity log (`bookingWriteEntries`), which is
+  // append-only, and Delete customer reaches only the NAME there. "Allergy" in
+  // that line would outlive the guest it describes. It reads "guest tags
+  // updated", as a notes change reads "notes updated". `guestTagsChange` is the
+  // save's own answer to "do these edits change anything".
+  { key: "guestTags", read: (b) => cleanTagIds(b.guestTags), undo: true,
+    draft: { at: 18, as: "guestTagEdits", seed: () => [] },
+    clause: { at: 16, say: (o, f, c) => (c.guestTagsChange ? "guest tags updated" : null) } },
+  // Compared by undo: undoing the save that made a statement has to take the
+  // statement back, and a statement moved to another booking by a delete
+  // (`rehomeGuestTags`) has to move back with the delete's Undo.
+  { key: "guestTagsAt", read: (b) => Math.max(0, Number(b.guestTagsAt) || 0), undo: true },
 ];
 
 // ── Derived: what a read keeps ───────────────────────────────────────────────
@@ -284,8 +327,9 @@ export const BOOKING_FIELDS = [
 //
 // `sanitizeByTable` is the definition: a loop over the rows. `sanitize`, which
 // every read calls, is the same thing written as an object literal with one
-// call site per row (v18.3.5). The loop stores 29 keys through one keyed store
-// and calls 29 different closures from one call site, and it runs on every
+// call site per row (v18.3.5). The loop stores every key through one keyed store
+// and calls a different closure per row from one call site (29 of each when it
+// was measured), and it runs on every
 // booking of every `/bookings` snapshot: measured on the restaurant's tablet,
 // 7.4 ms per 1,000 bookings, so about 12 ms a snapshot at PROD's 1,600. The
 // literal measured 3.3x faster in Node (0.74 ms against 2.44 for 3,000).
@@ -338,6 +382,9 @@ export function sanitize(b,key){
     guestId: R.guestId(b),
     stayedMin: R.stayedMin(b),
     updatedAt: R.updatedAt(b),
+    tags: R.tags(b),
+    guestTags: R.guestTags(b),
+    guestTagsAt: R.guestTagsAt(b),
   };
 }
 
@@ -383,8 +430,10 @@ const HISTORY_CLAUSES = BOOKING_FIELDS.filter(function(row){ return row.clause; 
 // `size` is the size being saved, already a number; `phonePrefix` is the
 // restaurant's (`settings/general`), because "no phone" includes the prefix the
 // form seeds into the field.
-export function diffBooking(orig,f,size,phonePrefix){
-  const ctx={size:size,phonePrefix:phonePrefix};
+// `more` is what only the save knows (v18.5.0): `tagList`, for an occasion
+// tag's label, and `guestTagsChange`.
+export function diffBooking(orig,f,size,phonePrefix,more){
+  const ctx=Object.assign({size:size,phonePrefix:phonePrefix},more);
   const ch=[];
   HISTORY_CLAUSES.forEach(function(h){ const s=h.say(orig,f,ctx); if(s) ch.push(s); });
   return ch.length?ch.join(", "):"saved (no field changes)";
