@@ -33480,3 +33480,32 @@ Allergy and Birthday, and is seated; the customer on +34 600111222 has VIP;
 
 **Gate.** Build: main bundle 131.75 kB gz (130.69 after part 2). Tests: 2,978 (2,961
 before). Lint: 63 problems, 0 errors. `check:style`: OK.
+
+### The DEV browser key's referrer list (#12)
+
+**Files:** `SECURITY.md` (§4) · `ROADMAP.md`. Docs only.
+
+Decided on 2026-10-08: restrict the two Firebase browser keys by HTTP referrer, DEV
+first. What was owed was the list. It was worked out from what runs against DEV
+(every `npm run dev` port, the tablet's DEV tab over `adb reverse`, the simulator's web
+clips, the sandbox deployment): `localhost`, `localhost/*`,
+`megustastu-bookings-wa-sandbox.vercel.app` and the same with `/*`.
+
+**Read, not assumed.** Google's API-key page (fetched 2026-10-09) says an entry with
+no port matches every port, an entry with a port matches only that one, and a host
+needs two entries (bare, and with `/*`). So one pair covers every dev port. The page
+does not mention `localhost` as a website entry at all: that it works is not
+documented there, which is the reason to try DEV first.
+
+**What a wrong list looks like.** The key rides on sign-in and on the hourly token
+refresh, so a new sign-in fails at once and a signed-in device can carry on for up to
+an hour. The check in §4 is therefore a fresh sign-in at both addresses and then one
+left open for over an hour. That behaviour is from how Firebase Auth works as I know
+it, not from a measurement here: nothing was restricted in this session.
+
+**Left out on purpose:** the project's `firebaseapp.com` page (pop-up and redirect
+sign-in only; `LoginScreen.jsx` is the one file that signs in, with email and
+password), `127.0.0.1` (the rules emulator, no key), per-deployment URLs.
+
+**Not done:** the step itself, which is Patryk's in Google Cloud. The PROD list is
+proposed in §4 and not applied.
