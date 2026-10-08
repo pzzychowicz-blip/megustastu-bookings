@@ -32958,3 +32958,14 @@ and MIT): "proprietary", published for reference only, no licence granted to cop
 modify, distribute or run it. The restaurant clause is unchanged. `src/App.jsx`'s header
 and SECURITY.md §4 say the same. The referrer restriction stays on ROADMAP as decided.
 
+### Dependabot is switched on (#14)
+
+Patryk turned on Dependabot alerts and Dependabot security updates in the repository's
+settings on 2026-10-08. Read back from GitHub's API: `vulnerability-alerts` 204,
+`automated-security-fixes` `{"enabled":true,"paused":false}`, 0 open alerts at that
+moment. `.github/dependabot.yml` (v18.4.5) keeps version updates off
+(`open-pull-requests-limit: 0`). `npm audit`'s 5 high advisories of 2026-10-07 (one chain,
+`@grpc/grpc-js` under `@firebase/firestore`, which the app does not import) have no fix
+but a firebase downgrade, so no pull request is expected for them. The entry is removed
+from ROADMAP.
+

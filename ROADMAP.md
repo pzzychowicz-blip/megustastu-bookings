@@ -106,13 +106,6 @@ evidence for each.
   every device out of sign-in until it is corrected. Still owed: the exact referrer list
   for each key. See SECURITY.md §4.
 
-- **Dependabot is configured but switched off (#14).** `.github/dependabot.yml` (v18.4.5)
-  limits it to security updates. It does nothing until Dependabot alerts and Dependabot
-  security updates are turned on in the repository's settings. `npm audit` still lists 5
-  high advisories on 2026-10-07, all one chain (`@grpc/grpc-js` under
-  `@firebase/firestore`, which the app does not import); their only offered fix is
-  `--force`, which downgrades firebase to 9, so Dependabot will open nothing for them.
-
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
   one domain per patch version. The save path went first, in v18.3.4 (#13): its
