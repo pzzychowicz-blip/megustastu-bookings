@@ -32836,3 +32836,161 @@ Retry in the shared Browser pane would explain it and cannot be ruled out.
   screen under the generic flash. Chosen over leaving the party without a table.
 
 **Gate at the push:** build 128.75 kB gz (128.51 on v18.4.8) · 2797 tests (2777) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
+
+---
+
+## v18.4.10 — the booking form checks the tables picked by hand
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.10-form-checks-picked-tables` ·
+**Behavioural change:** yes, two: the form's availability line can show Save's refusal of
+a pick, and Save refuses such a pick before it asks the kitchen question; and the printed
+timeline draws only the flags a block has room for (its own section below). No rules
+change, so no console step.
+
+One version with a section per item, at Patryk's exception to one version each
+(2026-10-08): the form fix, the iPhone print measurement (not built), the printed
+timeline's flags, the licence wording, Dependabot, and the review. The first section is
+the form fix.
+
+**Files:** `src/lib/booking-save.js` · `src/App.jsx` · `src/components/BookingFormModal.jsx` ·
+`tests/booking-logic.test.js` (326 → 334, one pinned string) · `src/lib/CLAUDE.md` ·
+`ROADMAP.md` (the entry removed)
+
+**The fault** (ROADMAP, from v18.4.9's `/code-review`; older than it). The form's
+availability scan returned "ok" for any `manualTables` without checking them, and the
+check lived inline in `doSave`.
+
+**Reproduced on DEV before the edit (1 trial).** New booking "V410 Picked", 17:30, 1B
+picked in the form's Assign, the time moved to 19:00 where WL48 A held 1B. The form read
+"Tables: 1B · Clear" with no warning. Save raised "Kitchen may be busy", and after
+Confirm refused with "Selected tables are not available at this time." Nothing stored.
+
+**Decisions (Patryk, AskUserQuestion).** The form shows Save's own sentence in the
+warning tone, over naming the table and over dropping the pick. Save checks the tables
+before the kitchen question.
+
+**What changed.**
+- `pickedRefusal` (and `PICKED_REFUSAL`) in `lib/booking-save.js` is the check, moved
+  out of `doSave` unchanged in what it asks: the day's live bookings less cancelled,
+  completed and the booking being edited, plus the table blocks, against the draft's
+  window with the turnaround buffer (`padEnd`). A live swap asks nothing.
+- `doSave` calls it. `save()`, the button's handler, calls it first and hands a refused
+  pick straight to `doSave`, which refuses in its usual order (a missing name still
+  comes first).
+- The form's scan calls it for a pick and returns the refusal the way `keptRefusal`'s
+  is returned, so the existing warning line shows it. The form takes `swap`
+  (`swapAffected`). "Add to waitlist" is not offered under a refusal: the way out is
+  Clear or Assign.
+- App no longer imports `canAssign`, `getBlockSlots`, `occupancyEnd` or `padEnd`.
+
+**After, on DEV (1 trial each).** The same steps: at 17:30 no warning; at 19:00 the line
+"Selected tables are not available at this time." (computed colour `rgb(138, 75, 10)`),
+no waitlist button. Save: the refusal at once, no kitchen dialog, nothing stored. Clear:
+the line gone, "Tables: 3" previewed. Save again: the kitchen question was asked (then
+Back; nothing stored).
+
+**Sabotage.** `pickedRefusal` made to return null always: 3 of the new tests fail.
+
+**Not verified:** an edit (the reproduction was a new booking; the function takes
+`editId` and a test covers it); a dropped Swap through the form (it reaches the same
+check with `swap` null); a second device.
+
+**Gate:** build 128.88 kB gz (main chunk, 128.75 on v18.4.9) · 2805 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Decided, not built: printing in place from the iPhone Home Screen app
+
+ROADMAP's entry (v18.4.6) left one thing unmeasured: whether the iOS share sheet offers
+Print for a shared PDF. **Measured on the iPhone 18 Pro Max simulator (iOS 27), 1 trial**,
+in a test page installed as a Home Screen app (`navigator.standalone` true), sharing a
+592-byte PDF built in the page:
+
+- `navigator.canShare({files})`: true.
+- `navigator.share({files})` from a tap: the sheet offered Copy, Markup, **Print** and
+  **Save to Files**.
+- Print: iOS's print options, the page previewed, A4, "page 1 of 1".
+- Closing that screen rejected `share()` with `AbortError`.
+- Control, `window.print()` in the same app: returned at once, nothing shown.
+
+Not measured: an iPad, a real device, a printer.
+
+**Decision (Patryk, 2026-10-08): not built.** The route works, and it would mean a PDF
+library in a lazy chunk and `DaySheet` (189 lines) and `TimelineSheet` (215 lines) each
+drawn a second time, for the installed app on an iPhone or iPad only. The "open the app
+in Safari to print" sentence stays. The entry is removed from ROADMAP.
+
+### The printed timeline draws the flags a block has room for
+
+**Files:** `src/lib/print-timeline.js` · `src/components/TimelineSheet.jsx` ·
+`tests/print-timeline.test.js` (36 → 42, one pinned string) · `src/components/CLAUDE.md` ·
+`GLOSSARY.md` · `ROADMAP.md` (the entry removed)
+
+**The fault** (ROADMAP, v18.4.6's `/code-review`). A block's flags were cut at its right
+edge when it was narrow, and the key under the grid listed every flag of every block.
+
+**Reproduced on DEV before the edit (1 trial).** Headless Chromium on the DEV app, print
+media emulated, the window 1047px wide (A4 landscape less the 10mm margins), `window.print`
+stubbed so the sheet stays mounted. A 13:00–23:00 print gave a 985px track; a 90-minute
+block was 147.8px. "Carlos" (21:00, locked, prefers outdoor) shortened to 45 minutes:
+73.9px, both flags outside the block, and the key listed "Prefers outdoor", which no other
+block carried. A block's parts, measured there: 5px edge, time 29.1–30.9px, party digit
+6.56px, status 12px, flag 14px, gaps 4px.
+
+**Decision (Patryk, AskUserQuestion):** the sheet decides by A4 landscape, over a lead-in
+for the key and over won't-fix.
+
+**What changed.** `fittingFlags(widthPct, trackPx, flags, size)` in `lib/print-timeline.js`
+turns the block's percent width into pixels of the page the stylesheet asks for
+(`PRINT_PAGE_PX`, held to `@page mgt-timeline` by a test) and hands the screen's
+`visibleRail` the print block's measured widths (`PRINT_BLOCK`). The sheet draws what it
+returns and the key collects from the same list. The name still gives way before a flag.
+
+**After, on DEV (1 trial, the same rig).** Carlos at 45 minutes: 0 flags drawn, 0 cut;
+the key no longer lists "Prefers outdoor". The 147.8px blocks kept their flag.
+
+**Sabotage.** `fittingFlags` returning every flag: 4 of the new tests fail.
+
+**Not verified:** a block that keeps some flags and drops others (tests only); paper; a
+browser that ignores the landscape rule and prints portrait, where blocks are narrower
+than assumed and a flag can still be cut.
+
+
+**Gate:** build 129.04 kB gz (main chunk, 128.88 after the form fix) · 2811 tests passed (2805) · lint 63 problems, 0 errors · `check:style` OK.
+
+### The licence says what is true of a public repository
+
+`LICENSE` called the code "proprietary and confidential" while anyone can read it
+(ROADMAP #12). Patryk's wording (AskUserQuestion, over leaving it, a private repository
+and MIT): "proprietary", published for reference only, no licence granted to copy,
+modify, distribute or run it. The restaurant clause is unchanged. `src/App.jsx`'s header
+and SECURITY.md §4 say the same. The referrer restriction stays on ROADMAP as decided.
+
+### Dependabot is switched on (#14)
+
+Patryk turned on Dependabot alerts and Dependabot security updates in the repository's
+settings on 2026-10-08. Read back from GitHub's API: `vulnerability-alerts` 204,
+`automated-security-fixes` `{"enabled":true,"paused":false}`, 0 open alerts at that
+moment. `.github/dependabot.yml` (v18.4.5) keeps version updates off
+(`open-pull-requests-limit: 0`). `npm audit`'s 5 high advisories of 2026-10-07 (one chain,
+`@grpc/grpc-js` under `@firebase/firestore`, which the app does not import) have no fix
+but a firebase downgrade, so no pull request is expected for them. The entry is removed
+from ROADMAP.
+
+### `/code-review` (high): five findings
+
+- **Fixed (3).** This entry's header named the form fix only; it names both behaviour
+  changes and lists the sections. `src/CLAUDE.md` named the save's check as `doSave`'s
+  manual guard in two lists of busy-set builders; both name `pickedRefusal`. The new test
+  forbade any `canAssign(` in the form, which never held the check; it forbids it in App.
+- **Disproved while reviewing (2, not reported).** `nowMins` in the form scan's deps adds
+  no run: `liveBookings` is `syncLiveDurations`' `.map`, a new array on every `nowMins`
+  change, and was already a dep. An edit does not open with `manualTables`
+  (`booking-fields.js` seeds `[]`), so the new check does not warn on opening a
+  hand-placed booking.
+- **Not changed (2).** `PRINT_BLOCK`'s widths were measured in headless Chromium on macOS
+  and carry no slack, so another browser's font metrics could cut a kept flag by a pixel
+  or two; not measured on another browser, so no number to set a slack from. `save()`
+  and `doSave` each compute a refused pick (a few array passes per tap); `doSave` owning
+  the refusal order is the point.
+
+**Gate at the push:** build 129.04 kB gz (main chunk, 128.75 on v18.4.9) · 2811 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
+

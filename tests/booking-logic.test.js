@@ -35,7 +35,7 @@ import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS } from "../src/lib/constants.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { draftFromBooking } from "../src/lib/booking-fields.js";
-import { applyEdit, buildBooking, editWindow, keptRefusal, releaseSwapped } from "../src/lib/booking-save.js";
+import { applyEdit, buildBooking, editWindow, keptRefusal, releaseSwapped, pickedRefusal, PICKED_REFUSAL } from "../src/lib/booking-save.js";
 
 const D = "2099-06-15";      // fixed future date — optimizer always active
 // v17.16.2: same source as the app. Derived with toISOString() this drifted
@@ -3123,7 +3123,8 @@ describe("doSave hands the seat a list with the cleared party completed (v18.0.0
   });
 
   it("the manual-table guard and the seat-clash gate read the patched list too", () => {
-    expect(/if\(mt\.length&&!swapAffected\)\{let ex=saveLive\.filter\(/.test(APP)).toBe(true);
+    // v18.4.10: the guard is `pickedRefusal`, handed the patched live list.
+    expect(APP).toContain("pickedRefusal(saveLive,f,editId,tableBlocks,swapAffected,nowMins,today)");
     expect(/seatClashParties\(mt\.length\?mt:\(seatOrig\.tables\|\|\[\]\),f\.date,editId,saveBks\)/.test(APP)).toBe(true);
   });
 });
@@ -3203,5 +3204,73 @@ describe("releaseSwapped: what a swap leaves the party it takes from", () => {
     const body = stripComments(readFileSync(new URL("../src/lib/manual-assign.js", import.meta.url), "utf8")).join("\n");
     expect(body).toContain("releaseSwapped(x,affected)");
     expect(body).not.toContain("_locked:false");
+  });
+});
+
+
+// ── pickedRefusal (v18.4.10) ────────────────────────────────────────────────
+// The tables a person picked in the form. Save refused a pick that was busy
+// and the form's availability line said "ok" for any pick: reproduced on DEV
+// with 1B picked at 17:30 and the time moved to 19:00, where another party held
+// 1B. One function answers both now, and Save asks it before the kitchen
+// question.
+describe("pickedRefusal: what Save will say about the tables picked in the form", () => {
+  const draft = (o) => Object.assign({ date: D, time: "19:00", size: 2, customDur: null, manualTables: ["3"] }, o);
+  const holder = (o) => mk(Object.assign({ id: "h", name: "Holder", time: "19:00", tables: ["3"] }, o));
+  const ask = (live, d, o) => pickedRefusal(live, d, (o && o.editId) || null, (o && o.blocks) || [], (o && o.swap) || null, 0, "2000-01-01");
+
+  it("a free pick is not refused", () => {
+    expect(ask([holder({ tables: ["4"] })], draft())).toBe(null);
+    expect(ask([holder({ time: "13:00" })], draft()), "the same table, hours earlier").toBe(null);
+  });
+
+  it("a pick another party holds at the draft's time is refused, in Save's sentence", () => {
+    expect(ask([holder()], draft())).toBe(PICKED_REFUSAL);
+    expect(ask([holder({ time: "19:30" })], draft()), "an overlap, not only the same start").toBe(PICKED_REFUSAL);
+    expect(PICKED_REFUSAL).toBe("Selected tables are not available at this time.");
+  });
+
+  it("the draft's time decides: the pick that fitted at 17:00 is refused at 19:00", () => {
+    expect(ask([holder()], draft({ time: "17:00" }))).toBe(null);
+    expect(ask([holder()], draft({ time: "19:00" }))).toBe(PICKED_REFUSAL);
+  });
+
+  it("a completed or cancelled party holds no table, and neither does the booking being edited", () => {
+    expect(ask([holder({ status: "completed" })], draft())).toBe(null);
+    expect(ask([holder({ status: "cancelled" })], draft())).toBe(null);
+    expect(ask([holder()], draft(), { editId: "h" })).toBe(null);
+  });
+
+  it("a table block over the draft's time refuses the pick", () => {
+    const blocks = [{ id: "bl1", tableId: "3", date: D, allDay: false, from: "18:30", to: "20:00" }];
+    expect(ask([], draft(), { blocks })).toBe(PICKED_REFUSAL);
+  });
+
+  it("asks nothing with no pick, with no time, or while the picker's swap is live", () => {
+    expect(ask([holder()], draft({ manualTables: [] }))).toBe(null);
+    expect(ask([holder()], draft({ manualTables: undefined }))).toBe(null);
+    expect(ask([holder()], draft({ time: "" }))).toBe(null);
+    expect(ask([holder()], draft(), { swap: [{ id: "h", tables: ["3"] }] })).toBe(null);
+  });
+
+  // Where it is asked. The sentence exists once, in the lib.
+  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const FORM = stripComments(readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
+
+  it("Save and the form both ask it, and neither keeps a copy of the check", () => {
+    expect(APP).toContain("pickedRefusal(saveLive,f,editId,tableBlocks,swapAffected,nowMins,today)");
+    expect(FORM).toContain("pickedRefusal(liveBookings,form,editId,tableBlocks,swap,nowMins,today)");
+    expect(APP).toContain("swap={swapAffected}");
+    // The sentence exists once, in the lib; App, which held the check, holds
+    // no busy-set arithmetic for it any more.
+    for (const src of [APP, FORM]) expect(src).not.toContain("Selected tables are not available");
+    expect(APP).not.toContain("canAssign(");
+  });
+
+  it("the button's save asks it before the kitchen question", () => {
+    const picked = APP.indexOf("if(pickedRefusal(withClearedSeats(liveBookings),f,editId,tableBlocks,swapAffected,nowMins,today))");
+    const kitchen = APP.indexOf('setConfirmKitchen("form")');
+    expect(picked).toBeGreaterThan(-1);
+    expect(kitchen).toBeGreaterThan(picked);
   });
 });

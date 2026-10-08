@@ -34,6 +34,7 @@ import {
   tablesPinned, tablesKept, keepsHandTables, tablesFreeFor, replacePinnedClashes,
   seatRefusal, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, handKeptRefusal,
   offZone, offZoneNote, seatNoteFor,
+  canAssign, occupancyEnd, getBlockSlots, padEnd,
 } from "./booking-logic.js";
 import { stampGuestSeed, resolveGuestId } from "./customers.js";
 import { isNoShow, NO_SHOW_CLEARED } from "./booking-fields.js";
@@ -713,6 +714,33 @@ export function occurrenceBooking(rule,date){
 // has changed nothing else `needsR` reads (`keepsHandTables`), and a Clear is
 // never kept, so the form, which asks only when `tablesKept`, never asks one.
 // The function answers as it did for every draft.
+//
+// ── v18.4.10: the tables a person PICKED in the form ───────────────────────
+// `pickedRefusal` is the save's check on `manualTables`, moved here so the form
+// asks the same question before Save. It was inline in `doSave`, and the
+// form's availability scan answered "ok" for any pick without looking: a pick
+// that became busy when the draft's time moved, or a Swap dropped because the
+// draft left its slot (`liveSwap`), read as fine until Save refused it.
+// Reproduced on DEV: 1B picked at 17:30, the time moved to 19:00 where another
+// party held 1B, "Tables: 1B" with no warning, then the refusal.
+//
+// `live` is the day as the save sees it (live durations, a just-cleared party
+// completed). A completed or cancelled booking holds no table. A live `swap`
+// means the picker already released the parties in the way, so nothing is
+// asked; a draft with no readable time is the time check's to refuse.
+export const PICKED_REFUSAL="Selected tables are not available at this time.";
+export function pickedRefusal(live,draft,editId,blocks,swap,nowMins,today){
+  const mt=draft&&Array.isArray(draft.manualTables)?draft.manualTables:[];
+  if(!mt.length||swap||!draft.time) return null;
+  const sm=toMins(draft.time);
+  const dur=draft.customDur||getDur(Number(draft.size)||2);
+  const ex=(live||[]).filter(function(b){
+    return b.date===draft.date&&b.status!=="cancelled"&&b.status!=="completed"&&b.id!==editId;
+  }).map(function(b){
+    return {tables:b.tables||[],s:toMins(b.time),e:occupancyEnd(b,nowMins,today)};
+  }).concat(getBlockSlots(blocks,draft.date));
+  return canAssign(mt,ex,sm,padEnd(sm+dur))?null:PICKED_REFUSAL;
+}
 export function keptRefusal(list,orig,draft,blocks){
   if(!orig||!draft) return null;
   const hand=keepsHandTables(orig,draft);

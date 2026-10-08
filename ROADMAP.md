@@ -100,16 +100,11 @@ evidence for each.
   `api/wa-sim-*.js` handlers. (#4's five files are run by `tests/api-handlers.test.js`
   since v18.4.5.)
 
-- **The public repository (#12).** Decide whether `LICENSE`'s "proprietary and
-  confidential" fits a public repo. Optionally, restrict the browser API keys by HTTP
-  referrer in Google Cloud, trying DEV first. See SECURITY.md §4.
-
-- **Dependabot is configured but switched off (#14).** `.github/dependabot.yml` (v18.4.5)
-  limits it to security updates. It does nothing until Dependabot alerts and Dependabot
-  security updates are turned on in the repository's settings. `npm audit` still lists 5
-  high advisories on 2026-10-07, all one chain (`@grpc/grpc-js` under
-  `@firebase/firestore`, which the app does not import); their only offered fix is
-  `--force`, which downgrades firebase to 9, so Dependabot will open nothing for them.
+- **The public repository (#12): restrict the browser API keys by HTTP referrer**
+  (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The
+  step is Patryk's, in Google Cloud → APIs & Services → Credentials; a wrong list locks
+  every device out of sign-in until it is corrected. Still owed: the exact referrer list
+  for each key. See SECURITY.md §4.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
@@ -122,39 +117,19 @@ evidence for each.
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`). The next domain is not chosen.
 
-- **The booking form shows hand-picked tables as fine when Save will refuse them**
-  (v18.4.9's `/code-review`; older than it). The availability preview answers "ok" for any
-  `manualTables` without checking them (`BookingFormModal.jsx`), so a pick that became
-  busy, or a Swap dropped because the draft left its slot, reads as normal until Save says
-  "Selected tables are not available at this time."
-
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
-  DEV). An edit parked by a forced rejection at 10:46:33Z on 2026-10-08 was on the server
-  76 s later, beside an automatic "2 bookings re-placed" line 2 ms apart. Three attempts
-  to repeat it stayed parked, and `retryParked` has one caller, the banner's button. A
-  press of Retry in the shared Browser pane cannot be ruled out. If it recurs: note
-  whether the tab was hidden and what the activity log holds for that second.
-
-- **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
-  restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
-  Scheduling's `014a461`): `Overlay`'s keyboard inset (N1, with v18.3.5's formula), `color-scheme` (N4), the
-  per-scheme `theme-color` metas plus the manifest colours and its `?v=` bump (N5),
-  `text-size-adjust` (N8), `enterKeyHint="go"` on the login password (N9), the
-  `prefers-contrast: more` block (A10), the popover keyframe pair for
-  `ConnectionStatus` (M9), and v18.3.1's `.mgt-edge` top strip (the iOS home-screen blur). Drop any item the device check turns back.
-
-- **The printed timeline's key can name a flag no block shows** (v18.4.6 `/code-review`).
-  It lists the flags of every block it drew, and a block narrower than its time, size
-  and marks clips them (`overflow: hidden`). Harmless, an explanation with nothing to
-  point at; fixing it means the sheet deciding which flags fit, as the screen's
-  `visibleRail` does.
-
-- **Printing from the iPhone Home Screen app** (v18.4.6). iOS ignores `window.print()`
-  there, so the app now says "open the app in Safari to print". A print that works in
-  place needs the PDF built in the app and handed to the iOS share sheet
-  (`navigator.share` with a file, which is defined there; the sheet has Print and Save to
-  Files). That means a PDF library, in a lazy chunk, and both sheets drawn a second way.
-  Not measured: whether the share sheet offers Print for a shared PDF, and an iPad.
+  DEV; investigated again 2026-10-08). The stored booking carries the edit's history
+  stamp (10:46:33.804Z) and a write stamp of 10:47:49.550Z, so the same in-page change
+  was replayed, 28 s after that session's turn ended and with no tool call running.
+  `retryParked` has one caller, the banner's button, and no shortcut. One clean trial
+  (the rejection turned off from the page, no reload, 120 s, through real visibility
+  changes and two clicks by Patryk on the strip header): 0 `saveBookings` calls, 0
+  `retryParked` calls, the booking unchanged. Editing `usePersistence.js` made Vite
+  reload the page 4 times of 4, which destroys a parked write, so a trial that removes
+  the switch by a file edit proves nothing unless the page is shown to have survived.
+  Patryk does click in the shared pane during a check and does not recall pressing Retry.
+  If it recurs: log clicks in the page (capture phase, `isTrusted`, the target's text),
+  trace `retryParked`, and keep Vite's log line for the edit.
 
 ## Designed, not implemented
 

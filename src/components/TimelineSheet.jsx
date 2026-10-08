@@ -26,8 +26,8 @@
 // What it draws: the header (restaurant, date, totals, the range), an hour
 // axis, the Unplaced lanes when there are any (lib/unplaced.js, the screen's
 // rule), one row per table with its bookings and its blocked spans, a legend.
-// A block carries its start time, name, party size, status mark and the rail's
-// flags (blockFlags.jsx, the screen's list). Seated bookings are drawn at their
+// A block carries its start time, name, party size, status mark and as many of
+// the rail's flags (blockFlags.jsx, the screen's list) as it has room for. Seated bookings are drawn at their
 // BOOKED duration: paper has no clock to grow them against.
 //
 // Props: bookings, date, blocks, from, to, splitHour, restaurantName, currency
@@ -42,7 +42,7 @@ import { WEEKDAY_LONG, formatDay } from "../lib/day";
 import { hourLabel } from "../lib/time-grid";
 import { StatusIcon } from "./Icons";
 import { railFlagsOf } from "./blockFlags";
-import { PRINT_FILL, spanIn } from "../lib/print-timeline";
+import { PRINT_FILL, spanIn, PRINT_PAGE_PX, fittingFlags } from "../lib/print-timeline";
 
 const STATUS_WORD = { confirmed: "Confirmed", pending: "Pending", seated: "Seated", completed: "Completed" };
 const INK = "#fff"; /* @fixed-fill */
@@ -115,11 +115,15 @@ export const TimelineSheet = memo(function TimelineSheet({ bookings, date, block
   // v18.4.6: every flag a DRAWN block carries is collected for the key under
   // the grid, first seen first, one line per meaning. Filled as the rows
   // below render and read after them, in this one render.
+  // v18.4.10: a block draws the flags it has ROOM for (`fittingFlags`, by the
+  // page the stylesheet asks for), so none is cut at its edge and the key
+  // names no flag the page does not show.
   const drawn = [];
+  const trackPx = PRINT_PAGE_PX - LABEL_W;
   const blockIn = function (b, dashed) {
     const pos = spanIn(toMins(b.time), endOf(b), fromM, toM);
     if (!pos) return null;
-    const flags = flagsOf(b);
+    const flags = fittingFlags(pos.width, trackPx, flagsOf(b), b.size);
     flags.forEach(function (f) { if (!drawn.some(function (d) { return d.legend === f.legend; })) drawn.push(f); });
     return <SheetBlock key={b.id} b={b} pos={pos} flags={flags} dashed={dashed} />;
   };

@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect, vi } from "vitest";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { PRINT_FILL, spanIn, printRange } from "../src/lib/print-timeline.js";
+import { PRINT_FILL, spanIn, printRange, PRINT_PAGE_PX, PRINT_BLOCK, fittingFlags } from "../src/lib/print-timeline.js";
 import { onPrintEnd, PRINT_EARLY_MS, printOrReport, PRINT_IGNORED_MS, PRINT_IGNORED_TEXT } from "../src/lib/print-end.js";
 
 const raw = (rel) => readFileSync(new URL("../" + rel, import.meta.url), "utf8");
@@ -133,7 +133,11 @@ describe("the sheet", () => {
     entries.forEach((e) => expect(e, e.slice(0, 30)).toMatch(/^\{ k: "\w+", keep: \d+, legend: /));
   });
   it("the key lists the flags of the blocks it DREW, one line per meaning", () => {
-    expect(sheet).toMatch(/if \(!pos\) return null;\s+const flags = flagsOf\(b\);\s+flags\.forEach\(function \(f\) \{ if \(!drawn\.some\(function \(d\) \{ return d\.legend === f\.legend; \}\)\) drawn\.push\(f\); \}\);/);
+    // v18.4.10: of the flags it had ROOM for, so the key names none the page
+    // does not show.
+    expect(sheet).toContain("const flags = fittingFlags(pos.width, trackPx, flagsOf(b), b.size);");
+    expect(sheet).toContain("const trackPx = PRINT_PAGE_PX - LABEL_W;");
+    expect(sheet).toMatch(/flags\.forEach\(function \(f\) \{ if \(!drawn\.some\(function \(d\) \{ return d\.legend === f\.legend; \}\)\) drawn\.push\(f\); \}\);\s+return <SheetBlock key=\{b\.id\} b=\{b\} pos=\{pos\} flags=\{flags\}/);
     const key = sheet.slice(sheet.indexOf("{statuses.map("));
     expect(key.indexOf("{drawn.map(")).toBeGreaterThan(-1);
     expect(key).toMatch(/\{f\.icon\}<\/span>\s+\{f\.legend\}/);
@@ -257,6 +261,59 @@ describe("a print the device ignores is reported", () => {
     expect(fn).toMatch(/printOrReport\(function\(\)\{\s*document\.documentElement\.removeAttribute\("data-print"\);setPrintJob\(null\);\s*flashRefusal\(PRINT_IGNORED_TEXT\);\s*\}\);/);
     expect(fn).not.toMatch(/window\.print\(\)/);
     expect(PRINT_IGNORED_TEXT).toMatch(/Home Screen app.*Safari/);
+  });
+});
+
+// ── v18.4.10: a printed block draws the flags it has room for ────────────────
+// The sheet is laid out in percent, so a narrow block cut its flags at its edge
+// while the key still explained them. Measured in a print layout 1047px wide:
+// a 45-minute booking in a 13:00–23:00 print was 73.9px and showed neither of
+// its two flags; a 90-minute one was 147.8px.
+describe("which flags fit a printed block", () => {
+  const TRACK = PRINT_PAGE_PX - 62;
+  const pct = (mins, hours) => (mins / (hours * 60)) * 100;
+  const F = (k, keep) => ({ k, keep, legend: k });
+  const all = [F("dep", 2), F("zone", 3), F("pref", 6), F("lock", 5), F("ns", 4)];
+  const keys = (list) => list.map((f) => f.k);
+
+  it("the page width is the one the stylesheet asks for", () => {
+    const m = css.match(/@page mgt-timeline \{ size: A4 landscape; margin: (\d+)mm; \}/);
+    expect(m, "@page mgt-timeline").not.toBeNull();
+    expect(PRINT_PAGE_PX).toBe(Math.round(((297 - 2 * Number(m[1])) / 25.4) * 96));
+  });
+
+  it("the measured case: 45 minutes of a ten-hour print has room for none", () => {
+    expect((pct(45, 10) / 100) * TRACK).toBeCloseTo(73.9, 1);
+    expect(fittingFlags(pct(45, 10), TRACK, [F("zone", 3), F("lock", 5)], 2)).toEqual([]);
+  });
+
+  it("90 minutes of a ten-hour print has room for four of five, the least important dropped", () => {
+    expect(keys(fittingFlags(pct(90, 10), TRACK, all, 2))).toEqual(["dep", "zone", "lock", "ns"]);
+  });
+
+  it("a wide block keeps them all, as the same array", () => {
+    expect(fittingFlags(pct(180, 10), TRACK, all, 2)).toBe(all);
+  });
+
+  it("a longer print range leaves less room, and so does a two-digit party", () => {
+    expect(keys(fittingFlags(pct(90, 13), TRACK, all, 2))).toEqual(["dep", "zone"]);
+    expect(keys(fittingFlags(pct(60, 10), TRACK, all, 2))).toEqual(["dep"]);
+    expect(keys(fittingFlags(pct(60, 10), TRACK, all, 12))).toEqual(["dep"]);
+    expect(keys(fittingFlags(pct(55, 10), TRACK, all, 2))).toEqual(["dep"]);
+    expect(keys(fittingFlags(pct(55, 10), TRACK, all, 12))).toEqual([]);
+  });
+
+  it("what is kept fits: the fixed parts and the kept flags are no wider than the block", () => {
+    const P = PRINT_BLOCK;
+    for (const mins of [15, 30, 45, 60, 75, 90, 120, 180]) {
+      for (const hours of [4, 8, 10, 13]) {
+        const w = (pct(mins, hours) / 100) * TRACK;
+        const kept = fittingFlags(pct(mins, hours), TRACK, all, 2).length;
+        const used = 2 * P.edge + P.time + 3 * P.gap + P.digit + P.status + kept * (P.gap + P.flag);
+        if (kept) expect(used, mins + "min of " + hours + "h").toBeLessThanOrEqual(w);
+        if (kept < all.length) expect(used + P.gap + P.flag, "one more would not fit").toBeGreaterThan(w);
+      }
+    }
   });
 });
 
