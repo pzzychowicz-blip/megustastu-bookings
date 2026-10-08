@@ -63,3 +63,19 @@ describe("onLanded fires for a write the server has, and only then", () => {
     expect(fn).toMatch(/try\{report\.onLanded\(\);\}catch/);
   });
 });
+
+// A refused patch is not "the same write" to skip. Measured on DEV with the
+// write forced to reject, before this: ONE rejection, no retry, no parked
+// banner, and the booking drawn from local state with nothing on the server —
+// the replay built an identical patch 40ms later and returned at the dedupe.
+// After it: four attempts, then the parked banner.
+describe("a rejected write disarms the duplicate-patch window", () => {
+  it("in the catch, and only if the signature is still this patch's", () => {
+    const caught = SAVE.slice(SAVE.indexOf("}).catch("));
+    const clear = caught.indexOf('if(lastPatchSigRef.current.sig===sig) lastPatchSigRef.current={sig:"",at:0};');
+    const queue = caught.indexOf("pendingRetriesRef.current.push(");
+    expect(clear).toBeGreaterThan(-1);
+    expect(queue, "cleared before the write is queued for its replay").toBeGreaterThan(clear);
+  });
+});
+

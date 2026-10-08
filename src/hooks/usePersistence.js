@@ -525,6 +525,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // hard-code "stale per-booking revision", which is one of at least four
         // things PERMISSION_DENIED can mean here — see describeWriteError.
         console.warn(describeWriteError("bookings",err)+" Resyncing + retry.");
+        // v18.4.6: a REFUSED patch is not "the same write" to skip. The
+        // signature stayed armed, so a replay that built an identical patch
+        // inside the window (any refusal that is not a stale stamp: the fresh
+        // list gives the same base) returned at the dedupe above. Measured on
+        // DEV with the write forced to reject: one rejection, no retry, no
+        // parked banner, and the booking drawn from local state with nothing
+        // on the server. Cleared only if it is still this patch's.
+        if(lastPatchSigRef.current.sig===sig) lastPatchSigRef.current={sig:"",at:0};
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
         markStale();
       });

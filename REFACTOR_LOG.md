@@ -32226,3 +32226,26 @@ for the one Save so the freshness gate held the write:
 
 **Gate:** build 127.68 kB gz (127.45 before) · 2720 tests (2706) · lint 63 problems,
 0 errors · `check:style` OK.
+
+### Commit 2 — a refused write is retried, not skipped as a duplicate
+
+**Files:** `src/hooks/usePersistence.js` · `tests/retry-report.test.js` (1 new)
+
+Found while planning commit 1, and measured before it was touched. `lastPatchSigRef` (the
+v16.0.0 StrictMode dedupe) stayed armed after a REJECTION, so a replay that built an
+identical patch inside the 2s window returned at the dedupe. A stale stamp never does that
+(the fresh list gives a new base); every other refusal does: a validation or a permission
+the rules refuse.
+
+- **Before**, on DEV, with the `update()` forced to reject (a temporary switch, not
+  committed) and a new booking saved: one rejection logged, no retry, no parked banner, and
+  the booking stayed on screen from local state with nothing on the server until a reload.
+  The resync answered from the cache, so the replay came 47ms after the rejection.
+- **After**: four attempts (the first and `MAX_RETRIES` replays), then "Couldn't save …
+  not saved, and undone" with Retry and Discard, and the booking off the screen.
+
+The signature is cleared in the `.catch`, only if it is still that patch's. Without this an
+`onLanded` could wait forever on a write that was neither landed nor parked.
+
+**Gate:** build 127.70 kB gz · 2721 tests · lint 63 problems, 0 errors · `check:style` OK.
+
