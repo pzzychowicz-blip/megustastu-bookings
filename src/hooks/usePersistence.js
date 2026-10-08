@@ -88,6 +88,12 @@ const RECONNECT_KICK_MAX_MS = 120000;
 const LOAD_TIMEOUT_MS = 15000;
 
 
+// v18.4.6: the reports whose `onLanded` has run (see `saveBookings`). At
+// module scope: a `useRef(new WeakSet())` builds one on every render and
+// keeps the first (/code-review), and a report is its caller's own object, so
+// nothing here is per-mount.
+const LANDED=new WeakSet();
+
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
   const [tableBlocks, setTableBlocks] = useState([]);
@@ -202,8 +208,6 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // re-running them on fresh data is safe. Value-form / silent writes (the auto
   // effects) never queue; replaying a precomputed stale array would re-write stale data.
   const pendingRetriesRef=useRef([]);
-  // v18.4.6: the reports whose `onLanded` has run (see `saveBookings`).
-  const landedRef=useRef(new WeakSet());
   // v17.16.9 (CT-2A-07): where a write goes once its automatic retries are spent.
   //
   // It used to go nowhere — `drainPending`'s give-up branch set a banner naming
@@ -416,8 +420,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
     // inside the write's `.then`, where a throw would reach the `.catch`
     // below it and queue a write that landed for a retry.
     function landed(){
-      if(!report||typeof report.onLanded!=="function"||landedRef.current.has(report)) return;
-      landedRef.current.add(report);
+      if(!report||typeof report.onLanded!=="function"||LANDED.has(report)) return;
+      LANDED.add(report);
       try{report.onLanded();}catch(e){console.warn("[SAFE] a bookings write landed, and what followed it threw.",e);}
     }
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local

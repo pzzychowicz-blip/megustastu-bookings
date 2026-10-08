@@ -63,7 +63,8 @@ describe("onLanded fires for a write the server has, and only then", () => {
   });
   it("once per report, and a throw in it cannot reach the write's catch", () => {
     const fn = SAVE.slice(SAVE.indexOf("function landed("), SAVE.indexOf("if(isStaleGap("));
-    expect(fn).toContain("landedRef.current.has(report)");
+    expect(fn).toContain("LANDED.has(report)");
+    expect(HOOK, "one set for the module, not one per render").toMatch(/^const LANDED=new WeakSet\(\);$/m);
     expect(fn).toMatch(/try\{report\.onLanded\(\);\}catch/);
   });
 });

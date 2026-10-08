@@ -311,7 +311,6 @@ function saver(h, mirror, dispatchOk) {
     const rest = (args[1] ? [args[1]] : []).concat(report ? [{ report: Object.keys(report).sort() }] : []);
     h.calls.push(["saveBookings", typeof fn === "function" ? "<fn>" : "<value>"].concat(rest));
     if (report && report.onLanded && dispatchOk) (h.landings = h.landings || []).push(report.onLanded);
-    h.report = report || null;
     return dispatchOk;
   };
 }
