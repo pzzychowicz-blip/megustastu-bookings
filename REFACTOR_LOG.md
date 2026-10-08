@@ -32411,3 +32411,31 @@ signed out of DEV), a physical iPhone, an iPad.
 
 **Gate:** build 128.10 kB gz · 2744 tests · lint 63 problems, 0 errors · `check:style` OK.
 
+### `/code-review` (high): seven findings
+
+**Fixed (6), each checked against the code first:**
+
+- **A `replayRefusal` that throws lost the rest of the queue.** `drainPending` empties the
+  queue and then loops, so a throw from one item's question escaped into `resync()`'s
+  `.catch` with the items behind it neither replayed nor parked. `replayOutcome` asks in a
+  `try` now; a throw is no objection and the write is replayed. 1 test.
+- **A replay's refusal replaced a warning already on screen.** `writeWarning` is one string
+  with four other writers; the drain now adds its sentence to whatever is showing (and adds
+  nothing a second time).
+- **A `WeakSet` was built on every render** (`useRef(new WeakSet())`). It is `LANDED`, at
+  module scope.
+- **`h.report` in the save-path harness was assigned and never read.** Removed. (These two
+  share a commit; they should have been two.)
+- **The printed key said "Deposit paid"**; the glossary's word for that mark is "taken".
+  It says "Deposit taken".
+- **`GLOSSARY.md` had no wording for the key's flags or for the print message.** Added to
+  the "timeline sheet" and "refusal toast" rows.
+
+**Deferred to ROADMAP (1):** the key lists the flags of every block drawn, and a narrow
+block clips its marks, so the key can explain a mark nobody can see. Harmless; fixing it
+means the sheet deciding which flags fit.
+
+**Gate at the push:** build 128.16 kB gz (127.45 on v18.4.5) · 2745 tests (2706) · lint
+63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
+rules suite was not run and there is no PROD rules step.
+

@@ -142,6 +142,12 @@ evidence for each.
   `prefers-contrast: more` block (A10), the popover keyframe pair for
   `ConnectionStatus` (M9), and v18.3.1's `.mgt-edge` top strip (the iOS home-screen blur). Drop any item the device check turns back.
 
+- **The printed timeline's key can name a flag no block shows** (v18.4.6 `/code-review`).
+  It lists the flags of every block it drew, and a block narrower than its time, size
+  and marks clips them (`overflow: hidden`). Harmless, an explanation with nothing to
+  point at; fixing it means the sheet deciding which flags fit, as the screen's
+  `visibleRail` does.
+
 - **Printing from the iPhone Home Screen app** (v18.4.6). iOS ignores `window.print()`
   there, so the app now says "open the app in Safari to print". A print that works in
   place needs the PDF built in the app and handed to the iOS share sheet
