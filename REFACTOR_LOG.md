@@ -32497,3 +32497,31 @@ without a conflict, the toast "Tables re-optimised.", the picker closed.
 edit form whose date was changed that is not the booking's day. Not reproduced.
 
 **Gate:** build 128.24 kB gz (main chunk, +0.08 on v18.4.6) · 2756 tests passed (11 new) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — the drop's displacement releases through `releaseSwapped`
+
+**Files:** `src/lib/drop-plan.js` · `tests/drop-plan.test.js` (2 new) ·
+`src/lib/booking-save.js` (a comment) · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+Patryk's call (AskUserQuestion): move, then unify. `planDrop`'s displacement stripped the
+set from each occupant and unlocked it in its own six lines, the fourth copy of what
+`releaseSwapped` does for the form's two saves and the picker. It now names each occupant
+with the whole set (`{id, tables: dSet}`) and calls `releaseSwapped`. **No behaviour
+change.** Only the release is shared: the dragged booking's own write stays the drop's,
+because its patch lists `_manual, _locked, _conflict` where the picker's lists `_conflict,
+_manual, _locked`, and `contentKey` compares key order.
+
+**Verified old against new.** `origin/main`'s `drop-plan.js` copied beside the new one and
+both run on generated days (600 seeds, the generator of commit 1, plus a shown list whose
+seated parties run longer than the stored one), every booking dropped on every table:
+**70,655 drops, the same answer each time**: the same null or refusal, the same toast, the
+same written list, the same list for a replay on a changed `prev`, the same rows returned
+as the same objects, and the same key order on every row. Reached: nothing 30,309 ·
+refusal 9,561 · move 24,896 · swap 401 · displace 5,488. **Sabotages:** a release that
+keeps the occupant's lock failed at seed 1; taking only the target table from an occupant
+failed at seed 9. Not committed, for commit 1's reason.
+
+**Not done:** a drag on DEV. The displacement is the only path changed and the Browser
+pane cannot arm a real drag (`mgt-measurement-traps`).
+
+**Gate:** build 128.23 kB gz (main chunk) · 2758 tests passed · lint 63 problems, 0 errors · `check:style` OK.

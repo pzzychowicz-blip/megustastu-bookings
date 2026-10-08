@@ -119,8 +119,8 @@ evidence for each.
   `lib/recurring.js`; `App.jsx` 5,410 lines), and backup/export in v18.4.5 (`runBackup` in
   `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
   drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines), and manual table assignment in
-  v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines). The next domain is not
-  chosen.
+  v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
+  shares its release, `releaseSwapped`). The next domain is not chosen.
 
 - **A new booking removes its waitlist entry before the booking lands** (found planning
   v18.4.6). `doSaveNew` calls `removeFromWaitlist` right after the dispatch, so a held

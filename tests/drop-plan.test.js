@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { planDrop } from "../src/lib/drop-plan.js";
+import { releaseSwapped } from "../src/lib/booking-save.js";
 import { ALL_TABLES } from "../src/lib/constants.js";
 import { comboCapBest } from "../src/lib/booking-logic.js";
 import { todayStr, addDays } from "../src/lib/day.js";
@@ -157,5 +158,31 @@ describe("BookingApp's dropOnTable", () => {
     // write is never shown as a move.
     expect(fn).toContain("if(saveBookings(plan.transform,false,goneReport(id))) flashDragMsg(plan.done,true);");
     expect(fn.split("\n").length).toBeLessThan(12);
+  });
+});
+
+// v18.4.7: the displacement and the table picker's Swap leave an occupant the
+// same thing. The drop wrote its own copy of the release until then; it was
+// run against that copy over 70,655 generated drops when it changed
+// (REFACTOR_LOG).
+describe("planDrop: what a displaced party is left with", () => {
+  const LIB = stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "lib", "drop-plan.js"), "utf8")).join("\n");
+
+  it("is releaseSwapped, not a second copy of it", () => {
+    expect(LIB).toContain("return releaseSwapped(b,taken);");
+    expect(LIB).not.toContain("_locked:false");
+  });
+
+  it("takes every table of the set from an occupant, and leaves it the rest", () => {
+    // `a` (4 guests) dropped on 3 needs a joined set; `b` holds 3 and 5A by hand.
+    const list = [bk("a", "19:00", 4, ["7"]), bk("b", "19:00", 2, ["3", "5A"], { _manual: true, _locked: true })];
+    const plan = drop(list, "a", "3");
+    const set = byId(plan.transform(list), "a").tables;
+    expect(set).toContain("3");
+    // before the optimiser pass: the same release, asked directly
+    const released = releaseSwapped(list[1], [{ id: "b", tables: set }]);
+    expect(released.tables).toEqual(["5A"].filter((t) => !set.includes(t)));
+    expect(released._locked).toBe(false);
+    expect(released._manual).toBe(false);
   });
 });
