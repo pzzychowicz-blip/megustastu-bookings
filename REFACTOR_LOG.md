@@ -32891,3 +32891,24 @@ check with `swap` null); a second device.
 
 **Gate:** build 128.88 kB gz (main chunk, 128.75 on v18.4.9) · 2805 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK.
 
+### Decided, not built: printing in place from the iPhone Home Screen app
+
+ROADMAP's entry (v18.4.6) left one thing unmeasured: whether the iOS share sheet offers
+Print for a shared PDF. **Measured on the iPhone 18 Pro Max simulator (iOS 27), 1 trial**,
+in a test page installed as a Home Screen app (`navigator.standalone` true), sharing a
+592-byte PDF built in the page:
+
+- `navigator.canShare({files})`: true.
+- `navigator.share({files})` from a tap: the sheet offered Copy, Markup, **Print** and
+  **Save to Files**.
+- Print: iOS's print options, the page previewed, A4, "page 1 of 1".
+- Closing that screen rejected `share()` with `AbortError`.
+- Control, `window.print()` in the same app: returned at once, nothing shown.
+
+Not measured: an iPad, a real device, a printer.
+
+**Decision (Patryk, 2026-10-08): not built.** The route works, and it would mean a PDF
+library in a lazy chunk and `DaySheet` (189 lines) and `TimelineSheet` (215 lines) each
+drawn a second time, for the installed app on an iPhone or iPad only. The "open the app
+in Safari to print" sentence stays. The entry is removed from ROADMAP.
+
