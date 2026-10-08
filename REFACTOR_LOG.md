@@ -32997,10 +32997,11 @@ from ROADMAP.
 
 ---
 
-## v18.5.0 — status changes leave BookingApp
+## v18.5.0 — status changes out of BookingApp · the day's deposits
 
 **Date:** 2026-10-08 · **Branch:** `feat/v18.5.0-deposits-line-guest-tags` ·
-**Behavioural change:** none in the first section. The header is extended as the
+**Behavioural change:** a deposits line in the Summary's opened panel and on the
+printed day sheet (section 2). None in section 1. The header is extended as the
 version's other items land.
 
 One version with a section per item (Patryk, 2026-10-08): #17's next extraction first,
@@ -33119,3 +33120,56 @@ app's own SDK logged no error.
 **Gate.** Build: main bundle 129.23 kB gz (129.04 recorded when v18.4.10 was pushed;
 not re-measured on `main` here). Tests: 2,843 (2,811 before the new file's 32). Lint:
 63 problems, 0 errors. `check:style`: OK.
+
+### The day's deposits line
+
+**Files:** `src/lib/booking-logic.js` (+47) · `src/components/Summary.jsx` ·
+`src/components/DaySheet.jsx` · `src/App.jsx` (one prop) · `tests/deposits.test.js`
+(new, 17) · `GLOSSARY.md` · `ROADMAP.md` · `src/components/CLAUDE.md` ·
+`src/lib/CLAUDE.md`
+
+**What it is** (Patryk's scope, 2026-10-08: a line on the day summary and the printed
+day sheet, split held against forfeited; placed in the opened panel, his pick of the
+placements offered). `depositSummary(bookings, date)` sorts the date's deposits into
+two sides, each a total and a count: **held** on a booking that still stands (pending,
+confirmed, seated, completed), **forfeited** on a cancelled one, a no-show included.
+`depositParts` is the words per side, and a side with nothing is left out;
+`depositLine` joins them into "Deposits · 150 € held (3 bookings) · 40 € forfeited
+(1 booking)". The Summary draws the parts and the day sheet prints the line, so the
+screen and the paper are one derivation. A day with no deposit shows nothing.
+
+**Decisions.**
+- **Its own pass, not two fields on `daySummary`.** That function drops cancelled
+  bookings before it counts, and the forfeited side is only about them. For the same
+  reason the line sits outside the panel's `hasData` branch and the day sheet reads
+  all the date's bookings, not the list its table prints.
+- **"Forfeited" is every cancelled booking that still carries a deposit.** The app has
+  no refund field. A deposit handed back counts as forfeited until somebody takes it
+  off the booking; the lib comment and the GLOSSARY row say so.
+- **On screen it is one more row of the hourly bars.** The label takes the hour
+  label's column (`LABEL_COL`, 104) and each side is a no-wrap unit with no separator
+  drawn. The first version drew the sentence's dots, and a wrapped line began with
+  one.
+
+**Measured on DEV** (1 trial each, real controls, 8 Oct 2026). The day opened with one
+deposit: "Deposits 20 € held (1 booking)". Deposit 30 typed into Anna Priks's form and
+saved (history "edited: deposit 0→30 €"): "50 € held (2 bookings)". RQ46 Weekly
+(deposit 20) cancelled from the List card's ⋯ and its confirm: "30 € held (1 booking)
+20 € forfeited (1 booking)", and the headline went from 18 covers, 9 bookings to 16
+and 8. At 712px: the label at x 31 and 104 wide, as the hour labels; the figures from
+x 143, as the bars. At 375px: both sides at x 139, on two lines 16px apart, page
+overflow 0. The print sheet's header (read from its DOM): "Deposits · 30 € held
+(1 booking) · 20 € forfeited (1 booking)" as the fourth line, and no row for the
+cancelled booking in its table, as before.
+
+**Sabotages**, each restored afterwards, against `tests/deposits.test.js`: a cancelled
+booking's deposit counted as held, 5 of 17 fail; every date counted, 1; a side with
+nothing printed, 2.
+
+**Not verified.** A printed page or a PDF (the header line was read from the
+print-only DOM; it is a plain line like the three above it). The dark theme (the line
+uses the panel's existing text tokens). A currency other than €, beyond the unit test.
+
+**Gate.** Build: main bundle 129.42 kB gz (129.23 after section 1). Tests: 2,860
+(2,843 before the new file's 17). Lint: 63 problems, 0 errors. `check:style`: OK.
+

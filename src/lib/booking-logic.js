@@ -38,6 +38,9 @@ import { withTypedCode, phoneHasCode } from "./phone-countries.js";
 // file is reachable from the serverless functions (api/* → whatsapp.js →
 // customers.js → here), and Node does not add the extension the way Vite does.
 import { UNDO_FIELDS, sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone, isNoShow } from "./booking-fields.js";
+// v18.5.0: the one money shape ("20 €"), for the day's deposits line.
+// `vouchers.js` imports only `day.js`, so this edge cannot close a cycle.
+import { money } from "./vouchers.js";
 export { sanitize, diffBooking, getDur, genId, isReadableTime, enteredPhone };
 
 // ── Primitive helpers ─────────────────────────────────────────────────────────
@@ -1923,6 +1926,50 @@ export function daySummary(bookings,date,splitHour){
     seated:{count:seatedCount,covers:seatedCovers}, // v14.8.0 — live occupancy
     upcoming:{count:upcomingCount}                  // v14.8.0 — confirmed (not yet seated)
   };
+}
+
+// ── The day's deposits (v18.5.0) ──────────────────────────────────────────────
+// What one date's bookings carry as deposits, split by what became of the
+// booking. HELD is a deposit on a booking that still stands: pending,
+// confirmed, seated or completed. FORFEITED is one on a cancelled booking, a
+// no-show included (a no-show is stored as cancelled).
+//
+// The app has no refund field. A deposit handed back to a guest who cancelled
+// counts as forfeited here until somebody takes it off the booking, and the
+// line cannot say otherwise.
+//
+// Its own function, not two more fields on `daySummary`: that one drops every
+// cancelled booking before it counts anything, and half of this is about them.
+// Pure, one pass. `any` says whether the day has a deposit at all, which is
+// when the line is shown.
+export function depositSummary(bookings,date){
+  var held={total:0,count:0},forfeited={total:0,count:0};
+  (bookings||[]).forEach(function(b){
+    if(!b||b.date!==date) return;
+    var d=Number(b.deposit)||0;
+    if(!(d>0)) return;
+    var side=b.status==="cancelled"?forfeited:held;
+    side.total+=d;side.count+=1;
+  });
+  return {held:held,forfeited:forfeited,any:held.count+forfeited.count>0};
+}
+// The same figures as words, one part per side that has a deposit; a side with
+// none is left out, so the line never prints "0 € forfeited". The Summary panel
+// draws the parts (the amount in bold) and the printed day sheet joins them
+// with `depositLine`, so the screen and the paper are one derivation.
+export function depositParts(sum,currency){
+  var out=[];
+  if(!sum) return out;
+  if(sum.held.count) out.push({key:"held",amount:money(sum.held.total,currency),word:"held",count:countLabel(sum.held.count,"booking","bookings")});
+  if(sum.forfeited.count) out.push({key:"forfeited",amount:money(sum.forfeited.total,currency),word:"forfeited",count:countLabel(sum.forfeited.count,"booking","bookings")});
+  return out;
+}
+// "Deposits · 150 € held (3 bookings) · 40 € forfeited (1 booking)", or "" on a
+// day with no deposit.
+export function depositLine(sum,currency){
+  var parts=depositParts(sum,currency);
+  if(!parts.length) return "";
+  return "Deposits · "+parts.map(function(p){return p.amount+" "+p.word+" ("+p.count+")";}).join(" · ");
 }
 
 // dayBookingsSig — v17.10.2. A content signature of ONE DATE's bookings: each

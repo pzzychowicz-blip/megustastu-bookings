@@ -4366,6 +4366,7 @@ function BookingApp({uid}){
     hoursSig={weekHours}
     layoutSig={layout}
     unplacedCount={unplacedItems.length}
+    currency={generalSettings.currency}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint} />;

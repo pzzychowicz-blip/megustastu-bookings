@@ -152,13 +152,10 @@ evidence for each.
 
 ## Ideas
 
-Both come from the **2026-07-24 `/engineering:tech-debt` scan's feature shortlist**,
-whose other items shipped in v17.4.0. That plan file is gone from `~/.claude/plans/`,
-so **no scope was ever recorded for either** and both need one before they are work.
+From the **2026-07-24 `/engineering:tech-debt` scan's feature shortlist**, whose other
+items shipped in v17.4.0. (Its second idea, deposits reporting, shipped in v18.5.0 as a
+line on the day summary and the printed day sheet, scoped by Patryk on 2026-10-08.)
 
-- **Deposits reporting.** `deposit` is per-booking and every surface shows it one
-  booking at a time; nothing aggregates it. Undecided: period, which statuses, and
-  whether it is its own surface or a line on the day summary.
 - **Structured guest tags.** Allergies and occasions live in free-text `notes`, which
   cannot be filtered or carried between visits and which `deleteCustomer` wipes.
   Undecided: fixed vocabulary or free tags, and whether tags are erasable personal data.
