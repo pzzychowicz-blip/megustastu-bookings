@@ -32307,3 +32307,25 @@ the queue drained. Before: nothing. After: the banner, naming "RQ46 Edit2, 20:00
 same with the List card's Seated button on a second booking: the banner, naming it.
 
 **Gate:** build 127.85 kB gz · 2737 tests · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 5 — the docs
+
+**Files:** `ROADMAP.md` · `CLAUDE.md` · `src/CLAUDE.md` · `src/hooks/CLAUDE.md` ·
+`src/lib/CLAUDE.md` · `GLOSSARY.md`
+
+- `ROADMAP.md`: the two entries this version closes are removed ("Repeat weekly" writes its
+  rule beside its first booking; an edit replayed after a delete). Two added: the waitlist
+  entry is removed before the booking lands (Patryk's choice: recorded, not fixed here, as
+  it needs the queue to report a discard), and the parked banner can name the wrong booking
+  for a create.
+- Guard 4 gains the report: one sentence in the root file, the mechanics in `src/CLAUDE.md`.
+
+**Not verified:** a real server refusal (the rejection in commit 2 was forced in the
+client); a write whose answer was lost and whose replay finds an empty patch (read from the
+code and tested by reading it, not produced live); the freshness gate tripped by a real
+sleep, where the socket dies (here `Date.now` was moved, and the queue drained on the next
+snapshot from elsewhere).
+
+**Left on DEV:** bookings "RQ46 …" on 2026-10-08, -15 and -22, two "RQ46" standing rules
+("RQ46 Weekly", "RQ46 LandOK", "RQ46 HeldLands") plus the orphan "RQ46 Orphan" from the
+reproduction, and `bookings/rq46poke` on 2026-10-09.

@@ -96,7 +96,7 @@ however many fire — that is the whole point of it.
 | "Reminder(s)" rows | **reminder banner** (`useReminders.jsx`) | A reminder inside its fire window. Snooze / Done. |
 | A reminder with faded text and a "Paused" tag | **paused reminder** (`active: false`) | Switched off in Settings → Reminders: it does not fire. Since v18.2.0 only its words fade; Edit and Delete stay at full strength, because both still work. |
 | "Working offline" | **offline section** (`appBannerSections`) | The socket is down; edits queue. |
-| "Couldn't save" | **write-error section** | A write was refused. Carries either a transient warning with a **Dismiss**, or a **parked write** with **Retry** and **Discard**. |
+| "Couldn't save" | **write-error section** | A write was refused. Carries either a transient warning with a **Dismiss**, or a **parked write** with **Retry** and **Discard**. Since v18.4.6 the warning can also be a change replayed after its booking was deleted on another device ("The change to Rita, 21:00 was not saved: …", `goneRefusal`). |
 | "P3 Smoke Test, 19:30 — not saved, and undone", with **Retry** / **Discard** | **parked write** (`parkedWrites`, `usePersistence.js`) | A change whose automatic retries ran out. It is kept and named instead of dropped: **Retry** runs a fresh round of attempts on resynced data, **Discard** accepts the loss. The change is already undone on screen — the banner names it so you know what to redo. |
 | "Couldn't load bookings" | **load-failure section** | The initial read failed. Permanent until reload. |
 | "Closed this day" | **closed-day section** | The viewed weekday has no opening hours. Suppresses the empty-day prompt. |
