@@ -257,3 +257,18 @@ export function replayOutcome(item, prev, max) {
   const d = retryDecision(item.tries, max);
   return d.action === "retry" ? d : { action: "park", tries: d.tries };
 }
+
+// v18.4.8: tell a write's caller that it will NEVER land (`report.onDiscarded`).
+// The other half of `onLanded`: a side effect taken at the dispatch on the
+// promise of the write (a waitlist party hidden while its booking is on the
+// way) is undone here. Once per report, and never for one that has landed;
+// `landed` and `discarded` are the hook's two module-level sets. A throw is
+// logged and swallowed: the callers are the banner's Discard and the drain,
+// and neither may lose the items behind this one.
+export function tellDiscarded(report, landed, discarded) {
+  if (!report || typeof report.onDiscarded !== "function") return false;
+  if (landed.has(report) || discarded.has(report)) return false;
+  discarded.add(report);
+  try { report.onDiscarded(); } catch (e) { console.warn("[SAFE] a bookings write was dropped, and what followed it threw.", e); }
+  return true;
+}

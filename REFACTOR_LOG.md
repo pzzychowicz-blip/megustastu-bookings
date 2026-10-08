@@ -32552,3 +32552,40 @@ optimiser pass per trial; not measured).
 **Gate at the push:** build 128.23 kB gz (128.16 on v18.4.6) · 2758 tests (2745) · lint 63
 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
 rules suite was not run and there is no PROD rules step.
+
+---
+
+## v18.4.8 — what a new booking does elsewhere waits for the booking
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.8-waitlist-restore-on-discard` ·
+**Behavioural change:** yes, in what a new booking does beside its own write. A waitlist
+party booked from the panel is hidden on this device at Save and removed from the
+waitlist when the booking lands; a booking discarded from the "Couldn't save" banner puts
+the party back. The WhatsApp conversation is marked accepted and linked when the booking
+lands. No rules change, so no console step.
+
+**The gap** (ROADMAP, found planning v18.4.6). `doSaveNew` removed the waitlist entry on
+the line after the dispatch. The removal went straight to the server; the booking could
+still be held or rejected.
+
+**Reproduced on DEV on v18.4.7 before any edit**, with the bookings `update()` forced to
+reject (a temporary switch, not committed): a party booked from the waitlist panel, Save.
+Six seconds later the "Couldn't save" banner was up with Retry and Discard, the server
+held no such booking, and the server's waitlist no longer held the party.
+
+### Commit 1 — the queue says when a write will never land
+
+**Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` ·
+`tests/retry-report.test.js` (9 new) · `src/App.jsx` (the version) · `src/CLAUDE.md` ·
+`src/lib/CLAUDE.md`
+
+`report.onDiscarded()`, beside v18.4.6's `onLanded`. `tellDiscarded(report, landed,
+discarded)` (`lib/write-path.js`) calls it once, never for a report that landed, and
+swallows a throw. The hook calls it at each place a write is dropped: Discard on the
+parked banner (every item), a replay its caller refuses, the two outright refusals (not
+loaded, the empty array), and a hold or rejection that has no place in the queue (value
+form or silent), at all three doors. A write that is parked, or handed back to the queue
+by Retry, is told nothing. Nothing passes `onDiscarded` yet, so this commit changes no
+behaviour.
+
+**Gate:** build 128.32 kB gz (main chunk, 128.23 on v18.4.7) · 2767 tests passed · lint 63 problems, 0 errors · `check:style` OK.

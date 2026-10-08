@@ -42,7 +42,7 @@ import { emitActivity } from "../lib/activitySink";
 // this hook keeps the refs, listeners, effects and setState. See its header.
 import {
   buildPatch, patchSignature, isDuplicatePatch,
-  isStaleGap, replayOutcome, describeWrite, STALE_GAP_MS, MAX_RETRIES,
+  isStaleGap, replayOutcome, tellDiscarded, describeWrite, STALE_GAP_MS, MAX_RETRIES,
 } from "../lib/write-path";
 import { todayStr } from "../lib/day";
 
@@ -93,6 +93,8 @@ const LOAD_TIMEOUT_MS = 15000;
 // keeps the first (/code-review), and a report is its caller's own object, so
 // nothing here is per-mount.
 const LANDED=new WeakSet();
+// v18.4.8: and those told they never will (`onDiscarded`, lib/write-path.js).
+const DISCARDED=new WeakSet();
 
 export function usePersistence({ autoOptimizer, nowMins }){
   const [bookings, setBookings] = useState([]);
@@ -266,10 +268,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
   // at park time (see above), that resync reverted nothing and cost a round
   // trip plus a "⟳ Syncing the latest data…" toast for a button whose whole
   // meaning is "stop". Dropping the items is the entire operation.
+  // v18.4.8: each dropped write's caller is told (`report.onDiscarded`), so
+  // what it did on the promise of the write can be undone.
   function discardParked(){
     if(!parkedRef.current.length) return;
+    const items=parkedRef.current;
     parkedRef.current=[];
     syncParked();
+    items.forEach(function(it){tellDiscarded(it.report,LANDED,DISCARDED);});
   }
   function clearStale(){
     staleRef.current=false;
@@ -300,7 +306,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // below — a retry is dispatched from a promise callback, where React
       // defers the render that would compute a fresh one.
       if(d.action==="retry") saveBookings(item.fn,false,item.report,d.tries,item.label);
-      else if(d.action==="refuse") refusals.push(d.message);
+      else if(d.action==="refuse"){refusals.push(d.message);tellDiscarded(item.report,LANDED,DISCARDED);}
       // v17.16.9: PARK, don't drop. See parkedRef above for what dropping cost.
       // No `setWriteWarning` here any more: the parked banner carries the message,
       // and a dismissible red banner beside an undismissable one saying the same
@@ -414,6 +420,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
   //                       discarded booking left the rule booking every week)
   //   replayRefusal(prev) asked before each REPLAY, on the fresh list: a
   //                       sentence drops the write and shows it, null replays
+  //   onDiscarded()       v18.4.8: once, when the write will NEVER land: it was
+  //                       refused outright, held or rejected without a place
+  //                       in the queue (value form, silent), refused on a
+  //                       replay, or discarded from the parked banner. Not
+  //                       when the tab goes away with a write still queued
   function saveBookings(next,isSilent,report,tryN,carriedLabel){
     tryN=tryN||0;
     // Once per report, whichever attempt lands. In its own try: this runs
@@ -424,6 +435,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
       LANDED.add(report);
       try{report.onLanded();}catch(e){console.warn("[SAFE] a bookings write landed, and what followed it threw.",e);}
     }
+    // v18.4.8: this attempt is the write's last, and it did not land.
+    function dropped(){tellDiscarded(report,LANDED,DISCARDED);}
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
@@ -474,6 +487,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         bookingsRef.current=computedHeld;
         setBookings(computedHeld);
       }
+      else dropped();
       markStale();
       return false;
     }
@@ -482,11 +496,13 @@ export function usePersistence({ autoOptimizer, nowMins }){
       if(!bookingsLoaded.current){
         console.warn("[SAFE] Refused to write bookings — initial read has not completed yet.");
         if(!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
+        dropped();
         dispatched=false;return;
       }
       if(Array.isArray(computed)&&computed.length===0&&firstLoadCount.current!==null&&firstLoadCount.current>0){
         console.warn("[SAFE] Refused to write empty bookings array — Firebase had "+firstLoadCount.current+" entries on load. This is a safety check against accidental wipe.");
         if(!isSilent) setWriteWarning("Refused to write empty data. Reload the page and try again. If you intended to delete everything, contact support.");
+        dropped();
         dispatched=false;return;
       }
       // v15.5.0: still on the legacy single-array shape (migration not yet echoed) —
@@ -496,6 +512,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       if(arrayShapeRef.current){
         console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
+        else dropped();
         markStale();
         dispatched=false;return;
       }
@@ -547,6 +564,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // on the server. Cleared only if it is still this patch's.
         if(lastPatchSigRef.current.sig===sig) lastPatchSigRef.current={sig:"",at:0};
         if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
+        else dropped();
         markStale();
       });
     }

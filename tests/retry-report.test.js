@@ -13,7 +13,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { goneRefusal, applyEdit } from "../src/lib/booking-save.js";
-import { replayOutcome } from "../src/lib/write-path.js";
+import { replayOutcome, tellDiscarded } from "../src/lib/write-path.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 
 const HOOK = stripComments(
@@ -66,6 +66,66 @@ describe("onLanded fires for a write the server has, and only then", () => {
     expect(fn).toContain("LANDED.has(report)");
     expect(HOOK, "one set for the module, not one per render").toMatch(/^const LANDED=new WeakSet\(\);$/m);
     expect(fn).toMatch(/try\{report\.onLanded\(\);\}catch/);
+  });
+});
+
+// ── v18.4.8: the other answer — a write that will never land ────────────────
+// `onDiscarded` is how a caller undoes what it did on the promise of the write
+// (a waitlist party hidden while its booking was on the way). The rule is that
+// every report hears ONE of the two, unless the tab goes away first.
+describe("tellDiscarded — once per report, and never after it landed", () => {
+  const sets = () => [new WeakSet(), new WeakSet()];
+  it("calls onDiscarded once", () => {
+    const [landed, discarded] = sets();
+    let n = 0;
+    const report = { onDiscarded: () => { n++; } };
+    expect(tellDiscarded(report, landed, discarded)).toBe(true);
+    expect(tellDiscarded(report, landed, discarded)).toBe(false);
+    expect(n).toBe(1);
+  });
+  it("says nothing for a report that landed", () => {
+    const [landed, discarded] = sets();
+    let n = 0;
+    const report = { onDiscarded: () => { n++; } };
+    landed.add(report);
+    expect(tellDiscarded(report, landed, discarded)).toBe(false);
+    expect(n).toBe(0);
+  });
+  it("is quiet for no report, and for one with nothing to say", () => {
+    const [landed, discarded] = sets();
+    expect(tellDiscarded(undefined, landed, discarded)).toBe(false);
+    expect(tellDiscarded({ onLanded() {} }, landed, discarded)).toBe(false);
+  });
+  it("swallows a throw, so the items behind it are still told", () => {
+    const [landed, discarded] = sets();
+    expect(() => tellDiscarded({ onDiscarded() { throw new Error("x"); } }, landed, discarded)).not.toThrow();
+  });
+});
+
+describe("the hook tells it wherever a write is dropped", () => {
+  const DISCARD = body("discardParked", "function clearStale(");
+  it("Discard on the parked banner tells every item it drops", () => {
+    expect(DISCARD).toContain("items.forEach(function(it){tellDiscarded(it.report,LANDED,DISCARDED);});");
+    expect(HOOK).toMatch(/^const DISCARDED=new WeakSet\(\);$/m);
+  });
+  it("a replay its caller refuses", () => {
+    expect(DRAIN).toContain('else if(d.action==="refuse"){refusals.push(d.message);tellDiscarded(item.report,LANDED,DISCARDED);}');
+  });
+  it("a write held or rejected with no place in the queue: each of the three doors queues it or says so", () => {
+    expect(SAVE).toContain("function dropped(){tellDiscarded(report,LANDED,DISCARDED);}");
+    const queued = SAVE.match(/pendingRetriesRef\.current\.push\((?:item|\{fn:next,[^}]*\})\);[^;]*?(else dropped\(\);)?/g) || [];
+    expect(queued.length).toBe(3);
+    // The stale gate's branch is a block, so its `else` follows the brace.
+    expect((SAVE.match(/else dropped\(\);/g) || []).length).toBe(3);
+  });
+  it("and the two outright refusals (not loaded, the empty array)", () => {
+    const refusals = SAVE.match(/dropped\(\);\s+dispatched=false;return;/g) || [];
+    expect(refusals.length).toBe(2);
+  });
+  it("a write parked or handed back to the queue is told nothing", () => {
+    const RETRY = body("retryParked", "function discardParked(");
+    expect(RETRY).not.toContain("tellDiscarded");
+    expect(DRAIN.match(/tellDiscarded/g).length, "the refusal alone, not the park").toBe(1);
   });
 });
 
