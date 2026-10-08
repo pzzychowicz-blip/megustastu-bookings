@@ -886,6 +886,15 @@ explaining why is usually the one to read.
   rest on the colour of a ring, and the mark is the difference a colour-blind
   reader gets. The chip grows by the mark when pressed; nothing is reserved for
   it, because an invisible gap in every unpressed chip sets its label off-centre.
+  **The growth is eased, in and out** (Patryk's report, 2026-10-09: it was
+  `{pressed ? <CheckIcon /> : null}`, 16px in one frame with every chip after
+  it jumping too). The mark sits in a horizontal `Reveal` at `speed="move"`,
+  the timeline block's start-time chip exactly, so the width it takes and its
+  opacity ease together and the neighbours slide in step; the ring and the ink
+  take the same 240ms, the Toggle's rule for its track. The 4px between mark
+  and name is inside the reveal and the chip's own gap is 0, or the chip jumps
+  4px at each end of a 12px ease. A chip pressed when it MOUNTS shows its mark
+  at once. `tests/motion.test.js` pins all three.
   On the List card a tag is a WORD in the flag row, in the settled facts' ink
   (`--text-secondary`), with no mark: the row is icon-led text and a tag has no
   counterpart on the timeline block, the reason `manual` has no mark either.

@@ -33540,3 +33540,65 @@ the next person to edit the file reads the limit there.
 **Not done.** The other two loose ends of the 2026-09-18 doc-load split (root
 restating what it relocated; the guard mechanics' home) are still open in the
 roadmap. The room left is 1,055 characters.
+
+### The tag chip's check mark eases in and out
+
+**Reported by Patryk (2026-10-09):** "A pressed chip gets a check mark" snaps when a
+tag is turned on or off. He asked for the new screens to be checked with
+`/find-animation-opportunities`.
+
+**Reproduced on DEV first.** Settings → Customers, an opened customer, the Vegan
+chip tapped: 58.7 → 74.7px wide in one commit, and the two chips after it 16px to
+the right in the same commit (269.3 → 285.3, 362.1 → 378.1). The chip's computed
+`transition-property` was the hover lift's list (`transform, background-color,
+box-shadow, filter`), which names neither `color` nor `border-color`, so the ring
+and the ink changed in that frame too. The cause is in one expression,
+`{pressed ? <CheckIcon /> : null}`: a conditional mount has no in-between.
+
+**The fix is the timeline block's start-time chip (v16.1.1), which had this exact
+fault.** The mark sits in a horizontal `Reveal` at `speed="move"`: the width it
+occupies eases 0 ↔ full with its opacity, and the neighbours slide in step. The
+ring and the ink take `M.move` too, so the state lands as one event (the Toggle's
+rule for its track). `move`, not the default `reveal`: a mark arriving or leaving
+is `--t-move`'s definition, and 520ms is for content read as it opens. Two details:
+the 4px between mark and name moved INSIDE the reveal and the chip's gap is 0
+(a `Reveal` is a flex child from mount to unmount, so the atom's gap would jump
+4px at each end and ease only 12); and `transform`, `background-color` and
+`box-shadow` are restated in the inline transition, which replaces
+`.mgt-hover-scale`'s list.
+
+**Measured after, on DEV, both directions** (the page made to report visible and
+its frames driven by screenshots, the measurement-traps procedure, since the pane
+reports hidden and `Reveal` snaps there by design). ON, the Allergy chip's width
+by frame: 63.93 · 67.02 · 69.70 · 71.97 · 73.88 · 75.43 · 76.70 · 77.70 · 78.44 ·
+79.05 · 79.45 · 79.70 · 79.84 · 79.91 · 79.93, the chip after it 117.93 → 133.93
+in the same steps, the mark's opacity 0 → 1, the ink `rgb(74, 85, 104)` →
+`rgb(22, 101, 52)` through eleven values. The first eased frame is 63.93 + 3.09:
+no 4px jump. OFF: 79.05 · 75.93 · 71.11 · 69.28 · 66.62 · 65.70, opacity 0.95 →
+0.11, the neighbour in step, and at rest 63.93 with the mark unmounted. At rest
+nothing moved: pressed and unpressed widths and every chip's x are what they were.
+**Not captured:** the last frames of the exit before the unmount (the pane stopped
+drawing twice at that point), so that the 260ms hold outlasts the 240ms fold rests
+on `Reveal`'s own guards in `tests/motion.test.js`, not on a reading of this chip.
+Not checked: a finger, the tablet, the phone, reduced motion (the global rules
+handle it: the OS setting keeps a 120ms colour and opacity fade and drops the
+width ease, the app's own switch makes all of it instant).
+
+**Guard.** Three cases in `tests/motion.test.js`, each failed once on purpose: the
+mark put back as a conditional mount (1 failed of 20), the two colour properties
+taken out of the transition (1), the chip's gap put back (1).
+
+**The sweep, and what it did not change.** Seven other places in the v18.5.0
+screens were gated and left alone: the tag list's rows and its × ↔ "Confirm —
+remove" swap (the duration tiers beside them, the shape they copy, do neither);
+the Add button's disabled fade (typing drives it); the List card's tag words
+(they arrive under a closing form, in a row whose other flags do not animate);
+the seat note's chips (static, in a note read while seating); the Summary's
+deposits line (a row among the hourly bars, which do not animate their arrival);
+the form's two tag groups (they change only when the list is edited, with the
+form closed). **One was measured and is Patryk's to decide:** an opened customer's
+chips move 11px down when their FIRST tag is tapped and 11px up when the last is
+removed (735.5 ↔ 746.5), because the words under the phone number mount above
+them. That is a control moving under the finger that tapped it, the layout twin
+`src/CLAUDE.md` records for an armed confirm.
+

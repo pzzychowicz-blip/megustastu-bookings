@@ -295,3 +295,41 @@ describe("no hand-typed exit delays", () => {
     expect(offenders, "pass no outMs and take the EXIT_MS default").toEqual([]);
   });
 });
+
+// ── v18.5.0: the tag chip's check mark ───────────────────────────────────────
+// It shipped for five phases as `{pressed ? <CheckIcon /> : null}`: there or
+// gone between two frames, the chip 16px wider or narrower in that frame and
+// every chip after it jumping with it (Patryk's report; measured on DEV as
+// 58.7 → 74.7px in one commit). A conditional mount looks finished in source,
+// which is why this is pinned: nothing else in the repo can see it come back.
+describe("a pressed tag chip's mark arrives and leaves", () => {
+  const chips = code(join(ROOT, "src/components/TagChips.jsx"), "utf8");
+
+  it("the mark sits in a horizontal Reveal, never a conditional mount", () => {
+    expect(chips).toContain('<Reveal horizontal show={pressed} speed="move"><span style={MARK}><CheckIcon size={IC.inline} /></span></Reveal>');
+    // No second mark, and none that mounts on the state: `? <CheckIcon` is the
+    // shape that snaps, in either branch order.
+    expect((chips.match(/<CheckIcon\b/g) || []).length).toBe(1);
+    expect(chips).not.toMatch(/\?\s*<CheckIcon\b/);
+    expect(chips).not.toMatch(/&&\s*<CheckIcon\b/);
+  });
+
+  it("the gap to the name is inside the reveal, so the whole 16px eases", () => {
+    // With the atom's own gap the Reveal is a flex child from mount to unmount,
+    // and the chip jumps 4px at each end of a 12px ease.
+    const pressable = chips.slice(chips.indexOf("const PRESSABLE"), chips.indexOf("const MARK"));
+    expect(pressable).toMatch(/\bgap: 0\b/);
+    expect(chips).toMatch(/const MARK = \{[^}]*paddingRight: SP\.tight[^}]*\}/);
+  });
+
+  it("the ring and the ink ease with it, and the hover lift keeps its own ease", () => {
+    // An inline transition REPLACES .mgt-hover-scale's list, so the three
+    // properties that class animates on this chip are restated beside the two
+    // the state changes.
+    const pressable = chips.slice(chips.indexOf("const PRESSABLE"), chips.indexOf("const MARK"));
+    for (const [prop, speed] of [["transform", "tap"], ["background-color", "tap"], ["box-shadow", "tap"], ["border-color", "move"], ["color", "move"]]) {
+      expect(pressable, prop).toContain('"' + (prop === "transform" ? "" : ", ") + prop + ' " + M.' + speed);
+    }
+    expect(chips).toContain('className="mgt-hover-scale" style={PRESSABLE}');
+  });
+});
