@@ -3,6 +3,8 @@
 // is only what the code does with its conclusion: it used to call
 // `flashDragMsg` and `saveBookings` itself, and now RETURNS the conclusion, so
 // the decision is reachable by a test and App keeps the two side effects.
+// v18.4.7: one statement has changed since. Step 4's release of an occupant is
+// `releaseSwapped` (lib/booking-save.js), where it was written out here.
 //
 //   planDrop(ctx) → null                  nothing to do (not this day's active
 //                                         booking, or dropped on its own row)
