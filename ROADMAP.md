@@ -122,6 +122,14 @@ evidence for each.
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`). The next domain is not chosen.
 
+- **A Swap from the edit form on another date leaves the other party without a table**
+  (v18.4.7's `/code-review`; older than it). The picker's Swap releases the parties it
+  takes from on the DRAFT's date, and `planAssign` re-optimises `viewDate`, the day on
+  screen. When the two differ (the form's date changed before Assign), a released party is
+  stored unlocked with its remaining tables and nothing seats it again: run on the lib,
+  it came back with `tables: []`. Not reproduced through the form. The fix is which date
+  the pass runs on (the released parties'), and `tests/manual-assign.test.js` pins today's.
+
 - **A new booking removes its waitlist entry before the booking lands** (found planning
   v18.4.6). `doSaveNew` calls `removeFromWaitlist` right after the dispatch, so a held
   booking that is then discarded from the banner has lost its waitlist party too. Moving

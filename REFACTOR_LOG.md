@@ -32525,3 +32525,30 @@ failed at seed 9. Not committed, for commit 1's reason.
 pane cannot arm a real drag (`mgt-measurement-traps`).
 
 **Gate:** build 128.23 kB gz (main chunk) · 2758 tests passed · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): five findings
+
+**Fixed (2), each checked first:**
+
+- **The new drop test ran a swap.** Its case had one party on the target, which `planDrop`
+  answers with "A and B — tables swapped.", so it never reached the release commit 2
+  changed, and it asserted `releaseSwapped` directly. It now puts two parties on the
+  table ("A moved to 3 — B, C reassigned.") and reads what was written. Sabotage: the
+  release replaced by `return b` fails it, with the older displacement test and the
+  source check.
+- **`drop-plan.js`'s header said every statement was the moved one.** It names the one
+  that is not.
+
+**Deferred to ROADMAP (1):** a Swap confirmed from the edit form while the draft's date
+is not the day on screen. The released party is on the draft's date and the pass runs on
+`viewDate`, so it is left unlocked without a table (run on the lib: `tables: []`). Older
+than this version, kept by the move, and fixing it changes which day is re-optimised.
+
+**Not changed (2):** the swap test written three times in `planAssign` (the move is
+statement for statement, and that is what was compared against the old code); the release
+being a `find` per booking where the drop had a `Set` (occupants are a handful beside an
+optimiser pass per trial; not measured).
+
+**Gate at the push:** build 128.23 kB gz (128.16 on v18.4.6) · 2758 tests (2745) · lint 63
+problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
+rules suite was not run and there is no PROD rules step.
