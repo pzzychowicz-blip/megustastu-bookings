@@ -45,7 +45,7 @@ import {
 import { pendingWipe, wipeOpen, armWipe } from "../lib/wipe-window";
 import { toMins, toTime, isIn, pct, liveBarDur, describeBooking, isReadableBlock, guestsLabel, firstStartOf } from "../lib/booking-logic";
 import { railFlagsOf } from "./blockFlags";
-import { noShowMap, identityKey } from "../lib/customers";
+import { noShowMap, identityKey, bookingTags, tagLine } from "../lib/customers";
 import { mkBtn, Presence, Reveal, useFlip, SizeRing, ModalPresence } from "./atoms";
 import { useRevealRows } from "../hooks/useRevealRows";
 import { useEnterLeave } from "../hooks/useEnterLeave";
@@ -223,7 +223,7 @@ function BlockFlag({ title, children }) {
 // the waitlist ghost's exit, and INERT: WaitGhost's `leaving` branch, property
 // for property. `arriving` puts a booking new to the day on the ghost's entrance.
 // TimelineView's useEnterLeave decides both; see there.
-function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null }) {
+function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, clash = null, late = null, noShows = 0, tags = "", showChip = false, freeMin = null, currency = "€", pxPerMin = 1, onEdit, onManual, setQuickStatus, homeTable = null, tableAtY = null, setDragHover = null, onDropOnTable = null, seedFlip = null, handOffQuick = null, leaving = false, arriving = false, focusFallbackRef = null }) {
   const d = liveBarDur(b, nowMins, today);
   const sm = toMins(b.time) - OPEN * 60;
   const left = pct(OPEN * 60 + sm);
@@ -674,6 +674,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
   // drawn right now, not what the booking is.
   const a11yLabel =
     describeBooking(b) +
+    // v18.5.0: the booking's tags ("Allergy, VIP · Birthday"), which the block
+    // draws no mark for (Patryk): they are here and in the hover title only.
+    (tags ? ", tagged " + tags.replace(" · ", ", ") : "") +
     (clash ? ", double-booked" : "") +
     (warn ? ", overstaying" : "") +
     (late === "warn" ? ", running late" : late === "noshow" ? ", not arrived" : "");
@@ -737,6 +740,8 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       // Not on a leaving copy: setGroupHover lifts every [data-bk] of an id.
       data-bk={leaving ? undefined : b.id}
       aria-hidden={leaving ? true : undefined}
+      // v18.5.0: the tags, as the hover title. Each mark inside keeps its own.
+      title={leaving || !tags ? undefined : tags}
       {...handlers}
       style={{
         position: "absolute", top: 3, height: ROW_H - 8 + "px",
@@ -1321,6 +1326,8 @@ export const TimelineView = memo(function TimelineView({
   // and which MINUTES of which ROW are double-claimed. Deriving one from the
   // other here would mean re-running the pair scan in the render path.
   clashes = NO_MARKS, clashSpans = {},
+  // v18.5.0: the tag list and App's guest-tag map, for the block's title.
+  tagList = null, guestTags = null,
   // v17.11.0: the empty-day prompt (EmptyDay.jsx), which shipped in List only.
   // v17.14.0: `emptyWalkin`, not `onWalkin` — PlanView already had an
   // `onWalkin(tableId)` of its own for its table popover, so the empty-day
@@ -2004,7 +2011,7 @@ export const TimelineView = memo(function TimelineView({
       <Fragment key={b.id}>
         {tail}
         {ghost}
-        <TimelineBlock arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
+        <TimelineBlock arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primary ? b.id : null} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} freeMin={primary ? (freeing[b.id] != null ? freeing[b.id] : null) : null} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={id} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />
       </Fragment>
     );
   }
@@ -2093,7 +2100,7 @@ export const TimelineView = memo(function TimelineView({
       <div style={unplacedEdge}>{unplacedLine}<GridLines /></div>
       {Array.from({ length: heldLanes }, (_, li) => unplacedLanes[li] || []).map((lane, li) => (
         <div key={"ul" + li} style={{ height: ROW_H + "px", position: "relative", boxSizing: "border-box" }}>
-          {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
+          {lane.map((b) => <TimelineBlock key={b.id} arriving={arriving.has(b.id)} focusFallbackRef={scrollRef} b={b} pxPerMin={pxPerMin} anim={statusAnimOf(b.id)} flipId={primaryGridTable(b, gridIds) ? null : b.id} nowMins={nowMins} today={today} totalMins={totalMins} warnings={warnings} clash={clashes[b.id] || null} currency={currency} late={late[b.id] || null} noShows={nsMap[identityKey(b)] || 0} tags={tagLine(bookingTags(b, guestTags, tagList))} showChip={chipsOn && (b.status === "confirmed" || b.status === "pending")} onEdit={onEdit} onManual={onManual} setQuickStatus={setQuickStatus} homeTable={null} tableAtY={tableForClientY} setDragHover={setDragHover} onDropOnTable={onDropOnTable} seedFlip={seedFlip} handOffQuick={handOffQuick} />)}
           {/* v18.3.0 (O1): a booking that left while in THIS lane. v18.3.2
               (O4): a lane the row is easing away from is still drawn, so the
               last booking leaving it fades there while the row shrinks. */}

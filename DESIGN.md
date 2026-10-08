@@ -878,6 +878,21 @@ explaining why is usually the one to read.
   be busy" pairs that solid with a `--warn-text` heading in the same modal. One
   role, one hue, whatever treatment carries it.
 
+- **A tag is a chip where it is chosen and a word where it is read (v18.5.0).**
+  In the booking form and in an opened customer a tag is tapped on and off, so
+  it is the app's interactive chip: `OutlineChip as="button"` at `size="small"`
+  and `H.chip`, the activity log's filter chips exactly (`TagChips.jsx`). Pressed
+  is the success tone AND a check mark: "this guest has an allergy" must not
+  rest on the colour of a ring, and the mark is the difference a colour-blind
+  reader gets. The chip grows by the mark when pressed; nothing is reserved for
+  it, because an invisible gap in every unpressed chip sets its label off-centre.
+  On the List card a tag is a WORD in the flag row, in the settled facts' ink
+  (`--text-secondary`), with no mark: the row is icon-led text and a tag has no
+  counterpart on the timeline block, the reason `manual` has no mark either.
+  On the seat note they are plain outline chips above the note (a sheet). On the
+  printed sheet they lead the Notes cell in bold. The timeline block draws
+  nothing for a tag (Patryk, 2026-10-08): its hover title and spoken label
+  carry it.
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
   where a tag competes inside a busy row (the reminder's time chip).
   **OUTLINE** — no fill, a **2px**

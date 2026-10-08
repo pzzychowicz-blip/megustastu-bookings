@@ -20,10 +20,15 @@
 //
 // One button, "Done": the house word for dismissing a panel with no decision in
 // it (the waitlist, search and roles panels). Escape and the backdrop do the same.
+//
+// v18.5.0: the party's tags are on it, above the note: the guest's (Allergy,
+// VIP) and the visit's (Birthday), as labels copied into the snapshot. A tagged
+// party with no note raises it too, and then there is no note box.
 
 import { S, R, T, FW, SP } from "../lib/constants";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, TBadge, mkBtn } from "./atoms";
+import { TagRow } from "./TagChips";
 
 export function SeatNoteModal({ note, onClose }) {
   if (!note) return null;
@@ -46,7 +51,8 @@ export function SeatNoteModal({ note, onClose }) {
         <span>{guests + " · " + note.time}</span>
         {note.tables.map((t) => <TBadge key={t} id={t} />)}
       </div>
-      <div style={{
+      <TagRow labels={(note.guestTags || []).concat(note.occasionTags || [])} style={{ marginBottom: note.notes ? 12 : 0 }} />
+      {note.notes ? <div style={{
         whiteSpace: "pre-wrap", overflowWrap: "anywhere",
         fontSize: T.lead, color: S.text,
         maxHeight: 300, overflowY: "auto",
@@ -57,7 +63,7 @@ export function SeatNoteModal({ note, onClose }) {
         boxShadow: "var(--shadow-well)"
       }}>
         {note.notes}
-      </div>
+      </div> : null}
     </Overlay>
   );
 }

@@ -37,7 +37,7 @@ import { useLeavingOrder } from "../hooks/useLeavingOrder";
 import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins, describeBooking, nextStatusOf, countLabel, offZone, offZoneLabel } from "../lib/booking-logic";
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
-import { noShowMap, identityKey, formatPhone } from "../lib/customers";
+import { noShowMap, identityKey, formatPhone, bookingTags } from "../lib/customers";
 import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -207,8 +207,8 @@ function CardFlag({ title, ink, children }) {
 // strip's Running-late mark — it was considered here and left out for exactly
 // that reason, so please do not re-litigate it without also putting it on the
 // block. No role: the text IS the label.
-function TextFlag({ ink, children }) {
-  return <span style={{ ...FLAG, color: ink }}>{children}</span>;
+function TextFlag({ ink, title, children }) {
+  return <span title={title} style={{ ...FLAG, color: ink }}>{children}</span>;
 }
 
 // v15.8.0: module-level status-change detection (mirrors TimelineView) so a card
@@ -264,6 +264,9 @@ export const ListView = memo(function ListView({
   // v18.0.0: code -> voucher, so a card can say whether an attached voucher is
   // still unsettled. A STABLE object from App's memo, per the React.memo rule.
   vouchersByCode = {},
+  // v18.5.0: the tag list and App's guest-tag map (`guestTagMap`), both stable
+  // objects. A card shows its guest's tags and its own occasion tags.
+  tagList = null, guestTags = null,
   // v18.2.0 phase 69: {bookingId: [table ids the layout lacks]} — App's memo
   // over `unplacedItems`, the rule the Unplaced row and the strip read.
   missingTables = {},
@@ -719,7 +722,15 @@ export const ListView = memo(function ListView({
         // v18.2.0 phase 18: whether there is a flags box at all. It lives inside
         // the size + status box, so leaving it out moves nothing (the name row
         // below says why that placement matters).
-        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || lateTag || durationTag);
+        // v18.5.0: the tags, as words. A tag is a settled fact about the guest
+        // or the visit, so it takes the settled facts' ink and, like `manual`,
+        // no mark: it has no counterpart on the timeline block (Patryk: the
+        // block says it in its title only). Guest tags first, then occasion,
+        // each in the tag list's order. The `title` says which kind it is.
+        const tagged = bookingTags(b, guestTags, tagList);
+        const tagFlags = tagged.guest.map((l) => <TextFlag key={"g" + l} ink={FLAG_NEUTRAL} title={"Guest tag: " + l}>{l}</TextFlag>)
+          .concat(tagged.occasion.map((l) => <TextFlag key={"o" + l} ink={FLAG_NEUTRAL} title={"Occasion: " + l}>{l}</TextFlag>));
+        const hasFlags = !!(depositTag || voucherTag || zoneTag || prefTag || lockedTag || manualTag || noShowTag || clashTag || tagFlags.length || lateTag || durationTag);
 
         const notesEl = b.notes ? (
           <div style={{
@@ -1011,6 +1022,7 @@ export const ListView = memo(function ListView({
                     {manualTag}
                     {noShowTag}
                     {clashTag}
+                    {tagFlags}
                     {lateTag}
                     {durationTag}
                   </div>

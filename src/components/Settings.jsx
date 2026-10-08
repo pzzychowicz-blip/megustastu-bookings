@@ -1281,6 +1281,9 @@ export function SettingsContent({
   onSaveTagList,
   tagError,
   onClearTagError,
+  // v18.5.0: App's guest-tag map and the tap that changes one customer's tags
+  guestTags,
+  onSetCustomerTag,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -1382,7 +1385,8 @@ export function SettingsContent({
     // v18.5.0: the tag list is edited here too, behind `settingsWrite` (the
     // tab itself is open to every account; the list's rule is not).
     content = <CustomersTabContent key={customerSeek || ""} seekQuery={customerSeek || ""} bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2}
-      tagList={tagList} onSaveTagList={onSaveTagList} tagError={tagError} onClearTagError={onClearTagError} canEditTags={can("settingsWrite")} onDirty={reportDirty} />;
+      tagList={tagList} onSaveTagList={onSaveTagList} tagError={tagError} onClearTagError={onClearTagError} canEditTags={can("settingsWrite")} onDirty={reportDirty}
+      guestTags={guestTags} onSetCustomerTag={onSetCustomerTag} canEditGuestTags={can("bookingEdit")} />;
   } else if (cur === "vouchers") {
     // v18.0.0: gift vouchers — the records AND their configuration, because a
     // voucher setting is edited where vouchers are.

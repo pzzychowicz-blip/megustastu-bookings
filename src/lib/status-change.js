@@ -41,6 +41,7 @@ import {
   seatedElapsed, unseatRestore, applySeatedShift, completedSeatedPatch
 } from "./booking-logic.js";
 import { memoByPrev } from "./booking-save.js";
+import { guestTagMap, bookingTags } from "./customers.js";
 import { voucherDue, voucherReturnDue } from "./vouchers.js";
 
 // ── v18.0.0 session 8 (C3): the seat-clash prompt's snapshot ─────────────────
@@ -85,7 +86,8 @@ export function planStatus(ctx){
       if(parties.length) return {seatClash:{id:id,status:status,from:"status",others:seatClashSnap(parties)}};
     }
   }
-  const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur);
+  // v18.5.0: with its tags (`ctx.tagList`), read only when this tap seats.
+  const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur,(status==="seated"&&seatCur&&seatCur.status!=="seated")?bookingTags(seatCur,guestTagMap(ctx.bookings),ctx.tagList):null);
   const user=ctx.getUser();
   const nowM=ctx.nowMins;
   return {transform:function(b){

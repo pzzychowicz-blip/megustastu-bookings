@@ -79,7 +79,10 @@ import { PhoneField } from "./PhoneField";
 // v18.0.0 session 8 (item 2b): a recognised guest's own open vouchers, plus the
 // two predicates the "carried from" note is derived with.
 import { guestOpenVouchers, normalizeCode, isUnsettled } from "../lib/vouchers";
-import { matchesIdentity } from "../lib/customers";
+import { matchesIdentity, guestTagBase } from "../lib/customers";
+import { enteredPhone } from "../lib/booking-fields";
+import { cleanTagIds, editTagIds, toggleTagEdit } from "../lib/tags";
+import { TagChips } from "./TagChips";
 
 // v16.3.0: weekday names for the "Repeat weekly" hint (UTC getUTCDay order).
 // v18.0.0 session 8: WEEKDAY_NAMES is gone — the list lives in lib/day.js, and
@@ -108,6 +111,8 @@ export function BookingFormModal({
   vouchersOn = true,              // v18.0.0 phase 4: settings/admin.modules.vouchers
   today = "", nowMins = 0,        // v17.16.12: for seatingClosed on the DRAFT's date
   swap = null,                    // v18.4.10: the live swap (`swapAffected`), for `pickedRefusal`
+  tagList = null,                 // v18.5.0: settings/tags — the chips this form offers
+  phonePrefix = "",               // v18.5.0: settings/general — a bare prefix is no number (`enteredPhone`), as the save reads it
 }){
   // ── Build form ─────────────────────────────────────────────────────────────
   // Pre-E1, these all lived inline in BookingApp's body. Moved here because
@@ -138,6 +143,26 @@ export function BookingFormModal({
   // every keystroke (the form draft lives in the parent, so EVERY field edit
   // re-renders this component).
   const custIdx=useMemo(function(){return customerIndex(bookings);},[bookings]);
+  // ── v18.5.0: tags ──────────────────────────────────────────────────────────
+  // Occasion tags are this booking's: `form.tags` is the set. Guest tags are the
+  // GUEST's, and the form holds what was tapped (`form.guestTagEdits`), never
+  // the set (lib/tags.js says what a set loses). What is lit is those taps
+  // applied to `guestTagBase`: the tags of whoever this draft names RIGHT NOW,
+  // so typing a known guest's number lights their tags and keeps the taps. The
+  // identity is spelled as the save spells it (`enteredPhone`, the stored guest
+  // id behind the draft's), and Save writes this same value (`saveGuestTags`).
+  const tagPhone=enteredPhone(form.phone,phonePrefix);
+  const tagGuestId=useMemo(function(){
+    if(form.guestId) return form.guestId;
+    const cur=editId?bookings.find(function(b){return b.id===editId;}):null;
+    return (cur&&cur.guestId)||null;
+  },[bookings,editId,form.guestId]);
+  const guestTagsBase=useMemo(function(){
+    return guestTagBase(bookings,editId,{phone:tagPhone,guestId:tagGuestId,guestSeed:form.guestSeed});
+  },[bookings,editId,tagPhone,tagGuestId,form.guestSeed]);
+  const guestTagsOn=editTagIds(guestTagsBase,form.guestTagEdits);
+  const guestTagChoices=(tagList&&tagList.guest)||[];
+  const occasionChoices=(tagList&&tagList.occasion)||[];
   const phoneMatches=phoneFocus&&hasRealPhone(form.phone)
     ?searchCustomers(custIdx,form.phone,20).filter(function(c){
       // hide an exact already-applied selection so the dropdown closes itself
@@ -1083,7 +1108,14 @@ export function BookingFormModal({
           rows={2}
           placeholder="Allergies, special requests..."
           className="mgt-hover-scale"
-          style={mkArea()} />;}}</Fld>{/* v16.3.0: deposit / prepayment amount (€). Empty = none.
+          style={mkArea()} />;}}</Fld>{/* v18.5.0: the tags, under the notes they take over from. A kind with
+          no tags in the list (Settings → Customers → Tags) is not drawn. */}{guestTagChoices.length?<Fld label="Guest tags"><TagChips
+          tags={guestTagChoices}
+          on={guestTagsOn}
+          onToggle={function(id){setForm(function(f){return Object.assign({},f,{guestTagEdits:toggleTagEdit(f.guestTagEdits,guestTagsBase,id)});});}} /></Fld>:null}{occasionChoices.length?<Fld label="Occasion"><TagChips
+          tags={occasionChoices}
+          on={form.tags}
+          onToggle={function(id){setForm(function(f){const cur=cleanTagIds(f.tags);return Object.assign({},f,{tags:cur.indexOf(id)>=0?cur.filter(function(x){return x!==id;}):cleanTagIds(cur.concat([id]))});});}} /></Fld>:null}{/* v16.3.0: deposit / prepayment amount (€). Empty = none.
           v18.3.1: `inputMode="numeric"`, the digit pad (Patryk, on the iPhone).
           Not "decimal": on a Spanish-locale phone that pad types a comma, which
           sanitize's Number() reads as 0, and deposits are whole euros. */}<Fld label={"Deposit (" + (currency || "€") + ")"}>{function(fid){return <input

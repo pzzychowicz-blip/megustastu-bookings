@@ -220,13 +220,17 @@ describe("every single-booking write in App hands saveBookings the report", () =
   it("goneReport is goneRefusal on the list the action was taken on", () => {
     expect(APP).toContain("function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}");
   });
-  it("and the rest are decided: 17 calls, 7 with it, 1 with onLanded", () => {
+  it("and the rest are decided: 18 calls, 7 with it, 1 with onLanded", () => {
     // Without: reconciliation and recurring generation (silent, never
     // queued), delete customer and force reshuffle (many bookings), delete
     // (a booking already gone is the delete done), complete-and-seat's first
     // write (several parties), undo (it puts bookings back), add / remove
     // block (the day, not a booking). The new booking carries `onLanded`.
-    expect(calls.length).toBe(17);
+    // v18.5.0: a customer's tag tapped in Settings → Customers. It names a
+    // customer, not a booking: which booking holds the statement is decided
+    // inside the transform (`customerTagTap`), and a replay that finds the
+    // customer gone writes nothing (`setCustomerTags` returns `prev`).
+    expect(calls.length).toBe(18);
     expect((APP.match(/goneReport\(/g) || []).length - 1, "uses, less the declaration").toBe(6);
   });
 });

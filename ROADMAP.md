@@ -152,10 +152,16 @@ evidence for each.
 
 ## Ideas
 
-From the **2026-07-24 `/engineering:tech-debt` scan's feature shortlist**, whose other
-items shipped in v17.4.0. (Its second idea, deposits reporting, shipped in v18.5.0 as a
-line on the day summary and the printed day sheet, scoped by Patryk on 2026-10-08.)
+The **2026-07-24 `/engineering:tech-debt` scan's feature shortlist** is spent: its last
+two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
 
-- **Structured guest tags.** Allergies and occasions live in free-text `notes`, which
-  cannot be filtered or carried between visits and which `deleteCustomer` wipes.
-  Undecided: fixed vocabulary or free tags, and whether tags are erasable personal data.
+- **Filter or search by tag.** v18.5.0 shows a booking's tags on six surfaces and
+  filters by none. A "who has an allergy tonight" filter on the List, or a tag in the
+  Customers tab's filters, is the obvious next use. Not asked for yet.
+- **Delete customer leaves their standing booking.** Read from the code while moving
+  the anonymiser in v18.5.0, NOT reproduced on DEV: `deleteCustomer` anonymises the
+  customer's bookings and removes their waitlist entries and WhatsApp conversation,
+  and does not touch `recurring.rules`, where a standing booking keeps the name, the
+  phone and the notes, and from which `occurrenceBooking` writes them onto each new
+  week's booking. Reproduce it first (a standing booking, Delete customer, then look
+  at Settings → Standing bookings and at the next generated week).

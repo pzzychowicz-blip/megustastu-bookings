@@ -33255,6 +33255,16 @@ activity-log line ("changed the tag list · guest"). A second device. The read-o
 view for an account without `settingsWrite`. The blur was a dispatched `focusout`,
 since `.blur()` in the hidden pane fired no React handler.
 
+**Verified afterwards, once DEV's rules had the node** (Patryk published them; 9 Oct
+2026, 1 trial each, real controls). "Nut allergy" added: six name boxes, no refusal
+sentence, nothing in the console; after a reload the section read "6 guest · 2
+occasion" and the name was there. Renamed to "Nuts": a second tab, on its own
+connection, opened showing "Nuts". Removed through "Confirm — remove": five names in
+the first tab, and five in the second without a reload. The activity log listed
+three "changed the tag list · guest" lines at 00:13. Still not verified: the
+read-only view for an account without `settingsWrite` (it needs a second account).
+DEV now stores the list (the seed's seven tags).
+
 **Gate.** Build: main bundle 130.71 kB gz (129.42 after section 2; the hook and
 `lib/tags.js` load with the app, the editor with the Settings chunk). Tests: 2,893
 (2,860 before the new file's 33). Lint: 63 problems, 0 errors. `check:style`: OK.
@@ -33375,3 +33385,96 @@ side by side; the entry grew 0.52 kB raw, and the two history clauses are in the
 shared `atoms` chunk). Tests: 2,961 (2,893 before: the new file's 60, 4 save-path
 scenarios, 4 field-table cases for the two new draft keys). Lint: 63 problems, 0
 errors. `check:style`: OK.
+
+### Guest tags, part 3: the screens
+
+**Files:** `src/components/TagChips.jsx` (new, 60) · `BookingFormModal.jsx` ·
+`ListView.jsx` · `TimelineView.jsx` · `DaySheet.jsx` · `SeatNoteModal.jsx` ·
+`CustomersSettings.jsx` · `Settings.jsx` · `src/App.jsx` · `src/lib/customers.js`
+(`bookingTags`, `tagLine`, `setCustomerTags`, `customerTagTap`) ·
+`src/lib/booking-logic.js` (`seatNoteFor`) · `src/lib/booking-save.js` ·
+`src/lib/status-change.js` · `tests/guest-tags.test.js` (+14, 74) · three seat-note
+expectations · `tests/retry-report.test.js` · `GLOSSARY.md` · `DESIGN.md` ·
+`ROADMAP.md` · `src/CLAUDE.md` · `src/lib/CLAUDE.md` · `src/components/CLAUDE.md`
+
+**Where a tag shows** (Patryk, AskUserQuestion, 2026-10-08): the booking form (edit),
+the List card, Settings → Customers (show and edit), the seat note, the printed day
+sheet (the Notes column), and the timeline block's title only. Not the walk-in form.
+
+**One read.** Every surface shows `bookingTags(b, guestTags, tagList)`, where
+`guestTags` is one `guestTagMap(bookings)` memo in App. A surface reading
+`b.guestTags` would be right only for the booking that holds the statement, so the
+test file fails a component that does, and pins each surface's call.
+
+**The form.** "Guest tags" and "Occasion", two groups of chips under Notes. The guest
+chips are the taps applied to `guestTagBase` for whoever the draft names at that
+moment, spelled as the save spells it (`enteredPhone`, so the form takes
+`phonePrefix`).
+
+**The chip** (`DESIGN.md`): the activity log's pressed filter chip, an existing atom.
+Pressed is the success tone and a check mark, so the state does not rest on a ring's
+colour. On the List card a tag is a word in the flag row in the settled facts' ink,
+with no mark, as `manual` is.
+
+**Settings → Customers.** A row shows the customer's tags under the phone. Opened, it
+leads with the chips; a tap is one write (`customerTagTap`), on the booking that
+already holds the customer's newest statement, or their most recent one. The chips
+were under the bookings at first: with a regular's 23 bookings they were a screen
+down, seen on DEV, and moved above. Behind `bookingEdit`, the capability the form's
+Save asks for, because a guest's tags are on their bookings.
+
+**The seat note** opens for a tagged party with no note too, and shows the tags above
+the note. `seatNoteFor` takes the labels from its caller, because a guest's tags are
+read from the whole list. Three existing expectations of the snapshot gained
+`guestTags: [], occasionTags: []`, edited by hand (one of them a line of a save-path
+snapshot).
+
+**Two guards that count things I moved.** `tests/a11y.test.js` reads a block's
+`data-bk` and `aria-hidden` as an adjacent pair, so the new `title` sits after them.
+`tests/unplaced.test.js` reads `missingTables` as the List's first prop, so the two
+new props follow it. And `tests/retry-report.test.js` counts App's `saveBookings`
+calls: 18 now, the customer tap decided as one of the calls without a report.
+
+**A lint warning that was a real note.** The first `saveCustomerTag` read
+`Date.now()` in App and took lint to 64 (`react-hooks/purity`, found by diffing the
+warning list against the last commit by file and rule). The clock read moved into
+`customerTagTap`, which is where the house shape puts it: the lib builds the
+transform, App dispatches it.
+
+**Measured on DEV** (9 Oct 2026, dark theme, an 800px pane, 1 trial each, real
+controls unless said).
+- The form on "v1834 weekly2": 7 chips, each 28px tall. Allergy and Birthday tapped:
+  `aria-pressed="true"`, a check mark, 63.9 → 79.9px wide. VIP tapped twice: back to
+  unpressed. Saved with no warning.
+- That booking afterwards: the block's `title` "Allergy · Birthday", its spoken label
+  "v1834 weekly2, 19:30, 2 guests, table 1A, confirmed, tagged Allergy, Birthday";
+  the List card's flag row "Allergy  Birthday"; the printed sheet's Notes cell
+  "Allergy · Birthday — <the note>", the tags at weight 700.
+- Seated from the List: the popover read "Note — v1834 weekly2 · 2 guests · 19:30 ·
+  1A · Allergy · Birthday · <the note> · Done".
+- Settings → Customers, Laura Vidal: VIP tapped, pressed, and the row read
+  "+34 600111222 · last Fri 02.10 | VIP | 6 visits".
+- A new booking's form: nothing lit; Allergy tapped → Allergy; her number typed →
+  Allergy, VIP; an unknown number typed → Allergy. Closing asked "Discard unsaved
+  changes?".
+- The activity log: "v1834 weekly2 · edited: occasion tags: Birthday, guest tags
+  updated" and "Standing Probe · guest tags updated" (the booking of that number
+  holding the statement). No guest tag is named.
+
+**Sabotages of the real code**, each restored byte for byte, against 443 tests in
+three files: a tagged party with no note raises no seat note (3 fail); a customer tap
+stamped with the clock as it reads (2); the tap written as the whole set (3); the tap
+without its capability check (1); the List card reading the booking's own statement
+(2); `bookingTags` in stored order (5).
+
+**Not verified.** A seat note for a tagged party with NO note in the running app
+(tests only). A printed page or PDF (the sheet's DOM was read). Light theme, a phone
+width, the tablet, a finger. A second device. An account without `bookingEdit`
+(disabled chips) or without `settingsWrite`.
+
+**DEV data changed and left:** "v1834 weekly2" (Fri 9 Oct) has a note, the tags
+Allergy and Birthday, and is seated; the customer on +34 600111222 has VIP;
+`settings/tags` is stored.
+
+**Gate.** Build: main bundle 131.75 kB gz (130.69 after part 2). Tests: 2,978 (2,961
+before). Lint: 63 problems, 0 errors. `check:style`: OK.

@@ -1180,11 +1180,20 @@ export function plannedDuration(b){
 // device in those seconds from blanking it. `time` is the booked time — the
 // seated shift has just moved `time` to now, and staff know a party by its
 // booking ("the 20:30 López party"), the reasoning Book Again already uses.
-export function seatNoteFor(prevStatus,nextStatus,b){
+//
+// v18.5.0: `tags` is `bookingTags(b, map, list)` (lib/customers.js), the
+// booking's guest and occasion tags as labels. A tagged party with no note
+// raises it too: "Allergy" is the note that matters most at the table. The
+// labels are copied into the snapshot, like everything else on it. The caller
+// passes them because a guest's tags are read from the whole list, which this
+// function does not have.
+export function seatNoteFor(prevStatus,nextStatus,b,tags){
   if(!b||nextStatus!=="seated"||prevStatus==="seated") return null;
   const notes=typeof b.notes==="string"?b.notes.trim():"";
-  if(!notes) return null;
-  return {id:b.id,name:b.name||"",size:Number(b.size)||0,time:b.scheduledTime||b.time||"",tables:Array.isArray(b.tables)?b.tables.slice():[],notes:notes};
+  const guestTags=tags&&Array.isArray(tags.guest)?tags.guest.slice():[];
+  const occasionTags=tags&&Array.isArray(tags.occasion)?tags.occasion.slice():[];
+  if(!notes&&!guestTags.length&&!occasionTags.length) return null;
+  return {id:b.id,name:b.name||"",size:Number(b.size)||0,time:b.scheduledTime||b.time||"",tables:Array.isArray(b.tables)?b.tables.slice():[],notes:notes,guestTags:guestTags,occasionTags:occasionTags};
 }
 // ── v18.0.0 session 8 (C1): leaving seated puts the booked plan back ─────────
 // `applySeatedShift` moves `time` to the moment the party sat down and rewrites

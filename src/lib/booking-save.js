@@ -36,7 +36,7 @@ import {
   offZone, offZoneNote, seatNoteFor,
   canAssign, occupancyEnd, getBlockSlots, padEnd,
 } from "./booking-logic.js";
-import { stampGuestSeed, resolveGuestId, saveGuestTags, guestTagsChange } from "./customers.js";
+import { stampGuestSeed, resolveGuestId, saveGuestTags, guestTagsChange, guestTagMap, bookingTags } from "./customers.js";
 import { cleanTagIds } from "./tags.js";
 import { isNoShow, NO_SHOW_CLEARED } from "./booking-fields.js";
 import { normalizeCode } from "./vouchers.js";
@@ -566,7 +566,9 @@ export function applyEdit(input){
     flash:(needsR||swapAffected||f.status==="completed"||seatingNow||zoneNote)?{kind:seatingNow?"saved":null,note:zoneNote}:null,
     // v18.0.0 session 7: the seat note. The snapshot is the EDITED booking,
     // so a note typed in this save is shown.
-    seatNote:seatNoteFor(orig&&orig.status,f.status,edited),
+    // v18.5.0: with the booking's tags, read from the list as this save leaves
+    // it, so a tag tapped in the same save is on the note. Only when seating.
+    seatNote:seatNoteFor(orig&&orig.status,f.status,edited,(f.status==="seated"&&edited&&!(orig&&orig.status==="seated"))?bookingTags(edited,guestTagMap(fin),input.tagList):null),
     // v18.4.6: what a REPLAY of this edit asks first (see `goneRefusal`).
     replayRefusal:goneRefusal(editId,bookings),
   };

@@ -158,8 +158,20 @@ describe("planStatus: what a status tap writes", () => {
   it("carries the booking's notes for the seat note, at its booked time", () => {
     const list = [bk("a", "20:30", 4, ["2", "3"], { notes: " nut allergy " })];
     expect(status("a", "seated", list).plan.seatNote)
-      .toStrictEqual({ id: "a", name: "A", size: 4, time: "20:30", tables: ["2", "3"], notes: "nut allergy" });
+      .toStrictEqual({ id: "a", name: "A", size: 4, time: "20:30", tables: ["2", "3"], notes: "nut allergy", guestTags: [], occasionTags: [] });
     expect(status("a", "completed", list).plan.seatNote).toBe(null);
+  });
+
+  it("v18.5.0: carries the party's tags, the guest's read from another of their bookings", () => {
+    const tagList = { v: 1, guest: [{ id: "g-allergy", label: "Allergy" }], occasion: [{ id: "o-birthday", label: "Birthday" }] };
+    const list = [
+      bk("a", "20:30", 2, ["2"], { phone: "+34 600 111 222", tags: ["o-birthday"] }),
+      bk("old", "20:30", 2, [], { phone: "+34 600 111 222", date: "2026-01-05", status: "completed", guestTags: ["g-allergy"], guestTagsAt: 5 }),
+    ];
+    const note = status("a", "seated", list, { tagList }).plan.seatNote;
+    expect([note.guestTags, note.occasionTags, note.notes]).toEqual([["Allergy"], ["Birthday"], ""]);
+    // Without the list there is nothing to name a tag with, and no note: no popover.
+    expect(status("a", "seated", list).plan.seatNote).toBe(null);
   });
 
   it("runs on the list it is handed, so a parked write replays on fresh data", () => {

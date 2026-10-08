@@ -86,7 +86,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
 import { applyEdit, buildBooking, memoByPrev, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, rehomeGuestTags } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, rehomeGuestTags, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -2142,6 +2142,10 @@ function BookingApp({uid}){
   // "No show" (lateNoShowMin+). Thresholds + master switch live in
   // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
   // React.memo — cheapness was never the point, identity is).
+  // v18.5.0: every guest's tags, {customer key: tag ids} (lib/customers.js). ONE
+  // pass here, handed to each view that shows a tag, and a stable object for
+  // their React.memo. Read through `guestTagsOf` / `bookingTags`, never by key.
+  const guestTags=useMemo(function(){return guestTagMap(bookings);},[bookings]);
   const lateMap=useMemo(function(){
     const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
@@ -2430,6 +2434,14 @@ function BookingApp({uid}){
   // clears the tags, guest and occasion both (Patryk, 2026-10-08), and
   // tests/guest-tags.test.js holds every row of BOOKING_FIELDS to "wiped" or
   // "kept, because", so a field added later is decided for erasure too.
+  // v18.5.0: one tap on a tag in Settings → Customers. A guest's tags are on
+  // their bookings, so this is a booking write, behind the capability the form's
+  // Save asks for. `edit` is the tap ("+g-vip" / "-g-vip"); `customerTagTap`
+  // (lib/customers.js) applies it to the tags as they are in `prev`, so a replay
+  // cannot write a stale set. Returns whether it was dispatched.
+  function saveCustomerTag(key,edit){if(refused("bookingEdit")) return false;
+    return saveBookings(customerTagTap(key,edit,histEntry(GUEST_TAGS_UPDATED,getUser())));
+  }
   function deleteCustomer(ident){if(refused("customerDelete")) return;
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
@@ -3322,7 +3334,7 @@ function BookingApp({uid}){
   // then the write. App keeps the gate, the refs and the side effects. This is
   // the one funnel for the popup, the List buttons and the S/C shortcuts.
   function updateStatus(id,status){if(refused("bookingStatus"))return;
-    const plan=planStatus({id:id,status:status,bookings:bookings,viewDate:viewDate,today:today,nowMins:nowMins,now:Date.now(),tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,getUser:getUser,redeemAsked:redeemAskedRef.current,seatAsked:seatAskedRef.current,vouchersOn:vouchersOn,vouchersByCode:vouchersByCode});
+    const plan=planStatus({id:id,status:status,bookings:bookings,viewDate:viewDate,today:today,nowMins:nowMins,now:Date.now(),tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,getUser:getUser,tagList:tagList,redeemAsked:redeemAskedRef.current,seatAsked:seatAskedRef.current,vouchersOn:vouchersOn,vouchersByCode:vouchersByCode});
     if(plan.confirmCancel){setConfirmCancel(id);return;}
     if(plan.voucherAsk){setVoucherAsk(plan.voucherAsk);return false;}
     if(plan.voucherBack){setVoucherBack(plan.voucherBack);return false;}
@@ -4248,6 +4260,8 @@ function BookingApp({uid}){
     clashSpans={clashSpans}
     late={lateMap}
     freeing={freeingMap}
+    tagList={tagList}
+    guestTags={guestTags}
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
     setZoom={VA.onSetZoom}
@@ -4281,6 +4295,8 @@ function BookingApp({uid}){
   // stop being true.
   const listEl=<ListView
     missingTables={missingTables}
+    tagList={tagList}
+    guestTags={guestTags}
     vouchersByCode={vouchersByCode}
     vouchersOn={vouchersOn}
     bookings={bookings}
@@ -4418,7 +4434,7 @@ function BookingApp({uid}){
   const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
-  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} tagList={tagList} guestTags={guestTags} />;
   // v18.4.0: the printed timeline, mounted for the one print that asked for it.
   const TimelineSheet=printJob&&printJob.kind!=="sheet"?printJob.Sheet:null;
   const timelineSheet=TimelineSheet?<TimelineSheet bookings={bookings} date={viewDate} blocks={tableBlocks} from={printJob.from} to={printJob.to} splitHour={dayShifts.split} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />:null;
@@ -4795,6 +4811,8 @@ function BookingApp({uid}){
               onClose={function(){setSplitMenuFor(null);}} />:null}</ModalPresence><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
+              tagList={tagList}
+              phonePrefix={generalSettings.phonePrefix}
               editId={editId}
               error={error}
               errorField={errorField}
@@ -4927,6 +4945,8 @@ function BookingApp({uid}){
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
+            guestTags={guestTags}
+            onSetCustomerTag={saveCustomerTag}
             vouchers={vouchers}
             voucherDefaults={voucherDefaults}
             onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}

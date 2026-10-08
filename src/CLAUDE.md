@@ -119,7 +119,15 @@ The history line says "guest tags updated" and never names one: `bookingWriteEnt
 copies every history action into `/activity`, which is append-only and which Delete
 customer cannot rewrite. An occasion tag (`tags`, the booking's own) is named. Delete
 customer is `anonymizeBooking` (`lib/customers.js`), which clears both kinds.
-`tests/guest-tags.test.js`.
+
+**Six surfaces, one read.** The booking form (edit), the List card, Settings →
+Customers (show, and edit by one tap = one write, `customerTagTap`), the seat note,
+the printed day sheet and the timeline block's title each show
+`bookingTags(b, guestTags, tagList)`, where `guestTags` is ONE `guestTagMap(bookings)`
+memo in App handed down as a stable prop. A surface that read `b.guestTags` would be
+right only for the booking that happens to hold the statement, so
+`tests/guest-tags.test.js` fails a component that does, and pins each surface's call.
+The walk-in form has no tags (Patryk, 2026-10-08).
 
 ### Waitlist active matching (v16.0.0)
 `waitAvail` is **state computed by a BookingApp effect**, not a render-time derivation — the `trialFits` scans are heavy, so the effect keys on `[bookings, tableBlocks, waitlist, autoOptimizer, nowQuarter]` where `nowQuarter = Math.floor(nowMins/15)` (never the raw 15s tick). Per waiting entry: try `prefTime` first; else a 15-min first-fit scan **clamped to ±90 min around the wanted time** (a 13:45 slot is no use to a party waiting for ~20:30); no wanted time → the whole remaining day.

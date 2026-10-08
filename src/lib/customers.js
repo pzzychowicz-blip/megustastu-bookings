@@ -31,7 +31,7 @@
 import { overlaps, toMins, getDur } from "./booking-logic.js";
 import { dialOf } from "./phone-countries.js";
 import { isNoShow } from "./booking-fields.js";
-import { cleanTagIds, cleanTagEdits, sameTagIds, unionTagIds, editTagIds } from "./tags.js";
+import { cleanTagIds, cleanTagEdits, sameTagIds, unionTagIds, editTagIds, tagLabels } from "./tags.js";
 
 export function normalizePhone(p) {
   if (!p) return "";
@@ -651,6 +651,71 @@ export function saveGuestTags(prev, cand, id, edits, seedId, now) {
   return out.map(function (b) {
     return b && b.id === id ? Object.assign({}, b, { guestTags: want, guestTagsAt: at }) : b;
   });
+}
+
+// bookingTags — the tags to SHOW for booking `b`, as labels in the list's
+// order: `{ guest, occasion }`. `map` is `guestTagMap(bookings)`, `list` the tag
+// list. The one read behind every surface, so a card, a block, the printed
+// sheet and the seat note cannot disagree about what a booking is tagged.
+export function bookingTags(b, map, list) {
+  return {
+    guest: tagLabels(list, "guest", guestTagsOf(b, map)),
+    occasion: tagLabels(list, "occasion", cleanTagIds(b && b.tags)),
+  };
+}
+
+// The same as one line of text, guest tags first: "Allergy, VIP · Birthday".
+// "" when the booking has none.
+export function tagLine(t) {
+  if (!t) return "";
+  return [t.guest, t.occasion].filter(function (x) { return x && x.length; })
+    .map(function (x) { return x.join(", "); }).join(" · ");
+}
+
+// setCustomerTags — a tap on a customer's tag in Settings → Customers. `key` is
+// the customer's key in `customerIndex`, `edits` the tap (`["+g-vip"]`), `entry`
+// the history entry to add (made once, at the tap). A transform of `prev`, so a
+// held write replays on fresh data and applies the tap to the tags as they are
+// by then.
+//
+// The statement is written where the customer's newest one already is, so a
+// customer does not collect one statement per tap; a customer with none gets it
+// on their most recent booking. That booking's history says "guest tags
+// updated", the words the form's save uses. Returns `prev` itself when the tap
+// changes nothing or the customer has no bookings left.
+export function setCustomerTags(prev, key, edits, now, entry) {
+  if (!Array.isArray(prev) || !key) return prev;
+  const keyOf = customerKeyFn(prev);
+  const theirs = prev.filter(function (b) { return b && keyOf(b) === key; });
+  if (!theirs.length) return prev;
+  const top = newestStatement(theirs, keyOf, key);
+  const base = top ? top.guestTags : [];
+  const want = editTagIds(base, edits);
+  if (sameTagIds(base, want)) return prev;
+  let holder = top;
+  if (!holder) {
+    theirs.forEach(function (b) {
+      if (!holder || (b.date || "") > (holder.date || "") || ((b.date || "") === (holder.date || "") && String(b.id) > String(holder.id))) holder = b;
+    });
+  }
+  const at = Math.max(Number(now) || 0, (top ? Number(top.guestTagsAt) : 0) + 1);
+  return prev.map(function (b) {
+    if (!b || b.id !== holder.id) return b;
+    const h = Array.isArray(b.history) ? b.history : [];
+    return Object.assign({}, b, { guestTags: want, guestTagsAt: at, history: entry ? h.concat([entry]) : h });
+  });
+}
+
+// The words that entry carries, the form's own (`BOOKING_FIELDS`' clause).
+export const GUEST_TAGS_UPDATED = "guest tags updated";
+
+// customerTagTap — the tap as the transform `saveBookings` takes. The clock is
+// read HERE, once, so the transform is a pure function of `prev` and every
+// replay of it stamps the same time (the stamp rule keeps that above whatever
+// is there by then).
+export function customerTagTap(key, edit, entry) {
+  const now = Date.now();
+  return function (prev) { return setCustomerTags(prev, key, [edit], now, entry); };
 }
 
 // ── v18.5.0: what "Delete customer" leaves of a booking ──────────────────────

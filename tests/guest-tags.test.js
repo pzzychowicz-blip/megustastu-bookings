@@ -28,7 +28,7 @@
 // (tests/test-hygiene.test.js).
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { BOOKING_FIELDS, sanitize, draftFromBooking } from "../src/lib/booking-fields.js";
@@ -36,7 +36,8 @@ import { applyEdit, buildBooking } from "../src/lib/booking-save.js";
 import { undoSnapshots, applyUndo } from "../src/lib/booking-logic.js";
 import {
   guestTagMap, guestTagsOf, guestTagBase, guestTagsChange, saveGuestTags, rehomeGuestTags,
-  anonymizeBooking, matchesIdentity, normalizePhone,
+  anonymizeBooking, matchesIdentity, normalizePhone, customerIndex,
+  bookingTags, tagLine, setCustomerTags, customerTagTap, GUEST_TAGS_UPDATED,
 } from "../src/lib/customers.js";
 import { cleanTagIds, cleanTagEdits, editTagIds, toggleTagEdit, DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
@@ -482,6 +483,123 @@ describe("Delete customer: every field is wiped, or kept for a reason", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+describe("what a screen shows for a booking: bookingTags and tagLine", () => {
+  const list = [says("a1", ANA, [V, A], 100), bk("a2", { phone: ANA, tags: ["o-anniversary", "o-birthday"] }), bk("b1", { phone: BEA })];
+  const map = guestTagMap(list);
+
+  it("the guest's tags and the booking's own, as labels in the tag list's order", () => {
+    expect(bookingTags(byId(list, "a2"), map, LIST)).toEqual({ guest: ["Allergy", "VIP"], occasion: ["Birthday", "Anniversary"] });
+    expect(bookingTags(byId(list, "a1"), map, LIST)).toEqual({ guest: ["Allergy", "VIP"], occasion: [] });
+    expect(bookingTags(byId(list, "b1"), map, LIST)).toEqual({ guest: [], occasion: [] });
+  });
+  it("a tag the list no longer has is not shown, and no list shows nothing", () => {
+    const short = { v: 1, guest: [{ id: V, label: "VIP" }], occasion: [] };
+    expect(bookingTags(byId(list, "a2"), map, short)).toEqual({ guest: ["VIP"], occasion: [] });
+    expect(bookingTags(byId(list, "a2"), map, null)).toEqual({ guest: [], occasion: [] });
+    expect(bookingTags(null, map, LIST)).toEqual({ guest: [], occasion: [] });
+  });
+  it("one line: guest tags, then occasion", () => {
+    expect(tagLine(bookingTags(byId(list, "a2"), map, LIST))).toBe("Allergy, VIP · Birthday, Anniversary");
+    expect(tagLine(bookingTags(byId(list, "a1"), map, LIST))).toBe("Allergy, VIP");
+    expect(tagLine({ guest: [], occasion: ["Birthday"] })).toBe("Birthday");
+    expect(tagLine(bookingTags(byId(list, "b1"), map, LIST))).toBe("");
+    expect(tagLine(null)).toBe("");
+  });
+  it("each surface that shows a booking's tags reads them through bookingTags", () => {
+    // The six Patryk chose (2026-10-08). A surface that stops showing tags, or
+    // starts reading them its own way, fails here.
+    const src = (n) => stripComments(readFileSync(fileURLToPath(new URL("../src/components/" + n, import.meta.url)), "utf8")).join("\n");
+    expect(src("ListView.jsx")).toContain("bookingTags(b, guestTags, tagList)");
+    expect(src("DaySheet.jsx")).toContain("tagLine(bookingTags(b, guestTags, tagList))");
+    const timeline = src("TimelineView.jsx");
+    expect((timeline.match(/tags=\{tagLine\(bookingTags\(b, guestTags, tagList\)\)\}/g) || []).length).toBe(2);   // a placed block, an unplaced one
+    expect(timeline).toContain('(tags ? ", tagged " + tags.replace(" · ", ", ") : "")');
+    expect(timeline).toContain("title={leaving || !tags ? undefined : tags}");
+    expect(src("SeatNoteModal.jsx")).toContain("(note.guestTags || []).concat(note.occasionTags || [])");
+    // The form shows the taps applied to whoever the draft names now.
+    const form = src("BookingFormModal.jsx");
+    expect(form).toContain("guestTagBase(bookings,editId,{phone:tagPhone,guestId:tagGuestId,guestSeed:form.guestSeed})");
+    expect(form).toContain("editTagIds(guestTagsBase,form.guestTagEdits)");
+    expect(form).toContain("toggleTagEdit(f.guestTagEdits,guestTagsBase,id)");
+    // Customers: the map's own key, the one `customerIndex` files the row under.
+    expect(src("CustomersSettings.jsx")).toContain("(guestTags && guestTags[c.key]) || []");
+  });
+  it("no component reads a statement off a booking: the guest's tags are usually on another one", () => {
+    const dir = fileURLToPath(new URL("../src/components/", import.meta.url));
+    const reads = readdirSync(dir).filter((n) => /\.jsx$/.test(n)).filter((n) => {
+      const code = stripComments(readFileSync(dir + n, "utf8")).join("\n");
+      return /\bb\.guestTags(At)?\b/.test(code);
+    });
+    expect(reads).toEqual([]);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe("the seat note, when the form's Save seats the party", () => {
+  // Today, so the party can be seated; a table, so nothing refuses the seat.
+  const seatable = (o) => bk("s1", Object.assign({ date: today, time: "20:00", tables: ["3"], _manual: true, _locked: true }, o));
+
+  it("carries a tag tapped in the same save, and the guest's from another booking", () => {
+    const list = [seatable({ phone: ANA }), says("a9", ANA, [A], 100, { date: day(3) })];
+    const plan = edit(list, "s1", { status: "seated", guestTagEdits: ["+" + V], tags: ["o-birthday"] }, { nowMins: 20 * 60 });
+    expect([plan.seatNote.guestTags, plan.seatNote.occasionTags, plan.seatNote.notes]).toEqual([["Allergy", "VIP"], ["Birthday"], ""]);
+  });
+  it("is not raised for an untagged party with no note, or by a save that does not seat", () => {
+    expect(edit([seatable({})], "s1", { status: "seated" }, { nowMins: 20 * 60 }).seatNote).toBe(null);
+    const list = [seatable({ phone: ANA }), says("a9", ANA, [A], 100, { date: day(3) })];
+    expect(edit(list, "s1", { notes: "n" }, { nowMins: 20 * 60 }).seatNote).toBe(null);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe("a tag tapped on a customer, in Settings → Customers", () => {
+  const entry = { at: "x", by: "t", action: GUEST_TAGS_UPDATED };
+  const keyOf = (list, phone) => Object.keys(customerIndex(list)).find((k) => k === normalizePhone(phone));
+
+  it("writes where the newest statement already is, above it, with one history line", () => {
+    const list = [says("a1", ANA, [A], 100, { date: day(1) }), bk("a2", { phone: ANA, date: day(9) }), bk("b1", { phone: BEA })];
+    const next = setCustomerTags(list, keyOf(list, ANA), ["+" + V], 50, entry);
+    expect(statementsWritten(list, next)).toEqual(["a1"]);
+    expect([byId(next, "a1").guestTags, byId(next, "a1").guestTagsAt]).toEqual([[A, V], 101]);
+    expect(byId(next, "a1").history.map((h) => h.action)).toEqual([GUEST_TAGS_UPDATED]);
+    expect(byId(next, "a2")).toBe(list[1]);
+    expect(shown(next, "a2")).toEqual([A, V]);
+  });
+  it("a customer with no statement gets one on their most recent booking", () => {
+    const list = [bk("a1", { phone: ANA, date: day(1) }), bk("a2", { phone: ANA, date: day(9) }), bk("a3", { phone: ANA, date: day(4) })];
+    const next = setCustomerTags(list, keyOf(list, ANA), ["+" + V], 7000, entry);
+    expect(statementsWritten(list, next)).toEqual(["a2"]);
+    expect(byId(next, "a2").guestTagsAt).toBe(7000);
+  });
+  it("a tap that changes nothing, or a customer with no bookings left, returns the list itself", () => {
+    const list = [says("a1", ANA, [A], 100)];
+    expect(setCustomerTags(list, keyOf(list, ANA), ["+" + A], 500, entry)).toBe(list);
+    expect(setCustomerTags(list, keyOf(list, ANA), ["-" + V], 500, entry)).toBe(list);
+    expect(setCustomerTags(list, normalizePhone(CARLA), ["+" + V], 500, entry)).toBe(list);
+    expect(setCustomerTags(list, "", ["+" + V], 500, entry)).toBe(list);
+  });
+  it("a joined guest with no phone is a customer too", () => {
+    const list = [bk("g1", { guestId: "gg1", date: day(1) }), bk("g2", { guestId: "gg1", date: day(2) })];
+    const next = setCustomerTags(list, "gg1", ["+" + N], 10, entry);
+    ["g1", "g2"].forEach((id) => expect(shown(next, id)).toEqual([N]));
+  });
+  it("the tap is a transform: a replay on fresh data applies it to the tags as they are by then", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(4000));
+    const list = [says("a1", ANA, [A], 100)];
+    const tap = customerTagTap(normalizePhone(ANA), "+" + V, entry);
+    vi.setSystemTime(new Date(999999));                      // the replay runs later; the stamp is the tap's
+    expect(byId(tap(list), "a1").guestTagsAt).toBe(4000);
+    const fresh = [says("a1", ANA, [N], 9000)];             // another device changed them meanwhile
+    expect([byId(tap(fresh), "a1").guestTags, byId(tap(fresh), "a1").guestTagsAt]).toEqual([[N, V], 9001]);
+    expect(JSON.stringify(tap(list))).toBe(JSON.stringify(tap(list)));
+  });
+  it("its history line is the form's, and names no tag", () => {
+    expect(GUEST_TAGS_UPDATED).toBe("guest tags updated");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // ── App's two wires ─────────────────────────────────────────────────────────
 // The lib functions above do nothing until App calls them. Its save is run for
 // real in tests/save-path.test.js; the delete and Delete customer are not, so
@@ -498,6 +616,16 @@ describe("App is wired to it", () => {
     const drops = app.match(/\.filter\(function\(x\)\{return x\.id!==id;\}\)/g) || [];
     expect(drops.length).toBe(1);
     expect(app).toContain("rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id)");
+  });
+  it("a customer's tap asks for the capability a booking edit asks for, and goes through customerTagTap", () => {
+    const fn = app.slice(app.indexOf("function saveCustomerTag("));
+    const body = fn.slice(0, fn.indexOf("\n  }\n"));
+    expect(body).toContain('if(refused("bookingEdit")) return false;');
+    expect(body).toContain("saveBookings(customerTagTap(key,edit,histEntry(GUEST_TAGS_UPDATED,getUser())))");
+  });
+  it("one tag map is made in App and handed to each view", () => {
+    expect((app.match(/guestTagMap\(/g) || []).length).toBe(1);
+    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(4);   // timeline, list, day sheet, settings
   });
   it("the edit is handed the tag list, for the occasion tag's name", () => {
     const call = app.slice(app.indexOf("applyEdit({"));

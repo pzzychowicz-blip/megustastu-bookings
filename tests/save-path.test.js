@@ -1498,7 +1498,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
-          "setSeatNote({"id":"b1","name":"Guest b1","size":2,"time":"19:00","tables":["3"],"notes":"nut allergy"})",
+          "setSeatNote({"id":"b1","name":"Guest b1","size":2,"time":"19:00","tables":["3"],"notes":"nut allergy","guestTags":[],"occasionTags":[]})",
         ],
         "guard": "dispatched",
         "writes": [

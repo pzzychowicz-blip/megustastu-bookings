@@ -28,6 +28,8 @@ import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
 import { TagListEditor } from "./TagListEditor";
+import { TagChips } from "./TagChips";
+import { tagLabels } from "../lib/tags";
 
 // v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
 // by aria-describedby only while it is on screen. One row is armed at a time.
@@ -56,7 +58,14 @@ const GUESTS_COL = 58;
 // delete, both of which SHOULD be discarded when you jump to a different person.
 // The alternative, an effect that writes `query` when the prop changes, is a
 // synchronous setState in an effect — the lint rule this codebase keeps clean.
-export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "", tagList, onSaveTagList, tagError, onClearTagError, canEditTags = false, onDirty }) {
+// v18.5.0: `guestTags` is App's guest-tag map (`guestTagMap`), keyed like the
+// index here, so `guestTags[c.key]` is the customer's tag ids. A row shows them
+// as words under the phone; opened, it shows every guest tag of the list as a
+// chip, pressed when the customer has it. A tap is one write
+// (`onSetCustomerTag(key, "+id" | "-id")`, App's `saveCustomerTag`), and the
+// chips are disabled for an account that may not edit bookings
+// (`canEditGuestTags`): a guest's tags live on their bookings.
+export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "", tagList, onSaveTagList, tagError, onClearTagError, canEditTags = false, onDirty, guestTags = null, onSetCustomerTag, canEditGuestTags = false }) {
   const [query, setQuery] = useState(seekQuery || "");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
@@ -115,6 +124,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   // border token and a text token from two unrelated families that disagreed
   // in light mode and nearly converged in dark.
 
+  const guestChoices = (tagList && tagList.guest) || [];
   const rows = shown.map(function (c) {
     // v17.10.0: `c.key` — the identity, which is the phone for a phone customer
     // and the guestId for a joined phone-less one. Keying any of this on
@@ -123,6 +133,8 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
     const open = openKey === c.key;
     const armed = armedKey === c.key;
     const wlCount = c.phone ? waitCountOf(c.phone) : 0;
+    const tagIds = (guestTags && guestTags[c.key]) || [];
+    const tagNames = tagLabels(tagList, "guest", tagIds);
     // v18.2.0 (C1): the visits' date column fits the widest date among them —
     // 65px for "Wed 24.09" in this weight, 101 with a year (measured on DEV) —
     // so the times line up when a guest's visits span years, as a regular's do.
@@ -163,7 +175,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             delete control is NOT inside it; that lives in the `Reveal` below, a
             sibling, so this stays a leaf rather than the container-of-controls
             defect `tests/a11y.test.js` exists for. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate ? formatDay(c.latestDate) : "\u2014")}</div></div><button
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate ? formatDay(c.latestDate) : "\u2014")}</div>{tagNames.length ? <div style={{ fontSize: T.body, fontWeight: FW.semi, color: S.sub }}>{tagNames.join(", ")}</div> : null}</div><button
           type="button"
           aria-expanded={open}
           aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + countLabel(c.visits, "visit", "visits") + (c.noShowCount > 0 ? ", " + countLabel(c.noShowCount, "no-show", "no-shows") : "") + (wlCount > 0 ? ", " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}
@@ -180,6 +192,19 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           style={mkBtn({ display: "flex", gap: 4, flexShrink: 0, alignItems: "center", padding: "6px 8px", minHeight: H.compact, background: "var(--bg-card)", border: "1px solid var(--border-soft)", borderRadius: R.card })}>{c.visits > 0 ? <OutlineChip tone="success">{countLabel(c.visits, "visit", "visits")}</OutlineChip> : null}{c.noShowCount > 0 ? <OutlineChip tone="warn">{countLabel(c.noShowCount, "no-show", "no-shows") + " (" + Math.round((c.noShowCount / c.bookings.length) * 100) + "%)"}</OutlineChip> : null}{wlCount > 0 ? <OutlineChip tone="neutral"><WaitIcon size={IC.inline} />{wlCount}</OutlineChip> : null}<span style={{ display: "flex", color: S.muted }}>{open ? <ChevronDownIcon size={IC.control} /> : <ChevronRightIcon size={IC.control} />}</span></button></div>
         <Reveal show={open}>
           <div style={{ padding: "0 12px 12px" }}>
+            {/* v18.5.0: this guest's tags, first: with a regular's thirty bookings
+                under them they would be a screen away. Not a `Fld`: the label
+                names a group of buttons, and the group says whose. */}
+            {guestChoices.length ? (
+              <div role="group" aria-label={"Guest tags for " + (c.name || "this customer")} style={{ margin: "4px 0 10px" }}>
+                <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, marginBottom: 6 }}>Guest tags</div>
+                <TagChips
+                  tags={guestChoices}
+                  on={tagIds}
+                  disabled={!canEditGuestTags || !onSetCustomerTag}
+                  onToggle={function (id) { onSetCustomerTag(c.key, (tagIds.indexOf(id) >= 0 ? "-" : "+") + id); }} />
+              </div>
+            ) : null}
             <div style={{ fontSize: T.body, fontWeight: FW.medium, color: S.muted, margin: "4px 0 6px" }}>{countLabel(c.bookings.length, "booking", "bookings") + (wlCount ? " · " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}</div>
             {historyRows}
             {/* v18.2.0 phase 62: the app's one destructive look, and the armed
@@ -198,7 +223,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
                   else setArmedKey(c.key);
                 }}><TrashIcon size={IC.control} />{armed ? "Confirm — delete" : "Delete customer & all data"}</button>
             </div>
-            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</div> : null}
+            {armed ? <div id={DELETE_WARN_ID} style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--danger-text)", marginTop: 8 }}>Permanently removes this customer's personal data (name, phone, notes, tags, history) — no backups. Their bookings remain anonymised as “Data removed” for statistics. Tap again to confirm.</div> : null}
           </div>
         </Reveal>
       </div>
