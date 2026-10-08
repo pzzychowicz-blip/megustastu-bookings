@@ -129,11 +129,18 @@ evidence for each.
   "Selected tables are not available at this time."
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
-  DEV). An edit parked by a forced rejection at 10:46:33Z on 2026-10-08 was on the server
-  76 s later, beside an automatic "2 bookings re-placed" line 2 ms apart. Three attempts
-  to repeat it stayed parked, and `retryParked` has one caller, the banner's button. A
-  press of Retry in the shared Browser pane cannot be ruled out. If it recurs: note
-  whether the tab was hidden and what the activity log holds for that second.
+  DEV; investigated again 2026-10-08). The stored booking carries the edit's history
+  stamp (10:46:33.804Z) and a write stamp of 10:47:49.550Z, so the same in-page change
+  was replayed, 28 s after that session's turn ended and with no tool call running.
+  `retryParked` has one caller, the banner's button, and no shortcut. One clean trial
+  (the rejection turned off from the page, no reload, 120 s, through real visibility
+  changes and two clicks by Patryk on the strip header): 0 `saveBookings` calls, 0
+  `retryParked` calls, the booking unchanged. Editing `usePersistence.js` made Vite
+  reload the page 4 times of 4, which destroys a parked write, so a trial that removes
+  the switch by a file edit proves nothing unless the page is shown to have survived.
+  Patryk does click in the shared pane during a check and does not recall pressing Retry.
+  If it recurs: log clicks in the page (capture phase, `isTrusted`, the target's text),
+  trace `retryParked`, and keep Vite's log line for the edit.
 
 - **The printed timeline's key can name a flag no block shows** (v18.4.6 `/code-review`).
   It lists the flags of every block it drew, and a block narrower than its time, size
