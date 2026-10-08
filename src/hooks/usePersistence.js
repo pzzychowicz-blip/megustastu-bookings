@@ -304,7 +304,16 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // callers (not loaded, empty-array refusal, blocks rejected) unchanged.
       else parkedRef.current=parkedRef.current.concat([item]);
     });
-    if(refusals.length) setWriteWarning(refusals.filter(function(m,i){return refusals.indexOf(m)===i;}).join(" "));
+    // Added to a warning already showing, not over it (/code-review): the
+    // slot is one string, and a block edit's "please redo the change" would
+    // have gone undismissed the moment this spoke.
+    if(refusals.length){
+      const said=refusals.filter(function(m,i){return refusals.indexOf(m)===i;});
+      setWriteWarning(function(was){
+        const fresh=said.filter(function(m){return !was||was.indexOf(m)<0;});
+        return fresh.length?(was?was+" ":"")+fresh.join(" "):was;
+      });
+    }
     syncParked();
   }
   // Force-pull the server's current bookings + tableBlocks, replace local state,

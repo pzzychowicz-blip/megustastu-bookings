@@ -41,7 +41,8 @@ describe("a queued bookings write keeps its report", () => {
   });
   it("the drain asks replayOutcome on the mirror, and shows what it refuses", () => {
     expect(DRAIN).toContain("replayOutcome(item,bookingsRef.current)");
-    expect(DRAIN).toMatch(/if\(refusals\.length\) setWriteWarning\(/);
+    // Added to a warning already on screen, never over it: the slot is one string.
+    expect(DRAIN).toMatch(/if\(refusals\.length\)\{[\s\S]*setWriteWarning\(function\(was\)\{[\s\S]*return fresh\.length\?\(was\?was\+" ":""\)\+fresh\.join\(" "\):was;/);
   });
 });
 
