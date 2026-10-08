@@ -33509,3 +33509,34 @@ password), `127.0.0.1` (the rules emulator, no key), per-deployment URLs.
 
 **Not done:** the step itself, which is Patryk's in Google Cloud. The PROD list is
 proposed in §4 and not applied.
+
+### The root CLAUDE.md, trimmed and counted
+
+**Files:** `CLAUDE.md` · `src/CLAUDE.md` · `api/CLAUDE.md` · `tests/doc-size.test.js`
+(new, 2) · `ROADMAP.md`. Docs and one test.
+
+The root file is loaded into every session. It was 43,967 characters (40,162 on
+2026-09-23, when the roadmap last measured it), over the 40,000 at which Claude Code
+warns, and nothing counted it. Patryk was shown the four passages before and after
+and chose them (AskUserQuestion, 2026-10-09).
+
+| Passage | Before | After | Moved, word for word, to |
+|---|---|---|---|
+| The app's name and the restaurant's (Project) | 2,125 | 591 | `src/CLAUDE.md` |
+| Post-sync reconciliation (write guards) | 1,207 | 537 | `src/CLAUDE.md` |
+| Gotcha: a new per-booking field | 2,867 | 661 | `src/CLAUDE.md`, Gotchas |
+| Gotcha: a timestamp from a remote party | 1,082 | 321 | `api/CLAUDE.md` |
+
+Root is 38,945 characters: the four moves take it to 38,796 and the footer's new
+sentence naming the guard adds 149. The script that applied it checked that each
+passage is present, unchanged, in its destination. What root keeps of each is the
+rule and a pointer.
+
+**The guard.** `tests/doc-size.test.js` fails the root file above 40,000 characters,
+and says what to do: move a passage to the CLAUDE.md beside the code it is about, do
+not shorten sentences. Its second case holds the footer sentence that names it, so
+the next person to edit the file reads the limit there.
+
+**Not done.** The other two loose ends of the 2026-09-18 doc-load split (root
+restating what it relocated; the guard mechanics' home) are still open in the
+roadmap. The room left is 1,055 characters.
