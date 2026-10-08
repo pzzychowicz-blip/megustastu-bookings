@@ -113,9 +113,12 @@ describe("the hook tells it wherever a write is dropped", () => {
   });
   it("a write held or rejected with no place in the queue: each of the three doors queues it or says so", () => {
     expect(SAVE).toContain("function dropped(){tellDiscarded(report,LANDED,DISCARDED);}");
-    const queued = SAVE.match(/pendingRetriesRef\.current\.push\((?:item|\{fn:next,[^}]*\})\);[^;]*?(else dropped\(\);)?/g) || [];
-    expect(queued.length).toBe(3);
-    // The stale gate's branch is a block, so its `else` follows the brace.
+    // Each door, with its own `else` on the line after its push. The stale
+    // gate's push sits in a block (the optimistic show follows it), so its
+    // `else` follows the block's last statement; the other two are one-liners.
+    expect(SAVE).toMatch(/pendingRetriesRef\.current\.push\(item\);[\s\S]*?setBookings\(computedHeld\);\s*\}\s*else dropped\(\);\s*markStale\(\);\s*return false;/);
+    const oneLiners = SAVE.match(/if\(typeof next==="function"&&!isSilent\) pendingRetriesRef\.current\.push\(\{fn:next,[^}]*\}\);\s*else dropped\(\);\s*markStale\(\);/g) || [];
+    expect(oneLiners.length, "the legacy-shape hold and the rejection").toBe(2);
     expect((SAVE.match(/else dropped\(\);/g) || []).length).toBe(3);
   });
   it("and the two outright refusals (not loaded, the empty array)", () => {
