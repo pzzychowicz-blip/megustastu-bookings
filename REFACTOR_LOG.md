@@ -33419,8 +33419,10 @@ with no mark, as `manual` is.
 **Settings → Customers.** A row shows the customer's tags under the phone. Opened, it
 leads with the chips; a tap is one write (`customerTagTap`), on the booking that
 already holds the customer's newest statement, or their most recent one. The chips
-were under the bookings at first: with a regular's 23 bookings they were a screen
-down, seen on DEV, and moved above. Behind `bookingEdit`, the capability the form's
+were under the bookings at first: on DEV, under a customer's 10 bookings, they were
+the last thing in the opened row, so they moved above. Looked at again after the
+move (light theme): the chips start 20px under the row, "10 bookings" 10px under
+the chips, VIP still pressed. Behind `bookingEdit`, the capability the form's
 Save asks for, because a guest's tags are on their bookings.
 
 **The seat note** opens for a tagged party with no note too, and shows the tags above

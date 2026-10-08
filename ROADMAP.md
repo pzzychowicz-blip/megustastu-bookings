@@ -103,8 +103,11 @@ evidence for each.
 - **The public repository (#12): restrict the browser API keys by HTTP referrer**
   (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The
   step is Patryk's, in Google Cloud → APIs & Services → Credentials; a wrong list locks
-  every device out of sign-in until it is corrected. Still owed: the exact referrer list
-  for each key. See SECURITY.md §4.
+  every device out of sign-in until it is corrected. SECURITY.md §4 has the DEV key's
+  four entries, how to check them (a fresh sign-in, then an hour), and how to undo it
+  (2026-10-09). Still owed: Patryk applying the DEV list; then, a week later, the PROD
+  list, which is proposed there and must be confirmed against the Vercel project's
+  domains first.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract

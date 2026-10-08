@@ -187,8 +187,51 @@ Keep that in mind when writing either.
   `apiKey`s (`src/firebase.js` for DEV, `src/tenants/mgt.js` for PROD) are public by
   design, since they ship in every browser bundle. Access is controlled by §2, not by
   the key.
-- **Optional hardening:** restrict each browser key by HTTP referrer in the Google
-  Cloud console (APIs & Services → Credentials), trying it on DEV first.
+- **Hardening, decided 2026-10-08: restrict each browser key by HTTP referrer**, the
+  DEV key first and PROD after a week on DEV shows nothing. The step is Patryk's
+  (Google Cloud console → the project → APIs & Services → Credentials → the key named
+  "Browser key (auto created by Firebase)" → Application restrictions → Websites).
+  What the restriction can and cannot do: it stops the key being used from a page on
+  another origin. It is not access control (§2 is), and a request made outside a
+  browser can send any `Referer` it likes.
+
+  **What carries the key.** Sign-in (`identitytoolkit.googleapis.com`) and the hourly
+  token refresh (`securetoken.googleapis.com`). So a wrong list refuses a new sign-in
+  at once, and a device already signed in can keep working until its token is next
+  refreshed, up to an hour later. A check that only looks at a signed-in device in the
+  first minutes proves nothing.
+
+  **The DEV key's list** (project `megustastu-bookings-dev`; worked out 2026-10-09 from
+  what runs against DEV: every `npm run dev`, the tablet's DEV tab over `adb reverse`,
+  the simulator's web clips, and the sandbox deployment). Four entries. Google's rule
+  is two per host, the bare host and the host with `/*`, and an entry with no port
+  matches every port, so one pair covers 5173, 5176, 5179 and the rest:
+
+  ```
+  localhost
+  localhost/*
+  megustastu-bookings-wa-sandbox.vercel.app
+  megustastu-bookings-wa-sandbox.vercel.app/*
+  ```
+
+  Not listed, on purpose: `megustastu-bookings-dev.firebaseapp.com` (the page Firebase
+  uses for pop-up and redirect sign-in; the app signs in with email and password
+  only, `LoginScreen.jsx`), `127.0.0.1` (only the rules emulator uses it, with no
+  key), and the sandbox project's per-deployment URLs (a sign-in from one of those is
+  refused, which is the intent). Google's page documents the port rule and the two
+  entries per host; it does not mention `localhost` as a website entry at all, which
+  is one more reason DEV goes first.
+
+  **Checking it** (the order matters): save, wait five minutes, then SIGN OUT and sign
+  in again at `localhost:5173` and at the sandbox address. Then leave one of them open
+  for over an hour and confirm it still saves. If either fails, set Application
+  restrictions back to "None": that undoes it.
+
+  **The PROD key's list, proposed, not yet applied** (project `megustastu-bookings`):
+  `megustastu-bookings.vercel.app` and `megustastu-bookings.vercel.app/*`. That leaves
+  out Vercel's preview addresses, which build against PROD (the stray-preview incident
+  behind the never-push rule): a preview could then load and not sign in. Confirm the
+  list against the Vercel project's domains before applying it.
 - **Keep personal data out of it:** no backup files, exports or screenshots with real
   guests. That includes GitHub Actions artifacts and logs, which are public on a public
   repository.
