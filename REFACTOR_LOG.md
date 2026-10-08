@@ -32693,3 +32693,45 @@ pass a function of the stored list.
 **Gate at the push:** build 128.51 kB gz (128.23 on v18.4.7) · 2777 tests (2758) · lint 63
 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff, so the
 rules suite was not run and there is no PROD rules step.
+
+---
+
+## v18.4.9 — the "Couldn't save" banner names the booking the change was about
+
+**Date:** 2026-10-08 · **Branch:** `fix/v18.4.9-parked-banner-names-the-change` ·
+**Behavioural change:** yes, in one line of text: which booking a parked write is named
+after. No rules change, so no console step.
+
+**Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` · `src/App.jsx` ·
+`tests/write-path.test.js` (4 new) · `tests/retry-report.test.js` (2 new, 2 pinned
+strings) · `tests/save-path.test.js` (2 new) · `src/CLAUDE.md` · `src/lib/CLAUDE.md` ·
+`GLOSSARY.md` · `ROADMAP.md` (the entry removed)
+
+**The fault** (ROADMAP, seen on DEV in v18.4.6 and again in v18.4.8). `describeWrite`
+named the first changed booking in list order and counted the rest. A save that
+reshuffles its day changes other bookings too, and a new booking is last in the list, so
+a parked new booking "WL48 Discard, 18:00" read "v1834 weekly, 19:00 and 2 others". An
+edit or a status change that moves an earlier booking is named wrongly the same way (from
+the code; the old text was not captured for that case).
+
+**The fix.** Patryk's call (AskUserQuestion): name the booking acted on, over "new
+bookings only". A write's report carries `subject`, the id of the booking the action was
+about, and `describeWrite(prev, computed, subject)` leads with it when the write changes
+it. With no subject it leads with a created booking (the walk-in passes no report), and
+otherwise with the first changed one, as before. `goneReport(id)` sets it for the seven
+writers that use it; the form's edit and the new booking pass theirs. The hook hands
+`report.subject` to `describeWrite` at all three doors into the queue. The name is still
+the booking as it appears on screen (`prev`), and the count is unchanged.
+
+**`tests/save-path.test.js`: no snapshot changed.** The harness names a report by its
+callbacks now (`subject` is a plain id), and the subject is asserted by its own two tests.
+
+**Measured on DEV (1 trial each), the bookings `update()` forced to reject by the
+temporary switch of v18.4.8, not committed:**
+
+| Action | Banner |
+|---|---|
+| A waiting party booked at 18:00 (its save moved one other booking) | "WL48 B, 18:00 and 1 other — not saved, and undone." |
+| An edit moving "WL48 A" from 18:00 to 19:00 (two others moved) | "WL48 A, 18:00 and 2 others — not saved, and undone." |
+
+**Gate:** build 128.58 kB gz (main chunk, 128.51 on v18.4.8) · 2785 tests passed (2777) · lint 63 problems, 0 errors · `check:style` OK.

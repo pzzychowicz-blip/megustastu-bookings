@@ -137,11 +137,6 @@ evidence for each.
   linked to it. Read from the code, not reproduced. `openNewWith` clears the waitlist's
   pending entry for the same reason (v18.3.5); the draft source needs the same.
 
-- **The parked-write banner can name the wrong booking for a create** (seen on DEV in
-  v18.4.6). `describeWrite` names the first CHANGED id, and a new booking that reshuffles
-  its day changes others first: a parked "RQ46 Reject, 18:00" read "v1834 weekly, 19:00
-  and 2 others". The create should be named.
-
 - **Port v18.3.0's shared conventions to MGT Scheduling.** Once v18.3.0 has run on the
   restaurant devices, port what it shipped that Scheduling shares the shape of (grepped at
   Scheduling's `014a461`): `Overlay`'s keyboard inset (N1, with v18.3.5's formula), `color-scheme` (N4), the

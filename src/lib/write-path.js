@@ -165,16 +165,30 @@ export function changedIds(prev, computed) {
 // A write can touch many bookings (an optimiser reshuffle moves several), so
 // the first is named and the rest counted — listing five in a banner is a list
 // nobody reads.
-export function describeWrite(prev, computed) {
+//
+// **v18.4.9: WHICH one is named.** It was the first changed id in list order,
+// and a save that reshuffles its day changes others first: a parked new
+// booking "RQ46 Reject, 18:00" read "v1834 weekly, 19:00 and 2 others" (DEV,
+// v18.4.6, and again in v18.4.8). The lead is now, in order: `subject`, the
+// booking the action was ABOUT (the write's `report.subject`, which every
+// single-booking writer passes), when the write changes it; else a CREATED
+// booking, for a writer that names none (the walk-in); else the first changed.
+export function describeWrite(prev, computed, subject) {
   const d = diffChanged(prev, computed);
   if (!d.ids.length) return null;
   const ids = d.ids;
+  let lead = ids[0];
+  if (subject != null && ids.some(function (id) { return String(id) === String(subject); })) lead = subject;
+  else {
+    const created = ids.find(function (id) { return !d.prevById[id] && d.byId[id]; });
+    if (created != null) lead = created;
+  }
   // `prevById` first, `byId` only as the fallback — a create is the one case
   // with no previous version.
-  const b = d.prevById[ids[0]] || d.byId[ids[0]];
+  const b = d.prevById[lead] || d.byId[lead];
   // The id is a poor name and a real fallback: `sanitize` guarantees a string
   // `name`, not a non-empty one, and a nameless booking must still be pointed at.
-  const first = (b && [b.name, b.time].filter(Boolean).join(", ")) || String(ids[0]);
+  const first = (b && [b.name, b.time].filter(Boolean).join(", ")) || String(lead);
   if (ids.length === 1) return first;
   return first + " and " + (ids.length - 1) + " other" + (ids.length > 2 ? "s" : "");
 }

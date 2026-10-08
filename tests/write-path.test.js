@@ -365,6 +365,34 @@ describe("describeWrite — what the parked banner calls the change", () => {
     const three = two.map((b) => Object.assign({}, b, { size: 4 }));
     expect(describeWrite(prev, three)).toBe("A, 13:00 and 2 others");
   });
+  // v18.4.9: WHICH booking is named. It was the first changed id in list
+  // order, and a save that reshuffles its day changes others first: on DEV a
+  // parked new booking "RQ46 Reject, 18:00" read "v1834 weekly, 19:00 and 2
+  // others".
+  it("names the booking the action was about, wherever it sits in the list", () => {
+    const prev = [bk({ id: "a", name: "A" }), bk({ id: "b", name: "B" }), bk({ id: "c", name: "C", time: "21:00" })];
+    // An edit of `c` that also moved `a` and `b`.
+    const next = prev.map((b) => Object.assign({}, b, b.id === "c" ? { notes: "x" } : { tables: ["7"] }));
+    expect(describeWrite(prev, next)).toBe("A, 13:00 and 2 others");
+    expect(describeWrite(prev, next, "c")).toBe("C, 21:00 and 2 others");
+  });
+  it("names a new booking ahead of the ones its save moved, with or without a subject", () => {
+    const prev = [bk({ id: "a", name: "A" }), bk({ id: "b", name: "B" })];
+    const next = prev.map((b) => Object.assign({}, b, { tables: ["7"] })).concat([bk({ id: "n", name: "New", time: "18:00" })]);
+    expect(describeWrite(prev, next, "n")).toBe("New, 18:00 and 2 others");
+    expect(describeWrite(prev, next)).toBe("New, 18:00 and 2 others");
+  });
+  it("ignores a subject the write does not change", () => {
+    const prev = [bk({ id: "a", name: "A" }), bk({ id: "b", name: "B" })];
+    const next = [bk({ id: "a", name: "A", size: 4 }), bk({ id: "b", name: "B" })];
+    expect(describeWrite(prev, next, "b")).toBe("A, 13:00");
+    expect(describeWrite(prev, next, "nobody")).toBe("A, 13:00");
+  });
+  it("names the subject as it still appears, and a deleted subject as it was", () => {
+    const prev = [bk({ id: "a", name: "A" }), bk({ id: "c", name: "C", time: "21:00" })];
+    expect(describeWrite(prev, [bk({ id: "a", name: "A", size: 4 }), bk({ id: "c", name: "Renamed", time: "22:00" })], "c")).toBe("C, 21:00 and 1 other");
+    expect(describeWrite(prev, [bk({ id: "a", name: "A", size: 4 })], "c")).toBe("C, 21:00 and 1 other");
+  });
   it("falls back to the id when a booking has neither name nor time", () => {
     // sanitize guarantees a string name, not a non-empty one. A nameless
     // booking must still be pointed at.

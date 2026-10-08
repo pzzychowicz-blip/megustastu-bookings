@@ -419,7 +419,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.4.8"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.4.9"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2665,7 +2665,7 @@ function BookingApp({uid}){
     // for a not-yet-persisted write — matches quick-action honesty).
     // v18.4.6: and if a replay finds the booking deleted on another device,
     // the banner says so (`plan.replayRefusal`); the form is closed by then.
-    const ok=saveBookings(plan.next,false,{replayRefusal:plan.replayRefusal});
+    const ok=saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal});
     // WhatsApp sandbox: if this edit came from a modify request's "Apply
     // changes", auto-mark that request handled — but only on a real save.
     wa.completeModifyApply(editId, ok);
@@ -2697,7 +2697,7 @@ function BookingApp({uid}){
   // another device, the "Couldn't save" banner names it (`goneRefusal`).
   // Without it the replay wrote nothing and said nothing. Not for a delete,
   // which that leaves done, or an undo, which puts a booking back.
-  function goneReport(id){return {replayRefusal:goneRefusal(id,bookings)};}
+  function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}
   function doSaveNew(f0){
     const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
@@ -2726,6 +2726,8 @@ function BookingApp({uid}){
     // conversation as it was, its draft still to accept.
     const waSource=wa.takeDraftSource();
     const ok=saveBookings(plan.next,false,{
+      // v18.4.9: the booking a parked write is named after (`describeWrite`).
+      subject:plan.id,
       onLanded:function(){
         if(plan.rule) addRule(plan.rule);
         if(wlId){removeFromWaitlist(wlId);releaseWaitlistEntry(wlId);}

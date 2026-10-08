@@ -420,6 +420,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
   //                       discarded booking left the rule booking every week)
   //   replayRefusal(prev) asked before each REPLAY, on the fresh list: a
   //                       sentence drops the write and shows it, null replays
+  //   subject             v18.4.9: the id of the booking the action was ABOUT,
+  //                       which the parked banner names (`describeWrite`)
   //   onDiscarded()       v18.4.8: once, when the write will NEVER land: it was
   //                       refused outright, held or rejected without a place
   //                       in the queue (value form, silent), refused on a
@@ -475,7 +477,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // and removing a working defence is not this commit's job.
         const prevHeld=bookingsRef.current;
         const computedHeld=next(prevHeld);
-        const item={fn:next,tries:tryN,label:carriedLabel||describeWrite(prevHeld,computedHeld),report:report};
+        const item={fn:next,tries:tryN,label:carriedLabel||describeWrite(prevHeld,computedHeld,report&&report.subject),report:report};
         pendingRetriesRef.current.push(item);
         // v15.6.0: optimistic show. Apply the user's change to LOCAL state NOW so it's
         // visible immediately — previously a held write stayed invisible until resync
@@ -511,7 +513,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // keyed shape lands (arrayShapeRef clears) the queued retry succeeds.
       if(arrayShapeRef.current){
         console.warn("[SAFE] bookings write held — legacy array shape, migration to per-booking nodes pending.");
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed,report&&report.subject),report:report});
         else dropped();
         markStale();
         dispatched=false;return;
@@ -563,7 +565,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // parked banner, and the booking drawn from local state with nothing
         // on the server. Cleared only if it is still this patch's.
         if(lastPatchSigRef.current.sig===sig) lastPatchSigRef.current={sig:"",at:0};
-        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed),report:report});
+        if(typeof next==="function"&&!isSilent) pendingRetriesRef.current.push({fn:next,tries:tryN,label:carriedLabel||describeWrite(prev,computed,report&&report.subject),report:report});
         else dropped();
         markStale();
       });
