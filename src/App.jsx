@@ -1380,6 +1380,8 @@ function BookingApp({uid}){
   const wa = useWhatsApp({
     enabled: whatsappOn,
     bookings, setWriteWarning, waSettings,
+    // v18.4.9: the hook drops an accepted draft's source when the form closes.
+    formOpen: showForm,
     openNew: openNewWith, openEdit, setViewDate, setConfirmCancel,
     setShowInbox, setConfirmArchive, setConfirmDeleteConv, setReturnToInboxKey,
   });

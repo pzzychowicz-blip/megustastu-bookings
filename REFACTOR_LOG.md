@@ -32702,6 +32702,8 @@ rules suite was not run and there is no PROD rules step.
 **Behavioural change:** yes, in one line of text: which booking a parked write is named
 after. No rules change, so no console step.
 
+### Commit 1 — the banner's name
+
 **Files:** `src/lib/write-path.js` · `src/hooks/usePersistence.js` · `src/App.jsx` ·
 `tests/write-path.test.js` (4 new) · `tests/retry-report.test.js` (2 new, 2 pinned
 strings) · `tests/save-path.test.js` (2 new) · `src/CLAUDE.md` · `src/lib/CLAUDE.md` ·
@@ -32735,3 +32737,28 @@ temporary switch of v18.4.8, not committed:**
 | An edit moving "WL48 A" from 18:00 to 19:00 (two others moved) | "WL48 A, 18:00 and 2 others — not saved, and undone." |
 
 **Gate:** build 128.58 kB gz (main chunk, 128.51 on v18.4.8) · 2785 tests passed (2777) · lint 63 problems, 0 errors · `check:style` OK.
+
+### Commit 2 — an accepted WhatsApp draft's source lasts as long as its form
+
+**Files:** `src/hooks/useWhatsApp.js` · `src/App.jsx` · `tests/wa-draft-source.test.js`
+(new, 5) · `src/hooks/CLAUDE.md` · `ROADMAP.md` (the entry removed)
+
+Added to this version at Patryk's choice (AskUserQuestion), from v18.4.8's review.
+`handleAcceptDraft` sets `draftSourceRef` and only a saved new booking cleared it.
+
+**Reproduced on DEV before the edit:** Accept on a conversation with a pending draft
+(+34641565745), Back out of the form, close the inbox, + New, a booking for somebody
+else, Save. The abandoned conversation read `accepted`, linked to the unrelated booking.
+
+**The fix.** The hook takes `formOpen` (App's `showForm`) and an effect clears the ref
+when the form closes. A save takes the source in its handler, before it closes the form,
+so the two cannot race. **Tried first and withdrawn:** clearing it in App's `openForm`,
+the form's one door. `openForm` is declared above `wa`, and reading `wa` there made the
+React Compiler skip `BookingApp`: lint went to 65 problems, 2 errors.
+
+**Measured on DEV after it (1 trial each):** the same steps on +447700900321 left the
+conversation `parsed` and unlinked, with the unrelated booking stored. Then Accept on it
+and Save: `accepted`, linked to the new booking's id. (The second does not separate the
+source from the link by phone number, which marks a pending draft accepted too.)
+
+**Gate:** build 128.62 kB gz (main chunk) · 2790 tests passed · lint 63 problems, 0 errors · `check:style` OK.
