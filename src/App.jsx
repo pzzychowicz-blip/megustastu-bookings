@@ -2692,13 +2692,17 @@ function BookingApp({uid}){
     const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
     if(plan.refusal){setError(plan.refusal.message);return;}
-    // v18.3.3: the standing rule, now that nothing above can refuse the save.
-    // Before the booking write, as it always was: the generator effect runs
-    // on the commit both land in, and finds the first occurrence stamped.
-    if(plan.rule) addRule(plan.rule);
     // v15.7.0: dispatch the function form (see the edit path). Held → optimistic
     // show + auto-retry; flash only on a real save.
-    const ok=saveBookings(plan.next);
+    // v18.4.6: the standing rule is written when the booking LANDS (the
+    // write's `onLanded`), not beside it. It was written first, straight to
+    // the server, while the booking could still be held by the freshness
+    // gate: a booking then discarded from the banner, or lost with the tab,
+    // left a rule that went on booking every later week (measured on DEV:
+    // the rule and the next two weeks, and no first visit). Nothing needs the
+    // rule sooner: the generator starts the weeks AFTER `startDate` (v18.3.3),
+    // and the first visit is this booking, already stamped with the rule's id.
+    const ok=saveBookings(plan.next,false,plan.rule?{onLanded:function(){addRule(plan.rule);}}:undefined);
     // WhatsApp sandbox: if this save came from accepting a draft, flip the
     // source conversation to "accepted" + link the new booking id (no-op
     // otherwise — draftSourceRef is only set by handleAcceptDraft).

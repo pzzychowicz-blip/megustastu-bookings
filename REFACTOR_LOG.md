@@ -32249,3 +32249,30 @@ The signature is cleared in the `.catch`, only if it is still that patch's. With
 
 **Gate:** build 127.70 kB gz · 2721 tests · lint 63 problems, 0 errors · `check:style` OK.
 
+
+### Commit 3 — "Repeat weekly" writes its rule when the booking lands
+
+**Files:** `src/App.jsx` (`doSaveNew`) · `src/lib/booking-save.js` (a comment) ·
+`tests/save-path.test.js` (2 new, 1 renamed) · `tests/recurring.test.js`
+
+`doSaveNew` called `addRule(plan.rule)` and then `saveBookings`. The rule write has no
+freshness gate and went straight to the server; the booking could still be held. It is now
+the booking write's `onLanded`. Patryk chose this over "write first, remove on discard",
+which would still leave the rule when the tab closes on a held booking.
+
+- Nothing needs the rule sooner. The generator starts the weeks AFTER `startDate`
+  (v18.3.3), and the first visit is the form's own booking, stamped with the rule's id at
+  build time as before.
+- Offline, the rule waits for the reconnect with its booking.
+- The save-path harness lands a dispatched write when the run is read, after everything
+  the handler did; a held one (`dispatchOk: false`) never lands.
+
+**On DEV, the same three runs as the reproduction:**
+
+| Run | Before | After |
+|---|---|---|
+| Normal save | rule, first visit, two more weeks | the same |
+| Held, page reloaded 120ms later | rule and two weeks, no first visit | nothing: no rule, no booking |
+| Held, then a change from elsewhere drains the queue | (not run) | no rule at 150ms; rule, first visit and two weeks 300ms after the drain |
+
+**Gate:** build 127.72 kB gz · 2723 tests · lint 63 problems, 0 errors · `check:style` OK.

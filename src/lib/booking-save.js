@@ -543,8 +543,9 @@ export function applyEdit(input){
 //   fin    `next(list)`
 //   id     the new booking's id, minted once, so a replay cannot add it twice
 //   rule   the standing rule "Repeat weekly" creates, or null. App writes it
-//          after the refusals and before the booking (v18.3.3): a refused save
-//          leaves no rule behind
+//          once the booking has LANDED (v18.4.6, `saveBookings`' `onLanded`):
+//          a refused save leaves no rule behind (v18.3.3), and neither does a
+//          booking that was held and never reached the server
 //   flash  `{ kind, note }` for the save toast
 export function buildBooking(input){
   const f=input.draft,bookings=input.list;
