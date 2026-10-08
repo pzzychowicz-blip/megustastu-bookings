@@ -32997,12 +32997,13 @@ from ROADMAP.
 
 ---
 
-## v18.5.0 — status changes out of BookingApp · the day's deposits
+## v18.5.0 — status changes out of BookingApp · the day's deposits · guest tags
 
 **Date:** 2026-10-08 · **Branch:** `feat/v18.5.0-deposits-line-guest-tags` ·
 **Behavioural change:** a deposits line in the Summary's opened panel and on the
-printed day sheet (section 2). None in section 1. The header is extended as the
-version's other items land.
+printed day sheet (section 2); a "Tags" section in Settings → Customers (section 3).
+None in section 1. The header is extended as the version's other items land.
+**Rules change: yes** — `settings/tags` + `tagsRev` (section 3 has the PROD step).
 
 One version with a section per item (Patryk, 2026-10-08): #17's next extraction first,
 then the deposits line and guest tags, then the documentation items he chose to bundle.
@@ -33172,4 +33173,90 @@ uses the panel's existing text tokens). A currency other than €, beyond the un
 
 **Gate.** Build: main bundle 129.42 kB gz (129.23 after section 1). Tests: 2,860
 (2,843 before the new file's 17). Lint: 63 problems, 0 errors. `check:style`: OK.
+
+### Guest tags, part 1: the list (`settings/tags`)
+
+**Files:** `src/lib/tags.js` (new) · `src/hooks/useTagSettings.js` (new) ·
+`src/components/TagListEditor.jsx` (new) · `src/components/CustomersSettings.jsx` ·
+`src/components/Settings.jsx` · `src/App.jsx` · `src/lib/activity.js` ·
+`database.rules.json` (+2 lines) · `tests/tags.test.js` (new, 33) ·
+`tests/rules/database-rules.test.js` (+1 row) · `database.rules.README.md` ·
+`CLAUDE.md` · `src/CLAUDE.md` · `tests/CLAUDE.md` · `src/hooks/CLAUDE.md` ·
+`src/lib/CLAUDE.md` · `src/components/CLAUDE.md` · `GLOSSARY.md`
+
+**Scope** (Patryk, 2026-10-08, by AskUserQuestion): a FIXED list edited in Settings;
+guest tags live on the customer and are erased with them, occasion tags on the one
+booking; the seed "a fuller list" (Guest: Allergy, Vegetarian, Vegan, Gluten-free,
+VIP. Occasion: Birthday, Anniversary); the editor a collapsible section in the
+Customers tab, behind `settingsWrite`. This part is the list. The fields on a booking
+and the screens that show them are parts 2 and 3.
+
+**The model.** `settings/tags` = `{ v, guest: [{id, label}…], occasion: [{id, label}…] }`
+on the `tagsRev` rev pair, the tenth settings node and the seventeenth rev pair.
+- **A booking will store ids, never labels.** A rename reaches every booking and
+  writes to none. An id is minted once (`tagIdFor(kind, genId())`) and never reused:
+  a removed name added again is a new tag, and the bookings that carried the old one
+  do not come back tagged.
+- **The seed's ids are fixed strings** (`g-allergy`, `o-birthday`…), so two devices
+  that have never seen a stored list agree, and a booking can carry a seed tag before
+  the list has ever been saved.
+- **Absent is the seed, a missing list is empty.** RTDB drops an empty array, so a
+  stored `{v: 1}` is a restaurant that removed every tag (the v15.9.0 priorities
+  rule).
+- Ids are unique across BOTH kinds; names within one, whatever the capitals. A name
+  is one line of at most 24 characters; a kind holds at most 12.
+
+**The hook differs from its template in two places, both for one window.**
+`useVoucherDefaults` keeps its state when the snapshot is null. Here a refused write
+is rolled back by the SDK to the stored value, which for a node never saved IS null,
+so that guard would have left a tag on screen that no database holds, and a booking
+saved with its id would carry a tag nothing can name. `useTagSettings` sanitises
+every snapshot (null → the seed) and reports a refused write as a sentence
+(`tagError`). The window is real: it is PROD between this version's deploy and the
+rules being published, and it is DEV today.
+
+**The rules.** Two lines, `settings/voucherDefaults`' with the names swapped, written
+by a script that asserts each substitution and then compares the parsed predicates.
+Its first run refused to write: I had counted the name three times in the node's line
+and it occurs four times (its own key, and the sibling rev three times). The
+`settingsWrite` gate is now named by 12 rules (10 before). `database.rules.README.md`
+has the section and the deploy order.
+
+**The PROD step** (after the merge has deployed, either order is safe): Firebase
+console → the PROD project → Realtime Database → Rules → paste `database.rules.json` →
+Publish. Until then the seed list is used and editing the list is refused, with the
+sentence below. **DEV needs the same step**: the Firebase CLI here holds no login
+(`firebase login:list`: "No authorized accounts"), so DEV's rules were not updated in
+this session.
+
+**Measured.**
+- `npm run test:rules`: 298 pass (294 before: the rev sweep's two cases for the new
+  pair, derived from the rules file, and the two own-capability cases added by name).
+  Sabotages, each restored: both lines naming `hoursEdit`, 2 of 298 fail (the
+  own-capability pair); the node's line without its rev check, 2 fail ("rejects a
+  write that does not bump its rev", and the bare-remove sweep).
+- On DEV, whose rules do not have the node (1 trial): "Nut allergy" typed and Add
+  pressed. A MutationObserver saw 7 name boxes 41ms after the click, 6 at 98ms and
+  the sentence "The tag list was not saved: the database refused the change
+  (permission denied)." at 101ms. The console logged the `[SAFE] settings/tags write
+  REJECTED — PERMISSION_DENIED` line. The typed name is not kept in the add box.
+- The editor at 820px: nine 230×44 name boxes, each remove named for its tag. "VIP"
+  renamed to "vegan" and blurred: `aria-invalid`, "There is already a tag called
+  “vegan”.", the box kept "vegan"; Close then raised "Discard unsaved changes?",
+  and with the name put back Close closed. Remove on Anniversary: the × at
+  (290, 649.5), 32×32; "Confirm — remove" at (290, 649.5), 152.1×32, the sentence
+  under the row.
+
+**Not verified.** A SUCCESSFUL save of the list in the running app: it needs the
+rule on DEV. What stands in for it is the emulator suite (the rule accepts an admin's
+and a `settingsWrite` holder's write at rev+1) and the hook reading
+`writeWithRev("settings/tags", …)`, the call the other nine settings nodes make. The
+activity-log line ("changed the tag list · guest"). A second device. The read-only
+view for an account without `settingsWrite`. The blur was a dispatched `focusout`,
+since `.blur()` in the hidden pane fired no React handler.
+
+**Gate.** Build: main bundle 130.71 kB gz (129.42 after section 2; the hook and
+`lib/tags.js` load with the app, the editor with the Settings chunk). Tests: 2,893
+(2,860 before the new file's 33). Lint: 63 problems, 0 errors. `check:style`: OK.
+Rules: 298.
 

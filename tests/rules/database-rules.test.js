@@ -1850,6 +1850,9 @@ describe("each gated path names its OWN capability", () => {
     { path: "recurring",               cap: "recurringManage", value: { v: 1, enabled: true } },
     { path: "settings/general",        cap: "settingsWrite",   value: { v: 1, restaurantName: "X" } },
     { path: "settings/optimizer",      cap: "settingsWrite",   value: { cutoff: 15 } },
+    // v18.5.0: the tag list. A copied rule is exactly the kind that keeps the
+    // gate it was copied with, so the new node is asked both halves by name.
+    { path: "settings/tags",           cap: "settingsWrite",   value: { v: 1, guest: [{ id: "g-vip", label: "VIP" }] } },
   ];
 
   for (const { path, cap, value } of PATHS) {

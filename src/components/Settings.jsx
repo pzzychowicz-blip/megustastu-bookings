@@ -1276,6 +1276,11 @@ export function SettingsContent({
   onIssueVoucher,
   onVoidVoucher,
   onSaveVoucherDefaults,
+  // v18.5.0: the tag list (settings/tags — useTagSettings)
+  tagList,
+  onSaveTagList,
+  tagError,
+  onClearTagError,
   reminders,
   onAddReminder,
   onEditReminder,
@@ -1374,7 +1379,10 @@ export function SettingsContent({
     content = <LayoutTabContent layout={layout} onSaveLayout={onSaveLayout} bookings={bookings} onDirty={reportDirty} />;
   } else if (cur === "customers") {
     // v16.0.0: customer management (phone-derived index; delete-all-data).
-    content = <CustomersTabContent key={customerSeek || ""} seekQuery={customerSeek || ""} bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2} />;
+    // v18.5.0: the tag list is edited here too, behind `settingsWrite` (the
+    // tab itself is open to every account; the list's rule is not).
+    content = <CustomersTabContent key={customerSeek || ""} seekQuery={customerSeek || ""} bookings={bookings} waitlist={waitlist} onDeleteCustomer={onDeleteCustomer} regularMinDefault={generalSettings ? generalSettings.regularMin : 2}
+      tagList={tagList} onSaveTagList={onSaveTagList} tagError={tagError} onClearTagError={onClearTagError} canEditTags={can("settingsWrite")} onDirty={reportDirty} />;
   } else if (cur === "vouchers") {
     // v18.0.0: gift vouchers — the records AND their configuration, because a
     // voucher setting is edited where vouchers are.

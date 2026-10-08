@@ -338,6 +338,9 @@ import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
 import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
+// v18.5.0: the tag list (settings/tags), the 10th settings node — the guest and
+// occasion tags a booking can carry. Its decisions are lib/tags.js.
+import { useTagSettings } from "./hooks/useTagSettings";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
@@ -1472,6 +1475,7 @@ function BookingApp({uid}){
     currency: generalSettings.currency,
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
+  const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
   // The Admin tab asks this on the way OFF, and only this file can answer it:
   // `lib/modules.js` knows what modules EXIST, not what they hold, and keeping
@@ -4920,6 +4924,10 @@ function BookingApp({uid}){
             onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}
             onVoidVoucher={function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}}
             onSaveVoucherDefaults={saveVoucherDefaults}
+            tagList={tagList}
+            onSaveTagList={function(l){return refused("settingsWrite")?false:saveTagList(l);}}
+            tagError={tagError}
+            onClearTagError={clearTagError}
             tab={settingsTab}
             setTab={setSettingsTab}
             can={can}

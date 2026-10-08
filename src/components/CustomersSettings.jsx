@@ -17,6 +17,8 @@
 //   waitlist              — waitlist entries (to show/delete alongside)
 //   onDeleteCustomer(key) — normalized-phone key; parent deletes bookings +
 //                           waitlist entries and reports the outcome
+//   tagList, onSaveTagList, tagError, onClearTagError, canEditTags, onDirty
+//                         — v18.5.0, handed straight to TagListEditor
 
 import { useState, useEffect, useMemo } from "react";
 import { S, BTN, R, T, FW, IC, H } from "../lib/constants";
@@ -25,6 +27,7 @@ import { Section, OutlineChip, Reveal, mkInp, mkBtn, mkDangerBtn, SBadge } from 
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel, countLabel } from "../lib/booking-logic";
 import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons";
+import { TagListEditor } from "./TagListEditor";
 
 // v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
 // by aria-describedby only while it is on screen. One row is armed at a time.
@@ -53,7 +56,7 @@ const GUESTS_COL = 58;
 // delete, both of which SHOULD be discarded when you jump to a different person.
 // The alternative, an effect that writes `query` when the prop changes, is a
 // synchronous setState in an effect — the lint rule this codebase keeps clean.
-export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "" }) {
+export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regularMinDefault = 2, seekQuery = "", tagList, onSaveTagList, tagError, onClearTagError, canEditTags = false, onDirty }) {
   const [query, setQuery] = useState(seekQuery || "");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
@@ -218,6 +221,11 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
 
   return (
     <div>
+      {/* v18.5.0 (Patryk): the tag list, above the customers it describes.
+          Collapsed by default, so the tab still opens on its list. */}
+      {tagList ? (
+        <TagListEditor tagList={tagList} onSave={onSaveTagList} tagError={tagError} onClearError={onClearTagError} canEdit={canEditTags} onDirty={onDirty} />
+      ) : null}
       <Section>
         {/* v16.3.0: insight totals */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>

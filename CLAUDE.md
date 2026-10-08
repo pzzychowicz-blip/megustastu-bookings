@@ -191,7 +191,7 @@ function saveBookings(next, isSilent) {
 
 1. **Loaded + non-empty** — the pattern above. No write before the first `onValue` returns, and no empty array over a database that had data.
 2. **Freshness / resync gate (v15.2.0)** — a heartbeat gap over `STALE_GAP_MS` (90s) means the event loop was frozen, so the write is refused **at write time, before any `setState`**, and the app force-pulls fresh data.
-3. **Server-side compare-and-swap (v16.0.0)** — every write proves it was based on the data it overwrites: `baseUpdatedAt` per child (`bookings`, `vouchers`, `roles`, `invites`), a `<name>Rev` +1 for the sixteen whole-node collections. **There is NO root `.write`** — permission cascades down and cannot be revoked lower, so every writable path carries its own grant and every rev CAS sits in `.write`, which is evaluated for a delete where `.validate` is not.
+3. **Server-side compare-and-swap (v16.0.0)** — every write proves it was based on the data it overwrites: `baseUpdatedAt` per child (`bookings`, `vouchers`, `roles`, `invites`), a `<name>Rev` +1 for the seventeen whole-node collections. **There is NO root `.write`** — permission cascades down and cannot be revoked lower, so every writable path carries its own grant and every rev CAS sits in `.write`, which is evaluated for a delete where `.validate` is not.
 4. **Save feedback + retry (v15.4.0 · v15.6.0 · v15.7.0 · v17.16.9)** — `saveBookings`/`saveBlocks` return a boolean and every handler gates its success UI on it, so a refused write is **never** shown as saved. Function-form, non-silent writes park and replay on fresh data; **value-form and silent writes never queue**, because replaying a precomputed array re-writes stale data. **A side effect that must not outlive a write that never lands goes in the write's `onLanded`** (v18.4.6, `saveBookings`' third argument), never beside the dispatch.
 5. **Per-booking storage + diff-write (v15.5.0)** — `bookings` is `/bookings/{id}`, written as a multi-path diff of changed children, so two devices editing different bookings merge. **The app makes no whole-node `bookings` write anywhere**, and a save computes from the `bookingsRef` mirror, never inside a `setState` updater (Gotchas).
 
@@ -206,7 +206,7 @@ function saveBookings(next, isSilent) {
 
 Nothing else skips a CAS.
 
-**Persisted collections** — every node, its shape, its CAS or rev pair and the hook that owns it, is in `src/hooks/CLAUDE.md` (authoritative paths and predicates: `database.rules.json`). The inventory, so this file still answers what exists: `bookings` · `vouchers` · `roles` + `invites` · `activity` · `tableBlocks` · `waitlist` · `reminders` · `reminderFires` · `recurring` · `templates` · `conversations` · `messages` · nine `settings/*` nodes · `settings/users/{uid}/prefs`.
+**Persisted collections** — every node, its shape, its CAS or rev pair and the hook that owns it, is in `src/hooks/CLAUDE.md` (authoritative paths and predicates: `database.rules.json`). The inventory, so this file still answers what exists: `bookings` · `vouchers` · `roles` + `invites` · `activity` · `tableBlocks` · `waitlist` · `reminders` · `reminderFires` · `recurring` · `templates` · `conversations` · `messages` · ten `settings/*` nodes · `settings/users/{uid}/prefs`.
 
 **Single central save path:** route every mutation of a collection through one helper (e.g. `bookingsAfterAction`) so future conflict-detection / re-derivation has one hook point.
 
