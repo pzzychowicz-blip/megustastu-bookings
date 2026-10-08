@@ -32766,7 +32766,7 @@ source from the link by phone number, which marks a pending draft accepted too.)
 ### Commit 3 — the booking form's picker fills the draft; a swap belongs to its slot
 
 **Files:** `src/App.jsx` · `src/lib/manual-assign.js` · `tests/manual-assign.test.js`
-(18 → 25) · `src/lib/CLAUDE.md` · `ROADMAP.md` (the entry removed; one added)
+(11 → 18) · `src/lib/CLAUDE.md` · `ROADMAP.md` (the entry removed; one added)
 
 Added at Patryk's choice, from v18.4.7's review, where it was "the picker re-optimises
 the wrong day", read from the lib. **Reproduced through the form on DEV before the edit
@@ -32806,8 +32806,7 @@ Back to 20:00, Save, Confirm on the kitchen prompt: RQ46 LandOK on 9 Oct 20:00, 
 locked, "tables manually set: 1B"; `v1833-recG` moved 1B → 2; `v1834 weekly2` seated on
 1A. Then Assign from the timeline (RQ46 Poke → 4): stored at once, locked.
 
-**Not verified:** the stale swap on a NEW booking through the form (the helper is tested,
-the form path was not run); a second device.
+**Not verified:** a second device.
 
 **Unexplained, on ROADMAP.** During commit 1's check an edit of WL48 A was parked by a
 forced rejection at 10:46:33Z and never retried by a tool call. The server holds it with
@@ -32819,3 +32818,21 @@ a parked write without Retry (`retryParked` has one caller, the banner). A press
 Retry in the shared Browser pane would explain it and cannot be ruled out.
 
 **Gate:** build 128.75 kB gz (main chunk, 128.62 after commit 2) · 2797 tests passed (2790) · lint 63 problems, 0 errors · `check:style` OK.
+
+### `/code-review` (high): five findings
+
+- **Fixed (2).** The new-booking stale swap had not been run through the form: run on
+  DEV (1 trial), "V49 StaleSwap", 9 Oct 20:00, Swap & Assign on table 2, time to 20:15,
+  Save: "Selected tables are not available at this time.", `v1833-recG` still on 2, no
+  booking stored. And the test that the saves never read the raw pick counted a text
+  fragment; it counts the identifier.
+- **No change (1).** `swapAffected` is derived from the rendered form and the saves read
+  `formRef`. Every `doSave()` caller was read: the Save button and four modal
+  round-trips, none in the tick of a change to the slot.
+- **ROADMAP (1).** The form's preview answers "ok" for hand-picked tables without
+  checking them, so a pick Save will refuse shows no warning first. Older than this
+  version; a stale swap now reaches it.
+- **Not changed (1).** `planAssign`'s extra pass re-optimises a day that is not on
+  screen under the generic flash. Chosen over leaving the party without a table.
+
+**Gate at the push:** build 128.75 kB gz (128.51 on v18.4.8) · 2797 tests (2777) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
