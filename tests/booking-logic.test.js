@@ -3261,10 +3261,10 @@ describe("pickedRefusal: what Save will say about the tables picked in the form"
     expect(APP).toContain("pickedRefusal(saveLive,f,editId,tableBlocks,swapAffected,nowMins,today)");
     expect(FORM).toContain("pickedRefusal(liveBookings,form,editId,tableBlocks,swap,nowMins,today)");
     expect(APP).toContain("swap={swapAffected}");
-    for (const src of [APP, FORM]) {
-      expect(src).not.toContain("Selected tables are not available");
-      expect(src).not.toContain("canAssign(");
-    }
+    // The sentence exists once, in the lib; App, which held the check, holds
+    // no busy-set arithmetic for it any more.
+    for (const src of [APP, FORM]) expect(src).not.toContain("Selected tables are not available");
+    expect(APP).not.toContain("canAssign(");
   });
 
   it("the button's save asks it before the kitchen question", () => {
