@@ -32329,3 +32329,22 @@ snapshot from elsewhere).
 **Left on DEV:** bookings "RQ46 …" on 2026-10-08, -15 and -22, three "RQ46" standing rules
 ("RQ46 Weekly", "RQ46 LandOK", "RQ46 HeldLands") plus the orphan "RQ46 Orphan" from the
 reproduction, and `bookings/rq46poke` on 2026-10-09.
+
+### Commit 6 — the re-cancelled legacy no-show is dropped from ROADMAP
+
+**Files:** `ROADMAP.md`
+
+The entry (v18.4.5's `/code-review`) said a no-show walked back before v18.3.5 and later
+cancelled normally still counts, and that the number of PROD bookings in that state was not
+known. Patryk counted them on the PROD backup of 2026-10-08, with two scripts over the
+file's `bookings`:
+
+- cancelled bookings counted as a no-show: 19, and none has a history entry after its
+  "no show" entry, so none was walked back and cancelled again. **0 affected.**
+- bookings NOT cancelled that still carry a no-show mark, the only ones that could become
+  affected if cancelled later: **1**.
+
+Patryk's decision: drop it. The cancel writer (`doCancelBooking`) is not changed. The fault
+is still reachable for that one booking, and for no booking walked back since v18.3.5,
+which writes the cleared entry.
+
