@@ -32842,9 +32842,15 @@ Retry in the shared Browser pane would explain it and cannot be ruled out.
 ## v18.4.10 — the booking form checks the tables picked by hand
 
 **Date:** 2026-10-08 · **Branch:** `fix/v18.4.10-form-checks-picked-tables` ·
-**Behavioural change:** yes: the form's availability line can show Save's refusal of a
-pick, and Save refuses such a pick before it asks the kitchen question. No rules change,
-so no console step.
+**Behavioural change:** yes, two: the form's availability line can show Save's refusal of
+a pick, and Save refuses such a pick before it asks the kitchen question; and the printed
+timeline draws only the flags a block has room for (its own section below). No rules
+change, so no console step.
+
+One version with a section per item, at Patryk's exception to one version each
+(2026-10-08): the form fix, the iPhone print measurement (not built), the printed
+timeline's flags, the licence wording, Dependabot, and the review. The first section is
+the form fix.
 
 **Files:** `src/lib/booking-save.js` · `src/App.jsx` · `src/components/BookingFormModal.jsx` ·
 `tests/booking-logic.test.js` (326 → 334, one pinned string) · `src/lib/CLAUDE.md` ·
@@ -32968,4 +32974,23 @@ moment. `.github/dependabot.yml` (v18.4.5) keeps version updates off
 `@grpc/grpc-js` under `@firebase/firestore`, which the app does not import) have no fix
 but a firebase downgrade, so no pull request is expected for them. The entry is removed
 from ROADMAP.
+
+### `/code-review` (high): five findings
+
+- **Fixed (3).** This entry's header named the form fix only; it names both behaviour
+  changes and lists the sections. `src/CLAUDE.md` named the save's check as `doSave`'s
+  manual guard in two lists of busy-set builders; both name `pickedRefusal`. The new test
+  forbade any `canAssign(` in the form, which never held the check; it forbids it in App.
+- **Disproved while reviewing (2, not reported).** `nowMins` in the form scan's deps adds
+  no run: `liveBookings` is `syncLiveDurations`' `.map`, a new array on every `nowMins`
+  change, and was already a dep. An edit does not open with `manualTables`
+  (`booking-fields.js` seeds `[]`), so the new check does not warn on opening a
+  hand-placed booking.
+- **Not changed (2).** `PRINT_BLOCK`'s widths were measured in headless Chromium on macOS
+  and carry no slack, so another browser's font metrics could cut a kept flag by a pixel
+  or two; not measured on another browser, so no number to set a slack from. `save()`
+  and `doSave` each compute a refused pick (a few array passes per tap); `doSave` owning
+  the refusal order is the point.
+
+**Gate at the push:** build 129.04 kB gz (main chunk, 128.75 on v18.4.9) · 2811 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
 
