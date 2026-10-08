@@ -32326,6 +32326,6 @@ code and tested by reading it, not produced live); the freshness gate tripped by
 sleep, where the socket dies (here `Date.now` was moved, and the queue drained on the next
 snapshot from elsewhere).
 
-**Left on DEV:** bookings "RQ46 …" on 2026-10-08, -15 and -22, two "RQ46" standing rules
+**Left on DEV:** bookings "RQ46 …" on 2026-10-08, -15 and -22, three "RQ46" standing rules
 ("RQ46 Weekly", "RQ46 LandOK", "RQ46 HeldLands") plus the orphan "RQ46 Orphan" from the
 reproduction, and `bookings/rq46poke` on 2026-10-09.
