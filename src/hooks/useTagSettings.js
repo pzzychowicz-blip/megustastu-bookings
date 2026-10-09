@@ -61,6 +61,9 @@ export function useTagSettings() {
   const saveTagList = useCallback(function (nextList) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write the tag list — initial read has not completed yet.");
+      // Said on screen like a refused write: the editor keeps the draft, and
+      // without a sentence an Add that did nothing looks like a dead button.
+      setTagError("The tag list has not loaded yet, so nothing was saved. Check the connection and try again.");
       return false;
     }
     const prev = listRef.current;

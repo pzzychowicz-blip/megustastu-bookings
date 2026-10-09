@@ -229,6 +229,12 @@ describe("the hook writes the list the way the Rule of law asks", () => {
     expect(hook).not.toMatch(/\bset\(ref\(/);
   });
 
+  it("says so on screen when it refuses before the first read", () => {
+    // The editor keeps the draft on a false return and shows `tagError`; a
+    // refusal that only logged left an Add that did nothing and said nothing.
+    expect(hook).toMatch(/if \(!loaded\.current\) \{\s+console\.warn\([^\n]+\s+setTagError\("The tag list has not loaded yet[^"]*"\);\s+return false;/);
+  });
+
   it("passes the error callback to its listener", () => {
     expect(hook).toMatch(/dbError\("settings\/tags"\)\)/);
   });
