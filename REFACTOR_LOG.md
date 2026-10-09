@@ -33780,7 +33780,7 @@ the atom).
 ## v18.5.1 — Delete customer takes the standing booking
 
 **Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
-**Behavioural change:** none in section 3. Delete customer also removes the customer's standing bookings
+**Behavioural change:** none in sections 3 and 4. Delete customer also removes the customer's standing bookings
 (section 1); a tagged booking shows the timeline block's note corner (section 2). The
 header is extended as the version's other items land.
 **Rules change: none.** **Deploy steps: none beyond the merge.**
@@ -33892,4 +33892,30 @@ the day, its date added to the rule's `skipDates`, the form closed, the pill "Bo
 deleted · tables re-optimised · Undo"), then Undo (6 bookings, the same id back on 1A
 with "deletion undone" in its history, the skipDate still there as designed, the pill
 gone, no console error).
+
+### 4. #17: Book Again's draft out of BookingApp
+
+**Files:** `src/lib/booking-save.js` (`againDraft`), `src/App.jsx` (`bookAgain`;
+5,093 → 5,032 lines), `tests/book-again.test.js` (new, 11).
+**Behavioural change: none.**
+
+`againDraft(source, {vouchersOn, vouchersByCode, bookings, now})` returns the draft
+the form opens with: the booked time and the planned length (through the seated
+shift), the voucher that follows a completed visit while it can still be attached, and
+the guest a phone-less source is joined to. App's `bookAgain` keeps the door:
+`pendingWaitlistRef`, `openForm` and the five setters. It sits beside the other
+builders (`buildBooking`, `walkinBooking`, `occurrenceBooking`) because it is the
+fourth place a booking's fields are written out.
+
+**Verified old against new.** The old `bookAgain` lifted from the commit before and the
+new one lifted from `App.jsx`, compiled against the same recorded stubs, over 100,000
+generated sources (odd sizes, empty and shifted times, lengths from 0 to 900, every
+status, phones that are and are not real, vouchers active, void, spent, expired,
+unknown and already on a live booking): the same calls with the same arguments, the
+draft included, every time. 97,029 opened the form (2,971 had no source); 2,595 carried
+a voucher, 59,125 a custom length, 48,366 a guest seed.
+
+**On DEV:** Book again pressed in a seated booking's edit form: the title "Book again",
+the return-guest line, the name carried, the date empty, the time 19:30, the note
+empty, and the new-booking buttons (Save pending, Save booking).
 

@@ -43,7 +43,6 @@ import {
   lateState, freeingSoon,
   undoSnapshots,
   // v18.0.0 session 7: the length Book Again carries over.
-  plannedDuration,
   // v18.3.4: the rules only the edit's save asks (`tablesKept`, the seated and
   // hand-kept refusals, `replacePinnedClashes`, `seatedShiftFor`,
   // `tablesFreeFor`, `offZone`) are imported by `applyEdit` in
@@ -86,7 +85,7 @@ import { planDelete, planUndo } from "./lib/delete-undo";
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, goneRefusal, pickedRefusal } from "./lib/booking-save";
+import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal } from "./lib/booking-save";
 import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -349,7 +348,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActiv
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget, voucherDue, voucherReturnDue } from "./lib/vouchers";
+import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachedElsewhere, carryTarget, voucherDue, voucherReturnDue } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -2507,74 +2506,13 @@ function BookingApp({uid}){
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
   function openEdit(b,changes){if(refused("bookingEdit"))return false;pendingWaitlistRef.current=null;openForm(changes?Object.assign(draftFromBooking(b),changes):draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);return true;}
-  // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
-  // booking. Date starts blank so staff must pick it; time carries over. The
-  // `returnOf` field links back to the source booking so we can write history
-  // on BOTH the new booking (when created) and the original (on successful save).
-  // v14 p1 (Issue 3): reads sourceBooking.scheduledTime — NOT sourceBooking.time —
-  // so the pre-filled time reflects the confirmed plan (e.g. 20:30), not the
-  // seated-shifted time (e.g. 20:15). Fallback to .time for legacy bookings
-  // without scheduledTime (sanitize also backfills it on load).
+  // v18.5.1 (#17): WHAT the form opens with is `againDraft` (lib/booking-save.js),
+  // which holds the reasoning: the planned time and length, the voucher that
+  // follows a completed visit, the guest it joins. App keeps the door.
   function bookAgain(sourceBooking){
     if(!sourceBooking) return;
     pendingWaitlistRef.current=null;
-    const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
-    // v18.0.0 session 7: the source's PLANNED length rides along — Patryk's
-    // choice over the actual stay, and the same reason this function reads
-    // scheduledTime above: Book Again copies the plan. `plannedDuration`
-    // recovers it through the seated shift, which rewrites `duration` AND
-    // `originalDuration`. It is a custom duration only when it differs from the
-    // size default — openEdit's rule — so a default-length booking still
-    // re-derives when the guest count changes. Clamped to the form stepper's own
-    // 15–480 bounds (BookingFormModal), so a corrupt legacy length cannot ride
-    // into a new booking. This was `customDur:null`, which opened every Book
-    // Again at the size default and silently dropped a long booking's length.
-    const againSize=sourceBooking.size||2;
-    const planned=plannedDuration(sourceBooking);
-    const againDur=planned?Math.max(15,Math.min(480,planned)):null;
-    // ── v18.0.0 session 8 (item 7): the guest's voucher comes with them ───────
-    // Patryk: a voucher that was not fully redeemed must follow the guest into
-    // the next booking. From a COMPLETED visit only — Patryk's call for the
-    // seated case, and the one-live-booking rule is why: a seated visit is
-    // still live and still holds its voucher, so copying the code here would
-    // create exactly the conflict `attachRefusal` exists to refuse. That guest
-    // is offered the carry at COMPLETION instead.
-    //
-    // Gated on the same predicate the picker uses, so the form never opens
-    // holding an attachment that Save would reject: a voided, spent or expired
-    // voucher, or one already on somebody's live booking, simply does not ride
-    // along. `bookingId` is null because the booking does not exist yet.
-    const againCode=(function(){
-      if(!vouchersOn||sourceBooking.status!=="completed") return "";
-      const c=normalizeCode(sourceBooking.voucherCode);
-      if(!c) return "";
-      const v=vouchersByCode[c];
-      if(!v) return "";
-      return attachRefusal(v,c,bookings,null,Date.now())?"":c;
-    })();
-    openForm(Object.assign({},EMPTY_FORM,{
-      name:sourceBooking.name||"",
-      phone:sourceBooking.phone||"",
-      date:"",
-      time:schedTime,
-      size:againSize,
-      preference:sourceBooking.preference||"auto",
-      preferredTables:Array.isArray(sourceBooking.preferredTables)?sourceBooking.preferredTables.slice():[],
-      notes:"",
-      customDur:againDur&&againDur!==getDur(againSize)?againDur:null,
-      manualTables:[],
-      voucherCode:againCode,
-      status:"confirmed",
-      returnOf:sourceBooking.id,
-      // v17.10.0: Book Again on a PHONE-LESS guest is the same assertion as
-      // picking them from the name dropdown — you are looking at their booking
-      // and saying "them again" — so it joins them too. An existing guestId is
-      // adopted; otherwise one is minted from the source and `guestSeed` asks
-      // doSave to write it back. A source WITH a phone needs neither: the phone
-      // copied above already is the identity.
-      guestId:hasRealPhone(sourceBooking.phone)?null:(sourceBooking.guestId||("g"+sourceBooking.id)),
-      guestSeed:(hasRealPhone(sourceBooking.phone)||sourceBooking.guestId)?null:sourceBooking.id
-    }));
+    openForm(againDraft(sourceBooking,{vouchersOn:vouchersOn,vouchersByCode:vouchersByCode,bookings:bookings,now:Date.now()}));
     setEditId(null);
     setError("");
     setSwapAffected(null);

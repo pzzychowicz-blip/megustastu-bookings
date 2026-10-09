@@ -130,10 +130,10 @@ evidence for each.
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`), and status changes in v18.5.0 (`planStatus`,
   `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines), and delete and
-  undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines). Still in
-  App, by lines and commits measured 2026-10-08: `bookAgain` (66, 16), `reassignBooking`
-  (44, 9), `settleVoucher` (58, 7). Patryk chose `bookAgain` and `reassignBooking` for
-  v18.5.1 as well (2026-10-09); `settleVoucher` is not scheduled.
+  undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines) with
+  Book Again's draft (`againDraft`, `lib/booking-save.js`; 5,032 lines). Still in App, by
+  lines and commits measured 2026-10-08: `reassignBooking` (44, 9), which Patryk chose
+  for v18.5.1 as well (2026-10-09), and `settleVoucher` (58, 7), which is not scheduled.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history
