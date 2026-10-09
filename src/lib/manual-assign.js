@@ -28,7 +28,7 @@
 //
 // `stamp(action, user)` builds a history entry. App passes nothing and gets
 // `histEntry`; a test passes its own so the result has no clock in it.
-import { bookingsAfterAction, histEntry as defaultHistEntry } from "./booking-logic.js";
+import { bookingsAfterAction, histEntry as defaultHistEntry, isLocked, toMins, findFreeSlot } from "./booking-logic.js";
 import { releaseSwapped } from "./booking-save.js";
 import { getDur } from "./booking-fields.js";
 
@@ -67,3 +67,69 @@ export function planAssign(ctx){
     return updated;
   },reshuffles:!!(affected&&affected.length>0)};
 }
+
+// ── planReassign: the Overlap banner's Reassign (v18.5.1, ROADMAP #17) ───────
+// MOVED out of BookingApp's `reassignBooking`, statement for statement. App
+// keeps `setError`, the write (with the deleted-elsewhere report) and the flash.
+//
+//   planReassign(ctx) → { refuse: "…" } | { transform }
+//   ctx: {id, bookings, liveBookings, tableBlocks, getUser, stamp?}
+//
+// Reassign a single booking to a different set of tables without touching any
+// other booking. Used by the overlap warning's Reassign button when Optimizer
+// is OFF and staff need a quick escape hatch for a booking about to be crowded
+// out by an overstaying guest. Skips locked bookings (manual intent preserved).
+// v14: feeds liveBookings into findFreeSlot so already-overstaying seated
+// guests' tables are correctly treated as occupied.
+// v14 p1 (Issue 1 fix): ALSO transiently extends the duration of any seated
+// booking that is about to overstay onto the target's window. Without this, a
+// seated booking ending in e.g. 9 min is not yet "overstaying" per
+// syncLiveDurations — its tables would falsely read as free at target.time,
+// and findFreeSlot would return the same tables the target already has. The
+// extension is for this one lookup; nothing stored changes.
+//
+// `getUser` is asked only once there is something to write, as it was.
+export function planReassign(ctx){
+  const id=ctx.id,bookings=ctx.bookings,liveBookings=ctx.liveBookings,tableBlocks=ctx.tableBlocks;
+  const histEntry=ctx.stamp||defaultHistEntry;
+  const target=bookings.find(function(b){return b.id===id;});
+  if(!target) return {refuse:"Booking not found."};
+  if(isLocked(target)) return {refuse:"Booking is manually locked. Edit manually to change tables."};
+  const targetStart=toMins(target.time);
+  const targetEnd=targetStart+(target.duration||90);
+  // Build a search-view where any seated booking sharing tables with THIS
+  // target whose scheduled end is before the target's END is stretched to cover
+  // the target fully. That guarantees findFreeSlot treats their tables as busy.
+  const searchView=liveBookings.map(function(b){
+    if(b.id===target.id) return b;
+    if(b.status!=="seated") return b;
+    if(b.date!==target.date) return b;
+    const tables=b.tables||[];
+    const sharesTable=tables.some(function(t){return (target.tables||[]).includes(t);});
+    if(!sharesTable) return b;
+    const bs=toMins(b.time);
+    const be=bs+(b.duration||90);
+    // Only extend if the seated booking ends before target's END (i.e., it could
+    // plausibly overlap or free up within target's window). If it already runs
+    // past target end, syncLiveDurations handled it.
+    if(be>=targetEnd) return b;
+    // Extend to cover target fully so findFreeSlot never considers these tables.
+    const extendedDur=targetEnd-bs;
+    return Object.assign({},b,{duration:extendedDur});
+  });
+  const tables=findFreeSlot(searchView,target.date,target.time,target.size||2,target.preference||"auto",target.duration||90,tableBlocks,id,target.preferredTables);
+  if(!tables||!tables.length) return {refuse:"No alternative tables available for "+target.name+" at "+target.time+"."};
+  // Sanity: if findFreeSlot returned the same tables (possible if the algorithm
+  // found a valid-but-unchanged assignment), surface it as a no-op rather than
+  // silently "succeeding" with nothing changed.
+  const curKey=(target.tables||[]).slice().sort().join("|");
+  const newKey=tables.slice().sort().join("|");
+  if(curKey===newKey) return {refuse:"No alternative tables available for "+target.name+" at "+target.time+"."};
+  const prevTables=(target.tables||[]).join("+")||"none";
+  const user=ctx.getUser();
+  return {transform:function(prev){return prev.map(function(b){
+    if(b.id!==id) return b;
+    return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
+  });}};
+}
+

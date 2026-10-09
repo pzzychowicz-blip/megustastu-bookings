@@ -33780,7 +33780,7 @@ the atom).
 ## v18.5.1 — Delete customer takes the standing booking
 
 **Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
-**Behavioural change:** none in sections 3 and 4. Delete customer also removes the customer's standing bookings
+**Behavioural change:** none in sections 3, 4 and 5. Delete customer also removes the customer's standing bookings
 (section 1); a tagged booking shows the timeline block's note corner (section 2). The
 header is extended as the version's other items land.
 **Rules change: none.** **Deploy steps: none beyond the merge.**
@@ -33918,4 +33918,32 @@ a voucher, 59,125 a custom length, 48,366 a guest seed.
 **On DEV:** Book again pressed in a seated booking's edit form: the title "Book again",
 the return-guest line, the name carried, the date empty, the time 19:30, the note
 empty, and the new-booking buttons (Save pending, Save booking).
+
+### 5. #17: the Overlap banner's Reassign out of BookingApp
+
+**Files:** `src/lib/manual-assign.js` (`planReassign`), `src/App.jsx`
+(`reassignBooking`; 5,032 → 4,984 lines), `tests/manual-assign.test.js` (+9, 27).
+**Behavioural change: none.**
+
+`planReassign({id, bookings, liveBookings, tableBlocks, getUser})` → `{refuse}` (not
+found, locked or seated, no alternative, the same tables back) or `{transform}`. App
+keeps `setError`, the write with `goneReport(id)` and the flash. It sits with
+`planAssign`: both give one booking tables and move nobody else.
+
+**Verified old against new.** The old `reassignBooking` lifted from the commit before
+and the new one from `App.jsx`, over 60,000 generated days (up to 25 bookings, seated
+parties, locks, table blocks, live and stored durations): the same calls, return and
+written list every time, a replay on another list included. 29,953 wrote, 20,501 were
+refused as locked, 7,639 as not found, 1,907 as having no alternative.
+
+**Sabotage:** three changes (no stretch for a seated party about to leave, no refusal
+for the same tables, `_manual` left on) fail three tests. Two of the tests did not
+catch their sabotage as first written and were rewritten until they did: the stretch
+changes the outcome only when the booking's own table is the one the lookup would
+pick first.
+
+**Not run on DEV:** Reassign needs the Overlap banner (the optimiser off and a seated
+party overstaying onto a later booking's table), which was not staged.
+
+`App.jsx` after this version's three extractions: 5,137 → 4,984 lines.
 

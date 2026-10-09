@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planAssign, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
+import { planAssign, planReassign, swapSlot, liveSwap } from "../src/lib/manual-assign.js";
 import { todayStr, addDays } from "../src/lib/day.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
@@ -187,3 +187,90 @@ describe("the picker opened from the booking form fills the draft (v18.4.9)", ()
     expect(APP).toContain('if(manualTarget!=="__new__"&&refused("bookingAssign"))return;');
   });
 });
+
+// v18.5.1 (ROADMAP #17): the Overlap banner's Reassign, moved out of App's
+// `reassignBooking`. Compared with the old function over 60,000 generated days
+// when it moved (REFACTOR_LOG); these are the outcomes that stay.
+describe("planReassign", () => {
+  const asked = [];
+  const re = (id, bookings, more) => planReassign(Object.assign({
+    id, bookings, liveBookings: bookings, tableBlocks: [],
+    getUser: () => { asked.push("user"); return "u@x"; }, stamp,
+  }, more || {}));
+
+  it("moves the booking to other tables, unlocked and unflagged, with one history line, and nobody else", () => {
+    const list = [bk("a", "20:00", 2, ["2"], { _manual: true, _conflict: true }), bk("b", "20:00", 2, ["3"])];
+    const plan = re("a", list);
+    expect(plan.refuse).toBe(undefined);
+    const after = plan.transform(list);
+    const a = byId(after, "a");
+    expect(a.tables).not.toEqual(["2"]);
+    expect(a.tables.length).toBeGreaterThan(0);
+    expect(a.tables).not.toContain("3");
+    expect([a._manual, a._conflict]).toEqual([false, false]);
+    expect(a.history).toEqual([{ action: "reassigned 2 → " + a.tables.join("+"), by: "u@x" }]);
+    expect(byId(after, "b")).toBe(list[1]);
+  });
+  it("names 'none' when the booking had no table", () => {
+    const list = [bk("a", "20:00", 2, [])];
+    expect(byId(re("a", list).transform(list), "a").history[0].action).toMatch(/^reassigned none → /);
+  });
+  it("refuses a booking that is not there, and one that is locked or seated, without asking who", () => {
+    asked.length = 0;
+    expect(re("gone", [])).toEqual({ refuse: "Booking not found." });
+    const locked = [bk("a", "20:00", 2, ["2"], { _locked: true })];
+    expect(re("a", locked)).toEqual({ refuse: "Booking is manually locked. Edit manually to change tables." });
+    const seated = [bk("a", "20:00", 2, ["2"], { status: "seated" })];
+    expect(re("a", seated).refuse).toBe("Booking is manually locked. Edit manually to change tables.");
+    expect(asked).toEqual([]);
+  });
+  it("refuses by name when every other table is taken", () => {
+    const ids = ["1A", "1B", "2", "3", "4", "5A", "5B", "6", "7", "i1", "i2", "i3", "i4"];
+    const full = ids.map((t, k) => bk("f" + k, "20:00", 2, [t], { _locked: true }));
+    const list = full.concat([bk("a", "20:00", 2, ["2"])]);
+    expect(re("a", list)).toEqual({ refuse: "No alternative tables available for A at 20:00." });
+  });
+  it("a seated party still at the booking's table, due to leave as it starts, counts as still there", () => {
+    // S sits at table 2 from 18:30 for 90, so on paper it leaves at 20:00, the minute
+    // A is booked onto 2. As stored, 2 reads free at 20:00 and A would be handed 2 back.
+    const s = bk("s", "18:30", 2, ["2"], { status: "seated" });
+    // 2 is also the table A asked for, so the lookup would pick it first if it read free:
+    // the same tables back, and the "no alternative" refusal with twelve tables empty.
+    const a = bk("a", "20:00", 2, ["2"], { preferredTables: ["2"] });
+    const list = [s, a];
+    const plan = re("a", list);
+    expect(plan.refuse).toBe(undefined);
+    const after = plan.transform(list);
+    expect(byId(after, "a").tables).not.toContain("2");
+    expect(byId(after, "s")).toBe(s);                       // the stretch is for the lookup only
+  });
+  it("being handed the tables it already has is a refusal, not a write", () => {
+    const best = byId(re("a", [bk("a", "20:00", 2, [])]).transform([bk("a", "20:00", 2, [])]), "a").tables;
+    expect(re("a", [bk("a", "20:00", 2, best)])).toEqual({ refuse: "No alternative tables available for A at 20:00." });
+  });
+  it("the replay writes the same tables onto whatever list it is handed", () => {
+    const list = [bk("a", "20:00", 2, ["2"])];
+    const plan = re("a", list);
+    const first = byId(plan.transform(list), "a").tables;
+    const fresh = [bk("a", "20:00", 4, ["2"], { notes: "changed elsewhere" }), bk("z", "21:00", 2, ["6"])];
+    const replay = plan.transform(fresh);
+    expect(byId(replay, "a").tables).toEqual(first);
+    expect(byId(replay, "a").notes).toBe("changed elsewhere");
+    expect(byId(replay, "z")).toBe(fresh[1]);
+  });
+});
+
+describe("App's reassignBooking is the plan and its three effects", () => {
+  const APP = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../src/App.jsx"), "utf8")).join("\n");
+  const at = APP.indexOf("function reassignBooking(");
+  const body = APP.slice(at, APP.indexOf("function flashRefusal(", at));
+  it("decides nothing itself", () => {
+    for (const word of ["findFreeSlot", "isLocked", "histEntry", "toMins(", ".map("]) expect(body, word).not.toContain(word);
+  });
+  it("shows a refusal, else writes with the deleted-elsewhere report, clears the error and flashes when the write went", () => {
+    const flat = body.replace(/\s+/g, "");
+    expect(flat).toContain("constplan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});if(plan.refuse){setError(plan.refuse);return;}constok=saveBookings(plan.transform,false,goneReport(id));setError(\"\");if(ok)flash();");
+  });
+});
+

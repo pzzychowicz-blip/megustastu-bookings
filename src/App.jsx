@@ -34,10 +34,10 @@ import {
 import {
   getDur, toMins, sanitizeBlock,
   histEntry,
-  isLocked, statusOrder,
+  statusOrder,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, findFreeSlot, bookingsAfterAction,
+  optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon,
@@ -109,7 +109,7 @@ import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop } from "./lib/drop-plan";
-import { planAssign, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
@@ -2885,59 +2885,12 @@ function BookingApp({uid}){
   }
 
   function forceReshuffle(){if(saveBookings(function(b){return applyOpt(b,viewDate,tableBlocks);})) flash();}
-  // Reassign a single booking to a different set of tables without touching any
-  // other booking. Used by the overlap warning's Reassign button when Optimizer
-  // is OFF and staff need a quick escape hatch for a booking about to be crowded
-  // out by an overstaying guest. Skips locked bookings (manual intent preserved).
-  // v14: feeds liveBookings into findFreeSlot so already-overstaying seated
-  // guests' tables are correctly treated as occupied.
-  // v14 p1 (Issue 1 fix): ALSO transiently extends the duration of any seated
-  // booking that is about to overstay onto the target's window (identified via
-  // overlapWarnings). Without this, a seated booking ending in e.g. 9 min is
-  // not yet "overstaying" per syncLiveDurations — its tables would falsely read
-  // as free at target.time, and findFreeSlot would return the same tables the
-  // target already has. We only extend for this one lookup; state is unchanged.
+  // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
+  // refusals, are `planReassign` (lib/manual-assign.js).
   function reassignBooking(id){
-    const target=bookings.find(function(b){return b.id===id;});
-    if(!target){setError("Booking not found.");return;}
-    if(isLocked(target)){setError("Booking is manually locked. Edit manually to change tables.");return;}
-    const targetStart=toMins(target.time);
-    const targetEnd=targetStart+(target.duration||90);
-    // Build a search-view where any seated booking currently flagged as blocking
-    // THIS target (or any seated booking sharing tables whose scheduled end is
-    // before target.time) is stretched to at least targetStart+1 minute. That
-    // guarantees findFreeSlot treats their tables as busy at target's start.
-    const searchView=liveBookings.map(function(b){
-      if(b.id===target.id) return b;
-      if(b.status!=="seated") return b;
-      if(b.date!==target.date) return b;
-      const tables=b.tables||[];
-      const sharesTable=tables.some(function(t){return (target.tables||[]).includes(t);});
-      if(!sharesTable) return b;
-      const bs=toMins(b.time);
-      const be=bs+(b.duration||90);
-      // Only extend if the seated booking ends before target's END (i.e., it could
-      // plausibly overlap or free up within target's window). If it already runs
-      // past target end, syncLiveDurations handled it.
-      if(be>=targetEnd) return b;
-      // Extend to cover target fully so findFreeSlot never considers these tables.
-      const extendedDur=targetEnd-bs;
-      return Object.assign({},b,{duration:extendedDur});
-    });
-    const tables=findFreeSlot(searchView,target.date,target.time,target.size||2,target.preference||"auto",target.duration||90,tableBlocks,id,target.preferredTables);
-    if(!tables||!tables.length){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
-    // Sanity: if findFreeSlot returned the same tables (possible if the algorithm
-    // found a valid-but-unchanged assignment), surface it as a no-op rather than
-    // silently "succeeding" with nothing changed.
-    const curKey=(target.tables||[]).slice().sort().join("|");
-    const newKey=tables.slice().sort().join("|");
-    if(curKey===newKey){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
-    const prevTables=(target.tables||[]).join("+")||"none";
-    const user=getUser();
-    const ok=saveBookings(function(prev){return prev.map(function(b){
-      if(b.id!==id) return b;
-      return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
-    });},false,goneReport(id));
+    const plan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});
+    if(plan.refuse){setError(plan.refuse);return;}
+    const ok=saveBookings(plan.transform,false,goneReport(id));
     setError("");
     if(ok) flash();
   }

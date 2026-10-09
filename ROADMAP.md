@@ -131,9 +131,11 @@ evidence for each.
   shares its release, `releaseSwapped`), and status changes in v18.5.0 (`planStatus`,
   `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines), and delete and
   undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines) with
-  Book Again's draft (`againDraft`, `lib/booking-save.js`; 5,032 lines). Still in App, by
-  lines and commits measured 2026-10-08: `reassignBooking` (44, 9), which Patryk chose
-  for v18.5.1 as well (2026-10-09), and `settleVoucher` (58, 7), which is not scheduled.
+  Book Again's draft (`againDraft`, `lib/booking-save.js`) and the Overlap banner's
+  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines). Still in App of the five
+  measured 2026-10-08: `settleVoucher` (58 lines, 7 commits) with the voucher carry. Its
+  ordering is tied to `doSave` and `saveGuardRef`, so it wants a version of its own.
+  Re-measure what is largest in App before choosing after it.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history
