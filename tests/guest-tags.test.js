@@ -623,9 +623,14 @@ describe("App is wired to it", () => {
     expect(app).not.toMatch(/anonymized\s*:\s*true/);
   });
   it("the one place that drops a booking from the list hands its statement on", () => {
-    const drops = app.match(/\.filter\(function\(x\)\{return x\.id!==id;\}\)/g) || [];
-    expect(drops.length).toBe(1);
-    expect(app).toContain("rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id)");
+    // v18.5.1 (#17): the delete's transform is `planDelete` (lib/delete-undo.js),
+    // so the one drop is there and App has none of its own.
+    const del = stripComments(readFileSync(fileURLToPath(new URL("../src/lib/delete-undo.js", import.meta.url)), "utf8")).join("\n");
+    const DROP = /\.filter\(function\(x\)\{return x\.id!==id;\}\)/g;
+    expect((app.match(DROP) || []).length).toBe(0);
+    expect((del.match(DROP) || []).length).toBe(1);
+    expect(del).toContain("rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id)");
+    expect(app).toContain("const ok=saveBookings(plan.transform);setConfirmDel(null);");
   });
   it("a customer's tap asks for the capability a booking edit asks for, and goes through customerTagTap", () => {
     const fn = app.slice(app.indexOf("function saveCustomerTag("));

@@ -41,7 +41,7 @@ import {
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon,
-  undoSnapshots, applyUndo,
+  undoSnapshots,
   // v18.0.0 session 7: the length Book Again carries over.
   plannedDuration,
   // v18.3.4: the rules only the edit's save asks (`tablesKept`, the seated and
@@ -81,12 +81,13 @@ import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStac
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
+import { planDelete, planUndo } from "./lib/delete-undo";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, memoByPrev, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, rehomeGuestTags, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
+import { applyEdit, buildBooking, goneRefusal, pickedRefusal } from "./lib/booking-save";
+import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -348,7 +349,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActiv
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget, voucherDue, voucherHeld, voucherReturnDue } from "./lib/vouchers";
+import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget, voucherDue, voucherReturnDue } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -3049,48 +3050,24 @@ function BookingApp({uid}){
   // so a staff member is refused at the point of intent rather than after
   // reading a "this cannot be undone" dialog and tapping Delete.
   function requestDelete(id){if(refused("bookingDelete")) return;setConfirmDel(id);}
+  // v18.5.1 (#17): the money question, the rule and date to park and the write
+  // are `planDelete` (lib/delete-undo.js). App keeps the gate and the effects.
   function delBooking(id){if(refused("bookingDelete")) return false;
-    // v18.0.0 session 8 (C6): the money question, before the record goes.
-    // Deleting a booking that had redeemed against a voucher asked NOTHING and
-    // left the ledger entry behind — pointing at a booking that no longer
-    // exists, which Settings → Vouchers renders as the literal text
-    // "booking <id>" because there is no name left to resolve. The balance
-    // stayed spent, so a guest's remaining money quietly belonged to a visit
-    // nobody can look up.
-    //
-    // The same prompt as the walk-back, with `from: "delete"`: the question is
-    // identical (restore the balance, or leave it spent?) and a second dialog
-    // asking it differently is a second thing to keep in step. Escape abandons
-    // the delete entirely, which is the safe direction — the booking is still
-    // there to try again.
-    if(!redeemAskedRef.current&&voucherHeldBy(id)){
+    const plan=planDelete({id:id,bookings:bookings,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,redeemAsked:redeemAskedRef.current,vouchersOn:vouchersOn,vouchersByCode:vouchersByCode});
+    if(plan.voucherBack){
       setConfirmDel(null);
-      setVoucherBack({id:id,from:"delete"});
+      setVoucherBack(plan.voucherBack);
       return false;
     }
-    const target=bookings.find(function(x){return x.id===id;});
-    // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
-    // skipDates so the generator never resurrects it. Done BEFORE the booking
-    // delete and UNGATED by the delete's `ok` — if the delete is held/auto-
-    // retried, the skipDate must still land so the generator doesn't re-create
-    // the occurrence during the hold (addSkipDate is idempotent). Silent write.
-    // /code-review: if the skipDate itself is REFUSED (recurring node not loaded
-    // yet — a tiny post-load window), ABORT the delete: deleting anyway would
-    // let the generator resurrect the occurrence moments later. Non-silent
+    // The skipDate goes BEFORE the delete and is not gated on its `ok`
+    // (`planDelete` has why). Refused, the delete stops, with a non-silent
     // warning so the tap isn't a mystery no-op.
-    if(target&&target.recurringId&&target.recurringDate){
-      const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
+    if(plan.skip){
+      const okSkip=addSkipDate(plan.skip.ruleId,plan.skip.date,true);
       if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return false;}
     }
-    // v18.5.0: a customer's guest tags are stored on ONE of their bookings (the
-    // newest statement, lib/customers.js). If that is the booking going, the
-    // statement moves to their most recent remaining one, in this same write,
-    // so deleting a booking never deletes what the guest told us.
-    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id),d,tableBlocks,null,false,autoOptimizer);}
-    // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
-    const delMemo=memoByPrev(delTransform);
-    const postDel=delMemo(bookings);
-    const ok=saveBookings(delMemo);setConfirmDel(null);
+    const postDel=plan.transform(bookings);
+    const ok=saveBookings(plan.transform);setConfirmDel(null);
     // v17.10.0: Delete is now reachable from INSIDE the edit form, so the form
     // has to go with the booking — otherwise you are left editing a record that
     // no longer exists. Deliberately the raw setter, not requestCloseForm: the
@@ -3247,10 +3224,10 @@ function BookingApp({uid}){
   // v18.5.0 (#17): the two money questions a status change can raise are
   // `voucherDue` / `voucherHeld` / `voucherReturnDue` (lib/vouchers.js), which
   // hold the reasoning. These are their old names, closed over this render's
-  // state, for the form's save, the delete and the two settle functions.
+  // state, for the form's save and the two settle functions. (v18.5.1: the
+  // delete asks `voucherHeld` inside `planDelete`, lib/delete-undo.js.)
   function voucherSrc(){return {bookings:bookings,vouchersByCode:vouchersByCode,vouchersOn:vouchersOn,now:Date.now()};}
   function voucherToAsk(id,status){return voucherDue(voucherSrc(),id,status);}
-  function voucherHeldBy(id){return voucherHeld(voucherSrc(),id);}
   function voucherToRestore(id,status){return voucherReturnDue(voucherSrc(),id,status);}
   // Re-enter the action the modal interrupted, with the question marked asked.
   // ONE ref covers both prompts, deliberately: a status change is either INTO
@@ -3592,36 +3569,16 @@ function BookingApp({uid}){
     setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:note});
     undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
   }
+  // v18.5.1 (#17): WHAT is restored is `planUndo` (lib/delete-undo.js), verbatim
+  // and never through bookingsAfterAction (src/CLAUDE.md's one exception).
   function undoLastAction(){
-    const info=undoInfo;
-    if(!info||!info.snapshots||!info.snapshots.length) return;
-    const user=getUser();
-    const note=info.kind==="delete"?"deletion undone":info.kind==="edit"?"edit undone":"cancellation undone";
-    const primary=info.snapshots.find(function(s2){return s2.id===info.primaryId;})||info.snapshots[0];
-    const ok=saveBookings(function(b){
-      // Only the booking the user acted on gets a history entry — the others
-      // were moved by the optimizer, not by a user action, and the original
-      // reshuffle didn't write history for them either (symmetry).
-      const snaps=info.snapshots.map(function(s2){
-        return s2.id===info.primaryId
-          ?Object.assign({},s2,{history:(s2.history||[]).concat([histEntry(note,user)])})
-          :s2;
-      });
-      // Restore VERBATIM — deliberately NOT through bookingsAfterAction. Its
-      // optimizer branch is taken whenever optimizerActiveFor() is true (which
-      // it ALWAYS is for a future date, regardless of the toggle), and a
-      // reshuffle here would immediately re-apply the very moves undo just
-      // reversed. syncLiveDurations still runs so a seated booking's live
-      // duration stays correct. If a booking created since the action now
-      // collides, the v15.6.1 reconciliation effect resolves it — the same
-      // path that handles offline merges.
-      const today=todayStr();
-      return syncLiveDurations(applyUndo(b,snaps),today,nowMins);
-    });
+    const plan=planUndo({info:undoInfo,getUser:getUser,nowMins:nowMins});
+    if(!plan) return;
+    const ok=saveBookings(plan.transform);
     if(ok){
       if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
       setUndoInfo(null);
-      setViewDate(primary.date);
+      setViewDate(plan.date);
     }
   }
   // v18.4.7 (#17): WHAT the picker's Save writes is `planAssign`

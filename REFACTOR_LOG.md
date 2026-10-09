@@ -33780,7 +33780,7 @@ the atom).
 ## v18.5.1 — Delete customer takes the standing booking
 
 **Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
-**Behavioural change:** Delete customer also removes the customer's standing bookings
+**Behavioural change:** none in section 3. Delete customer also removes the customer's standing bookings
 (section 1); a tagged booking shows the timeline block's note corner (section 2). The
 header is extended as the version's other items land.
 **Rules change: none.** **Deploy steps: none beyond the merge.**
@@ -33846,4 +33846,50 @@ timeline has no note mark and is unchanged.
 ("Birthday, Anniversary"), has the corner; the 8 with no tag and no note do not.
 **Not checked:** the tablet, and a booking with a note and no tag (that half of the
 condition is the line as it was).
+
+### 3. #17: delete and undo out of BookingApp
+
+**Files:** `src/lib/delete-undo.js` (new: `planDelete`, `planUndo`), `src/App.jsx`
+(`delBooking`, `undoLastAction`; 5,137 → 5,093 lines, after section 1 had added 9),
+`tests/delete-undo.test.js` (new, 16), `tests/status-change.test.js` (the
+`voucherHeldBy` wrapper it pinned is gone: the delete asks `voucherHeld` inside
+`planDelete`). **Behavioural change: none.**
+
+Patryk chose three domains for this version (2026-10-09): delete and undo, `bookAgain`
+and `reassignBooking`, one commit each. This is the first. Delete and undo are one
+lifecycle (a delete arms the undo that restores it), and they have `planCancel`'s shape.
+
+- `planDelete(ctx)` → `{voucherBack}` (the money question, nothing written), or
+  `{skip, transform}`: `skip` is the rule and date App must park before the write, or
+  null; `transform` is memoised by `prev`.
+- `planUndo({info, getUser, nowMins})` → null, or `{date, transform}`. Verbatim
+  restore, never through `bookingsAfterAction` (`src/CLAUDE.md`'s one exception).
+- App keeps the capability gate, the `addSkipDate` call and its refusal, the confirm
+  and the form it closes, the flash, `armUndo`'s timer, `setViewDate`, and `undoDelta`
+  (four lines over this render's `nowMins`, which `tests/save-path.test.js` lifts by
+  name). App's `saveBookings` call count is unchanged (`tests/retry-report.test.js`).
+
+**Verified old against new.** A throwaway test lifted the old `delBooking` and
+`undoLastAction` from the commit before and the new ones from `App.jsx`, compiled all
+four against the same recorded stubs, and compared the calls made (with their
+arguments, in order), the return value, the list written and the list a replay on a
+different `prev` writes:
+
+| | Cases | Wrote | Other outcomes |
+|---|---|---|---|
+| `delBooking` | 60,000 | 51,084 | 3,881 asked the voucher question · 12,913 parked a skipDate, 2,012 of them refused · 3,023 stopped at the capability · 17,462 moved another booking |
+| `undoLastAction` | 60,000 | 45,890 (15,964 delete · 14,118 cancel · 15,808 edit) | 14,110 with nothing to undo |
+
+120,000 of 120,000 equal. **The first run was not:** the new `undoLastAction` asked
+`getUser()` before testing whether there was anything to undo, where the old one asked
+after. `planUndo` takes `getUser` and calls it after the test, as `planCancel` does.
+
+**Sabotage:** three changes to the new file (the tags not handed on, the user asked
+for first, no skip named) fail three of the 16 tests.
+
+**On DEV:** a standing booking's week deleted from its edit form (6 → 5 bookings on
+the day, its date added to the rule's `skipDates`, the form closed, the pill "Booking
+deleted · tables re-optimised · Undo"), then Undo (6 bookings, the same id back on 1A
+with "deletion undone" in its history, the skipDate still there as designed, the pill
+gone, no console error).
 
