@@ -81,7 +81,7 @@ import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
 import { planDelete, planUndo } from "./lib/delete-undo";
-import { filterByTags } from "./lib/tag-filter";
+import { filterByTags, onlyFinishedMatch } from "./lib/tag-filter";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
@@ -420,7 +420,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.5.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.6.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -2107,7 +2107,10 @@ function BookingApp({uid}){
       setShowFinished(!!(b&&(b.status==="completed"||b.status==="cancelled")));
       bumpListFocus(); // v17.3.1: scroll the jumped-to card into view
     }else{
-      setSelectedListId(null);setShowFinished(false);
+      // v18.6.0: collapsed, unless the tag filter (kept from day to day)
+      // leaves only finished bookings on this day: then the fold is all there
+      // is to show (`onlyFinishedMatch`, lib/tag-filter.js).
+      setSelectedListId(null);setShowFinished(onlyFinishedMatch(bookings.filter(function(x){return x.date===viewDate;}),guestTags,tagList,listTagFilter));
     }
     resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a day change, not a data change: watching `bookings` would drop the List's selection on every save
@@ -2123,6 +2126,10 @@ function BookingApp({uid}){
       const sel=bookings.find(function(b){return b.id===selectedListId;});
       if(sel&&!filterByTags([sel],guestTags,tagList,next).length) setSelectedListId(null);
     }
+    // v18.6.0: a filter whose only matches are completed or cancelled opens
+    // the fold, or the List shows no card (Patryk, 2026-10-09). It never closes
+    // it: with an active match, or the filter cleared, the fold stays as set.
+    if(onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,next)) setShowFinished(true);
     setListTagFilter(next);
   }
   function toggleShowFinished(next){

@@ -175,7 +175,5 @@ two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
   no undo. Read from the code in v18.5.1's /code-review, not reproduced. Closing it
   wants one of: the rule removal in the write's `onLanded` plus a generator that
   skips a customer mid-delete, or a retry of the anonymise.
-- **The List's tag filter, two loose ends** (v18.5.1's /code-review). A filter whose
-  only matches are completed or cancelled shows no card until "Completed &
-  cancelled" is opened: should choosing a tag open the fold? And the "No bookings
+- **The List's tag filter, one loose end** (v18.5.1's /code-review). The "No bookings
   tagged…" line has no transition, and can sit beside the empty-day prompt.

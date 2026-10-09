@@ -34172,3 +34172,41 @@ selection and the search did not know about it.
 - **`matchedTagLabels` runs for every booking on each keystroke** and again for the
   30 shown. Not measured as slow; no change without a measurement.
 
+## v18.6.0 — the List's tag filter opens the fold
+
+**Date:** 2026-10-09 · **Branch:** `feat/v18.6.0-schema-gate` ·
+**Behavioural change:** a tag filter whose only matches are completed or cancelled
+opens "Completed & cancelled" (section 1). The header is extended as the version's
+other items land.
+**Rules change: none so far.** **Deploy steps: none so far.**
+
+One version with a section per item (Patryk, 2026-10-09), one commit each. The minor
+bump is for the schema gate (a device that refuses to write until refreshed), settled
+with him before the branch was cut.
+
+### 1. A filter with only finished matches showed no card
+
+**Files:** `src/lib/tag-filter.js` (`onlyFinishedMatch`), `src/App.jsx`
+(`changeListTags`, the day-change effect), `tests/tag-filter.test.js` (+4).
+
+**Reproduced on DEV first** (Fri 09.10, the day's one Highchair booking cancelled,
+then the Highchair chip chosen): 0 cards, and a closed fold reading "Completed &
+cancelled · 1 booking". No "No bookings tagged…" line either, since the filtered day
+is not empty.
+
+**The rule** (Patryk, 2026-10-09, both halves): the fold opens whenever the filter is
+on, no active booking matches and a finished one does: when a tag is chosen, and on
+arriving at such a day with the filter kept. It is never closed by the filter: with
+an active match, or the filter cleared, the fold stays as it was set. The day-change
+effect already collapsed the fold on every new day; it now collapses it unless
+`onlyFinishedMatch` says the fold is all there is.
+
+**On DEV after the change:** Highchair chosen → fold open, 1 card; chip cleared → fold
+still open, 6 + 1 cards. Fold closed by hand, Allergy chosen (one active match) → 1
+card, fold untouched. Highchair chosen, next day (no Highchair) → the "No bookings
+tagged" line; back to 09.10 → fold open, 1 card. Filter off, away and back → fold
+closed, 6 cards.
+
+**Not covered, by the rule as given:** a booking cancelled or completed WHILE its tag
+is the filter. The card moves into the closed fold and the List shows none until the
+fold is opened or the day is left and re-entered.

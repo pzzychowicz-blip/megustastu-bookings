@@ -46,6 +46,18 @@ export function filterByTags(bookings, map, list, chosen) {
   });
 }
 
+// v18.6.0: is every booking the filter leaves on this day completed or
+// cancelled? Then the List would show no card at all, only the closed
+// "Completed & cancelled" fold with a count (measured on DEV: 0 cards, "1
+// booking"), so App opens the fold: when a tag is chosen, and on arriving at
+// such a day with the filter still on (Patryk, 2026-10-09). False with no
+// filter, and false when nothing matches (the "No bookings tagged…" line's case).
+export function onlyFinishedMatch(day, map, list, chosen) {
+  if (!liveTagIds(list, chosen).length) return false;
+  const hit = filterByTags(day || [], map, list, chosen);
+  return hit.length > 0 && hit.every(function (b) { return b.status === "completed" || b.status === "cancelled"; });
+}
+
 // The List's chip row for one day: `[{id, label, count}]` in the list's order.
 // A tag gets a chip when a booking on the day has it, or while it is chosen —
 // the filter is kept from day to day, so on a day nobody has the tag its chip

@@ -1,6 +1,6 @@
 // tests/tag-filter.test.js — v18.5.1: filter and search by tag.
 import { describe, it, expect } from "vitest";
-import { bookingTagIds, liveTagIds, filterByTags, dayTagChips, toggleTagId, tagNames,
+import { bookingTagIds, liveTagIds, filterByTags, onlyFinishedMatch, dayTagChips, toggleTagId, tagNames,
   customerTagIds, guestTagChoices, customersWithTag } from "../src/lib/tag-filter.js";
 import { guestTagMap, customerIndex } from "../src/lib/customers.js";
 import { readFileSync } from "node:fs";
@@ -56,6 +56,36 @@ describe("filterByTags", () => {
   it("several: any of them, in the day's order", () => {
     expect(ids(filterByTags(day, map, LIST, ["g-vegan", "g-allergy"]))).toEqual(["a1", "v1"]);
     expect(ids(filterByTags(day, map, LIST, ["o-birthday", "g-allergy", "g-vegan"]))).toEqual(["a1", "b1", "v1"]);
+  });
+});
+
+// v18.6.0: a filter whose only matches are finished would show no card, so App
+// opens "Completed & cancelled" for it (on choosing a tag, and on arriving at
+// such a day with the filter kept).
+describe("onlyFinishedMatch", () => {
+  const done = bk("d1", { phone: ANA, status: "completed" });
+  const gone = bk("d2", { tags: ["o-birthday"], status: "cancelled" });
+  it("true when every match is completed or cancelled", () => {
+    expect(onlyFinishedMatch([done, c1], guestTagMap([old, done]), LIST, ["g-allergy"])).toBe(true);
+    expect(onlyFinishedMatch([gone, c1], {}, LIST, ["o-birthday"])).toBe(true);
+    expect(onlyFinishedMatch([done, gone], guestTagMap([old, done]), LIST, ["g-allergy", "o-birthday"])).toBe(true);
+  });
+  it("false when an active booking matches too", () => {
+    expect(onlyFinishedMatch([done, a1], map, LIST, ["g-allergy"])).toBe(false);
+    expect(onlyFinishedMatch([gone, b1], map, LIST, ["o-birthday"])).toBe(false);
+  });
+  it("false with no filter, a removed tag, or nothing matching", () => {
+    expect(onlyFinishedMatch([done], map, LIST, [])).toBe(false);
+    expect(onlyFinishedMatch([done], map, LIST, ["g-removed"])).toBe(false);
+    expect(onlyFinishedMatch([done], map, LIST, ["g-vip"])).toBe(false);
+    expect(onlyFinishedMatch(null, map, LIST, ["g-allergy"])).toBe(false);
+  });
+  it("App asks it where a tag is chosen and where the day changes, and only ever opens the fold from the first", () => {
+    const APP = read("App.jsx");
+    const fn = APP.slice(APP.indexOf("function changeListTags(next){"), APP.indexOf("function toggleShowFinished(next){"));
+    expect(fn).toContain("if(onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,next)) setShowFinished(true);");
+    expect(fn).not.toContain("setShowFinished(false)");
+    expect(APP).toContain("setSelectedListId(null);setShowFinished(onlyFinishedMatch(bookings.filter(function(x){return x.date===viewDate;}),guestTags,tagList,listTagFilter));");
   });
 });
 
