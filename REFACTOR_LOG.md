@@ -34104,8 +34104,33 @@ bookings, 9 Oct and 20 Nov); "birth" → 2 (two different bookings); "gluten" �
 phone's bookings: the tag follows the guest onto all of them); "zzzq" → "No bookings
 match."; no new console error.
 
-**Left as it is, and Patryk's to choose:** a result row does not say WHY it matched.
-"ann" lists people called Ann and bookings tagged Anniversary in one list with nothing
-to tell them apart, and the row has no tag on it. The row is a measured set of columns
-(v18.2.0 phase 76), so adding one is its own change.
+#### 8d. A result says which tag it matched by
+
+**Files:** `src/lib/customers.js` (`matchedTagLabels`, which `searchBookings` now
+matches through), `src/components/SearchPanel.jsx`, `tests/customers.test.js` (+1),
+`tests/date-format.test.js` and `tests/minor-findings.test.js` (two pins repointed).
+
+8c left a row silent about WHY it matched: "ann" listed people called Ann and
+bookings tagged Anniversary in one list. Patryk's three answers (2026-10-09): show
+the tag; **under the name**, inside the name column; and **only the tags that match
+what was typed, whenever one matched**, the name having matched or not.
+
+Under the name because nothing else fits: the card's inner width is 646px and the
+columns at their caps use all of it (date 104, time 44, name 190, guests 57, phone
+103, status 98, five 10px gaps). The name cell is now a two-line stack, so every
+column stays where it was and only a tag-matched row is taller. The name column is
+the wider of the widest name and the widest tag line, under the same cap. The search
+and the line cannot disagree about what matched: `searchBookings` calls
+`matchedTagLabels`.
+
+**On DEV, 824px wide:** a tag-matched row is 52px high and the others 42; within each
+result set every row's cells start at the same x ("ann": 13, 90, 144, 229, 290, 392);
+"ann" → Samanta with "Anniversary" under the name, then four people named Ann/Hannah
+with no line; "laura" → no row has a line; no row overflows. **At 375px:** the tagged
+row is 82px against 69, the tag sits under the name on line one, no overflow.
+**Not checked:** the tablet itself, and a tag line longer than 190px (it would
+ellipsize; no tag on DEV is that long).
+
+**The List chip's number and the Customers chips stay as built** (his answers the
+same day: still to come or seated; no count).
 

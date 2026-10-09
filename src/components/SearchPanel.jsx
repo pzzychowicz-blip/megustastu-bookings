@@ -17,7 +17,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { S, R, T, FW } from "../lib/constants";
-import { searchBookings, formatPhone } from "../lib/customers";
+import { searchBookings, matchedTagLabels, formatPhone } from "../lib/customers";
 import { formatDay, showsYear } from "../lib/day";
 import { guestsLabel } from "../lib/booking-logic";
 import { Overlay, ModalTitle, mkInp, mkBtn, AutoHeight, SBadge, SBADGE_W, textWidth } from "./atoms";
@@ -48,6 +48,8 @@ const TIME_COL = 44;
 const DATE_FONT = { fontWeight: FW.bold, fontSize: T.body };
 const NAME_FONT = { fontWeight: FW.bold, fontSize: T.lead };
 const CELL_FONT = { fontWeight: FW.regular, fontSize: T.body };
+// v18.5.1: the tag a result matched by, under its name.
+const TAG_FONT = { fontWeight: FW.regular, fontSize: T.small };
 
 // The widest of `labels` in `font`, or undefined (the cells' natural widths)
 // with no canvas — a test importing this file.
@@ -64,7 +66,13 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
   const inputRef = useRef(null);
   useEffect(function () { if (inputRef.current) inputRef.current.focus(); }, []);
 
-  const results = query.trim() ? searchBookings(bookings, query, todayStr, 30, tagList ? { map: guestTags, list: tagList } : null) : [];
+  const tagArg = tagList ? { map: guestTags, list: tagList } : null;
+  const results = query.trim() ? searchBookings(bookings, query, todayStr, 30, tagArg) : [];
+  // v18.5.1 (Patryk): the tags a result matched by, under its name, whether or
+  // not the name matched too. "" on a row found by its name or phone alone,
+  // which then has no second line.
+  const tagOf = {};
+  results.forEach(function (b) { tagOf[b.id] = matchedTagLabels(b, query, tagArg).join(", "); });
 
   // v18.2.0 (the design critique, C1): the date column is as wide as the widest
   // date the results hold — "Wed 24.09" is 66px in this bold and
@@ -76,7 +84,9 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
   const dateCol = widest(results.map(function (b) { return formatDay(b.date); }), DATE_FONT)
     || (results.some(function (b) { return showsYear(b.date); }) ? 104 : 68);
   const nameW = widest(results.map(function (b) { return b.name || "(no name)"; }), NAME_FONT);
-  const nameCol = nameW ? Math.min(NAME_CAP, nameW) : NAME_CAP;
+  // v18.5.1: the tag line is in the name column, so the column fits it too.
+  const tagW = widest(results.map(function (b) { return tagOf[b.id]; }), TAG_FONT) || 0;
+  const nameCol = nameW ? Math.min(NAME_CAP, Math.max(nameW, tagW)) : NAME_CAP;
   const paxCol = widest(results.map(function (b) { return guestsLabel(b.size); }), CELL_FONT);
   const phones = results.filter(function (b) { return b.phone; }).map(function (b) { return formatPhone(b.phone); });
   // v18.2.0 /code-review: "auto" when the width cannot be measured (no 2D
@@ -111,7 +121,10 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
             spare, and 96 measured a wrap there that 64 does not. Phase 76
             keeps that basis on a phone; on the wider card the name is a
             column (the note above the component). */}
-        <span style={{ flex: isMobile ? "1 1 64px" : "0 1 " + nameCol + "px", minWidth: 0, ...NAME_FONT, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
+        <span style={{ flex: isMobile ? "1 1 64px" : "0 1 " + nameCol + "px", minWidth: 0, display: "flex", flexDirection: "column" }}>
+          <span style={{ ...NAME_FONT, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name || "(no name)"}</span>
+          {tagOf[b.id] ? <span style={{ ...TAG_FONT, color: S.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tagOf[b.id]}</span> : null}
+        </span>
         <span style={{ ...CELL_FONT, color: S.muted, width: paxCol, flexShrink: 0, whiteSpace: "nowrap" }}>{guestsLabel(b.size)}</span>
         {phoneCol ? <span style={{ ...CELL_FONT, color: S.muted, width: phoneCol, flexShrink: 0, whiteSpace: "nowrap" }}>{b.phone ? formatPhone(b.phone) : ""}</span> : null}
         {/* v17.15.6: it IS `SBadge`. v17.7.0 gave this copy "the same fill, text

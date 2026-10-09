@@ -753,14 +753,11 @@ export function searchBookings(bookings, query, todayStr, limit, tags) {
   const qDigits = q.replace(/[^\d]/g, "");
   const qName = q.toLowerCase();
   const useDigits = qDigits.length >= 3;
-  const useTags = !useDigits && !!tags && qName.length >= 3;
   const out = bookings.filter(function (b) {
     if (!b || b.anonymized) return false; // v17.0.0: anonymized ("Data removed") bookings never match
     if (useDigits) return b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
     if (b.name && b.name.toLowerCase().indexOf(qName) !== -1) return true;
-    if (!useTags) return false;
-    const t = bookingTags(b, tags.map, tags.list);
-    return t.guest.concat(t.occasion).some(function (label) { return label.toLowerCase().indexOf(qName) !== -1; });
+    return matchedTagLabels(b, q, tags).length > 0;
   });
   const today = todayStr || "";
   out.sort(function (a, b) {
@@ -770,6 +767,20 @@ export function searchBookings(bookings, query, todayStr, limit, tags) {
     return (b.date || "").localeCompare(a.date || "") || (b.time || "").localeCompare(a.time || "");            // past desc
   });
   return out.slice(0, max);
+}
+
+// matchedTagLabels — the names of booking `b`'s tags that contain the query,
+// guest tags first: what Find a booking writes under a result's name, so "ann"
+// tells an Ann from an Anniversary (Patryk, 2026-10-09: only the MATCHING
+// tags, and also when the name matched too). [] for a digit query, for fewer
+// than three characters, and without `tags` — the same rule the search itself
+// matches by, because it IS that rule: `searchBookings` calls this.
+export function matchedTagLabels(b, query, tags) {
+  const q = String(query || "").trim();
+  const qName = q.toLowerCase();
+  if (!b || !tags || qName.length < 3 || q.replace(/[^\d]/g, "").length >= 3) return [];
+  const t = bookingTags(b, tags.map, tags.list);
+  return t.guest.concat(t.occasion).filter(function (label) { return label.toLowerCase().indexOf(qName) !== -1; });
 }
 
 // searchCustomers — match customers against a typed query.

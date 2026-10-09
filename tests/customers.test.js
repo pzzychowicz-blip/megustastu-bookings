@@ -10,7 +10,7 @@ import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap, stampGuestSeed,
   resolveGuestId,
-  searchBookings, guestTagMap, searchCustomers, searchGuestsByName, findPhoneOverlaps,
+  searchBookings, matchedTagLabels, guestTagMap, searchCustomers, searchGuestsByName, findPhoneOverlaps,
   regularChipLabel,
 } from "../src/lib/customers.js";
 
@@ -359,6 +359,17 @@ describe("searchBookings", () => {
       expect(ids("removed", tags)).toEqual([]);
       expect(ids("birthday", tags)).not.toContain("anon");
       expect(ids("600111", tags)).toEqual(["new", "old"]);
+    });
+    it("names the tags a result matched by, and only those", () => {
+      const by = (id, q, t = tags) => matchedTagLabels(tb.find((b) => b.id === id), q, t);
+      expect(by("new", "allerg")).toEqual(["Allergy"]);        // the guest's, stated on another booking
+      expect(by("an", "ann")).toEqual(["Anniversary"]);
+      expect(by("old", "ann")).toEqual([]);                    // found by the name Ann, no tag matched
+      expect(by("bd", "birth")).toEqual(["Birthday"]);
+      expect(by("bd", "bi")).toEqual([]);                      // two letters
+      expect(by("new", "600111")).toEqual([]);                 // a phone query
+      expect(by("new", "allerg", null)).toEqual([]);
+      expect(by("gone", "removed")).toEqual([]);
     });
     it("without the tag argument nothing changes", () => {
       expect(ids("allerg")).toEqual([]);
