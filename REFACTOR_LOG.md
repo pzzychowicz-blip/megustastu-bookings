@@ -32994,3 +32994,786 @@ from ROADMAP.
 
 **Gate at the push:** build 129.04 kB gz (main chunk, 128.75 on v18.4.9) · 2811 tests passed (2797) · lint 63 problems, 0 errors · `check:style` OK. `database.rules.json` is not in the diff: no rules suite run, no PROD rules step.
 
+
+---
+
+## v18.5.0 — status changes out of BookingApp · the day's deposits · guest tags
+
+**Date:** 2026-10-08 · **Branch:** `feat/v18.5.0-deposits-line-guest-tags` ·
+**Behavioural change:** a deposits line in the Summary's opened panel and on the
+printed day sheet (section 2); a "Tags" section in Settings → Customers (section 3).
+None in section 1. The header is extended as the version's other items land.
+**Rules change: yes** — `settings/tags` + `tagsRev` (section 3 has the PROD step).
+**Deploy steps: three**, in the table at the end of this entry; the second, refresh
+every device, is what keeps a device on v18.4.10 from deleting tags.
+
+One version with a section per item (Patryk, 2026-10-08): #17's next extraction first,
+then the deposits line and guest tags, then the documentation items he chose to bundle.
+
+### Status changes are `lib/status-change.js` (ROADMAP #17)
+
+**Files:** `src/lib/status-change.js` (new, 200 lines) · `src/lib/vouchers.js` (+75) ·
+`src/App.jsx` (5,258 → 5,091 lines) · `tests/status-change.test.js` (new, 32) ·
+`tests/save-path.test.js` · `tests/retry-report.test.js` · `tests/count-label.test.js` ·
+`src/CLAUDE.md` · `src/lib/CLAUDE.md` · `ROADMAP.md`
+
+**Why this domain** (Patryk chose it from four, AskUserQuestion). Measured on v18.4.10's
+`App.jsx` with `git log -L`: `updateStatus` 104 lines, 23 commits, 7 of them fixes;
+`doCancelBooking` 37, 18, 6. No test ran either (`tests/shortcuts.test.js` checks only
+that S and C call `updateStatus` by name, on a stub).
+
+**No behaviour change.** Three functions moved statement for statement, the exits
+replaced by returned conclusions:
+- `updateStatus` is `planStatus(ctx)`: `{confirmCancel}`, `{voucherAsk}`,
+  `{voucherBack}`, `{refuse}`, `{seatClash}` or `{transform, flashes, flashKind,
+  seatNote}`, in the order the function always asked.
+- `doCancelBooking` is `planCancel(ctx)`: `{voucherBack}` or `{transform}`, memoised by
+  `prev` as before.
+- The completion inside `seatAfterClearing` is `completeCleared(ctx)`.
+- `voucherToAsk`, `voucherHeldBy` and `voucherToRestore` are `voucherDue`, `voucherHeld`
+  and `voucherReturnDue` in `lib/vouchers.js`, taking what they closed over as `src`.
+  App keeps the old names as one-line wrappers, because the form's save, the delete and
+  the two settle functions call them. `seatClashSnap` moved with them; the form's save
+  imports it.
+
+App keeps the capability gate, the two "asked" refs, the modal setters, `saveBookings`
+with `goneReport`, the toast, the seat note, the undo and the WhatsApp cancel hook.
+Five imports left `App.jsx` (`seatNoteFor`, `unseatRestore`, `seatRefusal`,
+`applySeatedShift`, `seatedElapsed`) and `isRedeemedBy`.
+
+**One difference from a literal move, found by the gate.** `planCancel` takes no clock.
+The first version passed `now: Date.now()` to it as `planStatus` gets, and lint went
+from 63 warnings to 64 (`react-hooks/purity` on that call, which fails the 63 cap). The
+old cancel never read the clock (the walk-back question asks whether money was taken,
+not whether the voucher is still open), so the argument was removed, not silenced.
+
+**Verified old against new.** A throwaway test lifted the old `updateStatus`,
+`doCancelBooking`, `seatAfterClearing`, the three voucher predicates and their helpers
+out of `origin/main`'s `App.jsx` (`1bfe0179`) and the new ones out of the working
+tree's, compiled both with the real `booking-logic`, `booking-save`, `vouchers` and
+`status-change` and stubs for the gate, every setter, `saveBookings`, `flash`,
+`flashRefusal`, `goneReport`, `getUser`, `armUndo`, `doSave` and the WhatsApp hook, and
+ran both on generated days: 3,000 seeds, 3–15 bookings, all five statuses, locks,
+bookings with no table, seated parties sharing tables, early, late and overstaying
+seats, vouchers open, spent, void, expired, redeemed by some bookings and missing from
+the list, the module on and off, both refs set and unset, the permission refused, table
+blocks, the optimiser on and off, today, tomorrow and yesterday, eight clock times.
+Every booking and one unknown id went to every status and through cancel with `true`,
+`false` and no no-show argument, and each day ran four clear-and-seat answers.
+**250,696 actions: the same calls in the same order with the same arguments, the same
+return value, the same refs afterwards, the same written list, the same list on a second
+call, the same list for a replay on a changed `prev`, and the same rows returned as the
+same objects** (clock frozen, so history stamps included). The stub `saveBookings` kept
+a mirror, so the seat that follows a clearing ran on the list the clearing wrote.
+
+Reached, of 149,185 status taps: to the cancel confirm 28,666 · asks to redeem 1,545 ·
+asks to restore 1,395 · refused for no table 2,221 · seat clash asked 1,869 · permission
+refused 5,855 · written 91,933 · write held 15,701 (seated 14,265, of which 4,327 with a
+seat shift · un-seat restore 7,650 · seated to completed with the length cut 6,532 ·
+completed without having been seated 17,702 · an id not in the list 11,548 · a seat note
+4,326). Of 89,511 cancels: asks to restore 1,470 · written 75,282, each arming Undo ·
+held 12,759. Of 12,000 clear-and-seat answers: completion then the seat 6,245 · through
+the form's save 1,767 · refused for no table 519 · asks to restore 130.
+
+**The first full run proved nothing about tables, and its counts said so.** It built
+tables from `ALL_TABLES`, which holds `{id, capacity}` objects (`tests/CLAUDE.md`'s
+fixture trap), so no two bookings shared a table and "seat clash asked" was 0 of
+149,185. The run above is the second, with ids.
+
+**Sabotages, each restored afterwards.** The completion's length cut applied to a
+booking that was never seated: fails at seed 1. A seat that lets the optimiser run: seed
+1. The seat checks moved ahead of the money questions: seed 31. A re-entry that asks to
+redeem again: seed 13. The no-show flag dropped: seed 1. `completeCleared` completing a
+listed party that is not seated: seed 1. (The plan named "the two voucher gates swapped"
+as a sabotage. That one cannot fail: one gate needs the target status to be Completed
+and the other needs it not to be, so their order is unobservable.) The test is not
+committed, because it reads the old code from git.
+
+**What stays:** `tests/status-change.test.js`, 32 cases: each question, what each
+transition writes, the replay on a fresh list, the cancel's memo, the three predicates,
+and that App's three functions are still only the gate, the plan and the side effects.
+Each of the six sabotages fails exactly one of its behaviour cases.
+
+**Measured on DEV (1 trial each, real controls in List view, results read back from the
+database).** Seat from the card ("v1834 weekly", booked 19:00, tapped 17:20): `seated`,
+time 17:20, length 190, history "status → seated" and "seated early: time adjusted
+19:00 → 17:20", toast "Booking saved." The ⋯ popup's Confirmed on that seated booking:
+time 19:00, length 90, "un-seated: time restored 17:20 → 19:00, length 190 → 90 min".
+Seated again and completed from the card: `completed`, length 15, `stayedMin` 15.
+Cancel from the ⋯ popup ("Anna Priks"): the confirm, then `cancelled` with history
+"cancelled" and the pill "Booking cancelled · Undo"; Undo: `confirmed`, "cancellation
+undone". Seat onto an occupied table ("v1833-recD" on 1A, "RQ46 HeldLands" seated
+there): "That table is still occupied … 1A still has RQ46 HeldLands seated (since
+15:30)"; Complete them & seat: RQ46 HeldLands `completed`, `stayedMin` 111, "status →
+completed (table cleared to seat another party)", and v1833-recD `seated` at 17:21.
+Complete a booking holding an open voucher ("WL48 A", DH99-XKS9, 80 €): the redeem
+prompt opened with the booking still `confirmed`; Redeem & complete: `completed`, the
+voucher at 0 with a ledger entry for the booking. The ⋯ popup's Confirmed on it: the
+restore prompt; Restore to voucher: `confirmed`, the voucher at 80, one reversal.
+
+**Not verified.** The quick-status popup opened by a hold on the timeline or the plan
+(it needs a real press; the List's ⋯ opens the same component and calls the same
+`updateStatus`). The S and C keys. A second device. The DEV taps were `el.click()`, not
+a finger, and the seat tap landed while the ⋯ popup was still fading out, which a finger
+could not do. The voucher was attached by a direct DEV write, and that probe loaded a
+second copy of the Firebase SDK, which threw "Maximum call stack size exceeded" inside
+its own `update()` (the stack names the copy's URL, without the app's `?v=` hash). The
+app's own SDK logged no error.
+
+**Gate.** Build: main bundle 129.23 kB gz (129.04 recorded when v18.4.10 was pushed;
+not re-measured on `main` here). Tests: 2,843 (2,811 before the new file's 32). Lint:
+63 problems, 0 errors. `check:style`: OK.
+
+### The day's deposits line
+
+**Files:** `src/lib/booking-logic.js` (+47) · `src/components/Summary.jsx` ·
+`src/components/DaySheet.jsx` · `src/App.jsx` (one prop) · `tests/deposits.test.js`
+(new, 17) · `GLOSSARY.md` · `ROADMAP.md` · `src/components/CLAUDE.md` ·
+`src/lib/CLAUDE.md`
+
+**What it is** (Patryk's scope, 2026-10-08: a line on the day summary and the printed
+day sheet, split held against forfeited; placed in the opened panel, his pick of the
+placements offered). `depositSummary(bookings, date)` sorts the date's deposits into
+two sides, each a total and a count: **held** on a booking that still stands (pending,
+confirmed, seated, completed), **forfeited** on a cancelled one, a no-show included.
+`depositParts` is the words per side, and a side with nothing is left out;
+`depositLine` joins them into "Deposits · 150 € held (3 bookings) · 40 € forfeited
+(1 booking)". The Summary draws the parts and the day sheet prints the line, so the
+screen and the paper are one derivation. A day with no deposit shows nothing.
+
+**Decisions.**
+- **Its own pass, not two fields on `daySummary`.** That function drops cancelled
+  bookings before it counts, and the forfeited side is only about them. For the same
+  reason the line sits outside the panel's `hasData` branch and the day sheet reads
+  all the date's bookings, not the list its table prints.
+- **"Forfeited" is every cancelled booking that still carries a deposit.** The app has
+  no refund field. A deposit handed back counts as forfeited until somebody takes it
+  off the booking; the lib comment and the GLOSSARY row say so.
+- **On screen it is one more row of the hourly bars.** The label takes the hour
+  label's column (`LABEL_COL`, 104) and each side is a no-wrap unit with no separator
+  drawn. The first version drew the sentence's dots, and a wrapped line began with
+  one.
+
+**Measured on DEV** (1 trial each, real controls, 8 Oct 2026). The day opened with one
+deposit: "Deposits 20 € held (1 booking)". Deposit 30 typed into Anna Priks's form and
+saved (history "edited: deposit 0→30 €"): "50 € held (2 bookings)". RQ46 Weekly
+(deposit 20) cancelled from the List card's ⋯ and its confirm: "30 € held (1 booking)
+20 € forfeited (1 booking)", and the headline went from 18 covers, 9 bookings to 16
+and 8. At 712px: the label at x 31 and 104 wide, as the hour labels; the figures from
+x 143, as the bars. At 375px: both sides at x 139, on two lines 16px apart, page
+overflow 0. The print sheet's header (read from its DOM): "Deposits · 30 € held
+(1 booking) · 20 € forfeited (1 booking)" as the fourth line, and no row for the
+cancelled booking in its table, as before.
+
+**Sabotages**, each restored afterwards, against `tests/deposits.test.js`: a cancelled
+booking's deposit counted as held, 5 of 17 fail; every date counted, 1; a side with
+nothing printed, 2.
+
+**Not verified.** A printed page or a PDF (the header line was read from the
+print-only DOM; it is a plain line like the three above it). The dark theme (the line
+uses the panel's existing text tokens). A currency other than €, beyond the unit test.
+
+**Gate.** Build: main bundle 129.42 kB gz (129.23 after section 1). Tests: 2,860
+(2,843 before the new file's 17). Lint: 63 problems, 0 errors. `check:style`: OK.
+
+### Guest tags, part 1: the list (`settings/tags`)
+
+**Files:** `src/lib/tags.js` (new) · `src/hooks/useTagSettings.js` (new) ·
+`src/components/TagListEditor.jsx` (new) · `src/components/CustomersSettings.jsx` ·
+`src/components/Settings.jsx` · `src/App.jsx` · `src/lib/activity.js` ·
+`database.rules.json` (+2 lines) · `tests/tags.test.js` (new, 33) ·
+`tests/rules/database-rules.test.js` (+1 row) · `database.rules.README.md` ·
+`CLAUDE.md` · `src/CLAUDE.md` · `tests/CLAUDE.md` · `src/hooks/CLAUDE.md` ·
+`src/lib/CLAUDE.md` · `src/components/CLAUDE.md` · `GLOSSARY.md`
+
+**Scope** (Patryk, 2026-10-08, by AskUserQuestion): a FIXED list edited in Settings;
+guest tags live on the customer and are erased with them, occasion tags on the one
+booking; the seed "a fuller list" (Guest: Allergy, Vegetarian, Vegan, Gluten-free,
+VIP. Occasion: Birthday, Anniversary); the editor a collapsible section in the
+Customers tab, behind `settingsWrite`. This part is the list. The fields on a booking
+and the screens that show them are parts 2 and 3.
+
+**The model.** `settings/tags` = `{ v, guest: [{id, label}…], occasion: [{id, label}…] }`
+on the `tagsRev` rev pair, the tenth settings node and the seventeenth rev pair.
+- **A booking will store ids, never labels.** A rename reaches every booking and
+  writes to none. An id is minted once (`tagIdFor(kind, genId())`) and never reused:
+  a removed name added again is a new tag, and the bookings that carried the old one
+  do not come back tagged.
+- **The seed's ids are fixed strings** (`g-allergy`, `o-birthday`…), so two devices
+  that have never seen a stored list agree, and a booking can carry a seed tag before
+  the list has ever been saved.
+- **Absent is the seed, a missing list is empty.** RTDB drops an empty array, so a
+  stored `{v: 1}` is a restaurant that removed every tag (the v15.9.0 priorities
+  rule).
+- Ids are unique across BOTH kinds; names within one, whatever the capitals. A name
+  is one line of at most 24 characters; a kind holds at most 12.
+
+**The hook differs from its template in two places, both for one window.**
+`useVoucherDefaults` keeps its state when the snapshot is null. Here a refused write
+is rolled back by the SDK to the stored value, which for a node never saved IS null,
+so that guard would have left a tag on screen that no database holds, and a booking
+saved with its id would carry a tag nothing can name. `useTagSettings` sanitises
+every snapshot (null → the seed) and reports a refused write as a sentence
+(`tagError`). The window is real: it is PROD between this version's deploy and the
+rules being published, and it is DEV today.
+
+**The rules.** Two lines, `settings/voucherDefaults`' with the names swapped, written
+by a script that asserts each substitution and then compares the parsed predicates.
+Its first run refused to write: I had counted the name three times in the node's line
+and it occurs four times (its own key, and the sibling rev three times). The
+`settingsWrite` gate is now named by 12 rules (10 before). `database.rules.README.md`
+has the section and the deploy order.
+
+**The PROD step** (after the merge has deployed, either order is safe): Firebase
+console → the PROD project → Realtime Database → Rules → paste `database.rules.json` →
+Publish. Until then the seed list is used and editing the list is refused, with the
+sentence below. **DEV needs the same step**: the Firebase CLI here holds no login
+(`firebase login:list`: "No authorized accounts"), so DEV's rules were not updated in
+this session.
+
+**Measured.**
+- `npm run test:rules`: 298 pass (294 before: the rev sweep's two cases for the new
+  pair, derived from the rules file, and the two own-capability cases added by name).
+  Sabotages, each restored: both lines naming `hoursEdit`, 2 of 298 fail (the
+  own-capability pair); the node's line without its rev check, 2 fail ("rejects a
+  write that does not bump its rev", and the bare-remove sweep).
+- On DEV, whose rules do not have the node (1 trial): "Nut allergy" typed and Add
+  pressed. A MutationObserver saw 7 name boxes 41ms after the click, 6 at 98ms and
+  the sentence "The tag list was not saved: the database refused the change
+  (permission denied)." at 101ms. The console logged the `[SAFE] settings/tags write
+  REJECTED — PERMISSION_DENIED` line. The typed name is not kept in the add box.
+- The editor at 820px: nine 230×44 name boxes, each remove named for its tag. "VIP"
+  renamed to "vegan" and blurred: `aria-invalid`, "There is already a tag called
+  “vegan”.", the box kept "vegan"; Close then raised "Discard unsaved changes?",
+  and with the name put back Close closed. Remove on Anniversary: the × at
+  (290, 649.5), 32×32; "Confirm — remove" at (290, 649.5), 152.1×32, the sentence
+  under the row.
+
+**Not verified.** A SUCCESSFUL save of the list in the running app: it needs the
+rule on DEV. What stands in for it is the emulator suite (the rule accepts an admin's
+and a `settingsWrite` holder's write at rev+1) and the hook reading
+`writeWithRev("settings/tags", …)`, the call the other nine settings nodes make. The
+activity-log line ("changed the tag list · guest"). A second device. The read-only
+view for an account without `settingsWrite`. The blur was a dispatched `focusout`,
+since `.blur()` in the hidden pane fired no React handler.
+
+**Verified afterwards, once DEV's rules had the node** (Patryk published them; 9 Oct
+2026, 1 trial each, real controls). "Nut allergy" added: six name boxes, no refusal
+sentence, nothing in the console; after a reload the section read "6 guest · 2
+occasion" and the name was there. Renamed to "Nuts": a second tab, on its own
+connection, opened showing "Nuts". Removed through "Confirm — remove": five names in
+the first tab, and five in the second without a reload. The activity log listed
+three "changed the tag list · guest" lines at 00:13. Still not verified: the
+read-only view for an account without `settingsWrite` (it needs a second account).
+DEV now stores the list (the seed's seven tags).
+
+**Gate.** Build: main bundle 130.71 kB gz (129.42 after section 2; the hook and
+`lib/tags.js` load with the app, the editor with the Settings chunk). Tests: 2,893
+(2,860 before the new file's 33). Lint: 63 problems, 0 errors. `check:style`: OK.
+Rules: 298.
+
+
+### Guest tags, part 2: the fields on a booking and the save
+
+**Files:** `src/lib/customers.js` (+221) · `src/lib/tags.js` (+75) ·
+`src/lib/booking-fields.js` (three rows) · `src/lib/booking-save.js` ·
+`src/lib/constants.js` (`EMPTY_FORM`) · `src/App.jsx` (four lines) ·
+`tests/guest-tags.test.js` (new, 60) · `tests/save-path.test.js` (+4 scenarios, 23
+snapshots moved) · `tests/booking-fields.test.js` (fixtures) · `CLAUDE.md` ·
+`src/CLAUDE.md` · `src/lib/CLAUDE.md` · `tests/CLAUDE.md`
+
+No screen shows a tag yet: this part is storage and the save. The screens are part 3.
+
+**Three fields, one row each in `BOOKING_FIELDS`.** `tags` is the booking's occasion
+tags. `guestTags` and `guestTagsAt` are a STATEMENT of the guest's tags and when it
+was made. Two flat fields and not one `{at, ids}` object, because `undoKey` serialises
+arrays and scalars only.
+
+**Where a guest's tags live** (Patryk, AskUserQuestion: "On their bookings", not a
+customers node). A customer here is derived from bookings, so their tags are held the
+way their visits are. Copying the tags onto every booking has no answer when two
+copies disagree and rewrites every booking a regular has on each change. So nearly
+every booking states nothing, the guest has what their NEWEST statement says (the id
+breaks a tie), and a tag change writes one booking.
+
+**Four things the simple version loses, each found by working a case through, and
+each now a rule (`src/CLAUDE.md`, Customer layer):**
+1. *A set in the form.* Tap Allergy on a new booking, then type a known guest's
+   number: a set is either replaced by that guest's tags (the tap is gone) or kept
+   (Save overwrites what they had). It also overwrites another device's change and
+   replays stale. The form holds TAPS (`guestTagEdits`), and what it shows and what
+   Save writes is `editTagIds(guestTagBase(…), taps)`. A form nobody tapped holds no
+   taps and cannot write a guest's tags.
+2. *The clock.* A statement stamped with a slow device's clock as it reads is older
+   than the one it replaces: saved, and never seen. A new stamp is
+   `max(now, newest + 1)`.
+3. *A booking that leaves its guest* (deleted, or given another number). If it held
+   the newest statement the guest falls back to an older one: a tag taken off comes
+   back. `rehomeGuestTags` hands the statement, stamp and all, to the most recent
+   booking of each group left behind, in the same write. App's delete and both form
+   saves go through it.
+4. *The history line.* `bookingWriteEntries` copies every history action into
+   `/activity`, which is append-only and which Delete customer can only redact a
+   name in. So the line says "guest tags updated" and never names one (Patryk,
+   AskUserQuestion). An occasion tag is named: "occasion tags: Birthday".
+
+**A booking given another guest's number carries its tags to them** (and is shown
+doing so: the form's chips are the union, so one can be tapped off before Save). This
+is what makes "tagged with no phone, number added later" keep the tag, which is the
+common case; the cost is that re-pointing a booking at a different known person adds
+the first person's tags to the second unless they are tapped off. Flagged to Patryk
+as his to overrule.
+
+**Delete customer** is `anonymizeBooking` (`lib/customers.js`, moved from App). It
+clears guest tags and occasion tags (Patryk, AskUserQuestion: "Clear them too").
+`tests/guest-tags.test.js` lists every row of `BOOKING_FIELDS` as wiped (9) or kept
+with its reason (23), so a row added later fails until it is decided.
+
+**`tests/save-path.test.js`: 23 snapshots moved, each line accounted for before any
+was updated.** The guard runs App's own save and is pinned against v18.3.3; its rule
+is that `-u` is never the fix. First run: 100 of 112 failed, because the lifted code
+now names `tagList` and the harness did not bind it. Bound: 66 failed, 43 of them
+only on `tags: <absent> → []`, because the hand-written fixture rows predate the
+field (no row the app holds lacks it: `sanitize` fills it). With the three fields in
+`bk` and the two keys in `draftOf`: 23. A script then paired every changed line with
+its old one by removing exactly the new keys: 18 created rows gain
+`"tags":[],"guestTags":[]` (14 new-booking scenarios, 4 generated occurrences), 3
+`openEdit` drafts gain `"tags":[],"guestTagEdits":[]`, 2 `sanitize` rows gain the
+three keys, 3 field-list lines read "undo sig". 0 unexplained. No edit scenario's
+snapshot moved. Four scenarios were added for App's half (the tag list reaching the
+edit, the taps reaching the save).
+
+**The generated run.** 400 seeded runs of 60 steps (24,000): 8,696 creates, 8,843
+edits (4,800 with nothing tapped), 4,964 deletes, 1,497 erasures, each save reading
+its time from a range of 40ms so stamps arrive out of order and equal. A plain record
+of what each guest should have is kept beside the list, and after every step every
+booking must show what the record says. 10,149 saves changed a guest's tags, 3,295
+of them on a clock at or behind the statement they replaced; 552 deletes handed a
+statement on. The counts are an inline snapshot, so a run that stops reaching a case
+fails. The same run on three broken copies of the code must fail, and does: no
+hand-on at a delete, a stamp taken from the clock as it reads, the taps saved as the
+whole set.
+
+**Sabotages of the real code**, one at a time, each restored and compared byte for
+byte, against the three test files (236 tests):
+
+| Broken | Fails |
+|---|---|
+| Delete customer leaves guest tags | 7 |
+| Delete customer leaves occasion tags | 3 |
+| App's delete does not hand the statement on | 1 |
+| The history line names the guest tags | 3 |
+| A save with nothing tapped ignores a changed phone | 4 |
+| The older statement wins | 15 |
+| A moved booking takes back the tags of bookings that came with it | 3 |
+| The edit form opens with the stored set as its taps | 2 |
+
+The last one passed all 234 tests on its first run. Every fixture's statement was its
+guest's newest, so re-adding it changed nothing. The case that catches it (a booking
+holding a statement since replaced, saved unchanged) was added, and the sabotage
+re-run.
+
+**Measured on DEV** (1 trial, 9 Oct 2026). The app loaded as 18.5.0 with no console
+error. "v1834 weekly2" (19:30) was opened from the timeline, a note typed and Save
+pressed: the form closed with no warning, and after a reload the booking held the
+note and its history read "edited: notes updated". That is the edit path with the
+three new fields in it, and nothing more: no screen reads or writes a tag until
+part 3.
+
+**Not verified.** A tag saved or shown in the running app (part 3). A second device.
+
+**Gate.** Build: main bundle 130.69 kB gz (130.71 at the commit before, both built
+side by side; the entry grew 0.52 kB raw, and the two history clauses are in the
+shared `atoms` chunk). Tests: 2,961 (2,893 before: the new file's 60, 4 save-path
+scenarios, 4 field-table cases for the two new draft keys). Lint: 63 problems, 0
+errors. `check:style`: OK.
+
+### Guest tags, part 3: the screens
+
+**Files:** `src/components/TagChips.jsx` (new, 60) · `BookingFormModal.jsx` ·
+`ListView.jsx` · `TimelineView.jsx` · `DaySheet.jsx` · `SeatNoteModal.jsx` ·
+`CustomersSettings.jsx` · `Settings.jsx` · `src/App.jsx` · `src/lib/customers.js`
+(`bookingTags`, `tagLine`, `setCustomerTags`, `customerTagTap`) ·
+`src/lib/booking-logic.js` (`seatNoteFor`) · `src/lib/booking-save.js` ·
+`src/lib/status-change.js` · `tests/guest-tags.test.js` (+14, 74) · three seat-note
+expectations · `tests/retry-report.test.js` · `GLOSSARY.md` · `DESIGN.md` ·
+`ROADMAP.md` · `src/CLAUDE.md` · `src/lib/CLAUDE.md` · `src/components/CLAUDE.md`
+
+**Where a tag shows** (Patryk, AskUserQuestion, 2026-10-08): the booking form (edit),
+the List card, Settings → Customers (show and edit), the seat note, the printed day
+sheet (the Notes column), and the timeline block's title only. Not the walk-in form.
+
+**One read.** Every surface shows `bookingTags(b, guestTags, tagList)`, where
+`guestTags` is one `guestTagMap(bookings)` memo in App. A surface reading
+`b.guestTags` would be right only for the booking that holds the statement, so the
+test file fails a component that does, and pins each surface's call.
+
+**The form.** "Guest tags" and "Occasion", two groups of chips under Notes. The guest
+chips are the taps applied to `guestTagBase` for whoever the draft names at that
+moment, spelled as the save spells it (`enteredPhone`, so the form takes
+`phonePrefix`).
+
+**The chip** (`DESIGN.md`): the activity log's pressed filter chip, an existing atom.
+Pressed is the success tone and a check mark, so the state does not rest on a ring's
+colour. On the List card a tag is a word in the flag row in the settled facts' ink,
+with no mark, as `manual` is.
+
+**Settings → Customers.** A row shows the customer's tags under the phone. Opened, it
+leads with the chips; a tap is one write (`customerTagTap`), on the booking that
+already holds the customer's newest statement, or their most recent one. The chips
+were under the bookings at first: on DEV, under a customer's 10 bookings, they were
+the last thing in the opened row, so they moved above. Looked at again after the
+move (light theme): the chips start 20px under the row, "10 bookings" 10px under
+the chips, VIP still pressed. Behind `bookingEdit`, the capability the form's
+Save asks for, because a guest's tags are on their bookings.
+
+**The seat note** opens for a tagged party with no note too, and shows the tags above
+the note. `seatNoteFor` takes the labels from its caller, because a guest's tags are
+read from the whole list. Three existing expectations of the snapshot gained
+`guestTags: [], occasionTags: []`, edited by hand (one of them a line of a save-path
+snapshot).
+
+**Two guards that count things I moved.** `tests/a11y.test.js` reads a block's
+`data-bk` and `aria-hidden` as an adjacent pair, so the new `title` sits after them.
+`tests/unplaced.test.js` reads `missingTables` as the List's first prop, so the two
+new props follow it. And `tests/retry-report.test.js` counts App's `saveBookings`
+calls: 18 now, the customer tap decided as one of the calls without a report.
+
+**A lint warning that was a real note.** The first `saveCustomerTag` read
+`Date.now()` in App and took lint to 64 (`react-hooks/purity`, found by diffing the
+warning list against the last commit by file and rule). The clock read moved into
+`customerTagTap`, which is where the house shape puts it: the lib builds the
+transform, App dispatches it.
+
+**Measured on DEV** (9 Oct 2026, dark theme, an 800px pane, 1 trial each, real
+controls unless said).
+- The form on "v1834 weekly2": 7 chips, each 28px tall. Allergy and Birthday tapped:
+  `aria-pressed="true"`, a check mark, 63.9 → 79.9px wide. VIP tapped twice: back to
+  unpressed. Saved with no warning.
+- That booking afterwards: the block's `title` "Allergy · Birthday", its spoken label
+  "v1834 weekly2, 19:30, 2 guests, table 1A, confirmed, tagged Allergy, Birthday";
+  the List card's flag row "Allergy  Birthday"; the printed sheet's Notes cell
+  "Allergy · Birthday — <the note>", the tags at weight 700.
+- Seated from the List: the popover read "Note — v1834 weekly2 · 2 guests · 19:30 ·
+  1A · Allergy · Birthday · <the note> · Done".
+- Settings → Customers, Laura Vidal: VIP tapped, pressed, and the row read
+  "+34 600111222 · last Fri 02.10 | VIP | 6 visits".
+- A new booking's form: nothing lit; Allergy tapped → Allergy; her number typed →
+  Allergy, VIP; an unknown number typed → Allergy. Closing asked "Discard unsaved
+  changes?".
+- The activity log: "v1834 weekly2 · edited: occasion tags: Birthday, guest tags
+  updated" and "Standing Probe · guest tags updated" (the booking of that number
+  holding the statement). No guest tag is named.
+
+**Sabotages of the real code**, each restored byte for byte, against 443 tests in
+three files: a tagged party with no note raises no seat note (3 fail); a customer tap
+stamped with the clock as it reads (2); the tap written as the whole set (3); the tap
+without its capability check (1); the List card reading the booking's own statement
+(2); `bookingTags` in stored order (5).
+
+**Not verified.** A seat note for a tagged party with NO note in the running app
+(tests only). A printed page or PDF (the sheet's DOM was read). Light theme, a phone
+width, the tablet, a finger. A second device. An account without `bookingEdit`
+(disabled chips) or without `settingsWrite`.
+
+**DEV data changed and left:** "v1834 weekly2" (Fri 9 Oct) has a note, the tags
+Allergy and Birthday, and is seated; the customer on +34 600111222 has VIP;
+`settings/tags` is stored.
+
+**Gate.** Build: main bundle 131.75 kB gz (130.69 after part 2). Tests: 2,978 (2,961
+before). Lint: 63 problems, 0 errors. `check:style`: OK.
+
+### The DEV browser key's referrer list (#12)
+
+**Files:** `SECURITY.md` (§4) · `ROADMAP.md`. Docs only.
+
+Decided on 2026-10-08: restrict the two Firebase browser keys by HTTP referrer, DEV
+first. What was owed was the list. It was worked out from what runs against DEV
+(every `npm run dev` port, the tablet's DEV tab over `adb reverse`, the simulator's web
+clips, the sandbox deployment): `localhost`, `localhost/*`,
+`megustastu-bookings-wa-sandbox.vercel.app` and the same with `/*`.
+
+**Read, not assumed.** Google's API-key page (fetched 2026-10-09) says an entry with
+no port matches every port, an entry with a port matches only that one, and a host
+needs two entries (bare, and with `/*`). So one pair covers every dev port. The page
+does not mention `localhost` as a website entry at all: that it works is not
+documented there, which is the reason to try DEV first.
+
+**What a wrong list looks like.** The key rides on sign-in and on the hourly token
+refresh, so a new sign-in fails at once and a signed-in device can carry on for up to
+an hour. The check in §4 is therefore a fresh sign-in at both addresses and then one
+left open for over an hour. That behaviour is from how Firebase Auth works as I know
+it, not from a measurement here: nothing was restricted in this session.
+
+**Left out on purpose:** the project's `firebaseapp.com` page (pop-up and redirect
+sign-in only; `LoginScreen.jsx` is the one file that signs in, with email and
+password), `127.0.0.1` (the rules emulator, no key), per-deployment URLs.
+
+**Not done:** the step itself, which is Patryk's in Google Cloud. The PROD list is
+proposed in §4 and not applied.
+
+### The root CLAUDE.md, trimmed and counted
+
+**Files:** `CLAUDE.md` · `src/CLAUDE.md` · `api/CLAUDE.md` · `tests/doc-size.test.js`
+(new, 2) · `ROADMAP.md`. Docs and one test.
+
+The root file is loaded into every session. It was 43,967 characters (40,162 on
+2026-09-23, when the roadmap last measured it), over the 40,000 at which Claude Code
+warns, and nothing counted it. Patryk was shown the four passages before and after
+and chose them (AskUserQuestion, 2026-10-09).
+
+| Passage | Before | After | Moved, word for word, to |
+|---|---|---|---|
+| The app's name and the restaurant's (Project) | 2,125 | 591 | `src/CLAUDE.md` |
+| Post-sync reconciliation (write guards) | 1,207 | 537 | `src/CLAUDE.md` |
+| Gotcha: a new per-booking field | 2,867 | 661 | `src/CLAUDE.md`, Gotchas |
+| Gotcha: a timestamp from a remote party | 1,082 | 321 | `api/CLAUDE.md` |
+
+Root is 38,945 characters: the four moves take it to 38,796 and the footer's new
+sentence naming the guard adds 149. The script that applied it checked that each
+passage is present, unchanged, in its destination. What root keeps of each is the
+rule and a pointer.
+
+**The guard.** `tests/doc-size.test.js` fails the root file above 40,000 characters,
+and says what to do: move a passage to the CLAUDE.md beside the code it is about, do
+not shorten sentences. Its second case holds the footer sentence that names it, so
+the next person to edit the file reads the limit there.
+
+**Not done.** The other two loose ends of the 2026-09-18 doc-load split (root
+restating what it relocated; the guard mechanics' home) are still open in the
+roadmap. The room left is 1,055 characters.
+
+### The tag chip's check mark eases in and out
+
+**Reported by Patryk (2026-10-09):** "A pressed chip gets a check mark" snaps when a
+tag is turned on or off. He asked for the new screens to be checked with
+`/find-animation-opportunities`.
+
+**Reproduced on DEV first.** Settings → Customers, an opened customer, the Vegan
+chip tapped: 58.7 → 74.7px wide in one commit, and the two chips after it 16px to
+the right in the same commit (269.3 → 285.3, 362.1 → 378.1). The chip's computed
+`transition-property` was the hover lift's list (`transform, background-color,
+box-shadow, filter`), which names neither `color` nor `border-color`, so the ring
+and the ink changed in that frame too. The cause is in one expression,
+`{pressed ? <CheckIcon /> : null}`: a conditional mount has no in-between.
+
+**The fix is the timeline block's start-time chip (v16.1.1), which had this exact
+fault.** The mark sits in a horizontal `Reveal` at `speed="move"`: the width it
+occupies eases 0 ↔ full with its opacity, and the neighbours slide in step. The
+ring and the ink take `M.move` too, so the state lands as one event (the Toggle's
+rule for its track). `move`, not the default `reveal`: a mark arriving or leaving
+is `--t-move`'s definition, and 520ms is for content read as it opens. Two details:
+the 4px between mark and name moved INSIDE the reveal and the chip's gap is 0
+(a `Reveal` is a flex child from mount to unmount, so the atom's gap would jump
+4px at each end and ease only 12); and `transform`, `background-color` and
+`box-shadow` are restated in the inline transition, which replaces
+`.mgt-hover-scale`'s list.
+
+**Measured after, on DEV, both directions** (the page made to report visible and
+its frames driven by screenshots, the measurement-traps procedure, since the pane
+reports hidden and `Reveal` snaps there by design). ON, the Allergy chip's width
+by frame: 63.93 · 67.02 · 69.70 · 71.97 · 73.88 · 75.43 · 76.70 · 77.70 · 78.44 ·
+79.05 · 79.45 · 79.70 · 79.84 · 79.91 · 79.93, the chip after it 117.93 → 133.93
+in the same steps, the mark's opacity 0 → 1, the ink `rgb(74, 85, 104)` →
+`rgb(22, 101, 52)` through eleven values. The first eased frame is 63.93 + 3.09:
+no 4px jump. OFF: 79.05 · 75.93 · 71.11 · 69.28 · 66.62 · 65.70, opacity 0.95 →
+0.11, the neighbour in step, and at rest 63.93 with the mark unmounted. At rest
+nothing moved: pressed and unpressed widths and every chip's x are what they were.
+**Not captured:** the last frames of the exit before the unmount (the pane stopped
+drawing twice at that point), so that the 260ms hold outlasts the 240ms fold rests
+on `Reveal`'s own guards in `tests/motion.test.js`, not on a reading of this chip.
+Not checked: a finger, the tablet, the phone, reduced motion (the global rules
+handle it: the OS setting keeps a 120ms colour and opacity fade and drops the
+width ease, the app's own switch makes all of it instant).
+
+**Guard.** Three cases in `tests/motion.test.js`, each failed once on purpose: the
+mark put back as a conditional mount (1 failed of 20), the two colour properties
+taken out of the transition (1), the chip's gap put back (1).
+
+**The sweep, and what it did not change.** Seven other places in the v18.5.0
+screens were gated and left alone: the tag list's rows and its × ↔ "Confirm —
+remove" swap (the duration tiers beside them, the shape they copy, do neither);
+the Add button's disabled fade (typing drives it); the List card's tag words
+(they arrive under a closing form, in a row whose other flags do not animate);
+the seat note's chips (static, in a note read while seating); the Summary's
+deposits line (a row among the hourly bars, which do not animate their arrival);
+the form's two tag groups (they change only when the list is edited, with the
+form closed). **One was measured and put to Patryk:** an opened customer's
+chips move 11px down when their FIRST tag is tapped and 11px up when the last is
+removed (735.5 ↔ 746.5), because the words under the phone number mount above
+them. That is a control moving under the finger that tapped it, the layout twin
+`src/CLAUDE.md` records for an armed confirm. The next section is his answer.
+
+### A customer's tag words are the closed row's
+
+**Chosen by Patryk (2026-10-09)** from three: hide the words while the row is open,
+ease the line in, or leave it.
+
+Settings → Customers showed a customer's tags as words under the phone number,
+open or closed. Opened, the chips sit below that line, so the first tag tapped
+mounted it above them and the last tag removed unmounted it: the chips moved 11px
+in the commit the tap caused. The words now sit in a `Reveal` that is shut while
+the row is open. The chips say the same thing there, and a Settings section's
+summary already behaves this way (`Collapsible`). It runs at the default speed,
+the body's, so the header's 11px and the body's fold move as one. The child is
+conditional (`tagNames.length ? <div> : null`): `Reveal` keeps the last child it
+was given, so a closed row that loses its last tag folds the words it had, where
+an always-present child would empty first and fold nothing.
+
+**Measured on DEV.** First tag tapped on an opened customer with none: every chip's
+top 724.5 before and after (it was 735.5 → 746.5). Last tag removed: 724.5 and
+724.5. Opening a row that has a tag, frame by frame: the header 64.5 · 63.2 · 62.0
+· 59.8 · 54.9 · 53.5 while the words' opacity goes 1 → 0.03 and the card grows
+66.5 → 365.8. Closed again, the header reads the tag and is 64.5 tall; with no tag
+it is 53.5 and holds no third line. **Not captured:** the closing direction frame
+by frame (its end state was read, the frames were not). Not checked: a finger, the
+tablet, the phone.
+
+**While measuring, DEV changed under me:** Laura Vidal's VIP, there an hour
+earlier, was gone, and the app had gone to the dark theme. Neither was this
+session's doing (no tap was made on her row), so somebody else was using the same
+account. Tomás Herrera, the customer the taps were made on, was left with no tags,
+as found.
+
+**Guard.** Two cases in `tests/motion.test.js`; the first failed once on purpose
+(`show` put back to the tags alone: 1 failed of 22).
+
+### Every chip that is a button eases its tone
+
+**Chosen by Patryk (2026-10-09)** over leaving it on the tag chips alone: the
+activity log's filter chips are the same control (`OutlineChip as="button"`, pressed
+= the success tone), and their ring and ink still changed between two frames.
+
+The colour ease moved out of `TagChips.jsx` into the atom: `CHIP_BUTTON_EASE`,
+applied whenever `as === "button"`. It is `border-color` and `color` at `M.move`,
+plus the four properties `.mgt-hover-scale, .mgt-press` animate (`transform`,
+`background-color`, `box-shadow`, `filter`) at `M.tap`, restated because an inline
+transition replaces the classes' list. `TagChips.jsx` keeps the mark's `Reveal` and
+its zero gap, and names no transition.
+
+**Who it reaches.** Fourteen call sites pass `as="button"` (counted by grep,
+comments left out). The tone changes on a tap at six: the tag chips and the
+activity log's five filter sites. At the other eight it is fixed (the booking
+form's three Regular and No-show disclosures, Settings' pinned countries, the
+WhatsApp module's four), so they ease the same four properties as before and the
+two new ones never change.
+
+**Measured on DEV, the activity log's Waitlist filter, dark theme.** Its computed
+transition is `transform, background-color, box-shadow, filter, border-color,
+color` at 0.145s ×4 and 0.24s ×2. On: the ink `rgb(199, 199, 204)` →
+`rgb(135, 238, 172)` through twelve frames (186,207,198 · 175,213,192 ·
+166,219,188 · … · 136,238,173). Off: back through nine recorded frames
+(148,231,179 · 158,224,184 · … · 194,202,201). Its width stayed 66.3 throughout:
+there is no mark on a filter. The filter was left off, as found. Not checked: the
+light theme on this chip, the hover lift and the press dim on any button chip by
+hand (their four properties are pinned by the test below, read against the
+stylesheet, and were not exercised with a pointer).
+
+**Guard.** `tests/motion.test.js` reads the property list out of the
+`.mgt-hover-scale, .mgt-press` rule in `index.css` and requires each in the atom's
+string, so a property added to the classes and not to the atom fails the build. It
+also fails a `transition` in `TagChips.jsx`. Each failed once on purpose: `filter`
+taken out of the atom (1 of 23), the two colours taken out (1 of 23).
+
+### `/bookings`, measured (ROADMAP #3)
+
+No code. The roadmap entry asked for two things: read the console's usage, then set
+a threshold. Both are done: the readings below, and Patryk's threshold at the end.
+
+**The console (Patryk's three screenshots, 2026-10-09: Realtime Database → Usage,
+"Billable metrics", 10 Sept to 9 Oct).**
+
+| Metric | Reading | Free plan | Share |
+|---|---|---|---|
+| Connections, peak | 4 (1 to 4 a day, never 0) | 100 | 4% |
+| Storage, now | 1.48 MB (about 0.93 MB on 10 Sept) | 1 GB | 0.15% |
+| Downloads, the 30 days | 549.63 MB (most days 5 to 35 MB) | 10 GB a month | 5.5% |
+| Downloads, largest day | about 80 MB (8 and 9 Oct) | 360 MB a day | 22% |
+| Load, peak | not in the screenshots | | |
+
+The two "about" storage and largest-day figures are read off the graphs' axes, not
+printed by the console. The free plan's limits are from firebase.google.com/pricing,
+fetched 2026-10-09.
+
+**Which project: PROD** (Patryk, 2026-10-09, asked after the first write-up of this
+section). What follows is how it read before he said so, kept because the
+comparison is the only size DEV has been given. The screenshots do not show the
+project's name. DEV was measured the same
+day, read through the app's own SDK on localhost: the whole database is 821,828
+bytes as JSON (0.78 MB), about half the console's 1.48 MB. PROD held about 1,600
+bookings on 2026-10-06; at DEV's 679 bytes a booking that is about 1.09 MB before
+its activity log. A connection on every one of the thirty days also fits a tablet
+that is always on. So the readings fit PROD and do not fit DEV, which is what he
+confirmed. (If the console counts storage differently from a JSON export, the
+comparison is weaker than it looks; that was not checked.)
+
+**DEV, node by node** (bytes as JSON): `bookings` 536,781 for 790 bookings, so 679
+each, and 223,636 of it (42%) is `history`; `activity` 223,071 for 1,057 entries,
+211 each; `messages` 25,716; `conversations` 12,163; `settings` 7,337; `vouchers`
+7,126; everything else under 4,000 each. Bookings and the activity log are 92% of
+the database.
+
+**What the figures say.** Storage grew about 0.55 MB in thirty days, about 18 kB a
+day. Downloads over storage (549.63 MB against a database that averaged about
+1.2 MB) is about 460 whole-database loads in the period, 15 a day: every app open
+and every resync re-reads everything. If the loads a day stay where they are,
+downloads reach 10 GB a month when the database is about 22 MB, which at 0.55 MB a
+month is about three years away. Storage and connections are further off still.
+**The limit that arrives first is the tablet's, not Firebase's:** `sanitize` costs
+it 3.2 ms per 1,000 bookings on every snapshot (measured in v18.3.5), 8 ms at about
+2,900, and PROD is at about 1,600. How fast PROD adds bookings was not measured
+here, so no date is put on that.
+
+**The largest day is the restaurant's own.** 8 and 9 October are also the days this
+version's DEV verification reloaded the app many times, but those reloads are DEV's
+and the screenshots are PROD's. About 80 MB is some 55 whole-database loads in a
+day, against the period's average of 15. What made those two days heavy was not
+looked into; one day at 22% of the daily allowance is not near a limit.
+
+**The threshold (Patryk, 2026-10-09),** chosen over watching downloads alone and
+over designing the archive now: start the archive's design when the load banner
+reads 2,500 bookings (it prints the count on every connect, so no console is
+needed), or when a month's downloads pass 2.5 GB, whichever comes first.
+`ROADMAP.md` #3 carries it. Still not read: the peak-load graph.
+
+### `/code-review` (xhigh), 2026-10-09
+
+Ten findings over the branch diff (48 files). Each was checked before it was acted
+on; all ten were confirmed and none disproved. Nine are code or comment fixes, one
+commit each. The first has no code fix and is the deploy table below.
+
+| # | Finding | How it was confirmed | What changed |
+|---|---|---|---|
+| 1 | A device still on v18.4.10 deletes a booking's tags on its next write to it | Ran v18.4.10's own `sanitize` and `buildPatch` (from `origin/main`) on a booking stored with `tags`, `guestTags`, `guestTagsAt`: the read keeps none of the three, and the patch is the whole child, 30 keys, none of the three | Deploy step 2 below; the rule in `src/CLAUDE.md` (Gotchas, "A new per-booking FIELD") and one sentence in the root file; a ROADMAP idea for closing the class |
+| 2 | `TagRow` keyed a chip by its label; the seat note passes two kinds in one list | `addTag` accepts a guest tag "Birthday" beside the seed occasion "Birthday"; a booking carrying both gave 2 labels, 1 distinct key | The key is the position and the label |
+| 3 | A block's spoken tags: `replace(" · ", ", ")` changes the first separator only | `cleanTagLabel` keeps "Nut · sesame"; with an occasion the label read "Nut, sesame · Birthday" | `split(" · ").join(", ")` |
+| 4 | A disabled tag chip kept `cursor: pointer`; `TagChips`' header said that row uses `TagRow` | Rendered from the atom: enabled `pointer`, disabled `pointer` before, `default` after | The atom reads `rest.disabled`; the header says what the code does. A disabled chip keeps its full ink: it still says what the guest has |
+| 5 | A tag list save asked for before the first read returned false and said nothing | Read: the branch logged to the console only, and the editor keeps the draft on false. **Not reproduced live** (on DEV the first snapshot arrives with the page) | `saveTagList` sets `tagError` there |
+| 6 | An armed tag row with a refused rename showed the refusal under Confirm | On DEV after the fix: VIP renamed to Vegan and blurred, the refusal; × pressed, Confirm is described by "Bookings that carry “VIP” stop showing it…"; disarmed 3 s later, the refusal again. Nothing was written | `refusalShown = !!refusal && !armed` |
+| 7 | Ids and names kept in plain `{}` used as sets | A tag named "Constructor" was accepted by `addTag` and dropped by the next `sanitizeTagList`; `cleanTagIds` dropped the id `constructor` | The five sets are `Object.create(null)`; two tests, both failing on the old code |
+| 8 | `booking-fields.js` named `settleGuestTags`, which no file has | `grep`: one occurrence, the comment | It names `saveGuestTags` |
+| 9 | `depositSummary`, `depositParts`, `depositLine` declared with `var` | The root file's "Never `var` in new code"; five declarations, none reassigned | `const` |
+| 10 | `guestTagMap` built the alias map twice | Node, three runs each: 0.038 → 0.028 ms at 1,600 bookings, 0.061 → 0.045 ms at 3,000; `guestTagBase` 0.083 → 0.072 and 0.144 → 0.125 ms | `customerKeyFn` takes the map its caller has |
+
+**Checked and found sound, so nothing changed:** the #17 extraction against the
+handlers it replaced, statement for statement; the rules test's `PAIRS`, derived from
+the rules file (17 pairs, `tags` the 17th); the new tests' dates (derived from
+`todayStr()`) and their fake timers (restored in `afterEach`); Book Again, which
+builds on `EMPTY_FORM` and so copies no occasion tag; `saveGuestTags` and
+`customerTagTap` under a replay; the one path that deletes a booking
+(`delTransform`), which hands a statement on; tag ids, which are random and so never
+minted twice.
+
+**Not verified:** finding 5 on a live page; findings 2, 3 and 4 with a screen reader
+or on the tablet (2 and 3 are read from the code and a pure check, 4 from a render of
+the atom).
+
+### Deploy steps (Patryk)
+
+| # | Where | What |
+|---|---|---|
+| 1 | GitHub | Merge the PR. Vercel deploys it; the boot banner reads 18.5.0 |
+| 2 | **Every device** | **Refresh every device after the deploy** (the tablet, the phones), before anybody tags a booking. A device still on v18.4.10 does not know `tags`, `guestTags` or `guestTagsAt`, and its next write to a tagged booking (a seat tap, a drag, the close-time auto-complete) removes them from the database |
+| 3 | Firebase console, PROD | Realtime Database → Rules → paste `database.rules.json` → Publish. Until then the seed tag list is used and editing the list is refused with a sentence (section 3). Either order with step 2 |
+| 4 | Google Cloud console, DEV key | The referrer list in `SECURITY.md` §4 (#12). Independent of the others |
+

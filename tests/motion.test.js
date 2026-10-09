@@ -295,3 +295,96 @@ describe("no hand-typed exit delays", () => {
     expect(offenders, "pass no outMs and take the EXIT_MS default").toEqual([]);
   });
 });
+
+// ── v18.5.0: the tag chip's check mark ───────────────────────────────────────
+// It shipped for five phases as `{pressed ? <CheckIcon /> : null}`: there or
+// gone between two frames, the chip 16px wider or narrower in that frame and
+// every chip after it jumping with it (Patryk's report; measured on DEV as
+// 58.7 → 74.7px in one commit). A conditional mount looks finished in source,
+// which is why this is pinned: nothing else in the repo can see it come back.
+describe("a pressed tag chip's mark arrives and leaves", () => {
+  const chips = code(join(ROOT, "src/components/TagChips.jsx"), "utf8");
+
+  it("the mark sits in a horizontal Reveal, never a conditional mount", () => {
+    expect(chips).toContain('<Reveal horizontal show={pressed} speed="move"><span style={MARK}><CheckIcon size={IC.inline} /></span></Reveal>');
+    // No second mark, and none that mounts on the state: `? <CheckIcon` is the
+    // shape that snaps, in either branch order.
+    expect((chips.match(/<CheckIcon\b/g) || []).length).toBe(1);
+    expect(chips).not.toMatch(/\?\s*<CheckIcon\b/);
+    expect(chips).not.toMatch(/&&\s*<CheckIcon\b/);
+  });
+
+  it("the gap to the name is inside the reveal, so the whole 16px eases", () => {
+    // With the atom's own gap the Reveal is a flex child from mount to unmount,
+    // and the chip jumps 4px at each end of a 12px ease.
+    const pressable = chips.slice(chips.indexOf("const PRESSABLE"), chips.indexOf("const MARK"));
+    expect(pressable).toMatch(/\bgap: 0\b/);
+    expect(chips).toMatch(/const MARK = \{[^}]*paddingRight: SP\.tight[^}]*\}/);
+  });
+
+  it("the ring and the ink ease with it, for every chip that is a button", () => {
+    // The ease is the ATOM's (Patryk, 2026-10-09: the activity log's filter
+    // chips are the same control and must not differ), so the tag chip names no
+    // transition of its own: an inline one there would replace the atom's.
+    expect(chips).not.toMatch(/\btransition\b/);
+    expect(chips).toContain('className="mgt-hover-scale" style={PRESSABLE}');
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const ease = atoms.slice(atoms.indexOf("const CHIP_BUTTON_EASE"), atoms.indexOf("export function OutlineChip"));
+    expect(ease).toContain('", border-color " + M.move + ", color " + M.move');
+    expect(atoms).toContain('...(as === "button" ? { cursor: rest.disabled ? "default" : "pointer", transition: CHIP_BUTTON_EASE } : null),');
+  });
+
+  it("a disabled chip does not show the hand", () => {
+    // The lift and the press dim skip `:disabled` in the stylesheet; the cursor
+    // is the atom's inline style, which a class cannot reach. The Customers
+    // row passes `disabled` for an account that may not edit bookings.
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    expect(atoms).toContain('cursor: rest.disabled ? "default" : "pointer"');
+    const customers = code(join(ROOT, "src/components/CustomersSettings.jsx"), "utf8");
+    expect(customers).toContain("disabled={!canEditGuestTags || !onSetCustomerTag}");
+    const css = code(join(ROOT, "src/index.css"), "utf8");
+    expect(css).toContain(".mgt-hover-scale:hover:not(:disabled)");
+  });
+
+  it("the chip's inline transition names everything the hover and press classes animate", () => {
+    // An inline `transition` REPLACES a class's, so the atom restates the list
+    // of `.mgt-hover-scale, .mgt-press`. Read out of the stylesheet, not typed
+    // again here: a property added to the class and not to the atom would snap
+    // on every button chip, and nothing else can see that.
+    const rule = html.match(/\.mgt-hover-scale, \.mgt-press \{\s*transition:([^;]+);/);
+    expect(rule, "the shared interaction transition is still one rule").not.toBeNull();
+    const props = rule[1].split(",").map((p) => p.trim().split(/\s+/)[0]);
+    expect(props).toEqual(["transform", "background-color", "box-shadow", "filter"]);
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const ease = atoms.slice(atoms.indexOf("const CHIP_BUTTON_EASE"), atoms.indexOf("export function OutlineChip"));
+    for (const prop of props) {
+      expect(ease, prop).toContain((prop === "transform" ? '"' : '", ') + prop + ' " + M.tap');
+    }
+  });
+});
+
+// ── v18.5.0: an opened customer's tag chips stay under the finger ────────────
+// The tag words under the phone number mounted ABOVE the chips of the opened
+// row, so the first tag tapped (and the last removed) moved the chips 11px in
+// the commit the tap caused (measured on DEV: 735.5 → 746.5 and back). The
+// words are the closed row's now and fold away as it opens (Patryk's choice,
+// 2026-10-09), so nothing above the chips changes while they can be tapped.
+describe("a customer's tag words belong to the closed row", () => {
+  const customers = code(join(ROOT, "src/components/CustomersSettings.jsx"), "utf8");
+
+  it("the words sit in a Reveal that is shut while the row is open", () => {
+    expect(customers).toContain('<Reveal show={!open && tagNames.length > 0}>{tagNames.length ? <div');
+    // One place draws them, and it is that one.
+    expect((customers.match(/tagNames\.join\(/g) || []).length).toBe(1);
+    const at = customers.indexOf("tagNames.join(");
+    expect(customers.lastIndexOf("<Reveal show={!open && tagNames.length > 0}>", at)).toBeGreaterThan(customers.lastIndexOf("</Reveal>", at));
+  });
+
+  it("it folds on the body's clock, so the row and its words move as one", () => {
+    // The body is a default-speed Reveal; a `speed` on the words would finish
+    // the header's 11px before or after the body beneath it.
+    const words = customers.slice(customers.indexOf("<Reveal show={!open && tagNames.length > 0}"), customers.indexOf("tagNames.join("));
+    expect(words).not.toContain("speed=");
+    expect(customers).toContain("<Reveal show={open}>");
+  });
+});

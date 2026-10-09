@@ -878,6 +878,35 @@ explaining why is usually the one to read.
   be busy" pairs that solid with a `--warn-text` heading in the same modal. One
   role, one hue, whatever treatment carries it.
 
+- **A tag is a chip where it is chosen and a word where it is read (v18.5.0).**
+  In the booking form and in an opened customer a tag is tapped on and off, so
+  it is the app's interactive chip: `OutlineChip as="button"` at `size="small"`
+  and `H.chip`, the activity log's filter chips exactly (`TagChips.jsx`). Pressed
+  is the success tone AND a check mark: "this guest has an allergy" must not
+  rest on the colour of a ring, and the mark is the difference a colour-blind
+  reader gets. The chip grows by the mark when pressed; nothing is reserved for
+  it, because an invisible gap in every unpressed chip sets its label off-centre.
+  **The growth is eased, in and out** (Patryk's report, 2026-10-09: it was
+  `{pressed ? <CheckIcon /> : null}`, 16px in one frame with every chip after
+  it jumping too). The mark sits in a horizontal `Reveal` at `speed="move"`,
+  the timeline block's start-time chip exactly, so the width it takes and its
+  opacity ease together and the neighbours slide in step. The 4px between mark
+  and name is inside the reveal and the chip's own gap is 0, or the chip jumps
+  4px at each end of a 12px ease. A chip pressed when it MOUNTS shows its mark
+  at once. **The ring and the ink ease over the same 240ms, and that half is
+  `OutlineChip`'s, for every chip that is a button** (`CHIP_BUTTON_EASE`,
+  `M.move`, the Toggle's rule for its track): the activity log's filter chips
+  are this chip without the mark, and one control does not change colour two
+  ways. The atom's inline transition restates the hover and press classes'
+  list, which it replaces. `tests/motion.test.js` pins each of these, and reads
+  that list out of `index.css`.
+  On the List card a tag is a WORD in the flag row, in the settled facts' ink
+  (`--text-secondary`), with no mark: the row is icon-led text and a tag has no
+  counterpart on the timeline block, the reason `manual` has no mark either.
+  On the seat note they are plain outline chips above the note (a sheet). On the
+  printed sheet they lead the Notes cell in bold. The timeline block draws
+  nothing for a tag (Patryk, 2026-10-08): its hover title and spoken label
+  carry it.
 - **Three label treatments (v17.8.0), and context decides which.** **SOLID**
   where a tag competes inside a busy row (the reminder's time chip).
   **OUTLINE** — no fill, a **2px**

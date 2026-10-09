@@ -2042,7 +2042,22 @@ describe("seatNoteFor — what the seat note shows (v18.0.0 session 7)", () => {
     expect(seatNoteFor("confirmed", "seated", b)).toEqual({
       id: "s1", name: "Maria López", size: 4, time: "20:30", tables: ["5A"],
       notes: "Birthday — cake with dessert.\nNut allergy.",
+      // v18.5.0: the snapshot carries the party's tags, as labels; none here.
+      guestTags: [], occasionTags: [],
     });
+  });
+  it("v18.5.0: a tagged party is shown its tags, and a tag with no note raises it too", () => {
+    const tags = { guest: ["Allergy", "VIP"], occasion: ["Birthday"] };
+    const noted = seatNoteFor("confirmed", "seated", mk({ notes: "x" }), tags);
+    expect([noted.guestTags, noted.occasionTags, noted.notes]).toEqual([["Allergy", "VIP"], ["Birthday"], "x"]);
+    const bare = seatNoteFor("confirmed", "seated", mk({ notes: "" }), tags);
+    expect([bare.guestTags, bare.occasionTags, bare.notes]).toEqual([["Allergy", "VIP"], ["Birthday"], ""]);
+    // A copy, so the open popover cannot change under the reader.
+    expect(bare.guestTags).not.toBe(tags.guest);
+    // No tags and no note: still nothing. And never outside a move into seated.
+    expect(seatNoteFor("confirmed", "seated", mk({ notes: "" }), { guest: [], occasion: [] })).toBe(null);
+    expect(seatNoteFor("seated", "seated", mk({ notes: "" }), tags)).toBe(null);
+    expect(seatNoteFor("confirmed", "completed", mk({ notes: "" }), tags)).toBe(null);
   });
 
   it("the time is the BOOKED time — the seated shift has just moved `time` to now", () => {

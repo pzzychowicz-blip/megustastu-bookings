@@ -19,8 +19,8 @@
 import { useEffect, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { T, FW, APP_NAME } from "../lib/constants";
-import { daySummary, guestsLabel, countLabel } from "../lib/booking-logic";
-import { formatPhone } from "../lib/customers";
+import { daySummary, guestsLabel, countLabel, depositSummary, depositLine } from "../lib/booking-logic";
+import { formatPhone, bookingTags, tagLine } from "../lib/customers";
 import { normalizeCode, formatCode, money } from "../lib/vouchers";
 // v18.0.0 session 8: ONE weekday list, in lib/day.js — this was the fourth copy.
 import { WEEKDAY_LONG, formatDay } from "../lib/day";
@@ -54,7 +54,7 @@ const th = Object.assign({}, cell, { fontWeight: FW.bold, background: "#eee" /* 
 
 // v17.1.0 perf: React.memo — always-mounted (print-only DOM) so it used to
 // re-render on every BookingApp render; props are state objects + primitives.
-export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency, vouchersOn = true }) {
+export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, waitlist, blocks, restaurantName, currency, vouchersOn = true, tagList = null, guestTags = null }) {
   // /code-review: the sheet is PERMANENTLY mounted (display:none) and BookingApp
   // re-renders every 15s tick — memoise the filter/sort/summary passes so they
   // run only when the underlying data (not the clock) changes. This is the
@@ -67,6 +67,10 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
       .sort(function (a, b) { return (a.time || "").localeCompare(b.time || ""); });
   }, [bookings, date]);
   const s = useMemo(function () { return daySummary(bookings, date, splitHour); }, [bookings, date, splitHour]);
+  // v18.5.0: the Summary panel's deposits line, on paper. Read from ALL the
+  // date's bookings, not `day`: a forfeited deposit sits on a cancelled
+  // booking, which the table below leaves out.
+  const depLine = useMemo(function () { return depositLine(depositSummary(bookings, date), currency || "€"); }, [bookings, date, currency]);
   const dayBlocks = useMemo(function () {
     return (blocks || []).filter(function (bl) { return bl && bl.date === date; });
   }, [blocks, date]);
@@ -106,6 +110,7 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
           {countLabel(s.totalBookings, "booking", "bookings") + " · " + countLabel(s.totalCovers, "cover", "covers")
             + " · Afternoon " + s.afternoon.covers + " / Evening " + s.evening.covers}
         </div>
+        {depLine ? <div style={{ fontSize: T.body, marginTop: 2 }}>{depLine}</div> : null}
       </div>
 
       {day.length ? (
@@ -149,7 +154,13 @@ export const DaySheet = memo(function DaySheet({ bookings, date, splitHour, wait
                     (Number(b.deposit) || 0) > 0 ? money(Number(b.deposit), currency || "€") : null,
                     vouchersOn && normalizeCode(b.voucherCode) ? formatCode(b.voucherCode) : null,
                   ].filter(Boolean).join("  ·  ") || "—"}</td>
-                  <td style={cell}>{b.notes || ""}</td>
+                  {/* v18.5.0: the tags lead the note, in bold: "Allergy" is the
+                      part of this cell that is read at the table. */}
+                  <td style={cell}>{(function () {
+                    const line = tagLine(bookingTags(b, guestTags, tagList));
+                    if (!line) return b.notes || "";
+                    return <><span style={{ fontWeight: FW.bold }}>{line}</span>{b.notes ? " — " + b.notes : ""}</>;
+                  })()}</td>
                 </tr>
               );
             })}

@@ -208,9 +208,11 @@ describe("every single-booking write in App hands saveBookings the report", () =
     ["the form's edit", "saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal})"],
     ["reassign", "},false,goneReport(id));\n    setError(\"\");"],
     ["the timeline drop", "saveBookings(plan.transform,false,goneReport(id))"],
-    ["a status change", /\},false,goneReport\(id\)\);\s+if\(ok&&\(status==="completed"\|\|status==="seated"\)\)/],
+    // v18.5.0 (#17): the status tap and the cancel both hand over a plan's
+    // transform, so each is told apart by the line beside the call.
+    ["a status change", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+if\(ok&&plan\.flashes\)/],
     ["the voucher carry", "},false,goneReport(c.to));"],
-    ["cancel and no-show", "saveBookings(cancelMemo,false,goneReport(id))"],
+    ["cancel and no-show", /const post=plan\.transform\(bookings\);\s+const ok=saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+wa\.autoHandleCancelIntent/],
     ["manual assign", "saveBookings(plan.transform,false,goneReport(bookingId))"],
   ];
   WITH.forEach(([what, code]) => it(what, () => (
@@ -218,13 +220,17 @@ describe("every single-booking write in App hands saveBookings the report", () =
   it("goneReport is goneRefusal on the list the action was taken on", () => {
     expect(APP).toContain("function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}");
   });
-  it("and the rest are decided: 17 calls, 7 with it, 1 with onLanded", () => {
+  it("and the rest are decided: 18 calls, 7 with it, 1 with onLanded", () => {
     // Without: reconciliation and recurring generation (silent, never
     // queued), delete customer and force reshuffle (many bookings), delete
     // (a booking already gone is the delete done), complete-and-seat's first
     // write (several parties), undo (it puts bookings back), add / remove
     // block (the day, not a booking). The new booking carries `onLanded`.
-    expect(calls.length).toBe(17);
+    // v18.5.0: a customer's tag tapped in Settings → Customers. It names a
+    // customer, not a booking: which booking holds the statement is decided
+    // inside the transform (`customerTagTap`), and a replay that finds the
+    // customer gone writes nothing (`setCustomerTags` returns `prev`).
+    expect(calls.length).toBe(18);
     expect((APP.match(/goneReport\(/g) || []).length - 1, "uses, less the declaration").toBe(6);
   });
 });

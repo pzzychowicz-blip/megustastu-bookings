@@ -2225,6 +2225,27 @@ export const CHIP_TONES = {
   neutral: { border: "var(--chip-neutral-border)", text: "var(--text-secondary)" }
 };
 
+// v18.5.0 (Patryk, 2026-10-09): a chip that is a BUTTON eases its tone.
+// A pressed chip is the same chip in another tone (the activity log's filters,
+// a tag), and the ring and the ink changed between two frames: the only
+// transition a chip had was the hover lift's, which names neither. Reported on
+// the tag chips, whose check mark snapped with them (TagChips.jsx); the log's
+// filters are the same control, so the ease is here and not in one caller.
+//
+// `M.move` for the two colours, the Toggle's rule for its track: a state that
+// stays lands on the slower clock, and with a tag's mark (a `Reveal` at
+// `speed="move"`) as one event. The first four are .mgt-hover-scale / .mgt-press's
+// own list RESTATED, because an inline `transition` replaces the class's and a
+// list without them snaps the lift and the press dim (`segStyle`'s note above).
+// `tests/motion.test.js` reads that list out of index.css and fails if the
+// class animates a property this string does not name.
+//
+// Nothing changes for a button chip whose tone is fixed (the form's Regular and
+// No-show disclosures, Settings' pinned countries, the WhatsApp module's four):
+// the same four properties ease as before and the other two never change.
+const CHIP_BUTTON_EASE = "transform " + M.tap + ", background-color " + M.tap + ", box-shadow " + M.tap + ", filter " + M.tap
+  + ", border-color " + M.move + ", color " + M.move;
+
 export function OutlineChip({ tone = "neutral", as = "span", size = "micro", style, children, ...rest }) {
   const c = CHIP_TONES[tone] || CHIP_TONES.neutral;
   const Tag = as;
@@ -2239,7 +2260,12 @@ export function OutlineChip({ tone = "neutral", as = "span", size = "micro", sty
       border: "2px solid " + c.border,
       color: c.text,
       flexShrink: 0,
-      ...(as === "button" ? { cursor: "pointer" } : null),
+      // A disabled chip is not offered as pressable: the hover lift and the
+      // press dim already skip `:disabled`, and the cursor is inline, so it is
+      // decided here. It keeps its full ink, because a disabled tag chip still
+      // says what the guest has (Settings → Customers, for an account that may
+      // not edit bookings).
+      ...(as === "button" ? { cursor: rest.disabled ? "default" : "pointer", transition: CHIP_BUTTON_EASE } : null),
       ...(style || {})
     }}>{children}</Tag>
   );

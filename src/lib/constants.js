@@ -840,7 +840,7 @@ export const ROW_FOLD = "shift";
 // `formRef` / `formBaseline` initializers all keep taking a plain string — and
 // because a default that is silently wrong is a trap for the next call site
 // added, which will not know it has to set the field.
-export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",voucherCode:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null};
+export var EMPTY_FORM={name:"",phone:"+",get date(){return todayStr();},time:"13:00",size:2,preference:"auto",notes:"",status:"confirmed",customDur:null,deposit:"",voucherCode:"",repeatWeekly:false,manualTables:[],preferredTables:[],returnOf:null,guestId:null,guestSeed:null,tags:[],guestTagEdits:[]};
 
 // ── Button colour tokens ──────────────────────────────────────────────────────
 // Phase B1 addition: BTN was previously defined inline in App.jsx; moved here

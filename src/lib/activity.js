@@ -442,6 +442,7 @@ const NODE_LABEL = {
   "settings/bookingDefaults": "the booking defaults",
   "settings/general": "the general settings",
   "settings/voucherDefaults": "the voucher defaults",
+  "settings/tags": "the tag list",
   "settings/whatsapp": "the WhatsApp settings",
   "settings/admin": "the admin settings",
   "tableBlocks": "table blocks",

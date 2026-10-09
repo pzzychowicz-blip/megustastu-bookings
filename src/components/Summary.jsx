@@ -20,7 +20,7 @@
 // v14.6.0.
 
 import { useMemo, memo } from "react";
-import { daySummary, countLabel } from "../lib/booking-logic";
+import { daySummary, countLabel, depositSummary, depositParts } from "../lib/booking-logic";
 import { BTN, TOTAL_SEATS, hoursFor, R, T, FW, IC, SP } from "../lib/constants";
 import { mkBtn, Reveal, TBadge } from "./atoms";
 // v17.9.0: the local `hh` was one of six copies of this label — see lib/time-grid.js.
@@ -28,6 +28,11 @@ import { hourLabel as hh } from "../lib/time-grid";
 import { ChevronDownIcon, ChevronUpIcon, PrintIcon } from "./Icons";
 function coversLabel(n){ return countLabel(n, "cover", "covers"); }
 function bookingsLabel(n){ return countLabel(n, "booking", "bookings"); }
+
+// The opened panel's label column: "13:00–14:00" on an hourly bar and, since
+// v18.5.0, "Deposits" on the line under them. One number, so the figures of
+// both start at the same x.
+const LABEL_COL = 104;
 
 // v16.3.0: "freeing soon" entries from the freeing list ([{id,tables,inMin}]),
 // capped at 3 entries + a "+N" tail. Each entry is its own no-wrap unit, so the
@@ -55,11 +60,16 @@ function FreeingEntry({ f }) {
 // so it used to re-render on every BookingApp render. Function props are App's
 // stable VA wrappers; hoursSig/layoutSig are identity-only props that bust the
 // memo on an hours/layout edit (hoursFor + TOTAL_SEATS are live bindings).
-export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, onToggle, onOpenWeek, onPrint }) {
+export const Summary = memo(function Summary({ bookings, date, splitHour, shiftsEnabled, isToday, open, freeing, unplacedCount = 0, currency, onToggle, onOpenWeek, onPrint }) {
   // v17.1.0 perf: Summary lives in the always-visible date-nav row, so this
   // used to walk all bookings on EVERY BookingApp render; memoized.
   const s = useMemo(() => daySummary(bookings, date, splitHour), [bookings, date, splitHour]);
   const hasData = s.totalBookings > 0;
+  // v18.5.0: the day's deposits, held and forfeited. Its own pass, since
+  // `daySummary` drops the cancelled bookings half of it is about. `currency`
+  // is a scalar prop (settings/general), so the memo sees a change of it.
+  const dep = useMemo(() => depositSummary(bookings, date), [bookings, date]);
+  const depParts = depositParts(dep, currency || "€");
   // v15.0.0: per-weekday hours. The Afternoon/Evening split is ONE global value, so
   // on a day whose window excludes it (or a closed day) the two shift chips are
   // meaningless — hide them and show only the hourly bars. Read hoursFor(date) so
@@ -218,7 +228,7 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
                 {s.hours.map(function(h){
                   return (
                     <div key={h.hour} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: T.body }}>
-                      <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: 104, flexShrink: 0 }}>
+                      <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: LABEL_COL, flexShrink: 0 }}>
                         {hh(h.hour) + "–" + hh(h.hour + 1)}
                       </span>
                       <div style={{ flex: 1, height: 7, background: "var(--bg-input)", borderRadius: 4,   /* @canvas */  overflow: "hidden", minWidth: 40 }}>
@@ -235,6 +245,31 @@ export const Summary = memo(function Summary({ bookings, date, splitHour, shifts
           ) : (
             <div style={{ fontSize: T.body, color: "var(--text-muted)", padding: "4px 0 2px" }}>No bookings for this day.</div>
           )}
+          {/* v18.5.0 (Patryk): the day's deposits, under the hourly bars. Shown
+              only on a day that has one, and a side with nothing is left out.
+              Outside the `hasData` branch on purpose: a day whose only booking
+              was cancelled reads "No bookings for this day." and can still
+              hold a forfeited deposit. Laid out as one more row of the bars:
+              the label in the hour column, the figures beside it. Each part is
+              its own no-wrap unit, so a narrow panel puts "forfeited" under
+              "held" in the same column, and no separator is drawn that a wrap
+              could leave at the start of a line. The words are `depositParts`,
+              which the printed day sheet joins into its own header line. */}
+          {depParts.length ? (
+            <div style={{ display: "flex", alignItems: "baseline", gap: SP.base, marginTop: SP.wide, fontSize: T.body }}>
+              <span style={{ color: "var(--text-secondary)", fontWeight: FW.medium, minWidth: LABEL_COL, flexShrink: 0 }}>Deposits</span>
+              <div style={{ display: "flex", flexWrap: "wrap", columnGap: SP.wide, rowGap: SP.hair, minWidth: 0, color: "var(--text-muted)" }}>
+                {depParts.map(function(p){
+                  return (
+                    <span key={p.key} style={{ whiteSpace: "nowrap" }}>
+                      <span style={{ color: "var(--text-primary)", fontWeight: FW.bold }}>{p.amount}</span>
+                      {" " + p.word + " (" + p.count + ")"}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           {/* The day's two actions, right-aligned: print it, or step back and
               look at the week/month around it. More takes Print's exact button
               shape rather than the 36px/T.small one it wore in the header —

@@ -84,13 +84,22 @@ evidence for each.
   Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
   (`database.rules.README.md` § Backups and restore).
 
-- **Measure `/bookings` before its size becomes a problem (#3).** Every device
-  subscribes to every booking ever made, each with an uncapped `history`, and a resync
-  re-reads the lot. Nothing purges old bookings. First, read Firebase console →
-  Realtime Database → Usage (storage, downloads a month) and set a threshold.
-  Archiving needs design, because customer history derives from all bookings. One
-  figure from v18.3.5: `sanitize` alone costs the tablet 3.2 ms per 1,000 bookings on
-  every snapshot, so it passes 8 ms at about 2,900 (PROD held about 1,600 on 2026-10-06).
+- **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
+  device subscribes to every booking ever made, each with an uncapped `history`, and
+  a resync re-reads the lot. Nothing purges old bookings. Archiving needs design,
+  because customer history derives from all bookings.
+  **The threshold (Patryk, 2026-10-09):** start that design when the load banner
+  reads 2,500 bookings (it prints the count on every connect), or when a month's
+  downloads pass 2.5 GB in Firebase console → Realtime Database → Usage, whichever
+  comes first. The first is the one expected: `sanitize` costs the tablet 3.2 ms per
+  1,000 bookings on every snapshot (v18.3.5), so 8 ms at about 2,900, and PROD held
+  about 1,600 on 2026-10-06.
+  **PROD on 2026-10-09** (the console, 10 Sept to 9 Oct): storage 1.48 MB (about
+  0.93 MB thirty days earlier), downloads 549.63 MB (largest day about 80 MB),
+  connections 4 at most. Against the free plan (1 GB, 10 GB a month, 100): 0.15%,
+  5.5%, 4%. About 15 whole-database loads a day, so the plan's download limit is
+  reached at about 22 MB, roughly three years off at this rate. `REFACTOR_LOG.md`
+  v18.5.0 has the table and DEV's node-by-node sizes. Not read: the peak-load graph.
 
 - **Before WhatsApp goes live (#8):** load a conversation's messages when it opens
   (`messages/$phoneKey`) instead of every device subscribing to all of `/messages`, and
@@ -103,8 +112,11 @@ evidence for each.
 - **The public repository (#12): restrict the browser API keys by HTTP referrer**
   (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The
   step is Patryk's, in Google Cloud → APIs & Services → Credentials; a wrong list locks
-  every device out of sign-in until it is corrected. Still owed: the exact referrer list
-  for each key. See SECURITY.md §4.
+  every device out of sign-in until it is corrected. SECURITY.md §4 has the DEV key's
+  four entries, how to check them (a fresh sign-in, then an hour), and how to undo it
+  (2026-10-09). Still owed: Patryk applying the DEV list; then, a week later, the PROD
+  list, which is proposed there and must be confirmed against the Vercel project's
+  domains first.
 
 - **Keep extracting `BookingApp` by domain (#17).** `App.jsx` went from 2,545 to 5,393
   lines after the July scan and took 187 of the 616 commits, 90 of them fixes. Extract
@@ -115,7 +127,11 @@ evidence for each.
   `lib/backup.js`, `hooks/useBackup.js`, `lib/download.js`; 5,354 lines) and the timeline
   drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines), and manual table assignment in
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
-  shares its release, `releaseSwapped`). The next domain is not chosen.
+  shares its release, `releaseSwapped`), and status changes in v18.5.0 (`planStatus`,
+  `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines). Still in App,
+  by lines and commits measured 2026-10-08: `bookAgain` (66, 16), `delBooking` (56, 15),
+  `undoLastAction` (32, 12), `reassignBooking` (44, 9), `settleVoucher` (58, 7). The next
+  domain is not chosen.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history
@@ -133,28 +149,40 @@ evidence for each.
 
 ## Designed, not implemented
 
-- **The doc-load split has three loose ends, all scope calls rather than defects**
-  (`/code-review`, 2026-09-18, measured). (1) Root restates 29–34% of what it
-  relocated, word for word: the five-guard summary against `src/CLAUDE.md`, the
-  service-worker summary against its skill, the `api/` pointer against
-  `api/CLAUDE.md` — two copies with nothing keeping them in step, which is the
-  shape CLAUDE.md's own Gotchas row names. The node inventory at 0% is what a
-  pointer should look like. (2) The write guards' mechanics sit in
-  `src/CLAUDE.md`, which every src session loads, where 47% of them never open
-  `src/hooks/`. (3) **CLAUDE.md crossed 40,000 on 2026-09-19** (`c3f2d6b`), silently,
-  as predicted, and it is 40,162 characters after the scan's drift fixes. Nothing
-  measures it yet, and a size-guard test waits on the decision of what leaves root.
-  Deciding any of these means deciding what a root-only session must still know.
+- **The doc-load split has two loose ends, both scope calls rather than defects**
+  (`/code-review`, 2026-09-18, measured). (1) Root restates part of what it relocated,
+  word for word: the five-guard summary against `src/CLAUDE.md`, the service-worker
+  summary against its skill, the `api/` pointer against `api/CLAUDE.md`. Two copies
+  with nothing keeping them in step. The node inventory at 0% is what a pointer should
+  look like. (2) The write guards' mechanics sit in `src/CLAUDE.md`, which every src
+  session loads, where 47% of them never open `src/hooks/`. The third, the root
+  file's size, closed in v18.5.0: four passages moved out (43,967 → 38,945
+  characters) and `tests/doc-size.test.js` fails it above 40,000. It left 1,055
+  characters of room, and the file had grown about 3,800 in the two and a half weeks
+  before, so the next move is likely to be needed soon: the two database-rules
+  gotchas and the three compare-and-swap exemption bullets are the next candidates
+  (about 2,500).
 
 ## Ideas
 
-Both come from the **2026-07-24 `/engineering:tech-debt` scan's feature shortlist**,
-whose other items shipped in v17.4.0. That plan file is gone from `~/.claude/plans/`,
-so **no scope was ever recorded for either** and both need one before they are work.
+The **2026-07-24 `/engineering:tech-debt` scan's feature shortlist** is spent: its last
+two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
 
-- **Deposits reporting.** `deposit` is per-booking and every surface shows it one
-  booking at a time; nothing aggregates it. Undecided: period, which statuses, and
-  whether it is its own surface or a line on the day summary.
-- **Structured guest tags.** Allergies and occasions live in free-text `notes`, which
-  cannot be filtered or carried between visits and which `deleteCustomer` wipes.
-  Undecided: fixed vocabulary or free tags, and whether tags are erasable personal data.
+- **A device on the previous version deletes fields it does not know.** Found by
+  v18.5.0's `/code-review`: `sanitize` is a whitelist and a booking write replaces the
+  whole child, so a v18.4.10 device's next write to a tagged booking drops `tags`,
+  `guestTags` and `guestTagsAt` (measured on that version's own code). v18.3.3 had the
+  same shape with `recurring`'s `startDate`. Today the only defence is the deploy step
+  "refresh every device". Two ways to close the class, not designed: carry unknown keys
+  through the read and the write, or a stored minimum version an older build refuses
+  to write under. Either touches the write path, so it wants its own plan.
+- **Filter or search by tag.** v18.5.0 shows a booking's tags on six surfaces and
+  filters by none. A "who has an allergy tonight" filter on the List, or a tag in the
+  Customers tab's filters, is the obvious next use. Not asked for yet.
+- **Delete customer leaves their standing booking.** Read from the code while moving
+  the anonymiser in v18.5.0, NOT reproduced on DEV: `deleteCustomer` anonymises the
+  customer's bookings and removes their waitlist entries and WhatsApp conversation,
+  and does not touch `recurring.rules`, where a standing booking keeps the name, the
+  phone and the notes, and from which `occurrenceBooking` writes them onto each new
+  week's booking. Reproduce it first (a standing booking, Delete customer, then look
+  at Settings → Standing bookings and at the next generated week).

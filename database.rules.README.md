@@ -225,9 +225,10 @@ gives.
 
 ### What the suite asserts
 
-293 tests as of 2026-09-13, v18.0.0 session 11 (measured — this line read 127
+298 tests as of 2026-10-08, v18.5.0 (measured — this line read 127
 from v17.16.11, then 257, which was already stale against this file's OWN
-"261 → 286 tests." three sections down on the day it was written, then 286),
+"261 → 286 tests." three sections down on the day it was written, then 286,
+then 293),
 run on every
 PR by the `rules` job in
 `.github/workflows/ci.yml` as well as on demand here. The first group asserts
@@ -237,8 +238,8 @@ an ABSENCE because that absence is the whole of the access-control change and a
 re-added root grant would leave every other test in this file green. The next
 groups are what you would expect: the `auth != null` boundary, the per-`$id`
 booking CAS (`updatedAt` strictly greater **and** `baseUpdatedAt` equal to
-stored — the pair that closed the 2026-07-05 overwrite incident), and the sixteen
-`<name>Rev` pairs (counted 2026-09-11), each swept for repeated / skipped / lower / absent /
+stored — the pair that closed the 2026-07-05 overwrite incident), and the seventeen
+`<name>Rev` pairs (counted 2026-10-08), each swept for repeated / skipped / lower / absent /
 non-numeric revisions, and — v17.16.7 — for a bare `remove()` of the node and of
 its rev.
 
@@ -254,6 +255,50 @@ the rules", which is a claim a hand-written list cannot make. A guard asserts
 the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
+
+## v18.5.0 — `settings/tags` + `tagsRev`, the seventeenth rev pair
+
+The tag list (the guest tags and occasion tags a booking can carry) is one more
+settings node: `{ v, guest: [{id, label}…], occasion: [{id, label}…] }`, written by
+`useTagSettings.js` through `writeWithRev`, gated on `settingsWrite` like
+`settings/general`.
+
+**The two lines are `settings/voucherDefaults`' two, with the names swapped**, and
+they were written by a script that asserted each substitution landed (the name
+occurs four times in the node's line: its own key, and the sibling rev three
+times). Afterwards the script compared the parsed predicates: `tags`' `.write` is
+`voucherDefaults`' with `voucherDefaultsRev` replaced by `tagsRev`, and `tagsRev`'s
+is `voucherDefaultsRev`'s exactly.
+
+**What covers it in the suite.** The rev sweep and the "gate is on EVERY settings
+pair" sweep both derive their lists from the rules file, so they picked the pair up
+with no edit. The own-capability list is hand-written, so `settings/tags` joined it
+by name (a copied rule keeps the gate it was copied with, right or wrong).
+**294 → 298 tests.** Two sabotages, each restored: both lines naming `hoursEdit`
+fails the two own-capability cases; the node's line with its rev check cut off
+fails "rejects a write that does not bump its rev" and the bare-remove sweep.
+
+**A booking's tags need no rule.** They are three more fields on `/bookings/$bid`
+(`tags`, `guestTags`, `guestTagsAt`), which validates only the seven fields it
+names and has no `$other`.
+
+### Deployment — app FIRST, rules SECOND (rolling-safe), and what the gap looks like
+
+Either order is safe. Old rules have no grant for `settings/tags`, so until the new
+rules are published:
+
+- the app uses the seed list (Allergy, Vegetarian, Vegan, Gluten-free, VIP ·
+  Birthday, Anniversary), whose ids are fixed strings, and bookings can carry those
+  tags normally;
+- saving a change to the list in Settings → Customers → Tags is refused. Measured
+  on DEV before its rules were updated: the new tag was on screen for 57ms, the
+  list went back to the seed, and the section said "The tag list was not saved: the
+  database refused the change (permission denied)."
+
+**The PROD step, once, after the merge has deployed:** Firebase console → the
+PROD project → Realtime Database → Rules → paste `database.rules.json` → Publish
+(or `npm run rules:deploy -- mgt-prod`). DEV needs the same step before the list
+can be edited there.
 
 ## v18.0.0 phase 3 — `/roles`, `/invites`, and the enforcement flag
 

@@ -43,9 +43,12 @@ const COUNT_TERNARY = new RegExp('\\? ?" (' + WORDS + ')\\b', "g");
 
 // The sites that keep a plain space on purpose, counted, so a new one fails.
 const ALLOWED = {
-  // An entry in a booking's stored `history` ("length 90 → 120 min", the status
-  // path's un-seat) and one naming a visit by its date: records, not screen text.
-  "App.jsx": 2,
+  // An entry in a booking's stored `history` naming a visit by its date: a
+  // record, not screen text.
+  "App.jsx": 1,
+  // v18.5.0 (#17): the status path's un-seat entry ("length 90 → 120 min"), the
+  // same stored record, moved from App with `planStatus`.
+  "lib/status-change.js": 1,
   // v18.3.4: the form's un-seat entry, the same stored record, moved from App
   // with the edit's save.
   "lib/booking-save.js": 1,

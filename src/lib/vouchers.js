@@ -294,6 +294,81 @@ export function isUnsettled(booking, voucherByCode) {
   return !isRedeemedBy(v, booking.id);
 }
 
+// ── The two money questions a status change can raise (v18.5.0, ROADMAP #17) ─
+// MOVED out of BookingApp, where they were closures over its state
+// (`voucherToAsk`, `voucherHeldBy`, `voucherToRestore`). `src` is what they
+// closed over: `{ bookings, vouchersByCode, vouchersOn, now }`. App keeps
+// one-line wrappers under the old names for the form's save, the delete and
+// the two settle functions; `planStatus` / `planCancel` (lib/status-change.js)
+// ask these directly.
+
+// voucherDue — does completing this booking need the voucher question asked
+// first? Returns the voucher, or null. Three ways to answer "no", and each is
+// a real case rather than defensive padding: the booking carries no voucher;
+// the number is not in the list (recorded on another device, or the node has
+// not loaded — never block a completion on that); or this booking has ALREADY
+// been settled against it, which is what makes the re-entry after a held or
+// retried write idempotent.
+export function voucherDue(src, id, status) {
+  // v18.0.0 phase 4: the module gate, at the funnel both raise sites already
+  // share — the form's save and `updateStatus` (which is itself the one door
+  // for the popup, the List buttons and the S/C shortcuts). With vouchers off
+  // a completion must never stop to ask about one.
+  if (!src.vouchersOn) return null;
+  if (status !== "completed") return null;
+  const b = src.bookings.find(function (x) { return x.id === id; });
+  const code = b ? normalizeCode(b.voucherCode) : "";
+  if (!code) return null;
+  const v = src.vouchersByCode[code];
+  if (!v) return null;
+  if (isRedeemedBy(v, id)) return null;
+  // A voided, spent or expired voucher has nothing to redeem, so there is
+  // nothing to ask. It stays attached as a record of what was intended.
+  if (voucherState(v, src.now) !== "open") return null;
+  return v;
+}
+
+// voucherHeld — v18.0.0 session 8 (C6): "does this booking hold money on a
+// voucher", with no opinion about status. `voucherReturnDue` asks the same
+// question wrapped in a walk-back gate, and a DELETE has no target status to
+// test — so the question is separated from the occasion for asking it.
+//
+// Status-free on purpose rather than by omission: answering "keep it
+// redeemed" to a walk-back leaves a redemption on a booking that is no longer
+// completed, so a ledger entry can outlive the status that created it.
+export function voucherHeld(src, id) {
+  if (!src.vouchersOn) return null;
+  const b = src.bookings.find(function (x) { return x.id === id; });
+  if (!b) return null;
+  const code = normalizeCode(b.voucherCode);
+  if (!code) return null;
+  const v = src.vouchersByCode[code];
+  if (!v) return null;
+  // Nothing was taken for THIS visit, so there is nothing to give back. A
+  // voucher redeemed by a DIFFERENT booking is not this booking's to restore.
+  if (!isRedeemedBy(v, id)) return null;
+  return v;
+}
+
+// voucherReturnDue — the INVERSE of voucherDue (v18.0.0 phase 6). A completed
+// booking can be walked back to Confirmed, Seated or Pending in the edit form,
+// and it can be cancelled; if that visit redeemed a voucher, the ledger entry
+// and the spent balance stayed with no control anywhere to undo them. Patryk's
+// call: ASK, symmetric with the completion that asked whether to redeem in the
+// first place — so money never moves as a silent side-effect of a status tap,
+// in either direction.
+//
+// The gate is "is this booking LEAVING completed", not a list of target
+// statuses: every status other than completed is a visit that did not finish
+// the way the ledger says it did, and enumerating them is how the next one
+// added gets missed.
+export function voucherReturnDue(src, id, status) {
+  if (status === "completed") return null;
+  const b = src.bookings.find(function (x) { return x.id === id; });
+  if (!b || b.status !== "completed") return null;   // only a walk-back, never a first pass
+  return voucherHeld(src, id);
+}
+
 // ── Read sanitisation ────────────────────────────────────────────────────────
 
 // The `sanitize` shape from booking-logic.js, one collection over: every gap a

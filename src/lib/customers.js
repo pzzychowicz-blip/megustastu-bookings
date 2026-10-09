@@ -31,6 +31,7 @@
 import { overlaps, toMins, getDur } from "./booking-logic.js";
 import { dialOf } from "./phone-countries.js";
 import { isNoShow } from "./booking-fields.js";
+import { cleanTagIds, cleanTagEdits, sameTagIds, unionTagIds, editTagIds, tagLabels } from "./tags.js";
 
 export function normalizePhone(p) {
   if (!p) return "";
@@ -445,6 +446,293 @@ export function noShowMap(bookings) {
     if (map[alias[gid]] != null) map[gid] = map[alias[gid]];
   });
   return map;
+}
+
+// ── v18.5.0: GUEST TAGS ──────────────────────────────────────────────────────
+// A guest tag (an allergy, VIP) is about the PERSON, and a person in this app is
+// derived from their bookings, with no record of their own. So their tags are
+// held the way their visits and no-shows are: on bookings.
+//
+// THE MODEL. A booking may carry a STATEMENT of its guest's tags: `guestTags`
+// (ids, see lib/tags.js) and `guestTagsAt` (when it was made, ms). The
+// customer's tags are the NEWEST statement among their bookings. Nearly every
+// booking makes none (`guestTagsAt: 0`), so changing a guest's tags writes ONE
+// booking, and a new booking for a known guest shows their tags without holding
+// any.
+//
+// Why a stamp and not "copy the tags onto every booking": a copy has no answer
+// when two copies disagree (a device offline, a week's standing bookings made by
+// the generator), and it rewrites every booking a regular has on each change.
+//
+// "Their bookings" is the customer as `customerIndex` and `noShowMap` file it:
+// a booking's own real phone, else the phone its guest group has since acquired
+// (`guestPhoneAlias`), else its `guestId`. A booking that is nobody's (no
+// phone, not joined) is its own guest: its tags are its own statement.
+
+// The key a booking's CUSTOMER is filed under; "" for a booking that is nobody's.
+// `known` is the list's alias map when the caller has already built it, so the
+// pass over every booking is made once.
+function customerKeyFn(bookings, known) {
+  const alias = known || guestPhoneAlias(Array.isArray(bookings) ? bookings : []);
+  return function (b) {
+    if (!b) return "";
+    if (hasRealPhone(b.phone)) return normalizePhone(b.phone);
+    // customerIndex's rule: an anonymised booking is nobody's.
+    if (b.anonymized) return "";
+    return alias[b.guestId] || b.guestId || "";
+  };
+}
+
+function states(b) { return !!b && Number(b.guestTagsAt) > 0; }
+
+// Is statement `a` newer than `b`? The id breaks a tie, so every device picks
+// the same one from the same bookings.
+function newerStatement(a, b) {
+  const x = Number(a.guestTagsAt), y = Number(b.guestTagsAt);
+  return x > y || (x === y && String(a.id) > String(b.id));
+}
+
+function newestStatement(list, keyOf, key) {
+  let top = null;
+  list.forEach(function (b) {
+    if (!states(b) || keyOf(b) !== key) return;
+    if (!top || newerStatement(b, top)) top = b;
+  });
+  return top;
+}
+
+// guestTagMap — {customer key: tag ids}, one pass, for every surface that
+// shows a booking's guest tags. Read it through `guestTagsOf(b, map)`, never by
+// hand: like `noShowMap`, each total is mirrored onto the guest ids folded into
+// a phone, and a booking that is nobody's is not in it at all.
+export function guestTagMap(bookings) {
+  const map = {};
+  if (!Array.isArray(bookings)) return map;
+  const alias = guestPhoneAlias(bookings);
+  const keyOf = customerKeyFn(bookings, alias);
+  const top = {};
+  bookings.forEach(function (b) {
+    if (!states(b)) return;
+    const key = keyOf(b);
+    if (!key) return;
+    if (!top[key] || newerStatement(b, top[key])) top[key] = b;
+  });
+  Object.keys(top).forEach(function (key) { map[key] = cleanTagIds(top[key].guestTags); });
+  Object.keys(alias).forEach(function (gid) {
+    if (map[alias[gid]] != null) map[gid] = map[alias[gid]];
+  });
+  return map;
+}
+
+// guestTagsOf — the guest tags to show for booking `b`: its customer's, or its
+// own statement when it is nobody's.
+export function guestTagsOf(b, map) {
+  if (!b) return [];
+  const anon = b.anonymized && !hasRealPhone(b.phone);
+  const key = anon ? null : identityKey(b);
+  if (key) return (map && map[key]) || [];
+  return states(b) ? cleanTagIds(b.guestTags) : [];
+}
+
+// guestTagBase — the guest tags a form on booking `id` (null: a new booking)
+// STARTS from, before what was tapped in it: what `editTagIds` is applied to,
+// on screen and at Save, so the two cannot disagree. `ident` is the draft's
+// identity as the save will write it: `{ phone, guestId, guestSeed }`.
+//
+//   • a new booking: the tags of the customer the draft names, or none;
+//   • an edit that keeps its guest: that guest's tags;
+//   • an edit that MOVES the booking to another guest (the phone was changed):
+//     the tags it had, plus the tags of the customer it is joining. Nothing lit
+//     goes dark because a number was corrected, and what a known customer
+//     already has is added where it can be seen and tapped off.
+//
+// "Joining" leaves out the bookings that come along with it (a guest group
+// that follows the booking to its new phone): their statements are older
+// versions of the tags it already has, and adding them back would undo a
+// removal.
+export function guestTagBase(list, id, ident) {
+  const all = Array.isArray(list) ? list : [];
+  const o = ident || {};
+  const orig = id == null ? null : (all.find(function (b) { return b && b.id === id; }) || null);
+  const own = orig ? guestTagsOf(orig, guestTagMap(all)) : [];
+  // The booking as the save will file it, making no statement of its own.
+  const silent = Object.assign({}, orig, { id: orig ? orig.id : "\u0000draft", phone: o.phone || "", guestId: o.guestId || null, guestTags: [], guestTagsAt: 0 });
+  const joined = stampGuestSeed(all, o).filter(function (b) { return !b || !orig || b.id !== orig.id; }).concat([silent]);
+  const keyNew = customerKeyFn(joined), kNew = keyNew(silent);
+  if (!kNew) return own;
+  const keyOld = customerKeyFn(all), kOld = orig ? keyOld(orig) : "";
+  let top = null;
+  joined.forEach(function (b) {
+    if (b === silent || !states(b) || keyNew(b) !== kNew) return;
+    if (kOld && keyOld(b) === kOld) return;
+    if (!top || newerStatement(b, top)) top = b;
+  });
+  return unionTagIds(own, top ? top.guestTags : []);
+}
+
+// guestTagsChange — would these edits change anything? The history line's
+// "guest tags updated" asks it, at Save.
+export function guestTagsChange(list, id, ident, edits) {
+  if (!cleanTagEdits(edits).length) return false;
+  const base = guestTagBase(list, id, ident);
+  return !sameTagIds(editTagIds(base, edits), base);
+}
+
+// rehomeGuestTags — booking `id` is LEAVING its customer: deleted (`after` no
+// longer has it), or moved to another guest. If it held the customer's newest
+// statement, the customer would fall back to an older one, or to none: tags
+// taken off would come back and tags put on would go. So the statement is
+// handed to the most recent booking of each group it leaves behind, stamp and
+// all. Returns `after` itself when there is nothing to hand over.
+//
+// "Each group": the leaving booking can be the only thing joining a guest group
+// to a phone (it carried both keys), and without it they are two customers.
+// The booking itself keeps its statement; `saveGuestTags` decides what it says
+// under its new guest.
+export function rehomeGuestTags(before, after, id) {
+  if (!Array.isArray(before) || !Array.isArray(after)) return after;
+  const x = before.find(function (b) { return b && b.id === id; });
+  if (!states(x)) return after;
+  const keyB = customerKeyFn(before), k = keyB(x);
+  if (!k) return after;
+  const holder = newestStatement(before, keyB, k);
+  if (!holder || holder.id !== id) return after;
+  const wasWith = {};
+  before.forEach(function (b) { if (b && b.id !== id && keyB(b) === k) wasWith[b.id] = true; });
+  const keyA = customerKeyFn(after);
+  const xa = after.find(function (b) { return b && b.id === id; });
+  const kx = xa ? keyA(xa) : "";
+  const heirs = {};
+  after.forEach(function (b) {
+    if (!b || !wasWith[b.id]) return;
+    const kb = keyA(b);
+    if (!kb || (kx && kb === kx)) return;
+    const h = heirs[kb];
+    if (!h || (b.date || "") > (h.date || "") || ((b.date || "") === (h.date || "") && String(b.id) > String(h.id))) heirs[kb] = b;
+  });
+  const heirIds = {};
+  Object.keys(heirs).forEach(function (kb) { heirIds[heirs[kb].id] = true; });
+  if (!Object.keys(heirIds).length) return after;
+  const tags = cleanTagIds(x.guestTags), at = Number(x.guestTagsAt);
+  return after.map(function (b) {
+    return b && heirIds[b.id] ? Object.assign({}, b, { guestTags: tags, guestTagsAt: at }) : b;
+  });
+}
+
+function enteredIdentity(b) {
+  return (hasRealPhone(b.phone) ? normalizePhone(b.phone) : "") + "\u001f" + (b.guestId || "");
+}
+
+// saveGuestTags — what a booking form's save does to guest tags. `prev` is the
+// list before the save, `cand` the list with booking `id` written as the save
+// writes it (its phone and guestId final, a joined seed stamped), `edits` what
+// was tapped in the form, `seedId` the draft's `guestSeed`.
+//
+// The customer the booking now belongs to ends up with `guestTagBase` + the
+// edits, which is what the form showed. It writes the booking's own statement,
+// and only when that changes what the guest has; a stamp is always above the
+// one it replaces, whatever this device's clock says, or a slow clock's change
+// would be saved and never seen. Returns `cand` itself when nothing moves.
+//
+// The first branch is the common save, and it is the slow path's answer
+// reached without the slow path: nothing was tapped, and the booking is new
+// (a new booking states nothing by itself) or kept its guest.
+export function saveGuestTags(prev, cand, id, edits, seedId, now) {
+  if (!Array.isArray(prev) || !Array.isArray(cand)) return cand;
+  const row = cand.find(function (b) { return b && b.id === id; });
+  if (!row) return cand;
+  const orig = prev.find(function (b) { return b && b.id === id; });
+  if (!cleanTagEdits(edits).length && !seedId && (!orig || enteredIdentity(orig) === enteredIdentity(row))) return cand;
+  const base = guestTagBase(prev, id, { phone: row.phone, guestId: row.guestId, guestSeed: seedId });
+  const want = editTagIds(base, edits);
+  const out = rehomeGuestTags(prev, cand, id);
+  const keyOf = customerKeyFn(out), k = keyOf(row);
+  const top = k ? newestStatement(out, keyOf, k) : (states(row) ? row : null);
+  if (sameTagIds(top ? top.guestTags : [], want)) return out;
+  const at = Math.max(Number(now) || 0, (top ? Number(top.guestTagsAt) : 0) + 1);
+  return out.map(function (b) {
+    return b && b.id === id ? Object.assign({}, b, { guestTags: want, guestTagsAt: at }) : b;
+  });
+}
+
+// bookingTags — the tags to SHOW for booking `b`, as labels in the list's
+// order: `{ guest, occasion }`. `map` is `guestTagMap(bookings)`, `list` the tag
+// list. The one read behind every surface, so a card, a block, the printed
+// sheet and the seat note cannot disagree about what a booking is tagged.
+export function bookingTags(b, map, list) {
+  return {
+    guest: tagLabels(list, "guest", guestTagsOf(b, map)),
+    occasion: tagLabels(list, "occasion", cleanTagIds(b && b.tags)),
+  };
+}
+
+// The same as one line of text, guest tags first: "Allergy, VIP · Birthday".
+// "" when the booking has none.
+export function tagLine(t) {
+  if (!t) return "";
+  return [t.guest, t.occasion].filter(function (x) { return x && x.length; })
+    .map(function (x) { return x.join(", "); }).join(" · ");
+}
+
+// setCustomerTags — a tap on a customer's tag in Settings → Customers. `key` is
+// the customer's key in `customerIndex`, `edits` the tap (`["+g-vip"]`), `entry`
+// the history entry to add (made once, at the tap). A transform of `prev`, so a
+// held write replays on fresh data and applies the tap to the tags as they are
+// by then.
+//
+// The statement is written where the customer's newest one already is, so a
+// customer does not collect one statement per tap; a customer with none gets it
+// on their most recent booking. That booking's history says "guest tags
+// updated", the words the form's save uses. Returns `prev` itself when the tap
+// changes nothing or the customer has no bookings left.
+export function setCustomerTags(prev, key, edits, now, entry) {
+  if (!Array.isArray(prev) || !key) return prev;
+  const keyOf = customerKeyFn(prev);
+  const theirs = prev.filter(function (b) { return b && keyOf(b) === key; });
+  if (!theirs.length) return prev;
+  const top = newestStatement(theirs, keyOf, key);
+  const base = top ? top.guestTags : [];
+  const want = editTagIds(base, edits);
+  if (sameTagIds(base, want)) return prev;
+  let holder = top;
+  if (!holder) {
+    theirs.forEach(function (b) {
+      if (!holder || (b.date || "") > (holder.date || "") || ((b.date || "") === (holder.date || "") && String(b.id) > String(holder.id))) holder = b;
+    });
+  }
+  const at = Math.max(Number(now) || 0, (top ? Number(top.guestTagsAt) : 0) + 1);
+  return prev.map(function (b) {
+    if (!b || b.id !== holder.id) return b;
+    const h = Array.isArray(b.history) ? b.history : [];
+    return Object.assign({}, b, { guestTags: want, guestTagsAt: at, history: entry ? h.concat([entry]) : h });
+  });
+}
+
+// The words that entry carries, the form's own (`BOOKING_FIELDS`' clause).
+export const GUEST_TAGS_UPDATED = "guest tags updated";
+
+// customerTagTap — the tap as the transform `saveBookings` takes. The clock is
+// read HERE, once, so the transform is a pure function of `prev` and every
+// replay of it stamps the same time (the stamp rule keeps that above whatever
+// is there by then).
+export function customerTagTap(key, edit, entry) {
+  const now = Date.now();
+  return function (prev) { return setCustomerTags(prev, key, [edit], now, entry); };
+}
+
+// ── v18.5.0: what "Delete customer" leaves of a booking ──────────────────────
+// Moved here from App's `deleteCustomer` when tags gave it three more fields:
+// which fields are personal is a decision a test should be able to read
+// (`tests/guest-tags.test.js` holds every row of `BOOKING_FIELDS` to "wiped" or
+// "kept, because"). The booking stays for statistics (covers, the day and range
+// stats, the phone-less no-show tile) under the name "Data removed"; `noShow`
+// is kept (Patryk, v17.0.0). `guestId` goes because it is the only thing still
+// binding the anonymised bookings into a customer. Guest tags go with the guest
+// (an allergy is the most personal thing here), and occasion tags too (Patryk,
+// 2026-10-08): nothing counts them, and a birthday on a known date is a fact
+// about the person.
+export function anonymizeBooking(b) {
+  return Object.assign({}, b, { name: "Data removed", phone: "", notes: "", history: [], guestId: null, anonymized: true, tags: [], guestTags: [], guestTagsAt: 0 });
 }
 
 // searchBookings — match INDIVIDUAL bookings against a typed query (v16.3.0),

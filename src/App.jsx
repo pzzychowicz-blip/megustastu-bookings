@@ -37,25 +37,22 @@ import {
   isLocked, statusOrder,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, applySeatedShift, findFreeSlot, bookingsAfterAction,
+  optimizerActiveFor, syncLiveDurations, findFreeSlot, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon,
   undoSnapshots, applyUndo,
-  seatedElapsed,
   // v18.0.0 session 7: the length Book Again carries over.
   plannedDuration,
-  // v18.0.0 session 7: the seat note's one predicate.
-  seatNoteFor,
   // v18.3.4: the rules only the edit's save asks (`tablesKept`, the seated and
   // hand-kept refusals, `replacePinnedClashes`, `seatedShiftFor`,
   // `tablesFreeFor`, `offZone`) are imported by `applyEdit` in
   // lib/booking-save.js now. Each one below still has a caller here.
-  // v18.0.0 session 8 (C1): leaving seated puts the booked plan back.
-  unseatRestore,
-  // v18.0.0 session 8 (C2): and it cannot be seated with no table at all.
-  seatRefusal,
-  // v18.0.0 session 8 (C3): nor onto a table somebody is still sitting at.
+  // v18.5.0 (#17): the status tap's own (`seatNoteFor`, `unseatRestore`,
+  // `seatRefusal`, `applySeatedShift`, `seatedElapsed`) left with `planStatus`
+  // for lib/status-change.js.
+  // v18.0.0 session 8 (C3): the form's save asks who is still seated at the
+  // table, and the seat that follows a clearing reads the same completion.
   seatClashParties, completedSeatedPatch,
   // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
   enteredPhone,
@@ -89,7 +86,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
 import { applyEdit, buildBooking, memoByPrev, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, rehomeGuestTags, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -113,6 +110,7 @@ import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop } from "./lib/drop-plan";
 import { planAssign, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
 
@@ -340,6 +338,9 @@ import { useVouchers } from "./hooks/useVouchers";
 import { useRoles } from "./hooks/useRoles";
 import { capLabel } from "./lib/roles";
 import { useVoucherDefaults } from "./hooks/useVoucherDefaults";
+// v18.5.0: the tag list (settings/tags), the 10th settings node — the guest and
+// occasion tags a booking can carry. Its decisions are lib/tags.js.
+import { useTagSettings } from "./hooks/useTagSettings";
 // v18.0.0 session 8: the activity log. `useActivityLog` installs the module-level
 // sink every writer emits into; `useActivityFeed` is the app's first Firebase
 // QUERY, and is attached only while the log is open.
@@ -347,7 +348,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActiv
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, isRedeemedBy, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget } from "./lib/vouchers";
+import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget, voucherDue, voucherHeld, voucherReturnDue } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -418,7 +419,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.4.10"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.5.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1474,6 +1475,7 @@ function BookingApp({uid}){
     currency: generalSettings.currency,
   });
   const { voucherDefaults, saveVoucherDefaults } = useVoucherDefaults();
+  const { tagList, saveTagList, tagError, clearTagError } = useTagSettings();
   // ── v18.0.0 phase 4: what a module is about to hide ─────────────────────────
   // The Admin tab asks this on the way OFF, and only this file can answer it:
   // `lib/modules.js` knows what modules EXIST, not what they hold, and keeping
@@ -2140,6 +2142,10 @@ function BookingApp({uid}){
   // "No show" (lateNoShowMin+). Thresholds + master switch live in
   // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
   // React.memo — cheapness was never the point, identity is).
+  // v18.5.0: every guest's tags, {customer key: tag ids} (lib/customers.js). ONE
+  // pass here, handed to each view that shows a tag, and a stable object for
+  // their React.memo. Read through `guestTagsOf` / `bookingTags`, never by key.
+  const guestTags=useMemo(function(){return guestTagMap(bookings);},[bookings]);
   const lateMap=useMemo(function(){
     const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
@@ -2424,13 +2430,25 @@ function BookingApp({uid}){
   // `guestId` is cleared alongside the personal fields: it is the only thing
   // still binding the anonymized bookings into a customer, so leaving it would
   // leave the deleted guest sitting in the list under "Data removed".
+  // v18.5.0: WHAT is wiped is `anonymizeBooking` (lib/customers.js), which also
+  // clears the tags, guest and occasion both (Patryk, 2026-10-08), and
+  // tests/guest-tags.test.js holds every row of BOOKING_FIELDS to "wiped" or
+  // "kept, because", so a field added later is decided for erasure too.
+  // v18.5.0: one tap on a tag in Settings → Customers. A guest's tags are on
+  // their bookings, so this is a booking write, behind the capability the form's
+  // Save asks for. `edit` is the tap ("+g-vip" / "-g-vip"); `customerTagTap`
+  // (lib/customers.js) applies it to the tags as they are in `prev`, so a replay
+  // cannot write a stale set. Returns whether it was dispatched.
+  function saveCustomerTag(key,edit){if(refused("bookingEdit")) return false;
+    return saveBookings(customerTagTap(key,edit,histEntry(GUEST_TAGS_UPDATED,getUser())));
+  }
   function deleteCustomer(ident){if(refused("customerDelete")) return;
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
     saveBookings(function(prev){return prev.map(function(b){
       if(!matchesIdentity(b,o)) return b;
-      return Object.assign({},b,{name:"Data removed",phone:"",notes:"",history:[],guestId:null,anonymized:true});
+      return anonymizeBooking(b);
     });});
     if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
     // v18.3.1: and their WhatsApp conversation and messages, stored under the
@@ -2660,7 +2678,7 @@ function BookingApp({uid}){
   // "Complete them & seat", where the completion has been dispatched but this
   // render has not happened yet. See `withClearedSeats` for what that cost.
   function doSaveEdit(f,bookings,liveBookings){
-    const plan=applyEdit({list:bookings,live:liveBookings,id:editId,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,today:today,nowMins:nowMins,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
+    const plan=applyEdit({list:bookings,live:liveBookings,id:editId,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,today:today,nowMins:nowMins,phonePrefix:generalSettings.phonePrefix,getUser:getUser,tagList:tagList});
     // A refusal leaves the form open with its message (only the date's names
     // its field) and the guard READY, so Save still works.
     if(plan.refusal){if(plan.refusal.field) setErrorField(plan.refusal.field);setError(plan.refusal.message);return;}
@@ -3056,7 +3074,11 @@ function BookingApp({uid}){
       const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
       if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return false;}
     }
-    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(b.filter(function(x){return x.id!==id;}),d,tableBlocks,null,false,autoOptimizer);}
+    // v18.5.0: a customer's guest tags are stored on ONE of their bookings (the
+    // newest statement, lib/customers.js). If that is the booking going, the
+    // statement moves to their most recent remaining one, in this same write,
+    // so deleting a booking never deletes what the guest told us.
+    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id),d,tableBlocks,null,false,autoOptimizer);}
     // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
     const delMemo=memoByPrev(delTransform);
     const postDel=delMemo(bookings);
@@ -3214,70 +3236,14 @@ function BookingApp({uid}){
     requestCloseReminderEditor:requestCloseReminderEditor,requestCloseBlock:requestCloseBlock,requestCloseSettings:requestCloseSettings
   });
 
-  // v18.0.0: does completing this booking need the voucher question asked
-  // first? Returns the voucher, or null. Three ways to answer "no", and each is
-  // a real case rather than defensive padding: the booking carries no voucher;
-  // the number is not in the list (recorded on another device, or the node has
-  // not loaded — never block a completion on that); or this booking has ALREADY
-  // been settled against it, which is what makes the re-entry after a held or
-  // retried write idempotent.
-  function voucherToAsk(id,status){
-    // v18.0.0 phase 4: the module gate, at the funnel both raise sites already
-    // share — the form's save and `updateStatus` (which is itself the one door
-    // for the popup, the List buttons and the S/C shortcuts). With vouchers off
-    // a completion must never stop to ask about one.
-    if(!vouchersOn) return null;
-    if(status!=="completed") return null;
-    const b=bookings.find(function(x){return x.id===id;});
-    const code=b?normalizeCode(b.voucherCode):"";
-    if(!code) return null;
-    const v=vouchersByCode[code];
-    if(!v) return null;
-    if(isRedeemedBy(v,id)) return null;
-    // A voided, spent or expired voucher has nothing to redeem, so there is
-    // nothing to ask. It stays attached as a record of what was intended.
-    if(voucherState(v,Date.now())!=="open") return null;
-    return v;
-  }
-  // voucherToRestore(id,status) — the INVERSE of voucherToAsk (v18.0.0 phase 6).
-  // A completed booking can be walked back to Confirmed, Seated or Pending in the
-  // edit form, and it can be cancelled; if that visit redeemed a voucher, the
-  // ledger entry and the spent balance stayed with no control anywhere to undo
-  // them. Patryk's call: ASK, symmetric with the completion that asked whether to
-  // redeem in the first place — so money never moves as a silent side-effect of a
-  // status tap, in either direction.
-  //
-  // The gate is "is this booking LEAVING completed", not a list of target
-  // statuses: every status other than completed is a visit that did not finish
-  // the way the ledger says it did, and enumerating them is how the next one
-  // added gets missed.
-  // v18.0.0 session 8 (C6): "does this booking hold money on a voucher", with
-  // no opinion about status. `voucherToRestore` asked the same question wrapped
-  // in a walk-back gate, and a DELETE has no target status to test — so the
-  // question is separated from the occasion for asking it.
-  //
-  // Status-free on purpose rather than by omission: answering "keep it
-  // redeemed" to a walk-back leaves a redemption on a booking that is no longer
-  // completed, so a ledger entry can outlive the status that created it.
-  function voucherHeldBy(id){
-    if(!vouchersOn) return null;
-    const b=bookings.find(function(x){return x.id===id;});
-    if(!b) return null;
-    const code=normalizeCode(b.voucherCode);
-    if(!code) return null;
-    const v=vouchersByCode[code];
-    if(!v) return null;
-    // Nothing was taken for THIS visit, so there is nothing to give back. A
-    // voucher redeemed by a DIFFERENT booking is not this booking's to restore.
-    if(!isRedeemedBy(v,id)) return null;
-    return v;
-  }
-  function voucherToRestore(id,status){
-    if(status==="completed") return null;
-    const b=bookings.find(function(x){return x.id===id;});
-    if(!b||b.status!=="completed") return null;   // only a walk-back, never a first pass
-    return voucherHeldBy(id);
-  }
+  // v18.5.0 (#17): the two money questions a status change can raise are
+  // `voucherDue` / `voucherHeld` / `voucherReturnDue` (lib/vouchers.js), which
+  // hold the reasoning. These are their old names, closed over this render's
+  // state, for the form's save, the delete and the two settle functions.
+  function voucherSrc(){return {bookings:bookings,vouchersByCode:vouchersByCode,vouchersOn:vouchersOn,now:Date.now()};}
+  function voucherToAsk(id,status){return voucherDue(voucherSrc(),id,status);}
+  function voucherHeldBy(id){return voucherHeld(voucherSrc(),id);}
+  function voucherToRestore(id,status){return voucherReturnDue(voucherSrc(),id,status);}
   // Re-enter the action the modal interrupted, with the question marked asked.
   // ONE ref covers both prompts, deliberately: a status change is either INTO
   // `completed` or OUT of it, so the two can never both be pending, and a second
@@ -3287,12 +3253,10 @@ function BookingApp({uid}){
     try{ return fn(); } finally { redeemAskedRef.current=false; }
   }
   // ── v18.0.0 session 8 (C3): the seat-clash prompt ───────────────────────────
-  // Same three moves as the voucher prompts: a snapshot goes into the modal, a
-  // ref marks the question asked, and the interrupted action is re-entered by
-  // the answer rather than duplicated inside it.
-  function seatClashSnap(parties){
-    return parties.map(function(e){return {id:e.booking.id,name:e.booking.name||"",time:e.booking.time||"",tables:e.tables};});
-  }
+  // Same three moves as the voucher prompts: a snapshot goes into the modal
+  // (`seatClashSnap`, lib/status-change.js), a ref marks the question asked,
+  // and the interrupted action is re-entered by the answer rather than
+  // duplicated inside it.
   function withSeatAsked(fn){
     seatAskedRef.current=true;
     try{ return fn(); } finally { seatAskedRef.current=false; clearedSeatsRef.current=null; }
@@ -3351,25 +3315,11 @@ function BookingApp({uid}){
     const ids=(ask.others||[]).map(function(o){return o.id;});
     const user=getUser();
     const nowM=nowMins;
-    // One write for the parties leaving, then the seat. Both are function-form,
-    // and `saveBookings` computes from the `bookingsRef` mirror it updates as it
-    // dispatches, so the second sees the first — they compose without waiting
-    // for a render. `completedSeatedPatch` is the same arithmetic `updateStatus`
-    // applies, from one place, so the two cannot disagree about how long a
-    // visit lasted.
-    //
-    // A cleared party carrying a voucher lands UNSETTLED rather than raising the
-    // redeem prompt in the middle of somebody else being seated. That is a state
-    // the app defines, detects and shows in the strip — the close-time
-    // auto-complete produces it for the same reason — and it is the honest
-    // trade: the question gets asked, later, by the section that exists for it.
-    saveBookings(function(prev){
-      return prev.map(function(b){
-        if(ids.indexOf(b.id)<0||b.status!=="seated") return b;
-        return Object.assign({},b,completedSeatedPatch(b,today,nowM),
-          {history:(b.history||[]).concat([histEntry("status → completed (table cleared to seat another party)",user)])});
-      });
-    });
+    // One write for the parties leaving (`completeCleared`, lib/status-change.js),
+    // then the seat. Both are function-form, and `saveBookings` computes from the
+    // `bookingsRef` mirror it updates as it dispatches, so the second sees the
+    // first — they compose without waiting for a render.
+    saveBookings(completeCleared({ids:ids,today:today,nowM:nowM,user:user}));
     // v18.0.0 session 10 (/code-review): and the same completion, applied to
     // the SYNCHRONOUS reads the seat is about to make. The write above is
     // correct without this — `saveBookings` computes from its own mirror —
@@ -3378,106 +3328,22 @@ function BookingApp({uid}){
     clearedSeatsRef.current={ids:ids,today:today,nowM:nowM};
     resumeSeat(ask);
   }
+  // v18.5.0 (#17): WHAT a status tap does is `planStatus` (lib/status-change.js),
+  // which returns its conclusion in the order this function always asked: the
+  // cancel confirm, the two money questions, the seat refusal, the seat clash,
+  // then the write. App keeps the gate, the refs and the side effects. This is
+  // the one funnel for the popup, the List buttons and the S/C shortcuts.
   function updateStatus(id,status){if(refused("bookingStatus"))return;
-    if(status==="cancelled"){setConfirmCancel(id);return;}
-    // v18.0.0: stop and ask before the status lands. `updateStatus` is the one
-    // funnel for the popup, the List buttons and the S/C shortcuts, so gating
-    // here covers all three — the same property that made it one of the two
-    // hook points rather than four.
-    if(!redeemAskedRef.current&&voucherToAsk(id,status)){
-      setVoucherAsk({id:id,status:status,from:"status"});
-      return false;
-    }
-    if(!redeemAskedRef.current&&voucherToRestore(id,status)){
-      setVoucherBack({id:id,status:status,from:"status"});
-      return false;
-    }
-    // v18.0.0 session 7: the seat note, at this door. Taken from the booking as
-    // it stands BEFORE the write (a seat moves no tables) and raised after it —
-    // past both voucher gates above, so it can never open beside a money prompt,
-    // only after one has been answered. Not gated on `ok`: a write held by the
-    // stale gate still shows the seat, and the party is sitting down either way.
-    const seatCur=bookings.find(function(x){return x.id===id;});
-    // v18.0.0 session 8 (C2): this door covers the quick-status popup, the List
-    // card's button and the S key — all three call here — so one check answers
-    // for all of them. A refusal TOAST rather than a disabled button or a
-    // silent return: the fix is one tap away in Assign, and a button that does
-    // nothing is the worst of the three answers.
-    if(status==="seated"&&seatCur&&seatCur.status!=="seated"){
-      const noTable=seatRefusal(seatCur);
-      if(noTable){flashRefusal(noTable);return false;}
-      // C3, at the same door. After the refusal above, because "there is no
-      // table" and "somebody is at the table" are different sentences and the
-      // first has no question in it.
-      if(!seatAskedRef.current){
-        const parties=seatClashParties(seatCur.tables,seatCur.date,id,bookings);
-        if(parties.length){setSeatClash({id:id,status:status,from:"status",others:seatClashSnap(parties)});return false;}
-      }
-    }
-    const seatSnap=seatNoteFor(seatCur&&seatCur.status,status,seatCur);
-    const user=getUser();
-    const nowM=nowMins;
-    const ok=saveBookings(function(b){
-      const target=b.find(function(x){return x.id===id;});
-      const d=target?target.date:viewDate;
-      // v14: detect confirmed → seated transition (for any prior non-seated status).
-      // If the transition triggers a seated-shift, force no-reshuffle by passing
-      // autoOptimizerState=false to bookingsAfterAction, so other bookings never
-      // move as a side-effect of someone sitting down early/late.
-      const updated=b.map(function(x){
-        if(x.id!==id) return x;
-        const histEntries=[histEntry("status → "+status,user)];
-        const extra={status:status};
-        // v16.2.0: only a real SEATED visit gets its duration truncated to the
-        // actual span (now − start). A direct Confirmed → Completed keeps the
-        // scheduled duration unchanged — otherwise the block balloons to hours
-        // on the timeline (e.g. completing a 13:00 booking at 21:00 → 8h block).
-        if(status==="completed"&&x.status==="seated"){
-          // v17.16.2 (CT-2B-02): `nowM - toMins(x.time)` mixed axes. A party
-          // seated before midnight and completed after it recorded 15 minutes.
-          const actualDur=Math.max(15,seatedElapsed(x,today,nowM));
-          extra.duration=actualDur;
-          extra.customDur=actualDur;
-          // v17.6.0: stamp the real stay so the List card can show it after the
-          // visit (booking-logic's stayedMins). Only a genuine seated→completed
-          // transition reaches here, which is exactly the gate the tag needs.
-          extra.stayedMin=actualDur;
-        }
-        // v18.0.0 session 8 (C1): the other door out of seated. Same restore as
-        // the form's — one helper, so the popup, the List card and the S key
-        // cannot disagree with Save about what a booking goes back to.
-        if((status==="confirmed"||status==="pending")&&x.status==="seated"){
-          const back=unseatRestore(x,x.size);
-          if(back){
-            extra.time=back.time;
-            extra.duration=back.duration;
-            extra.originalDuration=back.originalDuration;
-            extra.customDur=back.customDur;
-            histEntries.push(histEntry("un-seated: time restored "+x.time+" → "+back.time+", length "+(x.duration||0)+" → "+back.duration+" min",user));
-          }
-        }
-        if(status==="seated"&&x.status!=="seated"){
-          const shift=applySeatedShift(x,nowM,b,today);
-          if(shift){
-            extra.time=shift.newTime;
-            extra.duration=shift.newDuration;
-            extra.originalDuration=shift.newDuration;
-            extra.customDur=shift.newDuration;
-            // scheduledTime is intentionally NOT updated here — it stays pinned to
-            // the confirmed time so Book Again and history reads show the true plan.
-            histEntries.push(histEntry("seated "+shift.direction+": time adjusted "+shift.oldTime+" → "+shift.newTime,user));
-          }
-        }
-        extra.history=(x.history||[]).concat(histEntries);
-        return Object.assign({},x,extra);
-      });
-      // Seated transitions never reshuffle others — even when optimizer is ON.
-      const optState=(status==="seated")?false:autoOptimizer;
-      return bookingsAfterAction(updated,d,tableBlocks,null,false,optState);
-    },false,goneReport(id));
-    // C8: same at this door — `optState` is false for a seat (see below).
-    if(ok&&(status==="completed"||status==="seated")) flash(status==="seated"?"saved":null);
-    if(seatSnap) setSeatNote(seatSnap);
+    const plan=planStatus({id:id,status:status,bookings:bookings,viewDate:viewDate,today:today,nowMins:nowMins,now:Date.now(),tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,getUser:getUser,tagList:tagList,redeemAsked:redeemAskedRef.current,seatAsked:seatAskedRef.current,vouchersOn:vouchersOn,vouchersByCode:vouchersByCode});
+    if(plan.confirmCancel){setConfirmCancel(id);return;}
+    if(plan.voucherAsk){setVoucherAsk(plan.voucherAsk);return false;}
+    if(plan.voucherBack){setVoucherBack(plan.voucherBack);return false;}
+    if(plan.refuse){flashRefusal(plan.refuse);return false;}
+    if(plan.seatClash){setSeatClash(plan.seatClash);return false;}
+    const ok=saveBookings(plan.transform,false,goneReport(id));
+    if(ok&&plan.flashes) flash(plan.flashKind);
+    // Not gated on `ok`: a write held by the stale gate still shows the seat.
+    if(plan.seatNote) setSeatNote(plan.seatNote);
     // v18.0.0: returned so the redeem path can gate the voucher write on the
     // BOOKING write having actually dispatched — see `settleVoucher`.
     return ok;
@@ -3646,32 +3512,23 @@ function BookingApp({uid}){
     if(!ok||!restore) return;
     if(code) unredeemVoucher(code,ask.id);
   }
+  // v18.5.0 (#17): the cancel's money question and its write are `planCancel`
+  // (lib/status-change.js). This is THE CANCEL FUNNEL: `updateStatus` hands
+  // "cancelled" to the confirm and never reaches its own gates.
   function doCancelBooking(id,noShow){
-    // /code-review v18.0.0 phase 6: THE CANCEL FUNNEL. `updateStatus` returns
-    // early for "cancelled" into `setConfirmCancel`, so neither of that
-    // function's gates nor `doSave`'s ever sees this path — cancelling a
-    // completed booking from the popup or the List card kept its redemption
-    // silently, while the identical change made in the edit form asked. One
-    // action, two routes, two behaviours.
-    //
+    const plan=planCancel({id:id,noShow:noShow,bookings:bookings,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,getUser:getUser,redeemAsked:redeemAskedRef.current,vouchersOn:vouchersOn,vouchersByCode:vouchersByCode});
     // The cancel confirm is dismissed first so only ONE dialog is on screen;
     // `voucherback` outranks `cancel` in MODAL_Z either way, but two stacked
     // confirms about the same tap is not a thing to show anybody.
-    if(!redeemAskedRef.current&&voucherToRestore(id,"cancelled")){
+    if(plan.voucherBack){
       setConfirmCancel(null);
-      setVoucherBack({id:id,status:"cancelled",noShow:!!noShow,from:"cancel"});
+      setVoucherBack(plan.voucherBack);
       return false;
     }
-    const user=getUser();
-    // v16.3.0: snapshot the pre-cancel booking so the undo toast can restore it
-    // (status/noShow/notes/tables — the whole object). Single pending slot; a
-    // newer cancel replaces it.
-    function cancelTransform(b){const target=b.find(function(x){return x.id===id;});const d=target?target.date:viewDate;const updated=b.map(function(x){if(x.id!==id) return x;const extra={status:"cancelled",history:(x.history||[]).concat([histEntry(noShow?"no show":"cancelled",user)])};if(noShow) extra.noShow=true;return Object.assign({},x,extra);});return bookingsAfterAction(updated,d,tableBlocks,null,false,autoOptimizer);}
-    // v17.4.0: prev-identity memo (the doSave pattern) so the delta computed for
+    // v17.4.0: the transform is memoised by `prev`, so the delta computed for
     // undo and the dispatched write share ONE optimizer pass.
-    const cancelMemo=memoByPrev(cancelTransform);
-    const post=cancelMemo(bookings);
-    const ok=saveBookings(cancelMemo,false,goneReport(id));
+    const post=plan.transform(bookings);
+    const ok=saveBookings(plan.transform,false,goneReport(id));
     wa.autoHandleCancelIntent(id); // a pending WA cancel-intent banner on this booking's conversation auto-handles
     setConfirmCancel(null);
     if(ok){
@@ -4403,6 +4260,8 @@ function BookingApp({uid}){
     clashSpans={clashSpans}
     late={lateMap}
     freeing={freeingMap}
+    tagList={tagList}
+    guestTags={guestTags}
     onNoShow={VA.onNoShow}
     zoom={timelineZoom}
     setZoom={VA.onSetZoom}
@@ -4436,6 +4295,8 @@ function BookingApp({uid}){
   // stop being true.
   const listEl=<ListView
     missingTables={missingTables}
+    tagList={tagList}
+    guestTags={guestTags}
     vouchersByCode={vouchersByCode}
     vouchersOn={vouchersOn}
     bookings={bookings}
@@ -4533,6 +4394,7 @@ function BookingApp({uid}){
     hoursSig={weekHours}
     layoutSig={layout}
     unplacedCount={unplacedItems.length}
+    currency={generalSettings.currency}
     onToggle={VA.onSummaryToggle}
     onOpenWeek={VA.onOpenWeek}
     onPrint={VA.onPrint} />;
@@ -4572,7 +4434,7 @@ function BookingApp({uid}){
   const dateCtrlMotion=summaryLine.settled?"transform "+M.shift:"none";
   // v16.3.0: print-only day sheet (portalled to body; hidden on screen). Mounted
   // permanently — cheap (display:none) — so window.print() always has fresh content.
-  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} />;
+  const daySheet=<DaySheet bookings={bookings} date={viewDate} splitHour={dayShifts.split} waitlist={waitlist} blocks={tableBlocks} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} vouchersOn={vouchersOn} tagList={tagList} guestTags={guestTags} />;
   // v18.4.0: the printed timeline, mounted for the one print that asked for it.
   const TimelineSheet=printJob&&printJob.kind!=="sheet"?printJob.Sheet:null;
   const timelineSheet=TimelineSheet?<TimelineSheet bookings={bookings} date={viewDate} blocks={tableBlocks} from={printJob.from} to={printJob.to} splitHour={dayShifts.split} restaurantName={generalSettings.restaurantName} currency={generalSettings.currency} />:null;
@@ -4949,6 +4811,8 @@ function BookingApp({uid}){
               onClose={function(){setSplitMenuFor(null);}} />:null}</ModalPresence><ModalPresence show={showForm}>{showForm?<BookingFormModal
               form={form}
               setForm={setForm}
+              tagList={tagList}
+              phonePrefix={generalSettings.phonePrefix}
               editId={editId}
               error={error}
               errorField={errorField}
@@ -5081,11 +4945,17 @@ function BookingApp({uid}){
             bookings={bookings}
             waitlist={waitlist}
             onDeleteCustomer={deleteCustomer}
+            guestTags={guestTags}
+            onSetCustomerTag={saveCustomerTag}
             vouchers={vouchers}
             voucherDefaults={voucherDefaults}
             onIssueVoucher={function(a){return refused("voucherIssue")?{ok:false,error:"You don't have permission to issue vouchers."}:issueVoucher(a);}}
             onVoidVoucher={function(c,on){return refused("voucherVoid")?false:voidVoucher(c,on);}}
             onSaveVoucherDefaults={saveVoucherDefaults}
+            tagList={tagList}
+            onSaveTagList={function(l){return refused("settingsWrite")?false:saveTagList(l);}}
+            tagError={tagError}
+            onClearTagError={clearTagError}
             tab={settingsTab}
             setTab={setSettingsTab}
             can={can}
