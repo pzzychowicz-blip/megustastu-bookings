@@ -890,11 +890,16 @@ explaining why is usually the one to read.
   `{pressed ? <CheckIcon /> : null}`, 16px in one frame with every chip after
   it jumping too). The mark sits in a horizontal `Reveal` at `speed="move"`,
   the timeline block's start-time chip exactly, so the width it takes and its
-  opacity ease together and the neighbours slide in step; the ring and the ink
-  take the same 240ms, the Toggle's rule for its track. The 4px between mark
+  opacity ease together and the neighbours slide in step. The 4px between mark
   and name is inside the reveal and the chip's own gap is 0, or the chip jumps
   4px at each end of a 12px ease. A chip pressed when it MOUNTS shows its mark
-  at once. `tests/motion.test.js` pins all three.
+  at once. **The ring and the ink ease over the same 240ms, and that half is
+  `OutlineChip`'s, for every chip that is a button** (`CHIP_BUTTON_EASE`,
+  `M.move`, the Toggle's rule for its track): the activity log's filter chips
+  are this chip without the mark, and one control does not change colour two
+  ways. The atom's inline transition restates the hover and press classes'
+  list, which it replaces. `tests/motion.test.js` pins each of these, and reads
+  that list out of `index.css`.
   On the List card a tag is a WORD in the flag row, in the settled facts' ink
   (`--text-secondary`), with no mark: the row is icon-led text and a tag has no
   counterpart on the timeline block, the reason `manual` has no mark either.

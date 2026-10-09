@@ -32,31 +32,26 @@
 // opacity, and the chips beside it slide in step. `speed="move"`, since a mark
 // arriving or leaving is `--t-move`'s own definition and a tick is not read as
 // it opens the way a disclosure is. The ring and the ink take the same 240ms,
-// the Toggle's rule for its track: one event, landing together.
+// so the state lands as one event; that half is `OutlineChip`'s, for every chip
+// that is a button (atoms.jsx, `CHIP_BUTTON_EASE`), the activity log's filters
+// among them.
 //
-// Two details the ease depends on:
-//   • The 4px between the mark and the name is INSIDE the reveal (`MARK`'s
-//     padding), and the chip's own gap is 0. A `Reveal` is a flex child from
-//     its first frame to its last, so with the atom's gap the chip would jump
-//     4px when it mounts and 4px when it unmounts, and ease only the other 12.
-//   • `transform`, `background-color` and `box-shadow` are in the list because
-//     an INLINE transition replaces .mgt-hover-scale's, and without them the
-//     hover lift snaps (`segStyle`'s note, atoms.jsx).
+// One detail the ease depends on: the 4px between the mark and the name is
+// INSIDE the reveal (`MARK`'s padding), and the chip's own gap is 0. A `Reveal`
+// is a flex child from its first frame to its last, so with the atom's gap the
+// chip would jump 4px when it mounts and 4px when it unmounts, and ease only
+// the other 12.
 //
 // A chip that is pressed when it MOUNTS shows its mark at once (a form opening
 // on a tagged guest does not tick five boxes at you), and a change that lands
 // while the page is hidden is a replacement: both are `Reveal`'s.
 
-import { H, IC, SP, M } from "../lib/constants";
+import { H, IC, SP } from "../lib/constants";
 import { OutlineChip, Reveal } from "./atoms";
 import { CheckIcon } from "./Icons";
 
 const CHIP = { minHeight: H.chip };
-const PRESSABLE = {
-  minHeight: H.chip, gap: 0,
-  transition: "transform " + M.tap + ", background-color " + M.tap + ", box-shadow " + M.tap
-    + ", border-color " + M.move + ", color " + M.move
-};
+const PRESSABLE = { minHeight: H.chip, gap: 0 };
 const MARK = { display: "inline-flex", paddingRight: SP.tight };
 const ROW = { display: "flex", flexWrap: "wrap", gap: SP.tight };
 

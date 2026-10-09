@@ -322,15 +322,32 @@ describe("a pressed tag chip's mark arrives and leaves", () => {
     expect(chips).toMatch(/const MARK = \{[^}]*paddingRight: SP\.tight[^}]*\}/);
   });
 
-  it("the ring and the ink ease with it, and the hover lift keeps its own ease", () => {
-    // An inline transition REPLACES .mgt-hover-scale's list, so the three
-    // properties that class animates on this chip are restated beside the two
-    // the state changes.
-    const pressable = chips.slice(chips.indexOf("const PRESSABLE"), chips.indexOf("const MARK"));
-    for (const [prop, speed] of [["transform", "tap"], ["background-color", "tap"], ["box-shadow", "tap"], ["border-color", "move"], ["color", "move"]]) {
-      expect(pressable, prop).toContain('"' + (prop === "transform" ? "" : ", ") + prop + ' " + M.' + speed);
-    }
+  it("the ring and the ink ease with it, for every chip that is a button", () => {
+    // The ease is the ATOM's (Patryk, 2026-10-09: the activity log's filter
+    // chips are the same control and must not differ), so the tag chip names no
+    // transition of its own: an inline one there would replace the atom's.
+    expect(chips).not.toMatch(/\btransition\b/);
     expect(chips).toContain('className="mgt-hover-scale" style={PRESSABLE}');
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const ease = atoms.slice(atoms.indexOf("const CHIP_BUTTON_EASE"), atoms.indexOf("export function OutlineChip"));
+    expect(ease).toContain('", border-color " + M.move + ", color " + M.move');
+    expect(atoms).toContain('...(as === "button" ? { cursor: "pointer", transition: CHIP_BUTTON_EASE } : null),');
+  });
+
+  it("the chip's inline transition names everything the hover and press classes animate", () => {
+    // An inline `transition` REPLACES a class's, so the atom restates the list
+    // of `.mgt-hover-scale, .mgt-press`. Read out of the stylesheet, not typed
+    // again here: a property added to the class and not to the atom would snap
+    // on every button chip, and nothing else can see that.
+    const rule = html.match(/\.mgt-hover-scale, \.mgt-press \{\s*transition:([^;]+);/);
+    expect(rule, "the shared interaction transition is still one rule").not.toBeNull();
+    const props = rule[1].split(",").map((p) => p.trim().split(/\s+/)[0]);
+    expect(props).toEqual(["transform", "background-color", "box-shadow", "filter"]);
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    const ease = atoms.slice(atoms.indexOf("const CHIP_BUTTON_EASE"), atoms.indexOf("export function OutlineChip"));
+    for (const prop of props) {
+      expect(ease, prop).toContain((prop === "transform" ? '"' : '", ') + prop + ' " + M.tap');
+    }
   });
 });
 

@@ -33636,6 +33636,43 @@ as found.
 **Guard.** Two cases in `tests/motion.test.js`; the first failed once on purpose
 (`show` put back to the tags alone: 1 failed of 22).
 
+### Every chip that is a button eases its tone
+
+**Chosen by Patryk (2026-10-09)** over leaving it on the tag chips alone: the
+activity log's filter chips are the same control (`OutlineChip as="button"`, pressed
+= the success tone), and their ring and ink still changed between two frames.
+
+The colour ease moved out of `TagChips.jsx` into the atom: `CHIP_BUTTON_EASE`,
+applied whenever `as === "button"`. It is `border-color` and `color` at `M.move`,
+plus the four properties `.mgt-hover-scale, .mgt-press` animate (`transform`,
+`background-color`, `box-shadow`, `filter`) at `M.tap`, restated because an inline
+transition replaces the classes' list. `TagChips.jsx` keeps the mark's `Reveal` and
+its zero gap, and names no transition.
+
+**Who it reaches.** Fourteen call sites pass `as="button"` (counted by grep,
+comments left out). The tone changes on a tap at six: the tag chips and the
+activity log's five filter sites. At the other eight it is fixed (the booking
+form's three Regular and No-show disclosures, Settings' pinned countries, the
+WhatsApp module's four), so they ease the same four properties as before and the
+two new ones never change.
+
+**Measured on DEV, the activity log's Waitlist filter, dark theme.** Its computed
+transition is `transform, background-color, box-shadow, filter, border-color,
+color` at 0.145s ×4 and 0.24s ×2. On: the ink `rgb(199, 199, 204)` →
+`rgb(135, 238, 172)` through twelve frames (186,207,198 · 175,213,192 ·
+166,219,188 · … · 136,238,173). Off: back through nine recorded frames
+(148,231,179 · 158,224,184 · … · 194,202,201). Its width stayed 66.3 throughout:
+there is no mark on a filter. The filter was left off, as found. Not checked: the
+light theme on this chip, the hover lift and the press dim on any button chip by
+hand (their four properties are pinned by the test below, read against the
+stylesheet, and were not exercised with a pointer).
+
+**Guard.** `tests/motion.test.js` reads the property list out of the
+`.mgt-hover-scale, .mgt-press` rule in `index.css` and requires each in the atom's
+string, so a property added to the classes and not to the atom fails the build. It
+also fails a `transition` in `TagChips.jsx`. Each failed once on purpose: `filter`
+taken out of the atom (1 of 23), the two colours taken out (1 of 23).
+
 ### `/bookings`, measured (ROADMAP #3)
 
 No code. The roadmap entry asked for two things: read the console's usage, then set
