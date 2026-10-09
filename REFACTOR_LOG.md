@@ -34178,9 +34178,14 @@ selection and the search did not know about it.
 **Behavioural change:** a tag filter whose only matches are completed or cancelled
 opens "Completed & cancelled" (section 1); the "No bookings tagged…" line folds in and
 out and no longer shows on an empty day (section 2); Delete customer pauses the
-standing bookings and erases only once the anonymise has landed (section 3). The header is extended as the version's
+standing bookings and erases only once the anonymise has landed (section 3); a device
+on an older build than the database refuses to save and shows "This device needs
+refreshing" (section 4). The header is extended as the version's
 other items land.
-**Rules change: none so far.** **Deploy steps: none so far.**
+**Rules change: YES** (section 4): `schema` + `schemaRev`, the eighteenth rev pair.
+**Deploy steps (Patryk):** (1) deploy `database.rules.json` to DEV and to PROD, BEFORE
+the merge (`database.rules.README.md`, v18.6.0); (2) merge; (3) refresh every device,
+as for every release so far: the gate protects from the NEXT release, not this one.
 
 One version with a section per item (Patryk, 2026-10-09), one commit each. The minor
 bump is for the schema gate (a device that refuses to write until refreshed), settled
@@ -34290,3 +34295,69 @@ held by a source test, and by `tellDiscarded`'s own tests in `tests/write-path.t
 and its cause not read.
 **Not changed:** while the write is parked the banner says "Your changes are saved and
 will finish syncing in a moment", for any parked write.
+
+### 4. The minimum schema gate: an older build no longer deletes what it does not know
+
+**Files:** new `src/lib/schema.js`, `src/hooks/useSchemaGate.js`,
+`src/components/UpdateRequired.jsx`, `tests/schema.test.js` (13); `src/lib/revGuard.js`,
+`src/hooks/usePersistence.js`, `src/hooks/useVouchers.js`, `src/hooks/useRoles.js` (the
+four writers ask the gate); `src/firebase.js` (`isDevDb`); `src/App.jsx`;
+`database.rules.json`, `tests/rules/database-rules.test.js` (+5), and the docs.
+
+**The fault** (v18.5.0's /code-review, ROADMAP since): every read is a whitelist and
+every write replaces the record whole, so a device on the previous build deletes the
+fields a newer one added. Measured then on v18.4.10's own code (`tags`, `guestTags`,
+`guestTagsAt`); v18.3.3 had it with a rule's `startDate`. The only defence was the
+deploy step "refresh every device".
+
+**Two ways were laid out and Patryk chose** (2026-10-09). Carrying unknown keys through
+the read and the write covers `bookings` only, puts a key scan on `sanitize`'s hot path
+(3.2 ms per 1,000 on the tablet), lets Delete customer on an old build keep a newer
+field it cannot see, and leaves an old build "keeping" a field it does not maintain.
+The gate covers every node, keeps the whitelist, and costs a stored node, a rules
+deploy and a blocking surface. His four further choices: enforced in production and
+ADVISORY on DEV Firebase (shared by every worktree and the sandbox deployment); a card
+that cannot be dismissed, with Refresh, and no automatic reload; a rev pair plus an
+only-upward rule (inside the Rule of law, no new exemption); and v18.6.0, a minor,
+because a device that refuses to work is something staff can meet.
+
+**How it works.** `SCHEMA` (1) is the build's number, separate from the app version.
+`/schema` is `{v: N}`, the highest any build announced. A build that reads a lower
+number announces its own, once per page load, through `writeWithRev`. A build that
+reads a HIGHER number refuses the four whitelisting writers (`saveBookings` and the
+legacy migration, `writeWithRev`, `saveVouchers`, roles and invites) and App shows
+`UpdateRequired` over an inert page. `activity`, `presence`, the WhatsApp nodes and
+the sign-in role stub stay open.
+
+**The guard on forgetting.** `tests/schema.test.js` fingerprints every `sanitize*`
+function in `src` (31 found by walking it, including the booking field list) and pins
+them beside the number. An edit to any of them fails until it is re-pinned (nothing
+new stored) or `SCHEMA` is raised (something is). It cannot see a field stored by a
+writer with no `sanitize*` function.
+
+**On DEV** (the build's number set to −1 for the run and put back; the local flag on):
+- the card showed with one button; Escape, N and a click on the scrim left it up; the
+  header and three wrappers were `inert`;
+- "seated" pressed on a booking under it (a scripted click, which `inert` does not
+  stop): console `[SAFE] Refused to write bookings`, and the stored booking unchanged
+  (`status` confirmed, the same `updatedAt`);
+- Refresh reloaded the page (a new `performance.timeOrigin`).
+With the number back at 1: no card, and the same "seated" landed.
+
+**A fault of this commit's own, found by that run and fixed before it was committed.**
+DEV has no grant for `/schema` yet, so the announce was refused; the SDK rolled the
+optimistic write back; the rollback arrived at the listener as the old number; and
+the hook announced again: 99 refused writes in a few seconds, and the same would have
+happened in production between the merge and the rules deploy. The announce is now
+once per page load. After the fix: one refusal on the next load with the flag on, none
+with it off (advisory), and none in a further 10 s.
+
+**Rules suite:** 305 passed on the emulator (300 before; the sweep took the new pair
+with no edit).
+
+**Not verified:** the announce LANDING (it needs the rule deployed; the emulator holds
+the rule, a source test holds the hook); two devices at different numbers; the card on
+the tablet or a phone.
+**What it does not do:** protect against builds before v18.6.0, which do not read the
+number. **And what it costs:** a rollback of a build that announced N locks the N−1
+builds out until `/schema` is lowered in the Firebase console.

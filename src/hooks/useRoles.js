@@ -47,6 +47,7 @@ import { settingsWriteEntry } from "../lib/activity";
 import { emitActivity } from "../lib/activitySink";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
+import { writesBlocked } from "../lib/schema";
 import {
   can as canFor, isAdminEntry, levelGrants, sanitizeRole, sanitizeRoles,
   sanitizeInvite, sanitizeInvites, normalizeEmail, wouldRemoveOwnAdmin,
@@ -136,6 +137,10 @@ export function useRoles({ uid, userEmail, setWriteWarning }) {
   // Returns TRUE if a write was dispatched (or there was nothing to write) so a
   // caller never reports success over a write that never left the device.
   const saveKeyed = useCallback(function (node, mirrorRef, setter, loadedRef, next) {
+    // v18.6.0: the schema gate (lib/schema.js): not from a build the database
+    // is ahead of. The sign-in stub further down is not gated: it only ever
+    // CREATES this account's own row, and the rule refuses it once one exists.
+    if (writesBlocked(node)) return false;
     if (!loadedRef.current) {
       console.warn("[SAFE] Refused to write " + node + " — initial read has not completed yet.");
       setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");

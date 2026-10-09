@@ -109,6 +109,10 @@ const devConfig = {
 // `import.meta.env.DEV`.
 const __fbTarget = import.meta.env.VITE_FB_TARGET;
 const isDev = __fbTarget === "dev" ? true : import.meta.env.DEV;
+// v18.6.0: which database this build is on, for the one caller that must
+// behave differently there (the schema gate is advisory on DEV, hooks/
+// useSchemaGate.js). Read-only: it reports the split, it cannot change it.
+export const isDevDb = isDev;
 const firebaseConfig = isDev ? devConfig : tenant.firebaseConfig;
 
 // Visible boot signal — appears in the browser console next to the

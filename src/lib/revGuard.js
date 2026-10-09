@@ -34,6 +34,7 @@
 import { ref, onValue, update } from "firebase/database";
 import { db } from "./../firebase";
 import { dbError, describeWriteError } from "./dbError";
+import { writesBlocked } from "./schema";
 
 // Subscribe `revRef.current` to <path>Rev. Plain assignment (not max): a
 // server rejection's rollback echo must be able to LOWER an optimistically
@@ -86,6 +87,10 @@ export function attachRev(path, revRef){
 //
 // Returns the promise for the write. Its FULFILMENT says nothing about success.
 export function writeWithRev(path, value, revRef, onReject, onDone){
+  // v18.6.0: the schema gate (lib/schema.js). A build the database is ahead of
+  // writes nothing here; App is showing the "refresh this device" card. Neither
+  // callback runs: the write was not refused by the server, and it did not land.
+  if(writesBlocked(path)) return Promise.resolve();
   const nextRev = (revRef.current || 0) + 1;
   revRef.current = nextRev; // optimistic — see header
   const patch = {};

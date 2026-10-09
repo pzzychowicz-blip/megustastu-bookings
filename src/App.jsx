@@ -81,6 +81,8 @@ import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { planDelete, planUndo, planCustomerDelete } from "./lib/delete-undo";
+import { useSchemaGate } from "./hooks/useSchemaGate";
+import UpdateRequired from "./components/UpdateRequired";
 import { filterByTags, onlyFinishedMatch } from "./lib/tag-filter";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
@@ -941,6 +943,10 @@ function BookingApp({uid}){
   // ListView) so listDaySorted can exclude the hidden cards while collapsed —
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
   const [showFinished, setShowFinished] = useState(false);
+  // v18.6.0: the minimum schema gate (lib/schema.js, hooks/useSchemaGate.js).
+  // True when the database is ahead of this build: every whitelisting write is
+  // refused, and the card below is all this device can use until it reloads.
+  const { blocked: schemaBlocked } = useSchemaGate();
   // v17.2.0: initial zoom = the per-device "Default zoom" setting (was 1).
   // v17.11.0: …raised to whatever the viewed day's HOURS SPAN needs, until the
   // user touches the zoom controls. See the effect further down; `zoomTouched`
@@ -3060,7 +3066,10 @@ function BookingApp({uid}){
   // ReferenceError that blanks the whole app with a generic message. That has
   // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
   // `isViewToday`), and neither lint nor `npm run build` catches it.
-  const anyModal=modalStack.length>0;
+  // v18.6.0: the "refresh this device" card (the schema gate) is not in the
+  // stack, because nothing closes it; it makes the page behind inert and
+  // silences the single-letter shortcuts like any modal.
+  const anyModal=modalStack.length>0||schemaBlocked;
   const topModalId=topModal(modalStack);
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
@@ -4753,7 +4762,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{schemaBlocked?<div style={{position:"relative",zIndex:350}}><UpdateRequired onRefresh={function(){window.location.reload();}} /></div>:null}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

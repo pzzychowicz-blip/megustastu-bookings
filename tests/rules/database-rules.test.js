@@ -2304,3 +2304,38 @@ describe("/activity — a deep write cannot MINT an entry around the create rule
     expect(await seedRead("activity/ghost")).toBeNull();
   });
 });
+
+// ── v18.6.0 — the minimum schema gate (`schema` + `schemaRev`) ───────────────
+// `{v: N}`: the highest schema number any build has announced (src/lib/
+// schema.js). The pair is in the walker's sweep above like every other; these
+// are the clauses that are its own: the number only goes UP, from any signed-in
+// account, and a build cannot be locked out by somebody lowering or clearing it.
+describe("schema: only upward, by anyone signed in (v18.6.0)", () => {
+  it("any signed-in account announces a number, with roles enforced and no role at all", async () => {
+    await seedEnforce(true);
+    await assertSucceeds(writeWithRev(staff("nobody"), "schema", { v: 1 }, 1));
+    expect(await seedRead("schema/v")).toBe(1);
+  });
+  it("refuses a number that is not higher, with the rev bumped correctly", async () => {
+    await seed((db) => db.ref().update({ schema: { v: 3 }, schemaRev: 1 }));
+    await assertFails(writeWithRev(staff(), "schema", { v: 2 }, 2));
+    await assertFails(writeWithRev(staff(), "schema", { v: 3 }, 2));
+    await assertSucceeds(writeWithRev(staff(), "schema", { v: 4 }, 2));
+    expect(await seedRead("schema/v")).toBe(4);
+  });
+  it("refuses it for an admin too: lowering is the console's job, after a rollback", async () => {
+    await seedAdmin();
+    await seed((db) => db.ref().update({ schema: { v: 3 }, schemaRev: 1 }));
+    await assertFails(writeWithRev(staff(), "schema", { v: 1 }, 2));
+  });
+  it("refuses a value with no number, and a deep write that skips the rev", async () => {
+    await assertFails(writeWithRev(staff(), "schema", { v: "2" }, 1));
+    await assertFails(writeWithRev(staff(), "schema", 2, 1));
+    await seed((db) => db.ref().update({ schema: { v: 3 }, schemaRev: 1 }));
+    await assertFails(staff().ref("schema/v").set(9));
+    expect(await seedRead("schema/v")).toBe(3);
+  });
+  it("refuses an unauthenticated write", async () => {
+    await assertFails(writeWithRev(anon(), "schema", { v: 1 }, 1));
+  });
+});

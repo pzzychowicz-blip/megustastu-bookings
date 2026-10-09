@@ -31,6 +31,7 @@ import { ref, onValue, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { writesBlocked } from "../lib/schema";
 import { dbError, onDbError, describeWriteError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log. The bookings diff and tableBlocks both
 // log; the legacy array→keyed MIGRATION deliberately does not — it is a one-time
@@ -439,6 +440,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
     }
     // v18.4.8: this attempt is the write's last, and it did not land.
     function dropped(){tellDiscarded(report,LANDED,DISCARDED);}
+    // v18.6.0: the schema gate (lib/schema.js), before every other gate. A
+    // build the database is ahead of would write this booking without the
+    // fields it does not know. Not parked: a replay from this build would
+    // drop them just the same. App shows the "refresh this device" card.
+    if(writesBlocked("bookings")){dropped();return false;}
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
@@ -741,6 +747,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // v17.16.13: this one logged NOTHING at all, so a refused migration was
         // invisible — and a legacy array node that cannot migrate leaves
         // `arrayShapeRef` holding every booking write forever (see v15.5.0).
+        // v18.6.0: and not from a build the database is ahead of (lib/schema.js).
+        if(writesBlocked("the bookings migration")) return;
         update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(err){
           console.warn(describeWriteError("bookings (legacy-array migration)",err)+" The array shape stays; booking writes remain held.");
           migratedRef.current=false;
