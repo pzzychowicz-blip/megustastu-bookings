@@ -34134,3 +34134,41 @@ ellipsize; no tag on DEV is that long).
 **The List chip's number and the Customers chips stay as built** (his answers the
 same day: still to come or seated; no count).
 
+### 9. /code-review (2026-10-09)
+
+Seven findings; two fixed, both from the List's tag filter being KEPT while the
+selection and the search did not know about it.
+
+**Fixed, one commit** (`src/App.jsx`, `tests/tag-filter.test.js` +1):
+
+- **A booking picked in Find a booking could be hidden by the filter.** The pick
+  switches to the List and selects the booking; with "Allergy" chosen and a guest
+  without it picked, the card was filtered out and still selected, so the List's
+  shortcuts would have acted on a booking not on screen. The pick now clears the
+  filter when it would hide the booking it is opening, and only then. Measured on
+  DEV: Allergy on (7 cards → 1), "Tracy" picked (no Allergy) → chip no longer
+  pressed, 7 cards.
+- **A filter change kept the selection on a card it hid.** A chip pressed with the
+  mouse or a finger already cleared the selection (the outside-card mousedown); one
+  pressed from the keyboard did not. `changeListTags` drops the selection when the
+  new filter hides it, the rule `toggleShowFinished` has for the fold. Read from the
+  code and held by a source test; not pressed with real keys.
+
+**Not changed, and why:**
+
+- **Delete customer removes the rules before the bookings write and does not check
+  that write.** A refused anonymise leaves the customer and no standing booking. The
+  order is deliberate (section 1: anonymised first, the generator could write one
+  more week), and closing it needs the rule removal in the bookings write's
+  `onLanded`, which then reopens that window. ROADMAP, Ideas.
+- **A filter whose only matches are completed or cancelled** shows no card until
+  "Completed & cancelled" is opened; its header and count are there. Patryk's to
+  choose whether the filter should open the fold.
+- **The "No bookings tagged…" line has no transition**, and can show beside the
+  empty-day prompt on a day of cancelled bookings only. Cosmetic; ROADMAP, Ideas.
+- **The day is filtered in App and in ListView.** Two calls of one function, pinned
+  together by a test; folding them means handing ListView App's list, which changes
+  what the memoised List re-renders on. Not in a ship run.
+- **`matchedTagLabels` runs for every booking on each keystroke** and again for the
+  30 shown. Not measured as slow; no change without a measurement.
+

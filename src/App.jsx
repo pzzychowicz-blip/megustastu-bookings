@@ -2115,6 +2115,16 @@ function BookingApp({uid}){
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
+  // v18.5.1 (/code-review): the same rule for the List's tag filter. A chip
+  // pressed from the keyboard is no mousedown, so the outside-click clear does
+  // not run, and the selected card would leave the screen still selected.
+  function changeListTags(next){
+    if(selectedListId){
+      const sel=bookings.find(function(b){return b.id===selectedListId;});
+      if(sel&&!filterByTags([sel],guestTags,tagList,next).length) setSelectedListId(null);
+    }
+    setListTagFilter(next);
+  }
   function toggleShowFinished(next){
     if(!next&&selectedListId){
       const sel=bookings.find(function(b){return b.id===selectedListId;});
@@ -4037,7 +4047,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -4052,6 +4062,7 @@ function BookingApp({uid}){
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
       onNew:function(){R.current.openNew();},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
+      onTagFilter:function(next){R.current.changeListTags(next);},
       onSelect:function(id){R.current.setSelectedListId(id);},
       onSummaryToggle:function(){R.current.setSummaryOpen(function(o){return !o;});},
       onOpenWeek:function(){R.current.setShowWeek(true);},
@@ -4197,7 +4208,7 @@ function BookingApp({uid}){
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
     tagFilter={listTagFilter}
-    onTagFilter={setListTagFilter}
+    onTagFilter={VA.onTagFilter}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
@@ -4723,7 +4734,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

@@ -124,7 +124,17 @@ describe("the List is wired to it", () => {
     expect(APP).toMatch(/const listDaySorted=useMemo\(function\(\)\{return filterByTags\(bookings[\s\S]{0,400}?,guestTags,tagList,listTagFilter\);\},\[bookings,viewDate,showFinished,guestTags,tagList,listTagFilter\]\);/);
     expect(APP).toContain("const [listTagFilter, setListTagFilter] = useState(NO_LIST_TAGS);");
     expect(APP).toContain("tagFilter={listTagFilter}");
-    expect(APP).toContain("onTagFilter={setListTagFilter}");
+    expect(APP).toContain("onTagFilter={VA.onTagFilter}");
+    expect(APP).toContain("onTagFilter:function(next){R.current.changeListTags(next);},");
+  });
+  // /code-review: a card the filter hides must not stay selected (the List's
+  // shortcuts act on the selection), and a booking picked in Find a booking
+  // must be on screen when the List opens on it.
+  it("a filter change drops a selection it hides, and a search pick clears a filter that would hide it", () => {
+    const fn = APP.slice(APP.indexOf("function changeListTags(next){"), APP.indexOf("function toggleShowFinished(next){"));
+    expect(fn).toContain("if(sel&&!filterByTags([sel],guestTags,tagList,next).length) setSelectedListId(null);");
+    expect(fn).toContain("setListTagFilter(next);");
+    expect(APP).toContain('setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);');
   });
   it("the guest-tag map is declared above the memo that reads it (a const read early blanks the app)", () => {
     expect(APP.indexOf("const guestTags=useMemo(")).toBeGreaterThan(-1);

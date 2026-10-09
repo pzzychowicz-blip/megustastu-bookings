@@ -168,3 +168,14 @@ two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
   "refresh every device". Two ways to close the class, not designed: carry unknown keys
   through the read and the write, or a stored minimum version an older build refuses
   to write under. Either touches the write path, so it wants its own plan.
+- **Delete customer: the rules go even if the anonymise is refused.** v18.5.1 removes
+  the customer's standing bookings BEFORE the bookings write (so the generator cannot
+  write one more week in between) and does not check that write. If it is refused
+  (the freshness gate), the customer stays and their standing booking is gone, with
+  no undo. Read from the code in v18.5.1's /code-review, not reproduced. Closing it
+  wants one of: the rule removal in the write's `onLanded` plus a generator that
+  skips a customer mid-delete, or a retry of the anonymise.
+- **The List's tag filter, two loose ends** (v18.5.1's /code-review). A filter whose
+  only matches are completed or cancelled shows no card until "Completed &
+  cancelled" is opened: should choosing a tag open the fold? And the "No bookings
+  tagged…" line has no transition, and can sit beside the empty-day prompt.
