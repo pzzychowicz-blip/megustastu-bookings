@@ -8,7 +8,9 @@
 // once per opened customer.
 //
 // `TagRow` is the same row READ: only the tags somebody has, as plain chips. The
-// seat note uses it, and a Customers row for an account that may not edit.
+// seat note uses it. An account that may not edit sees `TagChips` with
+// `disabled` in Settings → Customers, not this row: every tag of the list, the
+// guest's own pressed, none of them answering a tap.
 //
 // Both are the app's outline chip (atoms.jsx), at the size and height the
 // activity log's filter chips take, where a pressed chip is already this one in

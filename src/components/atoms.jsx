@@ -2260,7 +2260,12 @@ export function OutlineChip({ tone = "neutral", as = "span", size = "micro", sty
       border: "2px solid " + c.border,
       color: c.text,
       flexShrink: 0,
-      ...(as === "button" ? { cursor: "pointer", transition: CHIP_BUTTON_EASE } : null),
+      // A disabled chip is not offered as pressable: the hover lift and the
+      // press dim already skip `:disabled`, and the cursor is inline, so it is
+      // decided here. It keeps its full ink, because a disabled tag chip still
+      // says what the guest has (Settings → Customers, for an account that may
+      // not edit bookings).
+      ...(as === "button" ? { cursor: rest.disabled ? "default" : "pointer", transition: CHIP_BUTTON_EASE } : null),
       ...(style || {})
     }}>{children}</Tag>
   );

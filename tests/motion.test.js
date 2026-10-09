@@ -331,7 +331,19 @@ describe("a pressed tag chip's mark arrives and leaves", () => {
     const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
     const ease = atoms.slice(atoms.indexOf("const CHIP_BUTTON_EASE"), atoms.indexOf("export function OutlineChip"));
     expect(ease).toContain('", border-color " + M.move + ", color " + M.move');
-    expect(atoms).toContain('...(as === "button" ? { cursor: "pointer", transition: CHIP_BUTTON_EASE } : null),');
+    expect(atoms).toContain('...(as === "button" ? { cursor: rest.disabled ? "default" : "pointer", transition: CHIP_BUTTON_EASE } : null),');
+  });
+
+  it("a disabled chip does not show the hand", () => {
+    // The lift and the press dim skip `:disabled` in the stylesheet; the cursor
+    // is the atom's inline style, which a class cannot reach. The Customers
+    // row passes `disabled` for an account that may not edit bookings.
+    const atoms = code(join(ROOT, "src/components/atoms.jsx"), "utf8");
+    expect(atoms).toContain('cursor: rest.disabled ? "default" : "pointer"');
+    const customers = code(join(ROOT, "src/components/CustomersSettings.jsx"), "utf8");
+    expect(customers).toContain("disabled={!canEditGuestTags || !onSetCustomerTag}");
+    const css = code(join(ROOT, "src/index.css"), "utf8");
+    expect(css).toContain(".mgt-hover-scale:hover:not(:disabled)");
   });
 
   it("the chip's inline transition names everything the hover and press classes animate", () => {
