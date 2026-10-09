@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { SCHEMA, storedSchemaOf, schemaBehind, shouldAnnounce, configureSchemaGate, setStoredSchema,
+import { SCHEMA, storedSchemaOf, schemaBehind, shouldAnnounce, mayAnnounceFrom, configureSchemaGate, setStoredSchema,
   writesBlocked, resetSchemaGate } from "../src/lib/schema.js";
 import { BOOKING_FIELDS } from "../src/lib/booking-fields.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
@@ -33,6 +33,19 @@ describe("the stored number", () => {
     expect(shouldAnnounce(2, 1, true)).toBe(false);
     expect(shouldAnnounce(null, 1, true)).toBe(false);
     expect(shouldAnnounce(0, 1, false)).toBe(false);
+  });
+  // /code-review: a Vercel preview is a production build on the PROD database.
+  // Announcing from one would stop every device in the restaurant for a branch
+  // that is not merged.
+  it("a Vercel preview never announces; production and any other build may", () => {
+    expect(mayAnnounceFrom("preview")).toBe(false);
+    expect(mayAnnounceFrom("production")).toBe(true);
+    expect(mayAnnounceFrom("")).toBe(true);
+    expect(mayAnnounceFrom(undefined)).toBe(true);
+    const H = read("hooks/useSchemaGate.js");
+    expect(H).toContain("const announce = enforce && mayAnnounceFrom(import.meta.env.VITE_DEPLOY_ENV);");
+    const V = readFileSync(fileURLToPath(new URL("../vite.config.js", import.meta.url)), "utf8");
+    expect(V).toContain('define: { "import.meta.env.VITE_DEPLOY_ENV": JSON.stringify(process.env.VERCEL_ENV || "") },');
   });
 });
 
@@ -82,7 +95,7 @@ describe("the writers ask it", () => {
   });
   it("the hook never announces before the read, and App makes the page inert under the card", () => {
     const H = read("hooks/useSchemaGate.js");
-    const ask = H.indexOf("if (!announced.current && shouldAnnounce(stored, SCHEMA, enforce)) {");
+    const ask = H.indexOf("if (!announced.current && shouldAnnounce(stored, SCHEMA, announce)) {");
     expect(ask).toBeGreaterThan(H.indexOf("const stored = storedSchemaOf(snap.val());"));
     // Once per page load: a refused announce rolls back and arrives as the old
     // number again, which looped (99 refused writes, measured on DEV).

@@ -34447,3 +34447,23 @@ v18.3.0 doing what it was built to do, on a landscape tablet.
 The selector asked for a computed `border-top-width` of exactly `14px`, and the tablet
 reports 13.5135px. Read from the inline style, the corner was there, and a screenshot
 showed it.
+
+### 8. /code-review (2026-10-09)
+
+Read over the whole branch diff. Nine candidates; one fixed, one pinned, two filed in
+ROADMAP.md, five need no change.
+
+**Fixed: a Vercel preview could have stopped the restaurant.** A preview of a pull
+request is a production build, and `src/firebase.js` sends every production build that
+is not the sandbox to PROD. So the first branch to raise `SCHEMA` would have announced
+its number to PROD the moment anybody signed in to its preview, and every device on
+`main` would have refused to write until that branch merged and they were refreshed.
+This release raises nothing a v18.5.1 device reads, so the next one was the first at
+risk. Now a preview reads the number and never raises it: `mayAnnounceFrom(deployEnv)`
+(`src/lib/schema.js`), with `import.meta.env.VITE_DEPLOY_ENV` defined in
+`vite.config.js` from Vercel's `VERCEL_ENV`. A build made anywhere else (no
+`VERCEL_ENV`) announces as before. **Checked** in three builds: the compiled hook calls
+the function with `preview`, `production` and an empty string. **Not checked:** a real
+Vercel preview, which needs this branch pushed; `VERCEL_ENV` at build time is Vercel's
+documented behaviour, not something measured here.
+

@@ -31,6 +31,15 @@
 // builds at N-1 refuse to write until `/schema` is lowered by hand in the
 // Firebase console (the rule refuses a lower number from any client).
 //
+// A VERCEL PREVIEW NEVER ANNOUNCES (v18.6.0 /code-review). A preview of a pull
+// request is a production build on the restaurant's PROD database. Announcing
+// from one would raise the number for a build that is not merged: every device
+// in the restaurant would stop writing the moment somebody signed in to the
+// preview, and stay stopped until the merge and a refresh (or a console edit,
+// if the branch were dropped). A preview still READS the number and is blocked
+// by a higher one like any build. `mayAnnounceFrom` below; the environment's
+// name comes from vite.config.js.
+//
 // ON DEV FIREBASE THE GATE IS ADVISORY (Patryk, 2026-10-09). The DEV project
 // is shared by every worktree and by the sandbox deployment, so a feature
 // branch that raised the number would stop all of them until it merged. There
@@ -57,6 +66,11 @@ export function schemaBehind(stored, own) {
 // write-before-load this repo forbids), and only where the gate is enforced.
 export function shouldAnnounce(stored, own, enforce) {
   return enforce === true && typeof stored === "number" && stored < own;
+}
+// May a build made in this deployment environment announce at all? Everything
+// but a Vercel preview: "production", and "" for a build made anywhere else.
+export function mayAnnounceFrom(deployEnv) {
+  return deployEnv !== "preview";
 }
 
 // ── The live binding the writers ask ─────────────────────────────────────────

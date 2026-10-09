@@ -18,7 +18,7 @@ import { ref, onValue } from "firebase/database";
 import { db, isDevDb } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { dbError } from "../lib/dbError";
-import { SCHEMA, SCHEMA_ENFORCE_KEY, storedSchemaOf, schemaBehind, shouldAnnounce, configureSchemaGate, setStoredSchema } from "../lib/schema";
+import { SCHEMA, SCHEMA_ENFORCE_KEY, storedSchemaOf, schemaBehind, shouldAnnounce, mayAnnounceFrom, configureSchemaGate, setStoredSchema } from "../lib/schema";
 
 // Enforced everywhere except DEV Firebase, where it is advisory unless this
 // browser has set the local flag. localStorage can throw (private mode).
@@ -34,6 +34,8 @@ export function useSchemaGate() {
 
   useEffect(function () {
     const enforce = readEnforce();
+    // A Vercel preview reads the number and never raises it (lib/schema.js).
+    const announce = enforce && mayAnnounceFrom(import.meta.env.VITE_DEPLOY_ENV);
     configureSchemaGate({ enforce: enforce });
     const offRev = attachRev("schema", revRef);
     const off = onValue(ref(db, "schema"), function (snap) {
@@ -46,7 +48,7 @@ export function useSchemaGate() {
       // 99 refused writes in a few seconds). A device that lost the rev to
       // another gets that device's number by the echo, so it has no need to
       // try twice either.
-      if (!announced.current && shouldAnnounce(stored, SCHEMA, enforce)) {
+      if (!announced.current && shouldAnnounce(stored, SCHEMA, announce)) {
         announced.current = true;
         writeWithRev("schema", { v: SCHEMA }, revRef, function () {
           // Refused: another device announced first, or the rules are not
