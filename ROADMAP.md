@@ -76,14 +76,18 @@ in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
 
-- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23; decided
-  2026-10-08, not built). A scheduled **GitHub Actions** job in a separate PRIVATE
-  repository, because this one is public and its Actions artifacts and logs are
-  world-readable. The job uses a dedicated read-only service account, writes the same
-  file v18.1.1's `lib/backup.js` builds, encrypts it with `age` to a key only Patryk
-  holds, and keeps **90 days**. The private key lives in his password manager, with a
-  paper copy. Rehearse a restore on DEV first (`database.rules.README.md` § Backups and
-  restore). His steps: the private repository, the service account, the key pair.
+- **Daily PROD backup (#5): running since 2026-10-09, restore not yet rehearsed.** The
+  job is in the private repository `pzzychowicz-blip/mgt-backups` (this one is public,
+  so its Actions logs and artifacts are world-readable): every day at 04:30 UTC it
+  reads the database as a read-only service account, builds the file v18.1.1's
+  `lib/backup.js` builds (imported from this repository's `main`), encrypts it with
+  `age` to a key only Patryk holds, and keeps it 90 days. Its README has how to open
+  one. The first run (manual, 2026-10-09): 14 nodes, 1,640 bookings, 2.33 MB of JSON,
+  216 kB encrypted. **Still owed:** Patryk decrypting one with his key, and a restore
+  rehearsed on DEV (`database.rules.README.md` § Backups and restore). **Not proven:**
+  that the service account is refused a write; its role says so and nobody should try
+  one against PROD. A change to `src/lib/backup.js` that breaks its import fails the
+  next run there, and GitHub emails him.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
