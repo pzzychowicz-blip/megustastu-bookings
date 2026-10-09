@@ -34177,7 +34177,8 @@ selection and the search did not know about it.
 **Date:** 2026-10-09 · **Branch:** `feat/v18.6.0-schema-gate` ·
 **Behavioural change:** a tag filter whose only matches are completed or cancelled
 opens "Completed & cancelled" (section 1); the "No bookings tagged…" line folds in and
-out and no longer shows on an empty day (section 2). The header is extended as the version's
+out and no longer shows on an empty day (section 2); Delete customer pauses the
+standing bookings and erases only once the anonymise has landed (section 3). The header is extended as the version's
 other items land.
 **Rules change: none so far.** **Deploy steps: none so far.**
 
@@ -34238,3 +34239,54 @@ Neither run was watched to its last frame: the frames stop when the screenshots 
 
 **Not measured:** the line on arriving at a day, where the List remounts and the line
 is there from the first commit, as before.
+
+### 3. Delete customer: the rules went even if the anonymise did not land
+
+**Files:** `src/lib/delete-undo.js` (`planCustomerDelete`), `src/hooks/useRecurring.js`
+(`setRulesActive`), `src/App.jsx` (`deleteCustomer`), `tests/delete-undo.test.js` (+4),
+`tests/recurring.test.js` (1 rewritten), `src/CLAUDE.md`, `src/lib/CLAUDE.md`,
+`src/hooks/CLAUDE.md`.
+
+**Reproduced on DEV first**, on v18.5.1's code. A guest with a phone and Repeat weekly
+(1 rule, 3 bookings); the freshness gate tripped by shifting `Date.now` 8 h around the
+confirm (the measurement-traps row: the gate then holds, because the socket never
+dropped); Delete customer confirmed.
+
+| Server | rules | bookings with the name and phone |
+|---|---|---|
+| before | 1 | 3 |
+| 4 s after | 0 | 3 |
+| 30 s after | 0 | 3 |
+| after `goOffline`/`goOnline` | 0 | 0 ("Data removed" ×3) |
+
+**It was narrower than the ROADMAP entry said.** The bookings write is not refused by
+the gate: a function-form user write is PARKED and replayed on the resync, and then
+everything is consistent. `saveRecurring` has no such gate, so the rule removal landed
+at once. The loss was permanent only when the parked write died: a reload or a closed
+tab, Discard on the parked banner, or the refusal before the first read. And it was
+wider: the waitlist filter, the WhatsApp erase and the activity-log redaction were
+dispatched beside it too.
+
+**The fix** (Patryk's choice of four, 2026-10-09): the customer's active rules are
+PAUSED before the bookings write (stops the generator as a removal does, and can be
+taken back); the anonymise carries a report; `onLanded` removes the rules and runs the
+three other erasures; `onDiscarded` resumes the rules this delete paused. Every
+function `onLanded` calls reads refs, so a replay minutes later acts on the lists as
+they are then.
+
+**On DEV after the change**, a second guest (1 rule, 5 bookings), the same gate:
+
+| Server | rule | bookings with the name |
+|---|---|---|
+| 5 s after the confirm, write parked | present, `active: false` | 5 |
+| after a RELOAD while parked | present, `active: false` | 5 |
+| still listed in Settings → Customers | yes | |
+| Delete customer again, no gate | gone | 0 (5 "Data removed", 0 with a phone) |
+
+**Not run:** `onDiscarded` (the banner's Discard after three failed replays). It is
+held by a source test, and by `tellDiscarded`'s own tests in `tests/write-path.test.js`.
+**Seen and not chased:** Settings → Customers found the guest for "V186" and answered
+"No customers match" for the full name "V186 DelCust2". Not reproduced a second time
+and its cause not read.
+**Not changed:** while the write is parked the banner says "Your changes are saved and
+will finish syncing in a moment", for any parked write.

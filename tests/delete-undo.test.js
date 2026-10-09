@@ -9,7 +9,7 @@
 // one per outcome, each asserting what is ASKED or what is WRITTEN.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { planDelete, planUndo } from "../src/lib/delete-undo.js";
+import { planDelete, planUndo, planCustomerDelete } from "../src/lib/delete-undo.js";
 import { undoSnapshots } from "../src/lib/booking-logic.js";
 import { guestTagMap, guestTagsOf } from "../src/lib/customers.js";
 import { sanitizeVoucher } from "../src/lib/vouchers.js";
@@ -168,5 +168,49 @@ describe("the wiring", () => {
     expect(body).toContain("setViewDate(plan.date);");
     expect(body).not.toContain("bookingsAfterAction(");
     expect(body).not.toContain("applyUndo(");
+  });
+});
+
+// v18.6.0: Delete customer. The rules are paused before the anonymise and
+// removed after it lands; a discard resumes the ones this delete paused.
+describe("planCustomerDelete", () => {
+  const PHONE = "+34 600 555 186";
+  const rule = (id, extra) => Object.assign({ id, name: "Ana", phone: PHONE, active: true, weekday: 5, time: "20:00", size: 2 }, extra || {});
+  const book = (id, extra) => Object.assign({ id, name: "Ana", phone: PHONE, date: "2026-10-17", time: "20:00", size: 2, status: "confirmed", notes: "nut allergy", history: [] }, extra || {});
+  const rules = [rule("RA"), rule("RP", { active: false }), rule("RX", { phone: "+34 600 000 999" })];
+  const list = [book("b1", { recurringId: "RA" }), book("b2"), book("x1", { name: "Other", phone: "+34 600 000 999" })];
+  const plan = planCustomerDelete(rules, list, { phone: PHONE });
+
+  it("removes every rule of the customer, and pauses only the ones running now", () => {
+    expect(plan.remove).toEqual(["RA", "RP"]);
+    expect(plan.pause).toEqual(["RA"]);
+  });
+  it("anonymises their bookings and nobody else's", () => {
+    const out = plan.transform(list);
+    expect(out[0].name).toBe("Data removed");
+    expect(out[0].phone).toBe("");
+    expect(out[1].name).toBe("Data removed");
+    expect(out[2]).toBe(list[2]);
+  });
+  it("a customer with no standing booking has nothing to pause or remove", () => {
+    const p = planCustomerDelete(rules, list, { phone: "+34 600 000 111" });
+    expect(p.remove).toEqual([]);
+    expect(p.pause).toEqual([]);
+    expect(planCustomerDelete(null, list, { phone: PHONE }).pause).toEqual([]);
+  });
+  it("App erases nothing until the write has landed, and resumes the paused rules on a discard", () => {
+    const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n").replace(/\s+/g, "");
+    const at = APP.indexOf("functiondeleteCustomer(");
+    const body = APP.slice(at, APP.indexOf("functionopenNewWith(", at));
+    const landed = body.indexOf("onLanded:function(){");
+    const discarded = body.indexOf("onDiscarded:function(){if(plan.pause.length)setRulesActive(plan.pause,true);}");
+    expect(landed).toBeGreaterThan(body.indexOf("saveBookings(plan.transform,false,{"));
+    expect(discarded).toBeGreaterThan(landed);
+    for (const erase of ["removeRules(plan.remove)", "saveWaitlist(", "wa.eraseConversation(key)", "redactGuest("]) {
+      const i = body.indexOf(erase);
+      expect(i, erase).toBeGreaterThan(landed);
+      expect(i, erase).toBeLessThan(discarded);
+      expect(body.indexOf(erase, i + 1), erase + " once").toBe(-1);
+    }
   });
 });

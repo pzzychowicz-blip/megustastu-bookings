@@ -131,11 +131,20 @@ export function useRecurring({ setWriteWarning }) {
   function removeRule(id) {
     saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return r.id !== id; }) }); });
   }
-  // v18.5.1: several at once, in one write, and the answer returned: Delete
-  // customer removes the guest's rules BEFORE it anonymises their bookings, and
-  // stops if this is refused (the node not loaded yet).
+  // v18.5.1: several at once, in one write, and the answer returned. v18.6.0:
+  // Delete customer calls it once the anonymise has landed (it pauses them
+  // first, `setRulesActive` below).
   function removeRules(ids) {
     return saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return ids.indexOf(r.id) === -1; }) }); });
+  }
+  // v18.6.0: several rules paused or resumed in one write, and the answer
+  // returned. Delete customer pauses the guest's rules before it anonymises
+  // their bookings and removes them only once that write has landed
+  // (`planCustomerDelete`, lib/delete-undo.js).
+  function setRulesActive(ids, active) {
+    return saveRecurring(function (prev) {
+      return Object.assign({}, prev, { rules: prev.rules.map(function (r) { return ids.indexOf(r.id) === -1 ? r : Object.assign({}, r, { active: !!active }); }) });
+    });
   }
   function addSkipDate(id, date, isSilent) {
     return saveRecurring(function (prev) {
@@ -149,5 +158,5 @@ export function useRecurring({ setWriteWarning }) {
   function setEnabled(on) { saveRecurring(function (prev) { return Object.assign({}, prev, { enabled: !!on }); }); }
   function setHorizon(weeks) { saveRecurring(function (prev) { return Object.assign({}, prev, { horizonWeeks: clampInt(weeks, 4, 1, 12) }); }); }
 
-  return { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, addSkipDate, setEnabled, setHorizon };
+  return { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled, setHorizon };
 }

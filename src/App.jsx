@@ -79,15 +79,15 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
-import { planDelete, planUndo } from "./lib/delete-undo";
+import { dueOccurrences, withOccurrences } from "./lib/recurring";
+import { planDelete, planUndo, planCustomerDelete } from "./lib/delete-undo";
 import { filterByTags, onlyFinishedMatch } from "./lib/tag-filter";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
 import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
+import { normalizePhone, hasRealPhone, matchesIdentity, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -1511,7 +1511,7 @@ function BookingApp({uid}){
   // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
-  const { recurring, addRule, updateRule, removeRule, removeRules, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  const { recurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // ── v18.0.0 session 8: the activity log ────────────────────────────────────
   // Installing the sink is the whole of the write side here — every writer in
   // the app already emits into it, and until this runs `emitActivity` is a
@@ -2477,34 +2477,46 @@ function BookingApp({uid}){
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
-    // v18.5.1: their standing bookings go FIRST (`rulesOfCustomer`,
+    // v18.5.1: their standing bookings go too (`rulesOfCustomer`,
     // lib/recurring.js). A rule holds the name, the phone and the notes, and the
     // generator writes them onto each new week, so a rule left behind brought the
-    // customer back. Before the bookings and stopping on a refusal, as
-    // `delBooking` orders its skipDate: anonymised first, the generator could
-    // write one more week in between. `saveRecurring` says why it refused.
-    const theirRules=rulesOfCustomer(recurring.rules,bookings,o);
-    if(theirRules.length&&!removeRules(theirRules)) return;
-    saveBookings(function(prev){return prev.map(function(b){
-      if(!matchesIdentity(b,o)) return b;
-      return anonymizeBooking(b);
-    });});
-    if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
-    // v18.3.1: and their WhatsApp conversation and messages, stored under the
-    // same normalised phone. Unconditional, module on or off (useWhatsApp's
-    // eraseConversation says why); a phone-less guest has none.
-    if(key) wa.eraseConversation(key);
-    // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
-    // of the log erases itself — its text holds {b:<id>} tokens resolved against
-    // the live bookings, so the anonymisation above rewrites what it displays —
-    // but an entry for a DELETED booking has no row left to resolve against and
-    // carries `subject.name`. That is the one field to reach.
-    //
-    // The key list is derived EXACTLY as matchesIdentity derives it, so the keys
-    // erased can never be narrower than the bookings anonymised: a customer can
-    // have absorbed several guest groups, and erasing under one key would leave
-    // the others behind with nothing on screen to say so.
-    redactGuest([key].concat(Array.isArray(o.guestIds)?o.guestIds:(o.guestId?[o.guestId]:[])));
+    // customer back.
+    // v18.6.0: PAUSED first, removed once the anonymise has landed
+    // (`planCustomerDelete`, lib/delete-undo.js, says why: a held anonymise used
+    // to leave the rule gone and the customer as they were). Paused before the
+    // bookings write and stopping on a refusal, as `delBooking` orders its
+    // skipDate: anonymised first, the generator could write one more week in
+    // between. `saveRecurring` says why it refused.
+    const plan=planCustomerDelete(recurring.rules,bookings,o);
+    if(plan.pause.length&&!setRulesActive(plan.pause,false)) return;
+    saveBookings(plan.transform,false,{
+      // Everything below erases with no undo, so none of it runs until the
+      // customer's bookings ARE anonymised on the server. Every function here
+      // reads refs, so a replay minutes later acts on the lists as they are then.
+      onLanded:function(){
+        if(plan.remove.length) removeRules(plan.remove);
+        if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+        // v18.3.1: and their WhatsApp conversation and messages, stored under the
+        // same normalised phone. Unconditional, module on or off (useWhatsApp's
+        // eraseConversation says why); a phone-less guest has none.
+        if(key) wa.eraseConversation(key);
+        // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
+        // of the log erases itself — its text holds {b:<id>} tokens resolved against
+        // the live bookings, so the anonymisation above rewrites what it displays —
+        // but an entry for a DELETED booking has no row left to resolve against and
+        // carries `subject.name`. That is the one field to reach.
+        //
+        // The key list is derived EXACTLY as matchesIdentity derives it, so the keys
+        // erased can never be narrower than the bookings anonymised: a customer can
+        // have absorbed several guest groups, and erasing under one key would leave
+        // the others behind with nothing on screen to say so.
+        redactGuest([key].concat(Array.isArray(o.guestIds)?o.guestIds:(o.guestId?[o.guestId]:[])));
+      },
+      // The write will never land (refused before the first read, or discarded
+      // from the parked banner): the customer stays, so their standing bookings
+      // run again. Only the ones this delete paused.
+      onDiscarded:function(){if(plan.pause.length) setRulesActive(plan.pause,true);}
+    });
   }
 
   // v17.16.11 (/code-review): the seed is the viewed date only when that is a

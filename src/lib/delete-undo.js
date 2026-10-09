@@ -13,7 +13,8 @@
 // when the write runs, as it was.
 import { bookingsAfterAction, syncLiveDurations, applyUndo, histEntry as defaultHistEntry } from "./booking-logic.js";
 import { memoByPrev } from "./booking-save.js";
-import { rehomeGuestTags } from "./customers.js";
+import { rehomeGuestTags, matchesIdentity, anonymizeBooking } from "./customers.js";
+import { rulesOfCustomer } from "./recurring.js";
 import { voucherHeld } from "./vouchers.js";
 import { todayStr } from "./day.js";
 
@@ -100,4 +101,36 @@ export function planUndo(ctx){
     const today=todayStr();
     return syncLiveDurations(applyUndo(b,snaps),today,nowMins);
   }};
+}
+
+// ── planCustomerDelete ───────────────────────────────────────────
+// v18.6.0. Delete customer is several writes to several nodes, and only the
+// bookings write can be held: `saveBookings` parks it behind the freshness
+// gate while `saveRecurring` has no such gate. v18.5.1 removed the customer's
+// standing bookings first, so a held anonymise left the rule gone and the
+// bookings as they were. Measured on DEV with the gate tripped: 0 rules and 3
+// named bookings on the server for 30 s, until a reconnect replayed the write.
+// A reload in that time loses the parked write, and the rule with it, for good.
+//
+// So the rules are PAUSED first, which stops the generator exactly as removing
+// them does (`dueOccurrences` skips an inactive rule) and can be taken back.
+// App then:
+//   - pauses `pause` and stops if that is refused;
+//   - writes `transform` with a report;
+//   - on `onLanded` removes `remove` and erases the rest (waitlist, WhatsApp,
+//     the activity log's copy of the name);
+//   - on `onDiscarded` makes `pause` active again.
+// If the page dies while the write is parked, the customer is still listed
+// with a paused standing booking, and deleting them again finishes it.
+//
+// `pause` is the rules that are active NOW, so a rule the restaurant had
+// already paused is not switched on by a discard.
+// → {remove, pause, transform}
+export function planCustomerDelete(rules, bookings, ident){
+  const remove=rulesOfCustomer(rules,bookings,ident);
+  const pause=(rules||[]).filter(function(r){return r&&r.active&&remove.indexOf(r.id)!==-1;}).map(function(r){return r.id;});
+  return {remove:remove,pause:pause,transform:function(prev){return prev.map(function(b){
+    if(!matchesIdentity(b,ident)) return b;
+    return anonymizeBooking(b);
+  });}};
 }

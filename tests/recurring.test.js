@@ -295,12 +295,15 @@ describe("rulesOfCustomer", () => {
     expect(rulesOfCustomer(rules, [], { phone: "" })).toEqual([]);
     expect(rulesOfCustomer(null, null, { phone: "+34600555181" })).toEqual([]);
   });
-  it("App removes them before it anonymises, and stops when the rule write is refused", () => {
+  // v18.6.0: paused first and removed once the anonymise has landed
+  // (tests/delete-undo.test.js holds the plan).
+  it("App pauses them before it anonymises, stops when that is refused, and removes them only on landed", () => {
     const at = APP.indexOf("function deleteCustomer(");
     const body = APP.slice(at, APP.indexOf("function openNewWith(", at));
-    const rulesAt = body.indexOf("if(theirRules.length&&!removeRules(theirRules)) return;");
-    expect(body).toContain("const theirRules=rulesOfCustomer(recurring.rules,bookings,o);");
-    expect(rulesAt).toBeGreaterThan(-1);
-    expect(rulesAt).toBeLessThan(body.indexOf("saveBookings("));
+    const pauseAt = body.indexOf("if(plan.pause.length&&!setRulesActive(plan.pause,false)) return;");
+    expect(body).toContain("const plan=planCustomerDelete(recurring.rules,bookings,o);");
+    expect(pauseAt).toBeGreaterThan(-1);
+    expect(pauseAt).toBeLessThan(body.indexOf("saveBookings("));
+    expect(body.indexOf("removeRules(")).toBeGreaterThan(body.indexOf("onLanded:function(){"));
   });
 });
