@@ -59,9 +59,9 @@ const GUESTS_COL = 58;
 // The alternative, an effect that writes `query` when the prop changes, is a
 // synchronous setState in an effect — the lint rule this codebase keeps clean.
 // v18.5.0: `guestTags` is App's guest-tag map (`guestTagMap`), keyed like the
-// index here, so `guestTags[c.key]` is the customer's tag ids. A row shows them
-// as words under the phone; opened, it shows every guest tag of the list as a
-// chip, pressed when the customer has it. A tap is one write
+// index here, so `guestTags[c.key]` is the customer's tag ids. A CLOSED row
+// shows them as words under the phone; opened, the words fold away and it shows
+// every guest tag of the list as a chip, pressed when the customer has it. A tap is one write
 // (`onSetCustomerTag(key, "+id" | "-id")`, App's `saveCustomerTag`), and the
 // chips are disabled for an account that may not edit bookings
 // (`canEditGuestTags`): a guest's tags live on their bookings.
@@ -175,7 +175,14 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
             delete control is NOT inside it; that lives in the `Reveal` below, a
             sibling, so this stays a leaf rather than the container-of-controls
             defect `tests/a11y.test.js` exists for. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate ? formatDay(c.latestDate) : "\u2014")}</div>{tagNames.length ? <div style={{ fontSize: T.body, fontWeight: FW.semi, color: S.sub }}>{tagNames.join(", ")}</div> : null}</div><button
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "10px 12px", borderRadius: R.card }}><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name || "(no name)"}</div><div style={{ fontSize: T.body, color: S.muted, userSelect: "text", cursor: "text" }}>{(c.phone ? formatPhone(c.phone) : "No phone \u00b7 linked guest") + "  \u00b7  last " + (c.latestDate ? formatDay(c.latestDate) : "\u2014")}</div>{/* v18.5.0 (Patryk, 2026-10-09): the words are the CLOSED row's, and fold away as
+            it opens, the way a Settings section's summary does (Collapsible). Opened,
+            the chips below say the same thing, and with the words still above them
+            the first tag tapped (or the last removed) mounted a line over the chips
+            and moved them 11px under the finger that tapped (measured on DEV: 735.5 to
+            746.5 and back). On the body's own clock, so the two move as one. The
+            child is conditional so a row losing its last tag folds the words it had:
+            `Reveal` keeps the last child it was given. */}<Reveal show={!open && tagNames.length > 0}>{tagNames.length ? <div style={{ fontSize: T.body, fontWeight: FW.semi, color: S.sub }}>{tagNames.join(", ")}</div> : null}</Reveal></div><button
           type="button"
           aria-expanded={open}
           aria-label={(c.name || "(no name)") + ", " + (c.phone ? formatPhone(c.phone) : "no phone") + ", " + countLabel(c.visits, "visit", "visits") + (c.noShowCount > 0 ? ", " + countLabel(c.noShowCount, "no-show", "no-shows") : "") + (wlCount > 0 ? ", " + countLabel(wlCount, "waitlist entry", "waitlist entries") : "")}

@@ -333,3 +333,29 @@ describe("a pressed tag chip's mark arrives and leaves", () => {
     expect(chips).toContain('className="mgt-hover-scale" style={PRESSABLE}');
   });
 });
+
+// ── v18.5.0: an opened customer's tag chips stay under the finger ────────────
+// The tag words under the phone number mounted ABOVE the chips of the opened
+// row, so the first tag tapped (and the last removed) moved the chips 11px in
+// the commit the tap caused (measured on DEV: 735.5 → 746.5 and back). The
+// words are the closed row's now and fold away as it opens (Patryk's choice,
+// 2026-10-09), so nothing above the chips changes while they can be tapped.
+describe("a customer's tag words belong to the closed row", () => {
+  const customers = code(join(ROOT, "src/components/CustomersSettings.jsx"), "utf8");
+
+  it("the words sit in a Reveal that is shut while the row is open", () => {
+    expect(customers).toContain('<Reveal show={!open && tagNames.length > 0}>{tagNames.length ? <div');
+    // One place draws them, and it is that one.
+    expect((customers.match(/tagNames\.join\(/g) || []).length).toBe(1);
+    const at = customers.indexOf("tagNames.join(");
+    expect(customers.lastIndexOf("<Reveal show={!open && tagNames.length > 0}>", at)).toBeGreaterThan(customers.lastIndexOf("</Reveal>", at));
+  });
+
+  it("it folds on the body's clock, so the row and its words move as one", () => {
+    // The body is a default-speed Reveal; a `speed` on the words would finish
+    // the header's 11px before or after the body beneath it.
+    const words = customers.slice(customers.indexOf("<Reveal show={!open && tagNames.length > 0}"), customers.indexOf("tagNames.join("));
+    expect(words).not.toContain("speed=");
+    expect(customers).toContain("<Reveal show={open}>");
+  });
+});

@@ -33596,11 +33596,45 @@ the Add button's disabled fade (typing drives it); the List card's tag words
 the seat note's chips (static, in a note read while seating); the Summary's
 deposits line (a row among the hourly bars, which do not animate their arrival);
 the form's two tag groups (they change only when the list is edited, with the
-form closed). **One was measured and is Patryk's to decide:** an opened customer's
+form closed). **One was measured and put to Patryk:** an opened customer's
 chips move 11px down when their FIRST tag is tapped and 11px up when the last is
 removed (735.5 ↔ 746.5), because the words under the phone number mount above
 them. That is a control moving under the finger that tapped it, the layout twin
-`src/CLAUDE.md` records for an armed confirm.
+`src/CLAUDE.md` records for an armed confirm. The next section is his answer.
+
+### A customer's tag words are the closed row's
+
+**Chosen by Patryk (2026-10-09)** from three: hide the words while the row is open,
+ease the line in, or leave it.
+
+Settings → Customers showed a customer's tags as words under the phone number,
+open or closed. Opened, the chips sit below that line, so the first tag tapped
+mounted it above them and the last tag removed unmounted it: the chips moved 11px
+in the commit the tap caused. The words now sit in a `Reveal` that is shut while
+the row is open. The chips say the same thing there, and a Settings section's
+summary already behaves this way (`Collapsible`). It runs at the default speed,
+the body's, so the header's 11px and the body's fold move as one. The child is
+conditional (`tagNames.length ? <div> : null`): `Reveal` keeps the last child it
+was given, so a closed row that loses its last tag folds the words it had, where
+an always-present child would empty first and fold nothing.
+
+**Measured on DEV.** First tag tapped on an opened customer with none: every chip's
+top 724.5 before and after (it was 735.5 → 746.5). Last tag removed: 724.5 and
+724.5. Opening a row that has a tag, frame by frame: the header 64.5 · 63.2 · 62.0
+· 59.8 · 54.9 · 53.5 while the words' opacity goes 1 → 0.03 and the card grows
+66.5 → 365.8. Closed again, the header reads the tag and is 64.5 tall; with no tag
+it is 53.5 and holds no third line. **Not captured:** the closing direction frame
+by frame (its end state was read, the frames were not). Not checked: a finger, the
+tablet, the phone.
+
+**While measuring, DEV changed under me:** Laura Vidal's VIP, there an hour
+earlier, was gone, and the app had gone to the dark theme. Neither was this
+session's doing (no tap was made on her row), so somebody else was using the same
+account. Tomás Herrera, the customer the taps were made on, was left with no tags,
+as found.
+
+**Guard.** Two cases in `tests/motion.test.js`; the first failed once on purpose
+(`show` put back to the tags alone: 1 failed of 22).
 
 ### `/bookings`, measured (ROADMAP #3)
 
