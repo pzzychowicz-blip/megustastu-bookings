@@ -741,17 +741,26 @@ export function anonymizeBooking(b) {
 // case-insensitive name substring. Results sorted UPCOMING-first (date ≥ today,
 // ascending) then PAST (descending), capped at `limit` (default 30). `todayStr`
 // is passed in so the caller controls "today" (all-UTC ISO date string).
-export function searchBookings(bookings, query, todayStr, limit) {
+// v18.5.1: with `tags` (`{ map, list }`: `guestTagMap(bookings)` and the tag
+// list) a text query of 3+ characters ALSO matches a booking carrying a tag
+// whose name contains it, read as it is shown (`bookingTags`): "allerg" finds
+// every booking of every guest with Allergy. Three, as for digits: two letters
+// are in too many tag names to mean one. Without `tags` nothing changes.
+export function searchBookings(bookings, query, todayStr, limit, tags) {
   const max = limit || 30;
   const q = String(query || "").trim();
   if (!q || !Array.isArray(bookings)) return [];
   const qDigits = q.replace(/[^\d]/g, "");
   const qName = q.toLowerCase();
   const useDigits = qDigits.length >= 3;
+  const useTags = !useDigits && !!tags && qName.length >= 3;
   const out = bookings.filter(function (b) {
     if (!b || b.anonymized) return false; // v17.0.0: anonymized ("Data removed") bookings never match
     if (useDigits) return b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
-    return b.name && b.name.toLowerCase().indexOf(qName) !== -1;
+    if (b.name && b.name.toLowerCase().indexOf(qName) !== -1) return true;
+    if (!useTags) return false;
+    const t = bookingTags(b, tags.map, tags.list);
+    return t.guest.concat(t.occasion).some(function (label) { return label.toLowerCase().indexOf(qName) !== -1; });
   });
   const today = todayStr || "";
   out.sort(function (a, b) {

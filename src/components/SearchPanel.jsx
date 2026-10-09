@@ -9,6 +9,8 @@
 // Props:
 //   bookings   — full bookings list
 //   todayStr   — today's ISO date (upcoming/past split; all-UTC)
+//   guestTags  — `guestTagMap(bookings)`, and
+//   tagList    — the tag list (v18.5.1): 3+ letters of a tag's name match too
 //   isMobile   — App's `winW < 600`: the phone's two-line rows (v18.2.0 phase 76)
 //   onPick(b)  — jump to the booking (App: setViewDate + select + close)
 //   onClose()  — close the panel
@@ -57,12 +59,12 @@ function widest(labels, font) {
   return w || undefined;
 }
 
-export function SearchPanel({ bookings, todayStr, isMobile, onPick, onClose }) {
+export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, onPick, onClose }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   useEffect(function () { if (inputRef.current) inputRef.current.focus(); }, []);
 
-  const results = query.trim() ? searchBookings(bookings, query, todayStr, 30) : [];
+  const results = query.trim() ? searchBookings(bookings, query, todayStr, 30, tagList ? { map: guestTags, list: tagList } : null) : [];
 
   // v18.2.0 (the design critique, C1): the date column is as wide as the widest
   // date the results hold — "Wed 24.09" is 66px in this bold and
@@ -134,17 +136,17 @@ export function SearchPanel({ bookings, todayStr, isMobile, onPick, onClose }) {
       <ModalTitle background="var(--app-btn-grey-strong)">Find a booking</ModalTitle>
       <input
         ref={inputRef}
-        aria-label="Search bookings by name or phone number"
+        aria-label="Search bookings by name, phone number or tag"
         value={query}
         onChange={function (e) { setQuery(e.target.value); }}
-        placeholder="Search by name or phone, any date…"
+        placeholder="Search by name, phone or tag, any date…"
         className="mgt-hover-scale"
         style={mkInp()} />
       <AutoHeight>
         <div style={{ marginTop: 12 }}>
           {query.trim()
             ? (rows.length ? rows : <div style={{ textAlign: "center", padding: "18px 0", color: S.muted, fontSize: T.body }}>No bookings match.</div>)
-            : <div style={{ textAlign: "center", padding: "16px 0", color: S.muted, fontSize: T.body }}>Type a name or phone number to search every date.</div>}
+            : <div style={{ textAlign: "center", padding: "16px 0", color: S.muted, fontSize: T.body }}>Type a name, a phone number or a tag to search every date.</div>}
         </div>
       </AutoHeight>
     </Overlay>

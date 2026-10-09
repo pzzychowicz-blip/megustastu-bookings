@@ -640,7 +640,7 @@ describe("App is wired to it", () => {
   });
   it("one tag map is made in App and handed to each view", () => {
     expect((app.match(/guestTagMap\(/g) || []).length).toBe(1);
-    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(4);   // timeline, list, day sheet, settings
+    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(5);   // timeline, list, day sheet, settings, Find a booking (v18.5.1)
   });
   it("the edit is handed the tag list, for the occasion tag's name", () => {
     const call = app.slice(app.indexOf("applyEdit({"));

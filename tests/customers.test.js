@@ -10,7 +10,7 @@ import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap, stampGuestSeed,
   resolveGuestId,
-  searchBookings, searchCustomers, searchGuestsByName, findPhoneOverlaps,
+  searchBookings, guestTagMap, searchCustomers, searchGuestsByName, findPhoneOverlaps,
   regularChipLabel,
 } from "../src/lib/customers.js";
 
@@ -329,6 +329,41 @@ describe("searchBookings", () => {
     const r = searchBookings(bks, "ann", "2099-02-15");
     expect(r.map((b) => b.id)).toEqual(["f", "p"]);
     expect(searchBookings(bks, "removed", "2099-02-15")).toEqual([]);
+  });
+
+  // v18.5.1: 3+ letters of a tag's name match too, read as the tag is shown.
+  describe("by tag", () => {
+    const list = { guest: [{ id: "g-allergy", label: "Allergy" }], occasion: [{ id: "o-anniv", label: "Anniversary" }, { id: "o-bday", label: "Birthday" }] };
+    const tb = [
+      bk({ id: "old", phone: "+34600111222", name: "Ann", date: "2099-01-01", guestTags: ["g-allergy"], guestTagsAt: 5 }),
+      bk({ id: "new", phone: "+34600111222", name: "Ann", date: "2099-03-01" }),              // the guest's tag, stated on `old`
+      bk({ id: "bd", phone: "+34600999888", name: "Bea", date: "2099-03-02", tags: ["o-bday"] }),
+      bk({ id: "an", phone: "+34600777666", name: "Cid", date: "2099-03-03", tags: ["o-anniv"] }),
+      bk({ id: "gone", phone: "+34600555444", name: "Dee", date: "2099-03-04", tags: ["o-removed"] }),
+      bk({ id: "anon", phone: "", name: "Data removed", date: "2099-03-05", anonymized: true, tags: ["o-bday"] }),
+    ];
+    const tags = { map: guestTagMap(tb), list };
+    const ids = (q, t) => searchBookings(tb, q, "2099-02-15", 30, t).map((b) => b.id);
+    it("a guest tag finds every booking of the guest, an occasion tag its own booking", () => {
+      expect(ids("allerg", tags)).toEqual(["new", "old"]);
+      expect(ids("BIRTH", tags)).toEqual(["bd"]);
+    });
+    it("a name and a tag can both match one query", () => {
+      expect(ids("ann", tags)).toEqual(["new", "an", "old"]);
+    });
+    it("two letters match names only", () => {
+      expect(ids("al", tags)).toEqual([]);
+      expect(ids("an", tags)).toEqual(["new", "old"]);
+    });
+    it("a removed tag, an anonymised booking and a digit query are untouched by it", () => {
+      expect(ids("removed", tags)).toEqual([]);
+      expect(ids("birthday", tags)).not.toContain("anon");
+      expect(ids("600111", tags)).toEqual(["new", "old"]);
+    });
+    it("without the tag argument nothing changes", () => {
+      expect(ids("allerg")).toEqual([]);
+      expect(ids("ann")).toEqual(["new", "old"]);
+    });
   });
 });
 

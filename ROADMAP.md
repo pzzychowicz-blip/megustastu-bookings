@@ -168,6 +168,3 @@ two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
   "refresh every device". Two ways to close the class, not designed: carry unknown keys
   through the read and the write, or a stored minimum version an older build refuses
   to write under. Either touches the write path, so it wants its own plan.
-- **Filter or search by tag.** v18.5.0 shows a booking's tags on six surfaces and
-  filters by none. A "who has an allergy tonight" filter on the List, or a tag in the
-  Customers tab's filters, is the obvious next use. Not asked for yet.

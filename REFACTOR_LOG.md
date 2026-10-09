@@ -34084,3 +34084,28 @@ looked unchanged, because the Browser pane was hidden and the colour transition 
 not advanced; the inline `background` was right (`var(--accent)`). **Not checked:**
 the fall-back to All on DEV (read from the code and held by a source test).
 
+#### 8c. Find a booking
+
+**Files:** `src/lib/customers.js` (`searchBookings`' fifth argument),
+`src/components/SearchPanel.jsx`, `src/App.jsx` (two props), `tests/customers.test.js`
+(+5), `tests/guest-tags.test.js` (the hand-off count, 4 → 5), `GLOSSARY.md`,
+`ROADMAP.md` (the idea's entry removed: all three places have shipped).
+
+Three or more letters of a tag's name now match as well as a name: "allerg" lists
+every booking, on any date, of every guest with Allergy, and "birth" the bookings
+tagged Birthday. The tags are read as they are shown, so a guest tag stated on one
+booking finds the guest's others, and a tag removed from the list finds nothing.
+A digit query is still a phone query and nothing else; an anonymised booking still
+never matches; two letters still match names only (they are in too many tag names).
+The placeholder reads "Search by name, phone or tag, any date…".
+
+**On DEV:** "al" → 30 rows (names, the cap, as before); "allerg" → 2 (one guest's two
+bookings, 9 Oct and 20 Nov); "birth" → 2 (two different bookings); "gluten" → 29 (one
+phone's bookings: the tag follows the guest onto all of them); "zzzq" → "No bookings
+match."; no new console error.
+
+**Left as it is, and Patryk's to choose:** a result row does not say WHY it matched.
+"ann" lists people called Ann and bookings tagged Anniversary in one list with nothing
+to tell them apart, and the row has no tag on it. The row is a measured set of columns
+(v18.2.0 phase 76), so adding one is its own change.
+
