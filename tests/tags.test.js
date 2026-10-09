@@ -218,6 +218,21 @@ describe("tagLabelRefusal is the one name check", () => {
   });
 });
 
+describe("the editor's line under a tag says one thing", () => {
+  const editor = stripComments(readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "src", "components", "TagListEditor.jsx"), "utf8")).join("\n");
+
+  it("an armed row says what removing does, even over a refused rename", () => {
+    // × on a row whose box holds a refused name blurs the box and arms the row
+    // in one tap. `refusal || sentence` then put the confirm under "There is
+    // already a tag called…", and `aria-describedby` read that out for it.
+    expect(editor).toContain("const refusalShown = !!refusal && !armed;");
+    expect(editor).toMatch(/\{refusalShown \? refusal : "Bookings that carry/);
+    expect(editor).not.toMatch(/\{refusal \|\| "Bookings that carry/);
+    expect(editor).toContain("aria-describedby={refusalShown ? hintId : undefined}");
+  });
+});
+
 describe("the hook writes the list the way the Rule of law asks", () => {
   const hook = stripComments(readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), "..", "src", "hooks", "useTagSettings.js"), "utf8")).join("\n");

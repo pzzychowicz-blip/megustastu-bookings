@@ -75,6 +75,11 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
   useEffect(function () { if (onDirty) onDirty(dirtyId, dirty); }, [dirty, onDirty, dirtyId]);
   useEffect(function () { return function () { if (onDirty) onDirty(dirtyId, false); }; }, [onDirty, dirtyId]);
   const hintId = useId();
+  // The line under the row says ONE thing. While the row is armed that is what
+  // removing does, even when a rename was refused a moment ago: pressing × on a
+  // row whose box holds a refused name blurs the box (the refusal) and arms the
+  // row in one tap, and the confirm must not be read under the wrong sentence.
+  const refusalShown = !!refusal && !armed;
 
   function commit() {
     if (draft === tag.label) { setRefusal(null); return; }
@@ -97,7 +102,7 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
           maxLength={TAG_LABEL_MAX}
           aria-label={"Name of " + KIND_ONE[kind] + " " + (index + 1)}
           aria-invalid={refusal ? true : undefined}
-          aria-describedby={refusal ? hintId : undefined}
+          aria-describedby={refusalShown ? hintId : undefined}
           onChange={function (e) { setDraft(e.target.value); if (refusal) setRefusal(null); }}
           onBlur={commit}
           onKeyDown={function (e) { if (e.key === "Enter") e.currentTarget.blur(); }}
@@ -124,8 +129,8 @@ function TagRow({ tag, index, kind, tagList, onSave, armed, onArm, onDirty }) {
       {/* One line under the row for whichever applies: why the name was
           refused, or what removing does. Under, so neither moves a control. */}
       <Reveal show={!!refusal || armed}>
-        <div id={hintId} style={{ fontSize: T.small, paddingTop: SP.tight, color: refusal ? "var(--danger-text)" : "var(--text-muted)", fontWeight: refusal ? FW.semi : FW.regular }}>
-          {refusal || "Bookings that carry “" + tag.label + "” stop showing it. Adding the name again later does not bring it back on them."}
+        <div id={hintId} style={{ fontSize: T.small, paddingTop: SP.tight, color: refusalShown ? "var(--danger-text)" : "var(--text-muted)", fontWeight: refusalShown ? FW.semi : FW.regular }}>
+          {refusalShown ? refusal : "Bookings that carry “" + tag.label + "” stop showing it. Adding the name again later does not bring it back on them."}
         </div>
       </Reveal>
     </div>
