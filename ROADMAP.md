@@ -76,13 +76,14 @@ in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
 
-- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23). It needs a
-  scheduled job in a separate PRIVATE repository, because this one is public and its
-  Actions artifacts and logs are world-readable. The job uses a dedicated read-only
-  service account, writes the same file v18.1.1's `lib/backup.js` builds, encrypts it
-  with `age` to a key only Patryk holds, and keeps N days. Undecided: GitHub Actions or
-  Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
-  (`database.rules.README.md` § Backups and restore).
+- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23; decided
+  2026-10-08, not built). A scheduled **GitHub Actions** job in a separate PRIVATE
+  repository, because this one is public and its Actions artifacts and logs are
+  world-readable. The job uses a dedicated read-only service account, writes the same
+  file v18.1.1's `lib/backup.js` builds, encrypts it with `age` to a key only Patryk
+  holds, and keeps **90 days**. The private key lives in his password manager, with a
+  paper copy. Rehearse a restore on DEV first (`database.rules.README.md` § Backups and
+  restore). His steps: the private repository, the service account, the key pair.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
