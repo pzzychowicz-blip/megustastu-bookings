@@ -513,7 +513,11 @@ describe("what a screen shows for a booking: bookingTags and tagLine", () => {
     expect(src("DaySheet.jsx")).toContain("tagLine(bookingTags(b, guestTags, tagList))");
     const timeline = src("TimelineView.jsx");
     expect((timeline.match(/tags=\{tagLine\(bookingTags\(b, guestTags, tagList\)\)\}/g) || []).length).toBe(2);   // a placed block, an unplaced one
-    expect(timeline).toContain('(tags ? ", tagged " + tags.replace(" · ", ", ") : "")');
+    // The spoken form turns EVERY " · " into a comma. `replace(" · ", ", ")`
+    // changed the first only, so a name holding the mark kept the separator.
+    expect(timeline).toContain('(tags ? ", tagged " + tags.split(" · ").join(", ") : "")');
+    expect(timeline).not.toMatch(/tags\.replace\(/);
+    expect(tagLine({ guest: ["Nut · sesame"], occasion: ["Birthday"] }).split(" · ").join(", ")).toBe("Nut, sesame, Birthday");
     expect(timeline).toContain("title={leaving || !tags ? undefined : tags}");
     expect(src("SeatNoteModal.jsx")).toContain("(note.guestTags || []).concat(note.occasionTags || [])");
     // That is two kinds in one row, and a name is unique within one kind only

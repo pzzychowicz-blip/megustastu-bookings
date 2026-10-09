@@ -676,7 +676,9 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
     describeBooking(b) +
     // v18.5.0: the booking's tags ("Allergy, VIP · Birthday"), which the block
     // draws no mark for (Patryk): they are here and in the hover title only.
-    (tags ? ", tagged " + tags.replace(" · ", ", ") : "") +
+    // Every " · " becomes a comma, not the first: `replace` with a string stops
+    // at one, and a tag's own name may hold the mark ("Nut · sesame").
+    (tags ? ", tagged " + tags.split(" · ").join(", ") : "") +
     (clash ? ", double-booked" : "") +
     (warn ? ", overstaying" : "") +
     (late === "warn" ? ", running late" : late === "noshow" ? ", not arrived" : "");
