@@ -11,6 +11,7 @@ import {
   TAG_KINDS, TAG_LABEL_MAX, TAG_LIST_MAX, DEFAULT_TAG_LIST,
   sanitizeTagList, sameTagList, cleanTagLabel, tagLabelRefusal,
   addTag, renameTag, removeTag, tagIdFor, tagsOf, tagLabels,
+  cleanTagIds, cleanTagEdits, editTagIds,
 } from "../src/lib/tags.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
@@ -215,6 +216,26 @@ describe("tagLabelRefusal is the one name check", () => {
     expect(body("addTag")).toMatch(/tagLabelRefusal\(list, kind, label, null\)/);
     expect(body("renameTag")).toMatch(/tagLabelRefusal\(list, kind, label, id\)/);
     expect(tagLabelRefusal(list([t("g-1", "A")]), "guest", "a", "g-1")).toBeNull();
+  });
+});
+
+describe("a name every object inherits is still only a name", () => {
+  // The id and name sets were plain `{}`, where "constructor" and "__proto__"
+  // answer as already seen before anything was added.
+  it("a tag called Constructor survives the read that follows its save", () => {
+    const empty = { v: 1, guest: [], occasion: [] };
+    const added = addTag(sanitizeTagList(empty), "guest", "Constructor", "g-c1");
+    expect(added.refuse).toBeUndefined();
+    expect(sanitizeTagList(added.list).guest).toEqual([{ id: "g-c1", label: "Constructor" }]);
+    expect(sanitizeTagList({ v: 1, guest: [{ id: "g-p", label: "__proto__" }], occasion: [] }).guest).toHaveLength(1);
+  });
+  it("an id spelled like one is kept, once, by every reader of ids", () => {
+    const odd = ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"];
+    expect(sanitizeTagList({ v: 1, guest: odd.map((id, i) => ({ id, label: "T" + i })), occasion: [] }).guest.map((t) => t.id)).toEqual(odd);
+    expect(cleanTagIds(odd.concat(odd))).toEqual(odd.slice().sort());
+    expect(cleanTagEdits(odd.map((id) => "+" + id))).toEqual(odd.slice().sort().map((id) => "+" + id));
+    expect(editTagIds([], odd.map((id) => "+" + id))).toEqual(odd.slice().sort());
+    expect(editTagIds(odd, ["-constructor", "-__proto__"])).toEqual(["hasOwnProperty", "toString", "valueOf"]);
   });
 });
 

@@ -93,11 +93,16 @@ function freshSeed() {
 // What a read makes of the stored node. An id is unique across BOTH lists (a
 // booking's id must name one tag), a label is unique within its own list, and
 // a row that is not a tag is dropped. First wins, in stored order.
+//
+// The sets here and below are `Object.create(null)`: an id or a lower-cased
+// name is the key, and on a plain `{}` the names every object inherits answer
+// as if already seen. A tag called "Constructor" was accepted by the editor
+// and dropped by this read; an id `__proto__` cannot even be assigned.
 export function sanitizeTagList(src) {
   if (!src || typeof src !== "object") return freshSeed();
-  const seenIds = {};
+  const seenIds = Object.create(null);
   function list(raw) {
-    const out = [], seenLabels = {};
+    const out = [], seenLabels = Object.create(null);
     asArray(raw).forEach(function (t) {
       if (!t || typeof t !== "object") return;
       const id = typeof t.id === "string" ? t.id : "";
@@ -208,7 +213,7 @@ export function tagLabels(list, kind, ids) {
 // same array. The order on screen is the list's, never this one (`tagsOf`).
 export function cleanTagIds(ids) {
   if (!Array.isArray(ids)) return [];
-  const seen = {};
+  const seen = Object.create(null);
   const out = [];
   ids.forEach(function (id) {
     if (typeof id !== "string" || !ID_RE.test(id) || seen[id]) return;
@@ -244,7 +249,7 @@ export function unionTagIds(a, b) {
 const EDIT_RE = /^[+-][A-Za-z0-9_-]{1,40}$/;
 export function cleanTagEdits(edits) {
   if (!Array.isArray(edits)) return [];
-  const last = {};
+  const last = Object.create(null);
   edits.forEach(function (e) {
     if (typeof e === "string" && EDIT_RE.test(e)) last[e.slice(1)] = e.charAt(0);
   });
@@ -253,7 +258,7 @@ export function cleanTagEdits(edits) {
 
 // `base` with the edits applied.
 export function editTagIds(base, edits) {
-  const on = {};
+  const on = Object.create(null);
   cleanTagIds(base).forEach(function (id) { on[id] = true; });
   cleanTagEdits(edits).forEach(function (e) {
     if (e.charAt(0) === "+") on[e.slice(1)] = true;
