@@ -33782,7 +33782,8 @@ the atom).
 **Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
 **Behavioural change:** none in sections 3, 4 and 5. Delete customer also removes the customer's standing bookings
 (section 1); a tagged booking shows the timeline block's note corner (section 2); Book
-again and the waitlist's Book ask for the "Take bookings" capability (section 6). The
+again and the waitlist's Book ask for the "Take bookings" capability (section 6);
+filter and search by tag (section 8). The
 header is extended as the version's other items land.
 **Rules change: none.** **Deploy steps: none beyond the merge.**
 
@@ -34014,4 +34015,50 @@ detail is in the file pointed at: `grep` finds `skipWaiting`, `respondWith`,
 `STALE_GAP_MS`, `baseUpdatedAt`, `pendingRetriesRef` and `bookingsRef` in
 `src/CLAUDE.md`'s section. The second loose end is the decision itself and needs no
 change. Root now has 3,573 characters of room under `tests/doc-size.test.js`' 40,000.
+
+### 8. Filter and search by tag
+
+Patryk chose all three places the ROADMAP idea named (2026-10-09), one commit each:
+the List for the viewed day, Settings → Customers, and Find a booking. The version
+stays v18.5.1 (his call). One read is behind all three, `src/lib/tag-filter.js` (new):
+a booking's tags are read as they are shown, the guest's through `guestTagMap` and the
+booking's own occasion tags, and only ids still in the tag list count.
+
+#### 8a. The List
+
+**Files:** `src/lib/tag-filter.js`, `src/components/ListView.jsx`, `src/App.jsx`
+(`listTagFilter`; the `guestTags` memo moved above `listDaySorted`),
+`tests/tag-filter.test.js` (new, 18), `GLOSSARY.md`.
+
+A row of chips above the cards: one per tag a booking on the viewed day has, with the
+number of bookings still to come or seated ("Allergy 2"). A tap narrows the List, both
+the active cards and "Completed & cancelled", and the chips are the booking form's
+(`TagChips`, pressed = on). A day with no tagged booking has no row.
+
+Patryk's two answers: **several tags show a booking with ANY of them**, and **the
+choice is kept from day to day** (a reload clears it). Kept means a chosen tag keeps
+its chip on a day nobody has it, with no number, so it can be switched off, and the
+List says "No bookings tagged Allergy on this day." rather than drawing nothing.
+The number counts bookings that are not completed or cancelled; a tag only finished
+bookings carry has its chip and no number. That last rule is mine, inside his
+decision, and is one line in `dayTagChips` if he wants every status counted.
+
+The state is App's (`listTagFilter`), because the List remounts on a day change, and
+App's `listDaySorted` (what ↑/↓ walk) goes through the same `filterByTags` call, so a
+hidden card is not a keyboard target. `filterByTags` returns the SAME array when
+nothing is chosen, so an unfiltered List runs no differently from before. The name
+column is measured on the whole day, so a filter does not move the columns.
+
+**A load-order crash avoided:** `listDaySorted` sits above where `guestTags` was
+declared, and a `const` read above its declaration blanks the app with lint and build
+passing (`src/CLAUDE.md`'s TDZ row). The memo moved up and a test holds the order.
+
+**On DEV** (Fri 9 Oct, 6 active cards, one tagged Allergy and Birthday): chips
+"Allergy 1" and "Birthday 1"; Allergy on → 1 card, the chip pressed; Next day (nobody
+with Allergy) → chips "Allergy" (pressed, no number), "Birthday 1", "Anniversary 1",
+0 cards and the line "No bookings tagged Allergy on this day."; Birthday on as well →
+1 card (any of them); Allergy off → its chip gone, 1 card; Birthday off → all 7 cards
+back. No console error. **Not checked:** the tablet's width, the fold of a card
+leaving under the filter (it is `useRevealRows`' existing fold), ↑/↓ under a filter
+with real keys.
 

@@ -49,7 +49,9 @@ describe("the name row", () => {
   });
 
   it("the column is the widest of ALL the day's names — finished cards included — capped at NAME_COL", () => {
-    expect(List).toMatch(/const nameCol = nameColFor\(day\);/);
+    // v18.5.1: `dayAll`, the day BEFORE the tag filter, so a filter does not
+    // move the columns.
+    expect(List).toMatch(/const nameCol = nameColFor\(dayAll\);/);
     expect(List).toMatch(/return Math\.min\(NAME_COL, w\);/);
     // Measured in the name's own font — the SAME object the name span spreads,
     // so the measured and the rendered font cannot drift apart.

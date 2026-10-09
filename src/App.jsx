@@ -81,6 +81,7 @@ import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
 import { planDelete, planUndo } from "./lib/delete-undo";
+import { filterByTags } from "./lib/tag-filter";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
@@ -834,6 +835,8 @@ console.log(
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
+// v18.5.1: the List's tag filter with nothing chosen, one array for every mount.
+const NO_LIST_TAGS=[];
 function BookingApp({uid}){
   // ── Phase D1 (v14.1.8): persistence state lives in ./hooks/usePersistence ──
   // `bookings`, `tableBlocks`, write-guards (bookingsLoaded/blocksLoaded/
@@ -929,6 +932,11 @@ function BookingApp({uid}){
   // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
   // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
   const [selectedListId, setSelectedListId] = useState(null);
+  // v18.5.1: the tags the List is narrowed to (ids; any of them). App's, not
+  // the List's, because the List remounts on a day change and the choice is kept
+  // from day to day (Patryk, 2026-10-09). Not stored: a reload clears it, so a
+  // forgotten filter cannot outlive the session.
+  const [listTagFilter, setListTagFilter] = useState(NO_LIST_TAGS);
   // v15.1.0: List-view "Completed & cancelled" disclosure. Lives HERE (not in
   // ListView) so listDaySorted can exclude the hidden cards while collapsed —
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
@@ -2062,15 +2070,23 @@ function BookingApp({uid}){
   // heavy derivation the v17.1.0 useMemo pass missed. Keyed on [bookings,viewDate].
   const inefficient=useMemo(function(){return bookings.length>0&&checkInefficent(bookings,viewDate);},[bookings,viewDate]);
 
+  // v18.5.0: every guest's tags, {customer key: tag ids} (lib/customers.js). ONE
+  // pass here, handed to each view that shows a tag, and a stable object for
+  // their React.memo. Read through `guestTagsOf` / `bookingTags`, never by key.
+  // v18.5.1: declared ABOVE `listDaySorted`, which reads it as the memo runs (a
+  // `const` read above its declaration blanks the app: src/CLAUDE.md's TDZ row).
+  const guestTags=useMemo(function(){return guestTagMap(bookings);},[bookings]);
   // v14.4.0: the day's bookings in the SAME order ListView renders them
   // (status group, then time). Drives ↑/↓ keyboard navigation of selectedListId
   // and resolves which booking the List shortcuts act on. Kept identical to
   // ListView's internal sort so the focus ring and the keyboard target match.
   // v15.1.0: completed/cancelled cards are excluded while the "Completed &
   // cancelled" disclosure is collapsed — hidden cards must not be keyboard targets.
-  const listDaySorted=useMemo(function(){return bookings
+  // v18.5.1: and the cards the List's tag filter hides (`filterByTags`, the
+  // call ListView makes), for the same reason.
+  const listDaySorted=useMemo(function(){return filterByTags(bookings
     .filter(function(b){return b.date===viewDate&&(showFinished||(b.status!=="completed"&&b.status!=="cancelled"));})
-    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});},[bookings,viewDate,showFinished]);
+    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);}),guestTags,tagList,listTagFilter);},[bookings,viewDate,showFinished,guestTags,tagList,listTagFilter]);
   // Clear the List focus when the day changes — the focused booking won't be
   // on the new day. (A status change that drops a booking from view just leaves
   // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
@@ -2142,10 +2158,6 @@ function BookingApp({uid}){
   // "No show" (lateNoShowMin+). Thresholds + master switch live in
   // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
   // React.memo — cheapness was never the point, identity is).
-  // v18.5.0: every guest's tags, {customer key: tag ids} (lib/customers.js). ONE
-  // pass here, handed to each view that shows a tag, and a stable object for
-  // their React.memo. Read through `guestTagsOf` / `bookingTags`, never by key.
-  const guestTags=useMemo(function(){return guestTagMap(bookings);},[bookings]);
   const lateMap=useMemo(function(){
     const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
@@ -4184,6 +4196,8 @@ function BookingApp({uid}){
     onSelect={VA.onSelect}
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
+    tagFilter={listTagFilter}
+    onTagFilter={setListTagFilter}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
