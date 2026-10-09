@@ -8,7 +8,7 @@
 // list every time; that comparison is in REFACTOR_LOG, since it needs the old
 // code. These are the cases that stay: one per outcome, each asserting what is
 // ASKED or what is WRITTEN.
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,18 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 
 const TODAY = todayStr();
 const NOW = Date.now();
+
+// v18.6.0: the wall clock is held at 20:15 today, the minute `status()` passes
+// as `nowMins`. `bookingsAfterAction` reads the real clock itself (for the live
+// lengths of seated parties), so from about 21:30 local time until midnight the
+// two clocks disagreed and "a seat never lets the optimiser move anybody else"
+// failed on an untouched `main` (measured 2026-10-09 at 23:17: the other
+// booking came back equal but as a new object). In the app both are one clock.
+beforeAll(() => {
+  const at = new Date(); at.setHours(20, 15, 0, 0);
+  vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(at);
+});
+afterAll(() => { vi.useRealTimers(); });
 const stamp = (action, user) => ({ action, by: user });
 
 const bk = (id, time, size, tables, extra) => Object.assign(
