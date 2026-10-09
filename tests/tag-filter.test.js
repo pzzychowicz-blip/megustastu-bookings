@@ -148,7 +148,9 @@ describe("the List is wired to it", () => {
   });
   it("the chip row and the empty line are there only when there is something to say", () => {
     expect(LISTVIEW).toContain("<Reveal show={tagChips.length > 0}>");
-    expect(LISTVIEW).toContain("{filtering && !day.length ? (");
+    // v18.6.0: in a Reveal, and never beside the empty-day prompt.
+    expect(LISTVIEW).toContain("const noneTagged = filtering && !day.length && !isEmpty;");
+    expect(LISTVIEW).toContain("<Reveal show={noneTagged}>{noneTagged ? (");
   });
   it("App's keyboard list goes through the same call, and the state is App's", () => {
     expect(APP).toMatch(/const listDaySorted=useMemo\(function\(\)\{return filterByTags\(bookings[\s\S]{0,400}?,guestTags,tagList,listTagFilter\);\},\[bookings,viewDate,showFinished,guestTags,tagList,listTagFilter\]\);/);

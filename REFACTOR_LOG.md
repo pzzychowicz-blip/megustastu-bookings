@@ -34176,7 +34176,8 @@ selection and the search did not know about it.
 
 **Date:** 2026-10-09 · **Branch:** `feat/v18.6.0-schema-gate` ·
 **Behavioural change:** a tag filter whose only matches are completed or cancelled
-opens "Completed & cancelled" (section 1). The header is extended as the version's
+opens "Completed & cancelled" (section 1); the "No bookings tagged…" line folds in and
+out and no longer shows on an empty day (section 2). The header is extended as the version's
 other items land.
 **Rules change: none so far.** **Deploy steps: none so far.**
 
@@ -34210,3 +34211,30 @@ closed, 6 cards.
 **Not covered, by the rule as given:** a booking cancelled or completed WHILE its tag
 is the filter. The card moves into the closed fold and the List shows none until the
 fold is opened or the day is left and re-entered.
+
+### 2. The "No bookings tagged…" line
+
+**Files:** `src/components/ListView.jsx` (`noneTagged`, the line in a `Reveal`),
+`tests/tag-filter.test.js`.
+
+**Reproduced on DEV first.** The filter is kept from day to day, so with Highchair
+chosen the line showed on 8 of 8 following days with no Highchair booking, and on Thu
+26.11 (0 bookings) the empty-day prompt, the chip and the line were on screen together.
+The line was a bare conditional `<div>` outside any `Reveal`.
+
+**The rule** (Patryk, 2026-10-09): on a day with no bookings only the prompt shows; on
+any other day the line folds in and out like the chip row. The filter still survives a
+date change, and its chip stays on the empty day to switch off.
+
+**On DEV after the change**, Sat 10.10, Anniversary chosen (1 match), the page forced
+visible and frames driven by screenshots (the pane was hidden: a 500 ms frame count
+timed out). The matching booking moved to another day by a write from outside the
+app, then back:
+- **in:** the Reveal's wrapper read 0, 0.3, 1.0, 2.1, 3.4, 5.0, 6.7, 8.5, 10.4 px over
+  the 13 frames drawn in 185 ms, and 30.0 px settled;
+- **out:** 30.0, 24.6, 20.3, 16.4 … 3.0, 2.2, 1.7 px over 11 frames in 253 ms.
+Neither run was watched to its last frame: the frames stop when the screenshots do.
+- **the empty day** (26.11, Anniversary still chosen): the prompt and the chip, no line.
+
+**Not measured:** the line on arriving at a day, where the List remounts and the line
+is there from the first commit, as before.

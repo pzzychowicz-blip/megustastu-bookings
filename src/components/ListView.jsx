@@ -318,6 +318,8 @@ export const ListView = memo(function ListView({
   const tagChips = useMemo(() => dayTagChips(dayAll, guestTags, tagList, tagFilter)
     .map((c) => ({ id: c.id, label: c.count ? c.label + " " + c.count : c.label })), [dayAll, guestTags, tagList, tagFilter]);
   const filtering = liveTagIds(tagList, tagFilter).length > 0;
+  // The filter hides every booking of a day that has some.
+  const noneTagged = filtering && !day.length && !isEmpty;
 
   // statusOrder already sorts completed/cancelled last, so splitting here
   // preserves the exact visual order the inline list had.
@@ -1100,11 +1102,16 @@ export const ListView = memo(function ListView({
           <TagChips tags={tagChips} on={tagFilter} onToggle={function (id) { onTagFilter(toggleTagId(tagFilter, id)); }} />
         </div>
       ) : null}</Reveal>
-      {filtering && !day.length ? (
+      {/* v18.6.0: in a Reveal, as the two rows above, so the line folds in and
+          out; it used to appear and vanish in one commit. And not on an empty
+          day: the prompt above already says nothing is booked, and the two sat
+          one under the other (measured on DEV, a day with 0 bookings and the
+          filter kept from another day). The chip stays there to switch off. */}
+      <Reveal show={noneTagged}>{noneTagged ? (
         <div style={{ fontSize: T.body, color: S.muted, textAlign: "center", padding: SP.base }}>
           {"No bookings tagged " + tagNames(tagList, tagFilter) + " on this day."}
         </div>
-      ) : null}
+      ) : null}</Reveal>
       {/* v17.12.0: a real list, so the cards are list items and the count is
           announced. Two lists rather than one, because the finished cards live
           inside the Collapsible and a `list` must contain its items directly.
