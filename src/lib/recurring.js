@@ -17,6 +17,7 @@
 import { hoursFor } from "./constants.js";
 import { toMins, lastStartMins, optimizerActiveFor, bookingsAfterAction } from "./booking-logic.js";
 import { occurrenceBooking } from "./booking-save.js";
+import { matchesIdentity, normalizePhone } from "./customers.js";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -119,4 +120,30 @@ export function withOccurrences(prev, due, tableBlocks, autoOptimizer) {
     else added.forEach(function (id) { next = bookingsAfterAction(next, ds, tableBlocks, id, true, autoOptimizer); });
   });
   return next;
+}
+
+// ── rulesOfCustomer: the standing bookings "Delete customer" must take ───────
+// v18.5.1. Delete customer anonymised the bookings and left the rule, which
+// holds the name, the phone and the notes and writes them onto every new week
+// (`occurrenceBooking`). Measured on DEV in v18.5.0: after the delete the rule
+// was unchanged, and the next generated week carried all three again.
+//
+// A rule is the customer's when its own phone is theirs. A rule with no phone
+// cannot say whose it is, so it is theirs when one of THEIR bookings is stamped
+// with it (the booking "Repeat weekly" was ticked on carries the guest's
+// `guestId`; the generated weeks do not). That second test is asked only of a
+// phone-less rule: a single week of somebody's standing booking given to a
+// friend's number must not take the standing booking when the friend is deleted.
+// Returns the rule ids. `ident` is `matchesIdentity`'s ({phone, guestId, guestIds}).
+export function rulesOfCustomer(rules, bookings, ident) {
+  const key = normalizePhone(ident && ident.phone);
+  const stamped = {};
+  (bookings || []).forEach(function (b) {
+    if (b && b.recurringId && matchesIdentity(b, ident)) stamped[b.recurringId] = true;
+  });
+  return (rules || []).filter(function (r) {
+    if (!r) return false;
+    const own = normalizePhone(r.phone);
+    return own ? own === key : stamped[r.id] === true;
+  }).map(function (r) { return r.id; });
 }

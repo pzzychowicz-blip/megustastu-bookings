@@ -80,7 +80,7 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { dueOccurrences, withOccurrences } from "./lib/recurring";
+import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
@@ -419,7 +419,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.5.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.5.1"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1503,7 +1503,7 @@ function BookingApp({uid}){
   // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
-  const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  const { recurring, addRule, updateRule, removeRule, removeRules, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // ── v18.0.0 session 8: the activity log ────────────────────────────────────
   // Installing the sink is the whole of the write side here — every writer in
   // the app already emits into it, and until this runs `emitActivity` is a
@@ -2446,6 +2446,14 @@ function BookingApp({uid}){
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
+    // v18.5.1: their standing bookings go FIRST (`rulesOfCustomer`,
+    // lib/recurring.js). A rule holds the name, the phone and the notes, and the
+    // generator writes them onto each new week, so a rule left behind brought the
+    // customer back. Before the bookings and stopping on a refusal, as
+    // `delBooking` orders its skipDate: anonymised first, the generator could
+    // write one more week in between. `saveRecurring` says why it refused.
+    const theirRules=rulesOfCustomer(recurring.rules,bookings,o);
+    if(theirRules.length&&!removeRules(theirRules)) return;
     saveBookings(function(prev){return prev.map(function(b){
       if(!matchesIdentity(b,o)) return b;
       return anonymizeBooking(b);

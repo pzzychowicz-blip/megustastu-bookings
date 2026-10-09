@@ -21,7 +21,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
-import { dueOccurrences, ruleStart, withOccurrences } from "../src/lib/recurring.js";
+import { dueOccurrences, ruleStart, withOccurrences, rulesOfCustomer } from "../src/lib/recurring.js";
 import { todayStr } from "../src/lib/day.js";
 import { setWeekHours, DEFAULT_WEEK_HOURS, EMPTY_FORM, ALL_TABLES } from "../src/lib/constants.js";
 import { buildBooking } from "../src/lib/booking-save.js";
@@ -256,5 +256,51 @@ describe("the form's Repeat weekly toggle", () => {
       readFileSync(new URL("../src/components/BookingFormModal.jsx", import.meta.url), "utf8")).join("\n");
     expect(FORM.match(/repeatWeekly:/g)).toEqual(["repeatWeekly:"]);
     expect(FORM).toMatch(/!editId&&standingEnabled\?/);
+  });
+});
+
+// v18.5.1: "Delete customer" left the customer's standing booking. Measured on
+// DEV in v18.5.0 (a booking with a phone and a note, Repeat weekly, then Delete
+// customer): both bookings read "Data removed", the rule kept the name, the
+// phone and the note, and the next generated week carried all three.
+describe("rulesOfCustomer", () => {
+  const ana = rule({ id: "RA", name: "Ana", phone: "+34 600 555 181", notes: "nut allergy" });
+  const bea = rule({ id: "RB", name: "Bea", phone: "+34 600 000 002" });
+  const noPhone = rule({ id: "RN", name: "Nil", phone: "" });
+  const rules = [ana, bea, noPhone];
+
+  it("takes the rule whose phone is the customer's, however it was typed", () => {
+    expect(rulesOfCustomer(rules, [], { phone: "+34600555181" })).toEqual(["RA"]);
+    expect(rulesOfCustomer(rules, [], { phone: "+34 600 555 181" })).toEqual(["RA"]);
+  });
+  it("takes every rule the customer has, and nobody else's", () => {
+    const second = rule({ id: "RA2", name: "Ana", phone: "+34600555181", weekday: 2 });
+    expect(rulesOfCustomer(rules.concat([second]), [], { phone: "+34 600 555 181" })).toEqual(["RA", "RA2"]);
+  });
+  it("reaches a phone-less rule through the guest's own stamped booking", () => {
+    const joined = { id: "b1", name: "Nil", phone: "", guestId: "gb1", recurringId: "RN", recurringDate: "2026-10-10" };
+    expect(rulesOfCustomer(rules, [joined], { phone: "", guestId: "gb1" })).toEqual(["RN"]);
+    expect(rulesOfCustomer(rules, [joined], { phone: "", guestIds: ["gx", "gb1"] })).toEqual(["RN"]);
+  });
+  it("does not take a phone-less rule from a booking that is somebody else's", () => {
+    const other = { id: "b2", name: "Nil", phone: "", guestId: "gother", recurringId: "RN", recurringDate: "2026-10-10" };
+    expect(rulesOfCustomer(rules, [other], { phone: "", guestId: "gb1" })).toEqual([]);
+  });
+  it("one week given to a friend's number does not hand the friend the standing booking", () => {
+    const week = { id: "rRB_2026-10-10", name: "Friend", phone: "+34 600 555 181", recurringId: "RB", recurringDate: "2026-10-10" };
+    expect(rulesOfCustomer(rules, [week], { phone: "+34 600 555 181" })).toEqual(["RA"]);
+  });
+  it("an identity with nothing in it takes nothing", () => {
+    expect(rulesOfCustomer(rules, [], {})).toEqual([]);
+    expect(rulesOfCustomer(rules, [], { phone: "" })).toEqual([]);
+    expect(rulesOfCustomer(null, null, { phone: "+34600555181" })).toEqual([]);
+  });
+  it("App removes them before it anonymises, and stops when the rule write is refused", () => {
+    const at = APP.indexOf("function deleteCustomer(");
+    const body = APP.slice(at, APP.indexOf("function openNewWith(", at));
+    const rulesAt = body.indexOf("if(theirRules.length&&!removeRules(theirRules)) return;");
+    expect(body).toContain("const theirRules=rulesOfCustomer(recurring.rules,bookings,o);");
+    expect(rulesAt).toBeGreaterThan(-1);
+    expect(rulesAt).toBeLessThan(body.indexOf("saveBookings("));
   });
 });

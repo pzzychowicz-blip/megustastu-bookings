@@ -33777,3 +33777,55 @@ the atom).
 | 3 | Firebase console, PROD | Realtime Database → Rules → paste `database.rules.json` → Publish. Until then the seed tag list is used and editing the list is refused with a sentence (section 3). Either order with step 2 |
 | 4 | Google Cloud console, DEV key | The referrer list in `SECURITY.md` §4 (#12). Independent of the others |
 
+## v18.5.1 — Delete customer takes the standing booking
+
+**Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
+**Behavioural change:** Delete customer also removes the customer's standing bookings
+(section 1). The header is extended as the version's other items land.
+**Rules change: none.** **Deploy steps: none beyond the merge.**
+
+One version with a section per item (Patryk, 2026-10-09), one commit each.
+
+### 1. Delete customer left the standing booking
+
+**Files:** `src/lib/recurring.js` (`rulesOfCustomer`), `src/hooks/useRecurring.js`
+(`removeRules`), `src/App.jsx` (`deleteCustomer`), `tests/recurring.test.js`.
+
+**Reproduced on DEV first, on v18.5.0** (the ROADMAP entry was read from the code and
+never run). Through the app's own controls:
+
+| Step | DEV afterwards |
+|---|---|
+| New booking, a phone and a note, Sat 10 Oct 15:00, Repeat weekly | 1 rule and 2 bookings (10 and 17 Oct), all three with the name, phone and note |
+| Settings → Customers → Delete customer & all data | both bookings "Data removed", phone and note empty; the rule unchanged, still listed in Settings → Standing bookings with the name |
+| Weeks generated ahead 2 → 3 | a booking for 24 Oct with the name, the phone and the note, not anonymised |
+
+**The fix.** `rulesOfCustomer(rules, bookings, ident)` names the customer's rules: a
+rule whose own phone is theirs, or, for a rule with no phone, one that a booking of
+theirs is stamped with. The second test is asked only of a phone-less rule, so one week
+of somebody's standing booking given to a friend's number does not take the standing
+booking when the friend is deleted. `deleteCustomer` removes those rules in one write
+BEFORE it anonymises, and stops if that write is refused, which is `delBooking`'s order
+for its skipDate: the generator runs on the bookings change, and with the rule still
+there it could write one more week.
+
+**Patryk chose (2026-10-09)** removing the rule only, over also cancelling the
+customer's upcoming bookings and over keeping a stripped, paused rule. The upcoming
+bookings stay confirmed as "Data removed" and keep their tables, as v17.0.0 decided.
+
+**The same steps on DEV after the fix:** Delete customer → 0 rules for the customer
+(21 → 20 in the node), all 3 bookings "Data removed"; weeks ahead 3 → 4 → the generator
+ran (2 other rules' bookings appeared on 31 Oct) and wrote none for the deleted
+customer; 0 bookings in the database with the name, the phone or the note; the rule is
+not in Settings → Standing bookings.
+
+**Not covered, read from the code and not run:** a rule write the server rejects
+(another device changed `recurring` in the same moment) is rolled back after the
+bookings were anonymised, with the "redo the change" banner; the rule is then deleted
+by hand in Settings. And a phone-less guest's GENERATED weeks carry no `guestId`
+(`occurrenceBooking`), so Delete customer does not reach them; that is the never-merge
+rule and is older than this change.
+
+**The activity log** holds no rule's name: its entry for a standing-booking write is a
+count ("removed from the standing bookings · 21 → 20", `settingsWriteEntry`).
+
