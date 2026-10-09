@@ -33004,6 +33004,8 @@ from ROADMAP.
 printed day sheet (section 2); a "Tags" section in Settings → Customers (section 3).
 None in section 1. The header is extended as the version's other items land.
 **Rules change: yes** — `settings/tags` + `tagsRev` (section 3 has the PROD step).
+**Deploy steps: three**, in the table at the end of this entry; the second, refresh
+every device, is what keeps a device on v18.4.10 from deleting tags.
 
 One version with a section per item (Patryk, 2026-10-08): #17's next extraction first,
 then the deposits line and guest tags, then the documentation items he chose to bundle.
@@ -33733,4 +33735,45 @@ over designing the archive now: start the archive's design when the load banner
 reads 2,500 bookings (it prints the count on every connect, so no console is
 needed), or when a month's downloads pass 2.5 GB, whichever comes first.
 `ROADMAP.md` #3 carries it. Still not read: the peak-load graph.
+
+### `/code-review` (xhigh), 2026-10-09
+
+Ten findings over the branch diff (48 files). Each was checked before it was acted
+on; all ten were confirmed and none disproved. Nine are code or comment fixes, one
+commit each. The first has no code fix and is the deploy table below.
+
+| # | Finding | How it was confirmed | What changed |
+|---|---|---|---|
+| 1 | A device still on v18.4.10 deletes a booking's tags on its next write to it | Ran v18.4.10's own `sanitize` and `buildPatch` (from `origin/main`) on a booking stored with `tags`, `guestTags`, `guestTagsAt`: the read keeps none of the three, and the patch is the whole child, 30 keys, none of the three | Deploy step 2 below; the rule in `src/CLAUDE.md` (Gotchas, "A new per-booking FIELD") and one sentence in the root file; a ROADMAP idea for closing the class |
+| 2 | `TagRow` keyed a chip by its label; the seat note passes two kinds in one list | `addTag` accepts a guest tag "Birthday" beside the seed occasion "Birthday"; a booking carrying both gave 2 labels, 1 distinct key | The key is the position and the label |
+| 3 | A block's spoken tags: `replace(" · ", ", ")` changes the first separator only | `cleanTagLabel` keeps "Nut · sesame"; with an occasion the label read "Nut, sesame · Birthday" | `split(" · ").join(", ")` |
+| 4 | A disabled tag chip kept `cursor: pointer`; `TagChips`' header said that row uses `TagRow` | Rendered from the atom: enabled `pointer`, disabled `pointer` before, `default` after | The atom reads `rest.disabled`; the header says what the code does. A disabled chip keeps its full ink: it still says what the guest has |
+| 5 | A tag list save asked for before the first read returned false and said nothing | Read: the branch logged to the console only, and the editor keeps the draft on false. **Not reproduced live** (on DEV the first snapshot arrives with the page) | `saveTagList` sets `tagError` there |
+| 6 | An armed tag row with a refused rename showed the refusal under Confirm | On DEV after the fix: VIP renamed to Vegan and blurred, the refusal; × pressed, Confirm is described by "Bookings that carry “VIP” stop showing it…"; disarmed 3 s later, the refusal again. Nothing was written | `refusalShown = !!refusal && !armed` |
+| 7 | Ids and names kept in plain `{}` used as sets | A tag named "Constructor" was accepted by `addTag` and dropped by the next `sanitizeTagList`; `cleanTagIds` dropped the id `constructor` | The five sets are `Object.create(null)`; two tests, both failing on the old code |
+| 8 | `booking-fields.js` named `settleGuestTags`, which no file has | `grep`: one occurrence, the comment | It names `saveGuestTags` |
+| 9 | `depositSummary`, `depositParts`, `depositLine` declared with `var` | The root file's "Never `var` in new code"; five declarations, none reassigned | `const` |
+| 10 | `guestTagMap` built the alias map twice | Node, three runs each: 0.038 → 0.028 ms at 1,600 bookings, 0.061 → 0.045 ms at 3,000; `guestTagBase` 0.083 → 0.072 and 0.144 → 0.125 ms | `customerKeyFn` takes the map its caller has |
+
+**Checked and found sound, so nothing changed:** the #17 extraction against the
+handlers it replaced, statement for statement; the rules test's `PAIRS`, derived from
+the rules file (17 pairs, `tags` the 17th); the new tests' dates (derived from
+`todayStr()`) and their fake timers (restored in `afterEach`); Book Again, which
+builds on `EMPTY_FORM` and so copies no occasion tag; `saveGuestTags` and
+`customerTagTap` under a replay; the one path that deletes a booking
+(`delTransform`), which hands a statement on; tag ids, which are random and so never
+minted twice.
+
+**Not verified:** finding 5 on a live page; findings 2, 3 and 4 with a screen reader
+or on the tablet (2 and 3 are read from the code and a pure check, 4 from a render of
+the atom).
+
+### Deploy steps (Patryk)
+
+| # | Where | What |
+|---|---|---|
+| 1 | GitHub | Merge the PR. Vercel deploys it; the boot banner reads 18.5.0 |
+| 2 | **Every device** | **Refresh every device after the deploy** (the tablet, the phones), before anybody tags a booking. A device still on v18.4.10 does not know `tags`, `guestTags` or `guestTagsAt`, and its next write to a tagged booking (a seat tap, a drag, the close-time auto-complete) removes them from the database |
+| 3 | Firebase console, PROD | Realtime Database → Rules → paste `database.rules.json` → Publish. Until then the seed tag list is used and editing the list is refused with a sentence (section 3). Either order with step 2 |
+| 4 | Google Cloud console, DEV key | The referrer list in `SECURITY.md` §4 (#12). Independent of the others |
 

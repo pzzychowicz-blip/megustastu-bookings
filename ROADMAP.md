@@ -168,6 +168,14 @@ evidence for each.
 The **2026-07-24 `/engineering:tech-debt` scan's feature shortlist** is spent: its last
 two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
 
+- **A device on the previous version deletes fields it does not know.** Found by
+  v18.5.0's `/code-review`: `sanitize` is a whitelist and a booking write replaces the
+  whole child, so a v18.4.10 device's next write to a tagged booking drops `tags`,
+  `guestTags` and `guestTagsAt` (measured on that version's own code). v18.3.3 had the
+  same shape with `recurring`'s `startDate`. Today the only defence is the deploy step
+  "refresh every device". Two ways to close the class, not designed: carry unknown keys
+  through the read and the write, or a stored minimum version an older build refuses
+  to write under. Either touches the write path, so it wants its own plan.
 - **Filter or search by tag.** v18.5.0 shows a booking's tags on six surfaces and
   filters by none. A "who has an allergy tonight" filter on the List, or a tag in the
   Customers tab's filters, is the obvious next use. Not asked for yet.
