@@ -2336,7 +2336,9 @@ function BookingApp({uid}){
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
   // returnOf pattern) and remember the entry id — doSave's new-booking path
   // holds it, and removes it once the booking has landed (v18.4.8).
-  function bookFromWaitlist(w){if(refused("waitlistManage"))return;
+  // v18.5.1: and `bookingCreate`, as every door to the new-booking form asks
+  // (`doSaveNew` has the measurement).
+  function bookFromWaitlist(w){if(refused("waitlistManage"))return;if(refused("bookingCreate"))return;
     const avail=waitAvail[w.id];
     openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
@@ -2511,8 +2513,9 @@ function BookingApp({uid}){
   // follows a completed visit, the guest it joins. App keeps the door.
   function bookAgain(sourceBooking){
     if(!sourceBooking) return;
+    if(refused("bookingCreate")) return;   // v18.5.1: `doSaveNew` has the measurement
     pendingWaitlistRef.current=null;
-    openForm(againDraft(sourceBooking,{vouchersOn:vouchersOn,vouchersByCode:vouchersByCode,bookings:bookings,now:Date.now()}));
+    openForm(againDraft(sourceBooking,{vouchersOn:vouchersOn,vouchersByCode:vouchersByCode,bookings:bookings}));
     setEditId(null);
     setError("");
     setSwapAffected(null);
@@ -2670,6 +2673,14 @@ function BookingApp({uid}){
   // which that leaves done, or an undo, which puts a booking back.
   function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}
   function doSaveNew(f0){
+    // v18.5.1: THE GUARANTEE that a new booking needs `bookingCreate`. It was
+    // asked only by `openNewWith`, one of three doors to this form. Measured on
+    // DEV with the capability denied: "+ New" was refused, and Book again
+    // opened the form and its Save wrote a booking. The doors ask too
+    // (`bookAgain`, `bookFromWaitlist`), so the refusal comes before the form is
+    // filled in; this is for the door added later (`requestDelete` and
+    // `delBooking` are the same pair).
+    if(refused("bookingCreate")) return;
     const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
     if(plan.refusal){setError(plan.refusal.message);return;}

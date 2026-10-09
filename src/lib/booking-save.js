@@ -804,7 +804,9 @@ export function keptRefusal(list,orig,draft,blocks){
 // seated-shifted time (e.g. 20:15). Fallback to .time for legacy bookings
 // without scheduledTime (sanitize also backfills it on load).
 //
-// ctx: {vouchersOn, vouchersByCode, bookings, now}
+// ctx: {vouchersOn, vouchersByCode, bookings, now?}. `now` is for a test; App
+// passes none and the clock is read here, at the press, as it always was (in
+// App's handler the React compiler's purity rule flags a `Date.now()`).
 export function againDraft(sourceBooking,ctx){
   const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
   // v18.0.0 session 7: the source's PLANNED length rides along — Patryk's
@@ -838,7 +840,7 @@ export function againDraft(sourceBooking,ctx){
     if(!c) return "";
     const v=ctx.vouchersByCode[c];
     if(!v) return "";
-    return attachRefusal(v,c,ctx.bookings,null,ctx.now)?"":c;
+    return attachRefusal(v,c,ctx.bookings,null,ctx.now!=null?ctx.now:Date.now())?"":c;
   })();
   return Object.assign({},EMPTY_FORM,{
     name:sourceBooking.name||"",

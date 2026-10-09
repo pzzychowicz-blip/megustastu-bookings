@@ -68,6 +68,12 @@ describe("againDraft", () => {
     expect(again(src({ voucherCode: "NOPE0000" }), { vouchersByCode: by }).voucherCode).toBe("");
     expect(again(src({ voucherCode: "USED2345" }), { vouchersByCode: by, vouchersOn: false }).voucherCode).toBe("");
   });
+  it("with no `now` handed in, it reads the clock itself: an expired voucher stays behind", () => {
+    const s = src({ voucherCode: "USED2345" });
+    const ctx = (v) => ({ vouchersOn: true, vouchersByCode: { USED2345: v }, bookings: [s] });
+    expect(againDraft(s, ctx(voucher({ expiresAt: Date.now() - 1000 }))).voucherCode).toBe("");
+    expect(againDraft(s, ctx(voucher({ expiresAt: Date.now() + 86400000 }))).voucherCode).toBe("USED2345");
+  });
   it("nor when it is already on somebody's live booking", () => {
     const s = src({ voucherCode: "USED2345" });
     const live = src({ id: "x9", status: "confirmed", voucherCode: "USED2345" });
@@ -90,8 +96,37 @@ describe("the wiring", () => {
   it("bookAgain opens the form with againDraft, through openForm, and builds no draft itself", () => {
     const i = APP.indexOf("functionbookAgain(");
     const body = APP.slice(i, APP.indexOf("useWalkin(", i));
-    expect(body).toContain("pendingWaitlistRef.current=null;openForm(againDraft(sourceBooking,{vouchersOn:vouchersOn,vouchersByCode:vouchersByCode,bookings:bookings,now:Date.now()}));setEditId(null);");
+    expect(body).toContain("pendingWaitlistRef.current=null;openForm(againDraft(sourceBooking,{vouchersOn:vouchersOn,vouchersByCode:vouchersByCode,bookings:bookings}));setEditId(null);");
     expect(body).not.toContain("EMPTY_FORM");
     expect(body).not.toContain("attachRefusal(");
   });
 });
+
+// v18.5.1: `bookingCreate` was asked by one of the three doors to the
+// new-booking form. Measured on DEV with it denied: "+ New" refused, Book again
+// opened the form and Save wrote a booking.
+describe("a new booking needs bookingCreate, whichever door it came through", () => {
+  const APP = stripComments(readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n").replace(/\s+/g, "");
+  const GATE = 'if(refused("bookingCreate"))return';
+  // The function a position in App sits in: the nearest `function name(` before it.
+  const ownerOf = (at) => { const m = [...APP.slice(0, at).matchAll(/function([A-Za-z0-9_]+)\(/g)]; return m[m.length - 1][1]; };
+
+  it("the save is the guarantee: doSaveNew asks before it plans anything", () => {
+    const i = APP.indexOf("functiondoSaveNew(f0){");
+    expect(i).toBeGreaterThan(-1);
+    expect(APP.slice(i, i + 80)).toContain("functiondoSaveNew(f0){" + GATE + ";");
+  });
+  it("every door that opens the form asks, except the edit's, which asks bookingEdit", () => {
+    // Calls only: the declaration `function openForm(` is not a door.
+    const doors = [...APP.matchAll(/(?<!function)openForm\(/g)].map((m) => ownerOf(m.index));
+    expect(doors.sort()).toEqual(["bookAgain", "bookFromWaitlist", "openEdit", "openNewWith"]);
+    for (const name of ["bookAgain", "bookFromWaitlist", "openNewWith"]) {
+      const i = APP.indexOf("function" + name + "(");
+      const body = APP.slice(i, APP.indexOf("openForm(", i));
+      expect(body, name).toContain(GATE);
+    }
+    const e = APP.indexOf("functionopenEdit(");
+    expect(APP.slice(e, APP.indexOf("openForm(", e))).toContain('if(refused("bookingEdit"))returnfalse;');
+  });
+});
+

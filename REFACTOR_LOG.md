@@ -33781,7 +33781,8 @@ the atom).
 
 **Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
 **Behavioural change:** none in sections 3, 4 and 5. Delete customer also removes the customer's standing bookings
-(section 1); a tagged booking shows the timeline block's note corner (section 2). The
+(section 1); a tagged booking shows the timeline block's note corner (section 2); Book
+again and the waitlist's Book ask for the "Take bookings" capability (section 6). The
 header is extended as the version's other items land.
 **Rules change: none.** **Deploy steps: none beyond the merge.**
 
@@ -33946,4 +33947,44 @@ pick first.
 party overstaying onto a later booking's table), which was not staged.
 
 `App.jsx` after this version's three extractions: 5,137 → 4,984 lines.
+
+### 6. Book again created a booking without "Take bookings"
+
+**Files:** `src/App.jsx` (`bookAgain`, `bookFromWaitlist`, `doSaveNew`),
+`tests/book-again.test.js` (+2, 13).
+
+Read while moving `bookAgain` (section 4): `bookingCreate` was asked by `openNewWith`
+and by the walk-in, and by nothing else. Patryk chose to measure it and fix it if real.
+
+**Measured on DEV** (roles enforced; the signed-in admin account given a deny on
+`bookingCreate` in Settings → Admin → Capabilities, which stores
+`roles/<uid>/denies/bookingCreate: true`):
+
+| Action | Before | After |
+|---|---|---|
+| + New | refused: "You don't have permission to take bookings." | the same |
+| Book again, in a seated booking's edit form | the form opened as "Book again" | refused with the same sentence; the edit form stays |
+| Save in that form, with a date set | a new booking written for 20 Nov, "created via Book Again" | not reachable |
+
+**The fix, in two layers,** as `requestDelete` and `delBooking` are: `doSaveNew` asks
+first thing, so no new booking is written without the capability whichever door the
+form was opened through, and the doors ask too, so the refusal comes before a form is
+filled in. `bookFromWaitlist` is the third door (it asked `waitlistManage` only) and
+got the same line. **That door was read, not measured**: it needs a waiting party with
+a slot, which was not staged; it opens the same form and reaches the same `doSaveNew`.
+A test finds every call of `openForm` in App, names the function it is in (four:
+`bookAgain`, `bookFromWaitlist`, `openEdit`, `openNewWith`) and fails a door that does
+not ask, so a fifth door is decided when it is added.
+
+`bookingCreate` is a client-side capability (`lib/roles.js`: the rules do not enforce
+it), so this is a refusal in the app and not a server guarantee. The deny on the DEV
+account was removed afterwards (`denies` reads null). The 20 Nov booking stays on DEV.
+
+**One lint warning appeared with this change and was removed.** Adding the gate's line
+to `bookAgain` made the React compiler's purity rule flag the `Date.now()` two lines
+below it (64 warnings against the cap of 63; the same call in section 4's commit was
+not flagged, which is `src/CLAUDE.md`'s note that an edit can change what those rules
+say about a line it did not touch). `againDraft` reads the clock itself when it is
+handed no `now`, which is where the old function read it, and a test runs that path
+with an expired voucher.
 

@@ -249,7 +249,7 @@ describe("the form's Repeat weekly toggle", () => {
   // the same question, and hands `buildBooking` a draft without it.
   it("is asked again by the save, which drops repeatWeekly where the toggle would not show", () => {
     expect(APP).toContain("const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;");
-    expect(APP).toMatch(/function doSaveNew\(f0\)\{\s*const f=f0\.repeatWeekly[^\n]*\n\s*const plan=buildBooking\(\{list:bookings,draft:f,/);
+    expect(APP).toMatch(/function doSaveNew\(f0\)\{\s*if\(refused\("bookingCreate"\)\) return;\s*const f=f0\.repeatWeekly[^\n]*\n\s*const plan=buildBooking\(\{list:bookings,draft:f,/);
   });
   it("is the only way the form sets repeatWeekly, behind that prop", () => {
     const FORM = stripComments(
