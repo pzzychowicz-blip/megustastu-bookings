@@ -623,9 +623,14 @@ describe("App is wired to it", () => {
     expect(app).not.toMatch(/anonymized\s*:\s*true/);
   });
   it("the one place that drops a booking from the list hands its statement on", () => {
-    const drops = app.match(/\.filter\(function\(x\)\{return x\.id!==id;\}\)/g) || [];
-    expect(drops.length).toBe(1);
-    expect(app).toContain("rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id)");
+    // v18.5.1 (#17): the delete's transform is `planDelete` (lib/delete-undo.js),
+    // so the one drop is there and App has none of its own.
+    const del = stripComments(readFileSync(fileURLToPath(new URL("../src/lib/delete-undo.js", import.meta.url)), "utf8")).join("\n");
+    const DROP = /\.filter\(function\(x\)\{return x\.id!==id;\}\)/g;
+    expect((app.match(DROP) || []).length).toBe(0);
+    expect((del.match(DROP) || []).length).toBe(1);
+    expect(del).toContain("rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id)");
+    expect(app).toContain("const ok=saveBookings(plan.transform);setConfirmDel(null);");
   });
   it("a customer's tap asks for the capability a booking edit asks for, and goes through customerTagTap", () => {
     const fn = app.slice(app.indexOf("function saveCustomerTag("));
@@ -635,7 +640,7 @@ describe("App is wired to it", () => {
   });
   it("one tag map is made in App and handed to each view", () => {
     expect((app.match(/guestTagMap\(/g) || []).length).toBe(1);
-    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(4);   // timeline, list, day sheet, settings
+    expect((app.match(/guestTags=\{guestTags\}/g) || []).length).toBe(5);   // timeline, list, day sheet, settings, Find a booking (v18.5.1)
   });
   it("the edit is handed the tag list, for the occasion tag's name", () => {
     const call = app.slice(app.indexOf("applyEdit({"));
@@ -828,3 +833,17 @@ describe("a generated run of saves, deletes and erasures, on clocks that disagre
     expect(runAll(broken, SEEDS, STEPS).bad).toMatch(/shows \[/);
   });
 });
+
+// v18.5.1 (Patryk): a tagged booking shows the timeline block's note corner
+// even with nothing in Notes. Read from the source: there is no DOM here.
+describe("the timeline block's note corner", () => {
+  const TL = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
+  it("is drawn for a note OR a tag", () => {
+    expect(TL).toContain("const hasNote = !!((b.notes && b.notes.trim()) || tags);");
+    expect(TL).toMatch(/\{hasNote \? \(/);
+  });
+  it("is handed the same tag line the block's title shows", () => {
+    expect(TL.match(/tags=\{tagLine\(bookingTags\(b, guestTags, tagList\)\)\}/g).length).toBe(2);
+  });
+});
+

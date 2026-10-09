@@ -283,7 +283,7 @@ describe("a column of dates is as wide as its widest date", () => {
   // Phase 76 keeps that basis on a phone; the wider tablet card sizes the name
   // to the results' widest (minor-findings, X7).
   it("Find a booking: the name has a basis, so a wrapping row cannot crush it", () => {
-    expect(read("components/SearchPanel.jsx")).toMatch(/<span style=\{\{ flex: isMobile \? "1 1 64px" : "0 1 " \+ nameCol \+ "px", minWidth: 0, \.\.\.NAME_FONT/);
+    expect(read("components/SearchPanel.jsx")).toMatch(/<span style=\{\{ flex: isMobile \? "1 1 64px" : "0 1 " \+ nameCol \+ "px", minWidth: 0, display: "flex", flexDirection: "column" \}\}>\s*<span style=\{\{ \.\.\.NAME_FONT/);
   });
 
   it("Customers: 68px or 104, and the visit row wraps rather than overflow", () => {

@@ -48,14 +48,10 @@ src/
 ├── components/                      see `src/components/CLAUDE.md` — moved so it loads only when working under that directory
 └── lib/                              see `src/lib/CLAUDE.md` — moved so it loads only when working under that directory
 
-api/                                 serverless functions (v18.0.0 phase 5) — the first code in this repo
-                                     that does not run in the browser. **Notes in `api/CLAUDE.md`**, which
-                                     loads when Claude opens one. Two facts from there decide things
-                                     elsewhere in this file: Vercel deploys the directory WHOLESALE, so
-                                     there is no build-time way to keep a handler out of production and
-                                     every gate is a RUNTIME one; and `_lib/rtdb.js` writes through
-                                     **firebase-admin, which bypasses the security rules entirely** — see
-                                     the CAS exemptions under the Rule of law below
+api/                                 serverless functions (v18.0.0 phase 5). **Notes in `api/CLAUDE.md`.** Two
+                                     facts decide things in this file: every gate there is a RUNTIME one,
+                                     and firebase-admin bypasses the security rules (the CAS exemptions
+                                     under the Rule of law)
 
 .design-sync/                        the Claude Design sync (/design-sync, 2026-09-19): a barrel of the UI kit
                                      and seven screens, compiled by its own vite.lib.config.mjs, plus the
@@ -141,19 +137,10 @@ and the auth shell are in `src/CLAUDE.md`.
 
 ### The offline shell (v17.10.1) — a service worker, on terms
 
-v17.4.0's worker froze the app on iOS and was withdrawn with root cause unestablished;
-v17.10.1 established it (the CSP blocking Firebase's JSONP fallback, already fixed in
-v17.5.1) and shipped one with **four properties, none of which may be dropped**:
-`respondWith` fires for exactly two things, both same-origin GET — navigations
-(network-first) and hashed assets (cache-first), so every Firebase request is
-cross-origin and dropped on the handler's first line; registration is gated on
-`bookingsReady`, while DISABLING is not gated and must work in any state; there are
-two independent ways out, both verified on the tablet (`?sw=off` and re-deploying the
-v17.4.1 kill switch at the same URL); and there is **no `skipWaiting`**.
-
-**Load the `mgt-service-worker` skill before touching `public/sw.js`, the registration
-or the boot script** — it holds why each property is load-bearing, the evidence that
-settled the v17.4.0 root cause, and what still cannot be tested locally.
+`public/sw.js` has four properties and none may be dropped. **Load the
+`mgt-service-worker` skill before touching `public/sw.js`, the registration or the boot
+script**: it holds the four, why each is load-bearing, and what cannot be tested
+locally. A shipped worker cannot be withdrawn by deleting it (Gotchas).
 
 ---
 
@@ -187,13 +174,13 @@ function saveBookings(next, isSilent) {
 
 **Origin:** post-v13-deploy data-loss incident. Auto-extend effect fired `saveBookings([])` on mount before `onValue` returned. The pattern was retrofitted to all Firebase writes.
 
-**Five guards stand between a write and the database, in the order a write meets them.** Their mechanics are in `src/CLAUDE.md`, with the implementation in `src/hooks/usePersistence.js` and its pure core `src/lib/write-path.js` (per-file notes in `src/hooks/CLAUDE.md` and `src/lib/CLAUDE.md`); how each guard was FOUND is in `REFACTOR_LOG.md` under the version named. What none of that moves:
-
-1. **Loaded + non-empty** — the pattern above. No write before the first `onValue` returns, and no empty array over a database that had data.
-2. **Freshness / resync gate (v15.2.0)** — a heartbeat gap over `STALE_GAP_MS` (90s) means the event loop was frozen, so the write is refused **at write time, before any `setState`**, and the app force-pulls fresh data.
-3. **Server-side compare-and-swap (v16.0.0)** — every write proves it was based on the data it overwrites: `baseUpdatedAt` per child (`bookings`, `vouchers`, `roles`, `invites`), a `<name>Rev` +1 for the seventeen whole-node collections. **There is NO root `.write`** — permission cascades down and cannot be revoked lower, so every writable path carries its own grant and every rev CAS sits in `.write`, which is evaluated for a delete where `.validate` is not.
-4. **Save feedback + retry (v15.4.0 · v15.6.0 · v15.7.0 · v17.16.9)** — `saveBookings`/`saveBlocks` return a boolean and every handler gates its success UI on it, so a refused write is **never** shown as saved. Function-form, non-silent writes park and replay on fresh data; **value-form and silent writes never queue**, because replaying a precomputed array re-writes stale data. **A side effect that must not outlive a write that never lands goes in the write's `onLanded`** (v18.4.6, `saveBookings`' third argument), never beside the dispatch.
-5. **Per-booking storage + diff-write (v15.5.0)** — `bookings` is `/bookings/{id}`, written as a multi-path diff of changed children, so two devices editing different bookings merge. **The app makes no whole-node `bookings` write anywhere**, and a save computes from the `bookingsRef` mirror, never inside a `setState` updater (Gotchas).
+**Five guards stand between a write and the database**, in the order a write meets
+them: (1) loaded + non-empty, the pattern above; (2) the freshness / resync gate;
+(3) server-side compare-and-swap, with **no root `.write`**; (4) save feedback + retry:
+a refused write is never shown as saved, value-form and silent writes never queue, and
+a side effect that must not outlive its write goes in `onLanded`; (5) per-booking
+storage + diff-write: **no whole-node `bookings` write anywhere**. Rules and mechanics:
+`src/CLAUDE.md`, "The five write guards".
 
 **Post-sync conflict reconciliation (v15.6.1).** Two devices that each booked offline can overlap once synced, because the merge keeps both and each optimiser placed without seeing the other. An effect in `BookingApp` repairs it with one **silent** function-form write (`src/lib/reconcile.js`): a clean sync writes nothing, `_locked` bookings are never moved, and the choice of which booking moves is deterministic across devices. Its gate is the real loaded signal, `firstLoadCount`, never `loadBannerShown`. Mechanics: `src/CLAUDE.md`.
 

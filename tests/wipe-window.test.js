@@ -77,7 +77,9 @@ describe("the wipe window", () => {
   // (measured on DEV: 0, then 1).
   it("the List's detector follows the day's list, which follows the date", () => {
     const src = stripComments(readFileSync("src/components/ListView.jsx", "utf8")).join("\n");
-    expect(src, "the day's list must be memoised on the bookings and the date").toMatch(/const day = useMemo\(\(\) => bookings[\s\S]*?\}\), \[bookings, date\]\);/);
+    expect(src, "the day's list must be memoised on the bookings and the date").toMatch(/const dayAll = useMemo\(\(\) => bookings[\s\S]*?\}\), \[bookings, date\]\);/);
+    // v18.5.1: `day` is that list narrowed by the tag filter, so it still follows the date.
+    expect(src, "the shown list must be derived from the day's list").toMatch(/const day = useMemo\(\(\) => filterByTags\(dayAll, /);
     expect(src, "the detector must be keyed on the day's list").toMatch(/__listPrev = m;\s*\}, \[day\]\);/);
   });
 });

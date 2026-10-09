@@ -76,13 +76,14 @@ in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
 
-- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23). It needs a
-  scheduled job in a separate PRIVATE repository, because this one is public and its
-  Actions artifacts and logs are world-readable. The job uses a dedicated read-only
-  service account, writes the same file v18.1.1's `lib/backup.js` builds, encrypts it
-  with `age` to a key only Patryk holds, and keeps N days. Undecided: GitHub Actions or
-  Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
-  (`database.rules.README.md` § Backups and restore).
+- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23; decided
+  2026-10-08, not built). A scheduled **GitHub Actions** job in a separate PRIVATE
+  repository, because this one is public and its Actions artifacts and logs are
+  world-readable. The job uses a dedicated read-only service account, writes the same
+  file v18.1.1's `lib/backup.js` builds, encrypts it with `age` to a key only Patryk
+  holds, and keeps **90 days**. The private key lives in his password manager, with a
+  paper copy. Rehearse a restore on DEV first (`database.rules.README.md` § Backups and
+  restore). His steps: the private repository, the service account, the key pair.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
@@ -128,10 +129,13 @@ evidence for each.
   drop (`planDrop`, `lib/drop-plan.js`; 5,210 lines), and manual table assignment in
   v18.4.7 (`planAssign`, `lib/manual-assign.js`; 5,220 lines; the drop's displacement
   shares its release, `releaseSwapped`), and status changes in v18.5.0 (`planStatus`,
-  `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines). Still in App,
-  by lines and commits measured 2026-10-08: `bookAgain` (66, 16), `delBooking` (56, 15),
-  `undoLastAction` (32, 12), `reassignBooking` (44, 9), `settleVoucher` (58, 7). The next
-  domain is not chosen.
+  `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines), and delete and
+  undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines) with
+  Book Again's draft (`againDraft`, `lib/booking-save.js`) and the Overlap banner's
+  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines). Still in App of the five
+  measured 2026-10-08: `settleVoucher` (58 lines, 7 commits) with the voucher carry. Its
+  ordering is tied to `doSave` and `saveGuardRef`, so it wants a version of its own.
+  Re-measure what is largest in App before choosing after it.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history
@@ -149,19 +153,7 @@ evidence for each.
 
 ## Designed, not implemented
 
-- **The doc-load split has two loose ends, both scope calls rather than defects**
-  (`/code-review`, 2026-09-18, measured). (1) Root restates part of what it relocated,
-  word for word: the five-guard summary against `src/CLAUDE.md`, the service-worker
-  summary against its skill, the `api/` pointer against `api/CLAUDE.md`. Two copies
-  with nothing keeping them in step. The node inventory at 0% is what a pointer should
-  look like. (2) The write guards' mechanics sit in `src/CLAUDE.md`, which every src
-  session loads, where 47% of them never open `src/hooks/`. The third, the root
-  file's size, closed in v18.5.0: four passages moved out (43,967 → 38,945
-  characters) and `tests/doc-size.test.js` fails it above 40,000. It left 1,055
-  characters of room, and the file had grown about 3,800 in the two and a half weeks
-  before, so the next move is likely to be needed soon: the two database-rules
-  gotchas and the three compare-and-swap exemption bullets are the next candidates
-  (about 2,500).
+Nothing at present.
 
 ## Ideas
 
@@ -176,13 +168,14 @@ two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
   "refresh every device". Two ways to close the class, not designed: carry unknown keys
   through the read and the write, or a stored minimum version an older build refuses
   to write under. Either touches the write path, so it wants its own plan.
-- **Filter or search by tag.** v18.5.0 shows a booking's tags on six surfaces and
-  filters by none. A "who has an allergy tonight" filter on the List, or a tag in the
-  Customers tab's filters, is the obvious next use. Not asked for yet.
-- **Delete customer leaves their standing booking.** Read from the code while moving
-  the anonymiser in v18.5.0, NOT reproduced on DEV: `deleteCustomer` anonymises the
-  customer's bookings and removes their waitlist entries and WhatsApp conversation,
-  and does not touch `recurring.rules`, where a standing booking keeps the name, the
-  phone and the notes, and from which `occurrenceBooking` writes them onto each new
-  week's booking. Reproduce it first (a standing booking, Delete customer, then look
-  at Settings → Standing bookings and at the next generated week).
+- **Delete customer: the rules go even if the anonymise is refused.** v18.5.1 removes
+  the customer's standing bookings BEFORE the bookings write (so the generator cannot
+  write one more week in between) and does not check that write. If it is refused
+  (the freshness gate), the customer stays and their standing booking is gone, with
+  no undo. Read from the code in v18.5.1's /code-review, not reproduced. Closing it
+  wants one of: the rule removal in the write's `onLanded` plus a generator that
+  skips a customer mid-delete, or a retry of the anonymise.
+- **The List's tag filter, two loose ends** (v18.5.1's /code-review). A filter whose
+  only matches are completed or cancelled shows no card until "Completed &
+  cancelled" is opened: should choosing a tag open the fold? And the "No bookings
+  tagged…" line has no transition, and can sit beside the empty-day prompt.

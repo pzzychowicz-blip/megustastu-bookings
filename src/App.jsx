@@ -34,16 +34,15 @@ import {
 import {
   getDur, toMins, sanitizeBlock,
   histEntry,
-  isLocked, statusOrder,
+  statusOrder,
   getKitchenLoad,
   applyOpt,
-  optimizerActiveFor, syncLiveDurations, findFreeSlot, bookingsAfterAction,
+  optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
   checkInefficent, findClashes, clashRowId, mergeSpans,
   nowTime,
   lateState, freeingSoon,
-  undoSnapshots, applyUndo,
+  undoSnapshots,
   // v18.0.0 session 7: the length Book Again carries over.
-  plannedDuration,
   // v18.3.4: the rules only the edit's save asks (`tablesKept`, the seated and
   // hand-kept refusals, `replacePinnedClashes`, `seatedShiftFor`,
   // `tablesFreeFor`, `offZone`) are imported by `applyEdit` in
@@ -80,13 +79,15 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { dueOccurrences, withOccurrences } from "./lib/recurring";
+import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
+import { planDelete, planUndo } from "./lib/delete-undo";
+import { filterByTags } from "./lib/tag-filter";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, memoByPrev, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, rehomeGuestTags, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
+import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal } from "./lib/booking-save";
+import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -109,7 +110,7 @@ import { StatusToasts } from "./components/StatusToasts";
 import { RefusalToast } from "./components/RefusalToast";
 import { toastBox } from "./lib/toast-box";
 import { planDrop } from "./lib/drop-plan";
-import { planAssign, swapSlot, liveSwap } from "./lib/manual-assign";
+import { planAssign, planReassign, swapSlot, liveSwap } from "./lib/manual-assign";
 import { planStatus, planCancel, completeCleared, seatClashSnap } from "./lib/status-change";
 import { appBannerSections } from "./components/AppBanners";
 import { NotificationStrip } from "./components/NotificationStrip";
@@ -348,7 +349,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActiv
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachRefusal, attachedElsewhere, carryTarget, voucherDue, voucherHeld, voucherReturnDue } from "./lib/vouchers";
+import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachedElsewhere, carryTarget, voucherDue, voucherReturnDue } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -419,7 +420,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.5.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.5.1"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -834,6 +835,8 @@ console.log(
 
 
 // ── Booking App ───────────────────────────────────────────────────────────────
+// v18.5.1: the List's tag filter with nothing chosen, one array for every mount.
+const NO_LIST_TAGS=[];
 function BookingApp({uid}){
   // ── Phase D1 (v14.1.8): persistence state lives in ./hooks/usePersistence ──
   // `bookings`, `tableBlocks`, write-guards (bookingsLoaded/blocksLoaded/
@@ -929,6 +932,11 @@ function BookingApp({uid}){
   // v14.4.0: List-view keyboard focus — the booking the A/E/D/S/C/Delete
   // shortcuts act on. ↑/↓ move it; click a card to set it. Null = nothing focused.
   const [selectedListId, setSelectedListId] = useState(null);
+  // v18.5.1: the tags the List is narrowed to (ids; any of them). App's, not
+  // the List's, because the List remounts on a day change and the choice is kept
+  // from day to day (Patryk, 2026-10-09). Not stored: a reload clears it, so a
+  // forgotten filter cannot outlive the session.
+  const [listTagFilter, setListTagFilter] = useState(NO_LIST_TAGS);
   // v15.1.0: List-view "Completed & cancelled" disclosure. Lives HERE (not in
   // ListView) so listDaySorted can exclude the hidden cards while collapsed —
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
@@ -1503,7 +1511,7 @@ function BookingApp({uid}){
   // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
-  const { recurring, addRule, updateRule, removeRule, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  const { recurring, addRule, updateRule, removeRule, removeRules, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // ── v18.0.0 session 8: the activity log ────────────────────────────────────
   // Installing the sink is the whole of the write side here — every writer in
   // the app already emits into it, and until this runs `emitActivity` is a
@@ -2062,15 +2070,23 @@ function BookingApp({uid}){
   // heavy derivation the v17.1.0 useMemo pass missed. Keyed on [bookings,viewDate].
   const inefficient=useMemo(function(){return bookings.length>0&&checkInefficent(bookings,viewDate);},[bookings,viewDate]);
 
+  // v18.5.0: every guest's tags, {customer key: tag ids} (lib/customers.js). ONE
+  // pass here, handed to each view that shows a tag, and a stable object for
+  // their React.memo. Read through `guestTagsOf` / `bookingTags`, never by key.
+  // v18.5.1: declared ABOVE `listDaySorted`, which reads it as the memo runs (a
+  // `const` read above its declaration blanks the app: src/CLAUDE.md's TDZ row).
+  const guestTags=useMemo(function(){return guestTagMap(bookings);},[bookings]);
   // v14.4.0: the day's bookings in the SAME order ListView renders them
   // (status group, then time). Drives ↑/↓ keyboard navigation of selectedListId
   // and resolves which booking the List shortcuts act on. Kept identical to
   // ListView's internal sort so the focus ring and the keyboard target match.
   // v15.1.0: completed/cancelled cards are excluded while the "Completed &
   // cancelled" disclosure is collapsed — hidden cards must not be keyboard targets.
-  const listDaySorted=useMemo(function(){return bookings
+  // v18.5.1: and the cards the List's tag filter hides (`filterByTags`, the
+  // call ListView makes), for the same reason.
+  const listDaySorted=useMemo(function(){return filterByTags(bookings
     .filter(function(b){return b.date===viewDate&&(showFinished||(b.status!=="completed"&&b.status!=="cancelled"));})
-    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);});},[bookings,viewDate,showFinished]);
+    .sort(function(a,b){const sa=statusOrder(a.status),sb=statusOrder(b.status);if(sa!==sb) return sa-sb;return a.time.localeCompare(b.time);}),guestTags,tagList,listTagFilter);},[bookings,viewDate,showFinished,guestTags,tagList,listTagFilter]);
   // Clear the List focus when the day changes — the focused booking won't be
   // on the new day. (A status change that drops a booking from view just leaves
   // selectedListId pointing at a missing id → shortcuts no-op until it's re-set.)
@@ -2099,6 +2115,16 @@ function BookingApp({uid}){
   // v15.1.0: ListView's disclosure header toggles this. When COLLAPSING while a
   // finished card holds the keyboard focus, drop the focus — the card is about
   // to disappear and the shortcuts must not act on an invisible booking.
+  // v18.5.1 (/code-review): the same rule for the List's tag filter. A chip
+  // pressed from the keyboard is no mousedown, so the outside-click clear does
+  // not run, and the selected card would leave the screen still selected.
+  function changeListTags(next){
+    if(selectedListId){
+      const sel=bookings.find(function(b){return b.id===selectedListId;});
+      if(sel&&!filterByTags([sel],guestTags,tagList,next).length) setSelectedListId(null);
+    }
+    setListTagFilter(next);
+  }
   function toggleShowFinished(next){
     if(!next&&selectedListId){
       const sel=bookings.find(function(b){return b.id===selectedListId;});
@@ -2142,10 +2168,6 @@ function BookingApp({uid}){
   // "No show" (lateNoShowMin+). Thresholds + master switch live in
   // settings/bookingDefaults. v17.1.0 perf: useMemo (stable ref for the views'
   // React.memo — cheapness was never the point, identity is).
-  // v18.5.0: every guest's tags, {customer key: tag ids} (lib/customers.js). ONE
-  // pass here, handed to each view that shows a tag, and a stable object for
-  // their React.memo. Read through `guestTagsOf` / `bookingTags`, never by key.
-  const guestTags=useMemo(function(){return guestTagMap(bookings);},[bookings]);
   const lateMap=useMemo(function(){
     const today=todayStr();
     if(viewDate!==today) return EMPTY_OBJ;
@@ -2336,7 +2358,9 @@ function BookingApp({uid}){
   // Book a waitlist entry: pre-fill a fresh new-booking form from it (the
   // returnOf pattern) and remember the entry id — doSave's new-booking path
   // holds it, and removes it once the booking has landed (v18.4.8).
-  function bookFromWaitlist(w){if(refused("waitlistManage"))return;
+  // v18.5.1: and `bookingCreate`, as every door to the new-booking form asks
+  // (`doSaveNew` has the measurement).
+  function bookFromWaitlist(w){if(refused("waitlistManage"))return;if(refused("bookingCreate"))return;
     const avail=waitAvail[w.id];
     openForm(Object.assign({},EMPTY_FORM,{
       name:w.name||"",
@@ -2446,6 +2470,14 @@ function BookingApp({uid}){
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
+    // v18.5.1: their standing bookings go FIRST (`rulesOfCustomer`,
+    // lib/recurring.js). A rule holds the name, the phone and the notes, and the
+    // generator writes them onto each new week, so a rule left behind brought the
+    // customer back. Before the bookings and stopping on a refusal, as
+    // `delBooking` orders its skipDate: anonymised first, the generator could
+    // write one more week in between. `saveRecurring` says why it refused.
+    const theirRules=rulesOfCustomer(recurring.rules,bookings,o);
+    if(theirRules.length&&!removeRules(theirRules)) return;
     saveBookings(function(prev){return prev.map(function(b){
       if(!matchesIdentity(b,o)) return b;
       return anonymizeBooking(b);
@@ -2498,74 +2530,14 @@ function BookingApp({uid}){
   // form edits cannot be left out of what it opens with — the silent wipe
   // ROADMAP #13 named, where Save writes the gap.
   function openEdit(b,changes){if(refused("bookingEdit"))return false;pendingWaitlistRef.current=null;openForm(changes?Object.assign(draftFromBooking(b),changes):draftFromBooking(b));setEditId(b.id);setError("");setSwapAffected(null);setShowHistory(false);setShowForm(true);return true;}
-  // v14: Book Again — opens a fresh new-booking form pre-filled from an existing
-  // booking. Date starts blank so staff must pick it; time carries over. The
-  // `returnOf` field links back to the source booking so we can write history
-  // on BOTH the new booking (when created) and the original (on successful save).
-  // v14 p1 (Issue 3): reads sourceBooking.scheduledTime — NOT sourceBooking.time —
-  // so the pre-filled time reflects the confirmed plan (e.g. 20:30), not the
-  // seated-shifted time (e.g. 20:15). Fallback to .time for legacy bookings
-  // without scheduledTime (sanitize also backfills it on load).
+  // v18.5.1 (#17): WHAT the form opens with is `againDraft` (lib/booking-save.js),
+  // which holds the reasoning: the planned time and length, the voucher that
+  // follows a completed visit, the guest it joins. App keeps the door.
   function bookAgain(sourceBooking){
     if(!sourceBooking) return;
+    if(refused("bookingCreate")) return;   // v18.5.1: `doSaveNew` has the measurement
     pendingWaitlistRef.current=null;
-    const schedTime=sourceBooking.scheduledTime||sourceBooking.time||"13:00";
-    // v18.0.0 session 7: the source's PLANNED length rides along — Patryk's
-    // choice over the actual stay, and the same reason this function reads
-    // scheduledTime above: Book Again copies the plan. `plannedDuration`
-    // recovers it through the seated shift, which rewrites `duration` AND
-    // `originalDuration`. It is a custom duration only when it differs from the
-    // size default — openEdit's rule — so a default-length booking still
-    // re-derives when the guest count changes. Clamped to the form stepper's own
-    // 15–480 bounds (BookingFormModal), so a corrupt legacy length cannot ride
-    // into a new booking. This was `customDur:null`, which opened every Book
-    // Again at the size default and silently dropped a long booking's length.
-    const againSize=sourceBooking.size||2;
-    const planned=plannedDuration(sourceBooking);
-    const againDur=planned?Math.max(15,Math.min(480,planned)):null;
-    // ── v18.0.0 session 8 (item 7): the guest's voucher comes with them ───────
-    // Patryk: a voucher that was not fully redeemed must follow the guest into
-    // the next booking. From a COMPLETED visit only — Patryk's call for the
-    // seated case, and the one-live-booking rule is why: a seated visit is
-    // still live and still holds its voucher, so copying the code here would
-    // create exactly the conflict `attachRefusal` exists to refuse. That guest
-    // is offered the carry at COMPLETION instead.
-    //
-    // Gated on the same predicate the picker uses, so the form never opens
-    // holding an attachment that Save would reject: a voided, spent or expired
-    // voucher, or one already on somebody's live booking, simply does not ride
-    // along. `bookingId` is null because the booking does not exist yet.
-    const againCode=(function(){
-      if(!vouchersOn||sourceBooking.status!=="completed") return "";
-      const c=normalizeCode(sourceBooking.voucherCode);
-      if(!c) return "";
-      const v=vouchersByCode[c];
-      if(!v) return "";
-      return attachRefusal(v,c,bookings,null,Date.now())?"":c;
-    })();
-    openForm(Object.assign({},EMPTY_FORM,{
-      name:sourceBooking.name||"",
-      phone:sourceBooking.phone||"",
-      date:"",
-      time:schedTime,
-      size:againSize,
-      preference:sourceBooking.preference||"auto",
-      preferredTables:Array.isArray(sourceBooking.preferredTables)?sourceBooking.preferredTables.slice():[],
-      notes:"",
-      customDur:againDur&&againDur!==getDur(againSize)?againDur:null,
-      manualTables:[],
-      voucherCode:againCode,
-      status:"confirmed",
-      returnOf:sourceBooking.id,
-      // v17.10.0: Book Again on a PHONE-LESS guest is the same assertion as
-      // picking them from the name dropdown — you are looking at their booking
-      // and saying "them again" — so it joins them too. An existing guestId is
-      // adopted; otherwise one is minted from the source and `guestSeed` asks
-      // doSave to write it back. A source WITH a phone needs neither: the phone
-      // copied above already is the identity.
-      guestId:hasRealPhone(sourceBooking.phone)?null:(sourceBooking.guestId||("g"+sourceBooking.id)),
-      guestSeed:(hasRealPhone(sourceBooking.phone)||sourceBooking.guestId)?null:sourceBooking.id
-    }));
+    openForm(againDraft(sourceBooking,{vouchersOn:vouchersOn,vouchersByCode:vouchersByCode,bookings:bookings}));
     setEditId(null);
     setError("");
     setSwapAffected(null);
@@ -2723,6 +2695,14 @@ function BookingApp({uid}){
   // which that leaves done, or an undo, which puts a booking back.
   function goneReport(id){return {subject:id,replayRefusal:goneRefusal(id,bookings)};}
   function doSaveNew(f0){
+    // v18.5.1: THE GUARANTEE that a new booking needs `bookingCreate`. It was
+    // asked only by `openNewWith`, one of three doors to this form. Measured on
+    // DEV with the capability denied: "+ New" was refused, and Book again
+    // opened the form and its Save wrote a booking. The doors ask too
+    // (`bookAgain`, `bookFromWaitlist`), so the refusal comes before the form is
+    // filled in; this is for the door added later (`requestDelete` and
+    // `delBooking` are the same pair).
+    if(refused("bookingCreate")) return;
     const f=f0.repeatWeekly&&!standingOn()?Object.assign({},f0,{repeatWeekly:false}):f0;
     const plan=buildBooking({list:bookings,draft:f,blocks:tableBlocks,swap:swapAffected,autoOptimizer:autoOptimizer,phonePrefix:generalSettings.phonePrefix,getUser:getUser});
     if(plan.refusal){setError(plan.refusal.message);return;}
@@ -2938,59 +2918,12 @@ function BookingApp({uid}){
   }
 
   function forceReshuffle(){if(saveBookings(function(b){return applyOpt(b,viewDate,tableBlocks);})) flash();}
-  // Reassign a single booking to a different set of tables without touching any
-  // other booking. Used by the overlap warning's Reassign button when Optimizer
-  // is OFF and staff need a quick escape hatch for a booking about to be crowded
-  // out by an overstaying guest. Skips locked bookings (manual intent preserved).
-  // v14: feeds liveBookings into findFreeSlot so already-overstaying seated
-  // guests' tables are correctly treated as occupied.
-  // v14 p1 (Issue 1 fix): ALSO transiently extends the duration of any seated
-  // booking that is about to overstay onto the target's window (identified via
-  // overlapWarnings). Without this, a seated booking ending in e.g. 9 min is
-  // not yet "overstaying" per syncLiveDurations — its tables would falsely read
-  // as free at target.time, and findFreeSlot would return the same tables the
-  // target already has. We only extend for this one lookup; state is unchanged.
+  // v18.5.1 (#17): the Overlap banner's Reassign. WHICH tables, and the four
+  // refusals, are `planReassign` (lib/manual-assign.js).
   function reassignBooking(id){
-    const target=bookings.find(function(b){return b.id===id;});
-    if(!target){setError("Booking not found.");return;}
-    if(isLocked(target)){setError("Booking is manually locked. Edit manually to change tables.");return;}
-    const targetStart=toMins(target.time);
-    const targetEnd=targetStart+(target.duration||90);
-    // Build a search-view where any seated booking currently flagged as blocking
-    // THIS target (or any seated booking sharing tables whose scheduled end is
-    // before target.time) is stretched to at least targetStart+1 minute. That
-    // guarantees findFreeSlot treats their tables as busy at target's start.
-    const searchView=liveBookings.map(function(b){
-      if(b.id===target.id) return b;
-      if(b.status!=="seated") return b;
-      if(b.date!==target.date) return b;
-      const tables=b.tables||[];
-      const sharesTable=tables.some(function(t){return (target.tables||[]).includes(t);});
-      if(!sharesTable) return b;
-      const bs=toMins(b.time);
-      const be=bs+(b.duration||90);
-      // Only extend if the seated booking ends before target's END (i.e., it could
-      // plausibly overlap or free up within target's window). If it already runs
-      // past target end, syncLiveDurations handled it.
-      if(be>=targetEnd) return b;
-      // Extend to cover target fully so findFreeSlot never considers these tables.
-      const extendedDur=targetEnd-bs;
-      return Object.assign({},b,{duration:extendedDur});
-    });
-    const tables=findFreeSlot(searchView,target.date,target.time,target.size||2,target.preference||"auto",target.duration||90,tableBlocks,id,target.preferredTables);
-    if(!tables||!tables.length){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
-    // Sanity: if findFreeSlot returned the same tables (possible if the algorithm
-    // found a valid-but-unchanged assignment), surface it as a no-op rather than
-    // silently "succeeding" with nothing changed.
-    const curKey=(target.tables||[]).slice().sort().join("|");
-    const newKey=tables.slice().sort().join("|");
-    if(curKey===newKey){setError("No alternative tables available for "+target.name+" at "+target.time+".");return;}
-    const prevTables=(target.tables||[]).join("+")||"none";
-    const user=getUser();
-    const ok=saveBookings(function(prev){return prev.map(function(b){
-      if(b.id!==id) return b;
-      return Object.assign({},b,{tables:tables,_manual:false,_conflict:false,history:(b.history||[]).concat([histEntry("reassigned "+prevTables+" → "+tables.join("+"),user)])});
-    });},false,goneReport(id));
+    const plan=planReassign({id:id,bookings:bookings,liveBookings:liveBookings,tableBlocks:tableBlocks,getUser:getUser});
+    if(plan.refuse){setError(plan.refuse);return;}
+    const ok=saveBookings(plan.transform,false,goneReport(id));
     setError("");
     if(ok) flash();
   }
@@ -3041,48 +2974,24 @@ function BookingApp({uid}){
   // so a staff member is refused at the point of intent rather than after
   // reading a "this cannot be undone" dialog and tapping Delete.
   function requestDelete(id){if(refused("bookingDelete")) return;setConfirmDel(id);}
+  // v18.5.1 (#17): the money question, the rule and date to park and the write
+  // are `planDelete` (lib/delete-undo.js). App keeps the gate and the effects.
   function delBooking(id){if(refused("bookingDelete")) return false;
-    // v18.0.0 session 8 (C6): the money question, before the record goes.
-    // Deleting a booking that had redeemed against a voucher asked NOTHING and
-    // left the ledger entry behind — pointing at a booking that no longer
-    // exists, which Settings → Vouchers renders as the literal text
-    // "booking <id>" because there is no name left to resolve. The balance
-    // stayed spent, so a guest's remaining money quietly belonged to a visit
-    // nobody can look up.
-    //
-    // The same prompt as the walk-back, with `from: "delete"`: the question is
-    // identical (restore the balance, or leave it spent?) and a second dialog
-    // asking it differently is a second thing to keep in step. Escape abandons
-    // the delete entirely, which is the safe direction — the booking is still
-    // there to try again.
-    if(!redeemAskedRef.current&&voucherHeldBy(id)){
+    const plan=planDelete({id:id,bookings:bookings,viewDate:viewDate,tableBlocks:tableBlocks,autoOptimizer:autoOptimizer,redeemAsked:redeemAskedRef.current,vouchersOn:vouchersOn,vouchersByCode:vouchersByCode});
+    if(plan.voucherBack){
       setConfirmDel(null);
-      setVoucherBack({id:id,from:"delete"});
+      setVoucherBack(plan.voucherBack);
       return false;
     }
-    const target=bookings.find(function(x){return x.id===id;});
-    // v16.3.0: deleting a recurring OCCURRENCE parks its date on the rule's
-    // skipDates so the generator never resurrects it. Done BEFORE the booking
-    // delete and UNGATED by the delete's `ok` — if the delete is held/auto-
-    // retried, the skipDate must still land so the generator doesn't re-create
-    // the occurrence during the hold (addSkipDate is idempotent). Silent write.
-    // /code-review: if the skipDate itself is REFUSED (recurring node not loaded
-    // yet — a tiny post-load window), ABORT the delete: deleting anyway would
-    // let the generator resurrect the occurrence moments later. Non-silent
+    // The skipDate goes BEFORE the delete and is not gated on its `ok`
+    // (`planDelete` has why). Refused, the delete stops, with a non-silent
     // warning so the tap isn't a mystery no-op.
-    if(target&&target.recurringId&&target.recurringDate){
-      const okSkip=addSkipDate(target.recurringId,target.recurringDate,true);
+    if(plan.skip){
+      const okSkip=addSkipDate(plan.skip.ruleId,plan.skip.date,true);
       if(!okSkip){setWriteWarning("Still syncing standing bookings — try deleting again in a moment.");setConfirmDel(null);return false;}
     }
-    // v18.5.0: a customer's guest tags are stored on ONE of their bookings (the
-    // newest statement, lib/customers.js). If that is the booking going, the
-    // statement moves to their most recent remaining one, in this same write,
-    // so deleting a booking never deletes what the guest told us.
-    function delTransform(b){const t=b.find(function(x){return x.id===id;});const d=t?t.date:viewDate;return bookingsAfterAction(rehomeGuestTags(b,b.filter(function(x){return x.id!==id;}),id),d,tableBlocks,null,false,autoOptimizer);}
-    // v17.4.0: prev-identity memo so the undo delta and the write share ONE pass.
-    const delMemo=memoByPrev(delTransform);
-    const postDel=delMemo(bookings);
-    const ok=saveBookings(delMemo);setConfirmDel(null);
+    const postDel=plan.transform(bookings);
+    const ok=saveBookings(plan.transform);setConfirmDel(null);
     // v17.10.0: Delete is now reachable from INSIDE the edit form, so the form
     // has to go with the booking — otherwise you are left editing a record that
     // no longer exists. Deliberately the raw setter, not requestCloseForm: the
@@ -3239,10 +3148,10 @@ function BookingApp({uid}){
   // v18.5.0 (#17): the two money questions a status change can raise are
   // `voucherDue` / `voucherHeld` / `voucherReturnDue` (lib/vouchers.js), which
   // hold the reasoning. These are their old names, closed over this render's
-  // state, for the form's save, the delete and the two settle functions.
+  // state, for the form's save and the two settle functions. (v18.5.1: the
+  // delete asks `voucherHeld` inside `planDelete`, lib/delete-undo.js.)
   function voucherSrc(){return {bookings:bookings,vouchersByCode:vouchersByCode,vouchersOn:vouchersOn,now:Date.now()};}
   function voucherToAsk(id,status){return voucherDue(voucherSrc(),id,status);}
-  function voucherHeldBy(id){return voucherHeld(voucherSrc(),id);}
   function voucherToRestore(id,status){return voucherReturnDue(voucherSrc(),id,status);}
   // Re-enter the action the modal interrupted, with the question marked asked.
   // ONE ref covers both prompts, deliberately: a status change is either INTO
@@ -3584,36 +3493,16 @@ function BookingApp({uid}){
     setUndoInfo({snapshots:snapshots,primaryId:primaryId,kind:kind,noShow:!!noShow,note:note});
     undoTimerRef.current=setTimeout(function(){setUndoInfo(null);undoTimerRef.current=null;},(generalSettings.undoSecs||10)*1000);
   }
+  // v18.5.1 (#17): WHAT is restored is `planUndo` (lib/delete-undo.js), verbatim
+  // and never through bookingsAfterAction (src/CLAUDE.md's one exception).
   function undoLastAction(){
-    const info=undoInfo;
-    if(!info||!info.snapshots||!info.snapshots.length) return;
-    const user=getUser();
-    const note=info.kind==="delete"?"deletion undone":info.kind==="edit"?"edit undone":"cancellation undone";
-    const primary=info.snapshots.find(function(s2){return s2.id===info.primaryId;})||info.snapshots[0];
-    const ok=saveBookings(function(b){
-      // Only the booking the user acted on gets a history entry — the others
-      // were moved by the optimizer, not by a user action, and the original
-      // reshuffle didn't write history for them either (symmetry).
-      const snaps=info.snapshots.map(function(s2){
-        return s2.id===info.primaryId
-          ?Object.assign({},s2,{history:(s2.history||[]).concat([histEntry(note,user)])})
-          :s2;
-      });
-      // Restore VERBATIM — deliberately NOT through bookingsAfterAction. Its
-      // optimizer branch is taken whenever optimizerActiveFor() is true (which
-      // it ALWAYS is for a future date, regardless of the toggle), and a
-      // reshuffle here would immediately re-apply the very moves undo just
-      // reversed. syncLiveDurations still runs so a seated booking's live
-      // duration stays correct. If a booking created since the action now
-      // collides, the v15.6.1 reconciliation effect resolves it — the same
-      // path that handles offline merges.
-      const today=todayStr();
-      return syncLiveDurations(applyUndo(b,snaps),today,nowMins);
-    });
+    const plan=planUndo({info:undoInfo,getUser:getUser,nowMins:nowMins});
+    if(!plan) return;
+    const ok=saveBookings(plan.transform);
     if(ok){
       if(undoTimerRef.current){clearTimeout(undoTimerRef.current);undoTimerRef.current=null;}
       setUndoInfo(null);
-      setViewDate(primary.date);
+      setViewDate(plan.date);
     }
   }
   // v18.4.7 (#17): WHAT the picker's Save writes is `planAssign`
@@ -4158,7 +4047,7 @@ function BookingApp({uid}){
   // close over fresh state), and the props are ONE-TIME wrapper functions that
   // read the ref at event time — stable identity, always-fresh behavior.
   const viewActionsRef=useRef({});
-  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
+  viewActionsRef.current={openNew,openEdit,updateStatus,doCancelBooking,dropOnTable,openWalkin,toggleShowFinished,changeListTags,setManualTarget,setBlockTarget,setConfirmDel,requestDelete,setConfirmReshuffle,setSummaryOpen,setShowWeek,setSelectedListId,waitlist,bookFromWaitlist,setTimelineZoomManual,openPrint};
   const [VA]=useState(function(){
     const R=viewActionsRef;
     return {
@@ -4173,6 +4062,7 @@ function BookingApp({uid}){
       onReshuffle:function(){R.current.setConfirmReshuffle(true);},
       onNew:function(){R.current.openNew();},
       onToggleFinished:function(next){R.current.toggleShowFinished(next);},
+      onTagFilter:function(next){R.current.changeListTags(next);},
       onSelect:function(id){R.current.setSelectedListId(id);},
       onSummaryToggle:function(){R.current.setSummaryOpen(function(o){return !o;});},
       onOpenWeek:function(){R.current.setShowWeek(true);},
@@ -4317,6 +4207,8 @@ function BookingApp({uid}){
     onSelect={VA.onSelect}
     showFinished={showFinished}
     onToggleFinished={VA.onToggleFinished}
+    tagFilter={listTagFilter}
+    onTagFilter={VA.onTagFilter}
     onNew={VA.onNew}
     emptyWalkin={emptyWalkin}
     isEmpty={isEmptyDay}
@@ -4842,7 +4734,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} onPick={function(b){setShowSearch(false);setView("list");if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

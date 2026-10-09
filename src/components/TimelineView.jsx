@@ -250,7 +250,11 @@ function TimelineBlock({ b, anim, flipId, nowMins, today, totalMins, warnings, c
       : (late ? "3px solid var(--tl-block-late)" : "none");
   // v15.8.2: note marker — bookings with a note get a subtle "dog-ear" folded
   // corner. Kept OUT of the label string so it never truncates on narrow blocks.
-  const hasNote = b.notes && b.notes.trim();
+  // v18.5.1 (Patryk): a booking with a tag shows the corner too, note or no
+  // note. "Allergy" is the note that matters most at the table, and until now a
+  // tagged booking with nothing typed in Notes looked like one with nothing to
+  // read. `tags` is the block's tag line, the guest's and the occasion's.
+  const hasNote = !!((b.notes && b.notes.trim()) || tags);
   // v17.9.0 (second pass): the label carries the NAME and nothing else.
   //
   // It used to accumulate four flags — " [L]" locked, " [!]" repeat no-show,

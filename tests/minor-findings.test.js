@@ -116,7 +116,7 @@ describe("X7 — Find a booking's results are columns", () => {
     expect(read("App.jsx")).toMatch(/<SearchPanel bookings=\{bookings\} todayStr=\{todayStr\(\)\} isMobile=\{isMobile\}/);
   });
   it("each cell is a column sized to the widest in the results, in its own font", () => {
-    expect(P).toMatch(/const nameCol = nameW \? Math\.min\(NAME_CAP, nameW\) : NAME_CAP;/);
+    expect(P).toMatch(/const nameCol = nameW \? Math\.min\(NAME_CAP, Math\.max\(nameW, tagW\)\) : NAME_CAP;/);
     expect(P).toMatch(/const paxCol = widest\(results\.map\(function \(b\) \{ return guestsLabel\(b\.size\); \}\), CELL_FONT\);/);
     // /code-review: "auto" when unmeasurable — `phoneCol` also decides whether
     // the column is drawn, so undefined there hid every phone number.

@@ -30,6 +30,7 @@ import { ChevronDownIcon, ChevronRightIcon, WaitIcon, TrashIcon } from "./Icons"
 import { TagListEditor } from "./TagListEditor";
 import { TagChips } from "./TagChips";
 import { tagLabels } from "../lib/tags";
+import { guestTagChoices, customersWithTag } from "../lib/tag-filter";
 
 // v18.2.0 phase 62: the id of the armed delete's warning, tied to its button
 // by aria-describedby only while it is on screen. One row is armed at a time.
@@ -69,7 +70,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   const [query, setQuery] = useState(seekQuery || "");
   const [openKey, setOpenKey] = useState(null);   // expanded customer
   const [armedKey, setArmedKey] = useState(null); // delete armed for this key
-  const [filter, setFilter] = useState("all");    // v16.3.0: all | regulars | noshows
+  const [filter, setFilter] = useState("all");    // v16.3.0: all | regulars | noshows · v18.5.1: "tag:<id>"
   // v16.3.0 follow-up (Patryk): "Regular" threshold — minimum completed visits
   // for the Regulars filter, adjustable via a stepper (session-only view
   // preference, like `filter` itself). Default 2.
@@ -94,8 +95,17 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   // here as well would double-count them and leave the tile claiming they are
   // untraceable when they are two lines up.
   const phonelessNoShowCount = (bookings || []).filter(function (b) { return b && !identityKey(b) && isNoShow(b); }).length;
+  // v18.5.1: the guest tags somebody has join the quick filters, one chip each
+  // (lib/tag-filter.js). A tag whose last customer lost it, or that left the
+  // list, while it was chosen falls back to All rather than to an empty list.
+  const tagChoices = guestTagChoices(all, guestTags, tagList);
+  const tagId = filter.indexOf("tag:") === 0 ? filter.slice(4) : null;
+  const tagOn = tagId && tagChoices.some(function (t) { return t.id === tagId; }) ? tagId : null;
+  const byVisits = function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); };
   // v16.3.0: quick filters (applied only when NOT searching — a query overrides).
-  const base = filter === "regulars"
+  const base = tagOn
+    ? customersWithTag(all, guestTags, tagList, tagOn).sort(byVisits)
+    : filter === "regulars"
     ? all.filter(function (c) { return c.visits >= regularMin; }).sort(function (a, b) { return b.visits - a.visits || (b.latestDate || "").localeCompare(a.latestDate || ""); })
     : filter === "noshows"
       ? all.filter(function (c) { return c.noShowCount > 0; }).sort(function (a, b) { return b.noShowCount - a.noShowCount || (b.latestDate || "").localeCompare(a.latestDate || ""); })
@@ -241,7 +251,8 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
   // search query overrides it).
   const searching = !!query.trim();
   const filterChip = function (key, label) {
-    const active = filter === key && !searching;
+    // "All" is also what a chosen tag that is gone has fallen back to.
+    const active = !searching && (filter === key || (key === "all" && tagId && !tagOn));
     return (
       <button
         key={key}
@@ -291,6 +302,7 @@ export function CustomersTabContent({ bookings, waitlist, onDeleteCustomer, regu
           {filterChip("all", "All")}
           {filterChip("regulars", "Regulars")}
           {filterChip("noshows", "No-shows")}
+          {tagChoices.map(function (t) { return filterChip("tag:" + t.id, t.label); })}
           {/* v16.3.0 follow-up: Regulars visit-threshold stepper — visible while
               the Regulars filter is active (and not overridden by a search).
               v18.2.0 phase 56 (A-1): its buttons are named, as Settings'

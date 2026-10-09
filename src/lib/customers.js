@@ -741,7 +741,12 @@ export function anonymizeBooking(b) {
 // case-insensitive name substring. Results sorted UPCOMING-first (date ≥ today,
 // ascending) then PAST (descending), capped at `limit` (default 30). `todayStr`
 // is passed in so the caller controls "today" (all-UTC ISO date string).
-export function searchBookings(bookings, query, todayStr, limit) {
+// v18.5.1: with `tags` (`{ map, list }`: `guestTagMap(bookings)` and the tag
+// list) a text query of 3+ characters ALSO matches a booking carrying a tag
+// whose name contains it, read as it is shown (`bookingTags`): "allerg" finds
+// every booking of every guest with Allergy. Three, as for digits: two letters
+// are in too many tag names to mean one. Without `tags` nothing changes.
+export function searchBookings(bookings, query, todayStr, limit, tags) {
   const max = limit || 30;
   const q = String(query || "").trim();
   if (!q || !Array.isArray(bookings)) return [];
@@ -751,7 +756,8 @@ export function searchBookings(bookings, query, todayStr, limit) {
   const out = bookings.filter(function (b) {
     if (!b || b.anonymized) return false; // v17.0.0: anonymized ("Data removed") bookings never match
     if (useDigits) return b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
-    return b.name && b.name.toLowerCase().indexOf(qName) !== -1;
+    if (b.name && b.name.toLowerCase().indexOf(qName) !== -1) return true;
+    return matchedTagLabels(b, q, tags).length > 0;
   });
   const today = todayStr || "";
   out.sort(function (a, b) {
@@ -761,6 +767,20 @@ export function searchBookings(bookings, query, todayStr, limit) {
     return (b.date || "").localeCompare(a.date || "") || (b.time || "").localeCompare(a.time || "");            // past desc
   });
   return out.slice(0, max);
+}
+
+// matchedTagLabels — the names of booking `b`'s tags that contain the query,
+// guest tags first: what Find a booking writes under a result's name, so "ann"
+// tells an Ann from an Anniversary (Patryk, 2026-10-09: only the MATCHING
+// tags, and also when the name matched too). [] for a digit query, for fewer
+// than three characters, and without `tags` — the same rule the search itself
+// matches by, because it IS that rule: `searchBookings` calls this.
+export function matchedTagLabels(b, query, tags) {
+  const q = String(query || "").trim();
+  const qName = q.toLowerCase();
+  if (!b || !tags || qName.length < 3 || q.replace(/[^\d]/g, "").length >= 3) return [];
+  const t = bookingTags(b, tags.map, tags.list);
+  return t.guest.concat(t.occasion).filter(function (label) { return label.toLowerCase().indexOf(qName) !== -1; });
 }
 
 // searchCustomers — match customers against a typed query.

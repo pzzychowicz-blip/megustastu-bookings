@@ -353,7 +353,6 @@ describe("BookingApp's three functions are the gate, the plan and the side effec
 
   it("the old names are one-line wrappers over lib/vouchers.js", () => {
     expect(APP).toContain("functionvoucherToAsk(id,status){returnvoucherDue(voucherSrc(),id,status);}");
-    expect(APP).toContain("functionvoucherHeldBy(id){returnvoucherHeld(voucherSrc(),id);}");
     expect(APP).toContain("functionvoucherToRestore(id,status){returnvoucherReturnDue(voucherSrc(),id,status);}");
   });
 });

@@ -33777,3 +33777,398 @@ the atom).
 | 3 | Firebase console, PROD | Realtime Database → Rules → paste `database.rules.json` → Publish. Until then the seed tag list is used and editing the list is refused with a sentence (section 3). Either order with step 2 |
 | 4 | Google Cloud console, DEV key | The referrer list in `SECURITY.md` §4 (#12). Independent of the others |
 
+## v18.5.1 — Delete customer takes the standing booking
+
+**Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
+**Behavioural change:** none in sections 3, 4 and 5. Delete customer also removes the customer's standing bookings
+(section 1); a tagged booking shows the timeline block's note corner (section 2); Book
+again and the waitlist's Book ask for the "Take bookings" capability (section 6);
+filter and search by tag (section 8). The
+header is extended as the version's other items land.
+**Rules change: none.** **Deploy steps: none beyond the merge.**
+
+One version with a section per item (Patryk, 2026-10-09), one commit each.
+
+### 1. Delete customer left the standing booking
+
+**Files:** `src/lib/recurring.js` (`rulesOfCustomer`), `src/hooks/useRecurring.js`
+(`removeRules`), `src/App.jsx` (`deleteCustomer`), `tests/recurring.test.js`.
+
+**Reproduced on DEV first, on v18.5.0** (the ROADMAP entry was read from the code and
+never run). Through the app's own controls:
+
+| Step | DEV afterwards |
+|---|---|
+| New booking, a phone and a note, Sat 10 Oct 15:00, Repeat weekly | 1 rule and 2 bookings (10 and 17 Oct), all three with the name, phone and note |
+| Settings → Customers → Delete customer & all data | both bookings "Data removed", phone and note empty; the rule unchanged, still listed in Settings → Standing bookings with the name |
+| Weeks generated ahead 2 → 3 | a booking for 24 Oct with the name, the phone and the note, not anonymised |
+
+**The fix.** `rulesOfCustomer(rules, bookings, ident)` names the customer's rules: a
+rule whose own phone is theirs, or, for a rule with no phone, one that a booking of
+theirs is stamped with. The second test is asked only of a phone-less rule, so one week
+of somebody's standing booking given to a friend's number does not take the standing
+booking when the friend is deleted. `deleteCustomer` removes those rules in one write
+BEFORE it anonymises, and stops if that write is refused, which is `delBooking`'s order
+for its skipDate: the generator runs on the bookings change, and with the rule still
+there it could write one more week.
+
+**Patryk chose (2026-10-09)** removing the rule only, over also cancelling the
+customer's upcoming bookings and over keeping a stripped, paused rule. The upcoming
+bookings stay confirmed as "Data removed" and keep their tables, as v17.0.0 decided.
+
+**The same steps on DEV after the fix:** Delete customer → 0 rules for the customer
+(21 → 20 in the node), all 3 bookings "Data removed"; weeks ahead 3 → 4 → the generator
+ran (2 other rules' bookings appeared on 31 Oct) and wrote none for the deleted
+customer; 0 bookings in the database with the name, the phone or the note; the rule is
+not in Settings → Standing bookings.
+
+**Not covered, read from the code and not run:** a rule write the server rejects
+(another device changed `recurring` in the same moment) is rolled back after the
+bookings were anonymised, with the "redo the change" banner; the rule is then deleted
+by hand in Settings. And a phone-less guest's GENERATED weeks carry no `guestId`
+(`occurrenceBooking`), so Delete customer does not reach them; that is the never-merge
+rule and is older than this change.
+
+**The activity log** holds no rule's name: its entry for a standing-booking write is a
+count ("removed from the standing bookings · 21 → 20", `settingsWriteEntry`).
+
+### 2. A tagged booking shows the note corner
+
+**Files:** `src/components/TimelineView.jsx` (`TimelineBlock`), `tests/guest-tags.test.js`,
+`GLOSSARY.md` (a row for the **note corner**, which had none).
+
+Patryk, 2026-10-09: "if a tag is active for a booking the note flag must be visible as
+well". The app has one note flag, the white folded corner at the top left of a timeline
+block (v15.8.2), drawn when `b.notes` is not empty. It is now drawn for a note or a tag:
+`hasNote` also reads `tags`, the tag line the block already has for its title, so the
+guest's tags and the occasion's both count and no new prop is passed. The printed
+timeline has no note mark and is unchanged.
+
+**On DEV** (10 Oct, 9 blocks): the one tagged booking, with nothing in Notes
+("Birthday, Anniversary"), has the corner; the 8 with no tag and no note do not.
+**Not checked:** the tablet, and a booking with a note and no tag (that half of the
+condition is the line as it was).
+
+### 3. #17: delete and undo out of BookingApp
+
+**Files:** `src/lib/delete-undo.js` (new: `planDelete`, `planUndo`), `src/App.jsx`
+(`delBooking`, `undoLastAction`; 5,137 → 5,093 lines, after section 1 had added 9),
+`tests/delete-undo.test.js` (new, 16), `tests/status-change.test.js` (the
+`voucherHeldBy` wrapper it pinned is gone: the delete asks `voucherHeld` inside
+`planDelete`). **Behavioural change: none.**
+
+Patryk chose three domains for this version (2026-10-09): delete and undo, `bookAgain`
+and `reassignBooking`, one commit each. This is the first. Delete and undo are one
+lifecycle (a delete arms the undo that restores it), and they have `planCancel`'s shape.
+
+- `planDelete(ctx)` → `{voucherBack}` (the money question, nothing written), or
+  `{skip, transform}`: `skip` is the rule and date App must park before the write, or
+  null; `transform` is memoised by `prev`.
+- `planUndo({info, getUser, nowMins})` → null, or `{date, transform}`. Verbatim
+  restore, never through `bookingsAfterAction` (`src/CLAUDE.md`'s one exception).
+- App keeps the capability gate, the `addSkipDate` call and its refusal, the confirm
+  and the form it closes, the flash, `armUndo`'s timer, `setViewDate`, and `undoDelta`
+  (four lines over this render's `nowMins`, which `tests/save-path.test.js` lifts by
+  name). App's `saveBookings` call count is unchanged (`tests/retry-report.test.js`).
+
+**Verified old against new.** A throwaway test lifted the old `delBooking` and
+`undoLastAction` from the commit before and the new ones from `App.jsx`, compiled all
+four against the same recorded stubs, and compared the calls made (with their
+arguments, in order), the return value, the list written and the list a replay on a
+different `prev` writes:
+
+| | Cases | Wrote | Other outcomes |
+|---|---|---|---|
+| `delBooking` | 60,000 | 51,084 | 3,881 asked the voucher question · 12,913 parked a skipDate, 2,012 of them refused · 3,023 stopped at the capability · 17,462 moved another booking |
+| `undoLastAction` | 60,000 | 45,890 (15,964 delete · 14,118 cancel · 15,808 edit) | 14,110 with nothing to undo |
+
+120,000 of 120,000 equal. **The first run was not:** the new `undoLastAction` asked
+`getUser()` before testing whether there was anything to undo, where the old one asked
+after. `planUndo` takes `getUser` and calls it after the test, as `planCancel` does.
+
+**Sabotage:** three changes to the new file (the tags not handed on, the user asked
+for first, no skip named) fail three of the 16 tests.
+
+**On DEV:** a standing booking's week deleted from its edit form (6 → 5 bookings on
+the day, its date added to the rule's `skipDates`, the form closed, the pill "Booking
+deleted · tables re-optimised · Undo"), then Undo (6 bookings, the same id back on 1A
+with "deletion undone" in its history, the skipDate still there as designed, the pill
+gone, no console error).
+
+### 4. #17: Book Again's draft out of BookingApp
+
+**Files:** `src/lib/booking-save.js` (`againDraft`), `src/App.jsx` (`bookAgain`;
+5,093 → 5,032 lines), `tests/book-again.test.js` (new, 11).
+**Behavioural change: none.**
+
+`againDraft(source, {vouchersOn, vouchersByCode, bookings, now})` returns the draft
+the form opens with: the booked time and the planned length (through the seated
+shift), the voucher that follows a completed visit while it can still be attached, and
+the guest a phone-less source is joined to. App's `bookAgain` keeps the door:
+`pendingWaitlistRef`, `openForm` and the five setters. It sits beside the other
+builders (`buildBooking`, `walkinBooking`, `occurrenceBooking`) because it is the
+fourth place a booking's fields are written out.
+
+**Verified old against new.** The old `bookAgain` lifted from the commit before and the
+new one lifted from `App.jsx`, compiled against the same recorded stubs, over 100,000
+generated sources (odd sizes, empty and shifted times, lengths from 0 to 900, every
+status, phones that are and are not real, vouchers active, void, spent, expired,
+unknown and already on a live booking): the same calls with the same arguments, the
+draft included, every time. 97,029 opened the form (2,971 had no source); 2,595 carried
+a voucher, 59,125 a custom length, 48,366 a guest seed.
+
+**On DEV:** Book again pressed in a seated booking's edit form: the title "Book again",
+the return-guest line, the name carried, the date empty, the time 19:30, the note
+empty, and the new-booking buttons (Save pending, Save booking).
+
+### 5. #17: the Overlap banner's Reassign out of BookingApp
+
+**Files:** `src/lib/manual-assign.js` (`planReassign`), `src/App.jsx`
+(`reassignBooking`; 5,032 → 4,984 lines), `tests/manual-assign.test.js` (+9, 27).
+**Behavioural change: none.**
+
+`planReassign({id, bookings, liveBookings, tableBlocks, getUser})` → `{refuse}` (not
+found, locked or seated, no alternative, the same tables back) or `{transform}`. App
+keeps `setError`, the write with `goneReport(id)` and the flash. It sits with
+`planAssign`: both give one booking tables and move nobody else.
+
+**Verified old against new.** The old `reassignBooking` lifted from the commit before
+and the new one from `App.jsx`, over 60,000 generated days (up to 25 bookings, seated
+parties, locks, table blocks, live and stored durations): the same calls, return and
+written list every time, a replay on another list included. 29,953 wrote, 20,501 were
+refused as locked, 7,639 as not found, 1,907 as having no alternative.
+
+**Sabotage:** three changes (no stretch for a seated party about to leave, no refusal
+for the same tables, `_manual` left on) fail three tests. Two of the tests did not
+catch their sabotage as first written and were rewritten until they did: the stretch
+changes the outcome only when the booking's own table is the one the lookup would
+pick first.
+
+**Not run on DEV:** Reassign needs the Overlap banner (the optimiser off and a seated
+party overstaying onto a later booking's table), which was not staged.
+
+`App.jsx` after this version's three extractions: 5,137 → 4,984 lines.
+
+### 6. Book again created a booking without "Take bookings"
+
+**Files:** `src/App.jsx` (`bookAgain`, `bookFromWaitlist`, `doSaveNew`),
+`tests/book-again.test.js` (+2, 13).
+
+Read while moving `bookAgain` (section 4): `bookingCreate` was asked by `openNewWith`
+and by the walk-in, and by nothing else. Patryk chose to measure it and fix it if real.
+
+**Measured on DEV** (roles enforced; the signed-in admin account given a deny on
+`bookingCreate` in Settings → Admin → Capabilities, which stores
+`roles/<uid>/denies/bookingCreate: true`):
+
+| Action | Before | After |
+|---|---|---|
+| + New | refused: "You don't have permission to take bookings." | the same |
+| Book again, in a seated booking's edit form | the form opened as "Book again" | refused with the same sentence; the edit form stays |
+| Save in that form, with a date set | a new booking written for 20 Nov, "created via Book Again" | not reachable |
+
+**The fix, in two layers,** as `requestDelete` and `delBooking` are: `doSaveNew` asks
+first thing, so no new booking is written without the capability whichever door the
+form was opened through, and the doors ask too, so the refusal comes before a form is
+filled in. `bookFromWaitlist` is the third door (it asked `waitlistManage` only) and
+got the same line. **That door was read, not measured**: it needs a waiting party with
+a slot, which was not staged; it opens the same form and reaches the same `doSaveNew`.
+A test finds every call of `openForm` in App, names the function it is in (four:
+`bookAgain`, `bookFromWaitlist`, `openEdit`, `openNewWith`) and fails a door that does
+not ask, so a fifth door is decided when it is added.
+
+`bookingCreate` is a client-side capability (`lib/roles.js`: the rules do not enforce
+it), so this is a refusal in the app and not a server guarantee. The deny on the DEV
+account was removed afterwards (`denies` reads null). The 20 Nov booking stays on DEV.
+
+**One lint warning appeared with this change and was removed.** Adding the gate's line
+to `bookAgain` made the React compiler's purity rule flag the `Date.now()` two lines
+below it (64 warnings against the cap of 63; the same call in section 4's commit was
+not flagged, which is `src/CLAUDE.md`'s note that an edit can change what those rules
+say about a line it did not touch). `againDraft` reads the clock itself when it is
+handed no `now`, which is where the old function read it, and a test runs that path
+with an expired voucher.
+
+### 7. The doc-load split's two loose ends
+
+**Files:** `CLAUDE.md` (39,078 → 36,427 characters), `ROADMAP.md` (the entry deleted).
+No code.
+
+The 2026-09-18 `/code-review` left two scope calls, and Patryk decided both on
+2026-10-08 (trim root's restatements to pointers, showing before and after first; the
+write guards' mechanics stay in `src/CLAUDE.md`). The first is done here, after he saw
+the three new passages (2026-10-09):
+
+| Passage in root | Before (characters) | After | The full text is in |
+|---|---|---|---|
+| The `api/` block in File structure | 812 | 381 | `api/CLAUDE.md` (the wholesale deploy, firebase-admin) |
+| The offline shell | 1,042 | 375 | the `mgt-service-worker` skill (the four properties, by number) |
+| The five write guards | 2,106 | 553 | `src/CLAUDE.md`, "The five write guards" |
+
+Each pointer keeps what a session must know without opening the other file: that every
+gate in `api/` is a runtime one and firebase-admin bypasses the rules; that a shipped
+worker cannot be withdrawn; and the five guards by name, with the three sentences that
+are rules rather than mechanics (no root `.write`, a refused write is never shown as
+saved, no whole-node `bookings` write). Checked before the trim that each removed
+detail is in the file pointed at: `grep` finds `skipWaiting`, `respondWith`,
+`bookingsReady` and `?sw=off` in the skill, "WHOLESALE" in `api/CLAUDE.md`, and
+`STALE_GAP_MS`, `baseUpdatedAt`, `pendingRetriesRef` and `bookingsRef` in
+`src/CLAUDE.md`'s section. The second loose end is the decision itself and needs no
+change. Root now has 3,573 characters of room under `tests/doc-size.test.js`' 40,000.
+
+### 8. Filter and search by tag
+
+Patryk chose all three places the ROADMAP idea named (2026-10-09), one commit each:
+the List for the viewed day, Settings → Customers, and Find a booking. The version
+stays v18.5.1 (his call). One read is behind all three, `src/lib/tag-filter.js` (new):
+a booking's tags are read as they are shown, the guest's through `guestTagMap` and the
+booking's own occasion tags, and only ids still in the tag list count.
+
+#### 8a. The List
+
+**Files:** `src/lib/tag-filter.js`, `src/components/ListView.jsx`, `src/App.jsx`
+(`listTagFilter`; the `guestTags` memo moved above `listDaySorted`),
+`tests/tag-filter.test.js` (new, 18), `GLOSSARY.md`.
+
+A row of chips above the cards: one per tag a booking on the viewed day has, with the
+number of bookings still to come or seated ("Allergy 2"). A tap narrows the List, both
+the active cards and "Completed & cancelled", and the chips are the booking form's
+(`TagChips`, pressed = on). A day with no tagged booking has no row.
+
+Patryk's two answers: **several tags show a booking with ANY of them**, and **the
+choice is kept from day to day** (a reload clears it). Kept means a chosen tag keeps
+its chip on a day nobody has it, with no number, so it can be switched off, and the
+List says "No bookings tagged Allergy on this day." rather than drawing nothing.
+The number counts bookings that are not completed or cancelled; a tag only finished
+bookings carry has its chip and no number. That last rule is mine, inside his
+decision, and is one line in `dayTagChips` if he wants every status counted.
+
+The state is App's (`listTagFilter`), because the List remounts on a day change, and
+App's `listDaySorted` (what ↑/↓ walk) goes through the same `filterByTags` call, so a
+hidden card is not a keyboard target. `filterByTags` returns the SAME array when
+nothing is chosen, so an unfiltered List runs no differently from before. The name
+column is measured on the whole day, so a filter does not move the columns.
+
+**A load-order crash avoided:** `listDaySorted` sits above where `guestTags` was
+declared, and a `const` read above its declaration blanks the app with lint and build
+passing (`src/CLAUDE.md`'s TDZ row). The memo moved up and a test holds the order.
+
+**On DEV** (Fri 9 Oct, 6 active cards, one tagged Allergy and Birthday): chips
+"Allergy 1" and "Birthday 1"; Allergy on → 1 card, the chip pressed; Next day (nobody
+with Allergy) → chips "Allergy" (pressed, no number), "Birthday 1", "Anniversary 1",
+0 cards and the line "No bookings tagged Allergy on this day."; Birthday on as well →
+1 card (any of them); Allergy off → its chip gone, 1 card; Birthday off → all 7 cards
+back. No console error. **Not checked:** the tablet's width, the fold of a card
+leaving under the filter (it is `useRevealRows`' existing fold), ↑/↓ under a filter
+with real keys.
+
+#### 8b. Settings → Customers
+
+**Files:** `src/lib/tag-filter.js` (`customerTagIds`, `guestTagChoices`,
+`customersWithTag`), `src/components/CustomersSettings.jsx`,
+`tests/tag-filter.test.js` (+4, 22), `GLOSSARY.md`.
+
+The guest tags join All / Regulars / No-shows as chips of the same kind: one at a
+time, as those three are, and overridden by a typed search as they are. Only a guest
+tag somebody has gets a chip, so no chip leads to an empty list, and occasion tags
+are not offered (an occasion belongs to a booking, not to a customer). A chosen tag
+whose last customer loses it, or that leaves the list, falls back to All. The list
+under a tag is sorted by visits, as All is, and capped at 50 as every list here is.
+No count on the chip: Regulars and No-shows have none either.
+
+**On DEV** (two guest tags in use): chips "All · Regulars · No-shows · Allergy ·
+Gluten-free"; All 50 rows (the cap); Allergy → 1 row, its chip the accent one;
+Gluten-free → 1 row (a different customer); No-shows → 5; All → 50.
+**A measurement trap met here:** read through `getComputedStyle` the chosen chip
+looked unchanged, because the Browser pane was hidden and the colour transition had
+not advanced; the inline `background` was right (`var(--accent)`). **Not checked:**
+the fall-back to All on DEV (read from the code and held by a source test).
+
+#### 8c. Find a booking
+
+**Files:** `src/lib/customers.js` (`searchBookings`' fifth argument),
+`src/components/SearchPanel.jsx`, `src/App.jsx` (two props), `tests/customers.test.js`
+(+5), `tests/guest-tags.test.js` (the hand-off count, 4 → 5), `GLOSSARY.md`,
+`ROADMAP.md` (the idea's entry removed: all three places have shipped).
+
+Three or more letters of a tag's name now match as well as a name: "allerg" lists
+every booking, on any date, of every guest with Allergy, and "birth" the bookings
+tagged Birthday. The tags are read as they are shown, so a guest tag stated on one
+booking finds the guest's others, and a tag removed from the list finds nothing.
+A digit query is still a phone query and nothing else; an anonymised booking still
+never matches; two letters still match names only (they are in too many tag names).
+The placeholder reads "Search by name, phone or tag, any date…".
+
+**On DEV:** "al" → 30 rows (names, the cap, as before); "allerg" → 2 (one guest's two
+bookings, 9 Oct and 20 Nov); "birth" → 2 (two different bookings); "gluten" → 29 (one
+phone's bookings: the tag follows the guest onto all of them); "zzzq" → "No bookings
+match."; no new console error.
+
+#### 8d. A result says which tag it matched by
+
+**Files:** `src/lib/customers.js` (`matchedTagLabels`, which `searchBookings` now
+matches through), `src/components/SearchPanel.jsx`, `tests/customers.test.js` (+1),
+`tests/date-format.test.js` and `tests/minor-findings.test.js` (two pins repointed).
+
+8c left a row silent about WHY it matched: "ann" listed people called Ann and
+bookings tagged Anniversary in one list. Patryk's three answers (2026-10-09): show
+the tag; **under the name**, inside the name column; and **only the tags that match
+what was typed, whenever one matched**, the name having matched or not.
+
+Under the name because nothing else fits: the card's inner width is 646px and the
+columns at their caps use all of it (date 104, time 44, name 190, guests 57, phone
+103, status 98, five 10px gaps). The name cell is now a two-line stack, so every
+column stays where it was and only a tag-matched row is taller. The name column is
+the wider of the widest name and the widest tag line, under the same cap. The search
+and the line cannot disagree about what matched: `searchBookings` calls
+`matchedTagLabels`.
+
+**On DEV, 824px wide:** a tag-matched row is 52px high and the others 42; within each
+result set every row's cells start at the same x ("ann": 13, 90, 144, 229, 290, 392);
+"ann" → Samanta with "Anniversary" under the name, then four people named Ann/Hannah
+with no line; "laura" → no row has a line; no row overflows. **At 375px:** the tagged
+row is 82px against 69, the tag sits under the name on line one, no overflow.
+**Not checked:** the tablet itself, and a tag line longer than 190px (it would
+ellipsize; no tag on DEV is that long).
+
+**The List chip's number and the Customers chips stay as built** (his answers the
+same day: still to come or seated; no count).
+
+### 9. /code-review (2026-10-09)
+
+Seven findings; two fixed, both from the List's tag filter being KEPT while the
+selection and the search did not know about it.
+
+**Fixed, one commit** (`src/App.jsx`, `tests/tag-filter.test.js` +1):
+
+- **A booking picked in Find a booking could be hidden by the filter.** The pick
+  switches to the List and selects the booking; with "Allergy" chosen and a guest
+  without it picked, the card was filtered out and still selected, so the List's
+  shortcuts would have acted on a booking not on screen. The pick now clears the
+  filter when it would hide the booking it is opening, and only then. Measured on
+  DEV: Allergy on (7 cards → 1), "Tracy" picked (no Allergy) → chip no longer
+  pressed, 7 cards.
+- **A filter change kept the selection on a card it hid.** A chip pressed with the
+  mouse or a finger already cleared the selection (the outside-card mousedown); one
+  pressed from the keyboard did not. `changeListTags` drops the selection when the
+  new filter hides it, the rule `toggleShowFinished` has for the fold. Read from the
+  code and held by a source test; not pressed with real keys.
+
+**Not changed, and why:**
+
+- **Delete customer removes the rules before the bookings write and does not check
+  that write.** A refused anonymise leaves the customer and no standing booking. The
+  order is deliberate (section 1: anonymised first, the generator could write one
+  more week), and closing it needs the rule removal in the bookings write's
+  `onLanded`, which then reopens that window. ROADMAP, Ideas.
+- **A filter whose only matches are completed or cancelled** shows no card until
+  "Completed & cancelled" is opened; its header and count are there. Patryk's to
+  choose whether the filter should open the fold.
+- **The "No bookings tagged…" line has no transition**, and can show beside the
+  empty-day prompt on a day of cancelled bookings only. Cosmetic; ROADMAP, Ideas.
+- **The day is filtered in App and in ListView.** Two calls of one function, pinned
+  together by a test; folding them means handing ListView App's list, which changes
+  what the memoised List re-renders on. Not in a ship run.
+- **`matchedTagLabels` runs for every booking on each keystroke** and again for the
+  30 shown. Not measured as slow; no change without a measurement.
+

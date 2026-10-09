@@ -206,7 +206,9 @@ describe("every single-booking write in App hands saveBookings the report", () =
   const calls = APP.match(/saveBookings\(/g) || [];
   const WITH = [
     ["the form's edit", "saveBookings(plan.next,false,{subject:editId,replayRefusal:plan.replayRefusal})"],
-    ["reassign", "},false,goneReport(id));\n    setError(\"\");"],
+    // v18.5.1 (#17): reassign hands over `planReassign`'s transform too, told
+    // apart by the error it clears on the next line.
+    ["reassign", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+setError\(""\);/],
     ["the timeline drop", "saveBookings(plan.transform,false,goneReport(id))"],
     // v18.5.0 (#17): the status tap and the cancel both hand over a plan's
     // transform, so each is told apart by the line beside the call.

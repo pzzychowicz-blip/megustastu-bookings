@@ -38,6 +38,8 @@ import { toMins, toTime, isLocked, statusOrder, lateMins, liveBarDur, stayedMins
 import { formatCode, normalizeCode, isUnsettled, money } from "../lib/vouchers";
 import { EmptyDay } from "./EmptyDay";
 import { noShowMap, identityKey, formatPhone, bookingTags } from "../lib/customers";
+import { filterByTags, dayTagChips, toggleTagId, tagNames, liveTagIds } from "../lib/tag-filter";
+import { TagChips } from "./TagChips";
 import { SBadge, SBADGE_W, TBadge, SizeRing, mkBtn, Collapsible, Reveal, useFlip, InlineAlert, ALERT_TONES, textWidth, reduceMotionOn, ModalPresence } from "./atoms";
 import { AssignIcon, NoShowIcon, StarIcon, StatusIcon, OverlapIcon, LockIcon, DepositIcon, ClashIcon, VoucherIcon, MoreIcon, IndoorIcon, OutdoorIcon } from "./Icons";
 import { QuickStatusPopup } from "./QuickStatusPopup";
@@ -174,6 +176,9 @@ function nameWidth(name) {
   if (!nameFamily) nameFamily = getComputedStyle(document.body).fontFamily;
   return textWidth(s, NAME_FONT.fontWeight, NAME_FONT.fontSize + "px", nameFamily) || NAME_COL;
 }
+// v18.5.1: the default `tagFilter`, one array for every render (a fresh `[]`
+// would defeat the memos keyed on it).
+const NO_TAGS = [];
 function nameColFor(bookings) {
   let w = 0;
   bookings.forEach((b) => { w = Math.max(w, nameWidth(b.name)); });
@@ -267,6 +272,10 @@ export const ListView = memo(function ListView({
   // v18.5.0: the tag list and App's guest-tag map (`guestTagMap`), both stable
   // objects. A card shows its guest's tags and its own occasion tags.
   tagList = null, guestTags = null,
+  // v18.5.1: the tag ids the List is narrowed to (any of them), and the setter.
+  // App's state, so it is kept from day to day; a stable array and a stable
+  // setter, per the React.memo rule.
+  tagFilter = NO_TAGS, onTagFilter = () => {},
   // v18.2.0 phase 69: {bookingId: [table ids the layout lacks]} — App's memo
   // over `unplacedItems`, the rule the Unplaced row and the strip read.
   missingTables = {},
@@ -294,7 +303,7 @@ export const ListView = memo(function ListView({
   // (ViewTools.jsx) — one home for all three views. List keeps no chrome of its
   // own again; the `searchBar` element and its two buttons are gone.
   // v18.3.2: memoised so the status-change detector below can key on it.
-  const day = useMemo(() => bookings
+  const dayAll = useMemo(() => bookings
     .filter((b) => b.date === date)
     .sort((a, b) => {
       const sa = statusOrder(a.status);
@@ -302,6 +311,13 @@ export const ListView = memo(function ListView({
       if (sa !== sb) return sa - sb;
       return a.time.localeCompare(b.time);
     }), [bookings, date]);
+  // v18.5.1: the day narrowed to the chosen tags (lib/tag-filter.js). With none
+  // chosen `day` IS `dayAll`, the same array. The chips are built from the whole
+  // day, so choosing one never removes another.
+  const day = useMemo(() => filterByTags(dayAll, guestTags, tagList, tagFilter), [dayAll, guestTags, tagList, tagFilter]);
+  const tagChips = useMemo(() => dayTagChips(dayAll, guestTags, tagList, tagFilter)
+    .map((c) => ({ id: c.id, label: c.count ? c.label + " " + c.count : c.label })), [dayAll, guestTags, tagList, tagFilter]);
+  const filtering = liveTagIds(tagList, tagFilter).length > 0;
 
   // statusOrder already sorts completed/cancelled last, so splitting here
   // preserves the exact visual order the inline list had.
@@ -309,7 +325,8 @@ export const ListView = memo(function ListView({
   const finished = day.filter((b) => b.status === "completed" || b.status === "cancelled");
   // v18.2.0 phase 18: one name column for the whole day — the finished cards
   // included, so opening "Completed & cancelled" never moves the cards above.
-  const nameCol = nameColFor(day);
+  // v18.5.1: measured on the WHOLE day, so a filter does not move the columns.
+  const nameCol = nameColFor(dayAll);
 
   // v15.8.0: detect status changes → stamp a wipe of the OLD colour; FLIP the
   // active list so a re-sorted card eases to its new position instead of jumping.
@@ -1073,6 +1090,21 @@ export const ListView = memo(function ListView({
           load-bearing — `Reveal` caches only TRUTHY children, and that cache is
           what it collapses on the way out. */}
       <Reveal show={isEmpty}>{isEmpty ? <EmptyDay closed={dayClosed} onNew={onNew} onWalkin={emptyWalkin} /> : null}</Reveal>
+      {/* v18.5.1: the day's tags as chips; a tap narrows the List to the bookings
+          with any chosen tag, both lists below. Only the tags somebody on the
+          day has (plus any still chosen), so a day with none has no row. In a
+          Reveal, as the prompt above: the row arrives and leaves with the first
+          and last tagged booking. `TagChips` is the form's chip, pressed = on. */}
+      <Reveal show={tagChips.length > 0}>{tagChips.length > 0 ? (
+        <div role="group" aria-label="Show only bookings tagged">
+          <TagChips tags={tagChips} on={tagFilter} onToggle={function (id) { onTagFilter(toggleTagId(tagFilter, id)); }} />
+        </div>
+      ) : null}</Reveal>
+      {filtering && !day.length ? (
+        <div style={{ fontSize: T.body, color: S.muted, textAlign: "center", padding: SP.base }}>
+          {"No bookings tagged " + tagNames(tagList, tagFilter) + " on this day."}
+        </div>
+      ) : null}
       {/* v17.12.0: a real list, so the cards are list items and the count is
           announced. Two lists rather than one, because the finished cards live
           inside the Collapsible and a `list` must contain its items directly.
