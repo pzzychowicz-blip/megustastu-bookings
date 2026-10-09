@@ -34415,3 +34415,35 @@ section 5. The nine largest functions with their commit counts are in the ROADMA
 entry, with how they were counted. Two readings, neither a decision: by churn the
 form's save is next (`doSaveEdit`: 30 lines, 31 commits, 7 of them fixes); by size the
 render is (1,471 lines, 29% of the file).
+
+### 7. The tablet checks v18.5.1 left open
+
+**Files:** none. Nothing was found wrong, so nothing was changed.
+
+Measured on the restaurant tablet (HONOR NDL-L09, Chrome 154, 998 × 507 CSS px at
+1.924 device px each), on a DEV tab over `adb reverse`, this branch's build, 10 Oct.
+
+- **The note corner on a tagged block.** 9 blocks: the one tagged booking, with nothing
+  in Notes, has it, the 8 others do not. The triangle is 13.51 CSS px a side, which is
+  26 device px (14px is not a whole number of device px there), at 0,0 of the block;
+  the pencil is 8px at 0.5,0.5. The name's box starts 11.5px down, and at its left edge
+  the triangle is 7.5px deep, so they are 4px apart.
+- **The List's chip row.** Two chips on one row, 78.1 and 96.1px wide, 28px tall, 4px
+  apart, 11px type, nothing clipped, no sideways overflow of the page. A touch on the
+  first chip turned it on (94.1px wide with its tick) and left one card; a second touch
+  turned it off. A day with enough tags to wrap the row was not on DEV.
+- **The second line of a Find a booking result.** "birthday": 2 rows, each 50.7px tall
+  against 40.1 for a row without the line ("sam", 6 rows; "elena", 8). The tag line is
+  11px type, 13px tall, directly under the name and flush with its left edge, not
+  clipped; the name column is 102px, the tag's own width. No row overflows and every
+  other cell stays centred on the row.
+
+**Seen, not changed.** With the on-screen keyboard up the tablet's viewport is 231px
+tall and the search card 207.7px, so one result row and the top of a second are
+visible; a tagged row's extra 10.6px is taken from that. This is the keyboard inset of
+v18.3.0 doing what it was built to do, on a landscape tablet.
+
+**A measurement trap met here:** the first reading said the tagged block had no corner.
+The selector asked for a computed `border-top-width` of exactly `14px`, and the tablet
+reports 13.5135px. Read from the inline style, the corner was there, and a screenshot
+showed it.
