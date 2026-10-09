@@ -33781,7 +33781,8 @@ the atom).
 
 **Date:** 2026-10-09 · **Branch:** `feat/v18.5.1-delete-undo-standing-rule-tags` ·
 **Behavioural change:** Delete customer also removes the customer's standing bookings
-(section 1). The header is extended as the version's other items land.
+(section 1); a tagged booking shows the timeline block's note corner (section 2). The
+header is extended as the version's other items land.
 **Rules change: none.** **Deploy steps: none beyond the merge.**
 
 One version with a section per item (Patryk, 2026-10-09), one commit each.
@@ -33828,4 +33829,21 @@ rule and is older than this change.
 
 **The activity log** holds no rule's name: its entry for a standing-booking write is a
 count ("removed from the standing bookings · 21 → 20", `settingsWriteEntry`).
+
+### 2. A tagged booking shows the note corner
+
+**Files:** `src/components/TimelineView.jsx` (`TimelineBlock`), `tests/guest-tags.test.js`,
+`GLOSSARY.md` (a row for the **note corner**, which had none).
+
+Patryk, 2026-10-09: "if a tag is active for a booking the note flag must be visible as
+well". The app has one note flag, the white folded corner at the top left of a timeline
+block (v15.8.2), drawn when `b.notes` is not empty. It is now drawn for a note or a tag:
+`hasNote` also reads `tags`, the tag line the block already has for its title, so the
+guest's tags and the occasion's both count and no new prop is passed. The printed
+timeline has no note mark and is unchanged.
+
+**On DEV** (10 Oct, 9 blocks): the one tagged booking, with nothing in Notes
+("Birthday, Anniversary"), has the corner; the 8 with no tag and no note do not.
+**Not checked:** the tablet, and a booking with a note and no tag (that half of the
+condition is the line as it was).
 

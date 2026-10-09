@@ -828,3 +828,17 @@ describe("a generated run of saves, deletes and erasures, on clocks that disagre
     expect(runAll(broken, SEEDS, STEPS).bad).toMatch(/shows \[/);
   });
 });
+
+// v18.5.1 (Patryk): a tagged booking shows the timeline block's note corner
+// even with nothing in Notes. Read from the source: there is no DOM here.
+describe("the timeline block's note corner", () => {
+  const TL = stripComments(readFileSync(new URL("../src/components/TimelineView.jsx", import.meta.url), "utf8")).join("\n");
+  it("is drawn for a note OR a tag", () => {
+    expect(TL).toContain("const hasNote = !!((b.notes && b.notes.trim()) || tags);");
+    expect(TL).toMatch(/\{hasNote \? \(/);
+  });
+  it("is handed the same tag line the block's title shows", () => {
+    expect(TL.match(/tags=\{tagLine\(bookingTags\(b, guestTags, tagList\)\)\}/g).length).toBe(2);
+  });
+});
+
