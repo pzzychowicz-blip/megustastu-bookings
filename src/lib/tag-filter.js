@@ -82,3 +82,26 @@ export function tagNames(list, chosen) {
   if (names.length < 2) return names.join("");
   return names.slice(0, -1).join(", ") + " or " + names[names.length - 1];
 }
+
+// ── Settings → Customers ──
+// A CUSTOMER has guest tags only (an occasion belongs to one booking), read
+// from the same map by the index's key. `guestTagChoices` is the chips to
+// offer: the list's guest tags that at least one customer has, in the list's
+// order, so there is no chip that would show an empty list.
+export function customerTagIds(c, map, list) {
+  return tagsOf(list, "guest", (c && map && map[c.key]) || []).map(function (t) { return t.id; });
+}
+
+export function guestTagChoices(customers, map, list) {
+  const any = Object.create(null);
+  (customers || []).forEach(function (c) {
+    customerTagIds(c, map, list).forEach(function (id) { any[id] = true; });
+  });
+  return ((list && list.guest) || []).filter(function (t) { return any[t.id]; })
+    .map(function (t) { return { id: t.id, label: t.label }; });
+}
+
+export function customersWithTag(customers, map, list, id) {
+  return (customers || []).filter(function (c) { return customerTagIds(c, map, list).indexOf(id) >= 0; });
+}
+

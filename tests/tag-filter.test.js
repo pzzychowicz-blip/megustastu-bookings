@@ -1,7 +1,8 @@
 // tests/tag-filter.test.js — v18.5.1: filter and search by tag.
 import { describe, it, expect } from "vitest";
-import { bookingTagIds, liveTagIds, filterByTags, dayTagChips, toggleTagId, tagNames } from "../src/lib/tag-filter.js";
-import { guestTagMap } from "../src/lib/customers.js";
+import { bookingTagIds, liveTagIds, filterByTags, dayTagChips, toggleTagId, tagNames,
+  customerTagIds, guestTagChoices, customersWithTag } from "../src/lib/tag-filter.js";
+import { guestTagMap, customerIndex } from "../src/lib/customers.js";
 import { readFileSync } from "node:fs";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
@@ -129,6 +130,35 @@ describe("the List is wired to it", () => {
     expect(APP.indexOf("const guestTags=useMemo(")).toBeGreaterThan(-1);
     expect(APP.indexOf("const guestTags=useMemo(")).toBeLessThan(APP.indexOf("const listDaySorted=useMemo("));
     expect(APP.indexOf("const { tagList,")).toBeLessThan(APP.indexOf("const listDaySorted=useMemo("));
+  });
+});
+
+// Settings → Customers: a customer has guest tags only, read by the index's key.
+describe("the Customers tab's tag chips", () => {
+  const idx = customerIndex(all);
+  const customers = Object.keys(idx).map((k) => idx[k]);
+  const ana = customers.find((c) => c.name === a1.name && c.bookings.some((b) => b.id === "a1"));
+  it("a customer's tags come from the same map as a booking's", () => {
+    expect(customerTagIds(ana, map, LIST)).toEqual(["g-allergy"]);
+    expect(customerTagIds(ana, null, LIST)).toEqual([]);
+    expect(customerTagIds(ana, { [ana.key]: ["gone", "g-allergy"] }, LIST)).toEqual(["g-allergy"]);
+  });
+  it("offers the guest tags somebody has, in the list's order, and never an occasion tag", () => {
+    expect(guestTagChoices(customers, map, LIST)).toEqual([{ id: "g-allergy", label: "Allergy" }]);
+    const both = Object.assign({}, map, { [customers.find((c) => c !== ana).key]: ["g-vegan", "o-birthday"] });
+    expect(guestTagChoices(customers, both, LIST).map((t) => t.id)).toEqual(["g-allergy", "g-vegan"]);
+    expect(guestTagChoices([], map, LIST)).toEqual([]);
+  });
+  it("narrows to the customers with the tag", () => {
+    expect(customersWithTag(customers, map, LIST, "g-allergy")).toEqual([ana]);
+    expect(customersWithTag(customers, map, LIST, "g-vegan")).toEqual([]);
+  });
+  it("the tab falls back to All when the chosen tag is gone, and offers no chip nobody has", () => {
+    const C = read("components/CustomersSettings.jsx");
+    expect(C).toContain("const tagChoices = guestTagChoices(all, guestTags, tagList);");
+    expect(C).toContain("const tagOn = tagId && tagChoices.some(function (t) { return t.id === tagId; }) ? tagId : null;");
+    expect(C).toContain("? customersWithTag(all, guestTags, tagList, tagOn).sort(byVisits)");
+    expect(C).toContain('{tagChoices.map(function (t) { return filterChip("tag:" + t.id, t.label); })}');
   });
 });
 

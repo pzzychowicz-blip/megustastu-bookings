@@ -34062,3 +34062,25 @@ back. No console error. **Not checked:** the tablet's width, the fold of a card
 leaving under the filter (it is `useRevealRows`' existing fold), ↑/↓ under a filter
 with real keys.
 
+#### 8b. Settings → Customers
+
+**Files:** `src/lib/tag-filter.js` (`customerTagIds`, `guestTagChoices`,
+`customersWithTag`), `src/components/CustomersSettings.jsx`,
+`tests/tag-filter.test.js` (+4, 22), `GLOSSARY.md`.
+
+The guest tags join All / Regulars / No-shows as chips of the same kind: one at a
+time, as those three are, and overridden by a typed search as they are. Only a guest
+tag somebody has gets a chip, so no chip leads to an empty list, and occasion tags
+are not offered (an occasion belongs to a booking, not to a customer). A chosen tag
+whose last customer loses it, or that leaves the list, falls back to All. The list
+under a tag is sorted by visits, as All is, and capped at 50 as every list here is.
+No count on the chip: Regulars and No-shows have none either.
+
+**On DEV** (two guest tags in use): chips "All · Regulars · No-shows · Allergy ·
+Gluten-free"; All 50 rows (the cap); Allergy → 1 row, its chip the accent one;
+Gluten-free → 1 row (a different customer); No-shows → 5; All → 50.
+**A measurement trap met here:** read through `getComputedStyle` the chosen chip
+looked unchanged, because the Browser pane was hidden and the colour transition had
+not advanced; the inline `background` was right (`var(--accent)`). **Not checked:**
+the fall-back to All on DEV (read from the code and held by a source test).
+
