@@ -33988,3 +33988,30 @@ say about a line it did not touch). `againDraft` reads the clock itself when it 
 handed no `now`, which is where the old function read it, and a test runs that path
 with an expired voucher.
 
+### 7. The doc-load split's two loose ends
+
+**Files:** `CLAUDE.md` (39,078 → 36,427 characters), `ROADMAP.md` (the entry deleted).
+No code.
+
+The 2026-09-18 `/code-review` left two scope calls, and Patryk decided both on
+2026-10-08 (trim root's restatements to pointers, showing before and after first; the
+write guards' mechanics stay in `src/CLAUDE.md`). The first is done here, after he saw
+the three new passages (2026-10-09):
+
+| Passage in root | Before (characters) | After | The full text is in |
+|---|---|---|---|
+| The `api/` block in File structure | 812 | 381 | `api/CLAUDE.md` (the wholesale deploy, firebase-admin) |
+| The offline shell | 1,042 | 375 | the `mgt-service-worker` skill (the four properties, by number) |
+| The five write guards | 2,106 | 553 | `src/CLAUDE.md`, "The five write guards" |
+
+Each pointer keeps what a session must know without opening the other file: that every
+gate in `api/` is a runtime one and firebase-admin bypasses the rules; that a shipped
+worker cannot be withdrawn; and the five guards by name, with the three sentences that
+are rules rather than mechanics (no root `.write`, a refused write is never shown as
+saved, no whole-node `bookings` write). Checked before the trim that each removed
+detail is in the file pointed at: `grep` finds `skipWaiting`, `respondWith`,
+`bookingsReady` and `?sw=off` in the skill, "WHOLESALE" in `api/CLAUDE.md`, and
+`STALE_GAP_MS`, `baseUpdatedAt`, `pendingRetriesRef` and `bookingsRef` in
+`src/CLAUDE.md`'s section. The second loose end is the decision itself and needs no
+change. Root now has 3,573 characters of room under `tests/doc-size.test.js`' 40,000.
+

@@ -153,19 +153,7 @@ evidence for each.
 
 ## Designed, not implemented
 
-- **The doc-load split has two loose ends, both scope calls rather than defects**
-  (`/code-review`, 2026-09-18, measured). (1) Root restates part of what it relocated,
-  word for word: the five-guard summary against `src/CLAUDE.md`, the service-worker
-  summary against its skill, the `api/` pointer against `api/CLAUDE.md`. Two copies
-  with nothing keeping them in step. The node inventory at 0% is what a pointer should
-  look like. (2) The write guards' mechanics sit in `src/CLAUDE.md`, which every src
-  session loads, where 47% of them never open `src/hooks/`. The third, the root
-  file's size, closed in v18.5.0: four passages moved out (43,967 → 38,945
-  characters) and `tests/doc-size.test.js` fails it above 40,000. It left 1,055
-  characters of room, and the file had grown about 3,800 in the two and a half weeks
-  before, so the next move is likely to be needed soon: the two database-rules
-  gotchas and the three compare-and-swap exemption bullets are the next candidates
-  (about 2,500).
+Nothing at present.
 
 ## Ideas
 
