@@ -213,7 +213,7 @@ describe("every single-booking write in App hands saveBookings the report", () =
     // v18.5.0 (#17): the status tap and the cancel both hand over a plan's
     // transform, so each is told apart by the line beside the call.
     ["a status change", /saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+if\(ok&&plan\.flashes\)/],
-    ["the voucher carry", "},false,goneReport(c.to));"],
+    ["the voucher carry", "saveBookings(carryTransform(c,getUser(),histEntry),false,goneReport(c.to));"],
     ["cancel and no-show", /const post=plan\.transform\(bookings\);\s+const ok=saveBookings\(plan\.transform,false,goneReport\(id\)\);\s+wa\.autoHandleCancelIntent/],
     ["manual assign", "saveBookings(plan.transform,false,goneReport(bookingId))"],
   ];

@@ -132,9 +132,10 @@ evidence for each.
   `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines), and delete and
   undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines) with
   Book Again's draft (`againDraft`, `lib/booking-save.js`) and the Overlap banner's
-  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines). Still in App of the five
-  measured 2026-10-08: `settleVoucher` (58 lines, 7 commits) with the voucher carry. Its
-  ordering is tied to `doSave` and `saveGuardRef`, so it wants a version of its own.
+  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines), and in v18.6.0 the redeem
+  prompt's answer and the voucher carry (`planSettle`, `settleEffects`, `carryOffer`,
+  `carryTransform`, `lib/voucher-settle.js`; 4,987 lines after a version that also added
+  to App). That was the last of the five measured 2026-10-08.
   Re-measure what is largest in App before choosing after it.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,

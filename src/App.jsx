@@ -81,6 +81,7 @@ import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
 import { dueOccurrences, withOccurrences } from "./lib/recurring";
 import { planDelete, planUndo, planCustomerDelete } from "./lib/delete-undo";
+import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
 import { filterByTags, onlyFinishedMatch } from "./lib/tag-filter";
@@ -89,7 +90,7 @@ import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
 import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
+import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -351,7 +352,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActiv
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachedElsewhere, carryTarget, voucherDue, voucherReturnDue } from "./lib/vouchers";
+import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, voucherDue, voucherReturnDue } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -3302,6 +3303,9 @@ function BookingApp({uid}){
   //
   // So the order is chosen by which failure lands in a state the app can
   // report, not by which is tidier.
+  // v18.6.0 (#17): WHAT the answer decides is lib/voucher-settle.js
+  // (`planSettle`, `settleEffects`; the carry is `carryOffer` and
+  // `carryTransform`). The order above stays here, with the gates and the writes.
   function settleVoucher(amount){
     const ask=voucherAsk;
     if(!ask) return;
@@ -3313,23 +3317,10 @@ function BookingApp({uid}){
     // Escape was the only exit and it abandoned the status change silently.
     setVoucherAsk(null);
     if(refused("voucherRedeem")) return;
-    // v18.2.0 phase 48: a SETTLE is the missing ledger entry of a booking that
-    // is ALREADY completed, so there is no booking write to go first — the
-    // order below exists for a completion, and here the voucher is the only
-    // write. (Going through updateStatus would have logged a second "status →
-    // completed" for a status that did not change.)
-    // v18.2.0 /code-review: …which means nothing here re-checks that the visit
-    // IS still completed, and the prompt stays open whatever the booking's
-    // status (it mounts on the voucher alone). Walked back out of Completed on
-    // another device meanwhile, a redeem would leave a ledger entry against a
-    // booking that is not completed — the state the ordering note above says
-    // nothing in the app looks for. So a settle asks first, and refuses.
-    if(ask.from==="settle"){
-      const cur=bookings.find(function(x){return x.id===ask.id;});
-      if(!cur||cur.status!=="completed"){flashRefusal("That booking is no longer completed — nothing was recorded against its voucher.");return;}
-    }
-    const ok=ask.from==="settle"?true:withRedeemAsked(function(){
-      if(ask.from!=="form") return updateStatus(ask.id,ask.status);
+    const plan=planSettle({ask:ask,bookings:bookings});
+    if(plan.refuse){flashRefusal(plan.refuse);return;}
+    const ok=plan.route==="settle"?true:withRedeemAsked(function(){
+      if(plan.route!=="form") return updateStatus(ask.id,ask.status);
       // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
       // NOTHING — so the form path redeemed the voucher whether or not the
       // booking saved, which is precisely the voucher-first failure the comment
@@ -3348,70 +3339,18 @@ function BookingApp({uid}){
       doSave();
       return !mayDispatch(saveGuardRef.current);
     });
+    // A refused completion has nothing to redeem and nothing to carry from.
     if(!ok) return;
-    const b=bookings.find(function(x){return x.id===ask.id;});
-    const code=b?normalizeCode(b.voucherCode):"";
-    if(code&&amount) redeemVoucher(code,ask.id,amount);
-    // v18.0.0 session 8 (item 7): and THEN ask whether the rest should follow
-    // the guest. After the booking write and after the money, so the offer is
-    // made about a visit that is actually finished — and on BOTH answers, since
-    // "Complete without using it" leaves the whole balance behind, which is the
-    // case where carrying it matters most. `!ok` still returns above: a refused
-    // completion has nothing to carry from.
-    if(code&&b) offerVoucherCarry(b,code,amount);
+    const after=settleEffects({ask:ask,amount:amount,bookings:bookings,vouchersByCode:vouchersByCode});
+    if(after.redeem) redeemVoucher(after.code,ask.id,amount);
+    if(after.carry) setVoucherCarry(after.carry);
   }
-  // The offer, and the one number it has to get right. `vouchersByCode` here is
-  // still the version from BEFORE the redemption dispatched a moment ago, so the
-  // balance is computed by subtracting what was just taken rather than read back
-  // — reading it back would offer the guest money that has already been spent.
-  function offerVoucherCarry(b,code,justRedeemed){
-    const v=vouchersByCode[code];
-    if(!v) return;
-    const left=Math.max(0,remainingOf(v)-(Number(justRedeemed)||0));
-    if(left<=0) return;
-    if(!hasRealPhone(b.phone)&&!b.guestId) return;   // no identity, nothing to follow
-    const ident={phone:b.phone,guestId:b.guestId};
-    const mine=bookings.filter(function(x){return matchesIdentity(x,ident);});
-    const to=carryTarget(mine,code,vouchersByCode,bookings,Date.now(),b);
-    if(!to) return;
-    setVoucherCarry({code:code,amount:left,to:to.id,name:to.name||"",date:to.date,time:to.scheduledTime||to.time,from:b.date});
-  }
-  // Move — a function-form save, so it takes the retry path like every other
-  // user write. The re-check inside the updater is not ceremony: the prompt can
-  // sit on screen while another device attaches something to that booking, and
-  // overwriting a voucher somebody else chose is the one outcome this must not
-  // produce.
   function doVoucherCarry(){
     const c=voucherCarry;
     if(!c) return;
     setVoucherCarry(null);
     if(refused("bookingEdit")) return;
-    const user=getUser();
-    // v18.2.0 (the design critique, C1): the history entry stores the ISO day,
-    // as every other history text does ("date 2026-09-24→…"), and the screen
-    // writes it the house way (`formatDaysIn`, HistoryPopup and the Activity
-    // log). It stored its own "24/09", which nothing could re-write.
-    const fromLabel=c.from||"";
-    const ok=saveBookings(function(prev){
-      // v18.0.0 session 10 (/code-review): the OTHER half of the same race.
-      // The line below guards the target booking against having acquired a
-      // voucher of its own; this guards the VOUCHER against having been
-      // attached to somebody else while the prompt sat open. `carryTarget`
-      // asks `attachedElsewhere` when the offer is MADE, and this path is
-      // the one way an attachment reaches a booking without going through
-      // the picker — so without it, "Move it" is the only door in the app
-      // that can put one voucher on two live bookings, which is precisely
-      // the state that predicate exists to prevent. Asked against `prev`,
-      // which is the list the write actually lands on.
-      if(attachedElsewhere(prev,c.code,c.to)) return prev;
-      return prev.map(function(b){
-        if(b.id!==c.to||normalizeCode(b.voucherCode)) return b;
-        return Object.assign({},b,{
-          voucherCode:c.code,
-          history:(b.history||[]).concat([histEntry("voucher "+formatCode(c.code)+" attached (carried from the "+fromLabel+" visit)",user)])
-        });
-      });
-    },false,goneReport(c.to));
+    const ok=saveBookings(carryTransform(c,getUser(),histEntry),false,goneReport(c.to));
     if(ok) flash("saved");
   }
   // settleVoucherBack(restore) — the mirror of settleVoucher, and it keeps that

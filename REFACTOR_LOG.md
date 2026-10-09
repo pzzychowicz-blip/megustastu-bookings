@@ -34180,7 +34180,7 @@ opens "Completed & cancelled" (section 1); the "No bookings tagged…" line fold
 out and no longer shows on an empty day (section 2); Delete customer pauses the
 standing bookings and erases only once the anonymise has landed (section 3); a device
 on an older build than the database refuses to save and shows "This device needs
-refreshing" (section 4). The header is extended as the version's
+refreshing" (section 4). None in section 5 (an extraction). The header is extended as the version's
 other items land.
 **Rules change: YES** (section 4): `schema` + `schemaRev`, the eighteenth rev pair.
 **Deploy steps (Patryk):** (1) deploy `database.rules.json` to DEV and to PROD, BEFORE
@@ -34361,3 +34361,47 @@ the tablet or a phone.
 **What it does not do:** protect against builds before v18.6.0, which do not read the
 number. **And what it costs:** a rollback of a build that announced N locks the N−1
 builds out until `/schema` is lowered in the Firebase console.
+
+### 5. The redeem prompt's answer and the voucher carry out of BookingApp (#17)
+
+**Files:** new `src/lib/voucher-settle.js` (`planSettle`, `settleEffects`, `carryOffer`,
+`carryTransform`); `src/App.jsx` (`settleVoucher` and `doVoucherCarry` rewritten,
+`offerVoucherCarry` gone; 5,048 → 4,987 lines); `tests/voucher-settle.test.js` (+4, two
+rewritten), `tests/vouchers.test.js` (two source pins moved to the lib).
+**Behavioural change: none.**
+
+**Bundled against the advice given** (Patryk's choice, 2026-10-09). The ROADMAP said it
+wanted a version of its own, and this version already changes the save path twice
+(sections 3 and 4), so a regression in it is harder to attribute. It is its own commit.
+
+**What moved, and what did not.** The decisions moved: whether a settle is refused,
+which booking write goes first, what to redeem, whether to offer the carry and with
+what amount, and the Move write's transform. **The order did not move**, and it is the
+design: App still dismisses the prompt, asks the capability, asks the plan, runs the
+booking write inside `withRedeemAsked` (`updateStatus`, or `doSave` read through
+`saveGuardRef`), and only then redeems and offers. `doSave` is untouched.
+
+**One difference from verbatim, and why.** The first cut passed `now: Date.now()` from
+App, and lint went from 63 warnings to 64: the React Compiler's `purity` rule read the
+call as made during render. `carryOffer` reads the clock itself unless a test passes
+one, as `offerVoucherCarry` did.
+
+**Held to the code it replaced.** `tests/voucher-settle.test.js` carries v18.5.1's three
+handlers with their effects turned into return values, and a seeded generator:
+- `planSettle` + `settleEffects`: 20,000 cases, equal on every one (over 500 refusals,
+  over 1,000 redeems and over 100 carry offers among them, asserted, so the agreement is
+  not over one branch);
+- `carryOffer`: 20,000 cases;
+- `carryTransform`: 20,000 cases, the same list and the SAME array when it bails.
+A source test holds App's order.
+
+**On DEV:**
+- a confirmed booking with voucher 5C7Z-WJ3P (67.7 € left) → Completed → the prompt →
+  20 → Redeem & complete: status `completed`, 47.7 € left, a redemption of 20 under the
+  booking's id; no carry prompt (the guest has no other booking);
+- "QA Carry guest" with T5KB-HXR3 (12 € left) → 5 → Redeem & complete: 7 € left, and
+  the carry prompt "7 € is left… Move it to Standing Probe on Fri 25.09 at 19:30?" →
+  Move it: that booking carries the code, with the history entry "voucher T5KB-HXR3
+  attached (carried from the 2026-09-15 visit)".
+**Not run on DEV:** a settle from the strip's "Voucher not recorded" row, its refusal,
+and the form route. The generated cases and the source test hold them.
