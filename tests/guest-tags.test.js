@@ -39,7 +39,7 @@ import {
   anonymizeBooking, matchesIdentity, normalizePhone, customerIndex,
   bookingTags, tagLine, setCustomerTags, customerTagTap, GUEST_TAGS_UPDATED,
 } from "../src/lib/customers.js";
-import { cleanTagIds, cleanTagEdits, editTagIds, toggleTagEdit, DEFAULT_TAG_LIST } from "../src/lib/tags.js";
+import { cleanTagIds, cleanTagEdits, editTagIds, toggleTagEdit, addTag, DEFAULT_TAG_LIST } from "../src/lib/tags.js";
 import { EMPTY_FORM } from "../src/lib/constants.js";
 import { addDays, todayStr } from "../src/lib/day.js";
 
@@ -516,6 +516,12 @@ describe("what a screen shows for a booking: bookingTags and tagLine", () => {
     expect(timeline).toContain('(tags ? ", tagged " + tags.replace(" · ", ", ") : "")');
     expect(timeline).toContain("title={leaving || !tags ? undefined : tags}");
     expect(src("SeatNoteModal.jsx")).toContain("(note.guestTags || []).concat(note.occasionTags || [])");
+    // That is two kinds in one row, and a name is unique within one kind only
+    // (a guest tag "Birthday" beside the occasion "Birthday" is a legal list),
+    // so the read-only row keys a chip by its place as well as its name.
+    expect(addTag(LIST, "guest", "Birthday", "g-bday").list.guest.map((t) => t.label)).toContain("Birthday");
+    expect(src("TagChips.jsx")).toContain('key={i + ":" + l}');
+    expect(src("TagChips.jsx")).not.toContain("key={l}");
     // The form shows the taps applied to whoever the draft names now.
     const form = src("BookingFormModal.jsx");
     expect(form).toContain("guestTagBase(bookings,editId,{phone:tagPhone,guestId:tagGuestId,guestSeed:form.guestSeed})");

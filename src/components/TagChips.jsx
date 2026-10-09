@@ -78,11 +78,15 @@ export function TagChips({ tags, on, onToggle, disabled = false }) {
 
 // `labels`: the tag names to show, in the tag list's order. Nothing is rendered
 // for none, so a caller can put it in a row without asking first.
+//
+// The key carries the position: a name is unique within its own kind only, and
+// the seat note hands over a guest's tags and the visit's in one list, so a
+// guest tag and an occasion tag both called "Birthday" would share a key.
 export function TagRow({ labels, style }) {
   if (!labels || !labels.length) return null;
   return (
     <div style={{ ...ROW, ...(style || {}) }}>
-      {labels.map(function (l) { return <OutlineChip key={l} size="small" style={CHIP}>{l}</OutlineChip>; })}
+      {labels.map(function (l, i) { return <OutlineChip key={i + ":" + l} size="small" style={CHIP}>{l}</OutlineChip>; })}
     </div>
   );
 }
