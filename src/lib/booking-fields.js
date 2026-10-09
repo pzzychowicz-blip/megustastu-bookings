@@ -301,7 +301,7 @@ export const BOOKING_FIELDS = [
   // statement, which is nearly all of them: a tag change writes ONE booking.
   //
   // The form does not edit the set. It holds what was tapped (`guestTagEdits`,
-  // lib/tags.js says why), and `settleGuestTags` turns that into this booking's
+  // lib/tags.js says why), and `saveGuestTags` turns that into this booking's
   // statement at Save, only when it changes what the guest has. So the draft
   // opens with no edits whatever the booking holds.
   //
