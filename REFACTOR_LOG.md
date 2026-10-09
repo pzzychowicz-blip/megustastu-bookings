@@ -33676,7 +33676,7 @@ taken out of the atom (1 of 23), the two colours taken out (1 of 23).
 ### `/bookings`, measured (ROADMAP #3)
 
 No code. The roadmap entry asked for two things: read the console's usage, then set
-a threshold. The first is done; the second is Patryk's and is not chosen yet.
+a threshold. Both are done: the readings below, and Patryk's threshold at the end.
 
 **The console (Patryk's three screenshots, 2026-10-09: Realtime Database → Usage,
 "Billable metrics", 10 Sept to 9 Oct).**
@@ -33693,14 +33693,17 @@ The two "about" storage and largest-day figures are read off the graphs' axes, n
 printed by the console. The free plan's limits are from firebase.google.com/pricing,
 fetched 2026-10-09.
 
-**Which project.** The screenshots do not show its name. DEV was measured the same
+**Which project: PROD** (Patryk, 2026-10-09, asked after the first write-up of this
+section). What follows is how it read before he said so, kept because the
+comparison is the only size DEV has been given. The screenshots do not show the
+project's name. DEV was measured the same
 day, read through the app's own SDK on localhost: the whole database is 821,828
 bytes as JSON (0.78 MB), about half the console's 1.48 MB. PROD held about 1,600
 bookings on 2026-10-06; at DEV's 679 bytes a booking that is about 1.09 MB before
 its activity log. A connection on every one of the thirty days also fits a tablet
-that is always on. So the readings fit PROD and do not fit DEV, and that is an
-inference until he says so. (If the console counts storage differently from a JSON
-export, the comparison is weaker than it looks; that was not checked.)
+that is always on. So the readings fit PROD and do not fit DEV, which is what he
+confirmed. (If the console counts storage differently from a JSON export, the
+comparison is weaker than it looks; that was not checked.)
 
 **DEV, node by node** (bytes as JSON): `bookings` 536,781 for 790 bookings, so 679
 each, and 223,636 of it (42%) is `history`; `activity` 223,071 for 1,057 entries,
@@ -33719,13 +33722,15 @@ it 3.2 ms per 1,000 bookings on every snapshot (measured in v18.3.5), 8 ms at ab
 2,900, and PROD is at about 1,600. How fast PROD adds bookings was not measured
 here, so no date is put on that.
 
-**One caution about the largest day.** 8 and 9 October are also the days this
-version's DEV verification reloaded the app many times. If the screenshots are
-PROD's, those reloads are not in them and the 80 MB is the restaurant's own; if
-they are DEV's, it is mostly this session. That is the second reason the project
-needs confirming.
+**The largest day is the restaurant's own.** 8 and 9 October are also the days this
+version's DEV verification reloaded the app many times, but those reloads are DEV's
+and the screenshots are PROD's. About 80 MB is some 55 whole-database loads in a
+day, against the period's average of 15. What made those two days heavy was not
+looked into; one day at 22% of the daily allowance is not near a limit.
 
-**Proposed, for Patryk to choose:** design the archive when the load banner reads
-2,500 bookings (it prints the count on every connect, so no console is needed), or
-when a month's downloads pass 2.5 GB, whichever comes first.
+**The threshold (Patryk, 2026-10-09),** chosen over watching downloads alone and
+over designing the archive now: start the archive's design when the load banner
+reads 2,500 bookings (it prints the count on every connect, so no console is
+needed), or when a month's downloads pass 2.5 GB, whichever comes first.
+`ROADMAP.md` #3 carries it. Still not read: the peak-load graph.
 
