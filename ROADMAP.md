@@ -84,13 +84,24 @@ evidence for each.
   Vercel Cron, N, and where the private key lives. Rehearse a restore on DEV first
   (`database.rules.README.md` § Backups and restore).
 
-- **Measure `/bookings` before its size becomes a problem (#3).** Every device
+- **`/bookings` is measured; the threshold is not chosen yet (#3).** Every device
   subscribes to every booking ever made, each with an uncapped `history`, and a resync
-  re-reads the lot. Nothing purges old bookings. First, read Firebase console →
-  Realtime Database → Usage (storage, downloads a month) and set a threshold.
-  Archiving needs design, because customer history derives from all bookings. One
-  figure from v18.3.5: `sanitize` alone costs the tablet 3.2 ms per 1,000 bookings on
-  every snapshot, so it passes 8 ms at about 2,900 (PROD held about 1,600 on 2026-10-06).
+  re-reads the lot. Nothing purges old bookings. Archiving needs design, because
+  customer history derives from all bookings.
+  **Read on 2026-10-09** (Patryk's console screenshots, Usage, 10 Sept to 9 Oct; they
+  do not name the project, and the figures fit PROD, not DEV: `REFACTOR_LOG.md`
+  v18.5.0 has why): storage **1.48 MB** (about 0.93 MB thirty days earlier, so about
+  18 kB a day), downloads **549.63 MB** in the thirty days (largest day about 80 MB),
+  connections **4** at most. Against the free plan (1 GB, 10 GB a month, 100): 0.15%,
+  5.5%, 4%. The downloads are about 15 whole-database loads a day, so they reach
+  10 GB a month when the database is about 22 MB, which is about three years off at
+  this rate. **The tablet arrives first:** `sanitize` costs it 3.2 ms per 1,000
+  bookings on every snapshot (v18.3.5), so 8 ms at about 2,900, and PROD held about
+  1,600 on 2026-10-06. On DEV a booking is 679 bytes, 42% of it `history`.
+  **Still owed:** Patryk confirming the project, the peak-load graph (not in the
+  screenshots), and his choice of threshold. Proposed: design the archive when the
+  load banner reads 2,500 bookings, or a month's downloads pass 2.5 GB, whichever is
+  first.
 
 - **Before WhatsApp goes live (#8):** load a conversation's messages when it opens
   (`messages/$phoneKey`) instead of every device subscribing to all of `/messages`, and

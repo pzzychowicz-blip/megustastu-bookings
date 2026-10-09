@@ -33602,3 +33602,59 @@ removed (735.5 ↔ 746.5), because the words under the phone number mount above
 them. That is a control moving under the finger that tapped it, the layout twin
 `src/CLAUDE.md` records for an armed confirm.
 
+### `/bookings`, measured (ROADMAP #3)
+
+No code. The roadmap entry asked for two things: read the console's usage, then set
+a threshold. The first is done; the second is Patryk's and is not chosen yet.
+
+**The console (Patryk's three screenshots, 2026-10-09: Realtime Database → Usage,
+"Billable metrics", 10 Sept to 9 Oct).**
+
+| Metric | Reading | Free plan | Share |
+|---|---|---|---|
+| Connections, peak | 4 (1 to 4 a day, never 0) | 100 | 4% |
+| Storage, now | 1.48 MB (about 0.93 MB on 10 Sept) | 1 GB | 0.15% |
+| Downloads, the 30 days | 549.63 MB (most days 5 to 35 MB) | 10 GB a month | 5.5% |
+| Downloads, largest day | about 80 MB (8 and 9 Oct) | 360 MB a day | 22% |
+| Load, peak | not in the screenshots | | |
+
+The two "about" storage and largest-day figures are read off the graphs' axes, not
+printed by the console. The free plan's limits are from firebase.google.com/pricing,
+fetched 2026-10-09.
+
+**Which project.** The screenshots do not show its name. DEV was measured the same
+day, read through the app's own SDK on localhost: the whole database is 821,828
+bytes as JSON (0.78 MB), about half the console's 1.48 MB. PROD held about 1,600
+bookings on 2026-10-06; at DEV's 679 bytes a booking that is about 1.09 MB before
+its activity log. A connection on every one of the thirty days also fits a tablet
+that is always on. So the readings fit PROD and do not fit DEV, and that is an
+inference until he says so. (If the console counts storage differently from a JSON
+export, the comparison is weaker than it looks; that was not checked.)
+
+**DEV, node by node** (bytes as JSON): `bookings` 536,781 for 790 bookings, so 679
+each, and 223,636 of it (42%) is `history`; `activity` 223,071 for 1,057 entries,
+211 each; `messages` 25,716; `conversations` 12,163; `settings` 7,337; `vouchers`
+7,126; everything else under 4,000 each. Bookings and the activity log are 92% of
+the database.
+
+**What the figures say.** Storage grew about 0.55 MB in thirty days, about 18 kB a
+day. Downloads over storage (549.63 MB against a database that averaged about
+1.2 MB) is about 460 whole-database loads in the period, 15 a day: every app open
+and every resync re-reads everything. If the loads a day stay where they are,
+downloads reach 10 GB a month when the database is about 22 MB, which at 0.55 MB a
+month is about three years away. Storage and connections are further off still.
+**The limit that arrives first is the tablet's, not Firebase's:** `sanitize` costs
+it 3.2 ms per 1,000 bookings on every snapshot (measured in v18.3.5), 8 ms at about
+2,900, and PROD is at about 1,600. How fast PROD adds bookings was not measured
+here, so no date is put on that.
+
+**One caution about the largest day.** 8 and 9 October are also the days this
+version's DEV verification reloaded the app many times. If the screenshots are
+PROD's, those reloads are not in them and the 80 MB is the restaurant's own; if
+they are DEV's, it is mostly this session. That is the second reason the project
+needs confirming.
+
+**Proposed, for Patryk to choose:** design the archive when the load banner reads
+2,500 bookings (it prints the count on every connect, so no console is needed), or
+when a month's downloads pass 2.5 GB, whichever comes first.
+
