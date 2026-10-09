@@ -136,7 +136,19 @@ evidence for each.
   prompt's answer and the voucher carry (`planSettle`, `settleEffects`, `carryOffer`,
   `carryTransform`, `lib/voucher-settle.js`; 4,987 lines after a version that also added
   to App). That was the last of the five measured 2026-10-08.
-  Re-measure what is largest in App before choosing after it.
+  **Re-measured 2026-10-09** (`App.jsx` 4,987 lines; the functions declared directly in
+  `BookingApp`, by length, with the commits since 2026-07-24 that touched their lines
+  and how many of those say fix, /code-review or correction; `git log -L` on today's
+  line range, so the counts follow the lines back and are approximate):
+  `doSave` 132 lines, 18 commits, 2 fixes · `doSaveNew` 59, 18, 3 · `deleteCustomer` 45,
+  8, 1 (its decisions are already `planCustomerDelete`; what is left is comments and
+  effects) · `settleVoucher` 39, 8, 3 (likewise) · `doClearActivity` 37, 3, 2 ·
+  `delBooking` 34, 8, 1 · `save` 31, 3, 1 · `addFormToWaitlist` 31, 4, 0 · `doSaveEdit`
+  30, 31, 7. The render (from the first top-level JSX constant to the end) is 1,471
+  lines, 29% of the file. By churn the next candidate is the form's save
+  (`doSave` + `doSaveNew` + `doSaveEdit` + `save`: 252 lines, `doSaveEdit` alone 31
+  commits and 7 fixes), whose decisions v18.3.4 already moved to `lib/booking-save.js`;
+  by size it is the render. Not chosen: Patryk's call.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history

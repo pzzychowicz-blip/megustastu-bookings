@@ -34405,3 +34405,13 @@ A source test holds App's order.
   attached (carried from the 2026-09-15 visit)".
 **Not run on DEV:** a settle from the strip's "Voucher not recorded" row, its refusal,
 and the form route. The generated cases and the source test hold them.
+
+### 6. What is largest in App.jsx, re-measured
+
+**Files:** `ROADMAP.md` (#17). No code.
+
+Asked for by the #17 entry ("re-measure before choosing after it") and done after
+section 5. The nine largest functions with their commit counts are in the ROADMAP
+entry, with how they were counted. Two readings, neither a decision: by churn the
+form's save is next (`doSaveEdit`: 30 lines, 31 commits, 7 of them fixes); by size the
+render is (1,471 lines, 29% of the file).
