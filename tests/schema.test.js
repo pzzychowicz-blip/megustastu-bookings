@@ -103,6 +103,11 @@ describe("the writers ask it", () => {
     expect(H.indexOf("announced.current = true;")).toBeLessThan(H.indexOf('writeWithRev("schema"'));
     expect(H).toContain('writeWithRev("schema", { v: SCHEMA }, revRef,');
     const A = read("App.jsx");
+    // /code-review: until `/schema` is read the gate lets every write through.
+    // The hook is called before `usePersistence`, so its listener is attached
+    // first and the number arrives before the bookings any write needs.
+    expect(A.indexOf("useSchemaGate();")).toBeGreaterThan(-1);
+    expect(A.indexOf("useSchemaGate();")).toBeLessThan(A.indexOf("} = usePersistence({"));
     expect(A).toContain("const anyModal=modalStack.length>0||schemaBlocked;");
     expect(A).toContain("{schemaBlocked?<div style={{position:\"relative\",zIndex:350}}><UpdateRequired onRefresh={function(){window.location.reload();}} /></div>:null}");
   });

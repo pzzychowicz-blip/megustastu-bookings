@@ -34467,3 +34467,33 @@ the function with `preview`, `production` and an empty string. **Not checked:** 
 Vercel preview, which needs this branch pushed; `VERCEL_ENV` at build time is Vercel's
 documented behaviour, not something measured here.
 
+**Fixed (test only): a case that failed every evening.** "a seat never lets the
+optimiser move anybody else" (`tests/status-change.test.js`) failed on an untouched
+`origin/main` at 23:17 local time, and in a run with the clock faked it passed at 20:15
+and 00:10 and failed at 21:59, 22:01, 23:17 and 23:59. `bookingsAfterAction` reads the
+wall clock while the test passes its own `nowMins`; the other booking came back equal
+but as a new object. The file now holds the clock at 20:15. Found because this run's
+gate ran late; CI runs in UTC and would have gone red on the same hours.
+
+**Pinned:** until `/schema` is read the gate lets every write through. `useSchemaGate`
+is called before `usePersistence` in `BookingApp` (lines 950 and 1294), so its listener
+is attached first; `tests/schema.test.js` now holds that order.
+
+**Filed in ROADMAP.md, not built:** any signed-in account can raise `/schema` and so
+stop every device (the rule has to let the first refreshed device do it); and Delete
+customer's rule removal, if the server refuses it after the anonymise landed, leaves
+the paused rule with the name in it.
+
+**No change needed:**
+- *The WhatsApp writers are not gated.* `conversations` and `messages` are read as
+  stored, with no whitelist (`useWhatsApp.js:139`), so writing one back drops nothing.
+- *A blocked `writeWithRev` returns without calling back,* so a hook's optimistic state
+  is not rolled back. The card is up and cannot be dismissed; a reload is the only way
+  on, and it re-reads everything.
+- *An announce refused once is not retried until the next page load.* That is the fix
+  for the loop in section 4; another device's announce or the next load carries it.
+- *Delete customer with nothing left to anonymise:* an empty patch counts as landed
+  (`usePersistence.js`, "nothing to write IS landed"), so the rules are still removed.
+- *`UpdateRequired` is a default export* where most components are named ones.
+  `ErrorBoundary` is the same, and the file name matches the export.
+

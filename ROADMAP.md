@@ -89,6 +89,21 @@ evidence for each.
   one against PROD. A change to `src/lib/backup.js` that breaks its import fails the
   next run there, and GitHub emails him.
 
+- **The schema gate: any signed-in account can raise `/schema`** (v18.6.0
+  /code-review). The rule lets anyone signed in write a higher number, because the
+  first refreshed device has to. An account with staff rights could therefore write a
+  very large one and stop every device from saving until `/schema` is lowered in the
+  Firebase console. Not closed: a rule cannot know the newest build's number, and a
+  "+1 only" rule breaks a device that skipped a release. To decide, if it ever
+  matters: admin-only announcing (then an admin must open the app after each release
+  that raises it).
+
+- **Delete customer: a refused rule removal leaves the paused rule** (v18.6.0). Once
+  the bookings are anonymised the rules are removed; if the server refuses that write
+  (another device changed `recurring` in the same moment), the rule stays, paused,
+  still holding the name and phone, with the "redo the change" banner. It is deleted
+  by hand in Settings. A retry there is not built.
+
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
   a resync re-reads the lot. Nothing purges old bookings. Archiving needs design,
