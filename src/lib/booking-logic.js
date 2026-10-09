@@ -1952,12 +1952,12 @@ export function daySummary(bookings,date,splitHour){
 // Pure, one pass. `any` says whether the day has a deposit at all, which is
 // when the line is shown.
 export function depositSummary(bookings,date){
-  var held={total:0,count:0},forfeited={total:0,count:0};
+  const held={total:0,count:0},forfeited={total:0,count:0};
   (bookings||[]).forEach(function(b){
     if(!b||b.date!==date) return;
-    var d=Number(b.deposit)||0;
+    const d=Number(b.deposit)||0;
     if(!(d>0)) return;
-    var side=b.status==="cancelled"?forfeited:held;
+    const side=b.status==="cancelled"?forfeited:held;
     side.total+=d;side.count+=1;
   });
   return {held:held,forfeited:forfeited,any:held.count+forfeited.count>0};
@@ -1967,7 +1967,7 @@ export function depositSummary(bookings,date){
 // draws the parts (the amount in bold) and the printed day sheet joins them
 // with `depositLine`, so the screen and the paper are one derivation.
 export function depositParts(sum,currency){
-  var out=[];
+  const out=[];
   if(!sum) return out;
   if(sum.held.count) out.push({key:"held",amount:money(sum.held.total,currency),word:"held",count:countLabel(sum.held.count,"booking","bookings")});
   if(sum.forfeited.count) out.push({key:"forfeited",amount:money(sum.forfeited.total,currency),word:"forfeited",count:countLabel(sum.forfeited.count,"booking","bookings")});
@@ -1976,7 +1976,7 @@ export function depositParts(sum,currency){
 // "Deposits · 150 € held (3 bookings) · 40 € forfeited (1 booking)", or "" on a
 // day with no deposit.
 export function depositLine(sum,currency){
-  var parts=depositParts(sum,currency);
+  const parts=depositParts(sum,currency);
   if(!parts.length) return "";
   return "Deposits · "+parts.map(function(p){return p.amount+" "+p.word+" ("+p.count+")";}).join(" · ");
 }
