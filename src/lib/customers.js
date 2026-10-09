@@ -470,8 +470,10 @@ export function noShowMap(bookings) {
 // phone, not joined) is its own guest: its tags are its own statement.
 
 // The key a booking's CUSTOMER is filed under; "" for a booking that is nobody's.
-function customerKeyFn(bookings) {
-  const alias = guestPhoneAlias(Array.isArray(bookings) ? bookings : []);
+// `known` is the list's alias map when the caller has already built it, so the
+// pass over every booking is made once.
+function customerKeyFn(bookings, known) {
+  const alias = known || guestPhoneAlias(Array.isArray(bookings) ? bookings : []);
   return function (b) {
     if (!b) return "";
     if (hasRealPhone(b.phone)) return normalizePhone(b.phone);
@@ -507,7 +509,7 @@ export function guestTagMap(bookings) {
   const map = {};
   if (!Array.isArray(bookings)) return map;
   const alias = guestPhoneAlias(bookings);
-  const keyOf = customerKeyFn(bookings);
+  const keyOf = customerKeyFn(bookings, alias);
   const top = {};
   bookings.forEach(function (b) {
     if (!states(b)) return;
