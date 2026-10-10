@@ -34185,7 +34185,8 @@ unfinished match while its tag is the filter opens the fold too (section 9). The
 header is extended as the version's other items land.
 **Rules change: YES** (section 4): `schema` + `schemaRev`, the eighteenth rev pair.
 **Deploy steps (Patryk):** (1) deploy `database.rules.json` to DEV and to PROD, BEFORE
-the merge (`database.rules.README.md`, v18.6.0); (2) merge; (3) refresh every device,
+the merge (`database.rules.README.md`, v18.6.0), **and again if it was deployed before
+2026-10-10: section 11 changed the `schema` and `schemaRev` rules**; (2) merge; (3) refresh every device,
 as for every release so far: the gate protects from the NEXT release, not this one.
 
 One version with a section per item (Patryk, 2026-10-09), one commit each. The minor
@@ -34557,4 +34558,31 @@ pins the retry and that a handler replaces the banner.
 **Seen while setting this up, for the Customers search item:** Settings → Customers
 answered "No customers match" for the search "v1834" while "weekly" found "v1834
 weekly2".
+
+### 11. `/schema`: a manager or an admin raises it (2026-10-10)
+
+Filed by this version's first /code-review: the rule let any signed-in account write a
+higher number, so a staff-role account could write a very large one and stop every
+device from saving until `/schema` was lowered in the Firebase console.
+
+**Shown in the emulator first.** A new test, staff-role account, roles enforced,
+`{v: 999999}`: allowed by the rule as it stood (1 failed, 306 passed).
+
+**Decided: manager or admin** (AskUserQuestion, after Patryk asked for a
+recommendation; the others were admin only, and leaving it). Both rules of the pair
+now also ask `enforceRoles !== true || role === 'manager' || role === 'admin'`. No
+capability: nothing in the app would show or grant one, and `CAPABILITIES` stays at
+eighteen. The client is unchanged. `useSchemaGate` already treats a refused announce
+as nothing (an empty handler, one console line from `writeWithRev`, once per page
+load), read in the code and measured in section 4 with the rule undeployed.
+
+**What it changes in use.** A release that does not raise `SCHEMA`: nothing. One that
+does: the gate starts when the first manager or admin opens the refreshed app, which
+the post-merge boot-banner check does when it is made signed in as one. Until then an
+unrefreshed device writes as it did before v18.6.0. With `enforceRoles` off the rule
+is `auth != null` as before.
+
+**Measured:** rules suite 307 passed (305 before; the one "anyone" test became three).
+**Not measured:** the rule on DEV or PROD. Deploying it is Patryk's step, and the gate
+is advisory on DEV. PROD's `enforceRoles` was not read.
 

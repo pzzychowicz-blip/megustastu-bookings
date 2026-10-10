@@ -91,15 +91,6 @@ evidence for each.
   A change to `src/lib/backup.js` that breaks its import fails the next run there, and
   GitHub emails him.
 
-- **The schema gate: any signed-in account can raise `/schema`** (v18.6.0
-  /code-review). The rule lets anyone signed in write a higher number, because the
-  first refreshed device has to. An account with staff rights could therefore write a
-  very large one and stop every device from saving until `/schema` is lowered in the
-  Firebase console. Not closed: a rule cannot know the newest build's number, and a
-  "+1 only" rule breaks a device that skipped a release. To decide, if it ever
-  matters: admin-only announcing (then an admin must open the app after each release
-  that raises it).
-
 - **Delete customer: a rule removal refused four times, or cut short, leaves the
   paused rule** (v18.6.0). The removal is retried by itself three times (300, 600,
   900 ms). If all four attempts are refused, or the page is closed or reloaded before

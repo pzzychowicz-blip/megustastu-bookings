@@ -267,11 +267,20 @@ its own:
 - **`newData.child('v').val() > data.child('v').val()`**: a write must RAISE the
   number. An older build cannot lower it, and neither can an admin; after a
   rollback the number is lowered by hand in the console, which bypasses rules.
-- **`auth != null` and no capability**: the first device to load a new build may
-  be a staff device, and it must be able to announce.
+- **A manager or an admin, once roles are enforced** (round 2, 2026-10-10; it was
+  any signed-in account). With `settings/admin.enforceRoles` on, the writer's
+  `roles/{uid}/role` must be `manager` or `admin`, on `schema` and on `schemaRev`.
+  A staff-role account could otherwise write a very large number and stop every
+  device from saving until it was lowered in the console (refused in the emulator
+  now; allowed before, by the same test). The role alone, with no capability and
+  so no `extras` or `denies`: nothing in the app shows or grants it. With
+  `enforceRoles` off the rule is `auth != null`, as for every other gated path.
+  **What it costs:** after a release that raises `SCHEMA`, the gate starts when the
+  first manager or admin opens the refreshed app. A staff device that refreshes
+  first has its announce refused (one console line, once per page load).
 
 `newData.child('v').isNumber()` refuses a bare number, a string and a remove.
-Five tests of its own in the suite (305 in all on 2026-10-09).
+Seven tests of its own in the suite (307 in all on 2026-10-10).
 
 ### Deployment — RULES FIRST, to DEV and to PROD, before the app
 
