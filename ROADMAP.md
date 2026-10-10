@@ -155,7 +155,11 @@ evidence for each.
   Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines), and in v18.6.0 the redeem
   prompt's answer and the voucher carry (`planSettle`, `settleEffects`, `carryOffer`,
   `carryTransform`, `lib/voucher-settle.js`; 4,987 lines after a version that also added
-  to App). That was the last of the five measured 2026-10-08.
+  to App). That was the last of the five measured 2026-10-08. **The render, begun
+  2026-10-10:** measured at 1,484 lines from the first top-level JSX constant (84
+  statements; the `return` 562, `notifSections` 118, the clash derivations 95, the
+  four view elements 140). The clash derivations are `lib/clash-view.js` (`App.jsx`
+  4,980 lines).
   **Re-measured 2026-10-09** (`App.jsx` 4,987 lines; the functions declared directly in
   `BookingApp`, by length, with the commits since 2026-07-24 that touched their lines
   and how many of those say fix, /code-review or correction; `git log -L` on today's

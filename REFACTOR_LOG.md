@@ -34638,3 +34638,31 @@ dispatched `focusin` / `focusout`, and the fold was watched with the page report
 visible and screenshots driving the frames (`mgt-measurement-traps`). The tablet was
 not used; the ROADMAP entry asks for the check there.
 
+### 14. The render, measured, and its clash derivations out of BookingApp (#17)
+
+**The render measured** (2026-10-10, `App.jsx` 5,005 lines at that commit): 1,484 lines
+from the first top-level JSX constant to the end, in 84 top-level statements, 16 of
+which hold 1,117 lines. The `return` is 562 (the shell 239, the booking form and the
+confirms 89, the Settings mount 94, the reminder editor 48, the rest 92);
+`notifSections` 118; the clash derivations 95 (`clashBannerPairs` 21, `clashMap` 25,
+`clashSpans` 49); the four view elements 140 (`timelineEl` 50, `planView` 31,
+`listEl` 31, `summaryPanel` 28). Patryk chose three slices for this round
+(AskUserQuestion): the clash derivations, `notifSections`, the Settings mount.
+
+**This slice: `lib/clash-view.js`.** `undismissedClashes`, `clashByBooking` and
+`clashSpansByTable` are the bodies of the three memos, moved statement for statement.
+App keeps the memos, the dismissal Set, the prune effect and the `EMPTY_ARR` /
+`EMPTY_OBJ` it returns for a day with no pairs, since the memoised views compare
+those identities. `App.jsx` 5,005 → 4,980 lines.
+
+**Held to the old code first:** 40,000 generated days (5,280 with a clash, 5,327 with
+dismissals, some with a pair naming a booking no longer in the list): the three
+results equal, and the same identity answers (`=== pairs`, `=== EMPTY_ARR`,
+`=== EMPTY_OBJ`), 0 differences. A one-off script, not kept.
+
+**Measured on DEV** (two locked bookings written onto table 6 on 2026-11-17, 19:00
+and 19:30): the strip row "R2 ClashA (19:00) and R2 ClashB (19:30) are both on table
+6" with Assign; both blocks labelled ", double-booked" with the title "Double-booked
+with … on table 6", the red border and the band (screenshot). The row's ✕: the strip
+gone, both blocks still marked. `tests/clash-view.test.js`: 8 cases.
+

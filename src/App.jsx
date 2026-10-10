@@ -38,7 +38,7 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
-  checkInefficent, findClashes, clashRowId, mergeSpans,
+  checkInefficent, findClashes, clashRowId,
   nowTime,
   lateState, freeingSoon,
   undoSnapshots,
@@ -85,6 +85,7 @@ import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle"
 import { useSchemaGate } from "./hooks/useSchemaGate";
 import UpdateRequired from "./components/UpdateRequired";
 import { filterByTags, onlyFinishedMatch } from "./lib/tag-filter";
+import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/clash-view";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
@@ -3610,10 +3611,11 @@ function BookingApp({uid}){
   // next Tuesday, next to blocks that carry no marker, would be three different
   // days in one glance.
   const clashPairs=useMemo(function(){return findClashes(bookings,viewDate);},[bookings,viewDate]);
+  // v18.6.0 (#17): what the screen draws from the pairs is `lib/clash-view.js`
+  // (the strip's undismissed pairs here; per booking and per table below).
+  // App keeps the memos and the EMPTY identities the memoised views compare.
   const clashBannerPairs=useMemo(function(){
-    if(!clashPairs.length) return EMPTY_ARR;
-    if(clashDismissed.size===0) return clashPairs;
-    return clashPairs.filter(function(c){return !clashDismissed.has(clashRowId(c));});
+    return clashPairs.length?undismissedClashes(clashPairs,clashDismissed):EMPTY_ARR;
   },[clashPairs,clashDismissed]);
   // /code-review fix: a dismissed clash must RE-ARM once it stops being true.
   // The other two dismissal Sets get away with never pruning because their
@@ -3641,20 +3643,7 @@ function BookingApp({uid}){
   // dismissing a strip row quiets the row, it does not make the double-booking
   // stop being true, and the block marker is the permanent record of it.
   const clashMap=useMemo(function(){
-    if(!clashPairs.length) return EMPTY_OBJ;
-    const byId={};bookings.forEach(function(b){byId[b.id]=b;});
-    const map={};
-    function add(id,other,c){
-      if(!map[id]) map[id]={names:[],tables:[]};
-      if(other&&map[id].names.indexOf(other.name)<0) map[id].names.push(other.name);
-      c.tables.forEach(function(t){if(map[id].tables.indexOf(t)<0) map[id].tables.push(t);});
-    }
-    clashPairs.forEach(function(c){
-      const A=byId[c.a],B=byId[c.b];
-      if(!A||!B) return;
-      add(c.a,B,c);add(c.b,A,c);
-    });
-    return map;
+    return clashPairs.length?clashByBooking(clashPairs,bookings):EMPTY_OBJ;
   },[clashPairs,bookings]);
 
   // The same pairs seen per ROW: which minutes of which table are claimed
@@ -3665,22 +3654,9 @@ function BookingApp({uid}){
   // contributes no band, because there is no single row it belongs on. The
   // marker and the strip row still carry it; only the geometry has nowhere to
   // go, which is the honest outcome rather than a band drawn on a guess.
+  // One band per distinct SPAN, not per pair (v17.14.0, `mergeSpans`).
   const clashSpans=useMemo(function(){
-    if(!clashPairs.length) return EMPTY_OBJ;
-    const map={};
-    clashPairs.forEach(function(c){
-      c.tables.forEach(function(t){
-        if(!map[t]) map[t]=[];
-        map[t].push({from:c.from,to:c.to});
-      });
-    });
-    // v17.14.0 (/code-review follow-up): one band per distinct SPAN, not per
-    // pair. Three bookings all clashing on one table produced three coincident
-    // bands on the same pixels — three times the paint for one fact, and a
-    // three-way clash would have rendered differently from a two-way one the
-    // moment the band grew any transparency.
-    Object.keys(map).forEach(function(t){map[t]=mergeSpans(map[t]);});
-    return map;
+    return clashPairs.length?clashSpansByTable(clashPairs):EMPTY_OBJ;
   },[clashPairs]);
 
   // ── v17.11.0: the opening zoom follows the hours span ──────────────────────
