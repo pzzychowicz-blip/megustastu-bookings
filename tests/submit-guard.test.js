@@ -153,7 +153,10 @@ describe("the booking form is wired to the guard", () => {
   it("doSave consults the guard BEFORE it validates anything", () => {
     const body = app.slice(app.indexOf("function doSave(){"));
     const check = body.indexOf("mayDispatch(saveGuardRef.current)");
-    const firstValidation = body.indexOf('setError("Customer name is required.")');
+    // v18.6.0 (#17): the first thing the save decides is `draftForSave`, and
+    // the field checks are `draftRefusal` (lib/booking-save.js).
+    const firstValidation = body.indexOf("draftForSave(");
+    expect(firstValidation).toBeLessThan(body.indexOf("draftRefusal("));
     expect(check).toBeGreaterThan(-1);
     expect(firstValidation).toBeGreaterThan(-1);
     // A guard placed after validation would let a second tap through whenever

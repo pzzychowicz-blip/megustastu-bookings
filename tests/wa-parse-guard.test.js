@@ -128,8 +128,12 @@ describe("CT-WA-01 — the boundary is actually crossed", () => {
     expect(body.slice(0, build)).toMatch(/sanitizeParse\s*\(/);
   });
   it("doSave refuses an unreadable time BEFORE it computes with one", () => {
-    const src = read("src/App.jsx");
-    const body = src.slice(src.indexOf("function doSave()"));
+    // v18.6.0 (#17): the check is `draftRefusal` (lib/booking-save.js), which
+    // doSave calls before anything reads the time; tests/form-save.test.js
+    // runs it on the measured value.
+    expect(read("src/App.jsx")).toContain("const fieldNo=draftRefusal(f,forSave.phoneRefusal);");
+    const src = read("src/lib/booking-save.js");
+    const body = src.slice(src.indexOf("export function draftRefusal("));
     const guard = body.indexOf("isReadableTime(f.time)");
     const use = body.indexOf("toMins(f.time)");
     expect(guard).toBeGreaterThan(-1);

@@ -34673,3 +34673,61 @@ above overstated them: `notifSections` is 57 lines of code, and the 118 included
 component needs every one from App and saves about 6. Both are wiring for state that
 lives in `BookingApp`. ROADMAP #17 says so.
 
+### 15. The form's save: what `doSave` and `save` still decided, in lib (#17)
+
+Patryk's choice for the form's save (AskUserQuestion): decisions to lib, App keeps
+the effects. `doSaveEdit` and `doSaveNew` were already plans (`applyEdit`,
+`buildBooking`, v18.3.4). Four things were still decided inline, between the refs
+and the setters, and are functions of their inputs in `lib/booking-save.js` now:
+
+- **`draftForSave(form, statusOverride, orig, pinned, prefix)`** → `{draft,
+  phoneRefusal}`: the pending/confirm override on a clone, and the phone rule's
+  rewrite with the untouched-edit exemption.
+- **`draftRefusal(draft, phoneRefusal)`** → `{field, message}` or null: name, phone,
+  date, time, a time that cannot be read, a closed day, the day's hours, the last
+  start. The reasons written beside each check in App moved with it, shortened.
+- **`formSeatClash(draft, editId, list)`** → the seated parties at the tables an edit
+  is about to seat, or `[]`.
+- **`kitchenAsk(draft, orig, bookings, editId)`** → whether Save raises "Kitchen busy".
+
+`doSave` keeps the submit guard, the order of its questions (fields, picked tables,
+the two voucher prompts, the seat clash, the dispatch), the refs and every setter:
+132 → 64 lines. `save` 31 → 27. `App.jsx` 4,980 → 4,898. Seven imports left App.
+
+**Held to the old code first:** the inline code as it stood at `660570f4`, retyped
+into a one-off script (not kept), against the four functions over 60,000 generated
+drafts on a week with a closed Monday, a Friday closing at 01:00 and a Saturday
+closing at midnight: the draft (and whether it is the form's own object), the first
+refusal or the throw, the seat-clash parties and the kitchen answer. 0 differences.
+Reached: name 15,134 · phone 8,372 · no date 4,695 · no time 1,596 · unreadable time
+1,714 · closed day 4,017 · outside hours 8,551 · last start 2,888 · passes 13,033, of
+which 27 with a seat clash and 490 with the kitchen question. **The first two runs
+also said 0 and proved less:** the script's random generator was a 31-bit
+multiply done in floating point, and no case reached a closed day, a seat clash or
+the kitchen question (the week was also handed over in the stored `{days}` shape,
+which `setWeekHours` does not take). The tally by branch is what showed it.
+
+**`tests/save-path.test.js` is unchanged and was not run with `-u`:** its harness
+lifts `doSave` from App and resolves the new names through App's imports, and all
+its snapshots pass (176 tests with `booking-fields`). Eight tests in four other
+files pinned `doSave`'s text and failed, as they should: three now run the
+functions (`phone-countries`), three read the rule where it lives
+(`booking-logic` ×2, `wa-parse-guard`), two pin `doSave`'s call (`booking-logic`,
+`submit-guard`). `tests/form-save.test.js` is new: 15 cases. Gate: main bundle 134.13 kB gz (134.05 before) · 3,124 tests (3,109) · lint 63 problems, 0 errors · style OK.
+
+**Measured on DEV** (the booking form, 2026-11-19, a Thursday, 13:00 to 22:00):
+- new booking, name blank: "Customer name is required.", the name field invalid;
+- phone `600111222` with no country chosen: the phone field invalid;
+- time emptied: "Please set a time."; `03:00` and `23:59`: "Bookings on this day are
+  accepted between 13:00 and 22:00."; `21:50`: "The last start on Thursdays is 21:45.";
+- then 19:00: saved, "Tables re-optimised.", the card "R2 SaveA, 19:00, 2 guests,
+  table 1A, confirmed";
+- that booking edited to 22:30: refused with the hours sentence; to 20:00, where 8
+  bookings already start: "Kitchen may be busy" (screenshot); Confirm: "Booking
+  updated · tables re-optimised", the card at 20:00. No console errors.
+
+Not measured on DEV: the seat-clash prompt and the closed-day sentence through the
+form (both are in the 60,000 and in `tests/form-save.test.js`). An emptied date shows
+no sentence in the form because its Save button is disabled without one
+(`BookingFormModal`, `disabled={!form.date}`); the check stays for the other doors
+into `doSave`.

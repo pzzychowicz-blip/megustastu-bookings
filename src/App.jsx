@@ -29,7 +29,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX, VIEW_ORDER } from "./lib/constants";
+  OPEN, CLOSE, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX, VIEW_ORDER } from "./lib/constants";
 
 import {
   getDur, toMins, sanitizeBlock,
@@ -50,26 +50,17 @@ import {
   // v18.5.0 (#17): the status tap's own (`seatNoteFor`, `unseatRestore`,
   // `seatRefusal`, `applySeatedShift`, `seatedElapsed`) left with `planStatus`
   // for lib/status-change.js.
-  // v18.0.0 session 8 (C3): the form's save asks who is still seated at the
-  // table, and the seat that follows a clearing reads the same completion.
-  seatClashParties, completedSeatedPatch,
+  // v18.0.0 session 8 (C3): the seat that follows a clearing reads the same
+  // completion. (v18.6.0: who is still seated there is `formSeatClash`, booking-save.js.)
+  completedSeatedPatch,
   // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
   enteredPhone,
   // v18.3.2 (ROADMAP #13): and one for "may this typed number be stored" —
   // Save and Add to waitlist asked it in two copies.
   phoneForSave,
-  // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
-  kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
   savedToast,
-  // v18.0.0 session 8 (C7): the last minute a booking may start, and the
-  // formatter for it. `toTime` was removed here as a dead import once; it has a
-  // caller again.
-  lastStartMins, toTime,
-  // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
-  // `sanitize` already applies on the way IN. See the guard below.
-  isReadableTime,
   // v18.2.0 (C2): the one word for a party's size.
   guestsLabel,
   // v18.2.0 phase 77: any other count and its word, joined the same way.
@@ -90,7 +81,7 @@ import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/cla
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal } from "./lib/booking-save";
+import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk } from "./lib/booking-save";
 import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
@@ -377,8 +368,7 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 import { useWindowAtTop } from "./hooks/useWindowAtTop";
-// v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
-import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
+import { todayStr, stepDate, formatDay } from "./lib/day";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
@@ -2803,87 +2793,22 @@ function BookingApp({uid}){
     // lands on a live Save button — see src/lib/submitGuard.js. Checked before
     // validation: a refused save must not depend on the draft being valid.
     if(!mayDispatch(saveGuardRef.current)) return;
-    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
-    // so every downstream read (status write, diffBooking history, completed-
-    // duration gate, flash condition) sees the effective status uniformly.
-    const so=statusOverrideRef.current;
-    const fIn=so?Object.assign({},formRef.current,{status:so}):formRef.current;
-    // v18.2.0 phase 20: a number typed WITH its country code but no "+"
-    // ("44 7700 900123") gets that code here as well as when the number box
-    // loses focus (PhoneField), because a save by Enter never blurs the box.
-    // It goes into `f` itself, so every read below — the code check, the
-    // stored phone, the history diff, the WhatsApp link — sees one number.
-    // Not into the form state: a `setForm` here would change `form.phone` and
-    // the stale-error effect would then clear any error this same save sets.
-    // An edit that leaves the stored number untouched is never rewritten —
-    // phase 19's exemption, one test for both. v18.3.2: the rewrite and the
-    // refusal below are ONE call, `phoneForSave`, which Add to waitlist asks
-    // too; the refusal is only read after the name check, where it always was.
+    // v18.6.0 (#17): the draft this save works on is `draftForSave`
+    // (lib/booking-save.js): the pending/confirm status override on a clone,
+    // and the phone rule's rewrite. It goes into `f`, never into the form
+    // state: a `setForm` here would change `form.phone`, and the stale-error
+    // effect would then clear any error this same save sets.
     const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
-    const phoneUntouched=!!origB&&cleanPhoneOf(origB.phone)===cleanPhoneOf(fIn.phone);
-    const phoneRule=phoneForSave(fIn.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,phoneUntouched);
-    const f=phoneRule.phone!==fIn.phone?Object.assign({},fIn,{phone:phoneRule.phone}):fIn;
-    // v17.12.0: cleared here, set only by the field-specific branches below, so
-    // the form-level errors further down leave it null without having to say so.
+    const forSave=draftForSave(formRef.current,statusOverrideRef.current,origB,generalSettings.pinnedCountries,generalSettings.phonePrefix);
+    const f=forSave.draft;
+    // v17.12.0: cleared here, set only by a field's own refusal below, so the
+    // form-level errors further down leave it null without having to say so.
     setErrorField(null);
     try{
-      if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
-      // v18.2.0 phase 19 (Patryk): a number is saved only once it names its
-      // country. The picker starts empty now, so a number typed without a code
-      // would otherwise be stored without one — and the same guest with and
-      // without "+34" is two customers (`normalizePhone`), whom WhatsApp cannot
-      // link either. Checked right after the name, the field beside it.
-      // An EDIT that leaves an old code-less number untouched still saves: the
-      // rule is about numbers typed now, not a sweep of the stored ones.
-      if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
-      // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
-      // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setErrorField("date");setError("Please set a date.");return;}
-      if(!f.time){setErrorField("time");setError("Please set a time.");return;}
-      // v18.0.0 phase 6 (CT-WA-01). "Is there a time" and "is there a time this
-      // app can use" are different questions, and only the first was asked.
-      // `toMins` on an unreadable string yields NaN, and BOTH range comparisons
-      // below are false against NaN — so the range gate, the one thing standing
-      // between a garbage time and the database, passed everything. The security
-      // rules pin `date` and deliberately do NOT pin `time` (see
-      // database.rules.json), so nothing server-side refuses it either; the
-      // booking lands, and `sanitize` then shows it to every device as 13:00.
-      //
-      // Measured live on 2026-09-10: a WhatsApp draft carrying
-      // `time: "8 in the evening"` saved, stored verbatim, and displayed as a
-      // 13:00 booking. Nothing the form can produce moves — an <input type=time>
-      // yields "" (already caught above) or HH:MM — which is the same test
-      // v17.16.5 applied when it added this predicate for `sanitize`.
-      if(!isReadableTime(f.time)){setErrorField("time");setError("That time could not be read — please set it again.");return;}
-      const sm=toMins(f.time);
-      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
-      // viewed day, and block a closed day outright.
-      const fh=hoursFor(f.date);
-      if(fh.closed){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setErrorField("time");setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
-      // v18.0.0 session 8 (C7): a start exactly AT closing passed the test above
-      // (`sm > close*60`), and `findTimes` has never offered one — it stops at
-      // close − 15. A 22:00 booking on a day that closes at 22:00 is a party
-      // arriving as the door is locked, and the close-time auto-complete flips
-      // it to completed on the next 15s tick, so it reads as a visit that
-      // already happened. The message names the last start rather than the
-      // close, because that is the number somebody needs to type.
-      //
-      // v18.0.0 session 10 (/code-review): the test is `> lastStartMins`, not
-      // `>= close*60`. The message, the Time field's `max` and `findTimes`
-      // all name the same minute — close − 15 — and the guard named a
-      // different one, which is two rules wearing one sentence.
-      //
-      // The half that was simply DEAD: `lastStartMins` caps at midnight
-      // because no booking may START after it, so on a day closing at 24 or
-      // 25 the old test was `sm >= 1440` (or 1500) against an `sm` that a
-      // readable `HH:MM` cannot push past 1439. A restaurant closing at
-      // 01:00 had no last-start bound at all, and a 23:59 start passed —
-      // which is precisely the rule `lastStartMins`'s own note says the app
-      // keeps. Now it refuses, and the message it prints is the one the
-      // field was already offering.
-      if(sm>lastStartMins(fh.close)){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
-      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
+      // The field checks, in the form's order (name, phone, date, time), are
+      // `draftRefusal`; each one's reason is written there.
+      const fieldNo=draftRefusal(f,forSave.phoneRefusal);
+      if(fieldNo){setErrorField(fieldNo.field);setError(fieldNo.message);return;}
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
@@ -2918,12 +2843,9 @@ function BookingApp({uid}){
       // same point as the voucher gates — after validation, immediately before
       // the dispatch, so a save about to be refused for a missing name never
       // asks about somebody else's table first.
-      if(editId&&!seatAskedRef.current&&f.status==="seated"){
-        const seatOrig=saveBks.find(function(x){return x.id===editId;});
-        if(seatOrig&&seatOrig.status!=="seated"){
-          const parties=seatClashParties(mt.length?mt:(seatOrig.tables||[]),f.date,editId,saveBks);
-          if(parties.length){setSeatClash({id:editId,status:"seated",from:"form",others:seatClashSnap(parties)});return;}
-        }
+      if(!seatAskedRef.current){
+        const parties=formSeatClash(f,editId,saveBks);
+        if(parties.length){setSeatClash({id:editId,status:"seated",from:"form",others:seatClashSnap(parties)});return;}
       }
       if(editId) doSaveEdit(f,saveBks,saveLive);
       else doSaveNew(f);
@@ -2933,7 +2855,7 @@ function BookingApp({uid}){
     // v17.16.0: the guard is checked HERE as well as in doSave, because this is
     // the button's handler and it can return before doSave is ever reached. On a
     // double-tap the first tap's booking is already in `bookings`, so the kitchen
-    // load below is one higher — enough to cross KITCHEN_TABLE_LIMIT and raise
+    // load below is one higher — enough to cross the kitchen limit and raise
     // "Kitchen busy" for a booking that has already been written, over a form
     // that has already closed. doSave would then refuse the duplicate correctly,
     // but the stray dialog would have been produced by the very tap this fix
@@ -2945,17 +2867,13 @@ function BookingApp({uid}){
     statusOverrideRef.current=statusOverride||null;
     const f=formRef.current;
     if(!f.time) return doSave();
-    const size=Number(f.size)||2;const d=f.customDur||getDur(size);
-    // v18.0.0 session 8 (R6): ask only about a save the kitchen would notice.
-    // A notes-only edit in a busy slot raised this confirm, which trains people
-    // to tap past the dialog that means something on the save after it.
     // v18.4.10: a save its picked tables will refuse goes straight to doSave,
     // which refuses it in its own order. The kitchen question used to come
     // first, answered for a save that could not go through.
     if(pickedRefusal(withClearedSeats(liveBookings),f,editId,tableBlocks,swapAffected,nowMins,today)){setConfirmKitchen(null);return doSave();}
+    // v18.6.0 (#17): whether to ask is `kitchenAsk` (lib/booking-save.js).
     const kitchenOrig=editId?bookings.find(function(b){return b.id===editId;}):null;
-    const load=getKitchenLoad(bookings,f.date,f.time,d,editId);
-    if(kitchenRelevant(kitchenOrig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
+    if(kitchenAsk(f,kitchenOrig,bookings,editId)&&!confirmKitchen){
       setConfirmKitchen("form");return;
     }
     setConfirmKitchen(null);doSave();
