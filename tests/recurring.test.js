@@ -306,4 +306,22 @@ describe("rulesOfCustomer", () => {
     expect(pauseAt).toBeLessThan(body.indexOf("saveBookings("));
     expect(body.indexOf("removeRules(")).toBeGreaterThan(body.indexOf("onLanded:function(){"));
   });
+  // v18.6.0 round 2: a refused removal is tried again by itself. Measured on
+  // DEV: one refusal, removed 553 ms after the tap; nine, four attempts and
+  // then the banner.
+  it("useRecurring retries a refused removal three times, and only the last refusal reaches the banner", () => {
+    const HOOK = stripComments(
+      readFileSync(new URL("../src/hooks/useRecurring.js", import.meta.url), "utf8")).join("\n");
+    expect(HOOK).toContain("export const REMOVE_RETRIES = 3;");
+    expect(HOOK).toContain("function removeRules(ids) { return removeAttempt(ids, 0); }");
+    const at = HOOK.indexOf("function removeAttempt(ids, n) {");
+    const fn = HOOK.slice(at, HOOK.indexOf("function setRulesActive(", at));
+    // the last attempt passes no handler, so its refusal is the banner's
+    expect(fn).toContain("n >= REMOVE_RETRIES ? undefined : function () {");
+    expect(fn).toContain("setTimeout(function () { removeAttempt(ids, n + 1); }, REMOVE_RETRY_MS * (n + 1));");
+    // and a handler REPLACES the banner, it does not come after it
+    const save = HOOK.slice(HOOK.indexOf("function saveRecurring("), HOOK.indexOf("useEffect("));
+    expect(save.indexOf("if (onRefused) { onRefused(); return; }")).toBeGreaterThan(-1);
+    expect(save.indexOf("if (onRefused) { onRefused(); return; }")).toBeLessThan(save.indexOf("if (!isSilent) setWriteWarning(\"Couldn't save"));
+  });
 });

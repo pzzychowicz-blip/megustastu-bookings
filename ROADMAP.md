@@ -100,11 +100,13 @@ evidence for each.
   matters: admin-only announcing (then an admin must open the app after each release
   that raises it).
 
-- **Delete customer: a refused rule removal leaves the paused rule** (v18.6.0). Once
-  the bookings are anonymised the rules are removed; if the server refuses that write
-  (another device changed `recurring` in the same moment), the rule stays, paused,
-  still holding the name and phone, with the "redo the change" banner. It is deleted
-  by hand in Settings. A retry there is not built.
+- **Delete customer: a rule removal refused four times, or cut short, leaves the
+  paused rule** (v18.6.0). The removal is retried by itself three times (300, 600,
+  900 ms). If all four attempts are refused, or the page is closed or reloaded before
+  one lands, the rule stays, paused, still holding the name and phone, and is deleted
+  by hand in Settings. Closing that needs something stored (a mark on the rule that
+  any device sweeps), which raises `SCHEMA`; Patryk chose the retry without it
+  (2026-10-10).
 
 - **Seen in v18.6.0, not decided or not read.** (1) Settings → Customers answered
   "No customers match" for a test guest's full name ("V186 DelCust2") that the search

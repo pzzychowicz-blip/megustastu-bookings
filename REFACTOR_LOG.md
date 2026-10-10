@@ -34522,3 +34522,39 @@ It is now the previous answer held in state and compared during render, which is
 true, 1 card (the completed booking). Closed by hand: stayed false for the 3.5 s
 watched. Filter cleared: fold false, 6 cards. Filter chosen again: fold true, 1 card
 (section 1's rule, unchanged). `tests/tag-filter.test.js` pins the new site.
+
+### 10. Delete customer: a refused rule removal is retried (2026-10-10)
+
+Section 3 removes the customer's standing bookings once the anonymise has landed. If
+the server refused that removal (another device wrote `recurring` in the same moment),
+the rule stayed, paused, with the name and phone in it, under a banner asking to redo a
+change that only Settings could redo. Filed by this version's first /code-review.
+
+**Reproduced on DEV first**, with a temporary switch that sent one removal on a stale
+rev (the rule's own refusal, not a simulated one): the write at 127 ms after the
+confirm, the rollback echo at 185 ms with the rule back (`active: false`), the refusal
+heard at 186 ms, "Couldn't save" up, and the rule still stored after a reload.
+
+**Decided: it retries by itself** (AskUserQuestion; the others were a Retry button on
+the banner, and a stored mark that any device sweeps, which survives a reload and
+raises `SCHEMA`). `removeRules` (`useRecurring.js`) is now `removeAttempt(ids, 0)`:
+a refusal schedules the next attempt after `REMOVE_RETRY_MS * (n + 1)` (300, 600,
+900 ms), `REMOVE_RETRIES` (3) times, and the last attempt's refusal is the banner as
+before. `saveRecurring` takes an optional third argument that hears a refusal instead
+of the banner. Each attempt recomputes from the mirror, which the SDK has rolled back
+by then (the echo came 1 ms before the refusal in every measurement here).
+
+**Measured on DEV** (two seeded customers, each one completed booking and one rule):
+- One refusal: attempts at 130 and 553 ms after the confirm; the rule gone at 554 ms,
+  no banner, and not back in the 3 s watched.
+- Every attempt refused: attempts at 100, 464, 1,180 and 2,137 ms; four refusals; the
+  banner after the fourth; the rule left paused. This is the case the ROADMAP entry
+  keeps, with a page closed between attempts.
+
+The switch and its log lines were removed before the commit. `tests/recurring.test.js`
+pins the retry and that a handler replaces the banner.
+
+**Seen while setting this up, for the Customers search item:** Settings → Customers
+answered "No customers match" for the search "v1834" while "weekly" found "v1834
+weekly2".
+
