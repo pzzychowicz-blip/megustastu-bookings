@@ -24,4 +24,4 @@ const scrollPosRef = React.useRef(0);
   onEdit={(booking) => openForm(booking)} onManual={(id) => assignTables(id)} onStatus={(id, status) => setStatus(id, status)} />
 ```
 
-A booking is `{ id, name, phone, date: "YYYY-MM-DD", time: "HH:MM", size, duration (minutes), status, tables: ["5A"], notes, deposit, preferredTables, _locked, _manual, noShow, stayedMin, updatedAt }`.
+A booking is `{ id, name, phone, date: "YYYY-MM-DD", time: "HH:MM", size, duration (minutes), status, tables: ["6"], notes, deposit, preferredTables, _locked, _manual, noShow, stayedMin, updatedAt }`.

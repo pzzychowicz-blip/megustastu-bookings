@@ -18,7 +18,7 @@ export const Empty = () => <Live initial="" placeholder="Name or phone" />;
 export const BesideADateField = () => (
   <Surface>
     <div style={{ display: "flex", gap: SP.base }}>
-      <div style={{ flex: 2 }}><SearchField value="table 5A" onChange={() => {}} onClear={() => {}} placeholder="Search the log" ariaLabel="Search the activity log" /></div>
+      <div style={{ flex: 2 }}><SearchField value="table 6" onChange={() => {}} onClear={() => {}} placeholder="Search the log" ariaLabel="Search the activity log" /></div>
       <div style={{ flex: 1 }}><DateField value="2026-09-26" onChange={() => {}} style={mkInp()} inputProps={{ "aria-label": "From" }} /></div>
     </div>
   </Surface>

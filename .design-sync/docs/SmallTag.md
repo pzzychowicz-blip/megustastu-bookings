@@ -6,5 +6,5 @@ A generic small inline tag (`T.small`, semibold, pill-shaped). It has NO colours
 
 ```jsx
 const { SmallTag, StarIcon, IC, SP } = window.MGTBookings;
-<SmallTag label={<><StarIcon size={IC.inline} /> 5A · 5B</>} style={{ background: "var(--bg-veil)", color: "var(--text-secondary)" }} />
+<SmallTag label={<><StarIcon size={IC.inline} /> 6 · 7</>} style={{ background: "var(--bg-veil)", color: "var(--text-secondary)" }} />
 ```

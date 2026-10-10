@@ -8,9 +8,9 @@
 // happens in Phase C.
 
 // v15.0.0: the physical table layout is now runtime-configurable (Settings →
-// Layout; Firebase settings/layout, shared). DEFAULT_LAYOUT = the historical MGT
-// 13-table layout — an absent/empty Firebase node falls back to this, so an
-// untouched install is byte-identical to pre-v15. Each table: {id, capacity, zone}
+// Layout; Firebase settings/layout, shared). DEFAULT_LAYOUT = the MGT 13-table
+// layout (v18.6.1: as the restaurant runs it, tables 1–13) — what an absent or
+// empty Firebase node falls back to. Each table: {id, capacity, zone}
 // where zone ∈ {"indoor","outdoor"}. `kitchenLimit` is the max simultaneous
 // kitchen starts (was the hard-coded KITCHEN_TABLE_LIMIT).
 //
@@ -18,14 +18,14 @@
 // hard-coded VALID_COMBOS/CLUSTERS below). Three combo fields drive buildLayout():
 //   • joinGroups — ordered physical "runs" of adjacent tables. Every contiguous
 //     sub-run of ≥2 auto-generates a combo (cap = Σ member caps unless overridden).
-//     A table not in any ≥2 group is standalone. (7 and i1 are standalone here.)
+//     A table not in any ≥2 group is standalone. (9 and 10 are standalone here.)
 //   • comboCaps  — per-auto-combo seat-count overrides, key = comboKey(run ids)
 //     (sorted, "|"-joined). Only combos whose real seat count ≠ the member sum need
-//     an entry (e.g. 1A+1B seats 6, not 4; but 3+4 = 4 = sum, so it's omitted).
+//     an entry (e.g. 1+2 seats 5, not 4; but 4+5 = 4 = sum, so it's omitted).
 //   • megaCombos — explicit cross-group big-party combos that pairwise adjacency
 //     can't generate (each {ids, cap}). Appended to the auto combos in order.
-// buildLayout(DEFAULT_LAYOUT) reproduces the pre-Phase-4 VALID_COMBOS (40, ordered)
-// + CLUSTERS exactly — the zero-regression linchpin (see /tmp verify script).
+// buildLayout(DEFAULT_LAYOUT) gives 40 combos (10 from the runs, then the 30
+// megaCombos, in order) + CLUSTERS; tests/layout-default.test.js pins the count.
 // WA sandbox: explicit ".js" — this file is in the Node ESM chain reached from
 // src/lib/whatsapp.js via booking-logic.js (api/_lib + the :3999 harness import it).
 // Node ESM does not resolve extensionless specifiers; Vite does not care either way.
@@ -65,36 +65,41 @@ export const APP_NAME = "MGT Bookings";
 export const VIEW_ORDER=["timeline","list","plan"];
 
 export var DEFAULT_LAYOUT={
+  // v18.6.1: the restaurant renumbered its tables 1–13 (outdoor 1–9, indoor
+  // 10–13), and this default is that layout as DEV's `settings/layout` held it:
+  // read from the database on 2026-10-10 and written out here, names, seat
+  // counts, priorities and floor plan. Old → new, in order:
+  // 1A 1B 2 3 4 5A 5B 6 7 i1 i2 i3 i4 → 1 2 3 4 5 6 7 8 9 10 11 12 13.
+  // "2", "3", "4", "6" and "7" are ids in BOTH numberings and mean different
+  // tables in each, which is why nothing here may be renamed one id at a time.
   tables:[
-    {id:"1A",capacity:2,zone:"outdoor"},{id:"1B",capacity:2,zone:"outdoor"},
-    {id:"2",capacity:2,zone:"outdoor"},{id:"3",capacity:2,zone:"outdoor"},{id:"4",capacity:2,zone:"outdoor"},
-    {id:"5A",capacity:2,zone:"outdoor"},{id:"5B",capacity:2,zone:"outdoor"},{id:"6",capacity:2,zone:"outdoor"},
-    {id:"7",capacity:4,zone:"outdoor"},
-    {id:"i1",capacity:2,zone:"indoor"},{id:"i2",capacity:2,zone:"indoor"},{id:"i3",capacity:2,zone:"indoor"},{id:"i4",capacity:2,zone:"indoor"}
+    {id:"1",capacity:2,zone:"outdoor"},{id:"2",capacity:2,zone:"outdoor"},
+    {id:"3",capacity:2,zone:"outdoor"},{id:"4",capacity:2,zone:"outdoor"},{id:"5",capacity:2,zone:"outdoor"},
+    {id:"6",capacity:2,zone:"outdoor"},{id:"7",capacity:2,zone:"outdoor"},{id:"8",capacity:2,zone:"outdoor"},
+    {id:"9",capacity:4,zone:"outdoor"},
+    {id:"10",capacity:2,zone:"indoor"},{id:"11",capacity:2,zone:"indoor"},{id:"12",capacity:2,zone:"indoor"},{id:"13",capacity:2,zone:"indoor"}
   ],
-  // Ordered physical runs (singletons 7 / i1 are omitted → standalone clusters).
-  joinGroups:[["1A","1B"],["2","3","4"],["5A","5B","6"],["i2","i3","i4"]],
-  // Auto-combo seat overrides (key = sorted ids joined by "|"). "3|4" is omitted
+  // Ordered physical runs (singletons 9 / 10 are omitted → standalone clusters).
+  // The order is also the order the table pickers list the groups in.
+  joinGroups:[["3","4","5"],["6","7","8"],["11","12","13"],["1","2"]],
+  // Auto-combo seat overrides (key = sorted ids joined by "|"). "4|5" is omitted
   // because its real cap (4) equals the member sum.
-  comboCaps:{"1A|1B":6,"2|3":5,"2|3|4":8,"5A|5B":5,"5B|6":5,"5A|5B|6":8,"i2|i3":6,"i3|i4":6,"i2|i3|i4":8},
+  comboCaps:{"3|4":5,"3|4|5":8,"6|7":5,"7|8":5,"6|7|8":8,"11|12":5,"12|13":5,"11|12|13":8,"1|2":5},
   // Explicit cross-group big-party combos (order preserved in VALID_COMBOS).
   megaCombos:[
-    {ids:["i1","i2","i3","i4"],cap:10},
-    {ids:["1A","1B","7","i1"],cap:11},{ids:["1A","1B","7","i2"],cap:10},{ids:["1A","1B","7","i3"],cap:10},{ids:["1A","1B","7","i4"],cap:11},
-    {ids:["1A","1B","7","i1","i2"],cap:12},{ids:["1A","1B","7","i1","i3"],cap:12},{ids:["1A","1B","7","i1","i4"],cap:12},{ids:["1A","1B","7","i2","i3"],cap:12},{ids:["1A","1B","7","i3","i4"],cap:12},
-    {ids:["1A","1B","7","i1","i2","i3"],cap:14},{ids:["1A","1B","7","i1","i2","i4"],cap:14},{ids:["1A","1B","7","i1","i3","i4"],cap:14},{ids:["1A","1B","7","i2","i3","i4"],cap:14},
-    {ids:["1A","1B","7","i1","i2","i3","i4"],cap:16},
-    {ids:["1A","1B","7","2","3"],cap:15},{ids:["1A","1B","7","3","4"],cap:14},{ids:["1A","1B","7","2","3","4"],cap:18},
-    {ids:["1A","1B","7","5A","5B"],cap:15},{ids:["1A","1B","7","5B","6"],cap:15},{ids:["1A","1B","7","5A","5B","6"],cap:18},
-    {ids:["2","3","4","5A","5B","6"],cap:16},{ids:["2","3","4","5A","5B"],cap:13},{ids:["2","3","4","5B","6"],cap:13},{ids:["2","3","4","5A","5B","6","7"],cap:20},
-    {ids:["2","3","4","5A","5B","6","i1"],cap:20},{ids:["2","3","4","5A","5B","6","i4"],cap:20},
-    {ids:["1A","1B","7","2","3","4","5A","5B","6"],cap:26},{ids:["1A","1B","7","2","3","4","5A","5B"],cap:23},{ids:["1A","1B","7","2","3","4","5B","6"],cap:23}
+    {ids:["10","11","12","13"],cap:10},{ids:["1","2","9","10"],cap:11},{ids:["1","2","9","11"],cap:10},{ids:["1","2","9","12"],cap:10},
+    {ids:["1","2","9","13"],cap:11},{ids:["1","2","9","10","11"],cap:12},{ids:["1","2","9","10","12"],cap:12},{ids:["1","2","9","10","13"],cap:12},
+    {ids:["1","2","9","11","12"],cap:12},{ids:["1","2","9","12","13"],cap:12},{ids:["1","2","9","10","11","13"],cap:14},{ids:["1","2","9","10","12","13"],cap:14},
+    {ids:["1","2","9","11","12","13"],cap:14},{ids:["1","2","9","10","11","12","13"],cap:16},{ids:["1","2","9","3","4"],cap:15},{ids:["1","2","9","3","4","5"],cap:18},
+    {ids:["1","2","9","6","7"],cap:15},{ids:["1","2","9","7","8"],cap:15},{ids:["1","2","9","6","7","8"],cap:18},{ids:["3","4","5","6","7","8"],cap:16},
+    {ids:["3","4","5","6","7"],cap:13},{ids:["3","4","5","7","8"],cap:13},{ids:["3","4","5","6","7","8","9"],cap:20},{ids:["3","4","5","6","7","8","10"],cap:20},
+    {ids:["3","4","5","6","7","8","13"],cap:20},{ids:["1","2","9","3","4","5","6","7","8"],cap:26},{ids:["1","2","9","3","4","5","6","7"],cap:23},{ids:["1","2","9","3","4","5","7","8"],cap:23},
+    {ids:["1","2","4","5","9"],cap:14},{ids:["1","2","9","10","11","12"],cap:14}
   ],
   kitchenLimit:3,
-  // v15.9.0: data-driven optimizer priorities. These seed values reproduce the
-  // formerly hard-coded MGT heuristics in booking-logic.js BYTE-FOR-BYTE (proven
-  // by the v15.9.0 regression script) — the IS_MGT_LAYOUT gate no longer exists
-  // in the optimizer; it only curates the table-picker grouping. Fields:
+  // v15.9.0: data-driven optimizer priorities. These seed values are the
+  // formerly hard-coded MGT heuristics of booking-logic.js (v18.6.1: with the
+  // table ids renumbered, nothing else). Fields:
   //   • bands        — per-party-size single-table rules for findBest. First band
   //     whose min≤size≤max wins. `prefer` = ranked table ids tried first (need
   //     capacity+zone-pref+free); `avoid` = last-resort tables (used only when no
@@ -116,47 +121,65 @@ export var DEFAULT_LAYOUT={
   priorities:{
     v:1,
     bands:[
-      {min:1,max:1,prefer:[],avoid:["7"],zoneOrder:["indoor","outdoor"],combosFirst:false},
-      {min:2,max:2,prefer:[],avoid:["7"],zoneOrder:["outdoor","indoor"],combosFirst:false},
-      {min:3,max:4,prefer:["7"],avoid:[],zoneOrder:[],combosFirst:true}
+      {min:1,max:1,prefer:[],avoid:["9"],zoneOrder:["indoor","outdoor"],combosFirst:false},
+      {min:2,max:2,prefer:[],avoid:["9"],zoneOrder:["outdoor","indoor"],combosFirst:false},
+      {min:3,max:4,prefer:["9"],avoid:[],zoneOrder:[],combosFirst:true}
     ],
     comboRules:[
-      {key:"1A|1B",min:4,max:6,weight:10},
-      {key:"2|3",min:4,max:4,weight:5},
-      {key:"2|3|4",min:7,max:8,weight:10},
-      {key:"5A|5B|6",min:7,max:8,weight:9},
-      {key:"1A|1B|7|i4",min:9,max:12,weight:10},
-      {key:"1A|1B|7|i1",min:9,max:12,weight:9},
-      {key:"1A|1B|7|i2",min:9,max:12,weight:7},
-      {key:"1A|1B|7|i3",min:9,max:12,weight:7},
-      {key:"2|3|4|5A|5B",min:13,max:16,weight:10},
-      {key:"2|3|4|5B|6",min:13,max:16,weight:10},
-      {key:"2|3|4|5A|5B|6",min:13,max:16,weight:10},
-      {key:"2|3|4|5A|5B|6|i4",min:17,max:20,weight:10},
-      {key:"2|3|4|5A|5B|6|i1",min:17,max:20,weight:9},
-      {key:"2|3|4|5A|5B|6|7",min:17,max:20,weight:8},
-      {key:"i1|i2|i3|i4",min:1,max:99,avoid:true}
+      {key:"1|2",min:4,max:6,weight:10},
+      {key:"3|4",min:4,max:4,weight:5},
+      {key:"3|4|5",min:7,max:8,weight:10},
+      {key:"6|7|8",min:7,max:8,weight:9},
+      {key:"1|13|2|9",min:9,max:12,weight:10},
+      {key:"1|10|2|9",min:9,max:12,weight:9},
+      {key:"1|11|2|9",min:9,max:12,weight:7},
+      {key:"1|12|2|9",min:9,max:12,weight:7},
+      {key:"3|4|5|6|7",min:13,max:16,weight:10},
+      {key:"3|4|5|7|8",min:13,max:16,weight:10},
+      {key:"3|4|5|6|7|8",min:13,max:16,weight:10},
+      {key:"13|3|4|5|6|7|8",min:17,max:20,weight:10},
+      {key:"10|3|4|5|6|7|8",min:17,max:20,weight:9},
+      {key:"3|4|5|6|7|8|9",min:17,max:20,weight:8},
+      {key:"10|11|12|13",min:1,max:99,avoid:true}
     ],
-    anchors:["i4","i1"],
-    swapRules:[{table:"7",fromSize:4,toSize:3}],
-    mixedRequire:["1A","1B","7"]
-  }
+    anchors:["13","10"],
+    swapRules:[{table:"9",fromSize:4,toSize:3}],
+    mixedRequire:["1","2","9"]
+  },
+  // v18.6.1: the room as the restaurant drew it (centimetres; see useLayout.js
+  // for the shape). Until now a fresh database got an auto-placed grid. Applies
+  // only where the default itself does: a stored layout keeps its own plan.
+  floorPlan:{
+    v:1,room:{w:900,h:700},
+    tables:{
+      "1":{x:810,y:240,shape:"square",w:70,h:70,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "2":{x:690,y:240,shape:"square",w:70,h:70,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "3":{x:280,y:250,shape:"square",w:60,h:60,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "4":{x:180,y:250,shape:"square",w:60,h:60,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "5":{x:70,y:250,shape:"square",w:60,h:60,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "6":{x:70,y:60,shape:"square",w:60,h:60,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "7":{x:180,y:60,shape:"square",w:60,h:60,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "8":{x:280,y:60,shape:"square",w:60,h:60,rot:0,chairs:{top:1,right:0,bottom:1,left:0}},
+      "9":{x:730,y:80,shape:"square",w:90,h:90,rot:330,chairs:{top:1,right:1,bottom:1,left:1}},
+      "10":{x:750,y:370,shape:"square",w:70,h:70,rot:90,chairs:{top:1,right:0,bottom:1,left:0}},
+      "11":{x:100,y:370,shape:"square",w:70,h:70,rot:90,chairs:{top:1,right:0,bottom:1,left:0}},
+      "12":{x:100,y:480,shape:"square",w:70,h:70,rot:90,chairs:{top:1,right:0,bottom:1,left:0}},
+      "13":{x:100,y:600,shape:"square",w:70,h:70,rot:270,chairs:{top:1,right:0,bottom:1,left:0}}
+    },
+    walls:[{x1:0,y1:320,x2:850,y2:320},{x1:190,y1:650,x2:0,y2:650}],
+    doors:[{x:530,y:320,rot:180,width:80,flip:true}]
+  },
+  // v18.6.1: which tables a host may pick TOGETHER by hand (the table picker and
+  // the walk-in form). Each rule: the two tables of `pair` can be picked in one
+  // set only when every table of `need` is in it too. The restaurant's one rule:
+  // 10 and 13 are the two ends of the dining room, and they are one table only
+  // when 11 and 12 are pushed in between. It was four ids written into the two
+  // pickers, so renaming the indoor tables switched it off without a word.
+  // `v` keeps an emptied list present in RTDB, which drops an empty array: an
+  // ABSENT object reads as this default, a present one with no rules as none
+  // (the priorities contract). See pickBlockedBy in booking-logic.js.
+  pickRules:{v:1,rules:[{pair:["10","13"],need:["11","12"]}]}
 };
-
-// The physical-cluster grouping for the table pickers — the CURATED MGT layout.
-// v15.0.0: used ONLY when IS_MGT_LAYOUT (detect-and-apply, same gate as the
-// optimizer). It encodes MGT-specific curation a generic rule can't reproduce:
-// standalone table 7 is shown alongside the 1A/1B run, i1 sits on its own, and
-// the notes mention mega-combo hints ("all 4 indoor = 10"). Each chip's `cap` is
-// pulled LIVE from the layout config. Any layout edit flips IS_MGT_LAYOUT false →
-// buildGenericTableGroups (below) derives the picker grouping from join-groups.
-var TABLE_GROUP_STRUCT=[
-  {name:"Tables: 1A / 1B / 7",color:"var(--tbl-out-text)",note:"1A+1B = 6 · table 7 = 4 standalone",ids:["1A","1B","7"]},
-  {name:"Tables: 2 / 3 / 4",color:"var(--tbl-out-text)",note:"2+3 = 5 · 3+4 = 4 · 2+3+4 = 8",ids:["2","3","4"]},
-  {name:"Tables: 5A / 5B / 6",color:"var(--tbl-out-text)",note:"5A+5B = 5 · 5B+6 = 5 · 5A+5B+6 = 8",ids:["5A","5B","6"]},
-  {name:"Tables: i2 / i3 / i4",color:"var(--tbl-ind-text)",note:"i2+i3 = 6 · i3+i4 = 6 · i2+i3+i4 = 8",ids:["i2","i3","i4"]},
-  {name:"Table: i1",color:"var(--tbl-ind-text)",note:"Standalone cap 2 · all 4 indoor = 10",ids:["i1"]},
-];
 
 // ── Layout-derived live bindings (reassigned ONLY by setLayout, below) ─────────
 // `let` exports so setLayout can reassign them as live ESM bindings — every
@@ -179,31 +202,26 @@ export let ZONE_OF={};
 // setLayout; consumed live by booking-logic (comboCap / findBest / canAssign / …).
 export let VALID_COMBOS=[];
 export let CLUSTERS={};
-// v15.0.0 Phase 5: detect-and-apply flag. True when the live layout matches the
-// canonical MGT signature (tables + caps + zones + combos === DEFAULT_LAYOUT's).
-// v15.9.0: the optimizer NO LONGER reads this — its heuristics are data-driven
-// via PRIORITIES (below); the flag now only picks the curated MGT table-picker
-// grouping (TABLE_GROUPS) over the generic join-group derivation.
-export let IS_MGT_LAYOUT=true;
+// v18.6.1: IS_MGT_LAYOUT is gone. It was true when the live layout matched
+// DEFAULT_LAYOUT's fingerprint, and since v15.9.0 it chose one thing only: a
+// hand-curated table-picker grouping over the one derived from the join groups.
+// The database the v18.6.1 default was read from no longer matched the old
+// fingerprint (three seat counts differ), so its pickers already showed the
+// derived grouping, and the curated one was a second picker kept in step by
+// hand. Every layout takes the derived grouping now (Patryk, 2026-10-10).
 // v15.9.0: the data-driven optimizer priorities (normalized shape — see the
 // DEFAULT_LAYOUT.priorities comment for field semantics). Live binding reassigned
 // only by setLayout; consumed by booking-logic's _comboPri/_indoorPri/findBest/
 // optimise/isMixedLarge. Seeded from DEFAULT_LAYOUT at the bottom of this file.
 export let PRIORITIES={v:1,bands:[],comboRules:[],anchors:[],swapRules:[],mixedRequire:[]};
+// v18.6.1: the complete pick rules of the live layout ([{pair:[a,b],need:[…]}]).
+// Live binding, reassigned only by setLayout; read by pickBlockedBy.
+export let PICK_RULES=[];
 
-// MGT picker grouping (live caps, curated structure). Used only on the MGT path.
-function buildTableGroups(cfg){
-  var capOf={};(cfg.tables||[]).forEach(function(t){capOf[t.id]=t.capacity;});
-  return TABLE_GROUP_STRUCT.map(function(g){
-    return {name:g.name,color:g.color,note:g.note,tables:g.ids.map(function(id){return {id:id,cap:capOf[id]!=null?capOf[id]:2};})};
-  });
-}
-
-// Generic picker grouping for a CUSTOM layout (the !IS_MGT_LAYOUT path). One
+// The table pickers' grouping, derived from the layout (every layout). One
 // section per join-group (its within-run auto-combo caps become the hint note),
-// then standalone tables collected per zone. Same colour convention as the MGT
-// struct (outdoor stone / indoor violet) and the same {name,color,note,tables}
-// shape the pickers consume. v15.0.1: takes buildLayout's already-normalized
+// then standalone tables collected per zone. Outdoor stone / indoor violet, in
+// the {name,color,note,tables} shape the pickers consume. v15.0.1: takes buildLayout's already-normalized
 // tables/groups + the runCapByKey it recorded while generating the auto combos,
 // so the picker hints read the SAME caps the optimizer got (one cap rule, not
 // a re-implementation of it).
@@ -251,6 +269,35 @@ export function contiguousRuns(group){
   return runs;
 }
 
+// v18.6.1: the pick rules as stored and edited: `pair` up to two distinct
+// existing ids, `need` distinct existing ids outside the pair. A rule with a
+// table missing from its pair is KEPT (Settings builds a rule one tap at a
+// time, and every tap is a write); only a rule with nothing in its pair goes,
+// and RTDB could not have held that one anyway. activePickRules is the subset
+// the pickers enforce. Shared by sanitizeLayout and buildLayout: one reading.
+export var PICK_RULES_MAX=20;
+export function normalizePickRules(raw,idSet){
+  raw=(raw&&typeof raw==="object")?raw:DEFAULT_LAYOUT.pickRules;
+  var out=[];
+  (Array.isArray(raw.rules)?raw.rules:[]).forEach(function(r){
+    if(!r||typeof r!=="object"||out.length>=PICK_RULES_MAX) return;
+    var pair=[];
+    (Array.isArray(r.pair)?r.pair:[]).map(String).forEach(function(id){
+      if(idSet[id]&&pair.indexOf(id)<0&&pair.length<2) pair.push(id);
+    });
+    if(!pair.length) return;
+    var need=[];
+    (Array.isArray(r.need)?r.need:[]).map(String).forEach(function(id){
+      if(idSet[id]&&pair.indexOf(id)<0&&need.indexOf(id)<0) need.push(id);
+    });
+    out.push({pair:pair,need:need});
+  });
+  return out;
+}
+export function activePickRules(rules){
+  return (rules||[]).filter(function(r){return r.pair.length===2&&r.need.length>0;});
+}
+
 // v15.9.0: normalize a raw priorities config against the layout's table ids.
 // WHOLE-OBJECT fallback only: an absent/malformed priorities object seeds from
 // DEFAULT_LAYOUT.priorities (a legacy settings/layout node predating v15.9.0);
@@ -296,7 +343,7 @@ function normalizePriorities(p,idSet){
 // Pure derivation: a layout config → every value the app reads at runtime,
 // INCLUDING the combos + clusters (Phase 4). setLayout() assigns the result to the
 // live bindings; the deep-equal verify calls this directly. buildLayout(DEFAULT_LAYOUT)
-// reproduces the pre-Phase-4 hard-coded VALID_COMBOS (40, ordered) + CLUSTERS exactly.
+// gives the 40 combos of the MGT layout, in order, + CLUSTERS.
 // Combo fields fall back to DEFAULT_LAYOUT's when absent (e.g. a Phase-3 node that
 // only has tables+kitchenLimit), so an upgrade-in-place stays MGT-correct.
 export function buildLayout(cfg){
@@ -348,45 +395,29 @@ export function buildLayout(cfg){
     OUTDOOR:outdoor,INDOOR:indoor,ALL_TABLES:allTables,TIMELINE_TABLES:allTables,
     TOTAL_SEATS:allTables.reduce(function(a,t){return a+t.capacity;},0),
     ZONE_OF:zoneOf,KITCHEN_TABLE_LIMIT:kitchenLimit,
-    // Generic picker grouping, LAZY (v15.0.1): setLayout only needs it on the
-    // !IS_MGT_LAYOUT path (the MGT path swaps in the curated struct), so defer
-    // the work instead of computing-and-discarding it on every MGT snapshot.
+    // The picker grouping, built by setLayout (a function since v15.0.1, when
+    // one path discarded it; v18.6.1 left a single caller).
     makeTableGroups:function(){return buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf);},
     VALID_COMBOS:combos,CLUSTERS:clusters,
     // v15.9.0: data-driven optimizer priorities (see normalizePriorities above).
-    PRIORITIES:normalizePriorities(cfg.priorities,idSet)
+    PRIORITIES:normalizePriorities(cfg.priorities,idSet),
+    // v18.6.1: the rules the two table pickers enforce (complete ones only).
+    PICK_RULES:activePickRules(normalizePickRules(cfg.pickRules,idSet))
   };
 }
-
-// Canonical, order-independent fingerprint of a derived layout: tables
-// (id:cap:zone) + combos (sortedIds:cap), each sorted. Two layouts with the same
-// signature are interchangeable for the optimizer's hand-tuned heuristics.
-function layoutSignature(L){
-  var t=L.ALL_TABLES.map(function(x){return x.id+":"+x.capacity+":"+(L.ZONE_OF[x.id]||"outdoor");}).sort().join(",");
-  var c=L.VALID_COMBOS.map(function(x){return comboKey(x.ids)+":"+x.cap;}).sort().join(",");
-  return t+"|"+c;
-}
-// The MGT fingerprint, computed once from DEFAULT_LAYOUT (buildLayout + comboKey
-// are hoisted; DEFAULT_LAYOUT is assigned above) — the detect-and-apply reference.
-var MGT_SIGNATURE=layoutSignature(buildLayout(DEFAULT_LAYOUT));
 
 // Reassign the layout-derived bindings from a config. Called by useLayout on each
 // Firebase snapshot, and once at module load (bottom of file) to seed from
 // DEFAULT_LAYOUT. Only this module may reassign its own exports, so the setter
-// lives here. Also recomputes IS_MGT_LAYOUT (signature vs MGT) for the optimizer.
+// lives here.
 export function setLayout(cfg){
   var L=buildLayout(cfg);
   OUTDOOR=L.OUTDOOR;INDOOR=L.INDOOR;ALL_TABLES=L.ALL_TABLES;TIMELINE_TABLES=L.TIMELINE_TABLES;
   TOTAL_SEATS=L.TOTAL_SEATS;ZONE_OF=L.ZONE_OF;KITCHEN_TABLE_LIMIT=L.KITCHEN_TABLE_LIMIT;
   VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
   PRIORITIES=L.PRIORITIES; // v15.9.0 — the optimizer's data-driven heuristics
-  // v15.9.0: the signature (tables+combos only — priorities deliberately excluded)
-  // now gates ONLY the curated picker grouping below; the optimizer reads PRIORITIES.
-  IS_MGT_LAYOUT=(layoutSignature(L)===MGT_SIGNATURE);
-  // Picker grouping: curated MGT struct on the MGT path (built from the resolved
-  // tables so caps stay live), else the generic join-group derivation (lazy —
-  // only built when actually needed).
-  TABLE_GROUPS=IS_MGT_LAYOUT?buildTableGroups({tables:L.ALL_TABLES}):L.makeTableGroups();
+  PICK_RULES=L.PICK_RULES; // v18.6.1 — what the table pickers refuse
+  TABLE_GROUPS=L.makeTableGroups();
 }
 // v14.4.0 / v15.0.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable
 // (Settings → General → Opening hours), persisted to Firebase (settings/operatingHours)
@@ -849,9 +880,9 @@ export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
 // Phase B2: shared from here (consumed by TableGrid + App.jsx's Preferred picker).
-// v15.0.0: now a layout-derived live `let` binding (set by setLayout from
-// TABLE_GROUP_STRUCT + the config's live caps). `tables[].cap` is the standalone
-// capacity for the visual chip label.
+// v15.0.0: now a layout-derived live `let` binding (set by setLayout from the
+// layout's join groups, v18.6.1). `tables[].cap` is the standalone capacity for
+// the visual chip label.
 export let TABLE_GROUPS=[];
 
 // ── Seed all layout-derived bindings from DEFAULT_LAYOUT at module load ────────

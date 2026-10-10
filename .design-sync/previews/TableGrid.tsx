@@ -33,18 +33,18 @@ function Picker({ dark = false, modal, initial, busy, seated = [], swap = false 
   );
 }
 
-// A walk-in at 20:10: the seated tables are taken, 5B is picked.
+// A walk-in at 20:10: the seated tables are taken, 7 is picked.
 export const WalkIn = () => (
-  <Picker modal={WALKIN} initial={["5B"]} busy={["i2", "5A", "7", "2", "3"]} />
+  <Picker modal={WALKIN} initial={["7"]} busy={["11", "6", "9", "3", "4"]} />
 );
 
 // Assigning an existing booking by hand, swap mode on: a table held by a party
 // that has not sat down yet can still be taken (labelled "swap"); a seated
 // party's table cannot (labelled "busy", dimmed).
 export const ManualAssignSwap = () => (
-  <Picker modal={MANUAL} initial={["1A", "1B"]} busy={["i2", "5A", "7", "2", "3", "i3", "4", "6"]} seated={["i2", "5A", "7", "2", "3"]} swap />
+  <Picker modal={MANUAL} initial={["1", "2"]} busy={["11", "6", "9", "3", "4", "12", "5", "8"]} seated={["11", "6", "9", "3", "4"]} swap />
 );
 
 export const DarkTheme = () => (
-  <Picker dark modal={WALKIN} initial={["i2", "i3"]} busy={["5A", "7", "2", "3", "i1"]} />
+  <Picker dark modal={WALKIN} initial={["11", "12"]} busy={["6", "9", "3", "4", "10"]} />
 );

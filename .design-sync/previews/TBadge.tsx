@@ -1,8 +1,8 @@
 import { TBadge, SP } from "megustastu-bookings";
 import { Surface } from "./_shared/frame";
 
-const OUT = ["1A", "1B", "2", "3", "4", "5A", "5B", "6", "7"];
-const IN = ["i1", "i2", "i3", "i4"];
+const OUT = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+const IN = ["10", "11", "12", "13"];
 
 export const AllTables = () => (
   <Surface>
@@ -13,12 +13,12 @@ export const AllTables = () => (
 
 export const JoinedTables = () => (
   <Surface>
-    <div style={{ display: "flex", gap: SP.snug }}><TBadge id="5A" /><TBadge id="5B" /></div>
+    <div style={{ display: "flex", gap: SP.snug }}><TBadge id="6" /><TBadge id="7" /></div>
   </Surface>
 );
 
 export const DarkTheme = () => (
   <Surface dark>
-    <div style={{ display: "flex", gap: SP.snug }}><TBadge id="3" /><TBadge id="i2" /></div>
+    <div style={{ display: "flex", gap: SP.snug }}><TBadge id="4" /><TBadge id="11" /></div>
   </Surface>
 );

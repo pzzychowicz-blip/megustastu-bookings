@@ -24,6 +24,7 @@ import {
   hoursFor,
   ZONE_OF,
   PRIORITIES,
+  PICK_RULES,
   TURN_BUFFER
 } from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
 import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
@@ -522,7 +523,7 @@ export function isAllIn(ids){return ids.every(isIn);}
 export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
 // v15.0.0 Phase 5 / v15.9.0: a "mixed-large" combo spans both zones. When the
 // priorities config names required tables (PRIORITIES.mixedRequire — MGT's seed:
-// 1A+1B+7), a cross-zone set is allowed only when it includes ALL of them;
+// 1+2+9), a cross-zone set is allowed only when it includes ALL of them;
 // otherwise any cross-zone set that is a DECLARED combo (in VALID_COMBOS) is allowed.
 export function isMixedLarge(ids){
   if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
@@ -530,6 +531,74 @@ export function isMixedLarge(ids){
   if(req.length) return req.every(function(id){return ids.includes(id);});
   var k=ids.slice().sort().join("|");
   return VALID_COMBOS.some(function(c){return c.ids.slice().sort().join("|")===k;});
+}
+// v18.6.1: the pick rule a hand-picked set of tables breaks, or null. A rule
+// (settings/layout.pickRules, live as PICK_RULES) names two tables that may be
+// in one set only with every table of its `need`. A set that holds a whole
+// DECLARED combo containing both is let through: the layout says those tables
+// go together (1+2+9+10+13 seats 12 while 10+13 alone need 11 and 12), and the
+// optimiser may place a party on exactly that set. It was four ids in the two
+// pickers until v18.6.1, with no such exception, so they refused that set.
+// `rules` and `combos` are arguments for the tests; the pickers pass neither.
+export function pickBlockedBy(ids,rules,combos){
+  var set=ids||[];
+  var has=function(id){return set.indexOf(id)>=0;};
+  var list=rules||PICK_RULES;
+  var declared=combos||VALID_COMBOS;
+  for(var i=0;i<list.length;i++){
+    var r=list[i];
+    if(!has(r.pair[0])||!has(r.pair[1])||r.need.every(has)) continue;
+    var covered=declared.some(function(c){
+      return c.ids.indexOf(r.pair[0])>=0&&c.ids.indexOf(r.pair[1])>=0&&c.ids.every(has);
+    });
+    if(!covered) return r;
+  }
+  return null;
+}
+// v18.6.1 (follow-up): what the two pickers ASK, and the sentence they show.
+// pickRefusal(next) is for a table being added: the rule the new set breaks, as
+// a sentence, or null. unpickRefusal(current, id) is for one being taken out,
+// which the four ids never asked: 10+11+12+13 less 11 is 10+12+13, a set the
+// rule forbids, and it saved. A set that ALREADY breaks a rule (stored that way,
+// or made so by a layout edit) may be taken apart in any order, or the picker
+// would hold the host in it.
+export function pickRuleText(r){
+  if(!r.need.length) return "Tables "+r.pair[0]+" and "+r.pair[1]+" cannot be picked together.";
+  var need=r.need.length>1?r.need.slice(0,-1).join(", ")+" and "+r.need[r.need.length-1]:r.need[0];
+  return "Tables "+r.pair[0]+" and "+r.pair[1]+" go together only with "+need+".";
+}
+export function pickRefusal(next,rules,combos){
+  var r=pickBlockedBy(next,rules,combos);
+  return r?pickRuleText(r):null;
+}
+export function unpickRefusal(current,id,rules,combos){
+  var cur=current||[];
+  if(pickBlockedBy(cur,rules,combos)) return null;
+  return pickRefusal(cur.filter(function(x){return x!==id;}),rules,combos);
+}
+// v18.6.1 (the /code-review): one tap on a table in a hand picker, as a plan:
+// {tables} (the selection after it) or {refuse} (a pick rule's sentence, the
+// selection unchanged). The table picker and the walk-in form each held a copy,
+// and both asked the rule of the set BEFORE the auto-prune: a party of 2 on
+// table 10 tapping 13, which swaps 10 for 13, was refused for "10 and 13".
+// The prune (once the selection seats `needed`, the oldest picks go until it
+// no longer does, then the new table is added) comes first; the rule is asked
+// of what would actually be selected. Whether a table may be tapped at all
+// (busy, seated, swap mode) stays with each picker: it is asked before this.
+export function togglePick(sel,id,needed,rules,combos){
+  var cur=sel||[];
+  if(cur.indexOf(id)>=0){
+    var out=unpickRefusal(cur,id,rules,combos);
+    return out?{refuse:out}:{tables:cur.filter(function(x){return x!==id;})};
+  }
+  var next=cur.concat([id]);
+  if(cur.length>0&&comboCapBest(cur)>=needed){
+    var trimmed=cur.slice();
+    while(trimmed.length>0&&comboCapBest(trimmed)>=needed) trimmed=trimmed.slice(1);
+    next=trimmed.concat([id]);
+  }
+  var no=pickRefusal(next,rules,combos);
+  return no?{refuse:no}:{tables:next};
 }
 export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pref!=="auto") return false;if(mixed&&!isMixedLarge(ids)) return false;if(pref==="indoor") return isAllIn(ids);if(pref==="outdoor") return isAllOut(ids);return true;}
 export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
@@ -641,7 +710,7 @@ export function canAssign(ids,slots,s,e){
 // config both return 0 (no preference) — the optimizer then ranks combos purely by
 // _comboLoc (zone grouping, layout-agnostic) + capacity/length. _comboLoc stays on.
 // _indoorPri: ranked anchor tables inside cross-zone combos; the earliest-ranked
-// anchor present wins, boost = anchors.length - index (MGT seed: i4→2, i1→1).
+// anchor present wins, boost = anchors.length - index (MGT seed: 13→2, 10→1).
 function _indoorPri(c){var an=PRIORITIES.anchors;for(var i=0;i<an.length;i++){if(c.ids.indexOf(an[i])>=0) return an.length-i;}return 0;}
 function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
 // _comboPri: first comboRule matching (key, size band) wins — avoid → +100 (last
@@ -656,7 +725,7 @@ function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORI
 //      reported bug: an 8-top on 7 took a 5-table combo);
 //   2. then the coded PREFERENCE rules (PRIORITIES.comboRules — editable in
 //      Settings → Layout → Table priorities), so within one footprint the
-//      preferred attach wins (e.g. 1A+1B+7+i4/i1 over +i2/+i3). The rule match
+//      preferred attach wins (e.g. 1+2+9+13/10 over +11/+12). The rule match
 //      is BAND-AGNOSTIC here (key only, size ignored) — a drop honors the
 //      preference regardless of the rule's optimizer size-band, per Patryk;
 //   3. then least capacity (fewest wasted seats), then id for determinism.

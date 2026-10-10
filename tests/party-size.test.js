@@ -34,7 +34,7 @@ describe("guestsLabel — the one word", () => {
   });
 
   it("is what the spoken labels and the forms' starting line say", () => {
-    expect(describeBooking({ name: "Ana", time: "20:00", size: 1, tables: ["3"], status: "confirmed" }))
+    expect(describeBooking({ name: "Ana", time: "20:00", size: 1, tables: ["4"], status: "confirmed" }))
       .toContain("1\u00a0guest,");
     expect(startingPhrase({ starts: 1, guests: 1 })).toBe("1\u00a0booking · 1\u00a0guest");
     expect(startingPhrase({ starts: 2, guests: 6 })).toBe("2\u00a0bookings · 6\u00a0guests");

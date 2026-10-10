@@ -33,31 +33,31 @@ function del(id, bookings, more) {
 
 describe("planDelete", () => {
   it("removes the booking and nobody else", () => {
-    const list = [bk("a", "13:00", ["1A"]), bk("b", "14:00", ["2"])];
+    const list = [bk("a", "13:00", ["1"]), bk("b", "14:00", ["3"])];
     const plan = del("a", list);
     expect(plan.skip).toBe(null);
     expect(plan.voucherBack).toBe(undefined);
     expect(plan.transform(list)).toEqual([list[1]]);
   });
   it("a booking that is already gone changes nothing", () => {
-    const list = [bk("a", "13:00", ["1A"])];
+    const list = [bk("a", "13:00", ["1"])];
     expect(ids(del("gone", list).transform(list))).toEqual(["a"]);
   });
   it("the transform is memoised by prev: the undo delta and the write share one pass", () => {
-    const list = [bk("a", "13:00", ["1A"]), bk("b", "14:00", ["2"])];
+    const list = [bk("a", "13:00", ["1"]), bk("b", "14:00", ["3"])];
     const plan = del("a", list);
     expect(plan.transform(list)).toBe(plan.transform(list));
-    const other = [bk("a", "13:00", ["1A"]), bk("c", "15:00", ["3"])];
+    const other = [bk("a", "13:00", ["1"]), bk("c", "15:00", ["4"])];
     expect(ids(plan.transform(other))).toEqual(["c"]);       // a replay runs on what it is handed
   });
   it("a standing booking's week names the rule and date to park, and still deletes", () => {
-    const list = [bk("rR1_" + TODAY, "20:00", ["1A"], { recurringId: "R1", recurringDate: TODAY })];
+    const list = [bk("rR1_" + TODAY, "20:00", ["1"], { recurringId: "R1", recurringDate: TODAY })];
     const plan = del(list[0].id, list);
     expect(plan.skip).toEqual({ ruleId: "R1", date: TODAY });
     expect(plan.transform(list)).toEqual([]);
   });
   it("money taken for the visit is asked about first, and nothing is planned", () => {
-    const list = [bk("a", "13:00", ["1A"], { status: "completed", voucherCode: "USED2345" })];
+    const list = [bk("a", "13:00", ["1"], { status: "completed", voucherCode: "USED2345" })];
     const v = sanitizeVoucher({ value: 50, remaining: 40, status: "active", issuedAt: 1,
       redemptions: { a: { amount: 10, at: 1, by: "x" } } }, "USED2345");
     const src = { vouchersByCode: { USED2345: v } };
@@ -67,14 +67,14 @@ describe("planDelete", () => {
     expect(del("a", list, Object.assign({ vouchersOn: false }, src)).transform(list)).toEqual([]);
   });
   it("a voucher attached with nothing taken is not asked about", () => {
-    const list = [bk("a", "13:00", ["1A"], { voucherCode: "USED2345" })];
+    const list = [bk("a", "13:00", ["1"], { voucherCode: "USED2345" })];
     const v = sanitizeVoucher({ value: 50, remaining: 50, status: "active", issuedAt: 1 }, "USED2345");
     expect(del("a", list, { vouchersByCode: { USED2345: v } }).voucherBack).toBe(undefined);
   });
   it("the guest's tags move to their remaining booking when the one holding them goes", () => {
     const list = [
-      bk("a", "13:00", ["1A"], { phone: "+34 600 000 001", guestTags: ["g-allergy"], guestTagsAt: 5 }),
-      bk("b", "14:00", ["2"], { phone: "+34 600 000 001" }),
+      bk("a", "13:00", ["1"], { phone: "+34 600 000 001", guestTags: ["g-allergy"], guestTagsAt: 5 }),
+      bk("b", "14:00", ["3"], { phone: "+34 600 000 001" }),
     ];
     const after = del("a", list).transform(list);
     expect(ids(after)).toEqual(["b"]);
@@ -83,7 +83,7 @@ describe("planDelete", () => {
   it("with the optimiser on, the day is re-placed in the same write", () => {
     const tomorrow = new Date(TODAY + "T00:00:00Z"); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     const T = tomorrow.toISOString().slice(0, 10);
-    const list = [bk("a", "13:00", ["1A"], { date: T }), bk("b", "13:00", [], { date: T })];
+    const list = [bk("a", "13:00", ["1"], { date: T }), bk("b", "13:00", [], { date: T })];
     const after = del("a", list, { autoOptimizer: true, viewDate: T }).transform(list);
     expect(ids(after)).toEqual(["b"]);
     expect(byId(after, "b").tables.length).toBeGreaterThan(0);
@@ -102,7 +102,7 @@ describe("planUndo", () => {
     expect(asked).toEqual([]);
   });
   it("a delete: the booking is back, with the note on it and its date to go to", () => {
-    const prev = [bk("a", "13:00", ["1A"]), bk("b", "14:00", ["2"])];
+    const prev = [bk("a", "13:00", ["1"]), bk("b", "14:00", ["3"])];
     const post = [prev[1]];
     const plan = undo({ snapshots: undoSnapshots(prev, post), primaryId: "a", kind: "delete" });
     expect(plan.date).toBe(TODAY);
@@ -112,7 +112,7 @@ describe("planUndo", () => {
     expect(byId(back, "b")).toEqual(prev[1]);
   });
   it("a cancel and an edit: the snapshot replaces what is there, each with its own note", () => {
-    const prev = [bk("a", "13:00", ["1A"])];
+    const prev = [bk("a", "13:00", ["1"])];
     const cancelled = [Object.assign({}, prev[0], { status: "cancelled" })];
     const c = undo({ snapshots: undoSnapshots(prev, cancelled), primaryId: "a", kind: "cancel" }).transform(cancelled);
     expect(byId(c, "a").status).toBe("confirmed");
@@ -123,23 +123,23 @@ describe("planUndo", () => {
     expect(byId(e, "a").history[0].action).toBe("edit undone");
   });
   it("only the booking acted on gets the note; one the optimiser moved is put back bare", () => {
-    const prev = [bk("a", "13:00", ["1A"]), bk("b", "14:00", ["2"])];
-    const post = [Object.assign({}, prev[1], { tables: ["1A"] })];
+    const prev = [bk("a", "13:00", ["1"]), bk("b", "14:00", ["3"])];
+    const post = [Object.assign({}, prev[1], { tables: ["1"] })];
     const back = undo({ snapshots: undoSnapshots(prev, post), primaryId: "a", kind: "delete" }).transform(post);
-    expect(byId(back, "b").tables).toEqual(["2"]);
+    expect(byId(back, "b").tables).toEqual(["3"]);
     expect(byId(back, "b").history).toEqual([]);
   });
   it("restores verbatim: a booking made since then keeps its table, and nothing is re-placed", () => {
-    const prev = [bk("a", "13:00", ["1A"])];
-    const since = [bk("c", "13:00", ["1A"])];
+    const prev = [bk("a", "13:00", ["1"])];
+    const since = [bk("c", "13:00", ["1"])];
     const back = undo({ snapshots: undoSnapshots(prev, []), primaryId: "a", kind: "delete" }).transform(since);
-    expect(byId(back, "a").tables).toEqual(["1A"]);
-    expect(byId(back, "c").tables).toEqual(["1A"]);       // the reconciliation effect's to resolve
+    expect(byId(back, "a").tables).toEqual(["1"]);
+    expect(byId(back, "c").tables).toEqual(["1"]);       // the reconciliation effect's to resolve
   });
   it("with no primary among the snapshots, the first one names the date", () => {
     const tomorrow = new Date(TODAY + "T00:00:00Z"); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     const T = tomorrow.toISOString().slice(0, 10);
-    const plan = undo({ snapshots: [bk("x", "13:00", ["1A"], { date: T })], primaryId: "elsewhere", kind: "edit" });
+    const plan = undo({ snapshots: [bk("x", "13:00", ["1"], { date: T })], primaryId: "elsewhere", kind: "edit" });
     expect(plan.date).toBe(T);
   });
 });

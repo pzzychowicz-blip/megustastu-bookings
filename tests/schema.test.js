@@ -152,14 +152,14 @@ function sanitisers() {
 }
 
 const PINNED = {
-  schema: 1,
+  schema: 2,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
       "hooks/useDayShifts.js:sanitizeShifts": "42278cbe80",
       "hooks/useGeneralSettings.js:sanitizeGeneral": "9497dee0b6",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
-      "hooks/useLayout.js:sanitizeLayout": "ade2386fc8",
+      "hooks/useLayout.js:sanitizeLayout": "317b68da39",
       "hooks/useOperatingHours.js:sanitizeDay": "ad45829200",
       "hooks/useOperatingHours.js:sanitizeWeek": "626f2ee9fb",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",

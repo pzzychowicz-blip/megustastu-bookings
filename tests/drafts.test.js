@@ -39,8 +39,8 @@ describe("sameDraft — unchanged drafts", () => {
 
   it("ignores table-pick ORDER — the arrays are sets in spirit", () => {
     expect(sameDraft(
-      { ...FORM, preferredTables: ["5A", "1B", "7"] },
-      { ...FORM, preferredTables: ["7", "5A", "1B"] },
+      { ...FORM, preferredTables: ["6", "2", "9"] },
+      { ...FORM, preferredTables: ["9", "6", "2"] },
     )).toBe(true);
   });
 });
@@ -55,11 +55,11 @@ describe("sameDraft — real edits", () => {
   });
 
   it("catches an added table pick", () => {
-    expect(sameDraft(FORM, { ...FORM, manualTables: ["6"] })).toBe(false);
+    expect(sameDraft(FORM, { ...FORM, manualTables: ["8"] })).toBe(false);
   });
 
   it("catches a removed table pick", () => {
-    expect(sameDraft({ ...FORM, manualTables: ["6", "7"] }, { ...FORM, manualTables: ["6"] })).toBe(false);
+    expect(sameDraft({ ...FORM, manualTables: ["8", "9"] }, { ...FORM, manualTables: ["8"] })).toBe(false);
   });
 
   it("catches a genuine boolean flip", () => {

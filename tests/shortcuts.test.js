@@ -123,15 +123,15 @@ describe("the booking form on top", () => {
     expect(press("p", form).calls).toEqual([["setShowPrefPicker", true]]);
   });
   it("C clears hand-picked tables first", () => {
-    const { K, calls } = ctx(Object.assign({}, form, { form: { manualTables: ["3"] } }));
+    const { K, calls } = ctx(Object.assign({}, form, { form: { manualTables: ["4"] } }));
     const found = resolveShortcut({ key: "c" }, K, ENV);
     found.act(K);
     expect(calls[0][0]).toBe("setForm");
-    expect(calls[0][1]({ manualTables: ["3"], notes: "x" })).toEqual({ manualTables: [], notes: "x" });
+    expect(calls[0][1]({ manualTables: ["4"], notes: "x" })).toEqual({ manualTables: [], notes: "x" });
     expect(calls[1]).toEqual(["setSwapAffected", null]);
   });
   it("C marks a placed booking cleared, once, and does nothing for an unplaced one", () => {
-    const placed = [booking("b1", { _locked: true, tables: ["3"] })];
+    const placed = [booking("b1", { _locked: true, tables: ["4"] })];
     const state = Object.assign({}, form, { editId: "b1", bookings: placed });
     const { K, calls } = ctx(state);
     resolveShortcut({ key: "c" }, K, ENV).act(K);
@@ -153,18 +153,18 @@ describe("the booking form on top", () => {
     expect(press("h", form).none).toBe(true);
   });
   it("the form's keys do not fire through a modal above it", () => {
-    const under = { anyModal: true, topModalId: "discard", form: { manualTables: ["3"] } };
+    const under = { anyModal: true, topModalId: "discard", form: { manualTables: ["4"] } };
     ["a", "p", "c", "b", "h"].forEach((k) => expect(press(k, under).none, k).toBe(true));
   });
 });
 
 describe("the preferred-table picker", () => {
-  const picker = { anyModal: true, topModalId: "prefpicker", showPrefPicker: true, form: { preferredTables: ["5A"], manualTables: ["3"] } };
+  const picker = { anyModal: true, topModalId: "prefpicker", showPrefPicker: true, form: { preferredTables: ["6"], manualTables: ["4"] } };
   it("C clears the preferred tables, not the assigned ones", () => {
     const { K, calls } = ctx(picker);
     resolveShortcut({ key: "c" }, K, ENV).act(K);
     expect(calls.length).toBe(1);
-    expect(calls[0][1]({ preferredTables: ["5A"], manualTables: ["3"] })).toEqual({ preferredTables: [], manualTables: ["3"] });
+    expect(calls[0][1]({ preferredTables: ["6"], manualTables: ["4"] })).toEqual({ preferredTables: [], manualTables: ["4"] });
   });
   it("C with nothing to clear is left alone", () => {
     expect(press("c", Object.assign({}, picker, { form: { preferredTables: [] } })).none).toBe(true);

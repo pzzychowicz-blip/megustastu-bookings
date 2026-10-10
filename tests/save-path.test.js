@@ -259,7 +259,7 @@ function fullDay(date, time, locked) {
 }
 // The four indoor tables held at `time` by parties nobody can move.
 function indoorFull(date, time) {
-  return ["i1", "i2", "i3", "i4"].map((t) => bk("in" + t.slice(1), { date, time, tables: [t], _locked: true, _manual: true }));
+  return ["10", "11", "12", "13"].map((t) => bk("in" + t.slice(1), { date, time, tables: [t], _locked: true, _manual: true }));
 }
 
 // ── What a run is reduced to ────────────────────────────────────────────────
@@ -512,7 +512,7 @@ describe("the harness runs the code it claims to", () => {
   });
   it("draftOf builds exactly the draft openEdit opens with", () => {
     [
-      bk("b1", { tables: ["3"], deposit: 20, voucherCode: "ABCD2345", preferredTables: ["3"], guestId: "gx", notes: "n", phone: "+34 600 000 001" }),
+      bk("b1", { tables: ["4"], deposit: 20, voucherCode: "ABCD2345", preferredTables: ["4"], guestId: "gx", notes: "n", phone: "+34 600 000 001" }),
       bk("b2", { time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60 }),
       bk("b3", { size: 6, duration: 120, phone: null, notes: undefined, preferredTables: "x", guestId: undefined }),
     ].forEach((b) => expect(J(draftOf(b))).toBe(J(openEditDraft(b))));
@@ -606,8 +606,8 @@ describe("Save — doSave's own refusals, before either path", () => {
     `);
   });
   it("hand-picked tables somebody else holds", () => {
-    const b2 = bk("b2", { tables: ["4"] });
-    expect(runSave({ bookings: [b2], form: newDraft({ name: "Ana", time: "20:30", manualTables: ["4"] }) })).toMatchInlineSnapshot(`
+    const b2 = bk("b2", { tables: ["5"] });
+    expect(runSave({ bookings: [b2], form: newDraft({ name: "Ana", time: "20:30", manualTables: ["5"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
@@ -626,7 +626,7 @@ describe("Save — doSave's own refusals, before either path", () => {
     `);
   });
   it("asks about the voucher before completing", () => {
-    const b1 = bk("b1", { tables: ["1A"], voucherCode: "ABCD2345" });
+    const b1 = bk("b1", { tables: ["1"], voucherCode: "ABCD2345" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "completed" }), env: { voucherToAsk: () => true } })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -638,7 +638,7 @@ describe("Save — doSave's own refusals, before either path", () => {
     `);
   });
   it("asks about the redemption before walking a completed booking back", () => {
-    const b1 = bk("b1", { tables: ["1A"], status: "completed", voucherCode: "ABCD2345" });
+    const b1 = bk("b1", { tables: ["1"], status: "completed", voucherCode: "ABCD2345" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }), env: { voucherToRestore: () => true } })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -650,13 +650,13 @@ describe("Save — doSave's own refusals, before either path", () => {
     `);
   });
   it("asks before seating a party on a seated party's table", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"] });
-    const b2 = bk("b2", { date: TODAY, time: "18:30", tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"] });
+    const b2 = bk("b2", { date: TODAY, time: "18:30", tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { status: "seated" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setSeatClash({"id":"b1","status":"seated","from":"form","others":[{"id":"b2","name":"Guest b2","time":"18:30","tables":["3"]}]})",
+          "setSeatClash({"id":"b1","status":"seated","from":"form","others":[{"id":"b2","name":"Guest b2","time":"18:30","tables":["4"]}]})",
         ],
         "guard": "ready",
       }
@@ -667,7 +667,7 @@ describe("Save — doSave's own refusals, before either path", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("Save — an edit on a day the optimiser owns", () => {
   it("notes only", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { notes: "window seat" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -694,7 +694,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("notes only, on a table the optimiser would not choose: any save re-places it", () => {
-    const b1 = bk("b1", { tables: ["3"] });
+    const b1 = bk("b1", { tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { notes: "window seat" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -713,7 +713,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: notes updated"}]",
                 "notes": """ → "window seat"",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -722,7 +722,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("nothing changed: a history line, and no undo", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -747,8 +747,8 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("a time change into another party's window", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
-    const b2 = bk("b2", { time: "18:30", tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
+    const b2 = bk("b2", { time: "18:30", tables: ["1"] });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { time: "19:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -768,7 +768,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: time 20:00→19:00"}]",
                 "scheduledTime": ""20:00" → "19:00"",
-                "tables": "["1A"] → ["1B"]",
+                "tables": "["1"] → ["2"]",
                 "time": ""20:00" → "19:00"",
               },
             },
@@ -778,7 +778,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("a date change", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -806,7 +806,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("a preference change", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { preference: "indoor" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -826,7 +826,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: pref auto→indoor"}]",
                 "preference": ""auto" → "indoor"",
-                "tables": "["1A"] → ["i1"]",
+                "tables": "["1"] → ["10"]",
               },
             },
           },
@@ -835,8 +835,8 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("preferred tables", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
-    expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { preferredTables: ["4"] }) })).toMatchInlineSnapshot(`
+    const b1 = bk("b1", { tables: ["1"] });
+    expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { preferredTables: ["5"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
@@ -853,9 +853,9 @@ describe("Save — an edit on a day the optimiser owns", () => {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
               "b1": {
-                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: preferred tables: 4"}]",
-                "preferredTables": "[] → ["4"]",
-                "tables": "["1A"] → ["4"]",
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: preferred tables: 5"}]",
+                "preferredTables": "[] → ["5"]",
+                "tables": "["1"] → ["5"]",
               },
             },
           },
@@ -884,31 +884,31 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "f01": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: size 2→3"}]",
                 "size": "2 → 3",
-                "tables": "["1A"] → ["7"]",
+                "tables": "["1"] → ["9"]",
               },
               "f02": {
-                "tables": "["1B"] → ["1A"]",
+                "tables": "["2"] → ["1"]",
               },
               "f03": {
-                "tables": "["2"] → ["1B"]",
-              },
-              "f04": {
                 "tables": "["3"] → ["2"]",
               },
-              "f05": {
+              "f04": {
                 "tables": "["4"] → ["3"]",
               },
+              "f05": {
+                "tables": "["5"] → ["4"]",
+              },
               "f06": {
-                "tables": "["5A"] → ["4"]",
+                "tables": "["6"] → ["5"]",
               },
               "f07": {
-                "tables": "["5B"] → ["5A"]",
+                "tables": "["7"] → ["6"]",
               },
               "f08": {
-                "tables": "["6"] → ["5B"]",
+                "tables": "["8"] → ["7"]",
               },
               "f09": {
-                "tables": "["7"] → ["6"]",
+                "tables": "["9"] → ["8"]",
               },
             },
           },
@@ -938,7 +938,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
                 "_conflict": "true → false",
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: notes updated"}]",
                 "notes": """ → "anniversary"",
-                "tables": "[] → ["1A"]",
+                "tables": "[] → ["1"]",
               },
             },
           },
@@ -947,7 +947,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("a cancelled booking revived", () => {
-    const b1 = bk("b1", { tables: ["3"], status: "cancelled" });
+    const b1 = bk("b1", { tables: ["4"], status: "cancelled" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -966,7 +966,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"}]",
                 "status": ""cancelled" → "confirmed"",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -1003,7 +1003,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("confirmed → pending", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "pending" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1030,7 +1030,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("pending → confirmed through Save & confirm", () => {
-    const b1 = bk("b1", { tables: ["1A"], status: "pending" });
+    const b1 = bk("b1", { tables: ["1"], status: "pending" });
     expect(runSave({ bookings: [b1], editId: "b1", statusOverride: "confirmed", form: draftOf(b1) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1057,8 +1057,8 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("a guest join and nothing else: the seed is stamped, and there is no undo", () => {
-    const b1 = bk("b1", { tables: ["1A"], name: "Lola" });
-    const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["3"], status: "completed" });
+    const b1 = bk("b1", { tables: ["1"], name: "Lola" });
+    const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["4"], status: "completed" });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { guestId: "gb2", guestSeed: "b2" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1087,7 +1087,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("moved into a full evening it would push somebody off", () => {
-    const b1 = bk("b1", { time: "18:00", tables: ["1A"] });
+    const b1 = bk("b1", { time: "18:00", tables: ["1"] });
     expect(runSave({ bookings: fullDay(T, "20:00", false).concat([b1]), editId: "b1", form: draftOf(b1, { time: "20:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1099,7 +1099,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("moved into an evening nobody can be moved from: no table", () => {
-    const b1 = bk("b1", { time: "18:00", tables: ["1A"] });
+    const b1 = bk("b1", { time: "18:00", tables: ["1"] });
     expect(runSave({ bookings: fullDay(T, "20:00", true).concat([b1]), editId: "b1", form: draftOf(b1, { time: "20:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1112,8 +1112,8 @@ describe("Save — an edit on a day the optimiser owns", () => {
   });
   // v18.3.5: this pinned a "saved" toast over a write that re-placed b2 only.
   it("the booking was deleted elsewhere while the form was open: refused, the form stays open", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
-    const b2 = bk("b2", { tables: ["3"] });
+    const b1 = bk("b1", { tables: ["1"] });
+    const b2 = bk("b2", { tables: ["4"] });
     expect(runSave({ bookings: [b2], editId: "b1", form: draftOf(b1, { notes: "late edit" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1126,7 +1126,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
   });
   // v18.3.5: this pinned "keeps its no-show flag" until the walk-back cleared it.
   it("a no-show walked back to confirmed is no longer a no-show", () => {
-    const b1 = bk("b1", { tables: ["1A"], status: "cancelled", noShow: true, notes: "allergy: nuts\nNo show" });
+    const b1 = bk("b1", { tables: ["1"], status: "cancelled", noShow: true, notes: "allergy: nuts\nNo show" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1155,7 +1155,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
     `);
   });
   it("a save the write path holds: no flash and no undo, the form still closes", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", dispatchOk: false, form: draftOf(b1, { time: "20:30" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1186,7 +1186,7 @@ describe("Save — an edit on a day the optimiser owns", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("Save — what an edit normalises", () => {
   it("name, phone, notes, deposit and voucher together: one history line, in clause order", () => {
-    const b1 = bk("b1", { tables: ["1A"], name: "Ana", phone: "+34 600 000 001" });
+    const b1 = bk("b1", { tables: ["1"], name: "Ana", phone: "+34 600 000 001" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { name: "Ana María", phone: "+44 7700 900123", notes: "x", deposit: "25.5", voucherCode: "abcd-2345" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1217,7 +1217,7 @@ describe("Save — what an edit normalises", () => {
     `);
   });
   it("a negative deposit and a cleared voucher", () => {
-    const b1 = bk("b1", { tables: ["1A"], deposit: 20, voucherCode: "ABCD2345" });
+    const b1 = bk("b1", { tables: ["1"], deposit: 20, voucherCode: "ABCD2345" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { deposit: "-5", voucherCode: "" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1245,7 +1245,7 @@ describe("Save — what an edit normalises", () => {
     `);
   });
   it("a stored number without a code, left untouched, still saves", () => {
-    const b1 = bk("b1", { tables: ["1A"], phone: "600111222" });
+    const b1 = bk("b1", { tables: ["1"], phone: "600111222" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { notes: "regular" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1272,7 +1272,7 @@ describe("Save — what an edit normalises", () => {
     `);
   });
   it("a number typed with its code but no plus gets the plus", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
+    const b1 = bk("b1", { tables: ["1"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { phone: "34 600 111 222" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1303,7 +1303,7 @@ describe("Save — what an edit normalises", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("Save — an edit today, after the cutoff (optimiser off)", () => {
   it("a time change moves an unlocked booking to the best free table", () => {
-    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { time: "21:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1323,7 +1323,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: time 20:30→21:00"}]",
                 "scheduledTime": ""20:30" → "21:00"",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
                 "time": ""20:30" → "21:00"",
               },
             },
@@ -1333,8 +1333,8 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
     `);
   });
   it("…and before the cutoff, with the optimiser on, the whole day is re-placed", () => {
-    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["3"] });
-    const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["4"] });
+    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["4"] });
+    const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["5"] });
     expect(runSave({ at: TODAY + "T12:00:00", autoOptimizer: true, bookings: [b1, b2], editId: "b1", form: draftOf(b1, { time: "21:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1354,11 +1354,11 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T11:00:00.000Z","by":"staff@mgt.test","action":"edited: time 20:30→21:00"}]",
                 "scheduledTime": ""20:30" → "21:00"",
-                "tables": "["3"] → ["1B"]",
+                "tables": "["4"] → ["2"]",
                 "time": ""20:30" → "21:00"",
               },
               "b2": {
-                "tables": "["4"] → ["1A"]",
+                "tables": "["5"] → ["1"]",
               },
             },
           },
@@ -1367,7 +1367,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
     `);
   });
   it("a longer stay whose tables are still free keeps them", () => {
-    const b1 = bk("b1", { date: TODAY, tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { customDur: 120 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1396,8 +1396,8 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
     `);
   });
   it("a longer stay that runs into the next party is re-placed", () => {
-    const b1 = bk("b1", { date: TODAY, tables: ["3"] });
-    const b2 = bk("b2", { date: TODAY, time: "21:15", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, tables: ["4"] });
+    const b2 = bk("b2", { date: TODAY, time: "21:15", tables: ["4"] });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { customDur: 120 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1418,7 +1418,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
                 "duration": "90 → 120",
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: duration 90→120min"}]",
                 "originalDuration": "90 → 120",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -1427,7 +1427,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
     `);
   });
   it("revived with its table still free: it keeps it", () => {
-    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["3"], status: "cancelled" });
+    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["4"], status: "cancelled" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1454,8 +1454,8 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
     `);
   });
   it("revived with its table given away: it is re-placed", () => {
-    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["3"], status: "cancelled" });
-    const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, time: "20:30", tables: ["4"], status: "cancelled" });
+    const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["4"] });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1474,7 +1474,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: status cancelled→confirmed"}]",
                 "status": ""cancelled" → "confirmed"",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -1487,7 +1487,7 @@ describe("Save — an edit today, after the cutoff (optimiser off)", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("Save — seating, completing and walking back (today)", () => {
   it("seat a party that arrived late: the start moves, the end stays, the seat note shows", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"], notes: "nut allergy" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"], notes: "nut allergy" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "seated" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1498,7 +1498,7 @@ describe("Save — seating, completing and walking back (today)", () => {
           "armUndo(["b1"], "b1", "edit", false)",
           "setShowForm(false)",
           "setViewDate("2026-10-07")",
-          "setSeatNote({"id":"b1","name":"Guest b1","size":2,"time":"19:00","tables":["3"],"notes":"nut allergy","guestTags":[],"occasionTags":[]})",
+          "setSeatNote({"id":"b1","name":"Guest b1","size":2,"time":"19:00","tables":["4"],"notes":"nut allergy","guestTags":[],"occasionTags":[]})",
         ],
         "guard": "dispatched",
         "writes": [
@@ -1520,7 +1520,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("seat a party that arrived early", () => {
-    const b1 = bk("b1", { date: TODAY, time: "20:00", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, time: "20:00", tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "seated" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1552,7 +1552,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("seat with the time edited in the same save: the typed time wins", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "seated", time: "19:15" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1594,8 +1594,8 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("seat after completing the party at the table (the prompt's answer)", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"] });
-    const b2 = bk("b2", { date: TODAY, time: "17:30", tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"] });
+    const b2 = bk("b2", { date: TODAY, time: "17:30", tables: ["4"], status: "seated" });
     const cleared = { ids: ["b2"], today: TODAY, nowM: 19 * 60 + 30 };
     const mirror = [b1, Object.assign({}, b2, bookingLogic.completedSeatedPatch(b2, TODAY, cleared.nowM))];
     expect(runSave({ bookings: [b1, b2], mirror, editId: "b1", form: draftOf(b1, { status: "seated" }), env: { seatAskedRef: { current: true }, clearedSeatsRef: { current: cleared } } })).toMatchInlineSnapshot(`
@@ -1629,7 +1629,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("a seated booking cannot move to another date", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { date: NEXT }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1642,32 +1642,32 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("a seated party that grows past its table", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { size: 4 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setError("Party of 4 doesn't fit table 3 (seats 2). Assign tables that seat 4.")",
+          "setError("Party of 4 doesn't fit table 4 (seats 2). Assign tables that seat 4.")",
         ],
         "guard": "ready",
       }
     `);
   });
   it("a seated stay extended onto a party locked to the table", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"], status: "seated" });
-    const b2 = bk("b2", { date: TODAY, time: "20:45", tables: ["3"], _locked: true, _manual: true });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"], status: "seated" });
+    const b2 = bk("b2", { date: TODAY, time: "20:45", tables: ["4"], _locked: true, _manual: true });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { customDur: 150 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setError("Table 3 is also held by Guest b2 at 20:45, who is locked to it. Assign different tables.")",
+          "setError("Table 4 is also held by Guest b2 at 20:45, who is locked to it. Assign different tables.")",
         ],
         "guard": "ready",
       }
     `);
   });
   it("seated → completed: the length becomes the stay", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "completed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1698,7 +1698,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("confirmed → completed: the length is left alone", () => {
-    const b1 = bk("b1", { date: TODAY, time: "18:00", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, time: "18:00", tables: ["4"] });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "completed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1726,7 +1726,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("un-seat: the booked start and length come back", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1757,7 +1757,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("a seated booking's start corrected: its table stays", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:00", tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { time: "18:45" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1786,7 +1786,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("un-seat with the time typed in the same save: the typed time wins, nothing is restored", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed", time: "20:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1807,7 +1807,7 @@ describe("Save — seating, completing and walking back (today)", () => {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: time 19:30→20:00, status seated→confirmed"}]",
                 "scheduledTime": ""19:00" → "20:00"",
                 "status": ""seated" → "confirmed"",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
                 "time": ""19:30" → "20:00"",
               },
             },
@@ -1817,7 +1817,7 @@ describe("Save — seating, completing and walking back (today)", () => {
     `);
   });
   it("un-seat with a length typed in the same save: the start comes back, the typed length stays", () => {
-    const b1 = bk("b1", { date: TODAY, time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, tables: ["3"], status: "seated" });
+    const b1 = bk("b1", { date: TODAY, time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, tables: ["4"], status: "seated" });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { status: "confirmed", customDur: 120 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1852,8 +1852,8 @@ describe("Save — seating, completing and walking back (today)", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("Save — tables somebody chose by hand", () => {
   it("a hand-placed booking's time change keeps its table; the unlocked party in the way moves", () => {
-    const b1 = bk("b1", { tables: ["3"], _locked: true, _manual: true });
-    const b2 = bk("b2", { time: "21:00", tables: ["3"] });
+    const b1 = bk("b1", { tables: ["4"], _locked: true, _manual: true });
+    const b2 = bk("b2", { time: "21:00", tables: ["4"] });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { time: "20:30" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1876,7 +1876,7 @@ describe("Save — tables somebody chose by hand", () => {
                 "time": ""20:00" → "20:30"",
               },
               "b2": {
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -1885,34 +1885,34 @@ describe("Save — tables somebody chose by hand", () => {
     `);
   });
   it("…into a party locked to the same table", () => {
-    const b1 = bk("b1", { tables: ["3"], _locked: true, _manual: true });
-    const b2 = bk("b2", { time: "21:00", tables: ["3"], _locked: true, _manual: true });
+    const b1 = bk("b1", { tables: ["4"], _locked: true, _manual: true });
+    const b2 = bk("b2", { time: "21:00", tables: ["4"], _locked: true, _manual: true });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { time: "20:30" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setError("Table 3 is also held by Guest b2 at 21:00, who is locked to it. Assign different tables.")",
+          "setError("Table 4 is also held by Guest b2 at 21:00, who is locked to it. Assign different tables.")",
         ],
         "guard": "ready",
       }
     `);
   });
   it("…into a table block", () => {
-    const b1 = bk("b1", { tables: ["3"], _locked: true, _manual: true });
-    const blocks = [{ id: "k1", tableId: "3", date: T, from: "21:00", to: "22:00" }];
+    const b1 = bk("b1", { tables: ["4"], _locked: true, _manual: true });
+    const blocks = [{ id: "k1", tableId: "4", date: T, from: "21:00", to: "22:00" }];
     expect(runSave({ bookings: [b1], blocks, editId: "b1", form: draftOf(b1, { time: "20:30" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
-          "setError("Table 3 is blocked at that time. Assign different tables.")",
+          "setError("Table 4 is blocked at that time. Assign different tables.")",
         ],
         "guard": "ready",
       }
     `);
   });
   it("…today with the optimiser off: the party in the way is re-placed before the save", () => {
-    const b1 = bk("b1", { date: TODAY, tables: ["3"], _locked: true, _manual: true });
-    const b2 = bk("b2", { date: TODAY, time: "21:30", tables: ["3"] });
+    const b1 = bk("b1", { date: TODAY, tables: ["4"], _locked: true, _manual: true });
+    const b2 = bk("b2", { date: TODAY, time: "21:30", tables: ["4"] });
     expect(runSave({ bookings: [b1, b2], editId: "b1", form: draftOf(b1, { time: "20:30" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1935,7 +1935,7 @@ describe("Save — tables somebody chose by hand", () => {
                 "time": ""20:00" → "20:30"",
               },
               "b2": {
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -1944,8 +1944,8 @@ describe("Save — tables somebody chose by hand", () => {
     `);
   });
   it("tables picked in the form", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
-    expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { manualTables: ["4"] }) })).toMatchInlineSnapshot(`
+    const b1 = bk("b1", { tables: ["1"] });
+    expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { manualTables: ["5"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
@@ -1963,8 +1963,8 @@ describe("Save — tables somebody chose by hand", () => {
               "b1": {
                 "_locked": "false → true",
                 "_manual": "false → true",
-                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: tables manually set: 4"}]",
-                "tables": "["1A"] → ["4"]",
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: tables manually set: 5"}]",
+                "tables": "["1"] → ["5"]",
               },
             },
           },
@@ -1973,7 +1973,7 @@ describe("Save — tables somebody chose by hand", () => {
     `);
   });
   it("Clear on a hand-placed booking hands it back to the optimiser", () => {
-    const b1 = bk("b1", { tables: ["3"], _locked: true, _manual: true });
+    const b1 = bk("b1", { tables: ["4"], _locked: true, _manual: true });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { _clearManual: true }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -1994,7 +1994,7 @@ describe("Save — tables somebody chose by hand", () => {
                 "_locked": "true → false",
                 "_manual": "true → false",
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: manual assignment cleared"}]",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -2003,7 +2003,7 @@ describe("Save — tables somebody chose by hand", () => {
     `);
   });
   it("a finished visit's size: its table is a record and stays", () => {
-    const b1 = bk("b1", { date: TODAY, time: "17:00", size: 4, tables: ["7"], status: "completed", _locked: true, _manual: true });
+    const b1 = bk("b1", { date: TODAY, time: "17:00", size: 4, tables: ["9"], status: "completed", _locked: true, _manual: true });
     expect(runSave({ bookings: [b1], editId: "b1", form: draftOf(b1, { size: 5 }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2033,9 +2033,9 @@ describe("Save — tables somebody chose by hand", () => {
     `);
   });
   it("a swap: the table is taken from the party holding it, who is re-placed", () => {
-    const b1 = bk("b1", { tables: ["1A"] });
-    const b2 = bk("b2", { tables: ["3"], _locked: true, _manual: true });
-    expect(runSave({ bookings: [b1, b2], editId: "b1", swapAffected: [{ id: "b2", tables: ["3"] }], form: draftOf(b1, { manualTables: ["3"] }) })).toMatchInlineSnapshot(`
+    const b1 = bk("b1", { tables: ["1"] });
+    const b2 = bk("b2", { tables: ["4"], _locked: true, _manual: true });
+    expect(runSave({ bookings: [b1, b2], editId: "b1", swapAffected: [{ id: "b2", tables: ["4"] }], form: draftOf(b1, { manualTables: ["4"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
@@ -2054,13 +2054,13 @@ describe("Save — tables somebody chose by hand", () => {
               "b1": {
                 "_locked": "false → true",
                 "_manual": "false → true",
-                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: tables manually set: 3"}]",
-                "tables": "["1A"] → ["3"]",
+                "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"edited: tables manually set: 4"}]",
+                "tables": "["1"] → ["4"]",
               },
               "b2": {
                 "_locked": "true → false",
                 "_manual": "true → false",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
             },
           },
@@ -2089,7 +2089,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2113,7 +2113,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"pending","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"pending","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2121,7 +2121,7 @@ describe("Save — a new booking", () => {
     `);
   });
   it("tables picked in the form", () => {
-    expect(runSave({ form: newDraft({ name: "Ana", manualTables: ["4"] }) })).toMatchInlineSnapshot(`
+    expect(runSave({ form: newDraft({ name: "Ana", manualTables: ["5"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
@@ -2137,7 +2137,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["4"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["5"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2167,7 +2167,7 @@ describe("Save — a new booking", () => {
     `);
   });
   it("Book Again", () => {
-    const b1 = bk("b1", { date: PAST, time: "19:15", scheduledTime: "19:00", tables: ["3"], status: "completed" });
+    const b1 = bk("b1", { date: PAST, time: "19:15", scheduledTime: "19:00", tables: ["4"], status: "completed" });
     expect(runSave({ bookings: [b1], form: newDraft({ name: b1.name, returnOf: "b1" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2187,7 +2187,7 @@ describe("Save — a new booking", () => {
               "b1": {
                 "history": "[] → [{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"Book Again → new booking on 2026-10-14 at 20:00"}]",
               },
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created via Book Again (from Guest b1 on 2026-09-30 at 19:00)"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created via Book Again (from Guest b1 on 2026-09-30 at 19:00)"}],"_conflict":false}",
             },
           },
         ],
@@ -2211,7 +2211,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Guest b1","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":"b1","recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2236,7 +2236,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"usual table","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":"muyfzww09v3q","recurringDate":"2026-10-14","guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"usual table","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":"muyfzww09v3q","recurringDate":"2026-10-14","guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2282,7 +2282,7 @@ describe("Save — a new booking", () => {
     expect(row).toContain('"recurringDate":null');
   });
   it("a phone-less guest picked from the name list: the seed is stamped too", () => {
-    const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["3"], status: "completed" });
+    const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["4"], status: "completed" });
     expect(runSave({ bookings: [b2], form: newDraft({ name: "Lola", guestId: "gb2", guestSeed: "b2" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2302,7 +2302,7 @@ describe("Save — a new booking", () => {
               "b2": {
                 "guestId": "null → "gb2"",
               },
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gb2","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gb2","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2310,7 +2310,7 @@ describe("Save — a new booking", () => {
     `);
   });
   it("…whose seed was joined elsewhere in the meantime: the seed's group wins", () => {
-    const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["3"], status: "completed", guestId: "gzz" });
+    const b2 = bk("b2", { date: PAST, name: "Lola", tables: ["4"], status: "completed", guestId: "gzz" });
     expect(runSave({ bookings: [b2], form: newDraft({ name: "Lola", guestId: "gb2", guestSeed: "b2" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2327,7 +2327,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gzz","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Lola","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":"gzz","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2335,8 +2335,8 @@ describe("Save — a new booking", () => {
     `);
   });
   it("a swap", () => {
-    const b2 = bk("b2", { tables: ["3"], _locked: true, _manual: true });
-    expect(runSave({ bookings: [b2], swapAffected: [{ id: "b2", tables: ["3"] }], form: newDraft({ name: "Ana", manualTables: ["3"] }) })).toMatchInlineSnapshot(`
+    const b2 = bk("b2", { tables: ["4"], _locked: true, _manual: true });
+    expect(runSave({ bookings: [b2], swapAffected: [{ id: "b2", tables: ["4"] }], form: newDraft({ name: "Ana", manualTables: ["4"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setErrorField(null)",
@@ -2355,9 +2355,9 @@ describe("Save — a new booking", () => {
               "b2": {
                 "_locked": "true → false",
                 "_manual": "true → false",
-                "tables": "["3"] → ["1A"]",
+                "tables": "["4"] → ["1"]",
               },
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["3"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["4"],"customDur":null,"_manual":true,"_locked":true,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2381,7 +2381,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"indoor","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"indoor","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2413,7 +2413,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2436,7 +2436,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2485,7 +2485,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Big table","phone":"+34 600 111 222","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":5,"duration":150,"originalDuration":150,"preference":"auto","notes":"cake","deposit":0,"voucherCode":"ABCD2345","status":"confirmed","tables":["1A","1B"],"customDur":150,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Big table","phone":"+34 600 111 222","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":5,"duration":150,"originalDuration":150,"preference":"auto","notes":"cake","deposit":0,"voucherCode":"ABCD2345","status":"confirmed","tables":["1","2"],"customDur":150,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2493,7 +2493,7 @@ describe("Save — a new booking", () => {
     `);
   });
   it("today after the cutoff: the best free table, no reshuffle", () => {
-    const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["3"] });
+    const b2 = bk("b2", { date: TODAY, time: "20:30", tables: ["4"] });
     expect(runSave({ bookings: [b2], form: newDraft({ name: "Ana", date: TODAY, time: "21:00" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2510,7 +2510,7 @@ describe("Save — a new booking", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-07","time":"21:00","scheduledTime":"21:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"","date":"2026-10-07","time":"21:00","scheduledTime":"21:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"_conflict":false}",
             },
           },
         ],
@@ -2527,10 +2527,10 @@ describe("Save — a new booking", () => {
 // tags, case by case, is tests/guest-tags.test.js.
 describe("Save — tags", () => {
   const ANA = "+34 600 000 001";
-  const earlier = () => bk("b2", { date: PAST, status: "completed", tables: ["3"], phone: ANA, guestTags: ["g-allergy"], guestTagsAt: 100 });
+  const earlier = () => bk("b2", { date: PAST, status: "completed", tables: ["4"], phone: ANA, guestTags: ["g-allergy"], guestTagsAt: 100 });
 
   it("an occasion tag and a guest tag in one edit: one history line, and this booking states the guest's tags", () => {
-    const b1 = bk("b1", { tables: ["1A"], phone: ANA });
+    const b1 = bk("b1", { tables: ["1"], phone: ANA });
     expect(runSave({ bookings: [b1, earlier()], editId: "b1", form: draftOf(b1, { tags: ["o-birthday"], guestTagEdits: ["+g-vip"] }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2559,7 +2559,7 @@ describe("Save — tags", () => {
     `);
   });
   it("nothing tapped, on a tagged guest's booking: no tag field is written", () => {
-    const b1 = bk("b1", { tables: ["1A"], phone: ANA, tags: ["o-birthday"] });
+    const b1 = bk("b1", { tables: ["1"], phone: ANA, tags: ["o-birthday"] });
     expect(runSave({ bookings: [b1, earlier()], editId: "b1", form: draftOf(b1, { notes: "window seat" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2602,7 +2602,7 @@ describe("Save — tags", () => {
           {
             "replay": "same prev → same object; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1A"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":["o-birthday"],"guestTags":["g-vip"],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"guestTagsAt":1791397800000,"_conflict":false}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Ana","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","deposit":0,"voucherCode":"","status":"confirmed","tables":["1"],"customDur":null,"_manual":false,"_locked":false,"preferredTables":[],"returnOf":null,"recurringId":null,"recurringDate":null,"guestId":null,"tags":["o-birthday"],"guestTags":["g-vip"],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"created"}],"guestTagsAt":1791397800000,"_conflict":false}",
             },
           },
         ],
@@ -2610,7 +2610,7 @@ describe("Save — tags", () => {
     `);
   });
   it("the booking holding a guest's tags is given another number: the guest it leaves keeps them", () => {
-    const b1 = bk("b1", { tables: ["1A"], phone: ANA, guestTags: ["g-vip"], guestTagsAt: 200 });
+    const b1 = bk("b1", { tables: ["1"], phone: ANA, guestTags: ["g-vip"], guestTagsAt: 200 });
     expect(runSave({ bookings: [b1, earlier()], editId: "b1", form: draftOf(b1, { phone: "+34 600 000 009" }) })).toMatchInlineSnapshot(`
       {
         "calls": [
@@ -2644,10 +2644,10 @@ describe("Save — tags", () => {
 
 describe("openEdit — the draft the form opens with", () => {
   it("a default-length booking", () => {
-    expect(runOpenEdit(bk("b1", { tables: ["3"], deposit: 20, voucherCode: "ABCD2345", preferredTables: ["3"], guestId: "gx", phone: "+34 600 000 001", notes: "n" }))).toMatchInlineSnapshot(`
+    expect(runOpenEdit(bk("b1", { tables: ["4"], deposit: 20, voucherCode: "ABCD2345", preferredTables: ["4"], guestId: "gx", phone: "+34 600 000 001", notes: "n" }))).toMatchInlineSnapshot(`
       {
         "calls": [
-          "openForm({"name":"Guest b1","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","size":2,"preference":"auto","notes":"n","status":"confirmed","customDur":null,"deposit":"20","voucherCode":"ABCD2345","manualTables":[],"preferredTables":["3"],"returnOf":null,"guestId":"gx","guestSeed":null,"tags":[],"guestTagEdits":[]})",
+          "openForm({"name":"Guest b1","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","size":2,"preference":"auto","notes":"n","status":"confirmed","customDur":null,"deposit":"20","voucherCode":"ABCD2345","manualTables":[],"preferredTables":["4"],"returnOf":null,"guestId":"gx","guestSeed":null,"tags":[],"guestTagEdits":[]})",
           "setEditId("b1")",
           "setError("")",
           "setSwapAffected(null)",
@@ -2659,7 +2659,7 @@ describe("openEdit — the draft the form opens with", () => {
     `);
   });
   it("a seated-shifted booking: its stored length is the custom one", () => {
-    expect(runOpenEdit(bk("b1", { time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, status: "seated", tables: ["3"] }))).toMatchInlineSnapshot(`
+    expect(runOpenEdit(bk("b1", { time: "19:30", scheduledTime: "19:00", duration: 60, originalDuration: 60, customDur: 60, status: "seated", tables: ["4"] }))).toMatchInlineSnapshot(`
       {
         "calls": [
           "openForm({"name":"Guest b1","phone":"","date":"2026-10-14","time":"19:30","size":2,"preference":"auto","notes":"","status":"seated","customDur":60,"deposit":"","voucherCode":"","manualTables":[],"preferredTables":[],"returnOf":null,"guestId":null,"guestSeed":null,"tags":[],"guestTagEdits":[]})",
@@ -2701,7 +2701,7 @@ describe("openEdit — the draft the form opens with", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("Seat — a walk-in", () => {
   it("two guests on table 3", () => {
-    expect(runWalkin({ form: { size: 2, notes: "", tables: ["3"], time: "19:30", customDur: null } })).toMatchInlineSnapshot(`
+    expect(runWalkin({ form: { size: 2, notes: "", tables: ["4"], time: "19:30", customDur: null } })).toMatchInlineSnapshot(`
       {
         "calls": [
           "saveBookings("<fn>")",
@@ -2713,7 +2713,7 @@ describe("Seat — a walk-in", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Walk-in 1","phone":"","date":"2026-10-07","time":"19:30","scheduledTime":"19:30","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"seated","tables":["3"],"customDur":null,"_manual":true,"_locked":true,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"walk-in created"}]}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Walk-in 1","phone":"","date":"2026-10-07","time":"19:30","scheduledTime":"19:30","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"seated","tables":["4"],"customDur":null,"_manual":true,"_locked":true,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"walk-in created"}]}",
             },
           },
         ],
@@ -2722,11 +2722,11 @@ describe("Seat — a walk-in", () => {
   });
   it("numbered after today's walk-ins, at the current time, with a typed length", () => {
     const bookings = [
-      bk("w1", { date: TODAY, name: "Walk-in 1", tables: ["1A"], status: "completed" }),
-      bk("w3", { date: TODAY, name: "Walk-in 3", tables: ["1B"], status: "completed" }),
-      bk("w7", { date: PAST, name: "Walk-in 7", tables: ["2"], status: "completed" }),
+      bk("w1", { date: TODAY, name: "Walk-in 1", tables: ["1"], status: "completed" }),
+      bk("w3", { date: TODAY, name: "Walk-in 3", tables: ["2"], status: "completed" }),
+      bk("w7", { date: PAST, name: "Walk-in 7", tables: ["3"], status: "completed" }),
     ];
-    expect(runWalkin({ bookings, form: { size: "5", notes: "high chair", tables: ["7"], time: "", customDur: 100 } })).toMatchInlineSnapshot(`
+    expect(runWalkin({ bookings, form: { size: "5", notes: "high chair", tables: ["9"], time: "", customDur: 100 } })).toMatchInlineSnapshot(`
       {
         "calls": [
           "saveBookings("<fn>")",
@@ -2738,7 +2738,7 @@ describe("Seat — a walk-in", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Walk-in 4","phone":"","date":"2026-10-07","time":"19:30","scheduledTime":"19:30","size":5,"duration":100,"originalDuration":100,"preference":"auto","notes":"high chair","status":"seated","tables":["7"],"customDur":100,"_manual":true,"_locked":true,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"walk-in created"}]}",
+              "muyfzww04xjv": "created {"id":"muyfzww04xjv","name":"Walk-in 4","phone":"","date":"2026-10-07","time":"19:30","scheduledTime":"19:30","size":5,"duration":100,"originalDuration":100,"preference":"auto","notes":"high chair","status":"seated","tables":["9"],"customDur":100,"_manual":true,"_locked":true,"history":[{"at":"2026-10-07T18:30:00.000Z","by":"staff@mgt.test","action":"walk-in created"}]}",
             },
           },
         ],
@@ -2756,7 +2756,7 @@ describe("Seat — a walk-in", () => {
     `);
   });
   it("after closing", () => {
-    expect(runWalkin({ at: TODAY + "T22:30:00", form: { size: 2, notes: "", tables: ["3"], time: "", customDur: null } })).toMatchInlineSnapshot(`
+    expect(runWalkin({ at: TODAY + "T22:30:00", form: { size: 2, notes: "", tables: ["4"], time: "", customDur: null } })).toMatchInlineSnapshot(`
       {
         "calls": [
           "setWalkinError("It's past closing — walk-ins can't be seated now.")",
@@ -2766,7 +2766,7 @@ describe("Seat — a walk-in", () => {
     `);
   });
   it("a second tap after the walk-in went out", () => {
-    expect(runWalkin({ guard: submitGuard.DISPATCHED, form: { size: 2, notes: "", tables: ["3"], time: "19:30", customDur: null } })).toMatchInlineSnapshot(`
+    expect(runWalkin({ guard: submitGuard.DISPATCHED, form: { size: 2, notes: "", tables: ["4"], time: "19:30", customDur: null } })).toMatchInlineSnapshot(`
       {
         "calls": [],
         "guard": "dispatched",
@@ -2787,8 +2787,8 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-14": "created {"id":"rwk_2026-10-14","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-14","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
-              "rwk_2026-10-21": "created {"id":"rwk_2026-10-21","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-21","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-21","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-14": "created {"id":"rwk_2026-10-14","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-14","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-14","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-21": "created {"id":"rwk_2026-10-21","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-21","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-21","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2799,8 +2799,8 @@ describe("the weekly generator", () => {
   // with `tables: []` until the generator placed it.
   it("skips a week that already has its booking, by id or by stamp, and places today's after the cutoff", () => {
     const bookings = [
-      bk("rwk_" + T, { recurringId: "wk", recurringDate: T, tables: ["1A"] }),
-      bk("form1", { date: "2026-10-21", recurringId: "wk", recurringDate: "2026-10-21", tables: ["1A"] }),
+      bk("rwk_" + T, { recurringId: "wk", recurringDate: T, tables: ["1"] }),
+      bk("form1", { date: "2026-10-21", recurringId: "wk", recurringDate: "2026-10-21", tables: ["1"] }),
     ];
     expect(runGenerator({ bookings, rules: [weekly({ startDate: PAST })] })).toMatchInlineSnapshot(`
       {
@@ -2811,7 +2811,7 @@ describe("the weekly generator", () => {
           {
             "replay": "same prev → recomputed; fresh prev → equal",
             "rows": {
-              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1A"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
+              "rwk_2026-10-07": "created {"id":"rwk_2026-10-07","name":"Weekly","phone":"+34 600 000 001","date":"2026-10-07","time":"20:00","scheduledTime":"20:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":["1"],"customDur":null,"deposit":0,"voucherCode":"","_manual":false,"_locked":false,"_conflict":false,"preferredTables":[],"returnOf":null,"recurringId":"wk","recurringDate":"2026-10-07","tags":[],"guestTags":[],"history":[{"at":"2026-10-07T18:30:00.000Z","by":"auto","action":"auto-created from weekly rule"}]}",
             },
           },
         ],
@@ -2886,11 +2886,11 @@ describe("the field lists", () => {
     }))).toMatchInlineSnapshot(`"{"id":"b9","name":"","phone":"","date":"","time":"13:00","scheduledTime":"13:00","size":2,"duration":90,"originalDuration":90,"preference":"auto","notes":"","status":"confirmed","tables":[],"customDur":null,"_manual":true,"_locked":false,"_conflict":true,"preferredTables":[],"returnOf":null,"history":[],"noShow":true,"deposit":0,"voucherCode":"ABCD2345","recurringId":null,"recurringDate":null,"anonymized":true,"guestId":null,"stayedMin":33,"updatedAt":7,"tags":[],"guestTags":[],"guestTagsAt":0}"`);
   });
   it("sanitize: a full row survives unchanged", () => {
-    const b = bk("b1", { phone: "+34 600 000 001", tables: ["3"], deposit: 5, voucherCode: "ABCD2345", guestId: "g1", stayedMin: 40, history: [{ at: "x", by: "y", action: "z" }] });
+    const b = bk("b1", { phone: "+34 600 000 001", tables: ["4"], deposit: 5, voucherCode: "ABCD2345", guestId: "g1", stayedMin: 40, history: [{ at: "x", by: "y", action: "z" }] });
     expect(J(bookingLogic.sanitize(b))).toBe(J(b));
   });
   it("which fields undo and the reconciliation compare", () => {
-    const b = bk("b1", { tables: ["3"], preferredTables: ["3"] });
+    const b = bk("b1", { tables: ["4"], preferredTables: ["4"] });
     const bump = (v) => (Array.isArray(v) ? v.concat(["X"]) : typeof v === "number" ? v + 1 : typeof v === "boolean" ? !v : v === null ? "X" : v + "X");
     const out = {};
     Object.keys(b).filter((k) => k !== "id").forEach((k) => {
@@ -2936,15 +2936,15 @@ describe("the field lists", () => {
     `);
   });
   it("diffBooking: each change alone, all of them together, and none", () => {
-    const orig = bk("b1", { name: "Ana", phone: "+34 600 000 001", tables: ["3"], deposit: 10, voucherCode: "ABCD2345", preferredTables: ["3"], notes: "a" });
+    const orig = bk("b1", { name: "Ana", phone: "+34 600 000 001", tables: ["4"], deposit: 10, voucherCode: "ABCD2345", preferredTables: ["4"], notes: "a" });
     const f = draftOf(orig);
     const one = {
       name: { name: "Ana María" }, size: { size: 3 }, time: { time: "20:30" }, date: { date: NEXT },
       preference: { preference: "indoor" }, phone: { phone: "+44 7700 900123" }, phoneCleared: { phone: "+34" },
       duration: { customDur: 120 }, status: { status: "seated" }, notes: { notes: "b" },
       deposit: { deposit: "12" }, voucher: { voucherCode: "WXYZ7890" }, voucherCleared: { voucherCode: "" },
-      manual: { manualTables: ["4", "5A"] }, cleared: { _clearManual: true },
-      preferred: { preferredTables: ["4"] }, preferredCleared: { preferredTables: [] },
+      manual: { manualTables: ["5", "6"] }, cleared: { _clearManual: true },
+      preferred: { preferredTables: ["5"] }, preferredCleared: { preferredTables: [] },
     };
     const out = {};
     Object.keys(one).forEach((k) => {
@@ -2956,19 +2956,19 @@ describe("the field lists", () => {
     out.none = bookingLogic.diffBooking(orig, f, 2, "+34");
     expect(out).toMatchInlineSnapshot(`
       {
-        "all": "name Ana→Ana María, size 2→3, time 20:00→20:30, date 2026-10-14→2026-10-15, pref auto→indoor, phone +34 600 000 001→+44 7700 900123, duration 90→120min, status confirmed→seated, notes updated, deposit 10→12 €, voucher ABCD-2345→WXYZ-7890, tables manually set: 4, 5A, manual assignment cleared, preferred tables: 4",
+        "all": "name Ana→Ana María, size 2→3, time 20:00→20:30, date 2026-10-14→2026-10-15, pref auto→indoor, phone +34 600 000 001→+44 7700 900123, duration 90→120min, status confirmed→seated, notes updated, deposit 10→12 €, voucher ABCD-2345→WXYZ-7890, tables manually set: 5, 6, manual assignment cleared, preferred tables: 5",
         "cleared": "manual assignment cleared",
         "date": "date 2026-10-14→2026-10-15",
         "deposit": "deposit 10→12 €",
         "duration": "duration 90→120min",
-        "manual": "tables manually set: 4, 5A",
+        "manual": "tables manually set: 5, 6",
         "name": "name Ana→Ana María",
         "none": "saved (no field changes)",
         "notes": "notes updated",
         "phone": "phone +34 600 000 001→+44 7700 900123",
         "phoneCleared": "phone +34 600 000 001→none",
         "preference": "pref auto→indoor",
-        "preferred": "preferred tables: 4",
+        "preferred": "preferred tables: 5",
         "preferredCleared": "preferred tables: cleared",
         "size": "size 2→3",
         "status": "status confirmed→seated",

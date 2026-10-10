@@ -48,34 +48,36 @@ function makeBooking(o) {
 export function sampleBookings() {
   return [
     // Juan Pérez — regular (3 completed) on +34600123456
-    makeBooking({ id: "wasimJ1", name: "WA-SIM Juan Pérez", phone: PH.juan, date: isoPlus(-21), time: "20:30", size: 4, status: "completed", tables: ["2", "3"], _manual: false, _locked: false }),
-    makeBooking({ id: "wasimJ2", name: "WA-SIM Juan Pérez", phone: PH.juan, date: isoPlus(-42), time: "21:00", size: 2, status: "completed", tables: ["3"], _manual: false, _locked: false }),
-    makeBooking({ id: "wasimJ3", name: "WA-SIM Juan Pérez", phone: PH.juan, date: isoPlus(-70), time: "20:00", size: 4, status: "completed", tables: ["2", "3"], notes: "Anniversary", _manual: false, _locked: false }),
+    makeBooking({ id: "wasimJ1", name: "WA-SIM Juan Pérez", phone: PH.juan, date: isoPlus(-21), time: "20:30", size: 4, status: "completed", tables: ["3", "4"], _manual: false, _locked: false }),
+    makeBooking({ id: "wasimJ2", name: "WA-SIM Juan Pérez", phone: PH.juan, date: isoPlus(-42), time: "21:00", size: 2, status: "completed", tables: ["4"], _manual: false, _locked: false }),
+    makeBooking({ id: "wasimJ3", name: "WA-SIM Juan Pérez", phone: PH.juan, date: isoPlus(-70), time: "20:00", size: 4, status: "completed", tables: ["3", "4"], notes: "Anniversary", _manual: false, _locked: false }),
     // Maria López — 2 completed on +34611987654
-    makeBooking({ id: "wasimM1", name: "WA-SIM Maria López", phone: PH.maria, date: isoPlus(-14), time: "13:30", size: 2, status: "completed", tables: ["i3"], notes: "Vegetarian", _manual: false, _locked: false }),
-    makeBooking({ id: "wasimM2", name: "WA-SIM Maria López", phone: PH.maria, date: isoPlus(-35), time: "14:00", size: 2, status: "completed", tables: ["i3"], _manual: false, _locked: false }),
+    makeBooking({ id: "wasimM1", name: "WA-SIM Maria López", phone: PH.maria, date: isoPlus(-14), time: "13:30", size: 2, status: "completed", tables: ["12"], notes: "Vegetarian", _manual: false, _locked: false }),
+    makeBooking({ id: "wasimM2", name: "WA-SIM Maria López", phone: PH.maria, date: isoPlus(-35), time: "14:00", size: 2, status: "completed", tables: ["12"], _manual: false, _locked: false }),
     // Tom Richards — 1 completed + 1 upcoming (link target for cancel)
-    makeBooking({ id: "wasimT1", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(-7), time: "21:30", size: 3, status: "completed", tables: ["2", "3"], _manual: false, _locked: false }),
-    // tables 3+4, NOT 2+3. `isoPlus(2)` and Klaus's `nextDow(6)` are the same
+    makeBooking({ id: "wasimT1", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(-7), time: "21:30", size: 3, status: "completed", tables: ["3", "4"], _manual: false, _locked: false }),
+    // tables 4+5, NOT 3+4 (ids as renumbered in v18.6.1; they were 3+4 and 2+3). `isoPlus(2)` and Klaus's `nextDow(6)` are the same
     // date whenever today is a Thursday, and both bookings are `_locked` — which
     // is the ONE conflict the v15.6.1 reconciliation effect cannot resolve
     // (applyOpt copies a locked booking's tables through verbatim, so no
     // reshuffle separates them). Seeded, it put the app in a permanent loop:
     // reconcile, write, get refused by the per-booking CAS, resync, repeat —
     // measured at >1000 PERMISSION_DENIED writes a minute, on prod as well as
-    // here, since the fixtures land in the shared DEV database. Klaus needs
-    // 1A+1B+2 for a party of 8, so Tom moves off table 2. Pinned across all
+    // here, since the fixtures land in the shared DEV database. Klaus needed
+    // 1+2+3 for a party of 8, so Tom moved off table 3. v18.6.1: with 1+2
+    // seating 5 those three seat 7, so Klaus is on 11+12+13 (8) and Tom stays
+    // where he is. Pinned across all
     // seven weekdays in tests/wa-sim-fixtures.test.js — the collision only
     // happened on Thursdays, so a test that ran on the current day would have
     // reported it clean six times out of seven.
-    makeBooking({ id: "wasimT2", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(2), time: "21:30", size: 3, status: "confirmed", tables: ["3", "4"], _manual: true, _locked: true }),
+    makeBooking({ id: "wasimT2", name: "WA-SIM Tom Richards", phone: PH.tom, date: isoPlus(2), time: "21:30", size: 3, status: "confirmed", tables: ["4", "5"], _manual: true, _locked: true }),
     // Sofía García — upcoming (link target for modify)
-    makeBooking({ id: "wasimS1", name: "WA-SIM Sofía García", phone: PH.sofia, date: isoPlus(3), time: "20:30", size: 4, status: "confirmed", tables: ["5A", "5B"], _manual: true, _locked: true }),
+    makeBooking({ id: "wasimS1", name: "WA-SIM Sofía García", phone: PH.sofia, date: isoPlus(3), time: "20:30", size: 4, status: "confirmed", tables: ["6", "7"], _manual: true, _locked: true }),
     // Extra upcoming link targets (cancel / modify / running-late / add-person).
-    makeBooking({ id: "wasimL1", name: "WA-SIM Liam O'Brien", phone: PH.liam, date: isoPlus(0), time: "20:30", size: 2, status: "confirmed", tables: ["4"], _manual: true, _locked: true }),       // today dinner
-    makeBooking({ id: "wasimG1", name: "WA-SIM Greta Nilsson", phone: PH.greta, date: isoPlus(0), time: "13:30", size: 2, status: "confirmed", tables: ["i1"], _manual: true, _locked: true }),      // today lunch
-    makeBooking({ id: "wasimI1", name: "WA-SIM Inés Romero", phone: PH.ines, date: isoPlus(1), time: "21:00", size: 4, status: "confirmed", tables: ["5A", "5B"], _manual: true, _locked: true }),    // tomorrow dinner
-    makeBooking({ id: "wasimK1", name: "WA-SIM Klaus Bauer", phone: PH.klaus, date: nextDow(6), time: "20:00", size: 8, status: "confirmed", tables: ["1A", "1B", "2"], _manual: true, _locked: true }), // weekend large group
+    makeBooking({ id: "wasimL1", name: "WA-SIM Liam O'Brien", phone: PH.liam, date: isoPlus(0), time: "20:30", size: 2, status: "confirmed", tables: ["5"], _manual: true, _locked: true }),       // today dinner
+    makeBooking({ id: "wasimG1", name: "WA-SIM Greta Nilsson", phone: PH.greta, date: isoPlus(0), time: "13:30", size: 2, status: "confirmed", tables: ["10"], _manual: true, _locked: true }),      // today lunch
+    makeBooking({ id: "wasimI1", name: "WA-SIM Inés Romero", phone: PH.ines, date: isoPlus(1), time: "21:00", size: 4, status: "confirmed", tables: ["6", "7"], _manual: true, _locked: true }),    // tomorrow dinner
+    makeBooking({ id: "wasimK1", name: "WA-SIM Klaus Bauer", phone: PH.klaus, date: nextDow(6), time: "20:00", size: 8, status: "confirmed", tables: ["11", "12", "13"], _manual: true, _locked: true }), // weekend large group
   ];
 }
 

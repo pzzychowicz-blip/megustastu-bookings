@@ -35,6 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
+import { useState } from "react";
 import { stepPress } from "../lib/keyboard";
 import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
 import {
@@ -43,7 +44,7 @@ import {
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
-  comboCapBest, nowTime, guestsLabel, countLabel
+  comboCapBest, nowTime, guestsLabel, countLabel, togglePick
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -70,6 +71,9 @@ export function WalkinForm({
   onSave, onClose, onAddToWaitlist
 }) {
   const wf = draft;
+  // v18.6.1: why the last tap was refused by a pick rule, tied to the selection
+  // it was refused on (see ManualModal).
+  const [pickNote, setPickNote] = useState(null);
   const wSize = Number(wf.size) || 2;
   // Fallback if the draft has no time (initial state). Parent's openWalkin
   // already seeds `time` to nowTime(), so this branch is rarely taken — kept
@@ -130,41 +134,26 @@ export function WalkinForm({
   // keeps existing call sites readable.
   const getCapOf = comboCapBest;
 
-  // Toggle a table on/off. Auto-prunes the selection so the host doesn't
-  // accumulate redundant tables once `wSize` is met. Refuses i1+i4 without
-  // i2 AND i3 (the indoor cluster must be physically contiguous).
+  // Toggle a table on/off: togglePick (booking-logic.js) is the plan, the one
+  // ManualModal's toggle takes too (the auto-prune, then the pick rules).
   function wToggle(id) {
     const sel = wf.tables || [];
-    // v17.1.1: DESELECT before the busy check — the Plan-view seated-takeover
-    // pre-select can put a currently-busy table in the selection, and the host
-    // must still be able to remove it.
-    if (sel.includes(id)) {
-      setDraft({ ...wf, tables: sel.filter((x) => x !== id) });
-      return;
-    }
-    if (wBusy.has(id)) return;
-    let next = sel.concat([id]);
-    let h1 = next.includes("i1"), h4 = next.includes("i4");
-    let h2 = next.includes("i2"), h3 = next.includes("i3");
-    if (h1 && h4 && (!h2 || !h3)) return;
-    if (sel.length > 0 && getCapOf(sel) >= wSize) {
-      let trimmed = sel.slice();
-      while (trimmed.length > 0 && getCapOf(trimmed) >= wSize) {
-        trimmed = trimmed.slice(1);
-      }
-      next = trimmed.concat([id]);
-      h1 = next.includes("i1"); h4 = next.includes("i4");
-      h2 = next.includes("i2"); h3 = next.includes("i3");
-      if (h1 && h4 && (!h2 || !h3)) return;
-    }
-    setDraft({ ...wf, tables: next });
+    // v17.1.1: a DESELECT is never stopped by the busy check — the Plan-view
+    // seated-takeover pre-select can put a currently-busy table in the
+    // selection, and the host must still be able to remove it.
+    if (!sel.includes(id) && wBusy.has(id)) return;
+    const plan = togglePick(sel, id, wSize);
+    if (plan.refuse) { setPickNote({ text: plan.refuse, at: sel.join("|") }); return; }
+    setPickNote(null);
+    setDraft({ ...wf, tables: plan.tables });
   }
 
   const wSel = wf.tables || [];
   const wCap = getCapOf(wSel);
   const wOk = wSel.length > 0 && wCap >= wSize;
-  const wSummaryColor = wOk ? "var(--success-text)" : "var(--warn-text)";
-  const wSummaryText = wSel.length === 0
+  const wPickSaid = pickNote && pickNote.at === wSel.join("|") ? pickNote.text : null;
+  const wSummaryColor = wOk && !wPickSaid ? "var(--success-text)" : "var(--warn-text)";
+  const wSummaryText = wPickSaid ? wPickSaid : wSel.length === 0
     ? "Select tables below."
     : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + guestsLabel(wSize) + ")" : " — need " + guestsLabel(wSize));
   // v17.15.2: slides in and out. It appears the moment you tap a table and
@@ -509,7 +498,7 @@ export function WalkinForm({
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (wSel.length ? wSel.join(" + ") : "none")}
           </div>
-          <div style={{ fontSize: T.body, color: wSummaryColor, fontWeight: FW.medium, marginTop: 2 }}>
+          <div role="status" style={{ fontSize: T.body, color: wSummaryColor, fontWeight: FW.medium, marginTop: 2 }}>
             {wSummaryText}
           </div>
         </div>

@@ -26,7 +26,7 @@ export const InACardHeader = () => (
       <span style={{ fontSize: T.title, fontWeight: FW.semi, flex: 1 }}>Lucía Hernández</span>
       <SizeRing n={4} rim="var(--chip-neutral-border)" />
       <SBadge status="seated" />
-      <TBadge id="5A" />
+      <TBadge id="6" />
     </div>
   </Surface>
 );

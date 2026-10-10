@@ -171,7 +171,7 @@ describe("withOccurrences", () => {
   });
 
   it("with nothing due it hands back the list it was given", () => {
-    const prev = [party("a", { tables: ["3"] })];
+    const prev = [party("a", { tables: ["4"] })];
     expect(withOccurrences(prev, [], [], true)).toBe(prev);
   });
 
@@ -194,12 +194,12 @@ describe("withOccurrences", () => {
   describe("today, after the cutoff", () => {
     const TODAY = todayStr();
     it("places the new occurrence by itself and moves nobody else", () => {
-      const other = party("other", { date: TODAY, tables: ["7"] });
+      const other = party("other", { date: TODAY, tables: ["9"] });
       const next = withOccurrences([other], [due(TODAY)], [], false);
       const made = next.find((b) => b.id === "rR1_" + TODAY);
       expect(made.tables.length).toBeGreaterThan(0);
-      expect(made.tables).not.toContain("7");
-      expect(next.find((b) => b.id === "other").tables).toEqual(["7"]);
+      expect(made.tables).not.toContain("9");
+      expect(next.find((b) => b.id === "other").tables).toEqual(["9"]);
     });
     it("with no table free it is flagged, not left silently unplaced", () => {
       const wall = ALL_TABLES.map((t) => ({ id: "bl" + t.id, date: TODAY, tableId: t.id, allDay: true }));

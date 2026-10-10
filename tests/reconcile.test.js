@@ -33,8 +33,8 @@ const mk = (o) => Object.assign({
 // because applyOpt copies a locked booking's tables through verbatim. Reachable
 // by ordinary use — every walk-in and every drag-drop path sets _locked.
 const stuck = () => [
-  mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true }),
-  mk({ id: "r", time: "20:30", tables: ["3"], _locked: true, _manual: true }),
+  mk({ id: "p", time: "20:00", tables: ["4"], _locked: true, _manual: true }),
+  mk({ id: "r", time: "20:30", tables: ["4"], _locked: true, _manual: true }),
 ];
 
 describe("dirtyDates", () => {
@@ -43,7 +43,7 @@ describe("dirtyDates", () => {
   });
 
   it("returns nothing for a clean day", () => {
-    const clean = [mk({ id: "p", tables: ["3"] }), mk({ id: "r", tables: ["4"] })];
+    const clean = [mk({ id: "p", tables: ["4"] }), mk({ id: "r", tables: ["5"] })];
     expect(dirtyDates(clean, today)).toEqual([]);
   });
 
@@ -58,8 +58,8 @@ describe("dirtyDates", () => {
 describe("reconcile — the optimiser branch", () => {
   it("resolves a clash the optimiser CAN fix", () => {
     const prev = [
-      mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true }),
-      mk({ id: "r", time: "20:30", tables: ["3"] }),   // movable
+      mk({ id: "p", time: "20:00", tables: ["4"], _locked: true, _manual: true }),
+      mk({ id: "r", time: "20:30", tables: ["4"] }),   // movable
     ];
     const { next, changed } = reconcile(prev, [D], [], true);
     expect(changed).toBe(true);
@@ -80,8 +80,8 @@ describe("reconcile — the optimiser branch", () => {
 
   it("is idempotent — reconciling its own output changes nothing further", () => {
     const prev = [
-      mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true }),
-      mk({ id: "r", time: "20:30", tables: ["3"] }),
+      mk({ id: "p", time: "20:00", tables: ["4"], _locked: true, _manual: true }),
+      mk({ id: "r", time: "20:30", tables: ["4"] }),
     ];
     const once = reconcile(prev, [D], [], true).next;
     const twice = reconcile(once, dirtyDates(once, today), [], true);
@@ -93,8 +93,8 @@ describe("reconcile — the optimiser branch", () => {
 describe("reconcile — the manual branch (optimiser OFF today)", () => {
   const T = today;
   const stuckToday = () => [
-    mk({ id: "p", date: T, time: "20:00", tables: ["3"], _locked: true, _manual: true }),
-    mk({ id: "r", date: T, time: "20:30", tables: ["3"], _locked: true, _manual: true }),
+    mk({ id: "p", date: T, time: "20:00", tables: ["4"], _locked: true, _manual: true }),
+    mk({ id: "r", date: T, time: "20:30", tables: ["4"], _locked: true, _manual: true }),
   ];
 
   it("only-locked overlaps are left alone, same reference", () => {
@@ -108,18 +108,18 @@ describe("reconcile — the manual branch (optimiser OFF today)", () => {
     // updatedAt desc with an id tiebreaker, so two devices reconciling the same
     // merge pick the same booking and the per-$id CAS settles the double-write.
     const prev = [
-      mk({ id: "p", date: T, time: "20:00", tables: ["3"], updatedAt: 100 }),
-      mk({ id: "r", date: T, time: "20:30", tables: ["3"], updatedAt: 200 }),
+      mk({ id: "p", date: T, time: "20:00", tables: ["4"], updatedAt: 100 }),
+      mk({ id: "r", date: T, time: "20:30", tables: ["4"], updatedAt: 200 }),
     ];
     const { next, changed } = reconcile(prev, [T], [], false);
     expect(changed).toBe(true);
-    expect(next.find((b) => b.id === "p").tables).toEqual(["3"]);   // older kept its table
-    expect(next.find((b) => b.id === "r").tables).not.toEqual(["3"]);
+    expect(next.find((b) => b.id === "p").tables).toEqual(["4"]);   // older kept its table
+    expect(next.find((b) => b.id === "r").tables).not.toEqual(["4"]);
     expect(verifyClean(next, T)).toBe(true);
   });
 
   it("a clean date is a no-op even when listed as dirty", () => {
-    const prev = [mk({ id: "p", date: T, tables: ["3"] })];
+    const prev = [mk({ id: "p", date: T, tables: ["4"] })];
     const { next, changed } = reconcile(prev, [T], [], false);
     expect(next).toBe(prev);
     expect(changed).toBe(false);
@@ -128,7 +128,7 @@ describe("reconcile — the manual branch (optimiser OFF today)", () => {
 
 describe("reconcile — no dirty dates at all", () => {
   it("returns its input untouched", () => {
-    const prev = [mk({ id: "p", tables: ["3"] })];
+    const prev = [mk({ id: "p", tables: ["4"] })];
     expect(reconcile(prev, [], [], true).next).toBe(prev);
     expect(reconcile(prev, undefined, [], true).changed).toBe(false);
   });
@@ -153,15 +153,15 @@ describe("reconcile — no dirty dates at all", () => {
 // The predicate carries the contract, so the predicate is what gets pinned.
 describe("improvesDay — the termination gate", () => {
   const clash = () => [
-    mk({ id: "p", time: "20:00", tables: ["3"] }),
-    mk({ id: "r", time: "20:30", tables: ["3"] }),
-    mk({ id: "s", time: "20:15", tables: ["4"] }),
-    mk({ id: "t", time: "20:45", tables: ["4"] }),
+    mk({ id: "p", time: "20:00", tables: ["4"] }),
+    mk({ id: "r", time: "20:30", tables: ["4"] }),
+    mk({ id: "s", time: "20:15", tables: ["5"] }),
+    mk({ id: "t", time: "20:45", tables: ["5"] }),
   ];
 
   it("takes a pass that resolves a clash", () => {
     const before = clash();
-    const after = before.map((b) => (b.id === "r" ? { ...b, tables: ["6"] } : b));
+    const after = before.map((b) => (b.id === "r" ? { ...b, tables: ["8"] } : b));
     expect(findConflicts(after, D).length).toBeLessThan(findConflicts(before, D).length);
     expect(improvesDay(before, after, D)).toBe(true);
   });
@@ -185,13 +185,13 @@ describe("improvesDay — the termination gate", () => {
     // table 4, so the set shrinks from four to three. It has to start from a
     // day with one clash and two clean bookings.
     const before = [
-      mk({ id: "p", time: "20:00", tables: ["3"] }),
-      mk({ id: "r", time: "20:30", tables: ["3"] }),
-      mk({ id: "s", time: "20:15", tables: ["4"] }),
-      mk({ id: "t", time: "21:00", tables: ["6"] }),
+      mk({ id: "p", time: "20:00", tables: ["4"] }),
+      mk({ id: "r", time: "20:30", tables: ["4"] }),
+      mk({ id: "s", time: "20:15", tables: ["5"] }),
+      mk({ id: "t", time: "21:00", tables: ["8"] }),
     ];
     expect(findConflicts(before, D).length).toBe(2);
-    const after = before.map((b) => (b.id === "s" ? { ...b, tables: ["3"] } : b));
+    const after = before.map((b) => (b.id === "s" ? { ...b, tables: ["4"] } : b));
     expect(findConflicts(after, D).length).toBe(3);
     expect(improvesDay(before, after, D)).toBe(false);
   });
@@ -207,10 +207,10 @@ describe("improvesDay — the termination gate", () => {
     // `_locked`) rejected the WHOLE pass on a clash-count-only measure,
     // including the tables it had just found for a different booking. Measured
     // on the clash-only gate: `u` stayed `[]` on every pass, forever, while
-    // without any gate it became `["1A"]`. Placement has no other writer.
+    // without any gate it became `["1"]`. Placement has no other writer.
     const prev = [
-      mk({ id: "p", time: "20:00", tables: ["3"], _locked: true, _manual: true }),
-      mk({ id: "r", time: "20:30", tables: ["3"], _locked: true, _manual: true }),
+      mk({ id: "p", time: "20:00", tables: ["4"], _locked: true, _manual: true }),
+      mk({ id: "r", time: "20:30", tables: ["4"], _locked: true, _manual: true }),
       mk({ id: "u", time: "20:00", tables: [] }),
     ];
     const { next, changed } = reconcile(prev, [D], [], true);
@@ -227,8 +227,8 @@ describe("improvesDay — the termination gate", () => {
     // A summed measure (which passes every other test here) would REFUSE this,
     // leaving two parties on one table to protect a table assignment.
     const before = [
-      mk({ id: "p", time: "20:00", tables: ["3"] }),
-      mk({ id: "r", time: "20:30", tables: ["3"] }),
+      mk({ id: "p", time: "20:00", tables: ["4"] }),
+      mk({ id: "r", time: "20:30", tables: ["4"] }),
     ];
     const after = before.map((b) => ({ ...b, tables: [] }));
     expect(findConflicts(before, D).length).toBe(2);
@@ -246,13 +246,13 @@ describe("improvesDay — the termination gate", () => {
   it("REFUSES a pass that places one booking by UNPLACING another", () => {
     // The second count must not be gameable: same clashes, same unplaced total.
     const before = [
-      mk({ id: "p", time: "20:00", tables: ["3"] }),
-      mk({ id: "r", time: "20:30", tables: ["3"] }),
+      mk({ id: "p", time: "20:00", tables: ["4"] }),
+      mk({ id: "r", time: "20:30", tables: ["4"] }),
       mk({ id: "u", time: "21:00", tables: [] }),
-      mk({ id: "v", time: "21:30", tables: ["6"] }),
+      mk({ id: "v", time: "21:30", tables: ["8"] }),
     ];
     const after = before.map((b) =>
-      b.id === "u" ? { ...b, tables: ["6"] } : b.id === "v" ? { ...b, tables: [] } : b);
+      b.id === "u" ? { ...b, tables: ["8"] } : b.id === "v" ? { ...b, tables: [] } : b);
     expect(improvesDay(before, after, D)).toBe(false);
   });
 
@@ -260,7 +260,7 @@ describe("improvesDay — the termination gate", () => {
     // Deliberately not "accept only a CLEAN result": demanding perfection would
     // discard real progress and leave the restaurant with all of it.
     const before = clash();
-    const after = before.map((b) => (b.id === "t" ? { ...b, tables: ["6"] } : b));
+    const after = before.map((b) => (b.id === "t" ? { ...b, tables: ["8"] } : b));
     expect(verifyClean(after, D)).toBe(false);
     expect(improvesDay(before, after, D)).toBe(true);
   });

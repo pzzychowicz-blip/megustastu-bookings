@@ -76,8 +76,8 @@ function create(draft) {
 const RICH_VALUES = {
   id: "rich", name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:30", scheduledTime: "20:30",
   size: 4, duration: 105, originalDuration: 105, preference: "outdoor", notes: "window seat",
-  status: "pending", tables: ["7"], customDur: 105, _manual: true, _locked: true, _conflict: false,
-  preferredTables: ["7"], returnOf: "src1",
+  status: "pending", tables: ["9"], customDur: 105, _manual: true, _locked: true, _conflict: false,
+  preferredTables: ["9"], returnOf: "src1",
   history: [{ at: "2026-09-01T10:00:00.000Z", by: "t", action: "created" }],
   noShow: true, deposit: 20, voucherCode: "ABCD2345", recurringId: "rule1", recurringDate: D,
   anonymized: true, guestId: "gana", stayedMin: 80, updatedAt: 1790000000000,
@@ -95,7 +95,7 @@ const DERIVED = {
 // the table cost 12 ms a snapshot on the tablet), so it is a second copy of the
 // key order. It is held to `sanitizeByTable`, the loop, here.
 describe("sanitize, the literal, is the table's loop", () => {
-  const GARBAGE = [undefined, null, "", 0, 1, -5, "x", "20:30", "25:99", true, false, [], ["7"], {}, { a: 1 }, NaN, "12", 3.5];
+  const GARBAGE = [undefined, null, "", 0, 1, -5, "x", "20:30", "25:99", true, false, [], ["9"], {}, { a: 1 }, NaN, "12", 3.5];
   const rows = [{}, RICH_VALUES, { id: "only" }];
   // Every field, one at a time, missing and holding each wrong-typed value, on
   // top of the rich row and on top of an empty one.
@@ -240,8 +240,8 @@ const CHANGES = {
   customDur: { to: 150 },
   deposit: { to: "35", stored: 35 },
   voucherCode: { to: "wxyz-6789", stored: normalizeCode("wxyz-6789") },
-  manualTables: { to: ["5A"], field: "tables" },
-  preferredTables: { to: ["6"] },
+  manualTables: { to: ["6"], field: "tables" },
+  preferredTables: { to: ["8"] },
   returnOf: { to: "src9", edit: "an edit never writes it: Book Again sets it on the booking it creates" },
   guestId: { to: "gbea", quiet: "a join on its own is not undone: its row has `undo: false` and no clause, as before v18.3.4 (the row says what that means)" },
   guestSeed: { to: "seed1", skip: "not a field of this booking: it names the booking picked from the name list, which the same write stamps with the guest id" },
@@ -253,7 +253,7 @@ const CHANGES = {
   guestTagEdits: { to: ["+g-vip"], field: "guestTags", stored: ["g-vip"] },
 };
 // A placed, confirmed booking with nothing set: what each change is made to.
-const PLAIN = sanitize({ id: "plain", name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:00", size: 2, status: "confirmed", tables: ["3"], history: [] }, "plain");
+const PLAIN = sanitize({ id: "plain", name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:00", size: 2, status: "confirmed", tables: ["4"], history: [] }, "plain");
 // A new booking's form as `openNew` seeds it, filled in.
 const NEW_FORM = () => Object.assign({}, EMPTY_FORM, { name: "Ana Ruiz", phone: "+34 600 111 222", date: D, time: "20:00" });
 
@@ -353,7 +353,7 @@ const OMITS = {
 };
 const CREATED = {
   buildBooking: () => { const p = create(NEW_FORM()); return p.fin.find((b) => b.id === p.id); },
-  walkinBooking: () => walkinBooking({ size: 2, notes: "", tables: ["3"], time: "19:30", customDur: null }, 1, today, "t"),
+  walkinBooking: () => walkinBooking({ size: 2, notes: "", tables: ["4"], time: "19:30", customDur: null }, 1, today, "t"),
   occurrenceBooking: () => occurrenceBooking({
     id: "wk", name: "Weekly", phone: "+34 600 000 001", size: 2, weekday: 3, time: "20:00",
     preference: "auto", notes: "", active: true, skipDates: [], createdAt: 1, startDate: today,
@@ -370,7 +370,7 @@ describe("each new booking writes a row's field or says why not", () => {
     });
   });
   it("the walk-in with a typed length and no time is well-formed too", () => {
-    expectWellFormed(walkinBooking({ size: "5", notes: "high chair", tables: ["7"], time: "", customDur: 100 }, 4, today, "t"), "walkinBooking");
+    expectWellFormed(walkinBooking({ size: "5", notes: "high chair", tables: ["9"], time: "", customDur: 100 }, 4, today, "t"), "walkinBooking");
   });
 });
 

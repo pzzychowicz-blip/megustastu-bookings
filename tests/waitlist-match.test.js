@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import { placeWaitlist, withoutHeld } from "../src/lib/waitlist-match.js";
 import { genId, isAllIn, isAllOut, offZone } from "../src/lib/booking-logic.js";
-import { ALL_TABLES } from "../src/lib/constants.js";
+import { ALL_TABLES, INDOOR } from "../src/lib/constants.js";
 
 // ALL_TABLES holds {id, capacity} objects, not ids — a booking's `tables` is a
 // string array, so a fixture built straight from it silently occupies nothing.
@@ -86,9 +86,9 @@ describe("placeWaitlist — the sequential guarantee", () => {
   });
 
   it("respects real bookings as well as holds", () => {
-    const taken = bk({ time: "19:00", tables: ["2"] });
+    const taken = bk({ time: "19:00", tables: ["3"] });
     const res = run({ bookings: [taken], waitlist: [w({ prefTime: "19:00" }), w({ prefTime: "19:00" })] });
-    expect(allTables(res)).not.toContain("2");
+    expect(allTables(res)).not.toContain("3");
   });
 });
 
@@ -190,7 +190,7 @@ describe("placeWaitlist — the time budget and its anti-flap carry", () => {
   }
 
   it("carries a previous answer forward when the budget cut the scan short", () => {
-    const prev = { keep: { tables: ["2"], time: "19:00", resh: false } };
+    const prev = { keep: { tables: ["3"], time: "19:00", resh: false } };
     // Fill every table so the cheap path cannot hit and the trial is required.
     const full = TABLE_IDS.map((t) => bk({ time: "13:00", duration: 600, tables: [t], _locked: true }));
     const res = placeWaitlist({
@@ -202,7 +202,7 @@ describe("placeWaitlist — the time budget and its anti-flap carry", () => {
   });
 
   it("does NOT carry forward when the entry genuinely stopped fitting", () => {
-    const prev = { gone: { tables: ["2"], time: "19:00", resh: false } };
+    const prev = { gone: { tables: ["3"], time: "19:00", resh: false } };
     const full = TABLE_IDS.map((t) => bk({ time: "13:00", duration: 600, tables: [t], _locked: true }));
     const res = placeWaitlist({
       bookings: full, waitlist: [w({ id: "gone", prefTime: "19:00" })], blocks: [],
@@ -214,7 +214,7 @@ describe("placeWaitlist — the time budget and its anti-flap carry", () => {
   // The carry-forward is HELD, or the queue behind it can't see it and the
   // double-booking this whole shape prevents comes straight back.
   it("holds a carried-forward answer against the rest of the queue", () => {
-    const prev = { first: { tables: ["2"], time: "19:00", resh: false } };
+    const prev = { first: { tables: ["3"], time: "19:00", resh: false } };
     const full = TABLE_IDS.map((t) => bk({ time: "13:00", duration: 600, tables: [t], _locked: true }));
     const res = placeWaitlist({
       bookings: full,
@@ -224,13 +224,13 @@ describe("placeWaitlist — the time budget and its anti-flap carry", () => {
       prev, budgetMs: 5, now: burnedClock(5),
     });
     expect(res.first).toEqual(prev.first);
-    if (res.second) expect(res.second.tables).not.toContain("2");
+    if (res.second) expect(res.second.tables).not.toContain("3");
   });
 });
 
 describe("placeWaitlist — purity", () => {
   it("does not mutate its inputs", () => {
-    const bookings = [bk({ time: "19:00", tables: ["2"] })];
+    const bookings = [bk({ time: "19:00", tables: ["3"] })];
     const wl = [w({ prefTime: "19:00" }), w({ prefTime: "19:00" })];
     const bSnap = JSON.stringify(bookings);
     const wSnap = JSON.stringify(wl);
@@ -273,7 +273,7 @@ describe("placeWaitlist — a party's seating preference (v18.2.0 phase 68)", ()
   });
 
   it("with its zone full, an indoor party is offered outdoor rather than waiting", () => {
-    const indoor = ALL_TABLES.filter((t) => t.zone === "indoor" || /^i/.test(t.id)).map((t) => t.id);
+    const indoor = INDOOR.map((t) => t.id);
     const full = indoor.map((id) => bk({ time: "19:30", duration: 180, tables: [id], _locked: true }));
     const res = run({ bookings: full, waitlist: [w({ size: 2, prefTime: "20:00", preference: "indoor" })] });
     expect(isAllOut(Object.values(res)[0].tables)).toBe(true);

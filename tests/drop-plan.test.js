@@ -33,115 +33,115 @@ const byId = (list, id) => list.find((b) => b.id === id);
 
 describe("planDrop: nothing to do", () => {
   it("answers null for an unknown, cancelled, completed or other-day booking, and for its own row", () => {
-    const list = [bk("a", "19:00", 2, ["2"]), bk("gone", "19:00", 2, ["3"], { status: "cancelled" }),
-      bk("done", "19:00", 2, ["4"], { status: "completed" }), bk("far", "19:00", 2, ["6"], { date: addDays(D, 1) })];
-    expect(drop(list, "nobody", "3")).toBeNull();
-    expect(drop(list, "gone", "6")).toBeNull();
-    expect(drop(list, "done", "6")).toBeNull();
-    expect(drop(list, "far", "5A")).toBeNull();
-    expect(drop(list, "a", "2")).toBeNull();
+    const list = [bk("a", "19:00", 2, ["3"]), bk("gone", "19:00", 2, ["4"], { status: "cancelled" }),
+      bk("done", "19:00", 2, ["5"], { status: "completed" }), bk("far", "19:00", 2, ["8"], { date: addDays(D, 1) })];
+    expect(drop(list, "nobody", "4")).toBeNull();
+    expect(drop(list, "gone", "8")).toBeNull();
+    expect(drop(list, "done", "8")).toBeNull();
+    expect(drop(list, "far", "6")).toBeNull();
+    expect(drop(list, "a", "3")).toBeNull();
   });
 });
 
 describe("planDrop: a free table", () => {
   it("moves the booking, locks it, and says where", () => {
-    const list = [bk("a", "19:00", 2, ["2"]), bk("b", "19:00", 2, ["4"])];
-    const plan = drop(list, "a", "3");
-    expect(plan.done).toBe("A moved to 3.");
+    const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["5"])];
+    const plan = drop(list, "a", "4");
+    expect(plan.done).toBe("A moved to 4.");
     const out = plan.transform(list);
-    expect(byId(out, "a")).toMatchObject({ tables: ["3"], _manual: true, _locked: true, _conflict: false });
-    expect(byId(out, "a").history).toEqual([{ action: "moved to 3 (drag)", by: "u@x" }]);
+    expect(byId(out, "a")).toMatchObject({ tables: ["4"], _manual: true, _locked: true, _conflict: false });
+    expect(byId(out, "a").history).toEqual([{ action: "moved to 4 (drag)", by: "u@x" }]);
     expect(byId(out, "b")).toBe(list[1]);          // nobody else is touched
   });
 
   it("takes joined tables when the row's own table is too small", () => {
-    const list = [bk("a", "19:00", 4, ["7"])];
-    const plan = drop(list, "a", "2");
+    const list = [bk("a", "19:00", 4, ["9"])];
+    const plan = drop(list, "a", "3");
     const tables = byId(plan.transform(list), "a").tables;
-    expect(tables).toContain("2");
+    expect(tables).toContain("3");
     expect(tables.length).toBeGreaterThan(1);
     expect(comboCapBest(tables)).toBeGreaterThanOrEqual(4);
     expect(plan.done).toBe("A moved to " + tables.join("+") + ".");
   });
 
   it("a completed booking's table is free", () => {
-    const list = [bk("a", "19:00", 2, ["2"]), bk("done", "19:00", 2, ["3"], { status: "completed" })];
-    expect(drop(list, "a", "3").done).toBe("A moved to 3.");
+    const list = [bk("a", "19:00", 2, ["3"]), bk("done", "19:00", 2, ["4"], { status: "completed" })];
+    expect(drop(list, "a", "4").done).toBe("A moved to 4.");
   });
 });
 
 describe("planDrop: one party in the way", () => {
   it("swaps the two, and locks ONLY the one that was dragged (v17.10.0)", () => {
-    const list = [bk("a", "19:00", 2, ["2"]), bk("b", "19:00", 2, ["3"])];
-    const plan = drop(list, "a", "3");
+    const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["4"])];
+    const plan = drop(list, "a", "4");
     expect(plan.done).toBe("A and B — tables swapped.");
     const out = plan.transform(list);
-    expect(byId(out, "a")).toMatchObject({ tables: ["3"], _manual: true, _locked: true });
-    expect(byId(out, "b")).toMatchObject({ tables: ["2"], _manual: false, _locked: false });
-    expect(byId(out, "a").history[0].action).toBe("swapped tables with B (2 → 3)");
-    expect(byId(out, "b").history[0].action).toBe("swapped tables with A (3 → 2)");
+    expect(byId(out, "a")).toMatchObject({ tables: ["4"], _manual: true, _locked: true });
+    expect(byId(out, "b")).toMatchObject({ tables: ["3"], _manual: false, _locked: false });
+    expect(byId(out, "a").history[0].action).toBe("swapped tables with B (3 → 4)");
+    expect(byId(out, "b").history[0].action).toBe("swapped tables with A (4 → 3)");
   });
 
   it("a party that was already locked (a walk-in) keeps its lock on its new table", () => {
-    const list = [bk("a", "19:00", 2, ["2"]), bk("b", "19:00", 2, ["3"], { _manual: true, _locked: true })];
-    const out = drop(list, "a", "3").transform(list);
-    expect(byId(out, "b")).toMatchObject({ tables: ["2"], _manual: true, _locked: true });
+    const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["4"], { _manual: true, _locked: true })];
+    const out = drop(list, "a", "4").transform(list);
+    expect(byId(out, "b")).toMatchObject({ tables: ["3"], _manual: true, _locked: true });
   });
 
   it("refuses to move a seated party, by name", () => {
-    const list = [bk("a", "19:00", 2, ["2"]), bk("b", "19:00", 2, ["3"], { status: "seated" })];
-    expect(drop(list, "a", "3")).toEqual({ refuse: "B is seated on 3's tables — can't move them." });
+    const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["4"], { status: "seated" })];
+    expect(drop(list, "a", "4")).toEqual({ refuse: "B is seated on 4's tables — can't move them." });
   });
 
   it("displaces when there is nothing to swap with, and re-seats the other party unlocked", () => {
     // `a` has no table, so there is no set to hand `b` in exchange.
-    const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["3"], { _manual: true, _locked: true })];
-    const plan = drop(list, "a", "3");
-    expect(plan.done).toBe("A moved to 3 — B reassigned.");
+    const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["4"], { _manual: true, _locked: true })];
+    const plan = drop(list, "a", "4");
+    expect(plan.done).toBe("A moved to 4 — B reassigned.");
     const out = plan.transform(list);
-    expect(byId(out, "a")).toMatchObject({ tables: ["3"], _manual: true, _locked: true });
+    expect(byId(out, "a")).toMatchObject({ tables: ["4"], _manual: true, _locked: true });
     const b = byId(out, "b");
     expect(b.tables.length).toBeGreaterThan(0);
-    expect(b.tables).not.toContain("3");
+    expect(b.tables).not.toContain("4");
     expect(b).toMatchObject({ _manual: false, _locked: false });
     expect(b._conflict).toBeFalsy();
   });
 
   it("refuses a displacement that would leave the other party with no table", () => {
     // Every other table is held by a locked party, so `b` has nowhere to go.
-    const others = ALL_TABLES.map((t) => t.id).filter((t) => t !== "3")
+    const others = ALL_TABLES.map((t) => t.id).filter((t) => t !== "4")
       .map((t, i) => bk("x" + i, "19:00", 2, [t], { _manual: true, _locked: true }));
-    const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["3"])].concat(others);
-    expect(drop(list, "a", "3")).toEqual({ refuse: "Can't re-seat the parties there without stranding one — use Manual assign." });
+    const list = [bk("a", "19:00", 2, []), bk("b", "19:00", 2, ["4"])].concat(others);
+    expect(drop(list, "a", "4")).toEqual({ refuse: "Can't re-seat the parties there without stranding one — use Manual assign." });
   });
 });
 
 describe("planDrop: the table cannot take the party", () => {
   it("names a block on the target", () => {
-    const list = [bk("a", "19:00", 2, ["2"])];
-    const tableBlocks = [{ id: "k", tableId: "3", date: D, allDay: true }];
-    expect(drop(list, "a", "3", { tableBlocks })).toEqual({ refuse: "Table 3 is blocked then." });
+    const list = [bk("a", "19:00", 2, ["3"])];
+    const tableBlocks = [{ id: "k", tableId: "4", date: D, allDay: true }];
+    expect(drop(list, "a", "4", { tableBlocks })).toEqual({ refuse: "Table 4 is blocked then." });
   });
 
   it("says the tables to join are busy when every combination holds a seated party or a block", () => {
-    const seated = ALL_TABLES.map((t) => t.id).filter((t) => t !== "2" && t !== "7")
+    const seated = ALL_TABLES.map((t) => t.id).filter((t) => t !== "3" && t !== "9")
       .map((t, i) => bk("s" + i, "19:00", 2, [t], { status: "seated" }));
-    const list = [bk("a", "19:00", 4, ["7"])].concat(seated);
-    expect(drop(list, "a", "2")).toEqual({ refuse: "The tables needed to join with 2 are busy or blocked then." });
+    const list = [bk("a", "19:00", 4, ["9"])].concat(seated);
+    expect(drop(list, "a", "3")).toEqual({ refuse: "The tables needed to join with 3 are busy or blocked then." });
   });
 
   it("says a party no joined set can seat will not fit", () => {
     const list = [bk("a", "19:00", 60, [])];
-    expect(drop(list, "a", "2")).toEqual({ refuse: "Party of 60 won't fit at 2, even with joined tables." });
+    expect(drop(list, "a", "3")).toEqual({ refuse: "Party of 60 won't fit at 3, even with joined tables." });
   });
 });
 
 describe("planDrop: which list it reads", () => {
   it("decides occupancy from liveBookings and runs the transform on the list it is handed", () => {
-    const shown = [bk("a", "19:00", 2, ["2"])];
-    const stored = shown.concat([bk("b", "19:00", 2, ["3"])]);   // `b` is not on screen
-    const plan = drop(shown, "a", "3", { bookings: stored });
-    expect(plan.done).toBe("A moved to 3.");
+    const shown = [bk("a", "19:00", 2, ["3"])];
+    const stored = shown.concat([bk("b", "19:00", 2, ["4"])]);   // `b` is not on screen
+    const plan = drop(shown, "a", "4", { bookings: stored });
+    expect(plan.done).toBe("A moved to 4.");
     expect(plan.transform(stored).map((b) => b.id)).toEqual(["a", "b"]);
   });
 });
@@ -174,25 +174,25 @@ describe("planDrop: what a displaced party is left with", () => {
   });
 
   it("leaves each occupant unlocked for the optimiser, which seats it off the set", () => {
-    // Two parties hold 3 over `a`'s window, so there is no swap: a displacement.
-    // `b` also holds 4 by hand; the release leaves it 4, unlocked.
-    const list = [bk("a", "19:00", 2, ["2"]),
-      bk("b", "18:00", 2, ["3", "4"], { _manual: true, _locked: true }),
-      bk("c", "20:00", 2, ["3"], { _manual: true, _locked: true })];
-    const plan = drop(list, "a", "3");
-    expect(plan.done).toBe("A moved to 3 — B, C reassigned.");
+    // Two parties hold 4 over `a`'s window, so there is no swap: a displacement.
+    // `b` also holds 5 by hand; the release leaves it 5, unlocked.
+    const list = [bk("a", "19:00", 2, ["3"]),
+      bk("b", "18:00", 2, ["4", "5"], { _manual: true, _locked: true }),
+      bk("c", "20:00", 2, ["4"], { _manual: true, _locked: true })];
+    const plan = drop(list, "a", "4");
+    expect(plan.done).toBe("A moved to 4 — B, C reassigned.");
     const out = plan.transform(list);
-    expect(byId(out, "a").tables).toEqual(["3"]);
+    expect(byId(out, "a").tables).toEqual(["4"]);
     for (const id of ["b", "c"]) {
       const o = byId(out, id);
       expect(o._locked, id).toBe(false);
       expect(o._manual, id).toBe(false);
       expect(o.tables.length, id).toBeGreaterThan(0);
-      expect(o.tables, id).not.toContain("3");
+      expect(o.tables, id).not.toContain("4");
       expect(o._conflict, id).toBeFalsy();
     }
     // and what the optimiser was handed for `b` is the picker's release
-    expect(releaseSwapped(list[1], [{ id: "b", tables: ["3"] }])).toStrictEqual(
-      Object.assign({}, list[1], { tables: ["4"], _locked: false, _manual: false }));
+    expect(releaseSwapped(list[1], [{ id: "b", tables: ["4"] }])).toStrictEqual(
+      Object.assign({}, list[1], { tables: ["5"], _locked: false, _manual: false }));
   });
 });

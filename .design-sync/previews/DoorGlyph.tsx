@@ -7,7 +7,7 @@ export const InAWall = () => (
       <line x1={20} y1={170} x2={500} y2={170} stroke="var(--text-muted)" strokeWidth={6} strokeLinecap="round" />
       <DoorGlyph door={{ x: 140, y: 170, width: 80, rot: 0 }} />
       <DoorGlyph door={{ x: 380, y: 170, width: 80, rot: 0, flip: true }} selected />
-      <TableGlyph id="4" entry={{ x: 260, y: 80, shape: "round", w: 70, chairs: { top: 1, right: 1, bottom: 1, left: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
+      <TableGlyph id="5" entry={{ x: 260, y: 80, shape: "round", w: 70, chairs: { top: 1, right: 1, bottom: 1, left: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
     </svg>
   </Surface>
 );

@@ -34790,3 +34790,283 @@ Five findings, each checked before it was acted on.
 Gate: main bundle 134.16 kB gz (134.13 before the fixes) · 3,135 tests · lint 63
 problems, 0 errors · style OK. Rules suite: 307 passed when section 11 was written,
 and `database.rules.json` has not changed since.
+
+## v18.6.1 — the default layout is tables 1–13
+
+**Date:** 2026-10-10 · **Branch:** `feat/v18.6.1-tables-1-13` ·
+**Behavioural change:** only for a database with NO `settings/layout` node (a new
+restaurant, or a layout never saved): its tables are named 1–13, a joined pair of
+1+2, 11+12 or 12+13 seats 5 (it was 6), and the Plan view opens on the drawn floor
+plan in place of the auto-placed grid. The table pickers group every layout by its
+join groups (section 2). A stored layout is read exactly as before.
+Settings → Layout has a new section, "Tables picked together" (section 6): the
+pickers' rule that 10 and 13 need 11 and 12 is the layout's, and a set the layout
+declares as a combo is no longer refused by it.
+**Rules change:** none. **`SCHEMA`: raised to 2** (section 6: `settings/layout`
+gains `pickRules`).
+**Deploy steps (Patryk):** (1) merge; (2) **refresh every device.** The first
+refreshed device announces schema 2, and from then a device still on 18.6.0 shows
+"This device needs refreshing" and saves nothing until it is. A rollback to 18.6.0
+would be locked out the same way until `/schema` is lowered in the Firebase console
+(`src/lib/CLAUDE.md`, schema.js).
+PROD's tables were renamed in Settings → Layout before this version (Patryk,
+2026-10-10), so PROD has a stored `settings/layout` and never reads the default
+layout. **Two things change there:** the rule that 10 and 13 cannot be picked
+together without 11 and 12 works again (it named `i1`…`i4` in code and has done
+nothing in PROD since the rename; PROD's stored layout has no `pickRules` yet, and
+an absent list reads as that one rule), and Settings → Layout shows it.
+Renaming a table in Settings → Layout does not rename it on bookings already
+stored (the editor says so), and this version does not either.
+
+The restaurant renumbered its tables (Patryk, 2026-10-10: "Now it is as DEV is set.
+That's the new default layout."). Old to new, in order:
+
+| old | 1A | 1B | 2 | 3 | 4 | 5A | 5B | 6 | 7 | i1 | i2 | i3 | i4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| new | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+
+"2", "3", "4", "6" and "7" are ids in both numberings and name different tables in
+each, so every rename in this version was one pass through the table, never id by id.
+
+### 1. `DEFAULT_LAYOUT` is DEV's layout
+
+Two decisions were his (asked, 2026-10-10): the default is **DEV's layout exactly**,
+not the old default with new names; and the pickers **keep the derived grouping**
+(section 2). `DEFAULT_LAYOUT` (`src/lib/constants.js`) was generated from DEV's
+`settings/layout` as read that day (`layoutRev` 368):
+
+- **Tables:** 1–9 outdoor (9 seats 4, the others 2), 10–13 indoor (2 each). 28 seats.
+- **Join groups**, in DEV's order: 3+4+5 · 6+7+8 · 11+12+13 · 1+2.
+- **Seats of a joined set** (`comboCaps`): 3+4, 6+7, 7+8, 11+12, 12+13 and 1+2 seat 5;
+  the three triples seat 8; 4+5 has no entry and seats 4, its sum. **Three differ from
+  the old default**, which had 1A+1B, i2+i3 and i3+i4 at 6. So 1+2+3 seats 7 where
+  1A+1B+2 seated 8, which two tests state (`comboCap`, `comboCapBest`).
+- **Mega combos:** DEV's 30, in DEV's order. The same thirty sets as the old default
+  once renamed, in another order; `buildLayout` gives 40 combos as before.
+- **Priorities:** the old seed renamed (anchors 13 then 10, the swap rule on table 9,
+  `mixedRequire` 1, 2, 9). DEV holds a fourth size band, `{min: 2, max: 2}` after the
+  2–2 band above it, which no party size can reach; it is left out.
+- **Floor plan:** DEV's (a 900 × 700 room, the 13 tables, two walls, one door). The
+  default had none and `useLayout` auto-placed a grid. `defaultLayout()` in
+  `useLayout.js` runs the default's plan through `sanitizeFloorPlan` and is what the
+  three fallback sites return (no node, no tables, the first render).
+
+The contiguity rule in `ManualModal` and `WalkinForm` named `i1`/`i4` and `i2`/`i3` in
+code; it names 10/13 and 11/12 now.
+
+### 2. The pickers' grouping is derived for every layout
+
+`IS_MGT_LAYOUT` was true while the live layout matched the old default's signature,
+and its one remaining use (since v15.9.0) was to show a hand-written grouping in the
+table pickers (`TABLE_GROUP_STRUCT`: "1A / 1B / 7" as one section, `i1` alone, the
+mega-combo hints). The restaurant's own layout stopped matching it the day the tables
+were renamed, so DEV was already on the derived grouping. `TABLE_GROUP_STRUCT`,
+`buildTableGroups`, `layoutSignature`, `MGT_SIGNATURE` and the `IS_MGT_LAYOUT` export
+are removed, and `setLayout` always calls `makeTableGroups()`. For the default that is:
+3 / 4 / 5 · 6 / 7 / 8 · 11 / 12 / 13 · 1 / 2, each with its seats as the note, then
+table 9 and table 10.
+
+### 3. Tests
+
+Table ids in 27 test files were renamed by script in one pass (ids in `tables`,
+`tableId`, `preferredTables`, combo keys, re-sorted where a key is sorted), and the
+positional arguments and the sentences a script cannot see by hand (`drop-plan`,
+`booking-logic`, `manual-assign`, `waitlist-match`). `roles.test.js` and
+`unplaced.test.js` were left alone: their `i1` is an invite id, and the second file's
+ids are the ones a layout does NOT have, on purpose.
+
+- `tests/save-path.test.js`: eight inline snapshots changed, and every changed line is
+  a table's name inside a sentence ("Table 3 is also held by…" → "Table 4…",
+  "tables manually set: 4, 5A" → "5, 6"). No snapshot changed in what the save does.
+- `tests/schema.test.js`: `sanitizeLayout`'s print re-pinned (`ade2386fc8` →
+  `2fe9c7bd7a`), the function's two fallbacks now calling `defaultLayout()`. It stores
+  no new key, so `SCHEMA` stays 1.
+- `tests/waitlist-match.test.js` found its indoor tables by `/^i/`; it reads `INDOOR`.
+- **New, `tests/layout-default.test.js`** (7 cases): the 13 ids and 28 seats, the four
+  join groups, 40 combos with the seats above, every id named anywhere in the default
+  being one of the 13, the default surviving `sanitizeLayout` with its plan, the
+  derived grouping as listed in section 2, and no `IS_MGT_LAYOUT` left in `src`.
+
+### 4. Around it
+
+- `src/lib/wa-sim-scenarios.js` (the sandbox's sample bookings): ids renamed. Klaus's
+  party of 8 was on 1A+1B+2; those seat 7 now, so it is on 11+12+13 (8).
+  `tests/wa-sim-fixtures.test.js` still finds no two locked samples on one table on
+  any weekday.
+- Comments that record a measurement ("saved onto 1A", "from i1 passed under…") keep
+  the names the tables had when it was taken.
+- **`.design-sync/`** (the Claude Design previews; the app's build never reads it):
+  the fixtures' bookings, block and floor plan, eleven previews, five docs and the
+  `TBadge` prop note in `config.json` renamed in the same single pass. Grupo Martín is
+  a party of 5 on 1+2 (it was 6 on 1A+1B, which seated 6), in the fixture and in the
+  sample conversation. Checked by importing `fixtures.ts` against the default layout:
+  831 bookings, none on a table the layout lacks, the plan holding exactly the 13
+  ids, no double-booking on the fixture's day. The barrel still builds
+  (`vite.lib.config.mjs`). **The previews were not re-rendered or re-uploaded**: that
+  is `/design-sync`, which stages its own `.ds-sync/` and sends to Claude Design.
+
+### 5. `/code-review` of the branch (2026-10-10)
+
+Seven findings, each checked before it was acted on.
+
+1. **The deploy note said the release changes nothing in PROD. Fixed (the note).**
+   `ManualModal` and `WalkinForm` refuse 10 + 13 without 11 and 12, by id, in code. PROD's
+   tables have been 10–13 since the rename, so the rule (which looked for `i1`…`i4`)
+   has not fired there since; with this release it does again. Read in the two
+   files; PROD itself was not looked at.
+2. **That rule refuses a set the layout declares: 1+2+9+10+13 (seats 12). Fixed in
+   section 6** (first recorded as no change: the old default had the same pair,
+   `1A+1B+7+i1+i4` beside the `i1`/`i4` rule).
+3. **A stored layout with a field missing takes the default's for that field. No
+   change.** `sanitizeLayout` and `buildLayout` fall back per field (join groups, seat
+   overrides, mega combos; the whole priorities object), and the default's ids now
+   name other tables for a layout still on 1A…i4: its old 3+4 would read the
+   default's `"3|4": 5`. No database known to be in that state: PROD and DEV were
+   both saved from the editor, which writes every field, after their rename.
+4. **The rule is four ids in two components. Fixed in section 6** (Patryk, the same
+   day: "this must be solved in this version too").
+5. **Nothing tested that a rule's or a seat override's key is the key of a real
+   combo. Fixed.** A key is the ids in STRING order (`"1|13|2|9"`); one in counting
+   order names real tables and matches nothing. All 15 rules and 9 overrides match
+   today; `tests/layout-default.test.js` holds them to it.
+6. **A comment in `constants.js` named the wrong test file for the 40-combo pin.
+   Fixed.**
+7. **Two comments still named `TABLE_GROUP_STRUCT`** (`constants.js`, `index.css`).
+   **Fixed.**
+
+### 6. The pick rules are the layout's
+
+Asked how the layout should carry "10 and 13 need 11 and 12" (2026-10-10): stored
+in the layout and editable; derived from the join groups (which loses the 10/13
+rule and refuses three picks hosts have today); or removed. He chose **stored**.
+
+- **Data:** `settings/layout.pickRules = { v: 1, rules: [{ pair: [a, b], need: […] }] }`.
+  The two tables of `pair` may be picked in one set only with every table of
+  `need`. `DEFAULT_LAYOUT` has the one rule. `v` keeps an emptied list present (RTDB
+  drops an empty array): an ABSENT object reads as the default's rule, which is how
+  PROD and DEV get it without a migration; a present one with no rules is none.
+- **One reading:** `normalizePickRules(raw, idSet)` (`constants.js`) is used by
+  `sanitizeLayout` and by `buildLayout`: up to two distinct existing tables in a
+  pair, a need of existing tables outside it, at most 20 rules. A rule still being
+  built is kept (the editor writes on every tap) and only a whole one is in force
+  (`activePickRules` → the `PICK_RULES` live binding). A removed table leaves its
+  rules; a layout with other table names and no stored rules has none.
+- **One question:** `pickBlockedBy(ids)` (`booking-logic.js`) → the rule a set
+  breaks, or null. `ManualModal`'s `toggle` and `WalkinForm`'s `wToggle` ask it
+  where they named four ids, twice each. **A set that holds a whole declared combo
+  containing both tables of the pair is let through**: 1+2+9+10+13 can be picked
+  (finding 2), and only once all five are in the set. The tap that would break a
+  rule did nothing and said nothing, as before, until section 8.
+- **Rename:** `commitEdit` renames the rules' tables with the combos and priorities.
+- **Settings → Layout → "Tables picked together":** per rule a Pair row and a Needs
+  row (the priorities' chip rows, given a `max` and an `exclude`), a remove button,
+  "Not in force yet" under a rule that is not whole, "+ Add rule" (which starts
+  from the first two tables, because a rule with an empty pair cannot be stored).
+- **`SCHEMA` 1 → 2.** A build without the field reads the layout through its own
+  whitelist and saves it back without the rules; they would then read as the
+  default's, so a restaurant's own rules would be lost to any Layout edit on an
+  old device. `tests/schema.test.js`: the number and `sanitizeLayout`'s print
+  (`317b68da39`).
+- **Tests:** `tests/pick-rules.test.js` (18 cases): the default rule and what it
+  refuses and allows, the combo exception, the normaliser (absent / emptied /
+  half-built / foreign ids / the cap), a layout from before the field, a removed
+  table, and three checks of the wiring (both pickers ask on each candidate set and
+  name no table; the rename line; every edit writes the whole list under `v`).
+- **On DEV (the app at 18.6.1):** `PICK_RULES` is the one rule from a stored layout
+  with no `pickRules`; `pickBlockedBy` refuses 10+13 and passes 10+11+12+13 and
+  1+2+9+10+13; the section shows Rule 1 (Pair 10, 13 · Needs 11, 12); a second rule
+  was added (stored with an empty need, shown "Not in force yet", not in
+  `PICK_RULES`) and removed, and a reload read one rule back. No console error. The
+  pickers' own taps were not driven in the browser.
+
+Gate: main bundle 134.05 kB gz · 3,161 tests · lint 63 problems, 0 errors · style OK.
+Rules suite not re-run: neither `database.rules.json` nor `tests/rules/` changed
+since its 307 passed.
+
+### 7. `/code-review` of section 6 (2026-10-10)
+
+Five findings, each checked before it was acted on.
+
+1. **Taking the last table out of a rule's Pair deleted the rule, its Needs with it.
+   Fixed.** `sanitizeLayout` drops a rule with an empty pair (RTDB could not hold
+   it), and "+ Add rule" starts from tables 1 and 2, so the natural edit (remove
+   both, add the right two) lost the rule on the second removal. The Pair row keeps
+   its last chip (`chipRow`'s `opts.min`; the ✕ is disabled, titled "Add the other
+   table first"). On DEV: a new rule, one chip removed, the other's ✕ disabled and
+   the rule still there; then the rule removed.
+2. **Taking a table OUT of a set is never asked. Fixed in section 8** (first put in
+   ROADMAP). Pick 10,
+   11, 12, 13, deselect 11, and 10+12+13 saves. The four ids behaved the same;
+   whether the deselect or the Save should refuse is a decision.
+3. **Three comments had been separated from their code** by the functions inserted
+   under them (`isMixedLarge`, `normalizePriorities`, `priPick`). **Fixed.**
+4. **A rule whose Pair is itself a declared combo refuses nothing** (a whole combo is
+   always let through), and the section counted it as a rule. **Fixed** to the
+   extent of saying so under the rule.
+5. **The editor is tested by reading its source. Not changed.** Its three writes are
+   one-line maps over the list, and the checks that matter (what a stored list
+   reads as, what a set is refused for) run the code.
+
+Gate: main bundle 134.05 kB gz · 3,162 tests · lint 63 problems, 0 errors · style OK.
+
+### 8. A refused pick says why, and taking a table out is asked too
+
+Both were put in ROADMAP by sections 6 and 7; Patryk, the same day: "resolve now…
+You should have fixed it straight away." How the deselect is refused was not asked
+of him: the tap is refused, with the same sentence, because the rule is then one
+question asked of every candidate set, in and out. A refusal at Save would let a
+forbidden set stand on screen until the end.
+
+- `pickRuleText(rule)` → "Tables 10 and 13 go together only with 11 and 12."
+  `pickRefusal(next)` → that sentence or null, for a table being added.
+  `unpickRefusal(current, id)` → the same for one being taken out, **and null when
+  the current set already breaks a rule** (stored that way, or made so by a layout
+  edit), so a host is never held in it. All three in `booking-logic.js`, beside
+  `pickBlockedBy`.
+- `ManualModal` and `WalkinForm`: the three questions (the set with the table
+  added, that set after the auto-prune, the set with a table taken out) call
+  `refusePick(sentence)`. The sentence replaces the "Capacity: …" line under
+  "Selected", in the warn tone; that line is `role="status"` now, and always
+  mounted, so it is announced. The note is cleared by the next accepted tap AND tied
+  to the selection it was raised on. Each alone failed: tied only, a note raised
+  on "10" came back when the selection was next 10 (seen on DEV); cleared only,
+  Clear and the walk-in's size stepper change the selection without a tap.
+- Tests (`tests/pick-rules.test.js`, 24 cases now): the sentence for one, two and
+  three needed tables; the refusal on add; the deselect refused from an allowed set
+  (10+11+12+13 less 11 or 12; 1+2+9+10+13 less 9) and allowed from a broken one;
+  the wiring count per picker.
+- **On DEV, the walk-in form, a party of 8:** 10 then 13 → refused, the sentence
+  shown; 11, 12, 13 → "10 + 11 + 12 + 13 · Capacity: 10 (fits 8 guests)"; a tap on
+  11, then on 12 → each refused, the selection unchanged; a tap on 10 → taken out,
+  the capacity line back. Nothing was saved. The table picker (`ManualModal`) holds
+  the same lines and was not driven in the browser.
+
+Gate: main bundle 134.26 kB gz (134.05 before) · 3,167 tests · lint 63 problems,
+0 errors · style OK.
+
+### 9. `/code-review` of section 8 (2026-10-10)
+
+Five findings, all fixed.
+
+1. **The rule was asked of the set BEFORE the auto-prune.** A party of 2 on table 10
+   tapping 13 swaps 10 for 13, and was refused for "10 and 13", a pair that would
+   never have been selected. The four ids did the same in silence; the sentence
+   made it visible (the first DEV run of section 8 shows it). The prune comes
+   first now and the rule is asked once, of what would be selected.
+2. **The toggle was written out in both pickers.** It is `togglePick(sel, id, needed)`
+   in `booking-logic.js`, a plan: `{tables}` or `{refuse}`. Each picker keeps its own
+   "may this table be tapped at all" (busy, seated, swap mode) ahead of it, and the
+   note. That also answers section 7's finding 5 for this half: the toggle is run
+   by tests now, not read.
+3. `pickRuleText` printed "undefined" for a rule with nothing under Needs (not
+   reachable through `PICK_RULES`). It says "cannot be picked together".
+4. `summaryColorOf` was a function with one caller; a const, as in the walk-in form.
+5. The walk-in form's `react` import sits first.
+
+`tests/pick-rules.test.js` (30 cases): `togglePick` adding and removing, the prune,
+the 10 ↔ 13 swap for a party of 2, the refusals in and out, a refusal after a prune
+that leaves both ends, a declared combo completed. **On DEV, the walk-in form:** a
+party of 2 moves 10 → 13 → 10; a party of 8 is refused 10+13, builds 10+11+12+13,
+is refused taking 12 out, and may take 13 out.
+
+Gate: main bundle 134.07 kB gz · 3,173 tests · lint 63 problems, 0 errors · style OK.
