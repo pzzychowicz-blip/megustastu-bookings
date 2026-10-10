@@ -735,6 +735,18 @@ export function anonymizeBooking(b) {
   return Object.assign({}, b, { name: "Data removed", phone: "", notes: "", history: [], guestId: null, anonymized: true, tags: [], guestTags: [], guestTagsAt: 0 });
 }
 
+// nameQuery — is this query ALSO matched against names? Fewer than three digits
+// (the rule since v16.0.0), or, since v18.6.0, any letter. Three digits used to
+// make a query a phone search and nothing else, so a name with digits in it
+// could not be found by typing it: reproduced on DEV, "v1834" found nobody and
+// "weekly" found "v1834 weekly2", in Settings → Customers and in Find a
+// booking (Patryk, 2026-10-10: both). A query of digits and punctuation alone
+// ("600 111", "+34 600") is still a phone search only.
+export function nameQuery(q) {
+  const s = String(q || "");
+  return s.replace(/[^\d]/g, "").length < 3 || /\p{L}/u.test(s);
+}
+
 // searchBookings — match INDIVIDUAL bookings against a typed query (v16.3.0),
 // across ALL dates (the global-search panel). Same query semantics as
 // searchCustomers: digits (≥3) → phone substring match; non-digit text →
@@ -753,9 +765,11 @@ export function searchBookings(bookings, query, todayStr, limit, tags) {
   const qDigits = q.replace(/[^\d]/g, "");
   const qName = q.toLowerCase();
   const useDigits = qDigits.length >= 3;
+  const named = nameQuery(q);
   const out = bookings.filter(function (b) {
     if (!b || b.anonymized) return false; // v17.0.0: anonymized ("Data removed") bookings never match
-    if (useDigits) return b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
+    if (useDigits && b.phone && normalizePhone(b.phone).replace(/[^\d]/g, "").indexOf(qDigits) !== -1) return true;
+    if (!named) return false;
     if (b.name && b.name.toLowerCase().indexOf(qName) !== -1) return true;
     return matchedTagLabels(b, q, tags).length > 0;
   });
@@ -786,7 +800,7 @@ export function matchedTagLabels(b, query, tags) {
 // searchCustomers — match customers against a typed query.
 // Digits in the query → substring match on the normalized phone (so "600" finds
 // "+34 600 123 456" no matter the formatting); non-digit text → case-insensitive
-// substring match on the name. Both present → either matches. Results sorted by
+// substring match on the name. Both present → either matches (`nameQuery`). Results sorted by
 // most recent visit first, capped at `limit` (default 5, the dropdown size).
 export function searchCustomers(index, query, limit) {
   const max = limit || 5;
@@ -800,7 +814,7 @@ export function searchCustomers(index, query, limit) {
     // v17.10.0: `c.phone` is "" on a guest-id entry, so a digits query simply
     // never matches one — which is right: they have no number to search by.
     const phoneHit = qDigits.length >= 3 && !!c.phone && c.phone.replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
-    const nameHit = qDigits.length < 3 && c.name && c.name.toLowerCase().indexOf(qName) !== -1;
+    const nameHit = nameQuery(q) && c.name && c.name.toLowerCase().indexOf(qName) !== -1;
     if (phoneHit || nameHit) out.push(c);
   });
   out.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });

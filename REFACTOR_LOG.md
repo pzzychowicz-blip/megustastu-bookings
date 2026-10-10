@@ -34586,3 +34586,27 @@ is `auth != null` as before.
 **Not measured:** the rule on DEV or PROD. Deploying it is Patryk's step, and the gate
 is advisory on DEV. PROD's `enforceRoles` was not read.
 
+### 12. A name with digits in it can be searched for (2026-10-10)
+
+Seen once in this version's first round: Settings → Customers answered "No customers
+match" for a guest's full name ("V186 DelCust2").
+
+**Reproduced on DEV, and the cause read.** "v1834" found nobody and "weekly" found
+"v1834 weekly2". `searchCustomers` and `searchBookings` (`lib/customers.js`) treated a
+query holding three or more digits as a phone search and did not look at names, so a
+name with three digits in it could not be found by typing it, in Settings → Customers
+or in Find a booking. (The Browser pane also doubled a typed query once during this
+check, "v1833-recKv1833-recK"; the first sighting may have been either.)
+
+**Decided: names too, in both searches** (AskUserQuestion; the others were Customers
+only, and leaving it). `nameQuery(q)`: a query is matched against names when it has
+fewer than three digits, as before, or any letter. A query of digits and punctuation
+alone is still a phone search only. A query with a letter and three digits matches
+the name and, as mixed queries always did, any phone holding those digits, so "v1834"
+also lists a guest whose number contains 1834.
+
+**Measured on DEV after a reload.** Settings → Customers: "v1834" 2 customers (0
+before), "1834" 0, "612" 4 (phones, unchanged). Find a booking: "v1834" 4 or more
+bookings, "v1833-recK" and "RQ46 Weekly" found, "1834" "No bookings match".
+`tests/customers.test.js`: 4 new cases, 3 of them failing before the change.
+
