@@ -34664,5 +34664,12 @@ results equal, and the same identity answers (`=== pairs`, `=== EMPTY_ARR`,
 and 19:30): the strip row "R2 ClashA (19:00) and R2 ClashB (19:30) are both on table
 6" with Assign; both blocks labelled ", double-booked" with the title "Double-booked
 with … on table 6", the red border and the band (screenshot). The row's ✕: the strip
-gone, both blocks still marked. `tests/clash-view.test.js`: 8 cases.
+gone, both blocks still marked. `tests/clash-view.test.js`: 7 cases.
+
+**The other two slices were dropped once read** (Patryk, AskUserQuestion). The table
+above overstated them: `notifSections` is 57 lines of code, and the 118 included the
+61 comment lines that follow it; moved, App would pass about 40 values and lose 10 to
+15 lines. The Settings mount is 94 lines of which 88 are one prop each; a wrapper
+component needs every one from App and saves about 6. Both are wiring for state that
+lives in `BookingApp`. ROADMAP #17 says so.
 

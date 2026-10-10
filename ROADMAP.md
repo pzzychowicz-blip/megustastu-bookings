@@ -159,7 +159,12 @@ evidence for each.
   2026-10-10:** measured at 1,484 lines from the first top-level JSX constant (84
   statements; the `return` 562, `notifSections` 118, the clash derivations 95, the
   four view elements 140). The clash derivations are `lib/clash-view.js` (`App.jsx`
-  4,980 lines).
+  4,980 lines). **What is left of the render is prop wiring** (read 2026-10-10):
+  `notifSections` is 57 lines of code (the 118 counted the comments after it) and
+  would need about 40 values passed for 10 to 15 lines saved; the Settings mount is
+  94 lines, 88 of them one prop each, and a wrapper saves about 6. Patryk dropped
+  both. They shrink only when the state behind them moves into hooks by domain,
+  which is a design of its own and not started.
   **Re-measured 2026-10-09** (`App.jsx` 4,987 lines; the functions declared directly in
   `BookingApp`, by length, with the commits since 2026-07-24 that touched their lines
   and how many of those say fix, /code-review or correction; `git log -L` on today's
