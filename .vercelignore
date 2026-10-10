@@ -35,3 +35,6 @@
 api/CLAUDE.md
 
 api/wa-sim-*.js
+
+# Appended by .github/workflows/sandbox.yml: the sandbox deployment keeps the simulator endpoints.
+!api/wa-sim-*.js
