@@ -11,7 +11,7 @@ import * as phoneLib from "../src/lib/phone-countries";
 import { normalizePhone } from "../src/lib/customers";
 import { phoneForSave, NO_CODE_REFUSAL } from "../src/lib/booking-logic";
 import { draftFromBooking } from "../src/lib/booking-fields";
-import { againDraft } from "../src/lib/booking-save.js";
+import { againDraft, draftForSave, draftRefusal } from "../src/lib/booking-save.js";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const read = (...p) => stripComments(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", ...p), "utf8")).join("\n");
@@ -169,18 +169,25 @@ describe("the booking form asks for the code (v18.2.0 phase 19)", () => {
   });
 
   it("Save refuses a typed number without a code, as the phone field's error, right after the name", () => {
+    // v18.6.0 (#17): the order and the exemption are `draftRefusal` and
+    // `draftForSave` (lib/booking-save.js), so they are run, where this test
+    // read `doSave`'s text.
+    const P = ["ES", "GB"];
+    const typed = { name: "Ana", phone: "600111222", date: "", time: "" };
+    const rule = draftForSave(typed, null, null, P, "+34");
+    expect(rule.phoneRefusal).toBe(NO_CODE_REFUSAL);
+    expect(draftRefusal(Object.assign({}, rule.draft, { name: " " }), rule.phoneRefusal).field).toBe("name");
+    // The date is missing too, and the phone is what the save names.
+    expect(draftRefusal(rule.draft, rule.phoneRefusal)).toEqual({ field: "phone", message: NO_CODE_REFUSAL });
+    // An edit that leaves an old code-less number untouched still saves.
+    const kept = draftForSave(typed, null, { id: "b1", phone: "600111222" }, P, "+34");
+    expect(kept.phoneRefusal).toBe(null);
+    expect(draftRefusal(kept.draft, kept.phoneRefusal).field).toBe("date");
+    expect(draftForSave(typed, null, { id: "b1", phone: "600111999" }, P, "+34").phoneRefusal).toBe(NO_CODE_REFUSAL);
+    // And `doSave` shows what they answer as that field's error.
     const save = App.slice(App.indexOf("function doSave(){"));
-    const name = save.indexOf('setErrorField("name")');
-    const phone = save.indexOf('setErrorField("phone")');
-    const date = save.indexOf('setErrorField("date")');
-    expect(name).toBeGreaterThan(-1);
-    expect(phone).toBeGreaterThan(name);
-    expect(phone).toBeLessThan(date);
-    // An edit that leaves an old code-less number untouched still saves: it is
-    // `phoneForSave`'s fourth argument since v18.3.2.
-    expect(save).toMatch(/const phoneUntouched=!!origB&&cleanPhoneOf\(origB\.phone\)===cleanPhoneOf\(fIn\.phone\);/);
-    expect(save).toMatch(/const phoneRule=phoneForSave\(fIn\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,phoneUntouched\);/);
-    expect(save).toMatch(/if\(phoneRule\.refusal\)\{setErrorField\("phone"\);setError\(phoneRule\.refusal\);return;\}/);
+    expect(save).toContain("draftForSave(formRef.current,statusOverrideRef.current,origB,generalSettings.pinnedCountries,generalSettings.phonePrefix)");
+    expect(save).toMatch(/const fieldNo=draftRefusal\(f,forSave\.phoneRefusal\);\s*if\(fieldNo\)\{setErrorField\(fieldNo\.field\);setError\(fieldNo\.message\);return;\}/);
   });
 
   it("the phone field takes no default country", () => {
@@ -285,14 +292,21 @@ describe("where the detection runs (v18.2.0 phase 20)", () => {
   });
 
   it("Save runs it too — into `f`, never an untouched edit's number — before the code check", () => {
+    // v18.6.0 (#17): `draftForSave` (lib/booking-save.js), run here.
+    const P = ["ES", "GB"];
+    const form = { name: "Ana", phone: "34 600 111 333" };
+    const out = draftForSave(form, null, null, P, "+34");
+    expect(out).toEqual({ draft: { name: "Ana", phone: "+34 600 111 333" }, phoneRefusal: null });
+    // Into a copy: the form's own object is the one React holds.
+    expect(form.phone).toBe("34 600 111 333");
+    // An untouched edit's number is handed back as it is, in the same object.
+    const untouched = draftForSave(form, null, { id: "b1", phone: "34 600 111 333" }, P, "+34");
+    expect(untouched.draft).toBe(form);
     const save = App.slice(App.indexOf("function doSave(){"));
-    // v18.3.2: through `phoneForSave`, whose fourth argument is the untouched
-    // exemption (the helper's own tests, below, pin what it does with it).
-    expect(save).toMatch(/const phoneRule=phoneForSave\(fIn\.phone,generalSettings\.pinnedCountries,generalSettings\.phonePrefix,phoneUntouched\);/);
-    expect(save).toMatch(/const f=phoneRule\.phone!==fIn\.phone\?Object\.assign\(\{\},fIn,\{phone:phoneRule\.phone\}\):fIn;/);
-    expect(save.indexOf("phoneForSave(")).toBeLessThan(save.indexOf('setErrorField("phone")'));
+    expect(save.indexOf("draftForSave(")).toBeGreaterThan(-1);
+    expect(save.indexOf("draftForSave(")).toBeLessThan(save.indexOf("draftRefusal("));
     // Not written back to the form: that would clear the error this save may set.
-    expect(save.slice(0, save.indexOf('setErrorField("phone")'))).not.toMatch(/setForm\(/);
+    expect(save.slice(0, save.indexOf("draftRefusal("))).not.toMatch(/setForm\(/);
   });
 });
 
@@ -435,10 +449,13 @@ describe("Add to waitlist takes the phone the way Save does (v18.2.0 phase 80)",
   // door spells the sentence or either half of the rule any more.
   it("Save and this one ask ONE helper, and App spells neither the rule nor its sentence", () => {
     const save = App.slice(App.indexOf("function doSave(){"));
-    expect(save).toMatch(/phoneForSave\(/);
+    // v18.6.0 (#17): Save reaches it through `draftForSave`, so App calls it
+    // once (Add to waitlist) and booking-save.js once.
+    expect(save).toMatch(/draftForSave\(/);
     expect(App).not.toMatch(/Choose the country code/);
     expect(App).not.toMatch(/withTypedCode|phoneHasCode/);
-    expect(App.match(/phoneForSave\(/g)).toHaveLength(2);
+    expect(App.match(/phoneForSave\(/g)).toHaveLength(1);
+    expect(read("src", "lib", "booking-save.js").match(/phoneForSave\(/g)).toHaveLength(1);
   });
 });
 

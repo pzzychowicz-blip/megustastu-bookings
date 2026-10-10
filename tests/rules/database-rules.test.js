@@ -2304,3 +2304,57 @@ describe("/activity — a deep write cannot MINT an entry around the create rule
     expect(await seedRead("activity/ghost")).toBeNull();
   });
 });
+
+// ── v18.6.0 — the minimum schema gate (`schema` + `schemaRev`) ───────────────
+// `{v: N}`: the highest schema number any build has announced (src/lib/
+// schema.js). The pair is in the walker's sweep above like every other; these
+// are the clauses that are its own: the number only goes UP, and a build cannot
+// be locked out by somebody lowering or clearing it.
+// v18.6.0 round 2: with roles enforced only a manager or an admin raises it
+// (Patryk, 2026-10-10). Before, a staff-role account could write a very large
+// number and stop every device from saving until the console lowered it.
+describe("schema: only upward, and by a manager or admin once roles are enforced (v18.6.0)", () => {
+  it("with roles NOT enforced, any signed-in account announces a number", async () => {
+    await assertSucceeds(writeWithRev(staff("nobody"), "schema", { v: 1 }, 1));
+    expect(await seedRead("schema/v")).toBe(1);
+  });
+  it("with roles enforced, an account with no role and a staff-role account are refused, node and rev", async () => {
+    await seedEnforce(true);
+    await seedRole("staff-b", { role: "staff" });
+    await assertFails(writeWithRev(staff("nobody"), "schema", { v: 1 }, 1));
+    await assertFails(writeWithRev(staff("staff-b"), "schema", { v: 999999 }, 1));
+    await assertFails(staff("staff-b").ref("schemaRev").set(1));
+    expect(await seedRead("schema")).toBeNull();
+    expect(await seedRead("schemaRev")).toBeNull();
+  });
+  it("with roles enforced, a manager announces and so does an admin", async () => {
+    await seedEnforce(true);
+    await seedRole("mgr-a", { role: "manager" });
+    await seedAdmin("adm-a");
+    await assertSucceeds(writeWithRev(staff("mgr-a"), "schema", { v: 1 }, 1));
+    await assertSucceeds(writeWithRev(staff("adm-a"), "schema", { v: 2 }, 2));
+    expect(await seedRead("schema/v")).toBe(2);
+  });
+  it("refuses a number that is not higher, with the rev bumped correctly", async () => {
+    await seed((db) => db.ref().update({ schema: { v: 3 }, schemaRev: 1 }));
+    await assertFails(writeWithRev(staff(), "schema", { v: 2 }, 2));
+    await assertFails(writeWithRev(staff(), "schema", { v: 3 }, 2));
+    await assertSucceeds(writeWithRev(staff(), "schema", { v: 4 }, 2));
+    expect(await seedRead("schema/v")).toBe(4);
+  });
+  it("refuses it for an admin too: lowering is the console's job, after a rollback", async () => {
+    await seedAdmin();
+    await seed((db) => db.ref().update({ schema: { v: 3 }, schemaRev: 1 }));
+    await assertFails(writeWithRev(staff(), "schema", { v: 1 }, 2));
+  });
+  it("refuses a value with no number, and a deep write that skips the rev", async () => {
+    await assertFails(writeWithRev(staff(), "schema", { v: "2" }, 1));
+    await assertFails(writeWithRev(staff(), "schema", 2, 1));
+    await seed((db) => db.ref().update({ schema: { v: 3 }, schemaRev: 1 }));
+    await assertFails(staff().ref("schema/v").set(9));
+    expect(await seedRead("schema/v")).toBe(3);
+  });
+  it("refuses an unauthenticated write", async () => {
+    await assertFails(writeWithRev(anon(), "schema", { v: 1 }, 1));
+  });
+});

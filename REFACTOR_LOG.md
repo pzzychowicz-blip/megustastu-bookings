@@ -34172,3 +34172,621 @@ selection and the search did not know about it.
 - **`matchedTagLabels` runs for every booking on each keystroke** and again for the
   30 shown. Not measured as slow; no change without a measurement.
 
+## v18.6.0 — the List's tag filter opens the fold
+
+**Date:** 2026-10-09 · **Branch:** `feat/v18.6.0-schema-gate` ·
+**Behavioural change:** a tag filter whose only matches are completed or cancelled
+opens "Completed & cancelled" (section 1); the "No bookings tagged…" line folds in and
+out and no longer shows on an empty day (section 2); Delete customer pauses the
+standing bookings and erases only once the anonymise has landed (section 3); a device
+on an older build than the database refuses to save and shows "This device needs
+refreshing" (section 4). None in section 5 (an extraction). Finishing the last
+unfinished match while its tag is the filter opens the fold too (section 9). The
+header is extended as the version's other items land.
+**Rules change: YES** (section 4): `schema` + `schemaRev`, the eighteenth rev pair.
+**Deploy steps (Patryk):** (1) deploy `database.rules.json` to DEV and to PROD, BEFORE
+the merge (`database.rules.README.md`, v18.6.0), **and again if it was deployed before
+2026-10-10: section 11 changed the `schema` and `schemaRev` rules**; (2) merge; (3) refresh every device,
+as for every release so far: the gate protects from the NEXT release, not this one.
+
+One version with a section per item (Patryk, 2026-10-09), one commit each. The minor
+bump is for the schema gate (a device that refuses to write until refreshed), settled
+with him before the branch was cut.
+
+### 1. A filter with only finished matches showed no card
+
+**Files:** `src/lib/tag-filter.js` (`onlyFinishedMatch`), `src/App.jsx`
+(`changeListTags`, the day-change effect), `tests/tag-filter.test.js` (+4).
+
+**Reproduced on DEV first** (Fri 09.10, the day's one Highchair booking cancelled,
+then the Highchair chip chosen): 0 cards, and a closed fold reading "Completed &
+cancelled · 1 booking". No "No bookings tagged…" line either, since the filtered day
+is not empty.
+
+**The rule** (Patryk, 2026-10-09, both halves): the fold opens whenever the filter is
+on, no active booking matches and a finished one does: when a tag is chosen, and on
+arriving at such a day with the filter kept. It is never closed by the filter: with
+an active match, or the filter cleared, the fold stays as it was set. The day-change
+effect already collapsed the fold on every new day; it now collapses it unless
+`onlyFinishedMatch` says the fold is all there is.
+
+**On DEV after the change:** Highchair chosen → fold open, 1 card; chip cleared → fold
+still open, 6 + 1 cards. Fold closed by hand, Allergy chosen (one active match) → 1
+card, fold untouched. Highchair chosen, next day (no Highchair) → the "No bookings
+tagged" line; back to 09.10 → fold open, 1 card. Filter off, away and back → fold
+closed, 6 cards.
+
+**Not covered, by the rule as given:** a booking cancelled or completed WHILE its tag
+is the filter. The card moves into the closed fold and the List shows none until the
+fold is opened or the day is left and re-entered.
+
+### 2. The "No bookings tagged…" line
+
+**Files:** `src/components/ListView.jsx` (`noneTagged`, the line in a `Reveal`),
+`tests/tag-filter.test.js`.
+
+**Reproduced on DEV first.** The filter is kept from day to day, so with Highchair
+chosen the line showed on 8 of 8 following days with no Highchair booking, and on Thu
+26.11 (0 bookings) the empty-day prompt, the chip and the line were on screen together.
+The line was a bare conditional `<div>` outside any `Reveal`.
+
+**The rule** (Patryk, 2026-10-09): on a day with no bookings only the prompt shows; on
+any other day the line folds in and out like the chip row. The filter still survives a
+date change, and its chip stays on the empty day to switch off.
+
+**On DEV after the change**, Sat 10.10, Anniversary chosen (1 match), the page forced
+visible and frames driven by screenshots (the pane was hidden: a 500 ms frame count
+timed out). The matching booking moved to another day by a write from outside the
+app, then back:
+- **in:** the Reveal's wrapper read 0, 0.3, 1.0, 2.1, 3.4, 5.0, 6.7, 8.5, 10.4 px over
+  the 13 frames drawn in 185 ms, and 30.0 px settled;
+- **out:** 30.0, 24.6, 20.3, 16.4 … 3.0, 2.2, 1.7 px over 11 frames in 253 ms.
+Neither run was watched to its last frame: the frames stop when the screenshots do.
+- **the empty day** (26.11, Anniversary still chosen): the prompt and the chip, no line.
+
+**Not measured:** the line on arriving at a day, where the List remounts and the line
+is there from the first commit, as before.
+
+### 3. Delete customer: the rules went even if the anonymise did not land
+
+**Files:** `src/lib/delete-undo.js` (`planCustomerDelete`), `src/hooks/useRecurring.js`
+(`setRulesActive`), `src/App.jsx` (`deleteCustomer`), `tests/delete-undo.test.js` (+4),
+`tests/recurring.test.js` (1 rewritten), `src/CLAUDE.md`, `src/lib/CLAUDE.md`,
+`src/hooks/CLAUDE.md`.
+
+**Reproduced on DEV first**, on v18.5.1's code. A guest with a phone and Repeat weekly
+(1 rule, 3 bookings); the freshness gate tripped by shifting `Date.now` 8 h around the
+confirm (the measurement-traps row: the gate then holds, because the socket never
+dropped); Delete customer confirmed.
+
+| Server | rules | bookings with the name and phone |
+|---|---|---|
+| before | 1 | 3 |
+| 4 s after | 0 | 3 |
+| 30 s after | 0 | 3 |
+| after `goOffline`/`goOnline` | 0 | 0 ("Data removed" ×3) |
+
+**It was narrower than the ROADMAP entry said.** The bookings write is not refused by
+the gate: a function-form user write is PARKED and replayed on the resync, and then
+everything is consistent. `saveRecurring` has no such gate, so the rule removal landed
+at once. The loss was permanent only when the parked write died: a reload or a closed
+tab, Discard on the parked banner, or the refusal before the first read. And it was
+wider: the waitlist filter, the WhatsApp erase and the activity-log redaction were
+dispatched beside it too.
+
+**The fix** (Patryk's choice of four, 2026-10-09): the customer's active rules are
+PAUSED before the bookings write (stops the generator as a removal does, and can be
+taken back); the anonymise carries a report; `onLanded` removes the rules and runs the
+three other erasures; `onDiscarded` resumes the rules this delete paused. Every
+function `onLanded` calls reads refs, so a replay minutes later acts on the lists as
+they are then.
+
+**On DEV after the change**, a second guest (1 rule, 5 bookings), the same gate:
+
+| Server | rule | bookings with the name |
+|---|---|---|
+| 5 s after the confirm, write parked | present, `active: false` | 5 |
+| after a RELOAD while parked | present, `active: false` | 5 |
+| still listed in Settings → Customers | yes | |
+| Delete customer again, no gate | gone | 0 (5 "Data removed", 0 with a phone) |
+
+**Not run:** `onDiscarded` (the banner's Discard after three failed replays). It is
+held by a source test, and by `tellDiscarded`'s own tests in `tests/write-path.test.js`.
+**Seen and not chased:** Settings → Customers found the guest for "V186" and answered
+"No customers match" for the full name "V186 DelCust2". Not reproduced a second time
+and its cause not read.
+**Not changed:** while the write is parked the banner says "Your changes are saved and
+will finish syncing in a moment", for any parked write.
+
+### 4. The minimum schema gate: an older build no longer deletes what it does not know
+
+**Files:** new `src/lib/schema.js`, `src/hooks/useSchemaGate.js`,
+`src/components/UpdateRequired.jsx`, `tests/schema.test.js` (13); `src/lib/revGuard.js`,
+`src/hooks/usePersistence.js`, `src/hooks/useVouchers.js`, `src/hooks/useRoles.js` (the
+four writers ask the gate); `src/firebase.js` (`isDevDb`); `src/App.jsx`;
+`database.rules.json`, `tests/rules/database-rules.test.js` (+5), and the docs.
+
+**The fault** (v18.5.0's /code-review, ROADMAP since): every read is a whitelist and
+every write replaces the record whole, so a device on the previous build deletes the
+fields a newer one added. Measured then on v18.4.10's own code (`tags`, `guestTags`,
+`guestTagsAt`); v18.3.3 had it with a rule's `startDate`. The only defence was the
+deploy step "refresh every device".
+
+**Two ways were laid out and Patryk chose** (2026-10-09). Carrying unknown keys through
+the read and the write covers `bookings` only, puts a key scan on `sanitize`'s hot path
+(3.2 ms per 1,000 on the tablet), lets Delete customer on an old build keep a newer
+field it cannot see, and leaves an old build "keeping" a field it does not maintain.
+The gate covers every node, keeps the whitelist, and costs a stored node, a rules
+deploy and a blocking surface. His four further choices: enforced in production and
+ADVISORY on DEV Firebase (shared by every worktree and the sandbox deployment); a card
+that cannot be dismissed, with Refresh, and no automatic reload; a rev pair plus an
+only-upward rule (inside the Rule of law, no new exemption); and v18.6.0, a minor,
+because a device that refuses to work is something staff can meet.
+
+**How it works.** `SCHEMA` (1) is the build's number, separate from the app version.
+`/schema` is `{v: N}`, the highest any build announced. A build that reads a lower
+number announces its own, once per page load, through `writeWithRev`. A build that
+reads a HIGHER number refuses the four whitelisting writers (`saveBookings` and the
+legacy migration, `writeWithRev`, `saveVouchers`, roles and invites) and App shows
+`UpdateRequired` over an inert page. `activity`, `presence`, the WhatsApp nodes and
+the sign-in role stub stay open.
+
+**The guard on forgetting.** `tests/schema.test.js` fingerprints every `sanitize*`
+function in `src` (31 found by walking it, including the booking field list) and pins
+them beside the number. An edit to any of them fails until it is re-pinned (nothing
+new stored) or `SCHEMA` is raised (something is). It cannot see a field stored by a
+writer with no `sanitize*` function.
+
+**On DEV** (the build's number set to −1 for the run and put back; the local flag on):
+- the card showed with one button; Escape, N and a click on the scrim left it up; the
+  header and three wrappers were `inert`;
+- "seated" pressed on a booking under it (a scripted click, which `inert` does not
+  stop): console `[SAFE] Refused to write bookings`, and the stored booking unchanged
+  (`status` confirmed, the same `updatedAt`);
+- Refresh reloaded the page (a new `performance.timeOrigin`).
+With the number back at 1: no card, and the same "seated" landed.
+
+**A fault of this commit's own, found by that run and fixed before it was committed.**
+DEV has no grant for `/schema` yet, so the announce was refused; the SDK rolled the
+optimistic write back; the rollback arrived at the listener as the old number; and
+the hook announced again: 99 refused writes in a few seconds, and the same would have
+happened in production between the merge and the rules deploy. The announce is now
+once per page load. After the fix: one refusal on the next load with the flag on, none
+with it off (advisory), and none in a further 10 s.
+
+**Rules suite:** 305 passed on the emulator (300 before; the sweep took the new pair
+with no edit).
+
+**Not verified:** the announce LANDING (it needs the rule deployed; the emulator holds
+the rule, a source test holds the hook); two devices at different numbers; the card on
+the tablet or a phone.
+**What it does not do:** protect against builds before v18.6.0, which do not read the
+number. **And what it costs:** a rollback of a build that announced N locks the N−1
+builds out until `/schema` is lowered in the Firebase console.
+
+### 5. The redeem prompt's answer and the voucher carry out of BookingApp (#17)
+
+**Files:** new `src/lib/voucher-settle.js` (`planSettle`, `settleEffects`, `carryOffer`,
+`carryTransform`); `src/App.jsx` (`settleVoucher` and `doVoucherCarry` rewritten,
+`offerVoucherCarry` gone; 5,048 → 4,987 lines); `tests/voucher-settle.test.js` (+4, two
+rewritten), `tests/vouchers.test.js` (two source pins moved to the lib).
+**Behavioural change: none.**
+
+**Bundled against the advice given** (Patryk's choice, 2026-10-09). The ROADMAP said it
+wanted a version of its own, and this version already changes the save path twice
+(sections 3 and 4), so a regression in it is harder to attribute. It is its own commit.
+
+**What moved, and what did not.** The decisions moved: whether a settle is refused,
+which booking write goes first, what to redeem, whether to offer the carry and with
+what amount, and the Move write's transform. **The order did not move**, and it is the
+design: App still dismisses the prompt, asks the capability, asks the plan, runs the
+booking write inside `withRedeemAsked` (`updateStatus`, or `doSave` read through
+`saveGuardRef`), and only then redeems and offers. `doSave` is untouched.
+
+**One difference from verbatim, and why.** The first cut passed `now: Date.now()` from
+App, and lint went from 63 warnings to 64: the React Compiler's `purity` rule read the
+call as made during render. `carryOffer` reads the clock itself unless a test passes
+one, as `offerVoucherCarry` did.
+
+**Held to the code it replaced.** `tests/voucher-settle.test.js` carries v18.5.1's three
+handlers with their effects turned into return values, and a seeded generator:
+- `planSettle` + `settleEffects`: 20,000 cases, equal on every one (over 500 refusals,
+  over 1,000 redeems and over 100 carry offers among them, asserted, so the agreement is
+  not over one branch);
+- `carryOffer`: 20,000 cases;
+- `carryTransform`: 20,000 cases, the same list and the SAME array when it bails.
+A source test holds App's order.
+
+**On DEV:**
+- a confirmed booking with voucher 5C7Z-WJ3P (67.7 € left) → Completed → the prompt →
+  20 → Redeem & complete: status `completed`, 47.7 € left, a redemption of 20 under the
+  booking's id; no carry prompt (the guest has no other booking);
+- "QA Carry guest" with T5KB-HXR3 (12 € left) → 5 → Redeem & complete: 7 € left, and
+  the carry prompt "7 € is left… Move it to Standing Probe on Fri 25.09 at 19:30?" →
+  Move it: that booking carries the code, with the history entry "voucher T5KB-HXR3
+  attached (carried from the 2026-09-15 visit)".
+**Not run on DEV:** a settle from the strip's "Voucher not recorded" row, its refusal,
+and the form route. The generated cases and the source test hold them.
+
+### 6. What is largest in App.jsx, re-measured
+
+**Files:** `ROADMAP.md` (#17). No code.
+
+Asked for by the #17 entry ("re-measure before choosing after it") and done after
+section 5. The nine largest functions with their commit counts are in the ROADMAP
+entry, with how they were counted. Two readings, neither a decision: by churn the
+form's save is next (`doSaveEdit`: 30 lines, 31 commits, 7 of them fixes); by size the
+render is (1,471 lines, 29% of the file).
+
+### 7. The tablet checks v18.5.1 left open
+
+**Files:** none. Nothing was found wrong, so nothing was changed.
+
+Measured on the restaurant tablet (HONOR NDL-L09, Chrome 154, 998 × 507 CSS px at
+1.924 device px each), on a DEV tab over `adb reverse`, this branch's build, 10 Oct.
+
+- **The note corner on a tagged block.** 9 blocks: the one tagged booking, with nothing
+  in Notes, has it, the 8 others do not. The triangle is 13.51 CSS px a side, which is
+  26 device px (14px is not a whole number of device px there), at 0,0 of the block;
+  the pencil is 8px at 0.5,0.5. The name's box starts 11.5px down, and at its left edge
+  the triangle is 7.5px deep, so they are 4px apart.
+- **The List's chip row.** Two chips on one row, 78.1 and 96.1px wide, 28px tall, 4px
+  apart, 11px type, nothing clipped, no sideways overflow of the page. A touch on the
+  first chip turned it on (94.1px wide with its tick) and left one card; a second touch
+  turned it off. A day with enough tags to wrap the row was not on DEV.
+- **The second line of a Find a booking result.** "birthday": 2 rows, each 50.7px tall
+  against 40.1 for a row without the line ("sam", 6 rows; "elena", 8). The tag line is
+  11px type, 13px tall, directly under the name and flush with its left edge, not
+  clipped; the name column is 102px, the tag's own width. No row overflows and every
+  other cell stays centred on the row.
+
+**Seen, not changed.** With the on-screen keyboard up the tablet's viewport is 231px
+tall and the search card 207.7px, so one result row and the top of a second are
+visible; a tagged row's extra 10.6px is taken from that. This is the keyboard inset of
+v18.3.0 doing what it was built to do, on a landscape tablet.
+
+**A measurement trap met here:** the first reading said the tagged block had no corner.
+The selector asked for a computed `border-top-width` of exactly `14px`, and the tablet
+reports 13.5135px. Read from the inline style, the corner was there, and a screenshot
+showed it.
+
+### 8. /code-review (2026-10-09)
+
+Read over the whole branch diff. Nine candidates; one fixed, one pinned, two filed in
+ROADMAP.md, five need no change.
+
+**Fixed: a Vercel preview could have stopped the restaurant.** A preview of a pull
+request is a production build, and `src/firebase.js` sends every production build that
+is not the sandbox to PROD. So the first branch to raise `SCHEMA` would have announced
+its number to PROD the moment anybody signed in to its preview, and every device on
+`main` would have refused to write until that branch merged and they were refreshed.
+This release raises nothing a v18.5.1 device reads, so the next one was the first at
+risk. Now a preview reads the number and never raises it: `mayAnnounceFrom(deployEnv)`
+(`src/lib/schema.js`), with `import.meta.env.VITE_DEPLOY_ENV` defined in
+`vite.config.js` from Vercel's `VERCEL_ENV`. A build made anywhere else (no
+`VERCEL_ENV`) announces as before. **Checked** in three builds: the compiled hook calls
+the function with `preview`, `production` and an empty string. **Not checked:** a real
+Vercel preview, which needs this branch pushed; `VERCEL_ENV` at build time is Vercel's
+documented behaviour, not something measured here.
+
+**Fixed (test only): a case that failed every evening.** "a seat never lets the
+optimiser move anybody else" (`tests/status-change.test.js`) failed on an untouched
+`origin/main` at 23:17 local time, and in a run with the clock faked it passed at 20:15
+and 00:10 and failed at 21:59, 22:01, 23:17 and 23:59. `bookingsAfterAction` reads the
+wall clock while the test passes its own `nowMins`; the other booking came back equal
+but as a new object. The file now holds the clock at 20:15. Found because this run's
+gate ran late; CI runs in UTC and would have gone red on the same hours.
+
+**Pinned:** until `/schema` is read the gate lets every write through. `useSchemaGate`
+is called before `usePersistence` in `BookingApp` (lines 950 and 1294), so its listener
+is attached first; `tests/schema.test.js` now holds that order.
+
+**Filed in ROADMAP.md, not built:** any signed-in account can raise `/schema` and so
+stop every device (the rule has to let the first refreshed device do it); and Delete
+customer's rule removal, if the server refuses it after the anonymise landed, leaves
+the paused rule with the name in it.
+
+**No change needed:**
+- *The WhatsApp writers are not gated.* `conversations` and `messages` are read as
+  stored, with no whitelist (`useWhatsApp.js:139`), so writing one back drops nothing.
+- *A blocked `writeWithRev` returns without calling back,* so a hook's optimistic state
+  is not rolled back. The card is up and cannot be dismissed; a reload is the only way
+  on, and it re-reads everything.
+- *An announce refused once is not retried until the next page load.* That is the fix
+  for the loop in section 4; another device's announce or the next load carries it.
+- *Delete customer with nothing left to anonymise:* an empty patch counts as landed
+  (`usePersistence.js`, "nothing to write IS landed"), so the rules are still removed.
+- *`UpdateRequired` is a default export* where most components are named ones.
+  `ErrorBoundary` is the same, and the file name matches the export.
+
+### 9. The last match finished while its tag is the filter (2026-10-10)
+
+The second round on this version (Patryk, 2026-10-10: same version, same branch and
+PR #141, more commits). Section 1 opened the fold on choosing a tag and on arriving at
+a day. The third way in was left for him to decide: finish the last unfinished match
+while its tag is the filter.
+
+**Reproduced on DEV first:** Birthday chosen on 2026-10-10, one match (seated).
+Completed from its card: 0 cards, and the closed fold reading "1 booking".
+
+**Decided: the fold opens** (AskUserQuestion; the options were to open it, to open it
+and keep the card selected, or to leave it). `tagOnlyFinished` in `BookingApp` is
+`onlyFinishedMatch` for the viewed day as a memo, and the fold opens when that answer
+becomes true, so it also covers the close-time auto-complete and another device. A
+fold closed by hand afterwards stays closed, since the answer has not changed.
+
+**Adjusted during render, not in an effect.** The first version was a one-line effect
+and took lint from 63 warnings to 64 (`react-hooks/set-state-in-effect`), over the cap.
+It is now the previous answer held in state and compared during render, which is 63.
+
+**Measured on DEV after a reload:** completed under the filter: fold `aria-expanded`
+true, 1 card (the completed booking). Closed by hand: stayed false for the 3.5 s
+watched. Filter cleared: fold false, 6 cards. Filter chosen again: fold true, 1 card
+(section 1's rule, unchanged). `tests/tag-filter.test.js` pins the new site.
+
+### 10. Delete customer: a refused rule removal is retried (2026-10-10)
+
+Section 3 removes the customer's standing bookings once the anonymise has landed. If
+the server refused that removal (another device wrote `recurring` in the same moment),
+the rule stayed, paused, with the name and phone in it, under a banner asking to redo a
+change that only Settings could redo. Filed by this version's first /code-review.
+
+**Reproduced on DEV first**, with a temporary switch that sent one removal on a stale
+rev (the rule's own refusal, not a simulated one): the write at 127 ms after the
+confirm, the rollback echo at 185 ms with the rule back (`active: false`), the refusal
+heard at 186 ms, "Couldn't save" up, and the rule still stored after a reload.
+
+**Decided: it retries by itself** (AskUserQuestion; the others were a Retry button on
+the banner, and a stored mark that any device sweeps, which survives a reload and
+raises `SCHEMA`). `removeRules` (`useRecurring.js`) is now `removeAttempt(ids, 0)`:
+a refusal schedules the next attempt after `REMOVE_RETRY_MS * (n + 1)` (300, 600,
+900 ms), `REMOVE_RETRIES` (3) times, and the last attempt's refusal is the banner as
+before. `saveRecurring` takes an optional third argument that hears a refusal instead
+of the banner. Each attempt recomputes from the mirror, which the SDK has rolled back
+by then (the echo came 1 ms before the refusal in every measurement here).
+
+**Measured on DEV** (two seeded customers, each one completed booking and one rule):
+- One refusal: attempts at 130 and 553 ms after the confirm; the rule gone at 554 ms,
+  no banner, and not back in the 3 s watched.
+- Every attempt refused: attempts at 100, 464, 1,180 and 2,137 ms; four refusals; the
+  banner after the fourth; the rule left paused. This is the case the ROADMAP entry
+  keeps, with a page closed between attempts.
+
+The switch and its log lines were removed before the commit. `tests/recurring.test.js`
+pins the retry and that a handler replaces the banner.
+
+**Seen while setting this up, for the Customers search item:** Settings → Customers
+answered "No customers match" for the search "v1834" while "weekly" found "v1834
+weekly2".
+
+### 11. `/schema`: a manager or an admin raises it (2026-10-10)
+
+Filed by this version's first /code-review: the rule let any signed-in account write a
+higher number, so a staff-role account could write a very large one and stop every
+device from saving until `/schema` was lowered in the Firebase console.
+
+**Shown in the emulator first.** A new test, staff-role account, roles enforced,
+`{v: 999999}`: allowed by the rule as it stood (1 failed, 306 passed).
+
+**Decided: manager or admin** (AskUserQuestion, after Patryk asked for a
+recommendation; the others were admin only, and leaving it). Both rules of the pair
+now also ask `enforceRoles !== true || role === 'manager' || role === 'admin'`. No
+capability: nothing in the app would show or grant one, and `CAPABILITIES` stays at
+eighteen. The client is unchanged. `useSchemaGate` already treats a refused announce
+as nothing (an empty handler, one console line from `writeWithRev`, once per page
+load), read in the code and measured in section 4 with the rule undeployed.
+
+**What it changes in use.** A release that does not raise `SCHEMA`: nothing. One that
+does: the gate starts when the first manager or admin opens the refreshed app, which
+the post-merge boot-banner check does when it is made signed in as one. Until then an
+unrefreshed device writes as it did before v18.6.0. With `enforceRoles` off the rule
+is `auth != null` as before.
+
+**Measured:** rules suite 307 passed (305 before; the one "anyone" test became three).
+**Not measured:** the rule on DEV or PROD. Deploying it is Patryk's step, and the gate
+is advisory on DEV. PROD's `enforceRoles` was not read.
+
+### 12. A name with digits in it can be searched for (2026-10-10)
+
+Seen once in this version's first round: Settings → Customers answered "No customers
+match" for a guest's full name ("V186 DelCust2").
+
+**Reproduced on DEV, and the cause read.** "v1834" found nobody and "weekly" found
+"v1834 weekly2". `searchCustomers` and `searchBookings` (`lib/customers.js`) treated a
+query holding three or more digits as a phone search and did not look at names, so a
+name with three digits in it could not be found by typing it, in Settings → Customers
+or in Find a booking. (The Browser pane also doubled a typed query once during this
+check, "v1833-recKv1833-recK"; the first sighting may have been either.)
+
+**Decided: names too, in both searches** (AskUserQuestion; the others were Customers
+only, and leaving it). `nameQuery(q)`: a query is matched against names when it has
+fewer than three digits, as before, or any letter. A query of digits and punctuation
+alone is still a phone search only. A query with a letter and three digits matches
+the name and, as mixed queries always did, any phone holding those digits, so "v1834"
+also lists a guest whose number contains 1834.
+
+**Measured on DEV after a reload.** Settings → Customers: "v1834" 2 customers (0
+before), "1834" 0, "612" 4 (phones, unchanged). Find a booking: "v1834" 4 or more
+bookings, "v1833-recK" and "RQ46 Weekly" found, "1834" "No bookings match".
+`tests/customers.test.js`: 5 new cases, 3 of them failing before the change.
+
+### 13. Find a booking gives up its Done row while typing (2026-10-10)
+
+Section 7 saw it on the tablet: with the keyboard up the viewport is 231px and one
+result row and part of a second are visible.
+
+**Measured first** (Browser pane at 998 × 231, the tablet's keyboard-up size). Card
+207.9px. Body 128.9px with the full footer (77px), in which the title, the search box
+and their spacing leave the results 0px; with the slim footer the tablet gets (57px)
+and the focused box placed at the top, the results have 83px, which is one 42px row,
+a 6px gap and 35px of the next.
+
+**Decided: Done folds away while typing** (AskUserQuestion; the others were that plus
+34px rows, and leaving it). `Overlay` takes `footerYields`: while `tight` (a text
+field of the dialog focused on a screen under 480px) the card's footer row folds in a
+`Reveal` on `shift`. Only the card: a phone's sheet has no scrim, so its footer is its
+way out. Closing while it is folded is a pick, a tap outside the card, or Escape.
+
+**Measured after**, same size: footer gone, body 205.9px, three whole rows (42, 42,
+42). Focus taken away: the footer back at 77px. The fold plays both ways: sampled
+per frame, 77 → 65.2 → 54.9 → 46.2 → 38.6 → 32 → 26.5 going, and reversed mid-way
+22.1 → 19 → 19.6 → 28.9 → 37.3 → 44.7 coming back.
+
+**How it was measured, and what that leaves open.** The pane's document does not hold
+focus (`document.hasFocus()` false), so React's focus handlers were driven by
+dispatched `focusin` / `focusout`, and the fold was watched with the page reporting
+visible and screenshots driving the frames (`mgt-measurement-traps`). The tablet was
+not used; the ROADMAP entry asks for the check there.
+
+### 14. The render, measured, and its clash derivations out of BookingApp (#17)
+
+**The render measured** (2026-10-10, `App.jsx` 5,005 lines at that commit): 1,484 lines
+from the first top-level JSX constant to the end, in 84 top-level statements, 16 of
+which hold 1,117 lines. The `return` is 562 (the shell 239, the booking form and the
+confirms 89, the Settings mount 94, the reminder editor 48, the rest 92);
+`notifSections` 118; the clash derivations 95 (`clashBannerPairs` 21, `clashMap` 25,
+`clashSpans` 49); the four view elements 140 (`timelineEl` 50, `planView` 31,
+`listEl` 31, `summaryPanel` 28). Patryk chose three slices for this round
+(AskUserQuestion): the clash derivations, `notifSections`, the Settings mount.
+
+**This slice: `lib/clash-view.js`.** `undismissedClashes`, `clashByBooking` and
+`clashSpansByTable` are the bodies of the three memos, moved statement for statement.
+App keeps the memos, the dismissal Set, the prune effect and the `EMPTY_ARR` /
+`EMPTY_OBJ` it returns for a day with no pairs, since the memoised views compare
+those identities. `App.jsx` 5,005 → 4,980 lines.
+
+**Held to the old code first:** 40,000 generated days (5,280 with a clash, 5,327 with
+dismissals, some with a pair naming a booking no longer in the list): the three
+results equal, and the same identity answers (`=== pairs`, `=== EMPTY_ARR`,
+`=== EMPTY_OBJ`), 0 differences. A one-off script, not kept.
+
+**Measured on DEV** (two locked bookings written onto table 6 on 2026-11-17, 19:00
+and 19:30): the strip row "R2 ClashA (19:00) and R2 ClashB (19:30) are both on table
+6" with Assign; both blocks labelled ", double-booked" with the title "Double-booked
+with … on table 6", the red border and the band (screenshot). The row's ✕: the strip
+gone, both blocks still marked. `tests/clash-view.test.js`: 7 cases.
+
+**The other two slices were dropped once read** (Patryk, AskUserQuestion). The table
+above overstated them: `notifSections` is 57 lines of code, and the 118 included the
+61 comment lines that follow it; moved, App would pass about 40 values and lose 10 to
+15 lines. The Settings mount is 94 lines of which 88 are one prop each; a wrapper
+component needs every one from App and saves about 6. Both are wiring for state that
+lives in `BookingApp`. ROADMAP #17 says so.
+
+### 15. The form's save: what `doSave` and `save` still decided, in lib (#17)
+
+Patryk's choice for the form's save (AskUserQuestion): decisions to lib, App keeps
+the effects. `doSaveEdit` and `doSaveNew` were already plans (`applyEdit`,
+`buildBooking`, v18.3.4). Four things were still decided inline, between the refs
+and the setters, and are functions of their inputs in `lib/booking-save.js` now:
+
+- **`draftForSave(form, statusOverride, orig, pinned, prefix)`** → `{draft,
+  phoneRefusal}`: the pending/confirm override on a clone, and the phone rule's
+  rewrite with the untouched-edit exemption.
+- **`draftRefusal(draft, phoneRefusal)`** → `{field, message}` or null: name, phone,
+  date, time, a time that cannot be read, a closed day, the day's hours, the last
+  start. The reasons written beside each check in App moved with it, shortened.
+- **`formSeatClash(draft, editId, list)`** → the seated parties at the tables an edit
+  is about to seat, or `[]`.
+- **`kitchenAsk(draft, orig, bookings, editId)`** → whether Save raises "Kitchen busy".
+
+`doSave` keeps the submit guard, the order of its questions (fields, picked tables,
+the two voucher prompts, the seat clash, the dispatch), the refs and every setter:
+132 → 64 lines. `save` 31 → 27. `App.jsx` 4,980 → 4,898. Seven imports left App.
+
+**Held to the old code first:** the inline code as it stood at `660570f4`, retyped
+into a one-off script (not kept), against the four functions over 60,000 generated
+drafts on a week with a closed Monday, a Friday closing at 01:00 and a Saturday
+closing at midnight: the draft (and whether it is the form's own object), the first
+refusal or the throw, the seat-clash parties and the kitchen answer. 0 differences.
+Reached: name 15,134 · phone 8,372 · no date 4,695 · no time 1,596 · unreadable time
+1,714 · closed day 4,017 · outside hours 8,551 · last start 2,888 · passes 13,033, of
+which 27 with a seat clash and 490 with the kitchen question. **The first two runs
+also said 0 and proved less:** the script's random generator was a 31-bit
+multiply done in floating point, and no case reached a closed day, a seat clash or
+the kitchen question (the week was also handed over in the stored `{days}` shape,
+which `setWeekHours` does not take). The tally by branch is what showed it.
+
+**`tests/save-path.test.js` is unchanged and was not run with `-u`:** its harness
+lifts `doSave` from App and resolves the new names through App's imports, and all
+its snapshots pass (176 tests with `booking-fields`). Eight tests in four other
+files pinned `doSave`'s text and failed, as they should: three now run the
+functions (`phone-countries`), three read the rule where it lives
+(`booking-logic` ×2, `wa-parse-guard`), two pin `doSave`'s call (`booking-logic`,
+`submit-guard`). `tests/form-save.test.js` is new: 15 cases. Gate: main bundle 134.13 kB gz (134.05 before) · 3,124 tests (3,109) · lint 63 problems, 0 errors · style OK.
+
+**Measured on DEV** (the booking form, 2026-11-19, a Thursday, 13:00 to 22:00):
+- new booking, name blank: "Customer name is required.", the name field invalid;
+- phone `600111222` with no country chosen: the phone field invalid;
+- time emptied: "Please set a time."; `03:00` and `23:59`: "Bookings on this day are
+  accepted between 13:00 and 22:00."; `21:50`: "The last start on Thursdays is 21:45.";
+- then 19:00: saved, "Tables re-optimised.", the card "R2 SaveA, 19:00, 2 guests,
+  table 1A, confirmed";
+- that booking edited to 22:30: refused with the hours sentence; to 20:00, where 8
+  bookings already start: "Kitchen may be busy" (screenshot); Confirm: "Booking
+  updated · tables re-optimised", the card at 20:00. No console errors.
+
+Not measured on DEV: the seat-clash prompt and the closed-day sentence through the
+form (both are in the 60,000 and in `tests/form-save.test.js`). An emptied date shows
+no sentence in the form because its Save button is disabled without one
+(`BookingFormModal`, `disabled={!form.date}`); the check stays for the other doors
+into `doSave`.
+
+### 16. A DEV-only trace of the parked queue (2026-10-10)
+
+For the fault in ROADMAP, "A parked write was seen stored without Retry" (seen once,
+v18.4.9, not reproduced). Patryk's choice (AskUserQuestion): DEV only, in memory.
+This fixes nothing. It is there so the next occurrence can be read.
+
+`src/lib/write-trace.js`: `window.__mgtTrace`, the last 200 entries. Every click in
+the page, logged at the capture phase (`isTrusted`, the nearest control's label or
+text, `document.visibilityState`), and `traceWrite` for the four things that happen
+to a parked write in `usePersistence.js`: `park`, `retry` (with the call stack and
+the clicks of the 10 s before it), `discard`, `replay`. Those four print one
+`[trace]` console line each; clicks do not. Nothing is stored, and a reload empties it.
+
+**Compiled out, measured:** each call is `if(import.meta.env.DEV) traceWrite(…)`. With
+the guard only inside the functions the built main bundle was 475.58 kB (134.15 kB
+gz) against 475.47 (134.13) before the change, because the calls still built their
+arguments. With the guard at the call the build is `index-BzxkHXMk.js`, 475.47 kB,
+134.13 kB gz: the same file name, so the same bytes, as the commit before. No built
+chunk holds `__mgtTrace` or `[trace] `; `tests/write-trace.test.js` reads `dist/`
+for both when there is one.
+
+**Measured on DEV** (reload, then two clicks on the view switcher): `__mgtTrace` held
+`button "list"` with `trusted: true` (the Browser pane's pointer click) and
+`button "plan"` with `trusted: false` (a script's `.click()`), both `visible:
+"hidden"`, which is what the pane reports. No console errors.
+
+**Not measured on DEV:** a real park, Retry, Discard or replay. A park needs a write
+the server rejects three times, and nothing in this session produced one. The four
+entries are run in `tests/write-trace.test.js` against a stand-in `window` (11
+cases: the ring, the click's name, the Retry entry with its clicks, a script's click
+marked `SCRIPT`, the one listener, and the three build checks).
+
+### 17. `/code-review` of round 2 (2026-10-10, the nine commits after `8dfc9dfb`)
+
+Five findings, each checked before it was acted on.
+
+1. **A tag with digits in its label could not be found by typing it. Fixed.**
+   `matchedTagLabels` kept the three-digit test that section 12 replaced in the two
+   searches, and `searchBookings` calls it. Reproduced in Node: a booking tagged
+   "Table 100", the query "table 100": 0 results and no labels ("table" alone found
+   it). It asks `nameQuery` now; the same case is in `tests/customers.test.js`.
+2. **The rule-removal retry (section 10) could fire after the hook unmounted. Fixed.**
+   A bare `setTimeout`, 300 to 900 ms, with nothing to stop it on a sign-out or an
+   account switch; the old closure would write `/recurring` from a detached mirror.
+   Read, not reproduced. An `alive` ref, set in an effect and cleared in its
+   cleanup, is asked before the retry. Not re-measured on DEV: the retry needs a
+   refused write.
+3. **`searchCustomers` asked `nameQuery` once per customer. Fixed** (once per query).
+4. **Find a booking's Done row cannot be reached by Tab while it is folded. No
+   change.** That is DESIGN.md's rule for a folded piece ("a folded piece is
+   `inert`"), the fold needs a short viewport AND a focused field, and Esc and a tap
+   outside the card both close it.
+5. **ROADMAP said the trace has five lines in `usePersistence.js`; it has six. Fixed**
+   (and in `src/lib/CLAUDE.md`).
+
+Gate: main bundle 134.16 kB gz (134.13 before the fixes) · 3,135 tests · lint 63
+problems, 0 errors · style OK. Rules suite: 307 passed when section 11 was written,
+and `database.rules.json` has not changed since.

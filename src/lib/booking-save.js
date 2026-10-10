@@ -35,13 +35,14 @@ import {
   seatRefusal, seatedFitRefusal, pinnedClashParties, pinnedClashRefusal, handKeptRefusal,
   offZone, offZoneNote, seatNoteFor,
   canAssign, occupancyEnd, getBlockSlots, padEnd, plannedDuration,
+  phoneForSave, lastStartMins, toTime, seatClashParties, kitchenRelevant, getKitchenLoad,
 } from "./booking-logic.js";
 import { stampGuestSeed, resolveGuestId, saveGuestTags, guestTagsChange, guestTagMap, bookingTags, hasRealPhone } from "./customers.js";
 import { cleanTagIds } from "./tags.js";
-import { isNoShow, NO_SHOW_CLEARED } from "./booking-fields.js";
+import { isNoShow, NO_SHOW_CLEARED, isReadableTime } from "./booking-fields.js";
 import { normalizeCode, attachRefusal } from "./vouchers.js";
-import { EMPTY_FORM } from "./constants.js";
-import { todayStr } from "./day.js";
+import { EMPTY_FORM, hoursFor, KITCHEN_TABLE_LIMIT } from "./constants.js";
+import { todayStr, WEEKDAY_LONG } from "./day.js";
 
 // ── memoByPrev ───────────────────────────────────────────────────────────────
 // v17.4.0 /code-review: prev-identity memo for a save transform. The synchronous
@@ -867,3 +868,71 @@ export function againDraft(sourceBooking,ctx){
   });
 }
 
+// ── v18.6.0 (#17): what the form's Save decides before it reaches the day ──
+// `doSave` and `save` (App.jsx) held these four inline, between their refs and
+// their setters. Each is the same code as a function of its inputs, checked
+// against the inline version over generated drafts before the swap; App keeps
+// the order they are asked in, the refs and every effect.
+
+// The draft the save works on: the pending/confirm status override on a CLONE
+// (v17.0.0, so every later read sees one status), and the phone rule's rewrite
+// (v18.2.0 phase 20: a number typed with its country code and no "+" gets it
+// here too, because a save by Enter never blurs the box). An edit that leaves
+// the stored number untouched is never rewritten or refused (phase 19).
+// `phoneRefusal` is read by `draftRefusal`, after the name check.
+export function draftForSave(form,statusOverride,orig,pinned,prefix){
+  const fIn=statusOverride?Object.assign({},form,{status:statusOverride}):form;
+  const untouched=!!orig&&enteredPhone(orig.phone,prefix)===enteredPhone(fIn.phone,prefix);
+  const rule=phoneForSave(fIn.phone,pinned,prefix,untouched);
+  return {
+    draft:rule.phone!==fIn.phone?Object.assign({},fIn,{phone:rule.phone}):fIn,
+    phoneRefusal:rule.refusal||null,
+  };
+}
+
+// The first field the save refuses, `{field, message}`, or null. The order is
+// the form's: name, phone, date, time. Three of the checks carry a measured
+// fault each:
+// - a time that is THERE and unreadable (v18.0.0 phase 6, CT-WA-01): `toMins`
+//   gives NaN and both range comparisons are false against it, so the range
+//   check passed "8 in the evening" and it was stored and shown as 13:00;
+// - a closed day and the day's own hours (v15.0.0), read for the draft's date;
+// - the last start (v18.0.0 sessions 8 and 10): the test is `lastStartMins`,
+//   the minute the message, the Time field's `max` and `findTimes` all name.
+//   It caps at midnight, so a day closing at 24 or 25 still has a last start.
+export function draftRefusal(f,phoneRefusal){
+  if(!f.name||!f.name.trim()) return {field:"name",message:"Customer name is required."};
+  if(phoneRefusal) return {field:"phone",message:phoneRefusal};
+  if(!f.date) return {field:"date",message:"Please set a date."};
+  if(!f.time) return {field:"time",message:"Please set a time."};
+  if(!isReadableTime(f.time)) return {field:"time",message:"That time could not be read — please set it again."};
+  const sm=toMins(f.time);
+  const fh=hoursFor(f.date);
+  const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";
+  if(fh.closed) return {field:"date",message:"Closed on "+wd+"s — pick another date, or open that day in Settings."};
+  if(sm<fh.open*60||sm>fh.close*60) return {field:"time",message:"Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00."};
+  if(sm>lastStartMins(fh.close)) return {field:"time",message:"The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+"."};
+  return null;
+}
+
+// The parties sitting where an edit is about to seat its booking (v18.0.0
+// session 8, C3), or []. Only an edit that MOVES a booking into seated asks:
+// one already seated was asked when it sat down. The tables are the form's
+// pick, else the booking's own. `list` is the day as the save sees it.
+export function formSeatClash(f,editId,list){
+  if(!editId||f.status!=="seated") return [];
+  const orig=(list||[]).find(function(x){return x.id===editId;});
+  if(!orig||orig.status==="seated") return [];
+  const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
+  return seatClashParties(mt.length?mt:(orig.tables||[]),f.date,editId,list);
+}
+
+// Should the form's Save ask "Kitchen busy" first? Only about a save the
+// kitchen would notice (v18.0.0 session 8, R6: a notes-only edit in a busy
+// slot raised it, which trains people to tap past it), and only when this
+// booking's start would reach the limit. `orig` is the booking being edited.
+export function kitchenAsk(f,orig,bookings,editId){
+  const size=Number(f.size)||2;
+  const load=getKitchenLoad(bookings,f.date,f.time,f.customDur||getDur(size),editId);
+  return kitchenRelevant(orig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT;
+}

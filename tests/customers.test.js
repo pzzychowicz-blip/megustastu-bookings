@@ -10,7 +10,7 @@ import {
   normalizePhone, formatPhone, hasRealPhone, isNoShow,
   matchCustomerByPhone, matchCustomerFor, matchesIdentity, identityKey, customerIndex, noShowMap, stampGuestSeed,
   resolveGuestId,
-  searchBookings, matchedTagLabels, guestTagMap, searchCustomers, searchGuestsByName, findPhoneOverlaps,
+  searchBookings, matchedTagLabels, guestTagMap, searchCustomers, searchGuestsByName, findPhoneOverlaps, nameQuery,
   regularChipLabel,
 } from "../src/lib/customers.js";
 
@@ -368,6 +368,12 @@ describe("searchBookings", () => {
       expect(by("bd", "birth")).toEqual(["Birthday"]);
       expect(by("bd", "bi")).toEqual([]);                      // two letters
       expect(by("new", "600111")).toEqual([]);                 // a phone query
+      // v18.6.0 /code-review: a query with a letter is a name query here too,
+      // whatever digits it holds (it kept the old three-digit test).
+      const numbered = { map: {}, list: { v: 1, guest: [], occasion: [{ id: "o-t", label: "Table 100" }] } };
+      const tabled = { id: "t1", name: "Ana", phone: "", date: "2026-11-17", time: "19:00", tags: ["o-t"] };
+      expect(matchedTagLabels(tabled, "table 100", numbered)).toEqual(["Table 100"]);
+      expect(searchBookings([tabled], "table 100", "2026-11-01", 10, numbered).map((b) => b.id)).toEqual(["t1"]);
       expect(by("new", "allerg", null)).toEqual([]);
       expect(by("gone", "removed")).toEqual([]);
     });
@@ -387,6 +393,42 @@ describe("searchCustomers", () => {
     expect(searchCustomers(idx, "111").map((c) => c.name)).toEqual(["Ann"]);
     expect(searchCustomers(idx, "bob").map((c) => c.name)).toEqual(["Bob"]);
     expect(searchCustomers(idx, "")).toEqual([]);
+  });
+});
+
+// v18.6.0: three digits made a query a phone search and nothing else, so a
+// name holding digits could not be found by typing it. Reproduced on DEV:
+// "v1834" found nobody, "weekly" found "v1834 weekly2".
+describe("a query with a letter is matched against names too (v18.6.0)", () => {
+  const rows = [
+    bk({ id: "a", phone: "+34600555666", name: "Ann", date: "2099-03-01" }),
+    bk({ id: "p", phone: "+34600183400", name: "Pau", date: "2099-02-15" }),
+    bk({ id: "w", phone: "+34700333444", name: "v1834 weekly2", date: "2099-02-01" }),
+    bk({ id: "s", phone: "+34711000111", name: "Studio 3000", date: "2099-01-01" }),
+  ];
+  it("nameQuery: fewer than three digits, or any letter; digits and punctuation alone are a phone search", () => {
+    for (const q of ["ann", "an 12", "v1834", "V186 DelCust2", "Studio 3000", "José 2026", "600a"]) expect(nameQuery(q), q).toBe(true);
+    for (const q of ["600", "600 111", "+34 600", "(600) 111-222", "1834"]) expect(nameQuery(q), q).toBe(false);
+  });
+  it("searchCustomers finds a name with digits in it, whole or in part", () => {
+    const idx = customerIndex(rows);
+    expect(searchCustomers(idx, "v1834 w").map((c) => c.name)).toContain("v1834 weekly2");
+    expect(searchCustomers(idx, "v1834 weekly2").map((c) => c.name)).toContain("v1834 weekly2");
+    expect(searchCustomers(idx, "studio 3000").map((c) => c.name)).toEqual(["Studio 3000"]);
+  });
+  it("searchBookings does too", () => {
+    expect(searchBookings(rows, "v1834 weekly2", "2099-01-15").map((b) => b.id)).toContain("w");
+    expect(searchBookings(rows, "Studio 3000", "2099-01-15").map((b) => b.id)).toEqual(["s"]);
+  });
+  it("a digits-only query still reads phones alone", () => {
+    // "1834" is in Pau's PHONE and in another guest's NAME
+    expect(searchBookings(rows, "1834", "2099-01-15").map((b) => b.id)).toEqual(["p"]);
+    expect(searchCustomers(customerIndex(rows), "1834").map((c) => c.name)).toEqual(["Pau"]);
+  });
+  it("a letter with three digits matches the name AND any phone holding those digits, as mixed queries always did", () => {
+    expect(searchBookings(rows, "v1834", "2099-01-15").map((b) => b.id).sort()).toEqual(["p", "w"]);
+    expect(searchCustomers(customerIndex(rows), "v1834").map((c) => c.name).sort()).toEqual(["Pau", "v1834 weekly2"]);
+    expect(searchBookings(rows, "x1834", "2099-01-15").map((b) => b.id)).toEqual(["p"]);
   });
 });
 

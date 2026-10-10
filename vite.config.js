@@ -178,6 +178,13 @@ export default defineConfig(function ({ command }) {
   return {
   plugins: [react(), stripSimulator(isSandbox), tenantManifest()],
 
+  // v18.6.0: which Vercel environment built this ("production", "preview", or
+  // "" anywhere else). One reader, the schema gate: a PREVIEW build talks to the
+  // restaurant's PROD database (src/firebase.js), and must never announce a
+  // schema number there (src/lib/schema.js, `mayAnnounceFrom`). Not a VITE_
+  // variable of Vercel's own, so it does not depend on the project's preset.
+  define: { "import.meta.env.VITE_DEPLOY_ENV": JSON.stringify(process.env.VERCEL_ENV || "") },
+
   // ── The rules suite runs somewhere else, on purpose ──────────────────────
   // `tests/rules/**` drives a LOCAL Firebase RTDB emulator against the real
   // database.rules.json. The emulator is a Java jar, and CI (.github/workflows/

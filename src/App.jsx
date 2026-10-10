@@ -29,7 +29,7 @@ import { auth } from "./firebase";
 // ./lib/* modules are no longer imported here — they're imported directly
 // by their own consumers. Eliminates 31 leftover dead imports from B1–B5.
 import {
-  OPEN, CLOSE, KITCHEN_TABLE_LIMIT, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX, VIEW_ORDER } from "./lib/constants";
+  OPEN, CLOSE, BLOCK_BG, S, BTN, R, EMPTY_FORM, hoursFor, weekRange, extendActiveGrid, INDOOR, OUTDOOR, ALL_TABLES, TIMELINE_TABLES, M, T, FW, H, IC, APP_NAME, SPLIT_DIVIDER_PX, VIEW_ORDER } from "./lib/constants";
 
 import {
   getDur, toMins, sanitizeBlock,
@@ -38,7 +38,7 @@ import {
   getKitchenLoad,
   applyOpt,
   optimizerActiveFor, syncLiveDurations, bookingsAfterAction,
-  checkInefficent, findClashes, clashRowId, mergeSpans,
+  checkInefficent, findClashes, clashRowId,
   nowTime,
   lateState, freeingSoon,
   undoSnapshots,
@@ -50,26 +50,17 @@ import {
   // v18.5.0 (#17): the status tap's own (`seatNoteFor`, `unseatRestore`,
   // `seatRefusal`, `applySeatedShift`, `seatedElapsed`) left with `planStatus`
   // for lib/status-change.js.
-  // v18.0.0 session 8 (C3): the form's save asks who is still seated at the
-  // table, and the seat that follows a clearing reads the same completion.
-  seatClashParties, completedSeatedPatch,
+  // v18.0.0 session 8 (C3): the seat that follows a clearing reads the same
+  // completion. (v18.6.0: who is still seated there is `formSeatClash`, booking-save.js.)
+  completedSeatedPatch,
   // v18.0.0 session 8 (R5): one rule for "is there a phone here", both callers.
   enteredPhone,
   // v18.3.2 (ROADMAP #13): and one for "may this typed number be stored" —
   // Save and Add to waitlist asked it in two copies.
   phoneForSave,
-  // v18.0.0 session 8 (R6): does this save change what the kitchen sees?
-  kitchenRelevant,
   // v18.0.0 session 8 (C8): what the save toast is allowed to claim.
   // (v18.3.4: its zone note, `offZoneNote`, is the saves' own, in booking-save.js.)
   savedToast,
-  // v18.0.0 session 8 (C7): the last minute a booking may start, and the
-  // formatter for it. `toTime` was removed here as a dead import once; it has a
-  // caller again.
-  lastStartMins, toTime,
-  // v18.0.0 phase 6 (CT-WA-01): doSave's write-side half of the predicate
-  // `sanitize` already applies on the way IN. See the guard below.
-  isReadableTime,
   // v18.2.0 (C2): the one word for a party's size.
   guestsLabel,
   // v18.2.0 phase 77: any other count and its word, joined the same way.
@@ -79,15 +70,19 @@ import {
 import { useModalStack, modalMap, topModal, MODAL_Z } from "./hooks/useModalStack";
 import { useDismissals } from "./hooks/useDismissals";
 import { dirtyDates, reconcile } from "./lib/reconcile";
-import { dueOccurrences, withOccurrences, rulesOfCustomer } from "./lib/recurring";
-import { planDelete, planUndo } from "./lib/delete-undo";
-import { filterByTags } from "./lib/tag-filter";
+import { dueOccurrences, withOccurrences } from "./lib/recurring";
+import { planDelete, planUndo, planCustomerDelete } from "./lib/delete-undo";
+import { planSettle, settleEffects, carryTransform } from "./lib/voucher-settle";
+import { useSchemaGate } from "./hooks/useSchemaGate";
+import UpdateRequired from "./components/UpdateRequired";
+import { filterByTags, onlyFinishedMatch } from "./lib/tag-filter";
+import { undismissedClashes, clashByBooking, clashSpansByTable } from "./lib/clash-view";
 // v18.3.4: what the edit form opens with, from the one table of a booking's fields.
 import { draftFromBooking } from "./lib/booking-fields";
 // v18.3.4: the booking form's two saves as pure plans, the memo every save
 // transform shares.
-import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal } from "./lib/booking-save";
-import { normalizePhone, hasRealPhone, matchesIdentity, anonymizeBooking, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
+import { applyEdit, buildBooking, againDraft, goneRefusal, pickedRefusal, draftForSave, draftRefusal, formSeatClash, kitchenAsk } from "./lib/booking-save";
+import { normalizePhone, guestTagMap, customerTagTap, GUEST_TAGS_UPDATED } from "./lib/customers";
 import { sameDraft } from "./lib/drafts";
 import { READY, DISPATCHED, mayDispatch } from "./lib/submitGuard";
 import { hourLabel, spanZoom } from "./lib/time-grid";
@@ -349,7 +344,7 @@ import { useActivityLog, useActivityFeed, redactGuest, pruneActivity, clearActiv
 // v18.0.0 session 8 (item 7): `attachRefusal` — Book Again pre-attaches the
 // source visit's voucher, and only when the same rule the picker applies allows
 // it, so the form never opens holding an attachment Save would refuse.
-import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, attachedElsewhere, carryTarget, voucherDue, voucherReturnDue } from "./lib/vouchers";
+import { normalizeCode, voucherState, isUnsettled, remainingOf, money, formatCode, voucherDue, voucherReturnDue } from "./lib/vouchers";
 import { hideWarning } from "./lib/modules";
 import { VoucherRedeemModal } from "./components/VoucherRedeemModal";
 import { SeatNoteModal } from "./components/SeatNoteModal";
@@ -373,8 +368,7 @@ import { PlanView } from "./components/PlanView"; // v17.0.0: the floor-plan vie
 import { DaySheet } from "./components/DaySheet";
 import { readSwEnabled, setSwEnabled, applyServiceWorker } from "./lib/serviceWorker";
 import { useWindowAtTop } from "./hooks/useWindowAtTop";
-// v18.0.0 session 8 (C7): WEEKDAY_LONG — one list, four ex-copies.
-import { todayStr, stepDate, WEEKDAY_LONG, formatDay } from "./lib/day";
+import { todayStr, stepDate, formatDay } from "./lib/day";
 import { onPrintEnd, printOrReport, PRINT_IGNORED_TEXT } from "./lib/print-end";
 // v18.0.0 session 11: `dayRangeMs` left this import when the activity feed
 // stopped asking for one day. `activityWindow` wraps it — see lib/activity.js.
@@ -420,7 +414,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.5.1"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.6.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -941,6 +935,10 @@ function BookingApp({uid}){
   // ListView) so listDaySorted can exclude the hidden cards while collapsed —
   // keeps ↑/↓ focus and the per-card shortcuts in lockstep with what's visible.
   const [showFinished, setShowFinished] = useState(false);
+  // v18.6.0: the minimum schema gate (lib/schema.js, hooks/useSchemaGate.js).
+  // True when the database is ahead of this build: every whitelisting write is
+  // refused, and the card below is all this device can use until it reloads.
+  const { blocked: schemaBlocked } = useSchemaGate();
   // v17.2.0: initial zoom = the per-device "Default zoom" setting (was 1).
   // v17.11.0: …raised to whatever the viewed day's HOURS SPAN needs, until the
   // user touches the zoom controls. See the effect further down; `zoomTouched`
@@ -1511,7 +1509,7 @@ function BookingApp({uid}){
   // the reason `hoursSig`, `layoutSig` and `turnBuffer` are all scalars too.
   const vouchersOn = hasModule("vouchers");
   // ── v16.3.0: Recurring / standing bookings ──────────────────────────────────
-  const { recurring, addRule, updateRule, removeRule, removeRules, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
+  const { recurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled: setRecurringEnabled, setHorizon: setRecurringHorizon } = useRecurring({ setWriteWarning });
   // ── v18.0.0 session 8: the activity log ────────────────────────────────────
   // Installing the sink is the whole of the write side here — every writer in
   // the app already emits into it, and until this runs `emitActivity` is a
@@ -2107,7 +2105,10 @@ function BookingApp({uid}){
       setShowFinished(!!(b&&(b.status==="completed"||b.status==="cancelled")));
       bumpListFocus(); // v17.3.1: scroll the jumped-to card into view
     }else{
-      setSelectedListId(null);setShowFinished(false);
+      // v18.6.0: collapsed, unless the tag filter (kept from day to day)
+      // leaves only finished bookings on this day: then the fold is all there
+      // is to show (`onlyFinishedMatch`, lib/tag-filter.js).
+      setSelectedListId(null);setShowFinished(onlyFinishedMatch(bookings.filter(function(x){return x.date===viewDate;}),guestTags,tagList,listTagFilter));
     }
     resetDismissed(DAY_DISMISS_KEYS);   // NOT "clash" — it prunes itself, see useDismissals.js
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a day change, not a data change: watching `bookings` would drop the List's selection on every save
@@ -2123,6 +2124,10 @@ function BookingApp({uid}){
       const sel=bookings.find(function(b){return b.id===selectedListId;});
       if(sel&&!filterByTags([sel],guestTags,tagList,next).length) setSelectedListId(null);
     }
+    // v18.6.0: a filter whose only matches are completed or cancelled opens
+    // the fold, or the List shows no card (Patryk, 2026-10-09). It never closes
+    // it: with an active match, or the filter cleared, the fold stays as set.
+    if(onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,next)) setShowFinished(true);
     setListTagFilter(next);
   }
   function toggleShowFinished(next){
@@ -2131,6 +2136,23 @@ function BookingApp({uid}){
       if(sel&&(sel.status==="completed"||sel.status==="cancelled")) setSelectedListId(null);
     }
     setShowFinished(next);
+  }
+  // v18.6.0: the third way to reach a day whose only tagged bookings are
+  // finished is to FINISH the last one while its tag is the filter (measured on
+  // DEV: 0 cards and a closed fold reading "1 booking"). The fold opens then
+  // too (Patryk, 2026-10-10), whoever finished it: a tap here, the close-time
+  // auto-complete, another device. Keyed on the answer, so it runs when the
+  // answer BECOMES true and a fold closed by hand afterwards stays closed.
+  // Adjusted during render against the previous answer (React's own pattern
+  // for state that follows a derived value), not in an effect: an effect here
+  // is a `set-state-in-effect` warning and one more render with the List empty.
+  const tagOnlyFinished=useMemo(function(){
+    return onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,listTagFilter);
+  },[bookings,viewDate,guestTags,tagList,listTagFilter]);
+  const [wasTagOnlyFinished,setWasTagOnlyFinished]=useState(false);
+  if(tagOnlyFinished!==wasTagOnlyFinished){
+    setWasTagOnlyFinished(tagOnlyFinished);
+    if(tagOnlyFinished) setShowFinished(true);
   }
 
   // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
@@ -2470,34 +2492,46 @@ function BookingApp({uid}){
     const o=(ident&&typeof ident==="object")?ident:{phone:ident};
     const key=normalizePhone(o.phone);
     if(!key&&!o.guestId&&!(o.guestIds&&o.guestIds.length)) return;
-    // v18.5.1: their standing bookings go FIRST (`rulesOfCustomer`,
+    // v18.5.1: their standing bookings go too (`rulesOfCustomer`,
     // lib/recurring.js). A rule holds the name, the phone and the notes, and the
     // generator writes them onto each new week, so a rule left behind brought the
-    // customer back. Before the bookings and stopping on a refusal, as
-    // `delBooking` orders its skipDate: anonymised first, the generator could
-    // write one more week in between. `saveRecurring` says why it refused.
-    const theirRules=rulesOfCustomer(recurring.rules,bookings,o);
-    if(theirRules.length&&!removeRules(theirRules)) return;
-    saveBookings(function(prev){return prev.map(function(b){
-      if(!matchesIdentity(b,o)) return b;
-      return anonymizeBooking(b);
-    });});
-    if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
-    // v18.3.1: and their WhatsApp conversation and messages, stored under the
-    // same normalised phone. Unconditional, module on or off (useWhatsApp's
-    // eraseConversation says why); a phone-less guest has none.
-    if(key) wa.eraseConversation(key);
-    // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
-    // of the log erases itself — its text holds {b:<id>} tokens resolved against
-    // the live bookings, so the anonymisation above rewrites what it displays —
-    // but an entry for a DELETED booking has no row left to resolve against and
-    // carries `subject.name`. That is the one field to reach.
-    //
-    // The key list is derived EXACTLY as matchesIdentity derives it, so the keys
-    // erased can never be narrower than the bookings anonymised: a customer can
-    // have absorbed several guest groups, and erasing under one key would leave
-    // the others behind with nothing on screen to say so.
-    redactGuest([key].concat(Array.isArray(o.guestIds)?o.guestIds:(o.guestId?[o.guestId]:[])));
+    // customer back.
+    // v18.6.0: PAUSED first, removed once the anonymise has landed
+    // (`planCustomerDelete`, lib/delete-undo.js, says why: a held anonymise used
+    // to leave the rule gone and the customer as they were). Paused before the
+    // bookings write and stopping on a refusal, as `delBooking` orders its
+    // skipDate: anonymised first, the generator could write one more week in
+    // between. `saveRecurring` says why it refused.
+    const plan=planCustomerDelete(recurring.rules,bookings,o);
+    if(plan.pause.length&&!setRulesActive(plan.pause,false)) return;
+    saveBookings(plan.transform,false,{
+      // Everything below erases with no undo, so none of it runs until the
+      // customer's bookings ARE anonymised on the server. Every function here
+      // reads refs, so a replay minutes later acts on the lists as they are then.
+      onLanded:function(){
+        if(plan.remove.length) removeRules(plan.remove);
+        if(key) saveWaitlist(function(prev){return prev.filter(function(w){return normalizePhone(w.phone)!==key;});},true);
+        // v18.3.1: and their WhatsApp conversation and messages, stored under the
+        // same normalised phone. Unconditional, module on or off (useWhatsApp's
+        // eraseConversation says why); a phone-less guest has none.
+        if(key) wa.eraseConversation(key);
+        // v18.0.0 session 8: and the activity log's own copy of the name. Almost all
+        // of the log erases itself — its text holds {b:<id>} tokens resolved against
+        // the live bookings, so the anonymisation above rewrites what it displays —
+        // but an entry for a DELETED booking has no row left to resolve against and
+        // carries `subject.name`. That is the one field to reach.
+        //
+        // The key list is derived EXACTLY as matchesIdentity derives it, so the keys
+        // erased can never be narrower than the bookings anonymised: a customer can
+        // have absorbed several guest groups, and erasing under one key would leave
+        // the others behind with nothing on screen to say so.
+        redactGuest([key].concat(Array.isArray(o.guestIds)?o.guestIds:(o.guestId?[o.guestId]:[])));
+      },
+      // The write will never land (refused before the first read, or discarded
+      // from the parked banner): the customer stays, so their standing bookings
+      // run again. Only the ones this delete paused.
+      onDiscarded:function(){if(plan.pause.length) setRulesActive(plan.pause,true);}
+    });
   }
 
   // v17.16.11 (/code-review): the seed is the viewed date only when that is a
@@ -2759,87 +2793,22 @@ function BookingApp({uid}){
     // lands on a live Save button — see src/lib/submitGuard.js. Checked before
     // validation: a refused save must not depend on the draft being valid.
     if(!mayDispatch(saveGuardRef.current)) return;
-    // v17.0.0: apply the pending/confirm status override to a CLONE of the form
-    // so every downstream read (status write, diffBooking history, completed-
-    // duration gate, flash condition) sees the effective status uniformly.
-    const so=statusOverrideRef.current;
-    const fIn=so?Object.assign({},formRef.current,{status:so}):formRef.current;
-    // v18.2.0 phase 20: a number typed WITH its country code but no "+"
-    // ("44 7700 900123") gets that code here as well as when the number box
-    // loses focus (PhoneField), because a save by Enter never blurs the box.
-    // It goes into `f` itself, so every read below — the code check, the
-    // stored phone, the history diff, the WhatsApp link — sees one number.
-    // Not into the form state: a `setForm` here would change `form.phone` and
-    // the stale-error effect would then clear any error this same save sets.
-    // An edit that leaves the stored number untouched is never rewritten —
-    // phase 19's exemption, one test for both. v18.3.2: the rewrite and the
-    // refusal below are ONE call, `phoneForSave`, which Add to waitlist asks
-    // too; the refusal is only read after the name check, where it always was.
+    // v18.6.0 (#17): the draft this save works on is `draftForSave`
+    // (lib/booking-save.js): the pending/confirm status override on a clone,
+    // and the phone rule's rewrite. It goes into `f`, never into the form
+    // state: a `setForm` here would change `form.phone`, and the stale-error
+    // effect would then clear any error this same save sets.
     const origB=editId?bookings.find(function(x){return x.id===editId;}):null;
-    const phoneUntouched=!!origB&&cleanPhoneOf(origB.phone)===cleanPhoneOf(fIn.phone);
-    const phoneRule=phoneForSave(fIn.phone,generalSettings.pinnedCountries,generalSettings.phonePrefix,phoneUntouched);
-    const f=phoneRule.phone!==fIn.phone?Object.assign({},fIn,{phone:phoneRule.phone}):fIn;
-    // v17.12.0: cleared here, set only by the field-specific branches below, so
-    // the form-level errors further down leave it null without having to say so.
+    const forSave=draftForSave(formRef.current,statusOverrideRef.current,origB,generalSettings.pinnedCountries,generalSettings.phonePrefix);
+    const f=forSave.draft;
+    // v17.12.0: cleared here, set only by a field's own refusal below, so the
+    // form-level errors further down leave it null without having to say so.
     setErrorField(null);
     try{
-      if(!f.name||!f.name.trim()){setErrorField("name");setError("Customer name is required.");return;}
-      // v18.2.0 phase 19 (Patryk): a number is saved only once it names its
-      // country. The picker starts empty now, so a number typed without a code
-      // would otherwise be stored without one — and the same guest with and
-      // without "+34" is two customers (`normalizePhone`), whom WhatsApp cannot
-      // link either. Checked right after the name, the field beside it.
-      // An EDIT that leaves an old code-less number untouched still saves: the
-      // rule is about numbers typed now, not a sweep of the stored ones.
-      if(phoneRule.refusal){setErrorField("phone");setError(phoneRule.refusal);return;}
-      // v14 p1 (Issue 3): date is required. Applies to both new bookings (including
-      // Book Again) and edits. Walk-ins use today automatically so they are unaffected.
-      if(!f.date){setErrorField("date");setError("Please set a date.");return;}
-      if(!f.time){setErrorField("time");setError("Please set a time.");return;}
-      // v18.0.0 phase 6 (CT-WA-01). "Is there a time" and "is there a time this
-      // app can use" are different questions, and only the first was asked.
-      // `toMins` on an unreadable string yields NaN, and BOTH range comparisons
-      // below are false against NaN — so the range gate, the one thing standing
-      // between a garbage time and the database, passed everything. The security
-      // rules pin `date` and deliberately do NOT pin `time` (see
-      // database.rules.json), so nothing server-side refuses it either; the
-      // booking lands, and `sanitize` then shows it to every device as 13:00.
-      //
-      // Measured live on 2026-09-10: a WhatsApp draft carrying
-      // `time: "8 in the evening"` saved, stored verbatim, and displayed as a
-      // 13:00 booking. Nothing the form can produce moves — an <input type=time>
-      // yields "" (already caught above) or HH:MM — which is the same test
-      // v17.16.5 applied when it added this predicate for `sanitize`.
-      if(!isReadableTime(f.time)){setErrorField("time");setError("That time could not be read — please set it again.");return;}
-      const sm=toMins(f.time);
-      // v15.0.0: per-weekday hours — validate against THIS booking's date, not the
-      // viewed day, and block a closed day outright.
-      const fh=hoursFor(f.date);
-      if(fh.closed){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("date");setError("Closed on "+wd+"s — pick another date, or open that day in Settings.");return;}
-      if(sm<fh.open*60||sm>fh.close*60){setErrorField("time");setError("Bookings on this day are accepted between "+String(fh.open).padStart(2,"0")+":00 and "+String(fh.close%24).padStart(2,"0")+":00.");return;}
-      // v18.0.0 session 8 (C7): a start exactly AT closing passed the test above
-      // (`sm > close*60`), and `findTimes` has never offered one — it stops at
-      // close − 15. A 22:00 booking on a day that closes at 22:00 is a party
-      // arriving as the door is locked, and the close-time auto-complete flips
-      // it to completed on the next 15s tick, so it reads as a visit that
-      // already happened. The message names the last start rather than the
-      // close, because that is the number somebody needs to type.
-      //
-      // v18.0.0 session 10 (/code-review): the test is `> lastStartMins`, not
-      // `>= close*60`. The message, the Time field's `max` and `findTimes`
-      // all name the same minute — close − 15 — and the guard named a
-      // different one, which is two rules wearing one sentence.
-      //
-      // The half that was simply DEAD: `lastStartMins` caps at midnight
-      // because no booking may START after it, so on a day closing at 24 or
-      // 25 the old test was `sm >= 1440` (or 1500) against an `sm` that a
-      // readable `HH:MM` cannot push past 1439. A restaurant closing at
-      // 01:00 had no last-start bound at all, and a 23:59 start passed —
-      // which is precisely the rule `lastStartMins`'s own note says the app
-      // keeps. Now it refuses, and the message it prints is the one the
-      // field was already offering.
-      if(sm>lastStartMins(fh.close)){const wd=WEEKDAY_LONG[new Date(f.date).getUTCDay()]||"that day";setErrorField("time");setError("The last start on "+wd+"s is "+toTime(lastStartMins(fh.close))+".");return;}
-      const mt=Array.isArray(f.manualTables)&&f.manualTables.length>0?f.manualTables:[];
+      // The field checks, in the form's order (name, phone, date, time), are
+      // `draftRefusal`; each one's reason is written there.
+      const fieldNo=draftRefusal(f,forSave.phoneRefusal);
+      if(fieldNo){setErrorField(fieldNo.field);setError(fieldNo.message);return;}
       // v16.0.0 follow-up: completed bookings excluded from the busy set — a
       // completed visit is over, its table is free (mirrors ManualModal +
       // WalkinForm; the optimizer already ignores completed via isActive).
@@ -2874,12 +2843,9 @@ function BookingApp({uid}){
       // same point as the voucher gates — after validation, immediately before
       // the dispatch, so a save about to be refused for a missing name never
       // asks about somebody else's table first.
-      if(editId&&!seatAskedRef.current&&f.status==="seated"){
-        const seatOrig=saveBks.find(function(x){return x.id===editId;});
-        if(seatOrig&&seatOrig.status!=="seated"){
-          const parties=seatClashParties(mt.length?mt:(seatOrig.tables||[]),f.date,editId,saveBks);
-          if(parties.length){setSeatClash({id:editId,status:"seated",from:"form",others:seatClashSnap(parties)});return;}
-        }
+      if(!seatAskedRef.current){
+        const parties=formSeatClash(f,editId,saveBks);
+        if(parties.length){setSeatClash({id:editId,status:"seated",from:"form",others:seatClashSnap(parties)});return;}
       }
       if(editId) doSaveEdit(f,saveBks,saveLive);
       else doSaveNew(f);
@@ -2889,7 +2855,7 @@ function BookingApp({uid}){
     // v17.16.0: the guard is checked HERE as well as in doSave, because this is
     // the button's handler and it can return before doSave is ever reached. On a
     // double-tap the first tap's booking is already in `bookings`, so the kitchen
-    // load below is one higher — enough to cross KITCHEN_TABLE_LIMIT and raise
+    // load below is one higher — enough to cross the kitchen limit and raise
     // "Kitchen busy" for a booking that has already been written, over a form
     // that has already closed. doSave would then refuse the duplicate correctly,
     // but the stray dialog would have been produced by the very tap this fix
@@ -2901,17 +2867,13 @@ function BookingApp({uid}){
     statusOverrideRef.current=statusOverride||null;
     const f=formRef.current;
     if(!f.time) return doSave();
-    const size=Number(f.size)||2;const d=f.customDur||getDur(size);
-    // v18.0.0 session 8 (R6): ask only about a save the kitchen would notice.
-    // A notes-only edit in a busy slot raised this confirm, which trains people
-    // to tap past the dialog that means something on the save after it.
     // v18.4.10: a save its picked tables will refuse goes straight to doSave,
     // which refuses it in its own order. The kitchen question used to come
     // first, answered for a save that could not go through.
     if(pickedRefusal(withClearedSeats(liveBookings),f,editId,tableBlocks,swapAffected,nowMins,today)){setConfirmKitchen(null);return doSave();}
+    // v18.6.0 (#17): whether to ask is `kitchenAsk` (lib/booking-save.js).
     const kitchenOrig=editId?bookings.find(function(b){return b.id===editId;}):null;
-    const load=getKitchenLoad(bookings,f.date,f.time,d,editId);
-    if(kitchenRelevant(kitchenOrig,f,size)&&load.starts+1>=KITCHEN_TABLE_LIMIT&&!confirmKitchen){
+    if(kitchenAsk(f,kitchenOrig,bookings,editId)&&!confirmKitchen){
       setConfirmKitchen("form");return;
     }
     setConfirmKitchen(null);doSave();
@@ -3041,7 +3003,10 @@ function BookingApp({uid}){
   // ReferenceError that blanks the whole app with a generic message. That has
   // happened twice in this codebase (v17.5.0's `activeView`, v17.11.0's
   // `isViewToday`), and neither lint nor `npm run build` catches it.
-  const anyModal=modalStack.length>0;
+  // v18.6.0: the "refresh this device" card (the schema gate) is not in the
+  // stack, because nothing closes it; it makes the page behind inert and
+  // silences the single-letter shortcuts like any modal.
+  const anyModal=modalStack.length>0||schemaBlocked;
   const topModalId=topModal(modalStack);
 
   // v17.3.3: the global keyboard shortcuts (precedence rules, every key) and
@@ -3274,6 +3239,9 @@ function BookingApp({uid}){
   //
   // So the order is chosen by which failure lands in a state the app can
   // report, not by which is tidier.
+  // v18.6.0 (#17): WHAT the answer decides is lib/voucher-settle.js
+  // (`planSettle`, `settleEffects`; the carry is `carryOffer` and
+  // `carryTransform`). The order above stays here, with the gates and the writes.
   function settleVoucher(amount){
     const ask=voucherAsk;
     if(!ask) return;
@@ -3285,23 +3253,10 @@ function BookingApp({uid}){
     // Escape was the only exit and it abandoned the status change silently.
     setVoucherAsk(null);
     if(refused("voucherRedeem")) return;
-    // v18.2.0 phase 48: a SETTLE is the missing ledger entry of a booking that
-    // is ALREADY completed, so there is no booking write to go first — the
-    // order below exists for a completion, and here the voucher is the only
-    // write. (Going through updateStatus would have logged a second "status →
-    // completed" for a status that did not change.)
-    // v18.2.0 /code-review: …which means nothing here re-checks that the visit
-    // IS still completed, and the prompt stays open whatever the booking's
-    // status (it mounts on the voucher alone). Walked back out of Completed on
-    // another device meanwhile, a redeem would leave a ledger entry against a
-    // booking that is not completed — the state the ordering note above says
-    // nothing in the app looks for. So a settle asks first, and refuses.
-    if(ask.from==="settle"){
-      const cur=bookings.find(function(x){return x.id===ask.id;});
-      if(!cur||cur.status!=="completed"){flashRefusal("That booking is no longer completed — nothing was recorded against its voucher.");return;}
-    }
-    const ok=ask.from==="settle"?true:withRedeemAsked(function(){
-      if(ask.from!=="form") return updateStatus(ask.id,ask.status);
+    const plan=planSettle({ask:ask,bookings:bookings});
+    if(plan.refuse){flashRefusal(plan.refuse);return;}
+    const ok=plan.route==="settle"?true:withRedeemAsked(function(){
+      if(plan.route!=="form") return updateStatus(ask.id,ask.status);
       // /code-review v18.0.0: this was `(doSave(),true)`, and `doSave` returns
       // NOTHING — so the form path redeemed the voucher whether or not the
       // booking saved, which is precisely the voucher-first failure the comment
@@ -3320,70 +3275,18 @@ function BookingApp({uid}){
       doSave();
       return !mayDispatch(saveGuardRef.current);
     });
+    // A refused completion has nothing to redeem and nothing to carry from.
     if(!ok) return;
-    const b=bookings.find(function(x){return x.id===ask.id;});
-    const code=b?normalizeCode(b.voucherCode):"";
-    if(code&&amount) redeemVoucher(code,ask.id,amount);
-    // v18.0.0 session 8 (item 7): and THEN ask whether the rest should follow
-    // the guest. After the booking write and after the money, so the offer is
-    // made about a visit that is actually finished — and on BOTH answers, since
-    // "Complete without using it" leaves the whole balance behind, which is the
-    // case where carrying it matters most. `!ok` still returns above: a refused
-    // completion has nothing to carry from.
-    if(code&&b) offerVoucherCarry(b,code,amount);
+    const after=settleEffects({ask:ask,amount:amount,bookings:bookings,vouchersByCode:vouchersByCode});
+    if(after.redeem) redeemVoucher(after.code,ask.id,amount);
+    if(after.carry) setVoucherCarry(after.carry);
   }
-  // The offer, and the one number it has to get right. `vouchersByCode` here is
-  // still the version from BEFORE the redemption dispatched a moment ago, so the
-  // balance is computed by subtracting what was just taken rather than read back
-  // — reading it back would offer the guest money that has already been spent.
-  function offerVoucherCarry(b,code,justRedeemed){
-    const v=vouchersByCode[code];
-    if(!v) return;
-    const left=Math.max(0,remainingOf(v)-(Number(justRedeemed)||0));
-    if(left<=0) return;
-    if(!hasRealPhone(b.phone)&&!b.guestId) return;   // no identity, nothing to follow
-    const ident={phone:b.phone,guestId:b.guestId};
-    const mine=bookings.filter(function(x){return matchesIdentity(x,ident);});
-    const to=carryTarget(mine,code,vouchersByCode,bookings,Date.now(),b);
-    if(!to) return;
-    setVoucherCarry({code:code,amount:left,to:to.id,name:to.name||"",date:to.date,time:to.scheduledTime||to.time,from:b.date});
-  }
-  // Move — a function-form save, so it takes the retry path like every other
-  // user write. The re-check inside the updater is not ceremony: the prompt can
-  // sit on screen while another device attaches something to that booking, and
-  // overwriting a voucher somebody else chose is the one outcome this must not
-  // produce.
   function doVoucherCarry(){
     const c=voucherCarry;
     if(!c) return;
     setVoucherCarry(null);
     if(refused("bookingEdit")) return;
-    const user=getUser();
-    // v18.2.0 (the design critique, C1): the history entry stores the ISO day,
-    // as every other history text does ("date 2026-09-24→…"), and the screen
-    // writes it the house way (`formatDaysIn`, HistoryPopup and the Activity
-    // log). It stored its own "24/09", which nothing could re-write.
-    const fromLabel=c.from||"";
-    const ok=saveBookings(function(prev){
-      // v18.0.0 session 10 (/code-review): the OTHER half of the same race.
-      // The line below guards the target booking against having acquired a
-      // voucher of its own; this guards the VOUCHER against having been
-      // attached to somebody else while the prompt sat open. `carryTarget`
-      // asks `attachedElsewhere` when the offer is MADE, and this path is
-      // the one way an attachment reaches a booking without going through
-      // the picker — so without it, "Move it" is the only door in the app
-      // that can put one voucher on two live bookings, which is precisely
-      // the state that predicate exists to prevent. Asked against `prev`,
-      // which is the list the write actually lands on.
-      if(attachedElsewhere(prev,c.code,c.to)) return prev;
-      return prev.map(function(b){
-        if(b.id!==c.to||normalizeCode(b.voucherCode)) return b;
-        return Object.assign({},b,{
-          voucherCode:c.code,
-          history:(b.history||[]).concat([histEntry("voucher "+formatCode(c.code)+" attached (carried from the "+fromLabel+" visit)",user)])
-        });
-      });
-    },false,goneReport(c.to));
+    const ok=saveBookings(carryTransform(c,getUser(),histEntry),false,goneReport(c.to));
     if(ok) flash("saved");
   }
   // settleVoucherBack(restore) — the mirror of settleVoucher, and it keeps that
@@ -3626,10 +3529,11 @@ function BookingApp({uid}){
   // next Tuesday, next to blocks that carry no marker, would be three different
   // days in one glance.
   const clashPairs=useMemo(function(){return findClashes(bookings,viewDate);},[bookings,viewDate]);
+  // v18.6.0 (#17): what the screen draws from the pairs is `lib/clash-view.js`
+  // (the strip's undismissed pairs here; per booking and per table below).
+  // App keeps the memos and the EMPTY identities the memoised views compare.
   const clashBannerPairs=useMemo(function(){
-    if(!clashPairs.length) return EMPTY_ARR;
-    if(clashDismissed.size===0) return clashPairs;
-    return clashPairs.filter(function(c){return !clashDismissed.has(clashRowId(c));});
+    return clashPairs.length?undismissedClashes(clashPairs,clashDismissed):EMPTY_ARR;
   },[clashPairs,clashDismissed]);
   // /code-review fix: a dismissed clash must RE-ARM once it stops being true.
   // The other two dismissal Sets get away with never pruning because their
@@ -3657,20 +3561,7 @@ function BookingApp({uid}){
   // dismissing a strip row quiets the row, it does not make the double-booking
   // stop being true, and the block marker is the permanent record of it.
   const clashMap=useMemo(function(){
-    if(!clashPairs.length) return EMPTY_OBJ;
-    const byId={};bookings.forEach(function(b){byId[b.id]=b;});
-    const map={};
-    function add(id,other,c){
-      if(!map[id]) map[id]={names:[],tables:[]};
-      if(other&&map[id].names.indexOf(other.name)<0) map[id].names.push(other.name);
-      c.tables.forEach(function(t){if(map[id].tables.indexOf(t)<0) map[id].tables.push(t);});
-    }
-    clashPairs.forEach(function(c){
-      const A=byId[c.a],B=byId[c.b];
-      if(!A||!B) return;
-      add(c.a,B,c);add(c.b,A,c);
-    });
-    return map;
+    return clashPairs.length?clashByBooking(clashPairs,bookings):EMPTY_OBJ;
   },[clashPairs,bookings]);
 
   // The same pairs seen per ROW: which minutes of which table are claimed
@@ -3681,22 +3572,9 @@ function BookingApp({uid}){
   // contributes no band, because there is no single row it belongs on. The
   // marker and the strip row still carry it; only the geometry has nowhere to
   // go, which is the honest outcome rather than a band drawn on a guess.
+  // One band per distinct SPAN, not per pair (v17.14.0, `mergeSpans`).
   const clashSpans=useMemo(function(){
-    if(!clashPairs.length) return EMPTY_OBJ;
-    const map={};
-    clashPairs.forEach(function(c){
-      c.tables.forEach(function(t){
-        if(!map[t]) map[t]=[];
-        map[t].push({from:c.from,to:c.to});
-      });
-    });
-    // v17.14.0 (/code-review follow-up): one band per distinct SPAN, not per
-    // pair. Three bookings all clashing on one table produced three coincident
-    // bands on the same pixels — three times the paint for one fact, and a
-    // three-way clash would have rendered differently from a two-way one the
-    // moment the band grew any transparency.
-    Object.keys(map).forEach(function(t){map[t]=mergeSpans(map[t]);});
-    return map;
+    return clashPairs.length?clashSpansByTable(clashPairs):EMPTY_OBJ;
   },[clashPairs]);
 
   // ── v17.11.0: the opening zoom follows the hours span ──────────────────────
@@ -4734,7 +4612,7 @@ function BookingApp({uid}){
               onRequestCancel={function(id){setConfirmCancel(id);}}
               onRequestDelete={function(id){requestDelete(id);}}
               onAddToWaitlist={addFormToWaitlist}
-              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
+              standingEnabled={standingOn()} />:null}</ModalPresence>{delModal}{manualModal}{walkinModal}{discardModal}{schemaBlocked?<div style={{position:"relative",zIndex:350}}><UpdateRequired onRefresh={function(){window.location.reload();}} /></div>:null}{weekModal}{printModal}{prefPickerModal}{waitlistModal}{daySheet}{timelineSheet}<ModalPresence show={showSearch}>{showSearch?<Suspense fallback={null}><SearchPanel bookings={bookings} todayStr={todayStr()} isMobile={isMobile} guestTags={guestTags} tagList={tagList} onPick={function(b){setShowSearch(false);setView("list");if(!filterByTags([b],guestTags,tagList,listTagFilter).length) setListTagFilter(NO_LIST_TAGS);if(b.date===viewDate){setSelectedListId(b.id);const fin=b.status==="completed"||b.status==="cancelled";setShowFinished(fin);bumpListFocus();}else{pendingSelectRef.current=b.id;goToDate(b.date);}}} onClose={function(){setShowSearch(false);}} /></Suspense>:null}</ModalPresence><ModalPresence show={!!blockTarget}>{blockTarget?<BlockModal
           tableId={blockTarget}
           date={viewDate}
           blocks={tableBlocks}

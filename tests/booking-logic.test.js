@@ -2176,17 +2176,22 @@ describe("lastStartMins", () => {
   });
 });
 
+// v18.6.0 (#17): the check is `draftRefusal` (lib/booking-save.js) now, which
+// `doSave` calls; tests/form-save.test.js runs it on days closing at 22, 24
+// and 25. These two still read the text, because the fault was a guard that
+// tested one number and printed another.
 describe("doSave refuses a start after the last start (v18.0.0 session 10)", () => {
-  const APP = stripComments(
-    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+  const SAVE = stripComments(
+    readFileSync(new URL("../src/lib/booking-save.js", import.meta.url), "utf8")).join("\n");
+  const RULE = SAVE.slice(SAVE.indexOf("export function draftRefusal("));
 
   it("tests sm against lastStartMins, never against close*60", () => {
-    expect(/if\(sm>lastStartMins\(fh\.close\)\)\{/.test(APP)).toBe(true);
-    expect(/if\(sm>=fh\.close\*60\)\{/.test(APP)).toBe(false);
+    expect(/if\(sm>lastStartMins\(fh\.close\)\) return/.test(RULE)).toBe(true);
+    expect(/if\(sm>=fh\.close\*60\)/.test(RULE)).toBe(false);
   });
 
   it("and prints the same minute it just tested", () => {
-    expect(/if\(sm>lastStartMins\(fh\.close\)\)[\s\S]{0,220}?toTime\(lastStartMins\(fh\.close\)\)/.test(APP)).toBe(true);
+    expect(/if\(sm>lastStartMins\(fh\.close\)\)[\s\S]{0,220}?toTime\(lastStartMins\(fh\.close\)\)/.test(RULE)).toBe(true);
   });
 });
 
@@ -3140,7 +3145,8 @@ describe("doSave hands the seat a list with the cleared party completed (v18.0.0
   it("the manual-table guard and the seat-clash gate read the patched list too", () => {
     // v18.4.10: the guard is `pickedRefusal`, handed the patched live list.
     expect(APP).toContain("pickedRefusal(saveLive,f,editId,tableBlocks,swapAffected,nowMins,today)");
-    expect(/seatClashParties\(mt\.length\?mt:\(seatOrig\.tables\|\|\[\]\),f\.date,editId,saveBks\)/.test(APP)).toBe(true);
+    // v18.6.0 (#17): the gate is `formSeatClash`, handed the patched list.
+    expect(APP).toContain("formSeatClash(f,editId,saveBks)");
   });
 });
 

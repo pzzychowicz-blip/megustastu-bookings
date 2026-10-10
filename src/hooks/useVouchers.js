@@ -41,6 +41,7 @@ import { ref, onValue, update } from "firebase/database";
 import { db } from "../firebase";
 import { dbError, describeWriteError } from "../lib/dbError";
 import { buildPatch, patchSignature, isDuplicatePatch } from "../lib/write-path";
+import { writesBlocked } from "../lib/schema";
 // v18.0.0 session 8: the activity log. `activitySink` imports nothing;
 // `activity.js` imports `customers.js` for `identityKey` — deliberately, so the
 // key a deleted booking is filed under cannot drift from the key erasure
@@ -76,6 +77,9 @@ export function useVouchers({ setWriteWarning, userEmail, currency }) {
   // queued updater on the echo state. That is CLAUDE.md's own gotcha row and
   // v17.16.10 (CT-2A-09) removed the last exception to it.
   const saveVouchers = useCallback(function (next, isSilent) {
+    // v18.6.0: the schema gate (lib/schema.js): not from a build the database
+    // is ahead of. `sanitizeVoucher` is a whitelist like the booking's.
+    if (writesBlocked("vouchers")) return false;
     if (!vouchersLoaded.current) {
       console.warn("[SAFE] Refused to write vouchers — initial read has not completed yet.");
       if (!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");

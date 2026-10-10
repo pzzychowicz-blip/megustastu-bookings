@@ -1622,6 +1622,11 @@ the keyboard goes.
   keyboard.
 - **Nothing moves under a pressing finger.** A blur towards a control inside the
   folded surface (Send) does not unfold it.
+- **A footer may fold too, where something else closes the dialog** (v18.6.0).
+  Find a booking's Done row folds while its search box is being typed in
+  (`Overlay`'s `footerYields`): the results had 83px of the tablet's 231 and get
+  three whole rows. Only on a card, which a tap outside it closes; a phone's
+  sheet has no scrim, so its footer stays.
 - **A footed dialog** (`Overlay`, so every form) slims its Save row and scrolls the
   focused field to the top of its body with its label, which is also what gives a
   list opening under the field (names, phones, vouchers) room. The title pill is

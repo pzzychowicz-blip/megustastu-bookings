@@ -75,16 +75,31 @@ function sanitizeRecurring(raw) {
   };
 }
 
+// v18.6.0 round 2: how often a refused rule removal is tried again, and the
+// wait before the first retry (the second waits twice that, the third three
+// times: 300, 600, 900 ms).
+export const REMOVE_RETRIES = 3;
+export const REMOVE_RETRY_MS = 300;
+
 export function useRecurring({ setWriteWarning }) {
   const [recurring, setRecurring] = useState(DEFAULT_RECURRING);
   const recurringRef = useRef(DEFAULT_RECURRING);   // mirror for updater-free saves
   const loaded = useRef(false);
   const revRef = useRef(0);
+  // v18.6.0 /code-review: false once the hook has unmounted (a sign-out or an
+  // account switch), so `removeRules`' retry timer does not write from a dead
+  // closure. Set inside the effect, not by the initializer (the StrictMode
+  // mounted-ref lesson).
+  const alive = useRef(false);
+  useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
 
   // Returns true when the write was dispatched, false when refused by the
   // loaded-guard (/code-review: delBooking gates a recurring-occurrence delete
   // on addSkipDate's success so the generator can never resurrect it).
-  function saveRecurring(next, isSilent) {
+  // v18.6.0: `onRefused`, when given, hears a server refusal INSTEAD of the
+  // banner (`removeRules` retries with it and lets the last attempt fall
+  // through to the banner).
+  function saveRecurring(next, isSilent, onRefused) {
     if (!loaded.current) {
       console.warn("[SAFE] Refused to write recurring — initial read has not completed yet.");
       if (!isSilent) setWriteWarning("Refused to write: not connected to the server yet. If this persists, reload the page.");
@@ -97,6 +112,7 @@ export function useRecurring({ setWriteWarning }) {
     recurringRef.current = computed;
     setRecurring(computed);
     writeWithRev("recurring", computed, revRef, function () {
+      if (onRefused) { onRefused(); return; }
       if (!isSilent) setWriteWarning("Couldn't save — this device's data was out of date and has been refreshed. Please redo the change.");
     }, function () {
       const entry = settingsWriteEntry("recurring", prev, computed, { auto: isSilent === true });
@@ -131,11 +147,37 @@ export function useRecurring({ setWriteWarning }) {
   function removeRule(id) {
     saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return r.id !== id; }) }); });
   }
-  // v18.5.1: several at once, in one write, and the answer returned: Delete
-  // customer removes the guest's rules BEFORE it anonymises their bookings, and
-  // stops if this is refused (the node not loaded yet).
-  function removeRules(ids) {
-    return saveRecurring(function (prev) { return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return ids.indexOf(r.id) === -1; }) }); });
+  // v18.5.1: several at once, in one write, and the answer returned. v18.6.0:
+  // Delete customer calls it once the anonymise has landed (it pauses them
+  // first, `setRulesActive` below).
+  //
+  // v18.6.0 round 2: a refused removal is tried again, by itself (Patryk,
+  // 2026-10-10). By then the customer's bookings are anonymised, so a rule left
+  // behind is a paused rule still holding the name and the phone, and the
+  // banner's "redo the change" had nothing to redo it with but Settings.
+  // Reproduced on DEV with one removal sent on a stale rev: the rule came back
+  // paused 58 ms after the write, and stayed. The refusal means another device
+  // wrote `recurring` in the same moment; the SDK has rolled the mirror and the
+  // rev back by the time the refusal is heard (measured: the echo 1 ms before
+  // it), and the wait covers the case where it has not, in which the retry is
+  // refused again and counts as a try. After `REMOVE_RETRIES` the banner, as
+  // before. A page closed in between leaves the paused rule (ROADMAP).
+  function removeRules(ids) { return removeAttempt(ids, 0); }
+  function removeAttempt(ids, n) {
+    return saveRecurring(function (prev) {
+      return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return ids.indexOf(r.id) === -1; }) });
+    }, false, n >= REMOVE_RETRIES ? undefined : function () {
+      setTimeout(function () { if (alive.current) removeAttempt(ids, n + 1); }, REMOVE_RETRY_MS * (n + 1));
+    });
+  }
+  // v18.6.0: several rules paused or resumed in one write, and the answer
+  // returned. Delete customer pauses the guest's rules before it anonymises
+  // their bookings and removes them only once that write has landed
+  // (`planCustomerDelete`, lib/delete-undo.js).
+  function setRulesActive(ids, active) {
+    return saveRecurring(function (prev) {
+      return Object.assign({}, prev, { rules: prev.rules.map(function (r) { return ids.indexOf(r.id) === -1 ? r : Object.assign({}, r, { active: !!active }); }) });
+    });
   }
   function addSkipDate(id, date, isSilent) {
     return saveRecurring(function (prev) {
@@ -149,5 +191,5 @@ export function useRecurring({ setWriteWarning }) {
   function setEnabled(on) { saveRecurring(function (prev) { return Object.assign({}, prev, { enabled: !!on }); }); }
   function setHorizon(weeks) { saveRecurring(function (prev) { return Object.assign({}, prev, { horizonWeeks: clampInt(weeks, 4, 1, 12) }); }); }
 
-  return { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, addSkipDate, setEnabled, setHorizon };
+  return { recurring, saveRecurring, addRule, updateRule, removeRule, removeRules, setRulesActive, addSkipDate, setEnabled, setHorizon };
 }

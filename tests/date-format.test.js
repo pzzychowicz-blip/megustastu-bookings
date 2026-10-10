@@ -258,7 +258,8 @@ describe("every date on screen goes through formatDay", () => {
   });
 
   it("stores the carried voucher's day as ISO, so the screen can write it", () => {
-    expect(read("App.jsx")).toMatch(/const fromLabel=c\.from\|\|"";/);
+    // v18.6.0 (#17): the write is `carryTransform` (lib/voucher-settle.js).
+    expect(read("lib/voucher-settle.js")).toMatch(/const fromLabel=c\.from\|\|"";/);
   });
 
   it("keeps the Activity log's CSV on ISO — a spreadsheet sorts it", () => {

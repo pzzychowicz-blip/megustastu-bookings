@@ -76,14 +76,34 @@ in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
 
-- **Automated daily PROD backup (#5), free tier only** (Patryk, 2026-09-23; decided
-  2026-10-08, not built). A scheduled **GitHub Actions** job in a separate PRIVATE
-  repository, because this one is public and its Actions artifacts and logs are
-  world-readable. The job uses a dedicated read-only service account, writes the same
-  file v18.1.1's `lib/backup.js` builds, encrypts it with `age` to a key only Patryk
-  holds, and keeps **90 days**. The private key lives in his password manager, with a
-  paper copy. Rehearse a restore on DEV first (`database.rules.README.md` § Backups and
-  restore). His steps: the private repository, the service account, the key pair.
+- **Daily PROD backup (#5): running since 2026-10-09, restore rehearsed 2026-10-10.**
+  The job is in the private repository `pzzychowicz-blip/mgt-backups` (this one is
+  public, so its Actions logs and artifacts are world-readable): every day at 04:30 UTC
+  it reads the database as a read-only service account, builds the file v18.1.1's
+  `lib/backup.js` builds (imported from this repository's `main`), encrypts it with
+  `age` to a key only Patryk holds, and keeps it 90 days. Its README has how to open
+  one. The rehearsal: the first run's file (1,640 bookings, 2,326,413 bytes) decrypted
+  with his key, imported at the root of DEV through the console, exported again and
+  compared: 15 of 15 nodes identical. DEV was then put back from its own export (20 of
+  20 identical). **Still owed:** Patryk storing the key in the password manager and on
+  paper, then deleting `~/mgt-backup-key.txt`. **Not proven:** that the service
+  account is refused a write; its role says so and nobody should try one against PROD.
+  A change to `src/lib/backup.js` that breaks its import fails the next run there, and
+  GitHub emails him.
+
+- **Delete customer: a rule removal refused four times, or cut short, leaves the
+  paused rule** (v18.6.0). The removal is retried by itself three times (300, 600,
+  900 ms). If all four attempts are refused, or the page is closed or reloaded before
+  one lands, the rule stays, paused, still holding the name and phone, and is deleted
+  by hand in Settings. Closing that needs something stored (a mark on the rule that
+  any device sweeps), which raises `SCHEMA`; Patryk chose the retry without it
+  (2026-10-10).
+
+- **Find a booking's folded Done row, on the tablet itself** (v18.6.0). Built and
+  measured in the Browser pane at the tablet's keyboard-up size (998 × 231) with the
+  focus events dispatched by script, since the pane's document does not take focus.
+  To check on the HONOR tablet after the merge: with the keyboard up the Done row is
+  gone and three result rows show; closing the keyboard brings Done back.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
@@ -132,10 +152,37 @@ evidence for each.
   `planCancel`, `completeCleared`, `lib/status-change.js`; 5,091 lines), and delete and
   undo in v18.5.1 (`planDelete`, `planUndo`, `lib/delete-undo.js`; 5,093 lines) with
   Book Again's draft (`againDraft`, `lib/booking-save.js`) and the Overlap banner's
-  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines). Still in App of the five
-  measured 2026-10-08: `settleVoucher` (58 lines, 7 commits) with the voucher carry. Its
-  ordering is tied to `doSave` and `saveGuardRef`, so it wants a version of its own.
-  Re-measure what is largest in App before choosing after it.
+  Reassign (`planReassign`, `lib/manual-assign.js`; 4,984 lines), and in v18.6.0 the redeem
+  prompt's answer and the voucher carry (`planSettle`, `settleEffects`, `carryOffer`,
+  `carryTransform`, `lib/voucher-settle.js`; 4,987 lines after a version that also added
+  to App). That was the last of the five measured 2026-10-08. **The render, begun
+  2026-10-10:** measured at 1,484 lines from the first top-level JSX constant (84
+  statements; the `return` 562, `notifSections` 118, the clash derivations 95, the
+  four view elements 140). The clash derivations are `lib/clash-view.js` (`App.jsx`
+  4,980 lines). **What is left of the render is prop wiring** (read 2026-10-10):
+  `notifSections` is 57 lines of code (the 118 counted the comments after it) and
+  would need about 40 values passed for 10 to 15 lines saved; the Settings mount is
+  94 lines, 88 of them one prop each, and a wrapper saves about 6. Patryk dropped
+  both. They shrink only when the state behind them moves into hooks by domain,
+  which is a design of its own and not started. **The form's save, 2026-10-10:**
+  what `doSave` and `save` still decided inline is `draftForSave`, `draftRefusal`,
+  `formSeatClash` and `kitchenAsk` (`lib/booking-save.js`); `doSave` is 64 lines (132
+  in the table below), `save` 27 (31), `App.jsx` 4,898. What `doSave` keeps is the
+  order of its questions, the refs and the setters; `doSaveNew` and `doSaveEdit` were
+  already plans since v18.3.4.
+  **Re-measured 2026-10-09** (`App.jsx` 4,987 lines; the functions declared directly in
+  `BookingApp`, by length, with the commits since 2026-07-24 that touched their lines
+  and how many of those say fix, /code-review or correction; `git log -L` on today's
+  line range, so the counts follow the lines back and are approximate):
+  `doSave` 132 lines, 18 commits, 2 fixes · `doSaveNew` 59, 18, 3 · `deleteCustomer` 45,
+  8, 1 (its decisions are already `planCustomerDelete`; what is left is comments and
+  effects) · `settleVoucher` 39, 8, 3 (likewise) · `doClearActivity` 37, 3, 2 ·
+  `delBooking` 34, 8, 1 · `save` 31, 3, 1 · `addFormToWaitlist` 31, 4, 0 · `doSaveEdit`
+  30, 31, 7. The render (from the first top-level JSX constant to the end) is 1,471
+  lines, 29% of the file. By churn the next candidate is the form's save
+  (`doSave` + `doSaveNew` + `doSaveEdit` + `save`: 252 lines, `doSaveEdit` alone 31
+  commits and 7 fixes), whose decisions v18.3.4 already moved to `lib/booking-save.js`;
+  by size it is the render. Not chosen: Patryk's call.
 
 - **A parked write was seen stored without Retry, once, and not reproduced** (v18.4.9,
   DEV; investigated again 2026-10-08). The stored booking carries the edit's history
@@ -148,8 +195,15 @@ evidence for each.
   reload the page 4 times of 4, which destroys a parked write, so a trial that removes
   the switch by a file edit proves nothing unless the page is shown to have survived.
   Patryk does click in the shared pane during a check and does not recall pressing Retry.
-  If it recurs: log clicks in the page (capture phase, `isTrusted`, the target's text),
-  trace `retryParked`, and keep Vite's log line for the edit.
+  **The instrument is in place since v18.6.0, on DEV only** (`lib/write-trace.js`,
+  compiled out of every build): `window.__mgtTrace` holds the last 200 entries, in
+  memory, of every click (capture phase, `isTrusted`, the control's text, whether the
+  page was visible) and of each park, Retry, Discard and replay, and those four print
+  a `[trace]` console line; a Retry carries its call stack and the clicks of the 10 s
+  before it. A reload empties it, so **if it recurs, read `window.__mgtTrace` before
+  anything else**, and keep Vite's log line for any edit. Remove the module and its
+  six lines in `usePersistence.js` (the import and five guarded calls) once the fault is explained or a few months pass
+  without it.
 
 ## Designed, not implemented
 
@@ -159,23 +213,3 @@ Nothing at present.
 
 The **2026-07-24 `/engineering:tech-debt` scan's feature shortlist** is spent: its last
 two ideas, deposits reporting and structured guest tags, shipped in v18.5.0.
-
-- **A device on the previous version deletes fields it does not know.** Found by
-  v18.5.0's `/code-review`: `sanitize` is a whitelist and a booking write replaces the
-  whole child, so a v18.4.10 device's next write to a tagged booking drops `tags`,
-  `guestTags` and `guestTagsAt` (measured on that version's own code). v18.3.3 had the
-  same shape with `recurring`'s `startDate`. Today the only defence is the deploy step
-  "refresh every device". Two ways to close the class, not designed: carry unknown keys
-  through the read and the write, or a stored minimum version an older build refuses
-  to write under. Either touches the write path, so it wants its own plan.
-- **Delete customer: the rules go even if the anonymise is refused.** v18.5.1 removes
-  the customer's standing bookings BEFORE the bookings write (so the generator cannot
-  write one more week in between) and does not check that write. If it is refused
-  (the freshness gate), the customer stays and their standing booking is gone, with
-  no undo. Read from the code in v18.5.1's /code-review, not reproduced. Closing it
-  wants one of: the rule removal in the write's `onLanded` plus a generator that
-  skips a customer mid-delete, or a retry of the anonymise.
-- **The List's tag filter, two loose ends** (v18.5.1's /code-review). A filter whose
-  only matches are completed or cancelled shows no card until "Completed &
-  cancelled" is opened: should choosing a tag open the fold? And the "No bookings
-  tagged…" line has no transition, and can sit beside the empty-day prompt.

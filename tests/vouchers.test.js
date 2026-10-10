@@ -814,8 +814,9 @@ describe("the carry write re-asks attachedElsewhere (v18.0.0 session 10)", () =>
 });
 
 describe("doVoucherCarry guards both halves of that race (v18.0.0 session 10)", () => {
+  // v18.6.0 (#17): the updater is `carryTransform` (lib/voucher-settle.js).
   const APP = stripComments(
-    readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8")).join("\n");
+    readFileSync(new URL("../src/lib/voucher-settle.js", import.meta.url), "utf8")).join("\n");
 
   it("the updater bails on a voucher taken elsewhere, against `prev`", () => {
     expect(/if\(attachedElsewhere\(prev,c\.code,c\.to\)\) return prev;/.test(APP)).toBe(true);

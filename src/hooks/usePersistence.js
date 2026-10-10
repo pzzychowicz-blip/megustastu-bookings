@@ -31,6 +31,7 @@ import { ref, onValue, get, update, goOnline } from "firebase/database";
 import { db } from "../firebase";
 import { sanitizeAll, sanitizeBlocks, toMins, bookingsAfterAction, histEntry, pastCloseMins, seatedElapsed } from "../lib/booking-logic";
 import { attachRev, writeWithRev } from "../lib/revGuard";
+import { writesBlocked } from "../lib/schema";
 import { dbError, onDbError, describeWriteError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log. The bookings diff and tableBlocks both
 // log; the legacy array→keyed MIGRATION deliberately does not — it is a one-time
@@ -45,6 +46,11 @@ import {
   isStaleGap, replayOutcome, tellDiscarded, describeWrite, STALE_GAP_MS, MAX_RETRIES,
 } from "../lib/write-path";
 import { todayStr } from "../lib/day";
+// v18.6.0: a DEV-only trace of the parked queue (lib/write-trace.js), for the
+// fault in ROADMAP, "A parked write was seen stored without Retry". Compiled
+// out of a build.
+import { traceWrite, startClickTrace } from "../lib/write-trace";
+if(import.meta.env.DEV) startClickTrace();
 
 // v17.10.1: how long `.info/connected` may stay false, with the page in the
 // FOREGROUND, before we reset the SDK's reconnect backoff ourselves.
@@ -255,6 +261,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function retryParked(){
     if(!parkedRef.current.length) return;
     const items=parkedRef.current;
+    if(import.meta.env.DEV) traceWrite("retry",{labels:items.map(function(it){return it.label;})});
     parkedRef.current=[];
     syncParked();
     items.forEach(function(it){ it.tries=0; pendingRetriesRef.current.push(it); });
@@ -273,6 +280,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function discardParked(){
     if(!parkedRef.current.length) return;
     const items=parkedRef.current;
+    if(import.meta.env.DEV) traceWrite("discard",{labels:items.map(function(it){return it.label;})});
     parkedRef.current=[];
     syncParked();
     items.forEach(function(it){tellDiscarded(it.report,LANDED,DISCARDED);});
@@ -305,14 +313,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // name computed for the first attempt. That is also what closes the race
       // below — a retry is dispatched from a promise callback, where React
       // defers the render that would compute a fresh one.
-      if(d.action==="retry") saveBookings(item.fn,false,item.report,d.tries,item.label);
+      if(d.action==="retry"){if(import.meta.env.DEV) traceWrite("replay",{label:item.label,tries:d.tries});saveBookings(item.fn,false,item.report,d.tries,item.label);}
       else if(d.action==="refuse"){refusals.push(d.message);tellDiscarded(item.report,LANDED,DISCARDED);}
       // v17.16.9: PARK, don't drop. See parkedRef above for what dropping cost.
       // No `setWriteWarning` here any more: the parked banner carries the message,
       // and a dismissible red banner beside an undismissable one saying the same
       // thing is two notices for one fault. The red banner keeps its other three
       // callers (not loaded, empty-array refusal, blocks rejected) unchanged.
-      else parkedRef.current=parkedRef.current.concat([item]);
+      else{if(import.meta.env.DEV) traceWrite("park",{label:item.label,tries:item.tries});parkedRef.current=parkedRef.current.concat([item]);}
     });
     // Added to a warning already showing, not over it (/code-review): the
     // slot is one string, and a block edit's "please redo the change" would
@@ -439,6 +447,11 @@ export function usePersistence({ autoOptimizer, nowMins }){
     }
     // v18.4.8: this attempt is the write's last, and it did not land.
     function dropped(){tellDiscarded(report,LANDED,DISCARDED);}
+    // v18.6.0: the schema gate (lib/schema.js), before every other gate. A
+    // build the database is ahead of would write this booking without the
+    // fields it does not know. Not parked: a replay from this build would
+    // drop them just the same. App shows the "refresh this device" card.
+    if(writesBlocked("bookings")){dropped();return false;}
     // v15.2.0/v15.4.0: staleness gate FIRST — hold the SERVER write when the local
     // snapshot may be stale, so a frozen tab's stale data never lands on the server.
     // This is NOT a red error: a user write is PARKED for auto-replay on freshly-
@@ -741,6 +754,8 @@ export function usePersistence({ autoOptimizer, nowMins }){
         // v17.16.13: this one logged NOTHING at all, so a refused migration was
         // invisible — and a legacy array node that cannot migrate leaves
         // `arrayShapeRef` holding every booking write forever (see v15.5.0).
+        // v18.6.0: and not from a build the database is ahead of (lib/schema.js).
+        if(writesBlocked("the bookings migration")) return;
         update(ref(db,"bookings"),Object.assign(nulls,keyed)).catch(function(err){
           console.warn(describeWriteError("bookings (legacy-array migration)",err)+" The array shape stays; booking writes remain held.");
           migratedRef.current=false;

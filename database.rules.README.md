@@ -238,8 +238,8 @@ an ABSENCE because that absence is the whole of the access-control change and a
 re-added root grant would leave every other test in this file green. The next
 groups are what you would expect: the `auth != null` boundary, the per-`$id`
 booking CAS (`updatedAt` strictly greater **and** `baseUpdatedAt` equal to
-stored — the pair that closed the 2026-07-05 overwrite incident), and the seventeen
-`<name>Rev` pairs (counted 2026-10-08), each swept for repeated / skipped / lower / absent /
+stored — the pair that closed the 2026-07-05 overwrite incident), and the eighteen
+`<name>Rev` pairs (counted 2026-10-09), each swept for repeated / skipped / lower / absent /
 non-numeric revisions, and — v17.16.7 — for a bare `remove()` of the node and of
 its rev.
 
@@ -255,6 +255,44 @@ the rules", which is a claim a hand-written list cannot make. A guard asserts
 the walker found at least twelve and that `bookings` is *not* among them (it is
 guarded per-child by the `updatedAt` CAS, not by a rev), so a walker that starts
 returning nothing fails loudly instead of making the whole sweep vacuous.
+
+## v18.6.0 — `schema` + `schemaRev`, the eighteenth rev pair, and it only goes up
+
+`/schema` is `{ v: N }`: the highest schema number any build has announced
+(`src/lib/schema.js` says what the number is for). It is written by
+`useSchemaGate.js` through `writeWithRev`, so it is a rev pair like every other
+single node and the walker's sweep covers it with no test edit. Two clauses are
+its own:
+
+- **`newData.child('v').val() > data.child('v').val()`**: a write must RAISE the
+  number. An older build cannot lower it, and neither can an admin; after a
+  rollback the number is lowered by hand in the console, which bypasses rules.
+- **A manager or an admin, once roles are enforced** (round 2, 2026-10-10; it was
+  any signed-in account). With `settings/admin.enforceRoles` on, the writer's
+  `roles/{uid}/role` must be `manager` or `admin`, on `schema` and on `schemaRev`.
+  A staff-role account could otherwise write a very large number and stop every
+  device from saving until it was lowered in the console (refused in the emulator
+  now; allowed before, by the same test). The role alone, with no capability and
+  so no `extras` or `denies`: nothing in the app shows or grants it. With
+  `enforceRoles` off the rule is `auth != null`, as for every other gated path.
+  **What it costs:** after a release that raises `SCHEMA`, the gate starts when the
+  first manager or admin opens the refreshed app. A staff device that refreshes
+  first has its announce refused (one console line, once per page load).
+
+`newData.child('v').isNumber()` refuses a bare number, a string and a remove.
+Seven tests of its own in the suite (307 in all on 2026-10-10).
+
+### Deployment — RULES FIRST, to DEV and to PROD, before the app
+
+The other way round from the pairs above. Until the rule is deployed `/schema`
+has no grant, so the announce is refused and the gate does nothing: no device is
+blocked, and no device is protected. Nothing breaks in that state (the announce
+is tried once per page load and its refusal is one console line), so the order
+is about when the protection starts, not about safety. Deploying the rule first
+is harmless to the builds already out: none of them writes `/schema`.
+
+On DEV the gate is advisory, so the rule there only matters to a browser that
+sets `localStorage["mgt.schemaEnforce"] = "1"`.
 
 ## v18.5.0 — `settings/tags` + `tagsRev`, the seventeenth rev pair
 

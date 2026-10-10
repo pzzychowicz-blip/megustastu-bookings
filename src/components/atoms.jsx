@@ -469,7 +469,7 @@ const TOP_ANCHOR = "max(0px, calc(5dvh - 12px))";
 // centred card already sits at its 90dvh ceiling, so the tallest tabs do not
 // move at all and the shorter ones stop moving; only the bottom edge follows
 // the content. The phone sheet is full-screen and has no top to move.
-export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) {
+export function Overlay({ onClose, children, footer, panel, maxWidth, anchor, footerYields }) {
   const mob = typeof window !== "undefined" && window.innerWidth < 600;
   const scrollRef = useRef(null);
   const scrollApi = useRef({ scrollToTop: function () { if (scrollRef.current) scrollRef.current.scrollTop = 0; } });
@@ -640,6 +640,16 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
   // With the keyboard up (an iPad), the scrim pads by it so the card centres in
   // what is visible, and the card may fill that instead of 90dvh; a hung card
   // keeps its anchor, so its top does not move when the keyboard rises.
+  // v18.6.0: `footerYields` folds the footer row away while `tight` (Find a
+  // booking: on the tablet with the keyboard up the card is 208px, and its Done
+  // row took 57 of them from a results list that had 83). Only for a card,
+  // which a tap outside it closes; a phone's sheet has no scrim, so its footer
+  // is the one way out and stays. A `Reveal`, so it folds out and back in.
+  const cardFoot = footer ? (
+    <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
+      {footer}
+    </div>
+  ) : null;
   const top = anchor === "top";
   const cardMaxH = kb.bottom ? (top ? "calc(100% - " + TOP_ANCHOR + ")" : "100%") : "90dvh";
   return wrap(
@@ -653,9 +663,7 @@ export function Overlay({ onClose, children, footer, panel, maxWidth, anchor }) 
           <div ref={scrollRef} style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "24px", boxSizing: "border-box" }}>
             {children}
           </div>
-          <div style={{ flexShrink: 0, padding: tight ? "6px 24px" : "16px 24px", transition: "padding " + M.shift, borderTop: "1px solid var(--border-sheet)", boxSizing: "border-box" }}>
-            {footer}
-          </div>
+          {footerYields ? <Reveal show={!tight} speed="shift" style={{ flexShrink: 0 }}>{cardFoot}</Reveal> : cardFoot}
         </div>
       ) : (
         <div ref={(n) => { scrollRef.current = n; dialogRef.current = n; }} {...dialogProps} className={cardCls} style={{ background: "var(--bg-sheet)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: R.sheet, border: "1px solid var(--border-sheet)", padding: "24px", width: "100%", maxWidth: maxWidth || 580, maxHeight: cardMaxH, marginTop: top ? TOP_ANCHOR : 0, overflowY: "auto", boxSizing: "border-box", boxShadow: "var(--shadow-sheet)" }}>

@@ -618,9 +618,15 @@ describe("App is wired to it", () => {
   const app = stripComments(readFileSync(fileURLToPath(new URL("../src/App.jsx", import.meta.url)), "utf8")).join("\n");
 
   it("Delete customer anonymises through anonymizeBooking, and nothing else in src marks a booking anonymised", () => {
+    // v18.6.0: the transform is `planCustomerDelete` (lib/delete-undo.js), and
+    // App writes it.
     const fn = app.slice(app.indexOf("function deleteCustomer("));
-    expect(fn.slice(0, fn.indexOf("\n  }\n"))).toContain("return anonymizeBooking(b);");
+    expect(fn.slice(0, fn.indexOf("\n  }\n"))).toContain("saveBookings(plan.transform,false,{");
+    const del = stripComments(readFileSync(fileURLToPath(new URL("../src/lib/delete-undo.js", import.meta.url)), "utf8")).join("\n");
+    const plan = del.slice(del.indexOf("export function planCustomerDelete("));
+    expect(plan).toContain("return anonymizeBooking(b);");
     expect(app).not.toMatch(/anonymized\s*:\s*true/);
+    expect(del).not.toMatch(/anonymized\s*:\s*true/);
   });
   it("the one place that drops a booking from the list hands its statement on", () => {
     // v18.5.1 (#17): the delete's transform is `planDelete` (lib/delete-undo.js),
