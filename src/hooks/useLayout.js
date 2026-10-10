@@ -22,7 +22,7 @@ import { useState, useRef, useEffect } from "react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../firebase";
 import { attachRev, writeWithRev } from "../lib/revGuard";
-import { DEFAULT_LAYOUT, setLayout, comboKey } from "../lib/constants";
+import { DEFAULT_LAYOUT, setLayout, comboKey, normalizePickRules } from "../lib/constants";
 import { dbError } from "../lib/dbError";
 // v18.0.0 session 8: the activity log.
 import { settingsWriteEntry } from "../lib/activity";
@@ -239,8 +239,13 @@ export function sanitizeLayout(val){
     mixedRequire: (Array.isArray(rawPri.mixedRequire) ? rawPri.mixedRequire : []).map(String).filter(function(id){ return idSet[id]; })
   };
 
+  // v18.6.1: the pick rules (constants.js, DEFAULT_LAYOUT.pickRules). An absent
+  // object is a layout from before the field and reads as the default's rule; a
+  // present one is what somebody set, an empty list included.
+  const pickRules = { v: 1, rules: normalizePickRules(val.pickRules, idSet) };
+
   // v17.0.0: floor plan rides along on the same node (same layoutRev CAS).
-  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit, priorities: priorities, floorPlan: sanitizeFloorPlan(val.floorPlan, tables) };
+  return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit, priorities: priorities, pickRules: pickRules, floorPlan: sanitizeFloorPlan(val.floorPlan, tables) };
 }
 
 export function useLayout(){

@@ -46,7 +46,9 @@
 // a lower build logs one warning and keeps writing, and no build announces its
 // number. `localStorage["mgt.schemaEnforce"] = "1"` turns the full behaviour on
 // for one browser, which is how the card and the refusal are tested.
-export const SCHEMA = 1;
+// 1: v18.6.0. 2: v18.6.1, `settings/layout.pickRules` (a build without it
+// saves the layout with the rules gone, and they read back as the default's).
+export const SCHEMA = 2;
 
 export const SCHEMA_ENFORCE_KEY = "mgt.schemaEnforce";
 

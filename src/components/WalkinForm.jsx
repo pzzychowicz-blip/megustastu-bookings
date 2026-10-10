@@ -43,7 +43,7 @@ import {
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
-  comboCapBest, nowTime, guestsLabel, countLabel
+  comboCapBest, nowTime, guestsLabel, countLabel, pickBlockedBy
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -131,8 +131,9 @@ export function WalkinForm({
   const getCapOf = comboCapBest;
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
-  // accumulate redundant tables once `wSize` is met. Refuses 10+13 without
-  // 11 AND 12 (the indoor cluster must be physically contiguous).
+  // accumulate redundant tables once `wSize` is met. Refuses a set the
+  // layout's pick rules forbid (pickBlockedBy; the default: 10+13 without 11
+  // and 12, the two ends of the dining room).
   function wToggle(id) {
     const sel = wf.tables || [];
     // v17.1.1: DESELECT before the busy check — the Plan-view seated-takeover
@@ -144,18 +145,14 @@ export function WalkinForm({
     }
     if (wBusy.has(id)) return;
     let next = sel.concat([id]);
-    let h1 = next.includes("10"), h4 = next.includes("13");
-    let h2 = next.includes("11"), h3 = next.includes("12");
-    if (h1 && h4 && (!h2 || !h3)) return;
+    if (pickBlockedBy(next)) return;
     if (sel.length > 0 && getCapOf(sel) >= wSize) {
       let trimmed = sel.slice();
       while (trimmed.length > 0 && getCapOf(trimmed) >= wSize) {
         trimmed = trimmed.slice(1);
       }
       next = trimmed.concat([id]);
-      h1 = next.includes("10"); h4 = next.includes("13");
-      h2 = next.includes("11"); h3 = next.includes("12");
-      if (h1 && h4 && (!h2 || !h3)) return;
+      if (pickBlockedBy(next)) return;
     }
     setDraft({ ...wf, tables: next });
   }

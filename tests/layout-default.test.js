@@ -51,6 +51,7 @@ describe("the default layout (v18.6.1)", () => {
       Object.keys(DEFAULT_LAYOUT.comboCaps).flatMap((k) => k.split("|")),
       DEFAULT_LAYOUT.megaCombos.flatMap((m) => m.ids),
       Object.keys(DEFAULT_LAYOUT.floorPlan.tables),
+      DEFAULT_LAYOUT.pickRules.rules.flatMap((r) => r.pair.concat(r.need)),
       PRIORITIES.anchors,
       PRIORITIES.mixedRequire,
       PRIORITIES.swapRules.map((r) => r.table),

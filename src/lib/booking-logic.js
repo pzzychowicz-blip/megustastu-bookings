@@ -24,6 +24,7 @@ import {
   hoursFor,
   ZONE_OF,
   PRIORITIES,
+  PICK_RULES,
   TURN_BUFFER
 } from "./constants.js"; // WA sandbox: explicit ".js" — Node ESM chain, see customers.js
 import { todayStr, nowOn } from "./day.js"; // WA sandbox: same ESM chain — see above
@@ -524,6 +525,29 @@ export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});
 // priorities config names required tables (PRIORITIES.mixedRequire — MGT's seed:
 // 1+2+9), a cross-zone set is allowed only when it includes ALL of them;
 // otherwise any cross-zone set that is a DECLARED combo (in VALID_COMBOS) is allowed.
+// v18.6.1: the pick rule a hand-picked set of tables breaks, or null. A rule
+// (settings/layout.pickRules, live as PICK_RULES) names two tables that may be
+// in one set only with every table of its `need`. A set that holds a whole
+// DECLARED combo containing both is let through: the layout says those tables
+// go together (1+2+9+10+13 seats 12 while 10+13 alone need 11 and 12), and the
+// optimiser may place a party on exactly that set. It was four ids in the two
+// pickers until v18.6.1, with no such exception, so they refused that set.
+// `rules` and `combos` are arguments for the tests; the pickers pass neither.
+export function pickBlockedBy(ids,rules,combos){
+  var set=ids||[];
+  var has=function(id){return set.indexOf(id)>=0;};
+  var list=rules||PICK_RULES;
+  var declared=combos||VALID_COMBOS;
+  for(var i=0;i<list.length;i++){
+    var r=list[i];
+    if(!has(r.pair[0])||!has(r.pair[1])||r.need.every(has)) continue;
+    var covered=declared.some(function(c){
+      return c.ids.indexOf(r.pair[0])>=0&&c.ids.indexOf(r.pair[1])>=0&&c.ids.every(has);
+    });
+    if(!covered) return r;
+  }
+  return null;
+}
 export function isMixedLarge(ids){
   if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
   var req=PRIORITIES.mixedRequire;

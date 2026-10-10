@@ -168,7 +168,17 @@ export var DEFAULT_LAYOUT={
     },
     walls:[{x1:0,y1:320,x2:850,y2:320},{x1:190,y1:650,x2:0,y2:650}],
     doors:[{x:530,y:320,rot:180,width:80,flip:true}]
-  }
+  },
+  // v18.6.1: which tables a host may pick TOGETHER by hand (the table picker and
+  // the walk-in form). Each rule: the two tables of `pair` can be picked in one
+  // set only when every table of `need` is in it too. The restaurant's one rule:
+  // 10 and 13 are the two ends of the dining room, and they are one table only
+  // when 11 and 12 are pushed in between. It was four ids written into the two
+  // pickers, so renaming the indoor tables switched it off without a word.
+  // `v` keeps an emptied list present in RTDB, which drops an empty array: an
+  // ABSENT object reads as this default, a present one with no rules as none
+  // (the priorities contract). See pickBlockedBy in booking-logic.js.
+  pickRules:{v:1,rules:[{pair:["10","13"],need:["11","12"]}]}
 };
 
 // ── Layout-derived live bindings (reassigned ONLY by setLayout, below) ─────────
@@ -204,6 +214,9 @@ export let CLUSTERS={};
 // only by setLayout; consumed by booking-logic's _comboPri/_indoorPri/findBest/
 // optimise/isMixedLarge. Seeded from DEFAULT_LAYOUT at the bottom of this file.
 export let PRIORITIES={v:1,bands:[],comboRules:[],anchors:[],swapRules:[],mixedRequire:[]};
+// v18.6.1: the complete pick rules of the live layout ([{pair:[a,b],need:[…]}]).
+// Live binding, reassigned only by setLayout; read by pickBlockedBy.
+export let PICK_RULES=[];
 
 // The table pickers' grouping, derived from the layout (every layout). One
 // section per join-group (its within-run auto-combo caps become the hint note),
@@ -264,6 +277,35 @@ export function contiguousRuns(group){
 // doesn't get MGT's rules leaking back (RTDB drops empty arrays; the `v` scalar
 // keeps an all-empty object present). Every table reference is filtered against
 // the CURRENT ids, so removed/renamed tables self-heal at derive time too.
+// v18.6.1: the pick rules as stored and edited: `pair` up to two distinct
+// existing ids, `need` distinct existing ids outside the pair. A rule with a
+// table missing from its pair is KEPT (Settings builds a rule one tap at a
+// time, and every tap is a write); only a rule with nothing in its pair goes,
+// and RTDB could not have held that one anyway. activePickRules is the subset
+// the pickers enforce. Shared by sanitizeLayout and buildLayout: one reading.
+export var PICK_RULES_MAX=20;
+export function normalizePickRules(raw,idSet){
+  raw=(raw&&typeof raw==="object")?raw:DEFAULT_LAYOUT.pickRules;
+  var out=[];
+  (Array.isArray(raw.rules)?raw.rules:[]).forEach(function(r){
+    if(!r||typeof r!=="object"||out.length>=PICK_RULES_MAX) return;
+    var pair=[];
+    (Array.isArray(r.pair)?r.pair:[]).map(String).forEach(function(id){
+      if(idSet[id]&&pair.indexOf(id)<0&&pair.length<2) pair.push(id);
+    });
+    if(!pair.length) return;
+    var need=[];
+    (Array.isArray(r.need)?r.need:[]).map(String).forEach(function(id){
+      if(idSet[id]&&pair.indexOf(id)<0&&need.indexOf(id)<0) need.push(id);
+    });
+    out.push({pair:pair,need:need});
+  });
+  return out;
+}
+export function activePickRules(rules){
+  return (rules||[]).filter(function(r){return r.pair.length===2&&r.need.length>0;});
+}
+
 function normalizePriorities(p,idSet){
   p=(p&&typeof p==="object")?p:DEFAULT_LAYOUT.priorities;
   var has=function(id){return !!idSet[id];};
@@ -358,7 +400,9 @@ export function buildLayout(cfg){
     makeTableGroups:function(){return buildGenericTableGroups(tables,groups,runCapByKey,capOf,zoneOf);},
     VALID_COMBOS:combos,CLUSTERS:clusters,
     // v15.9.0: data-driven optimizer priorities (see normalizePriorities above).
-    PRIORITIES:normalizePriorities(cfg.priorities,idSet)
+    PRIORITIES:normalizePriorities(cfg.priorities,idSet),
+    // v18.6.1: the rules the two table pickers enforce (complete ones only).
+    PICK_RULES:activePickRules(normalizePickRules(cfg.pickRules,idSet))
   };
 }
 
@@ -372,6 +416,7 @@ export function setLayout(cfg){
   TOTAL_SEATS=L.TOTAL_SEATS;ZONE_OF=L.ZONE_OF;KITCHEN_TABLE_LIMIT=L.KITCHEN_TABLE_LIMIT;
   VALID_COMBOS=L.VALID_COMBOS;CLUSTERS=L.CLUSTERS;
   PRIORITIES=L.PRIORITIES; // v15.9.0 — the optimizer's data-driven heuristics
+  PICK_RULES=L.PICK_RULES; // v18.6.1 — what the table pickers refuse
   TABLE_GROUPS=L.makeTableGroups();
 }
 // v14.4.0 / v15.0.0: OPEN/CLOSE/GRID_CLOSE + QUARTER_HOURS are runtime-editable

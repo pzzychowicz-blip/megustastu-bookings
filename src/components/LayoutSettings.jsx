@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { Section, Collapsible, Toggle, mkStep, mkBtn, mkDangerBtn, mkRemoveX, Reveal, SEG_TRACK, segStyle, TBadge } from "./atoms";
 import { FloorPlanEditor } from "./FloorPlanEditor"; // v17.0.0: the drag-&-drop plan editor
 import { AlertPanel, AlertRow } from "./AlertPanel";
-import { contiguousRuns, comboKey, R, T, FW, H, IC } from "../lib/constants";
+import { contiguousRuns, comboKey, activePickRules, PICK_RULES_MAX, R, T, FW, H, IC } from "../lib/constants";
 import { AlertIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon, EditIcon, TrashIcon } from "./Icons";
 import { todayStr } from "../lib/day";
 import { countLabel } from "../lib/booking-logic";
@@ -107,6 +107,8 @@ const idOk = (s) => s.length > 0 && s.indexOf("|") < 0;
 const bandName = (b, i) => "size rule " + (i + 1) + ", party of " + b.min + " to " + b.max;
 const comboName = (r, i) => "combo rule " + (i + 1) + ", " + String(r.key).split("|").join(" + ");
 const swapName = (r, i) => "swap rule " + (i + 1) + ", table " + r.table;
+// v18.6.1: a pick rule's chips repeat per rule, so each control names its rule.
+const pickName = (i) => "pick rule " + (i + 1);
 // v17.15.5: a stepper's two buttons have a NAME.
 //
 // Their entire content was `−` and `+`, so all thirteen steppers in this tab
@@ -218,7 +220,10 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           anchors: (pri.anchors || []).map(rmap),
           swapRules: (pri.swapRules || []).map(function (r) { return { ...r, table: rmap(r.table) }; }),
           mixedRequire: (pri.mixedRequire || []).map(rmap)
-        }
+        },
+        // v18.6.1: the pick rules name tables too, and the rule that was written
+        // into the pickers by id is what a rename once switched off.
+        pickRules: { v: 1, rules: pickRules.map(function (r) { return { pair: r.pair.map(rmap), need: r.need.map(rmap) }; }) }
       });
     }
     cancelEdit();
@@ -358,6 +363,23 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   mega.forEach(function (mc) { declared.push({ key: comboKey(mc.ids), label: mc.ids.join(" + ") }); });
 
   // Which chip-adder picker is open: {kind:"prefer"|"avoid"|"anchor", band} | null.
+  // ── v18.6.1: the pick rules (settings/layout.pickRules) ─────────────────────
+  // What the table picker and the walk-in form refuse: the two tables of a
+  // `pair` together without every table of `need`. Controlled like the rest of
+  // the tab; the whole list is written each time, under its `v` marker, so an
+  // emptied list stays empty (RTDB drops an empty array, and an ABSENT object
+  // reads as the default's rule).
+  const pickRules = (layout && layout.pickRules && Array.isArray(layout.pickRules.rules)) ? layout.pickRules.rules : [];
+  const pickActive = activePickRules(pickRules).length;
+  function savePick(rules) { onSaveLayout({ ...layout, pickRules: { v: 1, rules: rules } }); }
+  function setPickRule(i, patch) { savePick(pickRules.map(function (r, idx) { return idx === i ? { ...r, ...patch } : r; })); }
+  function removePickRule(i) { setPriPick(null); savePick(pickRules.filter(function (_, idx) { return idx !== i; })); }
+  // A new rule starts with a pair, because a rule with nothing in it is one RTDB
+  // cannot hold (and sanitizeLayout drops): the first two tables, to be changed.
+  function addPickRule() {
+    if (tables.length < 3 || pickRules.length >= PICK_RULES_MAX) return;
+    savePick(pickRules.concat([{ pair: [tables[0].id, tables[1].id], need: [] }]));
+  }
   const [priPick, setPriPick] = useState(null);
   function samePick(kind, band) { return priPick && priPick.kind === kind && priPick.band === band; }
 
@@ -398,9 +420,14 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   // repeat per table AND per size band, so "Move up in rank" was one string in
   // the source and a dozen identical names on the page. Null for Anchors, which
   // appears once.
-  function chipRow(label, list, ranked, kind, bandIdx, onChange, rowName) {
+  // v18.6.1: `opts.max` caps the list (a pick rule's pair is two tables) and
+  // `opts.exclude` keeps ids out of the add-picker (a pair's tables cannot also
+  // be what the pair needs).
+  function chipRow(label, list, ranked, kind, bandIdx, onChange, rowName, opts) {
     const rowIn = rowName ? " (" + rowName + ")" : "";
-    const avail = tableIds.filter(function (id) { return list.indexOf(id) < 0; });
+    const full = !!(opts && opts.max && list.length >= opts.max);
+    const skip = (opts && opts.exclude) || [];
+    const avail = full ? [] : tableIds.filter(function (id) { return list.indexOf(id) < 0 && skip.indexOf(id) < 0; });
     const open = samePick(kind, bandIdx);
     const last = list.length - 1;
     return (
@@ -1003,6 +1030,39 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
           <button onClick={addSwap} className="mgt-hover-scale"
             style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add swap rule</button>
         </div>
+      </Collapsible>
+      {/* v18.6.1: the pick rules. They were four table ids written into the two
+          pickers; here they are the layout's, and follow a rename. */}
+      <Collapsible
+        title="Tables picked together"
+        subtitle="Two tables a host can pick together by hand only when other tables are picked too."
+        summary={countLabel(pickActive, "rule", "rules")}
+      >
+        <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginBottom: 10 }}>
+          In the table picker and the walk-in form, the two tables of a Pair can be chosen together only when every table under Needs is chosen as well. A set that is one of the Combos is always allowed.
+        </div>
+        {pickRules.map(function (r, i) {
+          const ready = r.pair.length === 2 && r.need.length > 0;
+          return (
+            <div key={i} style={{ padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: T.body, fontWeight: FW.bold, color: "var(--text-secondary)" }}>Rule {i + 1}</span>
+                <button onClick={function () { removePickRule(i); }} className="mgt-hover-scale"
+                  title="Remove rule" aria-label={"Remove " + pickName(i)}
+                  style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
+              </div>
+              {chipRow("Pair", r.pair, false, "pickPair", i, function (l) { setPickRule(i, { pair: l }); }, pickName(i), { max: 2, exclude: r.need })}
+              {chipRow("Needs", r.need, false, "pickNeed", i, function (l) { setPickRule(i, { need: l }); }, pickName(i), { exclude: r.pair })}
+              {ready ? null : (
+                <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 4, paddingLeft: 58   /* @canvas */ }}>
+                  Not in force yet: a rule needs two tables in its Pair and at least one under Needs.
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <button onClick={addPickRule} className="mgt-hover-scale" disabled={tables.length < 3 || pickRules.length >= PICK_RULES_MAX}
+          style={{ marginTop: 8, ...ACT_BTN, background: "var(--bg-stepper)", color: "var(--text-primary)", border: "1px solid var(--border-soft)" }}>+ Add rule</button>
       </Collapsible>
       {/* v17.0.0: Floor plan — the Plan view's geometry (settings/layout.floorPlan).
           Drag tables/doors, draw walls, per-table shape/size/rotation/chairs. */}
