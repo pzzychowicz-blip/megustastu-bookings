@@ -19,6 +19,15 @@ session and keeping it in sync.
 
 ## Deferred
 
+- **The pickers' "10 and 13 need 11 and 12" rule should come from the layout** (v18.6.1
+  `/code-review`). `ManualModal`'s `toggle` and `WalkinForm`'s `wToggle` name the four
+  ids in code, so renaming the indoor tables switches the rule off without a word (it
+  was off in PROD from the 1–13 rename until v18.6.1), and any layout that has tables
+  10 and 13 gets it whether they are the ends of a run or not. It also refuses a set
+  the default layout declares, 1+2+9+10+13 (seats 12). Decide what the rule is in
+  layout terms (the two ends of a join group plus the standalone beside it? floor-plan
+  adjacency?) before writing it once, in `lib/`.
+
 - **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send

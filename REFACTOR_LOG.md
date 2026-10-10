@@ -34803,7 +34803,10 @@ join groups (section 2). A stored layout is read exactly as before.
 fingerprint of `sanitizeLayout` is re-pinned, section 3).
 **Deploy steps (Patryk):** none beyond the merge. PROD's tables were renamed in
 Settings → Layout before this version (Patryk, 2026-10-10), so PROD has a stored
-`settings/layout` and never reads the default; this release changes nothing there.
+`settings/layout` and never reads the default. **One thing does change there**
+(the `/code-review`, section 5): the table pickers' rule that 10 and 13 cannot be
+picked together without 11 and 12 works again; it named `i1`…`i4` in code and has
+done nothing in PROD since the rename.
 Had it had no node, the first load would have switched it to 1–13 and left bookings
 stored on `1A`, `5A`, `i1`… in the Unplaced row. Renaming a table in Settings →
 Layout does not rename it on bookings already stored (the editor says so), and this
@@ -34895,3 +34898,32 @@ ids are the ones a layout does NOT have, on purpose.
   ids, no double-booking on the fixture's day. The barrel still builds
   (`vite.lib.config.mjs`). **The previews were not re-rendered or re-uploaded**: that
   is `/design-sync`, which stages its own `.ds-sync/` and sends to Claude Design.
+
+### 5. `/code-review` of the branch (2026-10-10)
+
+Seven findings, each checked before it was acted on.
+
+1. **The deploy note said the release changes nothing in PROD. Fixed (the note).**
+   `ManualModal` and `WalkinForm` refuse 10 + 13 without 11 and 12, by id, in code. PROD's
+   tables have been 10–13 since the rename, so the rule (which looked for `i1`…`i4`)
+   has not fired there since; with this release it does again. Read in the two
+   files; PROD itself was not looked at.
+2. **That rule refuses a set the layout declares: 1+2+9+10+13 (seats 12). No change.**
+   The old default had the same pair (`1A+1B+7+i1+i4` beside the `i1`/`i4` rule), so
+   it is what the pickers did before the rename. ROADMAP has it with finding 4.
+3. **A stored layout with a field missing takes the default's for that field. No
+   change.** `sanitizeLayout` and `buildLayout` fall back per field (join groups, seat
+   overrides, mega combos; the whole priorities object), and the default's ids now
+   name other tables for a layout still on 1A…i4: its old 3+4 would read the
+   default's `"3|4": 5`. No database known to be in that state: PROD and DEV were
+   both saved from the editor, which writes every field, after their rename.
+4. **The rule is four ids in two components. Not done, in ROADMAP:** it should come
+   from the layout (a rename killed it once already).
+5. **Nothing tested that a rule's or a seat override's key is the key of a real
+   combo. Fixed.** A key is the ids in STRING order (`"1|13|2|9"`); one in counting
+   order names real tables and matches nothing. All 15 rules and 9 overrides match
+   today; `tests/layout-default.test.js` holds them to it.
+6. **A comment in `constants.js` named the wrong test file for the 40-combo pin.
+   Fixed.**
+7. **Two comments still named `TABLE_GROUP_STRUCT`** (`constants.js`, `index.css`).
+   **Fixed.**

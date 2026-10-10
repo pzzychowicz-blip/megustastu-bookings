@@ -501,7 +501,7 @@
      all carried the same hand-written `0 8px 32px rgba(0,0,0,0.14)`, which
      never deepened for dark mode the way every --shadow-* token does. */
   --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.14);
-  /* v17.8.0: TABLE_GROUP_STRUCT heading colours, ex-hex in constants.js.
+  /* v17.8.0: the table pickers' group heading colours, ex-hex in constants.js.
      #7c3aed was a third purple, unrelated to --tbl-ind-rgb; both are now
      tied to their zone and both flip for dark, where the originals were
      near-unreadable on the dark sheet. */

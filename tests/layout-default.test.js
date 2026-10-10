@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../scripts/strip-comments.mjs";
 import {
-  DEFAULT_LAYOUT, buildLayout, ALL_TABLES, INDOOR, OUTDOOR, TOTAL_SEATS, VALID_COMBOS, CLUSTERS, TABLE_GROUPS, PRIORITIES,
+  DEFAULT_LAYOUT, buildLayout, comboKey, ALL_TABLES, INDOOR, OUTDOOR, TOTAL_SEATS, VALID_COMBOS, CLUSTERS, TABLE_GROUPS, PRIORITIES,
 } from "../src/lib/constants.js";
 import { sanitizeLayout } from "../src/hooks/useLayout.js";
 
@@ -60,6 +60,19 @@ describe("the default layout (v18.6.1)", () => {
     expect(named.filter((id) => !known.has(id))).toEqual([]);
     expect(Object.keys(DEFAULT_LAYOUT.floorPlan.tables).sort()).toEqual(IDS.slice().sort());
     expect(PRIORITIES.anchors).toEqual(["13", "10"]);
+  });
+
+  // A key is the SORTED ids joined by "|", and the sort is a string sort: the
+  // combo 1+2+9+13 is "1|13|2|9". A key written in counting order names real
+  // tables, so the check above passes it, and matches no combo: the rule or the
+  // seat count it carries would be dead with nothing to show for it.
+  it("every seat override and every combo rule is the key of a combo it builds", () => {
+    const keys = new Set(VALID_COMBOS.map((c) => comboKey(c.ids)));
+    expect(Object.keys(DEFAULT_LAYOUT.comboCaps).filter((k) => !keys.has(k))).toEqual([]);
+    expect(PRIORITIES.comboRules.map((r) => r.key).filter((k) => !keys.has(k))).toEqual([]);
+    expect(PRIORITIES.comboRules).toHaveLength(15);
+    expect(keys.has("1|13|2|9")).toBe(true);
+    expect(keys.has("1|2|9|13")).toBe(false);
   });
 
   it("survives its own sanitizer, floor plan included", () => {

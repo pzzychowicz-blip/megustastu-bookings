@@ -25,7 +25,7 @@
 //   • megaCombos — explicit cross-group big-party combos that pairwise adjacency
 //     can't generate (each {ids, cap}). Appended to the auto combos in order.
 // buildLayout(DEFAULT_LAYOUT) gives 40 combos (10 from the runs, then the 30
-// megaCombos, in order) + CLUSTERS; tests/booking-logic.test.js pins the count.
+// megaCombos, in order) + CLUSTERS; tests/layout-default.test.js pins the count.
 // WA sandbox: explicit ".js" — this file is in the Node ESM chain reached from
 // src/lib/whatsapp.js via booking-logic.js (api/_lib + the :3999 harness import it).
 // Node ESM does not resolve extensionless specifiers; Vite does not care either way.
@@ -835,9 +835,9 @@ export var BTN={tables:"var(--btn-tables)",edit:"var(--btn-edit)",del:"var(--btn
 
 // ── Table groupings for UI pickers ────────────────────────────────────────────
 // Phase B2: shared from here (consumed by TableGrid + App.jsx's Preferred picker).
-// v15.0.0: now a layout-derived live `let` binding (set by setLayout from
-// TABLE_GROUP_STRUCT + the config's live caps). `tables[].cap` is the standalone
-// capacity for the visual chip label.
+// v15.0.0: now a layout-derived live `let` binding (set by setLayout from the
+// layout's join groups, v18.6.1). `tables[].cap` is the standalone capacity for
+// the visual chip label.
 export let TABLE_GROUPS=[];
 
 // ── Seed all layout-derived bindings from DEFAULT_LAYOUT at module load ────────
