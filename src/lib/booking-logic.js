@@ -525,6 +525,13 @@ export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});
 // priorities config names required tables (PRIORITIES.mixedRequire — MGT's seed:
 // 1+2+9), a cross-zone set is allowed only when it includes ALL of them;
 // otherwise any cross-zone set that is a DECLARED combo (in VALID_COMBOS) is allowed.
+export function isMixedLarge(ids){
+  if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
+  var req=PRIORITIES.mixedRequire;
+  if(req.length) return req.every(function(id){return ids.includes(id);});
+  var k=ids.slice().sort().join("|");
+  return VALID_COMBOS.some(function(c){return c.ids.slice().sort().join("|")===k;});
+}
 // v18.6.1: the pick rule a hand-picked set of tables breaks, or null. A rule
 // (settings/layout.pickRules, live as PICK_RULES) names two tables that may be
 // in one set only with every table of its `need`. A set that holds a whole
@@ -547,13 +554,6 @@ export function pickBlockedBy(ids,rules,combos){
     if(!covered) return r;
   }
   return null;
-}
-export function isMixedLarge(ids){
-  if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
-  var req=PRIORITIES.mixedRequire;
-  if(req.length) return req.every(function(id){return ids.includes(id);});
-  var k=ids.slice().sort().join("|");
-  return VALID_COMBOS.some(function(c){return c.ids.slice().sort().join("|")===k;});
 }
 export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pref!=="auto") return false;if(mixed&&!isMixedLarge(ids)) return false;if(pref==="indoor") return isAllIn(ids);if(pref==="outdoor") return isAllOut(ids);return true;}
 export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}

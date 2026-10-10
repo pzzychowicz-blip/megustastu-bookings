@@ -362,7 +362,6 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   joinGroups.forEach(function (g) { contiguousRuns(g).forEach(function (run) { declared.push({ key: comboKey(run), label: run.join(" + ") }); }); });
   mega.forEach(function (mc) { declared.push({ key: comboKey(mc.ids), label: mc.ids.join(" + ") }); });
 
-  // Which chip-adder picker is open: {kind:"prefer"|"avoid"|"anchor", band} | null.
   // ── v18.6.1: the pick rules (settings/layout.pickRules) ─────────────────────
   // What the table picker and the walk-in form refuse: the two tables of a
   // `pair` together without every table of `need`. Controlled like the rest of
@@ -380,6 +379,7 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
     if (tables.length < 3 || pickRules.length >= PICK_RULES_MAX) return;
     savePick(pickRules.concat([{ pair: [tables[0].id, tables[1].id], need: [] }]));
   }
+  // Which chip-adder picker is open: {kind:"prefer"|"avoid"|"anchor"|"pickPair"|"pickNeed", band} | null.
   const [priPick, setPriPick] = useState(null);
   function samePick(kind, band) { return priPick && priPick.kind === kind && priPick.band === band; }
 
@@ -420,13 +420,16 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
   // repeat per table AND per size band, so "Move up in rank" was one string in
   // the source and a dozen identical names on the page. Null for Anchors, which
   // appears once.
-  // v18.6.1: `opts.max` caps the list (a pick rule's pair is two tables) and
+  // v18.6.1: `opts.max` caps the list (a pick rule's pair is two tables),
   // `opts.exclude` keeps ids out of the add-picker (a pair's tables cannot also
-  // be what the pair needs).
+  // be what the pair needs), and `opts.min` keeps that many chips: a rule whose
+  // pair is emptied is one sanitizeLayout drops, so taking the last table out
+  // of a Pair deleted the rule and its Needs with it (the /code-review).
   function chipRow(label, list, ranked, kind, bandIdx, onChange, rowName, opts) {
     const rowIn = rowName ? " (" + rowName + ")" : "";
     const full = !!(opts && opts.max && list.length >= opts.max);
     const skip = (opts && opts.exclude) || [];
+    const keep = list.length <= ((opts && opts.min) || 0);
     const avail = full ? [] : tableIds.filter(function (id) { return list.indexOf(id) < 0 && skip.indexOf(id) < 0; });
     const open = samePick(kind, bandIdx);
     const last = list.length - 1;
@@ -449,8 +452,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                     style={{ ...GCHIP_BTN, opacity: idx === last ? 0.3 : 1, cursor: idx === last ? "default" : "pointer" }}><ChevronDownIcon size={IC.inline} /></button>
                 ) : null}
                 <button /* @no-lift dense chip/inline row — pre-existing, not reviewed for v18.0.0 */ onClick={function () { onChange(list.filter(function (x) { return x !== id; })); }}
-                  title="Remove" aria-label={"Remove " + id + " from " + label + rowIn}
-                  style={{ ...GCHIP_BTN, color: "var(--danger-text)" }}><CloseIcon size={IC.inline} /></button>
+                  disabled={keep}
+                  title={keep ? "Add the other table first" : "Remove"} aria-label={"Remove " + id + " from " + label + rowIn}
+                  style={{ ...GCHIP_BTN, color: "var(--danger-text)", opacity: keep ? 0.3 : 1, cursor: keep ? "default" : "pointer" }}><CloseIcon size={IC.inline} /></button>
               </span>
             );
           }) : <span style={{ fontSize: T.small, color: "var(--text-faint)" }}>—</span>}
@@ -1043,6 +1047,9 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
         </div>
         {pickRules.map(function (r, i) {
           const ready = r.pair.length === 2 && r.need.length > 0;
+          // A pair that IS a declared combo is always allowed (pickBlockedBy
+          // lets a whole combo through), so its rule can never refuse anything.
+          const moot = ready && declared.some(function (d) { return d.key === comboKey(r.pair); });
           return (
             <div key={i} style={{ padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid var(--border-soft)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1051,11 +1058,13 @@ export function LayoutTabContent({ layout, onSaveLayout = () => {}, bookings = [
                   title="Remove rule" aria-label={"Remove " + pickName(i)}
                   style={{ ...X_BTN, marginLeft: "auto" }}><CloseIcon size={IC.control} /></button>
               </div>
-              {chipRow("Pair", r.pair, false, "pickPair", i, function (l) { setPickRule(i, { pair: l }); }, pickName(i), { max: 2, exclude: r.need })}
+              {chipRow("Pair", r.pair, false, "pickPair", i, function (l) { setPickRule(i, { pair: l }); }, pickName(i), { max: 2, min: 1, exclude: r.need })}
               {chipRow("Needs", r.need, false, "pickNeed", i, function (l) { setPickRule(i, { need: l }); }, pickName(i), { exclude: r.pair })}
-              {ready ? null : (
+              {ready && !moot ? null : (
                 <div style={{ fontSize: T.small, fontWeight: FW.regular, color: "var(--text-faint)", marginTop: 4, paddingLeft: 58   /* @canvas */ }}>
-                  Not in force yet: a rule needs two tables in its Pair and at least one under Needs.
+                  {moot
+                    ? "This rule refuses nothing: " + r.pair.join(" + ") + " is one of the Combos, and a combo is always allowed."
+                    : "Not in force yet: a rule needs two tables in its Pair and at least one under Needs."}
                 </div>
               )}
             </div>

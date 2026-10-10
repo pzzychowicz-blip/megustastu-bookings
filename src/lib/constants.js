@@ -269,14 +269,6 @@ export function contiguousRuns(group){
   return runs;
 }
 
-// v15.9.0: normalize a raw priorities config against the layout's table ids.
-// WHOLE-OBJECT fallback only: an absent/malformed priorities object seeds from
-// DEFAULT_LAYOUT.priorities (a legacy settings/layout node predating v15.9.0);
-// a PRESENT object with missing fields treats each missing field as EMPTY —
-// never per-field DEFAULT — so a tenant who deliberately cleared a rule list
-// doesn't get MGT's rules leaking back (RTDB drops empty arrays; the `v` scalar
-// keeps an all-empty object present). Every table reference is filtered against
-// the CURRENT ids, so removed/renamed tables self-heal at derive time too.
 // v18.6.1: the pick rules as stored and edited: `pair` up to two distinct
 // existing ids, `need` distinct existing ids outside the pair. A rule with a
 // table missing from its pair is KEPT (Settings builds a rule one tap at a
@@ -306,6 +298,14 @@ export function activePickRules(rules){
   return (rules||[]).filter(function(r){return r.pair.length===2&&r.need.length>0;});
 }
 
+// v15.9.0: normalize a raw priorities config against the layout's table ids.
+// WHOLE-OBJECT fallback only: an absent/malformed priorities object seeds from
+// DEFAULT_LAYOUT.priorities (a legacy settings/layout node predating v15.9.0);
+// a PRESENT object with missing fields treats each missing field as EMPTY —
+// never per-field DEFAULT — so a tenant who deliberately cleared a rule list
+// doesn't get MGT's rules leaking back (RTDB drops empty arrays; the `v` scalar
+// keeps an all-empty object present). Every table reference is filtered against
+// the CURRENT ids, so removed/renamed tables self-heal at derive time too.
 function normalizePriorities(p,idSet){
   p=(p&&typeof p==="object")?p:DEFAULT_LAYOUT.priorities;
   var has=function(id){return !!idSet[id];};

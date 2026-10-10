@@ -34982,3 +34982,28 @@ rule and refuses three picks hosts have today); or removed. He chose **stored**.
 Gate: main bundle 134.05 kB gz · 3,161 tests · lint 63 problems, 0 errors · style OK.
 Rules suite not re-run: neither `database.rules.json` nor `tests/rules/` changed
 since its 307 passed.
+
+### 7. `/code-review` of section 6 (2026-10-10)
+
+Five findings, each checked before it was acted on.
+
+1. **Taking the last table out of a rule's Pair deleted the rule, its Needs with it.
+   Fixed.** `sanitizeLayout` drops a rule with an empty pair (RTDB could not hold
+   it), and "+ Add rule" starts from tables 1 and 2, so the natural edit (remove
+   both, add the right two) lost the rule on the second removal. The Pair row keeps
+   its last chip (`chipRow`'s `opts.min`; the ✕ is disabled, titled "Add the other
+   table first"). On DEV: a new rule, one chip removed, the other's ✕ disabled and
+   the rule still there; then the rule removed.
+2. **Taking a table OUT of a set is never asked. Not changed, in ROADMAP.** Pick 10,
+   11, 12, 13, deselect 11, and 10+12+13 saves. The four ids behaved the same;
+   whether the deselect or the Save should refuse is a decision.
+3. **Three comments had been separated from their code** by the functions inserted
+   under them (`isMixedLarge`, `normalizePriorities`, `priPick`). **Fixed.**
+4. **A rule whose Pair is itself a declared combo refuses nothing** (a whole combo is
+   always let through), and the section counted it as a rule. **Fixed** to the
+   extent of saying so under the rule.
+5. **The editor is tested by reading its source. Not changed.** Its three writes are
+   one-line maps over the list, and the checks that matter (what a stored list
+   reads as, what a set is refused for) run the code.
+
+Gate: main bundle 134.05 kB gz · 3,162 tests · lint 63 problems, 0 errors · style OK.

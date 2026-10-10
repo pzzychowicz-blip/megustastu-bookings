@@ -142,6 +142,14 @@ describe("the pickers and the editor", () => {
     const text = code("components/LayoutSettings.jsx");
     expect(text).toContain("pickRules: { v: 1, rules: pickRules.map(function (r) { return { pair: r.pair.map(rmap), need: r.need.map(rmap) }; }) }");
   });
+  // sanitizeLayout drops a rule with nothing in its pair, so the last table of a
+  // Pair cannot be taken out: it deleted the rule and its Needs (the /code-review).
+  it("a Pair keeps its last table", () => {
+    const text = code("components/LayoutSettings.jsx");
+    expect(text).toContain("{ max: 2, min: 1, exclude: r.need }");
+    expect(text).toContain("const keep = list.length <= ((opts && opts.min) || 0);");
+    expect(text).toContain("disabled={keep}");
+  });
   it("every edit writes the whole list under its marker", () => {
     const text = code("components/LayoutSettings.jsx");
     expect(text).toContain("function savePick(rules) { onSaveLayout({ ...layout, pickRules: { v: 1, rules: rules } }); }");
