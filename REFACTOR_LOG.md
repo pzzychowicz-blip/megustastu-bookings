@@ -34801,14 +34801,13 @@ plan in place of the auto-placed grid. The table pickers group every layout by i
 join groups (section 2). A stored layout is read exactly as before.
 **Rules change:** none. **`SCHEMA`:** not raised (nothing new is stored; the
 fingerprint of `sanitizeLayout` is re-pinned, section 3).
-**Deploy steps (Patryk):** (1) **before the merge, check that PROD has a
-`settings/layout` node** (Firebase console). If it has, this release changes nothing
-there. If it has none, PROD would switch to tables 1–13 on the first load, and every
-booking stored on `1A`, `5A`, `i1`… would show in the Unplaced row; save the layout
-once in Settings → Layout first, or tell me and the release gets a migration.
-(2) Renaming a table in Settings → Layout does not rename it on bookings already
-stored (the editor says so: "they won't follow the rename"), and no version has ever
-done that; this one does not either.
+**Deploy steps (Patryk):** none beyond the merge. PROD's tables were renamed in
+Settings → Layout before this version (Patryk, 2026-10-10), so PROD has a stored
+`settings/layout` and never reads the default; this release changes nothing there.
+Had it had no node, the first load would have switched it to 1–13 and left bookings
+stored on `1A`, `5A`, `i1`… in the Unplaced row. Renaming a table in Settings →
+Layout does not rename it on bookings already stored (the editor says so), and this
+version does not either.
 
 The restaurant renumbered its tables (Patryk, 2026-10-10: "Now it is as DEV is set.
 That's the new default layout."). Old to new, in order:
