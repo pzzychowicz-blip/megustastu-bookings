@@ -17,48 +17,48 @@ const CLOSE = m("23:00");
 
 describe("nextBusyAt — the first minute after `at` that claims the table", () => {
   const day = [
-    bk("a", "19:30", ["1A"]),
-    bk("b", "21:00", ["1A"], "pending"),
-    bk("c", "18:00", ["1A"]),                 // before `at`: not "next"
-    bk("d", "19:00", ["2"]),                  // another table
-    bk("e", "19:15", ["1A"], "completed"),    // a completed visit frees its table
-    bk("f", "19:10", ["1A"], "cancelled"),
+    bk("a", "19:30", ["1"]),
+    bk("b", "21:00", ["1"], "pending"),
+    bk("c", "18:00", ["1"]),                 // before `at`: not "next"
+    bk("d", "19:00", ["3"]),                  // another table
+    bk("e", "19:15", ["1"], "completed"),    // a completed visit frees its table
+    bk("f", "19:10", ["1"], "cancelled"),
   ];
 
   it("takes the earliest later start on that table, any status that still holds it", () => {
-    expect(nextBusyAt("1A", m("18:30"), day, [], CLOSE)).toBe(m("19:30"));
-    expect(nextBusyAt("1A", m("19:45"), day, [], CLOSE)).toBe(m("21:00"));
+    expect(nextBusyAt("1", m("18:30"), day, [], CLOSE)).toBe(m("19:30"));
+    expect(nextBusyAt("1", m("19:45"), day, [], CLOSE)).toBe(m("21:00"));
     // A later SEATED booking counts: scrubbed back before a party sat down.
-    expect(nextBusyAt("5A", m("17:00"), [bk("s", "19:00", ["5A"], "seated")], [], CLOSE)).toBe(m("19:00"));
+    expect(nextBusyAt("6", m("17:00"), [bk("s", "19:00", ["6"], "seated")], [], CLOSE)).toBe(m("19:00"));
   });
 
   it("answers the day's end when nothing needs the table again", () => {
-    expect(nextBusyAt("1A", m("21:30"), day, [], CLOSE)).toBe(CLOSE);
-    expect(nextBusyAt("7", m("13:00"), day, [], CLOSE)).toBe(CLOSE);
+    expect(nextBusyAt("1", m("21:30"), day, [], CLOSE)).toBe(CLOSE);
+    expect(nextBusyAt("9", m("13:00"), day, [], CLOSE)).toBe(CLOSE);
   });
 
   it("a table block starting later counts like a booking", () => {
-    const blocks = [{ tables: ["1A"], s: m("19:00"), e: m("20:00") }, { tables: ["2"], s: m("18:45"), e: m("19:00") }];
-    expect(nextBusyAt("1A", m("18:30"), day, blocks, CLOSE)).toBe(m("19:00"));
+    const blocks = [{ tables: ["1"], s: m("19:00"), e: m("20:00") }, { tables: ["3"], s: m("18:45"), e: m("19:00") }];
+    expect(nextBusyAt("1", m("18:30"), day, blocks, CLOSE)).toBe(m("19:00"));
   });
 });
 
 describe("freeWindow — what the plan draws for a free table", () => {
-  const day = [bk("a", "19:30", ["1A"])];
+  const day = [bk("a", "19:30", ["1"])];
 
   it("`until` is the next claim, or null when free to closing (no label then)", () => {
-    expect(freeWindow("1A", m("18:00"), day, [], CLOSE, 90).until).toBe(m("19:30"));
-    expect(freeWindow("2", m("18:00"), day, [], CLOSE, 90).until).toBeNull();
+    expect(freeWindow("1", m("18:00"), day, [], CLOSE, 90).until).toBe(m("19:30"));
+    expect(freeWindow("3", m("18:00"), day, [], CLOSE, 90).until).toBeNull();
   });
 
   it("`fits` is a whole visit before that claim — exactly enough fits", () => {
-    expect(freeWindow("1A", m("18:00"), day, [], CLOSE, 90).fits).toBe(true);    // 90 of 90
-    expect(freeWindow("1A", m("18:01"), day, [], CLOSE, 90).fits).toBe(false);   // 89 of 90
-    expect(freeWindow("1A", m("18:00"), day, [], CLOSE, 90 + 15).fits).toBe(false); // + turnaround
+    expect(freeWindow("1", m("18:00"), day, [], CLOSE, 90).fits).toBe(true);    // 90 of 90
+    expect(freeWindow("1", m("18:01"), day, [], CLOSE, 90).fits).toBe(false);   // 89 of 90
+    expect(freeWindow("1", m("18:00"), day, [], CLOSE, 90 + 15).fits).toBe(false); // + turnaround
   });
 
   it("a table free to closing still has to fit before the day ends", () => {
-    expect(freeWindow("2", m("22:00"), day, [], CLOSE, 90)).toEqual({ until: null, fits: false });
+    expect(freeWindow("3", m("22:00"), day, [], CLOSE, 90)).toEqual({ until: null, fits: false });
   });
 });
 

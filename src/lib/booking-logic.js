@@ -522,7 +522,7 @@ export function isAllIn(ids){return ids.every(isIn);}
 export function isAllOut(ids){return ids.every(function(id){return !isIn(id);});}
 // v15.0.0 Phase 5 / v15.9.0: a "mixed-large" combo spans both zones. When the
 // priorities config names required tables (PRIORITIES.mixedRequire — MGT's seed:
-// 1A+1B+7), a cross-zone set is allowed only when it includes ALL of them;
+// 1+2+9), a cross-zone set is allowed only when it includes ALL of them;
 // otherwise any cross-zone set that is a DECLARED combo (in VALID_COMBOS) is allowed.
 export function isMixedLarge(ids){
   if(!ids.some(isIn)||!ids.some(function(id){return !isIn(id);})) return false;
@@ -641,7 +641,7 @@ export function canAssign(ids,slots,s,e){
 // config both return 0 (no preference) — the optimizer then ranks combos purely by
 // _comboLoc (zone grouping, layout-agnostic) + capacity/length. _comboLoc stays on.
 // _indoorPri: ranked anchor tables inside cross-zone combos; the earliest-ranked
-// anchor present wins, boost = anchors.length - index (MGT seed: i4→2, i1→1).
+// anchor present wins, boost = anchors.length - index (MGT seed: 13→2, 10→1).
 function _indoorPri(c){var an=PRIORITIES.anchors;for(var i=0;i<an.length;i++){if(c.ids.indexOf(an[i])>=0) return an.length-i;}return 0;}
 function _comboLoc(c){if(isAllOut(c.ids)) return 0;if(isAllIn(c.ids)) return 1;return 2;}
 // _comboPri: first comboRule matching (key, size band) wins — avoid → +100 (last
@@ -656,7 +656,7 @@ function _comboPri(c,size){var k=c.ids.slice().sort().join("|");var rules=PRIORI
 //      reported bug: an 8-top on 7 took a 5-table combo);
 //   2. then the coded PREFERENCE rules (PRIORITIES.comboRules — editable in
 //      Settings → Layout → Table priorities), so within one footprint the
-//      preferred attach wins (e.g. 1A+1B+7+i4/i1 over +i2/+i3). The rule match
+//      preferred attach wins (e.g. 1+2+9+13/10 over +11/+12). The rule match
 //      is BAND-AGNOSTIC here (key only, size ignored) — a drop honors the
 //      preference regardless of the rule's optimizer size-band, per Patryk;
 //   3. then least capacity (fewest wasted seats), then id for determinism.

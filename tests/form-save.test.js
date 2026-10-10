@@ -16,7 +16,7 @@ const WEEK = Object.assign({}, DEFAULT_WEEK_HOURS, {
   6: { open: 10, close: 24, closed: false },
 });
 const draft = (over) => Object.assign({ name: "Ana", phone: "", date: TUE, time: "19:00", size: 2, status: "confirmed" }, over);
-const bk = (id, over) => Object.assign({ id, name: id, phone: "", date: TUE, time: "19:00", size: 2, duration: 90, status: "confirmed", tables: ["3"] }, over);
+const bk = (id, over) => Object.assign({ id, name: id, phone: "", date: TUE, time: "19:00", size: 2, duration: 90, status: "confirmed", tables: ["4"] }, over);
 afterEach(() => setWeekHours(DEFAULT_WEEK_HOURS));
 
 describe("draftForSave — the draft a save works on", () => {
@@ -80,13 +80,13 @@ describe("draftRefusal — the first field a save refuses", () => {
 });
 
 describe("formSeatClash — who is sitting where an edit seats its booking", () => {
-  const day = [bk("mine"), bk("other", { status: "seated" }), bk("far", { status: "seated", tables: ["6"] })];
+  const day = [bk("mine"), bk("other", { status: "seated" }), bk("far", { status: "seated", tables: ["8"] })];
   it("names the seated party on the booking's own tables", () => {
     const out = formSeatClash(draft({ status: "seated" }), "mine", day);
-    expect(out.map((p) => [p.booking.id, p.tables])).toEqual([["other", ["3"]]]);
+    expect(out.map((p) => [p.booking.id, p.tables])).toEqual([["other", ["4"]]]);
   });
   it("reads the form's picked tables before the booking's own", () => {
-    const out = formSeatClash(draft({ status: "seated", manualTables: ["6"] }), "mine", day);
+    const out = formSeatClash(draft({ status: "seated", manualTables: ["8"] }), "mine", day);
     expect(out.map((p) => p.booking.id)).toEqual(["far"]);
   });
   it("asks nothing for a new booking, another status, or a booking already seated", () => {

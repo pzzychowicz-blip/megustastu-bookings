@@ -438,8 +438,8 @@ const KEPT = {
 const RICH = sanitize({
   id: "rich", name: "Ana Ruiz", phone: ANA, date: day(1), time: "20:30", scheduledTime: "20:15",
   size: 4, duration: 105, originalDuration: 100, preference: "outdoor", notes: "nut allergy, window seat",
-  status: "cancelled", tables: ["7"], customDur: 105, _manual: true, _locked: true, _conflict: true,
-  preferredTables: ["7"], returnOf: "src1",
+  status: "cancelled", tables: ["9"], customDur: 105, _manual: true, _locked: true, _conflict: true,
+  preferredTables: ["9"], returnOf: "src1",
   history: [{ at: "2026-09-01T10:00:00.000Z", by: "t", action: "created" }],
   noShow: true, deposit: 20, voucherCode: "ABCD2345", recurringId: "rule1", recurringDate: day(1),
   anonymized: false, guestId: "gana", stayedMin: 80, updatedAt: 1790000000000,
@@ -547,7 +547,7 @@ describe("what a screen shows for a booking: bookingTags and tagLine", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 describe("the seat note, when the form's Save seats the party", () => {
   // Today, so the party can be seated; a table, so nothing refuses the seat.
-  const seatable = (o) => bk("s1", Object.assign({ date: today, time: "20:00", tables: ["3"], _manual: true, _locked: true }, o));
+  const seatable = (o) => bk("s1", Object.assign({ date: today, time: "20:00", tables: ["4"], _manual: true, _locked: true }, o));
 
   it("carries a tag tapped in the same save, and the guest's from another booking", () => {
     const list = [seatable({ phone: ANA }), says("a9", ANA, [A], 100, { date: day(3) })];

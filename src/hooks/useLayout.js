@@ -49,8 +49,8 @@ import { emitActivity } from "../lib/activitySink";
 // anyway, so this is naturally safe); an ABSENT floorPlan — or any table with
 // no stored entry (a newly added table, or first run) — gets a deterministic
 // AUTO placement (rows grouped by zone) so the Plan view works before any
-// editing. Entries for removed tables are dropped. NOT part of layoutSignature
-// (like priorities) — editing the plan never kills IS_MGT_LAYOUT.
+// editing. Entries for removed tables are dropped. NOT read by buildLayout
+// (like priorities), so a plan edit changes nothing the optimiser reads.
 const FP_MIN_ROOM = 300, FP_MAX_ROOM = 4000;
 function fpNum(n, def, min, max){
   let v = Math.round(Number(n));
@@ -127,8 +127,14 @@ export function sanitizeFloorPlan(raw, tables){
   return { v: 1, room: room, tables: outT, walls: walls, doors: doors };
 }
 
-function sanitizeLayout(val){
-  if(!val || typeof val !== "object" || !Array.isArray(val.tables)) return DEFAULT_LAYOUT;
+// v18.6.1: the default WITH its floor plan run through the sanitizer, so the
+// three places that fall back to it hand out the same shape a stored layout has.
+function defaultLayout(){
+  return { ...DEFAULT_LAYOUT, floorPlan: sanitizeFloorPlan(DEFAULT_LAYOUT.floorPlan, DEFAULT_LAYOUT.tables) };
+}
+
+export function sanitizeLayout(val){
+  if(!val || typeof val !== "object" || !Array.isArray(val.tables)) return defaultLayout();
   const seen = {};
   const tables = [];
   val.tables.forEach(function(t){
@@ -142,7 +148,7 @@ function sanitizeLayout(val){
     const zone = t.zone === "indoor" ? "indoor" : "outdoor";
     tables.push({ id: id, capacity: cap, zone: zone });
   });
-  if(!tables.length) return DEFAULT_LAYOUT;
+  if(!tables.length) return defaultLayout();
   const idSet = {}; tables.forEach(function(t){ idSet[t.id] = true; });
 
   let kitchenLimit = Math.round(Number(val.kitchenLimit));
@@ -234,16 +240,15 @@ function sanitizeLayout(val){
   };
 
   // v17.0.0: floor plan rides along on the same node (same layoutRev CAS).
-  // Deliberately NOT in layoutSignature — plan edits never affect IS_MGT_LAYOUT.
   return { tables: tables, joinGroups: joinGroups, comboCaps: comboCaps, megaCombos: megaCombos, kitchenLimit: kitchenLimit, priorities: priorities, floorPlan: sanitizeFloorPlan(val.floorPlan, tables) };
 }
 
 export function useLayout(){
   // Seeded with DEFAULT_LAYOUT (already applied to the bindings at import).
-  // v17.0.0: + an auto-generated floorPlan so the Plan view/editor always have
-  // geometry, even before the first settings/layout snapshot arrives.
+  // v17.0.0: + a floor plan so the Plan view/editor always have geometry, even
+  // before the first settings/layout snapshot arrives (v18.6.1: the default's own).
   const [layout, setLO] = useState(function(){
-    return { ...DEFAULT_LAYOUT, floorPlan: sanitizeFloorPlan(null, DEFAULT_LAYOUT.tables) };
+    return defaultLayout();
   });
   const loaded = useRef(false);
   // v16.0.0: revision-CAS ref (lib/revGuard.js) — a stale device's overwrite is

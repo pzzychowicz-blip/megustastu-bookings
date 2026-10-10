@@ -34,7 +34,7 @@ its row there, in the same PR — the way `ROADMAP.md` is kept current.
 - **Repo:** `github.com/pzzychowicz-blip/megustastu-bookings`
 - **Live:** `https://megustastu-bookings.vercel.app/`
 - **Current version:** see `src/App.jsx` → `__APP_SIGNATURE__.version` (single source of truth)
-- **Layout context:** 9 outdoor tables (1A, 1B, 2, 3, 4, 5A, 5B, 6, 7) + 4 indoor (i1–i4). Operating hours 13:00–22:00.
+- **Layout context:** 9 outdoor tables (1–9; table 9 seats 4) + 4 indoor (10–13), renumbered in v18.6.1 from 1A, 1B, 2, 3, 4, 5A, 5B, 6, 7 and i1–i4, in that order. Operating hours 13:00–22:00.
 - **Sibling app:** MGT Scheduling (`github.com/pzzychowicz-blip/megustastu-scheduling`) — same UI conventions, separate repo, separate Firebase project. Use it as the style/pattern reference; keep the two consistent. Improve a shared pattern in one app → port it to the other rather than letting them drift.
 
 ---

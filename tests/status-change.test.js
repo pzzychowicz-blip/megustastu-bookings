@@ -66,19 +66,19 @@ describe("planStatus: the questions, in the order they are asked", () => {
   });
 
   it("asks whether to redeem before a booking with an open voucher completes", () => {
-    const list = [bk("a", "20:00", 2, ["2"], { voucherCode: "OPEN2345" })];
+    const list = [bk("a", "20:00", 2, ["3"], { voucherCode: "OPEN2345" })];
     expect(status("a", "completed", list, { vouchersByCode: open }).plan)
       .toStrictEqual({ voucherAsk: { id: "a", status: "completed", from: "status" } });
   });
 
   it("and writes once that question has been answered", () => {
-    const list = [bk("a", "20:00", 2, ["2"], { voucherCode: "OPEN2345" })];
+    const list = [bk("a", "20:00", 2, ["3"], { voucherCode: "OPEN2345" })];
     const { plan } = status("a", "completed", list, { vouchersByCode: open, redeemAsked: true });
     expect(byId(plan.transform(list), "a").status).toBe("completed");
   });
 
   it("asks whether to restore when a visit that redeemed leaves Completed", () => {
-    const list = [bk("a", "20:00", 2, ["2"], { status: "completed", voucherCode: "USED2345" })];
+    const list = [bk("a", "20:00", 2, ["3"], { status: "completed", voucherCode: "USED2345" })];
     for (const to of ["confirmed", "pending", "seated"]) {
       expect(status("a", to, list, { vouchersByCode: spentHere }).plan, to)
         .toStrictEqual({ voucherBack: { id: "a", status: to, from: "status" } });
@@ -86,7 +86,7 @@ describe("planStatus: the questions, in the order they are asked", () => {
   });
 
   it("asks neither with the vouchers module off", () => {
-    const list = [bk("a", "20:00", 2, ["2"], { voucherCode: "OPEN2345" })];
+    const list = [bk("a", "20:00", 2, ["3"], { voucherCode: "OPEN2345" })];
     const { plan } = status("a", "completed", list, { vouchersByCode: open, vouchersOn: false });
     expect(plan.voucherAsk).toBeUndefined();
     expect(typeof plan.transform).toBe("function");
@@ -98,13 +98,13 @@ describe("planStatus: the questions, in the order they are asked", () => {
   });
 
   it("asks about the party still seated at the table, with a snapshot of them", () => {
-    const list = [bk("a", "20:00", 2, ["2", "3"]), bk("s", "18:30", 4, ["3", "4"], { status: "seated" }), bk("c", "18:00", 2, ["2"])];
+    const list = [bk("a", "20:00", 2, ["3", "4"]), bk("s", "18:30", 4, ["4", "5"], { status: "seated" }), bk("c", "18:00", 2, ["3"])];
     expect(status("a", "seated", list).plan).toStrictEqual({ seatClash: { id: "a", status: "seated", from: "status",
-      others: [{ id: "s", name: "S", time: "18:30", tables: ["3"] }] } });
+      others: [{ id: "s", name: "S", time: "18:30", tables: ["4"] }] } });
   });
 
   it("and seats once that question has been answered", () => {
-    const list = [bk("a", "20:00", 2, ["3"]), bk("s", "18:30", 4, ["3"], { status: "seated" })];
+    const list = [bk("a", "20:00", 2, ["4"]), bk("s", "18:30", 4, ["4"], { status: "seated" })];
     const { plan } = status("a", "seated", list, { seatAsked: true });
     expect(byId(plan.transform(list), "a").status).toBe("seated");
   });
@@ -118,13 +118,13 @@ describe("planStatus: the questions, in the order they are asked", () => {
 
   it("asks who the user is once, and only on the path that writes", () => {
     expect(status("a", "seated", [bk("a", "20:00", 2, [])]).asked).toEqual([]);
-    expect(status("a", "seated", [bk("a", "20:00", 2, ["2"])]).asked).toEqual(["user"]);
+    expect(status("a", "seated", [bk("a", "20:00", 2, ["3"])]).asked).toEqual(["user"]);
   });
 });
 
 describe("planStatus: what a status tap writes", () => {
   it("seats a party that arrives early at the minute it sat down, the booked end kept", () => {
-    const list = [bk("a", "20:30", 2, ["2"], { duration: 150, originalDuration: 150 })];
+    const list = [bk("a", "20:30", 2, ["3"], { duration: 150, originalDuration: 150 })];
     const { plan } = status("a", "seated", list);
     expect(byId(plan.transform(list), "a")).toStrictEqual(Object.assign({}, list[0], {
       status: "seated", time: "20:15", duration: 165, originalDuration: 165, customDur: 165,
@@ -135,29 +135,29 @@ describe("planStatus: what a status tap writes", () => {
 
   it("a seat never lets the optimiser move anybody else; a completion does", () => {
     // On today with the switch on, the pass moves a party of two off table 7.
-    const list = [bk("a", "20:00", 2, ["2"]), bk("o", "13:00", 2, ["7"])];
+    const list = [bk("a", "20:00", 2, ["3"]), bk("o", "13:00", 2, ["9"])];
     const seat = status("a", "seated", list, { autoOptimizer: true }).plan.transform(list);
     expect(byId(seat, "o")).toBe(list[1]);
     const done = status("a", "completed", list, { autoOptimizer: true });
-    expect(byId(done.plan.transform(list), "o").tables).not.toEqual(["7"]);
+    expect(byId(done.plan.transform(list), "o").tables).not.toEqual(["9"]);
     expect([done.plan.flashes, done.plan.flashKind]).toEqual([true, null]);
   });
 
   it("cuts a seated visit's length to the stay when it completes, and stamps the stay", () => {
-    const list = [bk("a", "19:00", 2, ["2"], { status: "seated" })];
+    const list = [bk("a", "19:00", 2, ["3"], { status: "seated" })];
     const a = byId(status("a", "completed", list, { nowMins: 20 * 60 + 10 }).plan.transform(list), "a");
     expect([a.status, a.duration, a.customDur, a.stayedMin]).toEqual(["completed", 70, 70, 70]);
     expect(a.history).toEqual([{ action: "status → completed", by: "u@x" }]);
   });
 
   it("leaves the length alone when a booking completes without having been seated", () => {
-    const list = [bk("a", "13:00", 2, ["2"])];
+    const list = [bk("a", "13:00", 2, ["3"])];
     const a = byId(status("a", "completed", list, { nowMins: 21 * 60 }).plan.transform(list), "a");
     expect([a.status, a.duration, a.customDur, a.stayedMin]).toEqual(["completed", 90, undefined, undefined]);
   });
 
   it("puts the booked plan back when a seated party is walked back", () => {
-    const seated = bk("a", "20:15", 2, ["2"], { scheduledTime: "20:30", duration: 165, originalDuration: 165, status: "seated" });
+    const seated = bk("a", "20:15", 2, ["3"], { scheduledTime: "20:30", duration: 165, originalDuration: 165, status: "seated" });
     for (const to of ["confirmed", "pending"]) {
       const { plan } = status("a", to, [seated]);
       const a = byId(plan.transform([seated]), "a");
@@ -168,16 +168,16 @@ describe("planStatus: what a status tap writes", () => {
   });
 
   it("carries the booking's notes for the seat note, at its booked time", () => {
-    const list = [bk("a", "20:30", 4, ["2", "3"], { notes: " nut allergy " })];
+    const list = [bk("a", "20:30", 4, ["3", "4"], { notes: " nut allergy " })];
     expect(status("a", "seated", list).plan.seatNote)
-      .toStrictEqual({ id: "a", name: "A", size: 4, time: "20:30", tables: ["2", "3"], notes: "nut allergy", guestTags: [], occasionTags: [] });
+      .toStrictEqual({ id: "a", name: "A", size: 4, time: "20:30", tables: ["3", "4"], notes: "nut allergy", guestTags: [], occasionTags: [] });
     expect(status("a", "completed", list).plan.seatNote).toBe(null);
   });
 
   it("v18.5.0: carries the party's tags, the guest's read from another of their bookings", () => {
     const tagList = { v: 1, guest: [{ id: "g-allergy", label: "Allergy" }], occasion: [{ id: "o-birthday", label: "Birthday" }] };
     const list = [
-      bk("a", "20:30", 2, ["2"], { phone: "+34 600 111 222", tags: ["o-birthday"] }),
+      bk("a", "20:30", 2, ["3"], { phone: "+34 600 111 222", tags: ["o-birthday"] }),
       bk("old", "20:30", 2, [], { phone: "+34 600 111 222", date: "2026-01-05", status: "completed", guestTags: ["g-allergy"], guestTagsAt: 5 }),
     ];
     const note = status("a", "seated", list, { tagList }).plan.seatNote;
@@ -187,16 +187,16 @@ describe("planStatus: what a status tap writes", () => {
   });
 
   it("runs on the list it is handed, so a parked write replays on fresh data", () => {
-    const list = [bk("a", "20:00", 2, ["2"])];
+    const list = [bk("a", "20:00", 2, ["3"])];
     const { plan } = status("a", "completed", list);
-    const fresh = [bk("a", "20:00", 2, ["4"], { name: "Renamed" }), bk("n", "21:00", 2, ["3"])];
+    const fresh = [bk("a", "20:00", 2, ["5"], { name: "Renamed" }), bk("n", "21:00", 2, ["4"])];
     const out = plan.transform(fresh);
-    expect([byId(out, "a").name, byId(out, "a").tables, byId(out, "a").status]).toEqual(["Renamed", ["4"], "completed"]);
+    expect([byId(out, "a").name, byId(out, "a").tables, byId(out, "a").status]).toEqual(["Renamed", ["5"], "completed"]);
     expect(byId(out, "n")).toBe(fresh[1]);
   });
 
   it("writes nothing for a booking that is no longer in the list", () => {
-    const list = [bk("b", "20:00", 2, ["2"])];
+    const list = [bk("b", "20:00", 2, ["3"])];
     const out = status("gone", "completed", list).plan.transform(list);
     expect(out.length).toBe(1);
     expect(out[0]).toBe(list[0]);
@@ -210,7 +210,7 @@ describe("planCancel", () => {
   }, more || {}));
 
   it("asks whether to restore before a visit that redeemed is cancelled", () => {
-    const list = [bk("a", "20:00", 2, ["2"], { status: "completed", voucherCode: "USED2345" })];
+    const list = [bk("a", "20:00", 2, ["3"], { status: "completed", voucherCode: "USED2345" })];
     const by = { USED2345: voucher("USED2345", taken("a")) };
     expect(cancel("a", undefined, list, { vouchersByCode: by }))
       .toStrictEqual({ voucherBack: { id: "a", status: "cancelled", noShow: false, from: "cancel" } });
@@ -219,20 +219,20 @@ describe("planCancel", () => {
   });
 
   it("cancels with one history line, and no no-show key", () => {
-    const list = [bk("a", "20:00", 2, ["2"]), bk("b", "20:00", 2, ["3"])];
+    const list = [bk("a", "20:00", 2, ["3"]), bk("b", "20:00", 2, ["4"])];
     const out = cancel("a", false, list).transform(list);
     expect(byId(out, "a")).toStrictEqual(Object.assign({}, list[0], { status: "cancelled", history: [{ action: "cancelled", by: "u@x" }] }));
     expect(byId(out, "b")).toBe(list[1]);
   });
 
   it("a no-show is a cancellation with the flag and its own history word", () => {
-    const list = [bk("a", "20:00", 2, ["2"])];
+    const list = [bk("a", "20:00", 2, ["3"])];
     const a = byId(cancel("a", true, list).transform(list), "a");
     expect([a.status, a.noShow, a.history]).toEqual(["cancelled", true, [{ action: "no show", by: "u@x" }]]);
   });
 
   it("computes once per list: the undo's copy and the write's are the same object", () => {
-    const list = [bk("a", "20:00", 2, ["2"])];
+    const list = [bk("a", "20:00", 2, ["3"])];
     const plan = cancel("a", false, list);
     expect(plan.transform(list)).toBe(plan.transform(list));
     const fresh = list.slice();
@@ -243,9 +243,9 @@ describe("planCancel", () => {
 describe("completeCleared", () => {
   it("completes the listed parties that are still seated, and nobody else", () => {
     const list = [
-      bk("s", "19:00", 2, ["3"], { status: "seated" }),
-      bk("c", "19:00", 2, ["4"]),                           // listed, but not seated
-      bk("t", "19:00", 2, ["5A"], { status: "seated" }),    // seated, but not listed
+      bk("s", "19:00", 2, ["4"], { status: "seated" }),
+      bk("c", "19:00", 2, ["5"]),                           // listed, but not seated
+      bk("t", "19:00", 2, ["6"], { status: "seated" }),    // seated, but not listed
     ];
     const out = completeCleared({ ids: ["s", "c", "nobody"], today: TODAY, nowM: 20 * 60 + 10, user: "u@x", stamp })(list);
     expect(byId(out, "s")).toStrictEqual(Object.assign({}, list[0], {
@@ -259,10 +259,10 @@ describe("completeCleared", () => {
 
 describe("the two money questions (lib/vouchers.js)", () => {
   const list = [
-    bk("a", "20:00", 2, ["2"], { voucherCode: "OPEN2345" }),
-    bk("d", "20:00", 2, ["3"], { status: "completed", voucherCode: "USED2345" }),
-    bk("n", "20:00", 2, ["4"]),
-    bk("m", "20:00", 2, ["4"], { voucherCode: "GONE2345" }),
+    bk("a", "20:00", 2, ["3"], { voucherCode: "OPEN2345" }),
+    bk("d", "20:00", 2, ["4"], { status: "completed", voucherCode: "USED2345" }),
+    bk("n", "20:00", 2, ["5"]),
+    bk("m", "20:00", 2, ["5"], { voucherCode: "GONE2345" }),
   ];
   const by = {
     OPEN2345: voucher("OPEN2345"),
@@ -305,8 +305,8 @@ describe("the two money questions (lib/vouchers.js)", () => {
 
 describe("seatClashSnap", () => {
   it("keeps the four things the prompt prints, and blanks a missing name or time", () => {
-    expect(seatClashSnap([{ booking: { id: "s", name: "Sol", time: "19:00", notes: "x" }, tables: ["3"] }, { booking: { id: "t" }, tables: ["4", "5A"] }]))
-      .toStrictEqual([{ id: "s", name: "Sol", time: "19:00", tables: ["3"] }, { id: "t", name: "", time: "", tables: ["4", "5A"] }]);
+    expect(seatClashSnap([{ booking: { id: "s", name: "Sol", time: "19:00", notes: "x" }, tables: ["4"] }, { booking: { id: "t" }, tables: ["5", "6"] }]))
+      .toStrictEqual([{ id: "s", name: "Sol", time: "19:00", tables: ["4"] }, { id: "t", name: "", time: "", tables: ["5", "6"] }]);
   });
 });
 

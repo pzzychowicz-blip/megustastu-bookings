@@ -114,19 +114,19 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   const getCapOf = comboCapBest;
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
-  // accumulate redundant tables once `needed` is met. Refuses i1+i4 without
-  // i2 AND i3 (the indoor cluster must be physically contiguous).
+  // accumulate redundant tables once `needed` is met. Refuses 10+13 without
+  // 11 AND 12 (the indoor cluster must be physically contiguous).
   function toggle(id) {
     if (selected.includes(id)) { setSelected(selected.filter((x) => x !== id)); return; }
     if (busy.has(id) && !(swapBusy && !seatedBusy.has(id))) return;
     let next = selected.concat([id]);
-    let h1 = next.includes("i1"), h4 = next.includes("i4"), h2 = next.includes("i2"), h3 = next.includes("i3");
+    let h1 = next.includes("10"), h4 = next.includes("13"), h2 = next.includes("11"), h3 = next.includes("12");
     if (h1 && h4 && (!h2 || !h3)) return;
     if (selected.length > 0 && getCapOf(selected) >= needed) {
       let trimmed = selected.slice();
       while (trimmed.length > 0 && getCapOf(trimmed) >= needed) { trimmed = trimmed.slice(1); }
       next = trimmed.concat([id]);
-      h1 = next.includes("i1"); h4 = next.includes("i4"); h2 = next.includes("i2"); h3 = next.includes("i3");
+      h1 = next.includes("10"); h4 = next.includes("13"); h2 = next.includes("11"); h3 = next.includes("12");
       if (h1 && h4 && (!h2 || !h3)) return;
     }
     setSelected(next);

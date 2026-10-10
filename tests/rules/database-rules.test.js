@@ -116,7 +116,7 @@ const seedEnforce = (on) => seed((db) => db.ref("settings/admin").set({ v: 1, en
 const booking = (o = {}) => Object.assign({
   id: "b1", name: "Pau Estévez", phone: "+34600111222",
   date: "2026-09-01", time: "20:00", size: 4, duration: 90,
-  preference: "auto", notes: "", status: "confirmed", tables: ["3"],
+  preference: "auto", notes: "", status: "confirmed", tables: ["4"],
   updatedAt: 1000, baseUpdatedAt: 0,
 }, o);
 
@@ -335,7 +335,7 @@ async function seedRead(path) {
 // atomically with the node, that the rules require to be EXACTLY stored + 1.
 
 describe("tableBlocks — the representative rev pair", () => {
-  const BLOCK = [{ id: "k1", table: "3", date: "2026-09-01", from: "20:00", to: "21:00", reason: "" }];
+  const BLOCK = [{ id: "k1", table: "4", date: "2026-09-01", from: "20:00", to: "21:00", reason: "" }];
 
   it("accepts the first write at rev 1", async () => {
     await assertSucceeds(writeWithRev(staff(), "tableBlocks", BLOCK, 1));
@@ -889,7 +889,7 @@ describe("field shapes are validated (v17.16.1)", () => {
       await seed((db) => db.ref("bookings/legacy").set(stored({ date: "31/08/2026" })));
       // The optimiser moved its table. `sanitize` re-emits the date verbatim.
       await assertSucceeds(writeBooking(staff(), "legacy",
-        edit({ date: "31/08/2026", tables: ["5A"] })));
+        edit({ date: "31/08/2026", tables: ["6"] })));
     });
 
     it("carries a stored unknown STATUS through an unrelated edit", async () => {
@@ -969,19 +969,19 @@ describe("every booking shape the app itself produces is accepted", () => {
   const stamped = (b, i) => Object.assign({}, sanitize(b), { updatedAt: 1000 + i, baseUpdatedAt: 0 });
 
   const shapes = {
-    "an ordinary booking":       { id: "s1", name: "Pau Estévez", phone: "+34600111222", date: "2026-09-01", time: "20:00", size: 4, duration: 90, status: "confirmed", tables: ["3"] },
-    "a walk-in":                 { id: "s2", name: "Walk-in 1", phone: "", date: "2026-09-01", time: "20:15", size: 2, status: "seated", tables: ["5A"], _manual: true, _locked: true },
-    "an anonymized booking":     { id: "s3", name: "Data removed", phone: "", date: "2026-09-01", time: "13:00", size: 2, status: "completed", tables: ["2"], anonymized: true },
+    "an ordinary booking":       { id: "s1", name: "Pau Estévez", phone: "+34600111222", date: "2026-09-01", time: "20:00", size: 4, duration: 90, status: "confirmed", tables: ["4"] },
+    "a walk-in":                 { id: "s2", name: "Walk-in 1", phone: "", date: "2026-09-01", time: "20:15", size: 2, status: "seated", tables: ["6"], _manual: true, _locked: true },
+    "an anonymized booking":     { id: "s3", name: "Data removed", phone: "", date: "2026-09-01", time: "13:00", size: 2, status: "completed", tables: ["3"], anonymized: true },
     "a pending booking":         { id: "s4", name: "Rita", date: "2026-09-02", time: "21:30", size: 6, status: "pending", tables: [] },
     "a booking with NO tables":  { id: "s5", name: "Unplaced", date: "2026-09-02", time: "19:00", size: 2, status: "confirmed", tables: [] },
-    "a booking with no date":    { id: "s6", name: "Dateless", time: "19:00", size: 2, status: "confirmed", tables: ["4"] },
-    "a booking with no time":    { id: "s7", name: "Timeless", date: "2026-09-02", size: 2, status: "confirmed", tables: ["4"] },
-    "a completed visit":         { id: "s8", name: "Left", date: "2026-09-01", time: "13:00", size: 2, status: "completed", tables: ["6"], stayedMin: 74 },
+    "a booking with no date":    { id: "s6", name: "Dateless", time: "19:00", size: 2, status: "confirmed", tables: ["5"] },
+    "a booking with no time":    { id: "s7", name: "Timeless", date: "2026-09-02", size: 2, status: "confirmed", tables: ["5"] },
+    "a completed visit":         { id: "s8", name: "Left", date: "2026-09-01", time: "13:00", size: 2, status: "completed", tables: ["8"], stayedMin: 74 },
     "a cancelled no-show":       { id: "s9", name: "Gone", date: "2026-09-01", time: "13:00", size: 2, status: "cancelled", tables: [], noShow: true },
-    "a mega-combo booking":      { id: "s10", name: "Big party", date: "2026-09-03", time: "20:00", size: 8, duration: 120, status: "confirmed", tables: ["5A", "5B", "6"] },
-    "a deposit + notes booking": { id: "s11", name: "Deposit", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["1A"], deposit: 50, notes: "window seat" },
-    "a recurring occurrence":    { id: "r1_2026-09-03", name: "Standing", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["1B"], recurringId: "r1", recurringDate: "2026-09-03" },
-    "a joined phone-less guest": { id: "s12", name: "Maria", phone: "", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["7"], guestId: "gs12" },
+    "a mega-combo booking":      { id: "s10", name: "Big party", date: "2026-09-03", time: "20:00", size: 8, duration: 120, status: "confirmed", tables: ["6", "7", "8"] },
+    "a deposit + notes booking": { id: "s11", name: "Deposit", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["1"], deposit: 50, notes: "window seat" },
+    "a recurring occurrence":    { id: "r1_2026-09-03", name: "Standing", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["2"], recurringId: "r1", recurringDate: "2026-09-03" },
+    "a joined phone-less guest": { id: "s12", name: "Maria", phone: "", date: "2026-09-03", time: "20:00", size: 2, status: "confirmed", tables: ["9"], guestId: "gs12" },
   };
 
   let i = 0;
@@ -1780,7 +1780,7 @@ describe("the rules and ROLE_GRANTS agree (v18.0.0)", () => {
     // Each is driven against the REAL rules for every level, so "manager keeps
     // what it had inside settingsWrite" is proven rather than asserted.
     { cap: "hoursEdit",       run: (db) => writeWithRev(db, "settings/operatingHours", { days: { 0: { open: 13, close: 22 } } }, 1) },
-    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
+    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1", capacity: 2 }] }, 1) },
     { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
     { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
     // v18.0.0 session 8 — the activity log's redaction, the eighth enforced
@@ -1845,7 +1845,7 @@ describe("each gated path names its OWN capability", () => {
   const PATHS = [
     { path: "settings/operatingHours", cap: "hoursEdit",       value: { days: { 0: { open: 13, close: 22 } } } },
     { path: "settings/dayShifts",      cap: "hoursEdit",       value: { split: 17, enabled: true } },
-    { path: "settings/layout",         cap: "layoutEdit",      value: { tables: [{ id: "1A", capacity: 2 }] } },
+    { path: "settings/layout",         cap: "layoutEdit",      value: { tables: [{ id: "1", capacity: 2 }] } },
     { path: "reminders",               cap: "reminderManage",  value: [{ id: "r1", text: "Prep" }] },
     { path: "recurring",               cap: "recurringManage", value: { v: 1, enabled: true } },
     { path: "settings/general",        cap: "settingsWrite",   value: { v: 1, restaurantName: "X" } },
@@ -1897,7 +1897,7 @@ describe("a deny is refused by the rules, not only hidden", () => {
   const CASES = [
     { cap: "settingsWrite",   run: (db) => writeWithRev(db, "settings/general", { v: 1 }, 1) },
     { cap: "hoursEdit",       run: (db) => writeWithRev(db, "settings/operatingHours", { days: { 0: { open: 13, close: 22 } } }, 1) },
-    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1A", capacity: 2 }] }, 1) },
+    { cap: "layoutEdit",      run: (db) => writeWithRev(db, "settings/layout", { tables: [{ id: "1", capacity: 2 }] }, 1) },
     { cap: "reminderManage",  run: (db) => writeWithRev(db, "reminders", [{ id: "r1", text: "Prep" }], 1) },
     { cap: "recurringManage", run: (db) => writeWithRev(db, "recurring", { v: 1, enabled: true }, 1) },
     { cap: "bookingDelete",   run: (db) => db.ref("bookings").update({ b1: null }) },

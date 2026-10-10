@@ -131,8 +131,8 @@ export function WalkinForm({
   const getCapOf = comboCapBest;
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
-  // accumulate redundant tables once `wSize` is met. Refuses i1+i4 without
-  // i2 AND i3 (the indoor cluster must be physically contiguous).
+  // accumulate redundant tables once `wSize` is met. Refuses 10+13 without
+  // 11 AND 12 (the indoor cluster must be physically contiguous).
   function wToggle(id) {
     const sel = wf.tables || [];
     // v17.1.1: DESELECT before the busy check — the Plan-view seated-takeover
@@ -144,8 +144,8 @@ export function WalkinForm({
     }
     if (wBusy.has(id)) return;
     let next = sel.concat([id]);
-    let h1 = next.includes("i1"), h4 = next.includes("i4");
-    let h2 = next.includes("i2"), h3 = next.includes("i3");
+    let h1 = next.includes("10"), h4 = next.includes("13");
+    let h2 = next.includes("11"), h3 = next.includes("12");
     if (h1 && h4 && (!h2 || !h3)) return;
     if (sel.length > 0 && getCapOf(sel) >= wSize) {
       let trimmed = sel.slice();
@@ -153,8 +153,8 @@ export function WalkinForm({
         trimmed = trimmed.slice(1);
       }
       next = trimmed.concat([id]);
-      h1 = next.includes("i1"); h4 = next.includes("i4");
-      h2 = next.includes("i2"); h3 = next.includes("i3");
+      h1 = next.includes("10"); h4 = next.includes("13");
+      h2 = next.includes("11"); h3 = next.includes("12");
       if (h1 && h4 && (!h2 || !h3)) return;
     }
     setDraft({ ...wf, tables: next });

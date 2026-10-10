@@ -18,15 +18,15 @@ const TODAY = todayStr();
 const NOW = Date.now();
 const src = (extra) => Object.assign(
   { id: "s1", name: "Ana", phone: "+34 600 000 001", date: TODAY, time: "20:15", scheduledTime: "20:30", size: 4,
-    duration: 90, originalDuration: 90, customDur: null, status: "completed", tables: ["2"], preference: "indoor",
-    preferredTables: ["2", "3"], notes: "by the window", deposit: 20, voucherCode: "", tags: ["o-birthday"],
+    duration: 90, originalDuration: 90, customDur: null, status: "completed", tables: ["3"], preference: "indoor",
+    preferredTables: ["3", "4"], notes: "by the window", deposit: 20, voucherCode: "", tags: ["o-birthday"],
     guestTags: ["g-vip"], guestTagsAt: 5, history: [{ action: "created" }] }, extra || {});
 const again = (b, ctx) => againDraft(b, Object.assign({ vouchersOn: true, vouchersByCode: {}, bookings: [b], now: NOW }, ctx || {}));
 
 describe("againDraft", () => {
   it("copies who and the plan, and leaves the day, the note and the money behind", () => {
     const d = again(src());
-    expect([d.name, d.phone, d.size, d.preference, d.preferredTables]).toEqual(["Ana", "+34 600 000 001", 4, "indoor", ["2", "3"]]);
+    expect([d.name, d.phone, d.size, d.preference, d.preferredTables]).toEqual(["Ana", "+34 600 000 001", 4, "indoor", ["3", "4"]]);
     expect(d.time).toBe("20:30");                    // the booked time, not the seated-shifted 20:15
     expect([d.date, d.notes, d.status, d.returnOf]).toEqual(["", "", "confirmed", "s1"]);
     expect([d.deposit, d.manualTables, d.voucherCode]).toEqual([EMPTY_FORM.deposit, [], ""]);

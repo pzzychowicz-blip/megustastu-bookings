@@ -28,20 +28,20 @@ const assign = (bookingId, tables, locked, affected, more) => planAssign(Object.
 const byId = (list, id) => list.find((b) => b.id === id);
 
 describe("planAssign: a plain assignment", () => {
-  const list = [bk("a", "19:00", 2, ["2"], { _conflict: true }), bk("b", "19:00", 2, ["3"])];
+  const list = [bk("a", "19:00", 2, ["3"], { _conflict: true }), bk("b", "19:00", 2, ["4"])];
 
   it("gives the booking the tables, hand-placed and locked, with one history line", () => {
-    const plan = assign("a", ["4", "5A"], true, null);
+    const plan = assign("a", ["5", "6"], true, null);
     expect(plan.reshuffles).toBe(false);
     expect(byId(plan.transform(list), "a")).toStrictEqual(Object.assign({}, list[0], {
-      tables: ["4", "5A"], _conflict: false, _manual: true, _locked: true,
-      history: [{ action: "tables manually assigned: 4, 5A", by: "u@x" }],
+      tables: ["5", "6"], _conflict: false, _manual: true, _locked: true,
+      history: [{ action: "tables manually assigned: 5, 6", by: "u@x" }],
     }));
   });
 
   it("leaves every other booking the same object, and re-optimises nothing", () => {
     for (const affected of [null, undefined, []]) {
-      const out = assign("a", ["4"], true, affected).transform(list);
+      const out = assign("a", ["5"], true, affected).transform(list);
       expect(out[1]).toBe(list[1]);
       expect(out.length).toBe(2);
     }
@@ -49,7 +49,7 @@ describe("planAssign: a plain assignment", () => {
 
   it("locks only on the literal true", () => {
     for (const locked of [false, undefined, 1, "true"]) {
-      const a = byId(assign("a", ["4"], locked, null).transform(list), "a");
+      const a = byId(assign("a", ["5"], locked, null).transform(list), "a");
       expect(a._locked, String(locked)).toBe(false);
       expect(a._manual).toBe(true);
     }
@@ -58,11 +58,11 @@ describe("planAssign: a plain assignment", () => {
   it("starts a history for a booking stored without one", () => {
     const bare = [Object.assign({}, list[0])];
     delete bare[0].history;
-    expect(assign("a", ["4"], true, null).transform(bare)[0].history.length).toBe(1);
+    expect(assign("a", ["5"], true, null).transform(bare)[0].history.length).toBe(1);
   });
 
   it("writes nothing for an id that is not in the list", () => {
-    const out = assign("nobody", ["4"], true, null).transform(list);
+    const out = assign("nobody", ["5"], true, null).transform(list);
     expect(out[0]).toBe(list[0]);
     expect(out[1]).toBe(list[1]);
   });
@@ -70,26 +70,26 @@ describe("planAssign: a plain assignment", () => {
 
 describe("planAssign: a swap", () => {
   // `b` holds 3 by hand; `a` takes it. `b` is released and the day re-optimised.
-  const list = [bk("a", "19:00", 2, ["2"]), bk("b", "19:00", 2, ["3"], { _manual: true, _locked: true }),
-    bk("c", "19:00", 2, ["4"], { _manual: true, _locked: true })];
+  const list = [bk("a", "19:00", 2, ["3"]), bk("b", "19:00", 2, ["4"], { _manual: true, _locked: true }),
+    bk("c", "19:00", 2, ["5"], { _manual: true, _locked: true })];
 
   it("releases the party it takes from, which the optimiser then seats elsewhere", () => {
-    const plan = assign("a", ["3"], true, [{ id: "b", name: "B", tables: ["3"] }]);
+    const plan = assign("a", ["4"], true, [{ id: "b", name: "B", tables: ["4"] }]);
     expect(plan.reshuffles).toBe(true);
     const out = plan.transform(list);
-    expect(byId(out, "a").tables).toEqual(["3"]);
+    expect(byId(out, "a").tables).toEqual(["4"]);
     expect(byId(out, "a")._locked).toBe(true);
     const b = byId(out, "b");
     expect(b._locked).toBe(false);
     expect(b._manual).toBe(false);
     expect(b.tables.length).toBeGreaterThan(0);
-    expect(b.tables).not.toContain("3");
+    expect(b.tables).not.toContain("4");
     expect(b._conflict).toBeFalsy();
   });
 
   it("does not touch a locked party the swap did not name", () => {
-    const out = assign("a", ["3"], true, [{ id: "b", tables: ["3"] }]).transform(list);
-    expect(byId(out, "c").tables).toEqual(["4"]);
+    const out = assign("a", ["4"], true, [{ id: "b", tables: ["4"] }]).transform(list);
+    expect(byId(out, "c").tables).toEqual(["5"]);
     expect(byId(out, "c")._locked).toBe(true);
   });
 
@@ -97,26 +97,26 @@ describe("planAssign: a swap", () => {
     // `far` is on another day and unplaced: only a pass over ITS day seats it.
     const far = bk("far", "19:00", 2, [], { date: addDays(D, 1) });
     const days = list.concat([far]);
-    const swap = [{ id: "b", tables: ["3"] }];
-    expect(byId(assign("a", ["3"], true, swap).transform(days), "far").tables).toEqual([]);
-    expect(byId(assign("a", ["3"], true, swap, { viewDate: far.date }).transform(days), "far").tables.length).toBeGreaterThan(0);
+    const swap = [{ id: "b", tables: ["4"] }];
+    expect(byId(assign("a", ["4"], true, swap).transform(days), "far").tables).toEqual([]);
+    expect(byId(assign("a", ["4"], true, swap, { viewDate: far.date }).transform(days), "far").tables.length).toBeGreaterThan(0);
   });
 
   it("seats a released party on its own day when that is not the day on screen (v18.4.9)", () => {
     // The picker finds the parties it takes from on the BOOKING's date. Here
     // the booking and the party it swaps with are a day away from the view.
     const next = addDays(D, 1);
-    const a2 = bk("a2", "19:00", 2, ["2"], { date: next });
-    const b2 = bk("b2", "19:00", 2, ["3"], { date: next });
-    const out = assign("a2", ["3"], true, [{ id: "b2", tables: ["3"] }]).transform(list.concat([a2, b2]));
-    expect(byId(out, "a2").tables).toEqual(["3"]);
+    const a2 = bk("a2", "19:00", 2, ["3"], { date: next });
+    const b2 = bk("b2", "19:00", 2, ["4"], { date: next });
+    const out = assign("a2", ["4"], true, [{ id: "b2", tables: ["4"] }]).transform(list.concat([a2, b2]));
+    expect(byId(out, "a2").tables).toEqual(["4"]);
     const moved = byId(out, "b2");
     expect(moved.tables.length).toBeGreaterThan(0);
-    expect(moved.tables).not.toContain("3");
+    expect(moved.tables).not.toContain("4");
   });
 
   it("answers the same for the same list, and for a fresh one (the replay)", () => {
-    const plan = assign("a", ["3"], true, [{ id: "b", tables: ["3"] }]);
+    const plan = assign("a", ["4"], true, [{ id: "b", tables: ["4"] }]);
     expect(plan.transform(list)).toStrictEqual(plan.transform(list));
     const fresh = list.filter((b) => b.id !== "c");
     expect(plan.transform(fresh).map((b) => b.id)).toEqual(["a", "b"]);
@@ -146,7 +146,7 @@ describe("App's manualAssign is the plan and its three effects", () => {
 // was picked for.
 describe("liveSwap: a swap lasts as long as the draft stays in its slot", () => {
   const draft = { date: D, time: "20:00", size: 2, customDur: null };
-  const swap = [{ id: "b", tables: ["3"] }];
+  const swap = [{ id: "b", tables: ["4"] }];
   const slot = swapSlot(draft);
 
   it("is the swap while the draft is where it was picked", () => {
@@ -199,16 +199,16 @@ describe("planReassign", () => {
   }, more || {}));
 
   it("moves the booking to other tables, unlocked and unflagged, with one history line, and nobody else", () => {
-    const list = [bk("a", "20:00", 2, ["2"], { _manual: true, _conflict: true }), bk("b", "20:00", 2, ["3"])];
+    const list = [bk("a", "20:00", 2, ["3"], { _manual: true, _conflict: true }), bk("b", "20:00", 2, ["4"])];
     const plan = re("a", list);
     expect(plan.refuse).toBe(undefined);
     const after = plan.transform(list);
     const a = byId(after, "a");
-    expect(a.tables).not.toEqual(["2"]);
+    expect(a.tables).not.toEqual(["3"]);
     expect(a.tables.length).toBeGreaterThan(0);
-    expect(a.tables).not.toContain("3");
+    expect(a.tables).not.toContain("4");
     expect([a._manual, a._conflict]).toEqual([false, false]);
-    expect(a.history).toEqual([{ action: "reassigned 2 → " + a.tables.join("+"), by: "u@x" }]);
+    expect(a.history).toEqual([{ action: "reassigned 3 → " + a.tables.join("+"), by: "u@x" }]);
     expect(byId(after, "b")).toBe(list[1]);
   });
   it("names 'none' when the booking had no table", () => {
@@ -218,30 +218,30 @@ describe("planReassign", () => {
   it("refuses a booking that is not there, and one that is locked or seated, without asking who", () => {
     asked.length = 0;
     expect(re("gone", [])).toEqual({ refuse: "Booking not found." });
-    const locked = [bk("a", "20:00", 2, ["2"], { _locked: true })];
+    const locked = [bk("a", "20:00", 2, ["3"], { _locked: true })];
     expect(re("a", locked)).toEqual({ refuse: "Booking is manually locked. Edit manually to change tables." });
-    const seated = [bk("a", "20:00", 2, ["2"], { status: "seated" })];
+    const seated = [bk("a", "20:00", 2, ["3"], { status: "seated" })];
     expect(re("a", seated).refuse).toBe("Booking is manually locked. Edit manually to change tables.");
     expect(asked).toEqual([]);
   });
   it("refuses by name when every other table is taken", () => {
-    const ids = ["1A", "1B", "2", "3", "4", "5A", "5B", "6", "7", "i1", "i2", "i3", "i4"];
+    const ids = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
     const full = ids.map((t, k) => bk("f" + k, "20:00", 2, [t], { _locked: true }));
-    const list = full.concat([bk("a", "20:00", 2, ["2"])]);
+    const list = full.concat([bk("a", "20:00", 2, ["3"])]);
     expect(re("a", list)).toEqual({ refuse: "No alternative tables available for A at 20:00." });
   });
   it("a seated party still at the booking's table, due to leave as it starts, counts as still there", () => {
     // S sits at table 2 from 18:30 for 90, so on paper it leaves at 20:00, the minute
     // A is booked onto 2. As stored, 2 reads free at 20:00 and A would be handed 2 back.
-    const s = bk("s", "18:30", 2, ["2"], { status: "seated" });
+    const s = bk("s", "18:30", 2, ["3"], { status: "seated" });
     // 2 is also the table A asked for, so the lookup would pick it first if it read free:
     // the same tables back, and the "no alternative" refusal with twelve tables empty.
-    const a = bk("a", "20:00", 2, ["2"], { preferredTables: ["2"] });
+    const a = bk("a", "20:00", 2, ["3"], { preferredTables: ["3"] });
     const list = [s, a];
     const plan = re("a", list);
     expect(plan.refuse).toBe(undefined);
     const after = plan.transform(list);
-    expect(byId(after, "a").tables).not.toContain("2");
+    expect(byId(after, "a").tables).not.toContain("3");
     expect(byId(after, "s")).toBe(s);                       // the stretch is for the lookup only
   });
   it("being handed the tables it already has is a refusal, not a write", () => {
@@ -249,10 +249,10 @@ describe("planReassign", () => {
     expect(re("a", [bk("a", "20:00", 2, best)])).toEqual({ refuse: "No alternative tables available for A at 20:00." });
   });
   it("the replay writes the same tables onto whatever list it is handed", () => {
-    const list = [bk("a", "20:00", 2, ["2"])];
+    const list = [bk("a", "20:00", 2, ["3"])];
     const plan = re("a", list);
     const first = byId(plan.transform(list), "a").tables;
-    const fresh = [bk("a", "20:00", 4, ["2"], { notes: "changed elsewhere" }), bk("z", "21:00", 2, ["6"])];
+    const fresh = [bk("a", "20:00", 4, ["3"], { notes: "changed elsewhere" }), bk("z", "21:00", 2, ["8"])];
     const replay = plan.transform(fresh);
     expect(byId(replay, "a").tables).toEqual(first);
     expect(byId(replay, "a").notes).toBe("changed elsewhere");

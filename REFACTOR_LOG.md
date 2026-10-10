@@ -34790,3 +34790,103 @@ Five findings, each checked before it was acted on.
 Gate: main bundle 134.16 kB gz (134.13 before the fixes) · 3,135 tests · lint 63
 problems, 0 errors · style OK. Rules suite: 307 passed when section 11 was written,
 and `database.rules.json` has not changed since.
+
+## v18.6.1 — the default layout is tables 1–13
+
+**Date:** 2026-10-10 · **Branch:** `feat/v18.6.1-tables-1-13` ·
+**Behavioural change:** only for a database with NO `settings/layout` node (a new
+restaurant, or a layout never saved): its tables are named 1–13, a joined pair of
+1+2, 11+12 or 12+13 seats 5 (it was 6), and the Plan view opens on the drawn floor
+plan in place of the auto-placed grid. The table pickers group every layout by its
+join groups (section 2). A stored layout is read exactly as before.
+**Rules change:** none. **`SCHEMA`:** not raised (nothing new is stored; the
+fingerprint of `sanitizeLayout` is re-pinned, section 3).
+**Deploy steps (Patryk):** (1) **before the merge, check that PROD has a
+`settings/layout` node** (Firebase console). If it has, this release changes nothing
+there. If it has none, PROD would switch to tables 1–13 on the first load, and every
+booking stored on `1A`, `5A`, `i1`… would show in the Unplaced row; save the layout
+once in Settings → Layout first, or tell me and the release gets a migration.
+(2) Renaming a table in Settings → Layout does not rename it on bookings already
+stored (the editor says so: "they won't follow the rename"), and no version has ever
+done that; this one does not either.
+
+The restaurant renumbered its tables (Patryk, 2026-10-10: "Now it is as DEV is set.
+That's the new default layout."). Old to new, in order:
+
+| old | 1A | 1B | 2 | 3 | 4 | 5A | 5B | 6 | 7 | i1 | i2 | i3 | i4 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| new | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+
+"2", "3", "4", "6" and "7" are ids in both numberings and name different tables in
+each, so every rename in this version was one pass through the table, never id by id.
+
+### 1. `DEFAULT_LAYOUT` is DEV's layout
+
+Two decisions were his (asked, 2026-10-10): the default is **DEV's layout exactly**,
+not the old default with new names; and the pickers **keep the derived grouping**
+(section 2). `DEFAULT_LAYOUT` (`src/lib/constants.js`) was generated from DEV's
+`settings/layout` as read that day (`layoutRev` 368):
+
+- **Tables:** 1–9 outdoor (9 seats 4, the others 2), 10–13 indoor (2 each). 28 seats.
+- **Join groups**, in DEV's order: 3+4+5 · 6+7+8 · 11+12+13 · 1+2.
+- **Seats of a joined set** (`comboCaps`): 3+4, 6+7, 7+8, 11+12, 12+13 and 1+2 seat 5;
+  the three triples seat 8; 4+5 has no entry and seats 4, its sum. **Three differ from
+  the old default**, which had 1A+1B, i2+i3 and i3+i4 at 6. So 1+2+3 seats 7 where
+  1A+1B+2 seated 8, which two tests state (`comboCap`, `comboCapBest`).
+- **Mega combos:** DEV's 30, in DEV's order. The same thirty sets as the old default
+  once renamed, in another order; `buildLayout` gives 40 combos as before.
+- **Priorities:** the old seed renamed (anchors 13 then 10, the swap rule on table 9,
+  `mixedRequire` 1, 2, 9). DEV holds a fourth size band, `{min: 2, max: 2}` after the
+  2–2 band above it, which no party size can reach; it is left out.
+- **Floor plan:** DEV's (a 900 × 700 room, the 13 tables, two walls, one door). The
+  default had none and `useLayout` auto-placed a grid. `defaultLayout()` in
+  `useLayout.js` runs the default's plan through `sanitizeFloorPlan` and is what the
+  three fallback sites return (no node, no tables, the first render).
+
+The contiguity rule in `ManualModal` and `WalkinForm` named `i1`/`i4` and `i2`/`i3` in
+code; it names 10/13 and 11/12 now.
+
+### 2. The pickers' grouping is derived for every layout
+
+`IS_MGT_LAYOUT` was true while the live layout matched the old default's signature,
+and its one remaining use (since v15.9.0) was to show a hand-written grouping in the
+table pickers (`TABLE_GROUP_STRUCT`: "1A / 1B / 7" as one section, `i1` alone, the
+mega-combo hints). The restaurant's own layout stopped matching it the day the tables
+were renamed, so DEV was already on the derived grouping. `TABLE_GROUP_STRUCT`,
+`buildTableGroups`, `layoutSignature`, `MGT_SIGNATURE` and the `IS_MGT_LAYOUT` export
+are removed, and `setLayout` always calls `makeTableGroups()`. For the default that is:
+3 / 4 / 5 · 6 / 7 / 8 · 11 / 12 / 13 · 1 / 2, each with its seats as the note, then
+table 9 and table 10.
+
+### 3. Tests
+
+Table ids in 27 test files were renamed by script in one pass (ids in `tables`,
+`tableId`, `preferredTables`, combo keys, re-sorted where a key is sorted), and the
+positional arguments and the sentences a script cannot see by hand (`drop-plan`,
+`booking-logic`, `manual-assign`, `waitlist-match`). `roles.test.js` and
+`unplaced.test.js` were left alone: their `i1` is an invite id, and the second file's
+ids are the ones a layout does NOT have, on purpose.
+
+- `tests/save-path.test.js`: eight inline snapshots changed, and every changed line is
+  a table's name inside a sentence ("Table 3 is also held by…" → "Table 4…",
+  "tables manually set: 4, 5A" → "5, 6"). No snapshot changed in what the save does.
+- `tests/schema.test.js`: `sanitizeLayout`'s print re-pinned (`ade2386fc8` →
+  `2fe9c7bd7a`), the function's two fallbacks now calling `defaultLayout()`. It stores
+  no new key, so `SCHEMA` stays 1.
+- `tests/waitlist-match.test.js` found its indoor tables by `/^i/`; it reads `INDOOR`.
+- **New, `tests/layout-default.test.js`** (7 cases): the 13 ids and 28 seats, the four
+  join groups, 40 combos with the seats above, every id named anywhere in the default
+  being one of the 13, the default surviving `sanitizeLayout` with its plan, the
+  derived grouping as listed in section 2, and no `IS_MGT_LAYOUT` left in `src`.
+
+### 4. Around it
+
+- `src/lib/wa-sim-scenarios.js` (the sandbox's sample bookings): ids renamed. Klaus's
+  party of 8 was on 1A+1B+2; those seat 7 now, so it is on 11+12+13 (8).
+  `tests/wa-sim-fixtures.test.js` still finds no two locked samples on one table on
+  any weekday.
+- Comments that record a measurement ("saved onto 1A", "from i1 passed under…") keep
+  the names the tables had when it was taken.
+- **Not done:** `.design-sync/` (the Claude Design previews and their fixtures) still
+  names 1A…i4. It is tooling the app's build never reads, and its fixtures carry their
+  own floor plan.

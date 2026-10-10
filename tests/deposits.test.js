@@ -15,7 +15,7 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 const D = "2026-10-08";
 const NB = " "; // `money` and `countLabel` join a number and its word with a no-break space
 const bk = (id, status, deposit, extra) => Object.assign(
-  { id, date: D, time: "19:00", size: 2, status, deposit, tables: ["3"] }, extra || {});
+  { id, date: D, time: "19:00", size: 2, status, deposit, tables: ["4"] }, extra || {});
 
 describe("depositSummary — which side a deposit is on", () => {
   it("a day with no deposit has nothing to show", () => {

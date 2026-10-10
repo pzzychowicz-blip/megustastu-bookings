@@ -31,7 +31,7 @@ describe("contentKey / bookingChanged", () => {
   });
   it("sees a real field change", () => {
     expect(bookingChanged(bk({ size: 2 }), bk({ size: 4 }))).toBe(true);
-    expect(bookingChanged(bk({ tables: ["7"] }), bk({ tables: ["6"] }))).toBe(true);
+    expect(bookingChanged(bk({ tables: ["9"] }), bk({ tables: ["8"] }))).toBe(true);
   });
   it("does not leak updatedAt into the key", () => {
     expect(contentKey(bk({ updatedAt: 5 }))).not.toContain("updatedAt");
@@ -372,13 +372,13 @@ describe("describeWrite — what the parked banner calls the change", () => {
   it("names the booking the action was about, wherever it sits in the list", () => {
     const prev = [bk({ id: "a", name: "A" }), bk({ id: "b", name: "B" }), bk({ id: "c", name: "C", time: "21:00" })];
     // An edit of `c` that also moved `a` and `b`.
-    const next = prev.map((b) => Object.assign({}, b, b.id === "c" ? { notes: "x" } : { tables: ["7"] }));
+    const next = prev.map((b) => Object.assign({}, b, b.id === "c" ? { notes: "x" } : { tables: ["9"] }));
     expect(describeWrite(prev, next)).toBe("A, 13:00 and 2 others");
     expect(describeWrite(prev, next, "c")).toBe("C, 21:00 and 2 others");
   });
   it("names a new booking ahead of the ones its save moved, with or without a subject", () => {
     const prev = [bk({ id: "a", name: "A" }), bk({ id: "b", name: "B" })];
-    const next = prev.map((b) => Object.assign({}, b, { tables: ["7"] })).concat([bk({ id: "n", name: "New", time: "18:00" })]);
+    const next = prev.map((b) => Object.assign({}, b, { tables: ["9"] })).concat([bk({ id: "n", name: "New", time: "18:00" })]);
     expect(describeWrite(prev, next, "n")).toBe("New, 18:00 and 2 others");
     expect(describeWrite(prev, next)).toBe("New, 18:00 and 2 others");
   });

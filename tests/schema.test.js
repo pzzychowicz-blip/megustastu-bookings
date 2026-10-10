@@ -159,7 +159,7 @@ const PINNED = {
       "hooks/useDayShifts.js:sanitizeShifts": "42278cbe80",
       "hooks/useGeneralSettings.js:sanitizeGeneral": "9497dee0b6",
       "hooks/useLayout.js:sanitizeFloorPlan": "1c43f674f3",
-      "hooks/useLayout.js:sanitizeLayout": "ade2386fc8",
+      "hooks/useLayout.js:sanitizeLayout": "2fe9c7bd7a",
       "hooks/useOperatingHours.js:sanitizeDay": "ad45829200",
       "hooks/useOperatingHours.js:sanitizeWeek": "626f2ee9fb",
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",

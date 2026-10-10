@@ -50,7 +50,7 @@ function activityWriteRule() {
 const bk = (o = {}) => Object.assign({
   id: "b1", name: "Pau Estévez", phone: "+34600111222",
   date: "2026-09-01", time: "20:00", scheduledTime: "20:00", size: 4,
-  duration: 90, status: "confirmed", tables: ["3"], history: [],
+  duration: 90, status: "confirmed", tables: ["4"], history: [],
 }, o);
 
 const hist = (action) => ({ at: "2026-09-01T19:00:00.000Z", by: "staff@x", action });
@@ -170,12 +170,12 @@ describe("bookingWriteEntries", () => {
 
   it("summarises optimiser table moves as ONE Automatic entry", () => {
     const prev = [
-      bk({ id: "b1", tables: ["3"], history: [hist("created")] }),
-      bk({ id: "b2", tables: ["4"], history: [hist("created")] }),
+      bk({ id: "b1", tables: ["4"], history: [hist("created")] }),
+      bk({ id: "b2", tables: ["5"], history: [hist("created")] }),
     ];
     const next = [
-      bk({ id: "b1", tables: ["1A"], history: [hist("created")] }),
-      bk({ id: "b2", tables: ["1B"], history: [hist("created")] }),
+      bk({ id: "b1", tables: ["1"], history: [hist("created")] }),
+      bk({ id: "b2", tables: ["2"], history: [hist("created")] }),
     ];
     const out = bookingWriteEntries(prev, next);
     expect(out).toHaveLength(1);
@@ -184,16 +184,16 @@ describe("bookingWriteEntries", () => {
   });
 
   it("says one booking in the singular", () => {
-    const prev = [bk({ tables: ["3"], history: [hist("created")] })];
-    const next = [bk({ tables: ["1A"], history: [hist("created")] })];
+    const prev = [bk({ tables: ["4"], history: [hist("created")] })];
+    const next = [bk({ tables: ["1"], history: [hist("created")] })];
     expect(bookingWriteEntries(prev, next)[0].text).toBe("1 booking re-placed");
   });
 
   it("does not summarise a move that ALREADY has a history entry", () => {
     // A person dragging a booking writes history; counting it again would
     // report the same move twice, once named and once anonymously.
-    const prev = [bk({ tables: ["3"], history: [hist("created")] })];
-    const next = [bk({ tables: ["1A"], history: [hist("created"), hist("moved to 1A")] })];
+    const prev = [bk({ tables: ["4"], history: [hist("created")] })];
+    const next = [bk({ tables: ["1"], history: [hist("created"), hist("moved to 1A")] })];
     const out = bookingWriteEntries(prev, next);
     expect(out).toHaveLength(1);
     expect(out[0].text).toBe("moved to 1A");
@@ -280,8 +280,8 @@ describe("bookingWriteEntries", () => {
   it("no entry it can produce carries an undefined value anywhere", () => {
     // The general form of the rule above, swept over every branch: deletion
     // (which has the most optional keys), append, and the Automatic summary.
-    const prev = [bk({ id: "b1", tables: ["3"], history: [hist("created")] }), bk({ id: "b2" })];
-    const next = [bk({ id: "b1", tables: ["1A"], history: [hist("created")] })];
+    const prev = [bk({ id: "b1", tables: ["4"], history: [hist("created")] }), bk({ id: "b2" })];
+    const next = [bk({ id: "b1", tables: ["1"], history: [hist("created")] })];
     const all = bookingWriteEntries(prev, next)
       .concat(voucherWriteEntries([], [vc()]))
       .concat([settingsWriteEntry("settings/general", { a: 1 }, { a: 2 })]);

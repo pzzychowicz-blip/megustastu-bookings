@@ -74,7 +74,7 @@ describe("buildBackup — the file is the whole database, minus a reasoned list"
 
   it("copies values verbatim — revs included, nothing sanitized", () => {
     const db = {
-      tableBlocks: [{ tableId: "3", date: "2026-09-23", allDay: true }],
+      tableBlocks: [{ tableId: "4", date: "2026-09-23", allDay: true }],
       tableBlocksRev: 7,
       bookings: { x: { id: "x", time: "8 in the evening", odd: true } },
     };
