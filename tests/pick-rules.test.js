@@ -14,7 +14,7 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 import {
   DEFAULT_LAYOUT, PICK_RULES, PICK_RULES_MAX, buildLayout, normalizePickRules, activePickRules,
 } from "../src/lib/constants.js";
-import { pickBlockedBy, pickRuleText, pickRefusal, unpickRefusal } from "../src/lib/booking-logic.js";
+import { pickBlockedBy, pickRuleText, pickRefusal, unpickRefusal, togglePick } from "../src/lib/booking-logic.js";
 import { sanitizeLayout } from "../src/hooks/useLayout.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
@@ -110,6 +110,43 @@ describe("what the pickers ask: pickRefusal and unpickRefusal", () => {
   });
 });
 
+describe("togglePick — one tap in a hand picker", () => {
+  it("adds a table, and takes one out", () => {
+    expect(togglePick([], "3", 4)).toEqual({ tables: ["3"] });
+    expect(togglePick(["3"], "4", 4)).toEqual({ tables: ["3", "4"] });
+    expect(togglePick(["3", "4"], "3", 4)).toEqual({ tables: ["4"] });
+    expect(togglePick(undefined, "3", 2)).toEqual({ tables: ["3"] });
+  });
+  it("once the selection seats the party, the oldest picks go and the new table is added", () => {
+    expect(togglePick(["3"], "4", 2)).toEqual({ tables: ["4"] });
+    // 3+4 seats 5: for a party of 4 the oldest goes (4 alone seats 2, so it
+    // stays), for a party of 6 neither does.
+    expect(togglePick(["3", "4"], "9", 4)).toEqual({ tables: ["4", "9"] });
+    expect(togglePick(["3", "4"], "9", 6)).toEqual({ tables: ["3", "4", "9"] });
+  });
+  // Both pickers asked the rule of the set BEFORE the prune, so this swap of
+  // one table for another was refused for a pair that would never be selected.
+  it("asks the rule of what would actually be selected: a party of 2 on 10 can move to 13", () => {
+    expect(togglePick(["10"], "13", 2)).toEqual({ tables: ["13"] });
+    expect(togglePick(["13"], "10", 2)).toEqual({ tables: ["10"] });
+  });
+  it("refuses, with the sentence, a set the rule forbids, in and out", () => {
+    const said = "Tables 10 and 13 go together only with 11 and 12.";
+    expect(togglePick(["10"], "13", 8)).toEqual({ refuse: said });
+    expect(togglePick(["10", "11", "12"], "13", 8)).toEqual({ tables: ["10", "11", "12", "13"] });
+    expect(togglePick(["10", "11", "12", "13"], "11", 8)).toEqual({ refuse: said });
+    expect(togglePick(["10", "11", "12", "13"], "10", 8)).toEqual({ tables: ["11", "12", "13"] });
+    // …and after a prune that leaves both ends without the middle.
+    expect(togglePick(["11", "10", "12"], "13", 6)).toEqual({ refuse: said });
+  });
+  it("lets a declared combo through as it is completed", () => {
+    expect(togglePick(["1", "2", "9", "10"], "13", 12)).toEqual({ tables: ["1", "2", "9", "10", "13"] });
+  });
+  it("a rule with nothing under Needs, handed in, still reads as a sentence", () => {
+    expect(pickRuleText({ pair: ["A", "B"], need: [] })).toBe("Tables A and B cannot be picked together.");
+  });
+});
+
 describe("normalizePickRules / activePickRules", () => {
   const set = ids("1", "2", "3", "4");
   it("an absent object is the default's rules; a present one is what it holds, nothing included", () => {
@@ -167,17 +204,15 @@ describe("the layout carries the rules", () => {
 
 // The wiring a pure test cannot see: who asks, and who keeps the names in step.
 describe("the pickers and the editor", () => {
-  // Three questions per picker: the set with the table added, the same set
-  // after the auto-prune, and the set with a table taken out. Each refusal is
-  // SAID (the tap used to do nothing), on the status line under "Selected".
-  it("both pickers ask on every candidate set, in and out, say the refusal, and name no table", () => {
+  // One plan for a tap (togglePick), asked by both pickers; each refusal is SAID
+  // (the tap used to do nothing), on the status line under "Selected".
+  it("both pickers take togglePick's plan, say its refusal, and name no table", () => {
     for (const file of ["components/ManualModal.jsx", "components/WalkinForm.jsx"]) {
       const text = code(file);
-      expect(text.split("pickRefusal(next)").length - 1, file).toBe(2);
-      expect(text.split("unpickRefusal(").length - 1, file).toBe(1);
-      expect(text.split(") { refusePick(").length - 1, file).toBe(3);
-      expect(text, file).toMatch(/<div role="status" style=\{\{ fontSize: T\.body, color: \w+(\(\w+\))?, fontWeight: FW\.medium, marginTop: 2 \}\}>/);
-      expect(text, file).not.toContain("pickBlockedBy");
+      expect(text.split("togglePick(").length - 1, file).toBe(1);
+      expect(text, file).toMatch(/if \(plan\.refuse\) \{ setPickNote\(\{ text: plan\.refuse, at: \w+\.join\("\|"\) \}\); return; \}/);
+      expect(text, file).toMatch(/<div role="status" style=\{\{ fontSize: T\.body, color: \w+, fontWeight: FW\.medium, marginTop: 2 \}\}>/);
+      expect(text, file).not.toMatch(/pickBlockedBy|pickRefusal\(/);
       expect(text, file).not.toMatch(/\.includes\("(1[0-3]|i[1-4])"\)/);
     }
   });

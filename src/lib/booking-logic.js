@@ -563,6 +563,7 @@ export function pickBlockedBy(ids,rules,combos){
 // or made so by a layout edit) may be taken apart in any order, or the picker
 // would hold the host in it.
 export function pickRuleText(r){
+  if(!r.need.length) return "Tables "+r.pair[0]+" and "+r.pair[1]+" cannot be picked together.";
   var need=r.need.length>1?r.need.slice(0,-1).join(", ")+" and "+r.need[r.need.length-1]:r.need[0];
   return "Tables "+r.pair[0]+" and "+r.pair[1]+" go together only with "+need+".";
 }
@@ -574,6 +575,30 @@ export function unpickRefusal(current,id,rules,combos){
   var cur=current||[];
   if(pickBlockedBy(cur,rules,combos)) return null;
   return pickRefusal(cur.filter(function(x){return x!==id;}),rules,combos);
+}
+// v18.6.1 (the /code-review): one tap on a table in a hand picker, as a plan:
+// {tables} (the selection after it) or {refuse} (a pick rule's sentence, the
+// selection unchanged). The table picker and the walk-in form each held a copy,
+// and both asked the rule of the set BEFORE the auto-prune: a party of 2 on
+// table 10 tapping 13, which swaps 10 for 13, was refused for "10 and 13".
+// The prune (once the selection seats `needed`, the oldest picks go until it
+// no longer does, then the new table is added) comes first; the rule is asked
+// of what would actually be selected. Whether a table may be tapped at all
+// (busy, seated, swap mode) stays with each picker: it is asked before this.
+export function togglePick(sel,id,needed,rules,combos){
+  var cur=sel||[];
+  if(cur.indexOf(id)>=0){
+    var out=unpickRefusal(cur,id,rules,combos);
+    return out?{refuse:out}:{tables:cur.filter(function(x){return x!==id;})};
+  }
+  var next=cur.concat([id]);
+  if(cur.length>0&&comboCapBest(cur)>=needed){
+    var trimmed=cur.slice();
+    while(trimmed.length>0&&comboCapBest(trimmed)>=needed) trimmed=trimmed.slice(1);
+    next=trimmed.concat([id]);
+  }
+  var no=pickRefusal(next,rules,combos);
+  return no?{refuse:no}:{tables:next};
 }
 export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pref!=="auto") return false;if(mixed&&!isMixedLarge(ids)) return false;if(pref==="indoor") return isAllIn(ids);if(pref==="outdoor") return isAllOut(ids);return true;}
 export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}

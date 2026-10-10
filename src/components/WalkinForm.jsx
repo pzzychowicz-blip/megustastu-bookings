@@ -35,6 +35,7 @@
 // source — also used by ManualModal). The `localNowTime` fallback is
 // replaced by the imported `nowTime`.
 
+import { useState } from "react";
 import { stepPress } from "../lib/keyboard";
 import { S, BTN, BLOCK_BG, KITCHEN_TABLE_LIMIT, hoursFor, R, M, T, FW, H, IC } from "../lib/constants";
 import {
@@ -43,7 +44,7 @@ import {
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
-  comboCapBest, nowTime, guestsLabel, countLabel, pickRefusal, unpickRefusal
+  comboCapBest, nowTime, guestsLabel, countLabel, togglePick
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -51,7 +52,6 @@ import { AlertPanel } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { WaitIcon, AlertIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
-import { useState } from "react";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { todayStr } from "../lib/day";
 
@@ -134,38 +134,18 @@ export function WalkinForm({
   // keeps existing call sites readable.
   const getCapOf = comboCapBest;
 
-  // Toggle a table on/off. Auto-prunes the selection so the host doesn't
-  // accumulate redundant tables once `wSize` is met. Refuses a set the
-  // layout's pick rules forbid, with the rule as a sentence, whether the tap
-  // adds a table or takes one out (ManualModal's toggle, the same way).
+  // Toggle a table on/off: togglePick (booking-logic.js) is the plan, the one
+  // ManualModal's toggle takes too (the auto-prune, then the pick rules).
   function wToggle(id) {
     const sel = wf.tables || [];
-    const refusePick = function (text) { setPickNote({ text: text, at: sel.join("|") }); };
-    // v17.1.1: DESELECT before the busy check — the Plan-view seated-takeover
-    // pre-select can put a currently-busy table in the selection, and the host
-    // must still be able to remove it.
-    if (sel.includes(id)) {
-      const out = unpickRefusal(sel, id);
-      if (out) { refusePick(out); return; }
-      setPickNote(null);
-      setDraft({ ...wf, tables: sel.filter((x) => x !== id) });
-      return;
-    }
-    if (wBusy.has(id)) return;
-    let next = sel.concat([id]);
-    let no = pickRefusal(next);
-    if (no) { refusePick(no); return; }
-    if (sel.length > 0 && getCapOf(sel) >= wSize) {
-      let trimmed = sel.slice();
-      while (trimmed.length > 0 && getCapOf(trimmed) >= wSize) {
-        trimmed = trimmed.slice(1);
-      }
-      next = trimmed.concat([id]);
-      no = pickRefusal(next);
-      if (no) { refusePick(no); return; }
-    }
+    // v17.1.1: a DESELECT is never stopped by the busy check — the Plan-view
+    // seated-takeover pre-select can put a currently-busy table in the
+    // selection, and the host must still be able to remove it.
+    if (!sel.includes(id) && wBusy.has(id)) return;
+    const plan = togglePick(sel, id, wSize);
+    if (plan.refuse) { setPickNote({ text: plan.refuse, at: sel.join("|") }); return; }
     setPickNote(null);
-    setDraft({ ...wf, tables: next });
+    setDraft({ ...wf, tables: plan.tables });
   }
 
   const wSel = wf.tables || [];

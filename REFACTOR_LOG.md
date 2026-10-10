@@ -35043,3 +35043,30 @@ forbidden set stand on screen until the end.
 
 Gate: main bundle 134.26 kB gz (134.05 before) · 3,167 tests · lint 63 problems,
 0 errors · style OK.
+
+### 9. `/code-review` of section 8 (2026-10-10)
+
+Five findings, all fixed.
+
+1. **The rule was asked of the set BEFORE the auto-prune.** A party of 2 on table 10
+   tapping 13 swaps 10 for 13, and was refused for "10 and 13", a pair that would
+   never have been selected. The four ids did the same in silence; the sentence
+   made it visible (the first DEV run of section 8 shows it). The prune comes
+   first now and the rule is asked once, of what would be selected.
+2. **The toggle was written out in both pickers.** It is `togglePick(sel, id, needed)`
+   in `booking-logic.js`, a plan: `{tables}` or `{refuse}`. Each picker keeps its own
+   "may this table be tapped at all" (busy, seated, swap mode) ahead of it, and the
+   note. That also answers section 7's finding 5 for this half: the toggle is run
+   by tests now, not read.
+3. `pickRuleText` printed "undefined" for a rule with nothing under Needs (not
+   reachable through `PICK_RULES`). It says "cannot be picked together".
+4. `summaryColorOf` was a function with one caller; a const, as in the walk-in form.
+5. The walk-in form's `react` import sits first.
+
+`tests/pick-rules.test.js` (30 cases): `togglePick` adding and removing, the prune,
+the 10 ↔ 13 swap for a party of 2, the refusals in and out, a refusal after a prune
+that leaves both ends, a declared combo completed. **On DEV, the walk-in form:** a
+party of 2 moves 10 → 13 → 10; a party of 8 is refused 10+13, builds 10+11+12+13,
+is refused taking 12 out, and may take 13 out.
+
+Gate: main bundle 134.07 kB gz · 3,173 tests · lint 63 problems, 0 errors · style OK.
