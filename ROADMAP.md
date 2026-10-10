@@ -76,18 +76,20 @@ in its register, and the report
 (`megustastu-bookings context/MGT_Bookings_Tech_Debt_Scan_2026-09-23.md`) has the
 evidence for each.
 
-- **Daily PROD backup (#5): running since 2026-10-09, restore not yet rehearsed.** The
-  job is in the private repository `pzzychowicz-blip/mgt-backups` (this one is public,
-  so its Actions logs and artifacts are world-readable): every day at 04:30 UTC it
-  reads the database as a read-only service account, builds the file v18.1.1's
+- **Daily PROD backup (#5): running since 2026-10-09, restore rehearsed 2026-10-10.**
+  The job is in the private repository `pzzychowicz-blip/mgt-backups` (this one is
+  public, so its Actions logs and artifacts are world-readable): every day at 04:30 UTC
+  it reads the database as a read-only service account, builds the file v18.1.1's
   `lib/backup.js` builds (imported from this repository's `main`), encrypts it with
   `age` to a key only Patryk holds, and keeps it 90 days. Its README has how to open
-  one. The first run (manual, 2026-10-09): 14 nodes, 1,640 bookings, 2.33 MB of JSON,
-  216 kB encrypted. **Still owed:** Patryk decrypting one with his key, and a restore
-  rehearsed on DEV (`database.rules.README.md` § Backups and restore). **Not proven:**
-  that the service account is refused a write; its role says so and nobody should try
-  one against PROD. A change to `src/lib/backup.js` that breaks its import fails the
-  next run there, and GitHub emails him.
+  one. The rehearsal: the first run's file (1,640 bookings, 2,326,413 bytes) decrypted
+  with his key, imported at the root of DEV through the console, exported again and
+  compared: 15 of 15 nodes identical. DEV was then put back from its own export (20 of
+  20 identical). **Still owed:** Patryk storing the key in the password manager and on
+  paper, then deleting `~/mgt-backup-key.txt`. **Not proven:** that the service
+  account is refused a write; its role says so and nobody should try one against PROD.
+  A change to `src/lib/backup.js` that breaks its import fails the next run there, and
+  GitHub emails him.
 
 - **The schema gate: any signed-in account can raise `/schema`** (v18.6.0
   /code-review). The rule lets anyone signed in write a higher number, because the
