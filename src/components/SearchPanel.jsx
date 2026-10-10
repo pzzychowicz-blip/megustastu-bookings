@@ -145,7 +145,7 @@ export function SearchPanel({ bookings, todayStr, isMobile, guestTags, tagList, 
   );
 
   return (
-    <Overlay onClose={onClose} footer={footerEl} maxWidth={FIND_CARD_W}>
+    <Overlay onClose={onClose} footer={footerEl} footerYields maxWidth={FIND_CARD_W}>
       <ModalTitle background="var(--app-btn-grey-strong)">Find a booking</ModalTitle>
       <input
         ref={inputRef}

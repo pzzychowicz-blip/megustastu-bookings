@@ -111,7 +111,7 @@ describe("X7 — Find a booking's results are columns", () => {
   const P = read("components/SearchPanel.jsx");
   it("a 720px card on a tablet, one line per result", () => {
     expect(P).toMatch(/const FIND_CARD_W = 720;/);
-    expect(P).toMatch(/<Overlay onClose=\{onClose\} footer=\{footerEl\} maxWidth=\{FIND_CARD_W\}>/);
+    expect(P).toMatch(/<Overlay onClose=\{onClose\} footer=\{footerEl\} footerYields maxWidth=\{FIND_CARD_W\}>/);
     expect(P).toMatch(/flexWrap: isMobile \? "wrap" : "nowrap"/);
     expect(read("App.jsx")).toMatch(/<SearchPanel bookings=\{bookings\} todayStr=\{todayStr\(\)\} isMobile=\{isMobile\}/);
   });

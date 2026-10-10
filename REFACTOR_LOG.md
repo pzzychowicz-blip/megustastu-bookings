@@ -34608,5 +34608,33 @@ also lists a guest whose number contains 1834.
 **Measured on DEV after a reload.** Settings → Customers: "v1834" 2 customers (0
 before), "1834" 0, "612" 4 (phones, unchanged). Find a booking: "v1834" 4 or more
 bookings, "v1833-recK" and "RQ46 Weekly" found, "1834" "No bookings match".
-`tests/customers.test.js`: 4 new cases, 3 of them failing before the change.
+`tests/customers.test.js`: 5 new cases, 3 of them failing before the change.
+
+### 13. Find a booking gives up its Done row while typing (2026-10-10)
+
+Section 7 saw it on the tablet: with the keyboard up the viewport is 231px and one
+result row and part of a second are visible.
+
+**Measured first** (Browser pane at 998 × 231, the tablet's keyboard-up size). Card
+207.9px. Body 128.9px with the full footer (77px), in which the title, the search box
+and their spacing leave the results 0px; with the slim footer the tablet gets (57px)
+and the focused box placed at the top, the results have 83px, which is one 42px row,
+a 6px gap and 35px of the next.
+
+**Decided: Done folds away while typing** (AskUserQuestion; the others were that plus
+34px rows, and leaving it). `Overlay` takes `footerYields`: while `tight` (a text
+field of the dialog focused on a screen under 480px) the card's footer row folds in a
+`Reveal` on `shift`. Only the card: a phone's sheet has no scrim, so its footer is its
+way out. Closing while it is folded is a pick, a tap outside the card, or Escape.
+
+**Measured after**, same size: footer gone, body 205.9px, three whole rows (42, 42,
+42). Focus taken away: the footer back at 77px. The fold plays both ways: sampled
+per frame, 77 → 65.2 → 54.9 → 46.2 → 38.6 → 32 → 26.5 going, and reversed mid-way
+22.1 → 19 → 19.6 → 28.9 → 37.3 → 44.7 coming back.
+
+**How it was measured, and what that leaves open.** The pane's document does not hold
+focus (`document.hasFocus()` false), so React's focus handlers were driven by
+dispatched `focusin` / `focusout`, and the fold was watched with the page reporting
+visible and screenshots driving the frames (`mgt-measurement-traps`). The tablet was
+not used; the ROADMAP entry asks for the check there.
 

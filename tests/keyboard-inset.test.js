@@ -209,6 +209,18 @@ describe("v18.4.0: a footed dialog makes room while a field is typed into on a s
     expect(Overlay.match(/\{\.\.\.typingProps\}/g)).toHaveLength(2);
   });
 
+  // v18.6.0: Find a booking gives its Done row up while typing on a short
+  // screen. Measured at the tablet's keyboard-up size (998 × 231): three whole
+  // result rows where the list had 83px, and the row back when the field loses
+  // the focus.
+  it("folds a card's footer away while tight when the caller asks, and never a phone sheet's", () => {
+    expect(Overlay).toContain('{footerYields ? <Reveal show={!tight} speed="shift" style={{ flexShrink: 0 }}>{cardFoot}</Reveal> : cardFoot}');
+    // once: the sheet's footer is the phone's only way out (no scrim there)
+    expect(Overlay.match(/footerYields \?/g)).toHaveLength(1);
+    const Search = stripComments(read("src", "components", "SearchPanel.jsx")).join("\n");
+    expect(Search).toContain("<Overlay onClose={onClose} footer={footerEl} footerYields maxWidth={FIND_CARD_W}>");
+  });
+
   it("places the focused field with its label, and only where the layout was resized", () => {
     // On iOS the keyboard covers the page and the system places the field
     // (v18.3.5's two ways); a second scroll there was not tried on a device.

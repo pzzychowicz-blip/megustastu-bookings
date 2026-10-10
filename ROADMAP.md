@@ -99,8 +99,11 @@ evidence for each.
   any device sweeps), which raises `SCHEMA`; Patryk chose the retry without it
   (2026-10-10).
 
-- **Find a booking on the tablet with the on-screen keyboard up** (seen in v18.6.0):
-  the viewport is 231 px, so one result row and part of a second are visible.
+- **Find a booking's folded Done row, on the tablet itself** (v18.6.0). Built and
+  measured in the Browser pane at the tablet's keyboard-up size (998 × 231) with the
+  focus events dispatched by script, since the pane's document does not take focus.
+  To check on the HONOR tablet after the merge: with the keyboard up the Done row is
+  gone and three result rows show; closing the keyboard brings Done back.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and
