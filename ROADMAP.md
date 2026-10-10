@@ -195,8 +195,15 @@ evidence for each.
   reload the page 4 times of 4, which destroys a parked write, so a trial that removes
   the switch by a file edit proves nothing unless the page is shown to have survived.
   Patryk does click in the shared pane during a check and does not recall pressing Retry.
-  If it recurs: log clicks in the page (capture phase, `isTrusted`, the target's text),
-  trace `retryParked`, and keep Vite's log line for the edit.
+  **The instrument is in place since v18.6.0, on DEV only** (`lib/write-trace.js`,
+  compiled out of every build): `window.__mgtTrace` holds the last 200 entries, in
+  memory, of every click (capture phase, `isTrusted`, the control's text, whether the
+  page was visible) and of each park, Retry, Discard and replay, and those four print
+  a `[trace]` console line; a Retry carries its call stack and the clicks of the 10 s
+  before it. A reload empties it, so **if it recurs, read `window.__mgtTrace` before
+  anything else**, and keep Vite's log line for any edit. Remove the module and its
+  five lines in `usePersistence.js` once the fault is explained or a few months pass
+  without it.
 
 ## Designed, not implemented
 

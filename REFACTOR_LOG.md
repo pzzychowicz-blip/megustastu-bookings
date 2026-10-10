@@ -34731,3 +34731,35 @@ form (both are in the 60,000 and in `tests/form-save.test.js`). An emptied date 
 no sentence in the form because its Save button is disabled without one
 (`BookingFormModal`, `disabled={!form.date}`); the check stays for the other doors
 into `doSave`.
+
+### 16. A DEV-only trace of the parked queue (2026-10-10)
+
+For the fault in ROADMAP, "A parked write was seen stored without Retry" (seen once,
+v18.4.9, not reproduced). Patryk's choice (AskUserQuestion): DEV only, in memory.
+This fixes nothing. It is there so the next occurrence can be read.
+
+`src/lib/write-trace.js`: `window.__mgtTrace`, the last 200 entries. Every click in
+the page, logged at the capture phase (`isTrusted`, the nearest control's label or
+text, `document.visibilityState`), and `traceWrite` for the four things that happen
+to a parked write in `usePersistence.js`: `park`, `retry` (with the call stack and
+the clicks of the 10 s before it), `discard`, `replay`. Those four print one
+`[trace]` console line each; clicks do not. Nothing is stored, and a reload empties it.
+
+**Compiled out, measured:** each call is `if(import.meta.env.DEV) traceWrite(…)`. With
+the guard only inside the functions the built main bundle was 475.58 kB (134.15 kB
+gz) against 475.47 (134.13) before the change, because the calls still built their
+arguments. With the guard at the call the build is `index-BzxkHXMk.js`, 475.47 kB,
+134.13 kB gz: the same file name, so the same bytes, as the commit before. No built
+chunk holds `__mgtTrace` or `[trace] `; `tests/write-trace.test.js` reads `dist/`
+for both when there is one.
+
+**Measured on DEV** (reload, then two clicks on the view switcher): `__mgtTrace` held
+`button "list"` with `trusted: true` (the Browser pane's pointer click) and
+`button "plan"` with `trusted: false` (a script's `.click()`), both `visible:
+"hidden"`, which is what the pane reports. No console errors.
+
+**Not measured on DEV:** a real park, Retry, Discard or replay. A park needs a write
+the server rejects three times, and nothing in this session produced one. The four
+entries are run in `tests/write-trace.test.js` against a stand-in `window` (11
+cases: the ring, the click's name, the Retry entry with its clicks, a script's click
+marked `SCRIPT`, the one listener, and the three build checks).

@@ -46,6 +46,11 @@ import {
   isStaleGap, replayOutcome, tellDiscarded, describeWrite, STALE_GAP_MS, MAX_RETRIES,
 } from "../lib/write-path";
 import { todayStr } from "../lib/day";
+// v18.6.0: a DEV-only trace of the parked queue (lib/write-trace.js), for the
+// fault in ROADMAP, "A parked write was seen stored without Retry". Compiled
+// out of a build.
+import { traceWrite, startClickTrace } from "../lib/write-trace";
+if(import.meta.env.DEV) startClickTrace();
 
 // v17.10.1: how long `.info/connected` may stay false, with the page in the
 // FOREGROUND, before we reset the SDK's reconnect backoff ourselves.
@@ -256,6 +261,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function retryParked(){
     if(!parkedRef.current.length) return;
     const items=parkedRef.current;
+    if(import.meta.env.DEV) traceWrite("retry",{labels:items.map(function(it){return it.label;})});
     parkedRef.current=[];
     syncParked();
     items.forEach(function(it){ it.tries=0; pendingRetriesRef.current.push(it); });
@@ -274,6 +280,7 @@ export function usePersistence({ autoOptimizer, nowMins }){
   function discardParked(){
     if(!parkedRef.current.length) return;
     const items=parkedRef.current;
+    if(import.meta.env.DEV) traceWrite("discard",{labels:items.map(function(it){return it.label;})});
     parkedRef.current=[];
     syncParked();
     items.forEach(function(it){tellDiscarded(it.report,LANDED,DISCARDED);});
@@ -306,14 +313,14 @@ export function usePersistence({ autoOptimizer, nowMins }){
       // name computed for the first attempt. That is also what closes the race
       // below — a retry is dispatched from a promise callback, where React
       // defers the render that would compute a fresh one.
-      if(d.action==="retry") saveBookings(item.fn,false,item.report,d.tries,item.label);
+      if(d.action==="retry"){if(import.meta.env.DEV) traceWrite("replay",{label:item.label,tries:d.tries});saveBookings(item.fn,false,item.report,d.tries,item.label);}
       else if(d.action==="refuse"){refusals.push(d.message);tellDiscarded(item.report,LANDED,DISCARDED);}
       // v17.16.9: PARK, don't drop. See parkedRef above for what dropping cost.
       // No `setWriteWarning` here any more: the parked banner carries the message,
       // and a dismissible red banner beside an undismissable one saying the same
       // thing is two notices for one fault. The red banner keeps its other three
       // callers (not loaded, empty-array refusal, blocks rejected) unchanged.
-      else parkedRef.current=parkedRef.current.concat([item]);
+      else{if(import.meta.env.DEV) traceWrite("park",{label:item.label,tries:item.tries});parkedRef.current=parkedRef.current.concat([item]);}
     });
     // Added to a warning already showing, not over it (/code-review): the
     // slot is one string, and a block edit's "please redo the change" would
