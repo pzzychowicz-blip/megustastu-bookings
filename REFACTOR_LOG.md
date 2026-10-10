@@ -34956,7 +34956,7 @@ rule and refuses three picks hosts have today); or removed. He chose **stored**.
   where they named four ids, twice each. **A set that holds a whole declared combo
   containing both tables of the pair is let through**: 1+2+9+10+13 can be picked
   (finding 2), and only once all five are in the set. The tap that would break a
-  rule still does nothing, as before; saying why is not in this version.
+  rule did nothing and said nothing, as before, until section 8.
 - **Rename:** `commitEdit` renames the rules' tables with the combos and priorities.
 - **Settings → Layout → "Tables picked together":** per rule a Pair row and a Needs
   row (the priorities' chip rows, given a `max` and an `exclude`), a remove button,
@@ -34994,7 +34994,8 @@ Five findings, each checked before it was acted on.
    its last chip (`chipRow`'s `opts.min`; the ✕ is disabled, titled "Add the other
    table first"). On DEV: a new rule, one chip removed, the other's ✕ disabled and
    the rule still there; then the rule removed.
-2. **Taking a table OUT of a set is never asked. Not changed, in ROADMAP.** Pick 10,
+2. **Taking a table OUT of a set is never asked. Fixed in section 8** (first put in
+   ROADMAP). Pick 10,
    11, 12, 13, deselect 11, and 10+12+13 saves. The four ids behaved the same;
    whether the deselect or the Save should refuse is a decision.
 3. **Three comments had been separated from their code** by the functions inserted
@@ -35007,3 +35008,38 @@ Five findings, each checked before it was acted on.
    reads as, what a set is refused for) run the code.
 
 Gate: main bundle 134.05 kB gz · 3,162 tests · lint 63 problems, 0 errors · style OK.
+
+### 8. A refused pick says why, and taking a table out is asked too
+
+Both were put in ROADMAP by sections 6 and 7; Patryk, the same day: "resolve now…
+You should have fixed it straight away." How the deselect is refused was not asked
+of him: the tap is refused, with the same sentence, because the rule is then one
+question asked of every candidate set, in and out. A refusal at Save would let a
+forbidden set stand on screen until the end.
+
+- `pickRuleText(rule)` → "Tables 10 and 13 go together only with 11 and 12."
+  `pickRefusal(next)` → that sentence or null, for a table being added.
+  `unpickRefusal(current, id)` → the same for one being taken out, **and null when
+  the current set already breaks a rule** (stored that way, or made so by a layout
+  edit), so a host is never held in it. All three in `booking-logic.js`, beside
+  `pickBlockedBy`.
+- `ManualModal` and `WalkinForm`: the three questions (the set with the table
+  added, that set after the auto-prune, the set with a table taken out) call
+  `refusePick(sentence)`. The sentence replaces the "Capacity: …" line under
+  "Selected", in the warn tone; that line is `role="status"` now, and always
+  mounted, so it is announced. The note is cleared by the next accepted tap AND tied
+  to the selection it was raised on. Each alone failed: tied only, a note raised
+  on "10" came back when the selection was next 10 (seen on DEV); cleared only,
+  Clear and the walk-in's size stepper change the selection without a tap.
+- Tests (`tests/pick-rules.test.js`, 24 cases now): the sentence for one, two and
+  three needed tables; the refusal on add; the deselect refused from an allowed set
+  (10+11+12+13 less 11 or 12; 1+2+9+10+13 less 9) and allowed from a broken one;
+  the wiring count per picker.
+- **On DEV, the walk-in form, a party of 8:** 10 then 13 → refused, the sentence
+  shown; 11, 12, 13 → "10 + 11 + 12 + 13 · Capacity: 10 (fits 8 guests)"; a tap on
+  11, then on 12 → each refused, the selection unchanged; a tap on 10 → taken out,
+  the capacity line back. Nothing was saved. The table picker (`ManualModal`) holds
+  the same lines and was not driven in the browser.
+
+Gate: main bundle 134.26 kB gz (134.05 before) · 3,167 tests · lint 63 problems,
+0 errors · style OK.

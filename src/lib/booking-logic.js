@@ -555,6 +555,26 @@ export function pickBlockedBy(ids,rules,combos){
   }
   return null;
 }
+// v18.6.1 (follow-up): what the two pickers ASK, and the sentence they show.
+// pickRefusal(next) is for a table being added: the rule the new set breaks, as
+// a sentence, or null. unpickRefusal(current, id) is for one being taken out,
+// which the four ids never asked: 10+11+12+13 less 11 is 10+12+13, a set the
+// rule forbids, and it saved. A set that ALREADY breaks a rule (stored that way,
+// or made so by a layout edit) may be taken apart in any order, or the picker
+// would hold the host in it.
+export function pickRuleText(r){
+  var need=r.need.length>1?r.need.slice(0,-1).join(", ")+" and "+r.need[r.need.length-1]:r.need[0];
+  return "Tables "+r.pair[0]+" and "+r.pair[1]+" go together only with "+need+".";
+}
+export function pickRefusal(next,rules,combos){
+  var r=pickBlockedBy(next,rules,combos);
+  return r?pickRuleText(r):null;
+}
+export function unpickRefusal(current,id,rules,combos){
+  var cur=current||[];
+  if(pickBlockedBy(cur,rules,combos)) return null;
+  return pickRefusal(cur.filter(function(x){return x!==id;}),rules,combos);
+}
 export function comboOk(ids,pref){var mixed=!isAllIn(ids)&&!isAllOut(ids);if(mixed&&pref!=="auto") return false;if(mixed&&!isMixedLarge(ids)) return false;if(pref==="indoor") return isAllIn(ids);if(pref==="outdoor") return isAllOut(ids);return true;}
 export function comboCap(ids){var k=ids.slice().sort().join("|");var c=VALID_COMBOS.find(function(x){return x.ids.slice().sort().join("|")===k;});return c?c.cap:ids.reduce(function(a,id){var t=ALL_TABLES.find(function(x){return x.id===id;});return a+(t?t.capacity:0);},0);}
 export function isLocked(b){return b&&(b._locked===true||b.status==="seated");}

@@ -32,7 +32,7 @@ import { useState, useEffect, useRef } from "react";
 import { S, BTN, R, M, T, FW, ALL_TABLES } from "../lib/constants";
 import { isTyping } from "../lib/keyboard";
 import {
-  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd, guestsLabel, pickBlockedBy
+  toMins, toTime, overlaps, canAssign, getBlockSlots, getBusy, comboCapBest, bookEnd, padEnd, guestsLabel, pickRefusal, unpickRefusal
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Toggle, mkBtn, mkSolidBtn, AutoHeight, Reveal } from "./atoms";
 import { AlertPanel, AlertRow } from "./AlertPanel";
@@ -51,6 +51,11 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
     return booking && booking.tables ? booking.tables.filter(function (t) { return known.has(t); }) : [];
   });
   const [swapBusy, setSwapBusy] = useState(false);
+  // v18.6.1: why the last tap was refused by a pick rule. An accepted tap clears
+  // it, and it is tied to the selection it was refused on, so a change by any
+  // other route (Clear, the swap switch) hides it too. Both are needed: a note
+  // raised on "10" came back the next time the selection was 10 again (DEV).
+  const [pickNote, setPickNote] = useState(null);
 
   // v17.5.0 (unsaved-changes guard): the table picks live HERE, not in App, so
   // dirtiness is REPORTED upward rather than App reaching in. The baseline is
@@ -115,19 +120,30 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
   // accumulate redundant tables once `needed` is met. Refuses a set the
-  // layout's pick rules forbid (pickBlockedBy; the default: 10+13 without 11
-  // and 12, the two ends of the dining room).
+  // layout's pick rules forbid, with the rule as a sentence (the default:
+  // 10+13 without 11 and 12, the two ends of the dining room), whether the
+  // tap adds a table or takes one out.
+  function refusePick(text) { setPickNote({ text: text, at: selected.join("|") }); }
   function toggle(id) {
-    if (selected.includes(id)) { setSelected(selected.filter((x) => x !== id)); return; }
+    if (selected.includes(id)) {
+      const no = unpickRefusal(selected, id);
+      if (no) { refusePick(no); return; }
+      setPickNote(null);
+      setSelected(selected.filter((x) => x !== id));
+      return;
+    }
     if (busy.has(id) && !(swapBusy && !seatedBusy.has(id))) return;
     let next = selected.concat([id]);
-    if (pickBlockedBy(next)) return;
+    let no = pickRefusal(next);
+    if (no) { refusePick(no); return; }
     if (selected.length > 0 && getCapOf(selected) >= needed) {
       let trimmed = selected.slice();
       while (trimmed.length > 0 && getCapOf(trimmed) >= needed) { trimmed = trimmed.slice(1); }
       next = trimmed.concat([id]);
-      if (pickBlockedBy(next)) return;
+      no = pickRefusal(next);
+      if (no) { refusePick(no); return; }
     }
+    setPickNote(null);
     setSelected(next);
   }
 
@@ -149,8 +165,9 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
   const slotsForConflict = otherSlots.filter((sl) => !swapBusy || sl.status === "seated");
   const conflict = selected.length >= 2 && !canAssign(selected, slotsForConflict, s, e);
   const ok = selected.length > 0 && cap >= needed && !conflict;
-  const summaryColor = conflict ? "var(--danger-text)" : ok ? "var(--success-text)" : "var(--warn-text)";
-  const summaryText = selected.length === 0
+  const summaryColorOf = (said) => said ? "var(--warn-text)" : conflict ? "var(--danger-text)" : ok ? "var(--success-text)" : "var(--warn-text)";
+  const pickSaid = pickNote && pickNote.at === selected.join("|") ? pickNote.text : null;
+  const summaryText = pickSaid ? pickSaid : selected.length === 0
     ? "Select tables below."
     : conflict
       ? "Conflict: cannot use these tables together."
@@ -293,7 +310,9 @@ export function ManualModal({ booking, bookings, onSave, onClose, onDirty, title
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (selected.length ? selected.join(" + ") : "none")}
           </div>
-          <div style={{ fontSize: T.body, color: summaryColor, fontWeight: FW.medium, marginTop: 2 }}>
+          {/* v18.6.1: a status line. It is always mounted, so a refusal that
+              replaces the capacity here is announced as well as shown. */}
+          <div role="status" style={{ fontSize: T.body, color: summaryColorOf(pickSaid), fontWeight: FW.medium, marginTop: 2 }}>
             {summaryText}
           </div>
         </div>

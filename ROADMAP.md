@@ -19,14 +19,6 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **A tap the pick rules refuse does nothing, and says nothing** (v18.6.1). The
-  table picker and the walk-in form ignore a tap that would break a rule from
-  Settings → Layout → "Tables picked together" (`pickBlockedBy` returns the rule).
-  Say which rule, the way a refused drop does. **And taking a table OUT of a set is
-  never asked**: pick 10, 11, 12, 13, deselect 11, and 10+12+13 saves (the rule was
-  the same before it moved to the layout). Decide whether the deselect is refused or
-  Save is, then ask `pickBlockedBy` there.
-
 - **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
   (1) **Photos in the inbox** — staff send the menu as a picture and customers send

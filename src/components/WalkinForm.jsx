@@ -43,7 +43,7 @@ import {
   findBest, findBestAny,
   optimizerActiveFor, findTimes, formatSugg,
   getKitchenLoad, findKitchenFriendlyTimes, startingPhrase,
-  comboCapBest, nowTime, guestsLabel, countLabel, pickBlockedBy
+  comboCapBest, nowTime, guestsLabel, countLabel, pickRefusal, unpickRefusal
 } from "../lib/booking-logic";
 import { Overlay, ModalTitle, Section, Fld, InlineAlert, mkInp, mkArea, mkBtn, mkSolidBtn, AutoHeight, Reveal, Presence, OutlineChip } from "./atoms";
 import { AvailBanner } from "./AvailBanner";
@@ -51,6 +51,7 @@ import { AlertPanel } from "./AlertPanel";
 import { NOTIF_GUTTER, NOTIF_PAD_X } from "./NotificationStrip";
 import { WaitIcon, AlertIcon } from "./Icons";
 import { TableGrid } from "./TableGrid";
+import { useState } from "react";
 import { useDeferredCompute } from "../hooks/useDeferredCompute";
 import { todayStr } from "../lib/day";
 
@@ -70,6 +71,9 @@ export function WalkinForm({
   onSave, onClose, onAddToWaitlist
 }) {
   const wf = draft;
+  // v18.6.1: why the last tap was refused by a pick rule, tied to the selection
+  // it was refused on (see ManualModal).
+  const [pickNote, setPickNote] = useState(null);
   const wSize = Number(wf.size) || 2;
   // Fallback if the draft has no time (initial state). Parent's openWalkin
   // already seeds `time` to nowTime(), so this branch is rarely taken — kept
@@ -132,36 +136,44 @@ export function WalkinForm({
 
   // Toggle a table on/off. Auto-prunes the selection so the host doesn't
   // accumulate redundant tables once `wSize` is met. Refuses a set the
-  // layout's pick rules forbid (pickBlockedBy; the default: 10+13 without 11
-  // and 12, the two ends of the dining room).
+  // layout's pick rules forbid, with the rule as a sentence, whether the tap
+  // adds a table or takes one out (ManualModal's toggle, the same way).
   function wToggle(id) {
     const sel = wf.tables || [];
+    const refusePick = function (text) { setPickNote({ text: text, at: sel.join("|") }); };
     // v17.1.1: DESELECT before the busy check — the Plan-view seated-takeover
     // pre-select can put a currently-busy table in the selection, and the host
     // must still be able to remove it.
     if (sel.includes(id)) {
+      const out = unpickRefusal(sel, id);
+      if (out) { refusePick(out); return; }
+      setPickNote(null);
       setDraft({ ...wf, tables: sel.filter((x) => x !== id) });
       return;
     }
     if (wBusy.has(id)) return;
     let next = sel.concat([id]);
-    if (pickBlockedBy(next)) return;
+    let no = pickRefusal(next);
+    if (no) { refusePick(no); return; }
     if (sel.length > 0 && getCapOf(sel) >= wSize) {
       let trimmed = sel.slice();
       while (trimmed.length > 0 && getCapOf(trimmed) >= wSize) {
         trimmed = trimmed.slice(1);
       }
       next = trimmed.concat([id]);
-      if (pickBlockedBy(next)) return;
+      no = pickRefusal(next);
+      if (no) { refusePick(no); return; }
     }
+    setPickNote(null);
     setDraft({ ...wf, tables: next });
   }
 
   const wSel = wf.tables || [];
   const wCap = getCapOf(wSel);
   const wOk = wSel.length > 0 && wCap >= wSize;
-  const wSummaryColor = wOk ? "var(--success-text)" : "var(--warn-text)";
-  const wSummaryText = wSel.length === 0
+  const wPickSaid = pickNote && pickNote.at === wSel.join("|") ? pickNote.text : null;
+  const wSummaryColor = wOk && !wPickSaid ? "var(--success-text)" : "var(--warn-text)";
+  const wSummaryText = wPickSaid ? wPickSaid : wSel.length === 0
     ? "Select tables below."
     : "Capacity: " + wCap + (wCap >= wSize ? " (fits " + guestsLabel(wSize) + ")" : " — need " + guestsLabel(wSize));
   // v17.15.2: slides in and out. It appears the moment you tap a table and
@@ -506,7 +518,7 @@ export function WalkinForm({
           <div style={{ fontSize: T.lead, fontWeight: FW.bold, color: S.text }}>
             {"Selected: " + (wSel.length ? wSel.join(" + ") : "none")}
           </div>
-          <div style={{ fontSize: T.body, color: wSummaryColor, fontWeight: FW.medium, marginTop: 2 }}>
+          <div role="status" style={{ fontSize: T.body, color: wSummaryColor, fontWeight: FW.medium, marginTop: 2 }}>
             {wSummaryText}
           </div>
         </div>

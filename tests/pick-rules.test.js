@@ -14,7 +14,7 @@ import { stripComments } from "../scripts/strip-comments.mjs";
 import {
   DEFAULT_LAYOUT, PICK_RULES, PICK_RULES_MAX, buildLayout, normalizePickRules, activePickRules,
 } from "../src/lib/constants.js";
-import { pickBlockedBy } from "../src/lib/booking-logic.js";
+import { pickBlockedBy, pickRuleText, pickRefusal, unpickRefusal } from "../src/lib/booking-logic.js";
 import { sanitizeLayout } from "../src/hooks/useLayout.js";
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
@@ -71,6 +71,42 @@ describe("pickBlockedBy — any rules", () => {
     expect(pickBlockedBy(["A", "D", "Q", "X", "Y"], rules, combos)).toBe(rules[1]);
     // A combo holding one table of the pair says nothing about the pair.
     expect(pickBlockedBy(["A", "D", "Q"], rules, [{ ids: ["A", "Q"], cap: 4 }])).toBe(rules[0]);
+  });
+});
+
+describe("what the pickers ask: pickRefusal and unpickRefusal", () => {
+  it("the sentence names the pair and what it needs, as a list", () => {
+    expect(pickRuleText({ pair: ["10", "13"], need: ["11", "12"] })).toBe("Tables 10 and 13 go together only with 11 and 12.");
+    expect(pickRuleText({ pair: ["A", "B"], need: ["C"] })).toBe("Tables A and B go together only with C.");
+    expect(pickRuleText({ pair: ["A", "B"], need: ["C", "D", "E"] })).toBe("Tables A and B go together only with C, D and E.");
+  });
+  it("adding: the sentence for a set a rule forbids, null for one it allows", () => {
+    expect(pickRefusal(["10", "13"])).toBe("Tables 10 and 13 go together only with 11 and 12.");
+    expect(pickRefusal(["10", "11", "12", "13"])).toBe(null);
+    expect(pickRefusal(["1", "2", "9", "10", "13"])).toBe(null);
+  });
+  // The four ids in the pickers never asked this: the whole room picked, one
+  // of the two between taken out, and 10+12+13 saved.
+  it("taking a table out of an allowed set is refused when what is left breaks a rule", () => {
+    const room = ["10", "11", "12", "13"];
+    expect(unpickRefusal(room, "11")).toBe("Tables 10 and 13 go together only with 11 and 12.");
+    expect(unpickRefusal(room, "12")).toBe("Tables 10 and 13 go together only with 11 and 12.");
+    expect(unpickRefusal(room, "10")).toBe(null);
+    expect(unpickRefusal(room, "13")).toBe(null);
+    expect(unpickRefusal(["1", "2", "9", "10", "13"], "9")).toBe("Tables 10 and 13 go together only with 11 and 12.");
+    expect(unpickRefusal(["3", "4"], "3")).toBe(null);
+  });
+  it("a set that already breaks a rule can be taken apart in any order", () => {
+    expect(unpickRefusal(["10", "12", "13"], "12")).toBe(null);
+    expect(unpickRefusal(["10", "13", "3"], "3")).toBe(null);
+    expect(unpickRefusal(["10", "13"], "10")).toBe(null);
+    expect(unpickRefusal(undefined, "1")).toBe(null);
+  });
+  it("reads the rules and combos it is handed", () => {
+    const rules = [{ pair: ["A", "D"], need: ["B"] }];
+    expect(pickRefusal(["A", "D"], rules, [])).toBe("Tables A and D go together only with B.");
+    expect(unpickRefusal(["A", "B", "D"], "B", rules, [])).toBe("Tables A and D go together only with B.");
+    expect(unpickRefusal(["A", "B", "D"], "B", [], [])).toBe(null);
   });
 });
 
@@ -131,10 +167,17 @@ describe("the layout carries the rules", () => {
 
 // The wiring a pure test cannot see: who asks, and who keeps the names in step.
 describe("the pickers and the editor", () => {
-  it("both pickers ask pickBlockedBy on every candidate set, and name no table", () => {
-    for (const [file, calls] of [["components/ManualModal.jsx", 2], ["components/WalkinForm.jsx", 2]]) {
+  // Three questions per picker: the set with the table added, the same set
+  // after the auto-prune, and the set with a table taken out. Each refusal is
+  // SAID (the tap used to do nothing), on the status line under "Selected".
+  it("both pickers ask on every candidate set, in and out, say the refusal, and name no table", () => {
+    for (const file of ["components/ManualModal.jsx", "components/WalkinForm.jsx"]) {
       const text = code(file);
-      expect(text.split("if (pickBlockedBy(next)) return;").length - 1, file).toBe(calls);
+      expect(text.split("pickRefusal(next)").length - 1, file).toBe(2);
+      expect(text.split("unpickRefusal(").length - 1, file).toBe(1);
+      expect(text.split(") { refusePick(").length - 1, file).toBe(3);
+      expect(text, file).toMatch(/<div role="status" style=\{\{ fontSize: T\.body, color: \w+(\(\w+\))?, fontWeight: FW\.medium, marginTop: 2 \}\}>/);
+      expect(text, file).not.toContain("pickBlockedBy");
       expect(text, file).not.toMatch(/\.includes\("(1[0-3]|i[1-4])"\)/);
     }
   });
