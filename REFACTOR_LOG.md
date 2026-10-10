@@ -34763,3 +34763,30 @@ the server rejects three times, and nothing in this session produced one. The fo
 entries are run in `tests/write-trace.test.js` against a stand-in `window` (11
 cases: the ring, the click's name, the Retry entry with its clicks, a script's click
 marked `SCRIPT`, the one listener, and the three build checks).
+
+### 17. `/code-review` of round 2 (2026-10-10, the nine commits after `8dfc9dfb`)
+
+Five findings, each checked before it was acted on.
+
+1. **A tag with digits in its label could not be found by typing it. Fixed.**
+   `matchedTagLabels` kept the three-digit test that section 12 replaced in the two
+   searches, and `searchBookings` calls it. Reproduced in Node: a booking tagged
+   "Table 100", the query "table 100": 0 results and no labels ("table" alone found
+   it). It asks `nameQuery` now; the same case is in `tests/customers.test.js`.
+2. **The rule-removal retry (section 10) could fire after the hook unmounted. Fixed.**
+   A bare `setTimeout`, 300 to 900 ms, with nothing to stop it on a sign-out or an
+   account switch; the old closure would write `/recurring` from a detached mirror.
+   Read, not reproduced. An `alive` ref, set in an effect and cleared in its
+   cleanup, is asked before the retry. Not re-measured on DEV: the retry needs a
+   refused write.
+3. **`searchCustomers` asked `nameQuery` once per customer. Fixed** (once per query).
+4. **Find a booking's Done row cannot be reached by Tab while it is folded. No
+   change.** That is DESIGN.md's rule for a folded piece ("a folded piece is
+   `inert`"), the fold needs a short viewport AND a focused field, and Esc and a tap
+   outside the card both close it.
+5. **ROADMAP said the trace has five lines in `usePersistence.js`; it has six. Fixed**
+   (and in `src/lib/CLAUDE.md`).
+
+Gate: main bundle 134.16 kB gz (134.13 before the fixes) · 3,135 tests · lint 63
+problems, 0 errors · style OK. Rules suite: 307 passed when section 11 was written,
+and `database.rules.json` has not changed since.

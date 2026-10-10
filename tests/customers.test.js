@@ -368,6 +368,12 @@ describe("searchBookings", () => {
       expect(by("bd", "birth")).toEqual(["Birthday"]);
       expect(by("bd", "bi")).toEqual([]);                      // two letters
       expect(by("new", "600111")).toEqual([]);                 // a phone query
+      // v18.6.0 /code-review: a query with a letter is a name query here too,
+      // whatever digits it holds (it kept the old three-digit test).
+      const numbered = { map: {}, list: { v: 1, guest: [], occasion: [{ id: "o-t", label: "Table 100" }] } };
+      const tabled = { id: "t1", name: "Ana", phone: "", date: "2026-11-17", time: "19:00", tags: ["o-t"] };
+      expect(matchedTagLabels(tabled, "table 100", numbered)).toEqual(["Table 100"]);
+      expect(searchBookings([tabled], "table 100", "2026-11-01", 10, numbered).map((b) => b.id)).toEqual(["t1"]);
       expect(by("new", "allerg", null)).toEqual([]);
       expect(by("gone", "removed")).toEqual([]);
     });

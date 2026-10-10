@@ -202,7 +202,7 @@ evidence for each.
   a `[trace]` console line; a Retry carries its call stack and the clicks of the 10 s
   before it. A reload empties it, so **if it recurs, read `window.__mgtTrace` before
   anything else**, and keep Vite's log line for any edit. Remove the module and its
-  five lines in `usePersistence.js` once the fault is explained or a few months pass
+  six lines in `usePersistence.js` (the import and five guarded calls) once the fault is explained or a few months pass
   without it.
 
 ## Designed, not implemented

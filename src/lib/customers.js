@@ -786,13 +786,15 @@ export function searchBookings(bookings, query, todayStr, limit, tags) {
 // matchedTagLabels — the names of booking `b`'s tags that contain the query,
 // guest tags first: what Find a booking writes under a result's name, so "ann"
 // tells an Ann from an Anniversary (Patryk, 2026-10-09: only the MATCHING
-// tags, and also when the name matched too). [] for a digit query, for fewer
+// tags, and also when the name matched too). [] for a query that is a phone
+// search only (`nameQuery`; v18.6.0 /code-review: it kept the old three-digit
+// test, so "table 100" did not find the tag "Table 100"), for fewer
 // than three characters, and without `tags` — the same rule the search itself
 // matches by, because it IS that rule: `searchBookings` calls this.
 export function matchedTagLabels(b, query, tags) {
   const q = String(query || "").trim();
   const qName = q.toLowerCase();
-  if (!b || !tags || qName.length < 3 || q.replace(/[^\d]/g, "").length >= 3) return [];
+  if (!b || !tags || qName.length < 3 || !nameQuery(q)) return [];
   const t = bookingTags(b, tags.map, tags.list);
   return t.guest.concat(t.occasion).filter(function (label) { return label.toLowerCase().indexOf(qName) !== -1; });
 }
@@ -808,13 +810,14 @@ export function searchCustomers(index, query, limit) {
   if (!q) return [];
   const qDigits = q.replace(/[^\d]/g, "");
   const qName = q.toLowerCase();
+  const named = nameQuery(q);
   const out = [];
   Object.keys(index).forEach(function (key) {
     const c = index[key];
     // v17.10.0: `c.phone` is "" on a guest-id entry, so a digits query simply
     // never matches one — which is right: they have no number to search by.
     const phoneHit = qDigits.length >= 3 && !!c.phone && c.phone.replace(/[^\d]/g, "").indexOf(qDigits) !== -1;
-    const nameHit = nameQuery(q) && c.name && c.name.toLowerCase().indexOf(qName) !== -1;
+    const nameHit = named && c.name && c.name.toLowerCase().indexOf(qName) !== -1;
     if (phoneHit || nameHit) out.push(c);
   });
   out.sort(function (a, b) { return (b.latestDate || "").localeCompare(a.latestDate || ""); });

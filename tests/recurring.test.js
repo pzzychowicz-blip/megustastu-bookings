@@ -318,9 +318,13 @@ describe("rulesOfCustomer", () => {
     const fn = HOOK.slice(at, HOOK.indexOf("function setRulesActive(", at));
     // the last attempt passes no handler, so its refusal is the banner's
     expect(fn).toContain("n >= REMOVE_RETRIES ? undefined : function () {");
-    expect(fn).toContain("setTimeout(function () { removeAttempt(ids, n + 1); }, REMOVE_RETRY_MS * (n + 1));");
+    // /code-review: and only while the hook is mounted, so a sign-out inside
+    // the wait does not write from a dead closure.
+    expect(fn).toContain("setTimeout(function () { if (alive.current) removeAttempt(ids, n + 1); }, REMOVE_RETRY_MS * (n + 1));");
+    expect(HOOK).toContain("useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);");
     // and a handler REPLACES the banner, it does not come after it
-    const save = HOOK.slice(HOOK.indexOf("function saveRecurring("), HOOK.indexOf("useEffect("));
+    const saveAt = HOOK.indexOf("function saveRecurring(");
+    const save = HOOK.slice(saveAt, HOOK.indexOf("useEffect(", saveAt));
     expect(save.indexOf("if (onRefused) { onRefused(); return; }")).toBeGreaterThan(-1);
     expect(save.indexOf("if (onRefused) { onRefused(); return; }")).toBeLessThan(save.indexOf("if (!isSilent) setWriteWarning(\"Couldn't save"));
   });

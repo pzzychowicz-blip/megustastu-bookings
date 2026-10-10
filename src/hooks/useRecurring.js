@@ -86,6 +86,12 @@ export function useRecurring({ setWriteWarning }) {
   const recurringRef = useRef(DEFAULT_RECURRING);   // mirror for updater-free saves
   const loaded = useRef(false);
   const revRef = useRef(0);
+  // v18.6.0 /code-review: false once the hook has unmounted (a sign-out or an
+  // account switch), so `removeRules`' retry timer does not write from a dead
+  // closure. Set inside the effect, not by the initializer (the StrictMode
+  // mounted-ref lesson).
+  const alive = useRef(false);
+  useEffect(function () { alive.current = true; return function () { alive.current = false; }; }, []);
 
   // Returns true when the write was dispatched, false when refused by the
   // loaded-guard (/code-review: delBooking gates a recurring-occurrence delete
@@ -161,7 +167,7 @@ export function useRecurring({ setWriteWarning }) {
     return saveRecurring(function (prev) {
       return Object.assign({}, prev, { rules: prev.rules.filter(function (r) { return ids.indexOf(r.id) === -1; }) });
     }, false, n >= REMOVE_RETRIES ? undefined : function () {
-      setTimeout(function () { removeAttempt(ids, n + 1); }, REMOVE_RETRY_MS * (n + 1));
+      setTimeout(function () { if (alive.current) removeAttempt(ids, n + 1); }, REMOVE_RETRY_MS * (n + 1));
     });
   }
   // v18.6.0: several rules paused or resumed in one write, and the answer
