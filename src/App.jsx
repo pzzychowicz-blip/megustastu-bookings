@@ -2146,6 +2146,23 @@ function BookingApp({uid}){
     }
     setShowFinished(next);
   }
+  // v18.6.0: the third way to reach a day whose only tagged bookings are
+  // finished is to FINISH the last one while its tag is the filter (measured on
+  // DEV: 0 cards and a closed fold reading "1 booking"). The fold opens then
+  // too (Patryk, 2026-10-10), whoever finished it: a tap here, the close-time
+  // auto-complete, another device. Keyed on the answer, so it runs when the
+  // answer BECOMES true and a fold closed by hand afterwards stays closed.
+  // Adjusted during render against the previous answer (React's own pattern
+  // for state that follows a derived value), not in an effect: an effect here
+  // is a `set-state-in-effect` warning and one more render with the List empty.
+  const tagOnlyFinished=useMemo(function(){
+    return onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,listTagFilter);
+  },[bookings,viewDate,guestTags,tagList,listTagFilter]);
+  const [wasTagOnlyFinished,setWasTagOnlyFinished]=useState(false);
+  if(tagOnlyFinished!==wasTagOnlyFinished){
+    setWasTagOnlyFinished(tagOnlyFinished);
+    if(tagOnlyFinished) setShowFinished(true);
+  }
 
   // Overlap warnings: seated bookings whose live end is within 15 min of next booking on same table
   // v17.1.0 perf: useMemo (was a per-render IIFE) — a fresh object every render

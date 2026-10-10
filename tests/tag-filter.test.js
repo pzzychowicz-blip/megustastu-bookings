@@ -87,6 +87,16 @@ describe("onlyFinishedMatch", () => {
     expect(fn).not.toContain("setShowFinished(false)");
     expect(APP).toContain("setSelectedListId(null);setShowFinished(onlyFinishedMatch(bookings.filter(function(x){return x.date===viewDate;}),guestTags,tagList,listTagFilter));");
   });
+  it("App opens the fold when the answer BECOMES true (the last match finished under the filter), and never closes it from there", () => {
+    const APP = read("App.jsx");
+    const at = APP.indexOf("const tagOnlyFinished=useMemo(");
+    expect(at).toBeGreaterThan(-1);
+    const fn = APP.slice(at, at + 600);
+    expect(fn).toContain("onlyFinishedMatch(bookings.filter(function(b){return b.date===viewDate;}),guestTags,tagList,listTagFilter)");
+    expect(fn).toContain("if(tagOnlyFinished!==wasTagOnlyFinished){");
+    expect(fn).toContain("if(tagOnlyFinished) setShowFinished(true);");
+    expect(fn).not.toContain("setShowFinished(false)");
+  });
 });
 
 describe("dayTagChips", () => {

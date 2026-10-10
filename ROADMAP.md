@@ -106,14 +106,11 @@ evidence for each.
   still holding the name and phone, with the "redo the change" banner. It is deleted
   by hand in Settings. A retry there is not built.
 
-- **Seen in v18.6.0, not decided or not read.** (1) The List's tag filter: a booking
-  completed or cancelled WHILE its tag is the filter moves into the closed fold, and
-  the List shows no card until the day is re-entered; the rule built opens the fold
-  on choosing a tag and on arriving. Patryk to say whether this case opens it too.
-  (2) Settings → Customers answered "No customers match" for a test guest's full name
-  ("V186 DelCust2") that the search "V186" found; seen once on DEV, cause not read.
-  (3) Find a booking on the tablet with the on-screen keyboard up: the viewport is
-  231 px, so one result row and part of a second are visible.
+- **Seen in v18.6.0, not decided or not read.** (1) Settings → Customers answered
+  "No customers match" for a test guest's full name ("V186 DelCust2") that the search
+  "V186" found; seen once on DEV, cause not read. (2) Find a booking on the tablet
+  with the on-screen keyboard up: the viewport is 231 px, so one result row and part
+  of a second are visible.
 
 - **Design the bookings archive at 2,500 bookings or 2.5 GB a month (#3).** Every
   device subscribes to every booking ever made, each with an uncapped `history`, and

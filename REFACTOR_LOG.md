@@ -34180,8 +34180,9 @@ opens "Completed & cancelled" (section 1); the "No bookings tagged…" line fold
 out and no longer shows on an empty day (section 2); Delete customer pauses the
 standing bookings and erases only once the anonymise has landed (section 3); a device
 on an older build than the database refuses to save and shows "This device needs
-refreshing" (section 4). None in section 5 (an extraction). The header is extended as the version's
-other items land.
+refreshing" (section 4). None in section 5 (an extraction). Finishing the last
+unfinished match while its tag is the filter opens the fold too (section 9). The
+header is extended as the version's other items land.
 **Rules change: YES** (section 4): `schema` + `schemaRev`, the eighteenth rev pair.
 **Deploy steps (Patryk):** (1) deploy `database.rules.json` to DEV and to PROD, BEFORE
 the merge (`database.rules.README.md`, v18.6.0); (2) merge; (3) refresh every device,
@@ -34497,3 +34498,27 @@ the paused rule with the name in it.
 - *`UpdateRequired` is a default export* where most components are named ones.
   `ErrorBoundary` is the same, and the file name matches the export.
 
+### 9. The last match finished while its tag is the filter (2026-10-10)
+
+The second round on this version (Patryk, 2026-10-10: same version, same branch and
+PR #141, more commits). Section 1 opened the fold on choosing a tag and on arriving at
+a day. The third way in was left for him to decide: finish the last unfinished match
+while its tag is the filter.
+
+**Reproduced on DEV first:** Birthday chosen on 2026-10-10, one match (seated).
+Completed from its card: 0 cards, and the closed fold reading "1 booking".
+
+**Decided: the fold opens** (AskUserQuestion; the options were to open it, to open it
+and keep the card selected, or to leave it). `tagOnlyFinished` in `BookingApp` is
+`onlyFinishedMatch` for the viewed day as a memo, and the fold opens when that answer
+becomes true, so it also covers the close-time auto-complete and another device. A
+fold closed by hand afterwards stays closed, since the answer has not changed.
+
+**Adjusted during render, not in an effect.** The first version was a one-line effect
+and took lint from 63 warnings to 64 (`react-hooks/set-state-in-effect`), over the cap.
+It is now the previous answer held in state and compared during render, which is 63.
+
+**Measured on DEV after a reload:** completed under the filter: fold `aria-expanded`
+true, 1 card (the completed booking). Closed by hand: stayed false for the 3.5 s
+watched. Filter cleared: fold false, 6 cards. Filter chosen again: fold true, 1 card
+(section 1's rule, unchanged). `tests/tag-filter.test.js` pins the new site.
