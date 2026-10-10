@@ -6,7 +6,7 @@ const TAG = { background: "var(--bg-veil)", color: "var(--text-secondary)" };
 export const WithIcons = () => (
   <Surface>
     <div style={{ display: "flex", flexWrap: "wrap", gap: SP.snug }}>
-      <SmallTag label={<><StarIcon size={IC.inline} /> 5A · 5B</>} style={TAG} />
+      <SmallTag label={<><StarIcon size={IC.inline} /> 6 · 7</>} style={TAG} />
       <SmallTag label={<><DepositIcon size={IC.inline} /> €30 deposit</>} style={TAG} />
       <SmallTag label={<><LockIcon size={IC.inline} /> manual</>} style={TAG} />
     </div>
@@ -25,7 +25,7 @@ export const TextOnly = () => (
 export const DarkTheme = () => (
   <Surface dark>
     <div style={{ display: "flex", gap: SP.snug }}>
-      <SmallTag label={<><StarIcon size={IC.inline} /> i2</>} style={TAG} />
+      <SmallTag label={<><StarIcon size={IC.inline} /> 11</>} style={TAG} />
       <SmallTag label="Repeats weekly" style={TAG} />
     </div>
   </Surface>

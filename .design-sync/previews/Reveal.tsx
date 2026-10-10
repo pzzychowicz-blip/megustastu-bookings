@@ -29,9 +29,9 @@ export const DisclosureBody = () => {
         <button style={mkBtn({ background: "var(--app-btn-slate)" })} onClick={() => setOpen(!open)} aria-expanded={open}>Past visits (3)</button>
         <Reveal show={open}>
           <div style={{ display: "flex", flexDirection: "column", gap: SP.tight, marginTop: SP.base, fontSize: T.body }}>
-            <span><b style={{ fontWeight: FW.semi }}>12 Sep</b> · 4 guests · 5A</span>
-            <span><b style={{ fontWeight: FW.semi }}>29 Aug</b> · 2 guests · i2</span>
-            <span><b style={{ fontWeight: FW.semi }}>3 Aug</b> · 4 guests · 5A · 5B</span>
+            <span><b style={{ fontWeight: FW.semi }}>12 Sep</b> · 4 guests · 6</span>
+            <span><b style={{ fontWeight: FW.semi }}>29 Aug</b> · 2 guests · 11</span>
+            <span><b style={{ fontWeight: FW.semi }}>3 Aug</b> · 4 guests · 6 · 7</span>
           </div>
         </Reveal>
       </Section>

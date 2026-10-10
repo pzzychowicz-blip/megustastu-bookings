@@ -19,9 +19,9 @@ function Room({ children, h = 200 }: { children?: any; h?: number }) {
 export const ShapesAndChairs = () => (
   <Surface>
     <Room>
-      <TableGlyph id="2" entry={{ x: 90, y: 100, shape: "round", w: 80, chairs: { top: 1, right: 1, bottom: 1, left: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
-      <TableGlyph id="5A" entry={{ x: 260, y: 100, shape: "rect", w: 130, h: 70, chairs: { top: 2, bottom: 2 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
-      <TableGlyph id="i3" entry={{ x: 430, y: 100, shape: "square", w: 80, chairs: { top: 1, bottom: 1, left: 1, right: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
+      <TableGlyph id="3" entry={{ x: 90, y: 100, shape: "round", w: 80, chairs: { top: 1, right: 1, bottom: 1, left: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
+      <TableGlyph id="6" entry={{ x: 260, y: 100, shape: "rect", w: 130, h: 70, chairs: { top: 2, bottom: 2 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
+      <TableGlyph id="12" entry={{ x: 430, y: 100, shape: "square", w: 80, chairs: { top: 1, bottom: 1, left: 1, right: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
     </Room>
   </Surface>
 );
@@ -29,13 +29,13 @@ export const ShapesAndChairs = () => (
 export const Occupancy = () => (
   <Surface>
     <Room>
-      <TableGlyph id="3" entry={{ x: 90, y: 100, shape: "round", w: 80, chairs: { top: 1, right: 1, bottom: 1, left: 1 } }} fill={BLOCK_BG.seated} stroke={OCCUPIED}>
+      <TableGlyph id="4" entry={{ x: 90, y: 100, shape: "round", w: 80, chairs: { top: 1, right: 1, bottom: 1, left: 1 } }} fill={BLOCK_BG.seated} stroke={OCCUPIED}>
         <Mark status="seated" />
       </TableGlyph>
-      <TableGlyph id="5A" entry={{ x: 260, y: 100, shape: "rect", w: 130, h: 70, chairs: { top: 2, bottom: 2 } }} fill={BLOCK_BG.confirmed} stroke={OCCUPIED}>
+      <TableGlyph id="6" entry={{ x: 260, y: 100, shape: "rect", w: 130, h: 70, chairs: { top: 2, bottom: 2 } }} fill={BLOCK_BG.confirmed} stroke={OCCUPIED}>
         <Mark status="confirmed" />
       </TableGlyph>
-      <TableGlyph id="7" entry={{ x: 430, y: 100, shape: "rect", w: 70, h: 110, rot: 90, chairs: { left: 2, right: 2 } }} fill="var(--bg-card)" stroke="var(--text-muted)" strokeDasharray="4 3" />
+      <TableGlyph id="9" entry={{ x: 430, y: 100, shape: "rect", w: 70, h: 110, rot: 90, chairs: { left: 2, right: 2 } }} fill="var(--bg-card)" stroke="var(--text-muted)" strokeDasharray="4 3" />
     </Room>
   </Surface>
 );
@@ -43,8 +43,8 @@ export const Occupancy = () => (
 export const DarkTheme = () => (
   <Surface dark>
     <Room h={180}>
-      <TableGlyph id="i1" entry={{ x: 130, y: 90, shape: "square", w: 80, chairs: { top: 1, bottom: 1, left: 1, right: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
-      <TableGlyph id="1A" entry={{ x: 330, y: 90, shape: "rect", w: 120, h: 70, chairs: { top: 2, bottom: 2 } }} fill={BLOCK_BG.pending} stroke={OCCUPIED}>
+      <TableGlyph id="10" entry={{ x: 130, y: 90, shape: "square", w: 80, chairs: { top: 1, bottom: 1, left: 1, right: 1 } }} fill="var(--bg-card)" stroke="var(--fp-outline)" />
+      <TableGlyph id="1" entry={{ x: 330, y: 90, shape: "rect", w: 120, h: 70, chairs: { top: 2, bottom: 2 } }} fill={BLOCK_BG.pending} stroke={OCCUPIED}>
         <Mark status="pending" />
       </TableGlyph>
     </Room>

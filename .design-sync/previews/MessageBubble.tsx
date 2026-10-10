@@ -17,8 +17,8 @@ const CONVERSATION = [
   { id: "m1", direction: "in", text: "Hola! ¿Tenéis mesa para 4 esta noche sobre las 21:00?", ts: at(18, 2) },
   { id: "m2", direction: "out", text: "¡Gracias por tu mensaje! Te respondemos en unos minutos.", ts: at(18, 2), status: "read", isAutoAck: true },
   { id: "m3", direction: "out", text: "Sí, tenemos mesa en la terraza a las 21:15. ¿A qué nombre la reservo?", ts: at(18, 5), status: "read" },
-  { id: "m4", direction: "in", text: "Grupo Martín. Al final seremos 6, ¿es posible?", ts: at(18, 6) },
-  { id: "m5", direction: "out", text: "Perfecto — 6 personas a las 21:15, mesas 1A y 1B. ¡Hasta luego!", ts: at(18, 8), status: "delivered" },
+  { id: "m4", direction: "in", text: "Grupo Martín. Al final seremos 5, ¿es posible?", ts: at(18, 6) },
+  { id: "m5", direction: "out", text: "Perfecto — 5 personas a las 21:15, mesas 1 y 2. ¡Hasta luego!", ts: at(18, 8), status: "delivered" },
 ];
 
 export const Conversation = () => (
@@ -30,7 +30,7 @@ export const Conversation = () => (
 export const SendStates = () => (
   <Thread>
     <MessageBubble msg={{ id: "s1", direction: "in", text: "Can we move our booking to 20:30 instead?", ts: at(17, 41) }} isLast={false} />
-    <MessageBubble msg={{ id: "s2", direction: "out", text: "Of course — you're now booked for 20:30, table 4.", ts: at(17, 44), status: "failed" }} isLast={false} onRetry={() => {}} />
+    <MessageBubble msg={{ id: "s2", direction: "out", text: "Of course — you're now booked for 20:30, table 5.", ts: at(17, 44), status: "failed" }} isLast={false} onRetry={() => {}} />
     <MessageBubble msg={{ id: "s3", direction: "out", text: "See you tonight!", ts: at(17, 45), status: "sending" }} isLast={false} />
   </Thread>
 );

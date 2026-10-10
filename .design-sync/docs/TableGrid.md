@@ -2,7 +2,7 @@
 category: Booking
 keywords: [tables, picker, assign, walk-in, select tables]
 ---
-The table picker used by the walk-in form and manual table assignment: every table as a pill-shaped cell, grouped by physical cluster, each group with its combination note ("1A+1B = 6 · table 7 = 4 standalone"). The cell text gives its state. A free cell is outlined teal (outdoor) or purple (indoor) and shows its capacity. Selected cells fill with the accent. A busy cell is dimmed red with a not-allowed cursor. In swap mode, a table held by a party that has not sat down yet is labelled "swap" and stays selectable.
+The table picker used by the walk-in form and manual table assignment: every table as a pill-shaped cell, grouped by physical cluster, each group with its combination note ("3+4 = 5 · 4+5 = 4 · 3+4+5 = 8"). The cell text gives its state. A free cell is outlined teal (outdoor) or purple (indoor) and shows its capacity. Selected cells fill with the accent. A busy cell is dimmed red with a not-allowed cursor. In swap mode, a table held by a party that has not sat down yet is labelled "swap" and stays selectable.
 
 It is purely presentational: the parent owns `selected` and decides what counts as busy.
 
@@ -13,8 +13,8 @@ It is purely presentational: the parent owns `selected` and decides what counts 
 
 ```jsx
 const { TableGrid } = window.MGTBookings;
-const busy = new Set(["5A", "7", "2", "3"]);
-const [selected, setSelected] = React.useState(["5B"]);
-<TableGrid selected={selected} busy={busy} seatedBusy={new Set(["5A", "7"])} swapBusy={false}
+const busy = new Set(["6", "9", "3", "4"]);
+const [selected, setSelected] = React.useState(["7"]);
+<TableGrid selected={selected} busy={busy} seatedBusy={new Set(["6", "9"])} swapBusy={false}
   toggle={(id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : busy.has(id) ? s : [...s, id])} />
 ```

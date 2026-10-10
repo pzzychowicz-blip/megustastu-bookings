@@ -34887,6 +34887,12 @@ ids are the ones a layout does NOT have, on purpose.
   any weekday.
 - Comments that record a measurement ("saved onto 1A", "from i1 passed under…") keep
   the names the tables had when it was taken.
-- **Not done:** `.design-sync/` (the Claude Design previews and their fixtures) still
-  names 1A…i4. It is tooling the app's build never reads, and its fixtures carry their
-  own floor plan.
+- **`.design-sync/`** (the Claude Design previews; the app's build never reads it):
+  the fixtures' bookings, block and floor plan, eleven previews, five docs and the
+  `TBadge` prop note in `config.json` renamed in the same single pass. Grupo Martín is
+  a party of 5 on 1+2 (it was 6 on 1A+1B, which seated 6), in the fixture and in the
+  sample conversation. Checked by importing `fixtures.ts` against the default layout:
+  831 bookings, none on a table the layout lacks, the plan holding exactly the 13
+  ids, no double-booking on the fixture's day. The barrel still builds
+  (`vite.lib.config.mjs`). **The previews were not re-rendered or re-uploaded**: that
+  is `/design-sync`, which stages its own `.ds-sync/` and sends to Claude Design.

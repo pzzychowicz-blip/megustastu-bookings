@@ -16,7 +16,7 @@ export const Messages = () => (
     <div style={{ display: "flex", flexDirection: "column", gap: SP.wide, alignItems: "center" }}>
       <Toast show={true}><Pane tone="var(--status-online)">Reconnected — changes synced.</Pane></Toast>
       <Toast show={true}><Pane tone="var(--success-text)">Added to the waitlist.</Pane></Toast>
-      <Toast show={true}><Pane tone="var(--warn-text)">Table 7 is blocked 21:00–22:00.</Pane></Toast>
+      <Toast show={true}><Pane tone="var(--warn-text)">Table 9 is blocked 21:00–22:00.</Pane></Toast>
     </div>
   </Surface>
 );
