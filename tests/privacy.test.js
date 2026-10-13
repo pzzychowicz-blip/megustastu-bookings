@@ -36,6 +36,13 @@ describe("the privacy notice — the template", () => {
     expect(/\son[a-z]+\s*=/i.test(BODY)).toBe(false);
   });
 
+  // Meta checks this URL with a crawler before it will publish an app. Whether
+  // that crawler treats `noindex` as "not there" was not established, and the
+  // page gains nothing from it that is worth finding out the hard way.
+  it("does not tell crawlers to stay away", () => {
+    expect(/<meta\s+name="robots"/i.test(BODY)).toBe(false);
+  });
+
   it("loads nothing from another origin", () => {
     const urls = [...BODY.matchAll(/\s(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
     const loaded = urls.filter((u) => !u.startsWith("#") && !u.startsWith("/"));

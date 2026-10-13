@@ -35085,7 +35085,8 @@ it behaves exactly as before.
 `https://megustastu-bookings.vercel.app/privacy` and the sandbox's `/privacy` and
 check both show the notice; (3) paste the sandbox URL into the sandbox Meta app's
 App settings → Basic → Privacy policy URL. **Before the PRODUCTION Meta app is
-published:** fill `profile.privacy` (ROADMAP), with the owner's approval of the text.
+published:** nothing more is owed here (sections 2 and 3: the text was read by
+Patryk and the controller is named).
 
 ### Why
 
@@ -35101,7 +35102,7 @@ and half of a ROADMAP entry.
   responsible, what is kept, why, who processes it (Meta, Google Firebase, Google
   Gemini, Vercel), how long, and how to have it deleted (which is also the "data
   deletion instructions" Meta may ask for). No script, nothing loaded from another
-  origin, its own light and dark palette (the offline page's). `noindex`.
+  origin, its own light and dark palette (the offline page's).
 - **`scripts/privacy-page.mjs`** — `renderPrivacy(template, profile)` fills four
   tokens from the tenant: `restaurant`, `controller`, `contact`, `updated`. It strips
   the template's editing notes, escapes what it is given, throws on a token it does
@@ -35198,3 +35199,14 @@ Five findings. Four confirmed and fixed, one acted on without proof (item 3).
    `Intl.DateTimeFormat` in UTC), and throws on anything that is not a real date.
 3. **`tenantPrivacy()` repeated `tenantManifest()`'s tenant loader.** Both call
    `loadTenant()` in `vite.config.js` now.
+4. **`<meta name="robots" content="noindex">` is gone.** NOT proven to be a defect:
+   Meta validates a privacy-policy URL with a crawler, and whether it honours
+   `noindex` was not established. It was nobody's request, the page is public either
+   way, and a refused URL would cost a session to diagnose. The page can now be
+   found by a search engine, with the owner's name on it.
+5. **The entry's own deploy steps were stale** (they asked for `profile.privacy` to
+   be filled, which section 3 did). Corrected in place.
+
+`tests/privacy.test.js` is 14 cases. Gate after the fixes: main bundle 165.11 kB gz
+· 3,197 tests · lint 63 problems, 0 errors · style OK.
+
