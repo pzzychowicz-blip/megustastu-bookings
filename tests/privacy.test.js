@@ -85,7 +85,7 @@ describe("the privacy notice — the generator", () => {
   // reads as a finished policy that names nobody.
   it("prints a visible blank for a missing value, never nothing", () => {
     const out = renderPrivacy(TEMPLATE, { name: "Casa Prueba" });
-    expect(out).toContain("The data controller is [to be confirmed], which operates Casa Prueba.");
+    expect(out).toContain("The data controller is [to be confirmed], the operator of Casa Prueba.");
     expect(out).toContain("El responsable del tratamiento es [to be confirmed], que gestiona Casa Prueba.");
   });
 

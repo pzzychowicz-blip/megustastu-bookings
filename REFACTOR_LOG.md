@@ -35175,3 +35175,10 @@ worktree, same command) · 3,195 tests · lint 63 problems, 0 errors · style OK
 - This section supersedes the list above where it says four tokens and names
   `contact`. On the dev server: two "[to be confirmed]", no token left.
 
+### 3. The controller's name (2026-10-13)
+
+`profile.privacy.controller` is "Tomasz Uzarowski", the owner, given by Patryk. The
+notice has no blank left and the ROADMAP entry is removed. The English sentence reads
+"the operator of" where it read "which operates", so it is right for a person and
+for a company. The "fill `profile.privacy`" deploy step above no longer applies.
+

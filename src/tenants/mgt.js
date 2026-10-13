@@ -85,12 +85,11 @@ export const profile = {
   // asks about their data the way they booked, by WhatsApp, by phone or in
   // person, and the notice says so.
   //
-  // `controller` is EMPTY ON PURPOSE: it is the owner's to give, and the page
-  // prints "[to be confirmed]" for it rather than leaving a gap that reads as
-  // finished. Fill it before the PRODUCTION Meta app is published;
-  // `tests/privacy.test.js` keeps the ROADMAP entry alive until it is.
+  // `controller` is the owner's name as he gave it through Patryk (2026-10-13).
+  // A tenant that leaves it empty gets a visible "[to be confirmed]" on the
+  // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
   privacy: {
-    controller: "",
+    controller: "Tomasz Uzarowski",
     updated: "13 October 2026"
   }
 };

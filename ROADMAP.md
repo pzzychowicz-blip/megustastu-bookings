@@ -29,13 +29,6 @@ session and keeping it in sync.
   shipped in v18.3.1; set the Meta app's WEBHOOK version to v26.0 in the dashboard at
   go-live, since the code cannot.)
 
-- **The privacy notice still has one blank** (v18.7.0). `/privacy` prints
-  "[to be confirmed]" for the data controller's legal name, which is the owner's to
-  give: fill `profile.privacy.controller` in `src/tenants/mgt.js`
-  **before the PRODUCTION Meta app is published**
-  (the sandbox app only needs the URL to exist). Remove this entry in the same commit;
-  `tests/privacy.test.js` fails until it is gone.
-
 - **WhatsApp coexistence — the Business app and the Cloud API on one number**
   (decided 2026-09-21, go-live plan § 3a–3b). Replaces the ops-SIM migration: the groups
   never move and staff keep answering from the phone. **Milestone 1 is a rehearsal and
