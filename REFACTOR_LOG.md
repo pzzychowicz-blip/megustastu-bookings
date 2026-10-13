@@ -35196,3 +35196,5 @@ Five findings. Four confirmed and fixed, one acted on without proof (item 3).
    2026"): `privacy.updated` was one string in words. It is `YYYY-MM-DD` now and
    `renderPrivacy` prints it per section (`updated_en`, `updated_es`, through
    `Intl.DateTimeFormat` in UTC), and throws on anything that is not a real date.
+3. **`tenantPrivacy()` repeated `tenantManifest()`'s tenant loader.** Both call
+   `loadTenant()` in `vite.config.js` now.

@@ -122,18 +122,28 @@ function stripSimulator(isSandbox) {
 // `generateBundle` — Vite copies `public/` AFTER the bundle is emitted, so an
 // emitted asset of the same name is overwritten by the source file; writing last
 // is what makes the generated one win.
+// The tenant this build is for, and the project root it was read from. ONE
+// loader for every plugin that fills a static file from the profile (v18.7.0
+// /code-review: the privacy notice had its own copy of these four lines, and
+// two copies of "which restaurant is this" is two restaurants waiting to happen).
+//
+// An ABSOLUTE file URL, and it has to be. Vite bundles this config into
+// `node_modules/.vite-temp/` before running it, so a relative specifier
+// resolves against THAT directory and the import fails with a
+// `.vite-temp/src/tenants/mgt.js` that has never existed. `process.cwd()` is
+// the project root during both `serve` and `build`, which is also what makes
+// the callers' readFileSync correct.
+async function loadTenant() {
+  const slug = process.env.VITE_TENANT || "mgt";
+  const root = process.cwd();
+  const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+  return { root, profile };
+}
+
 function tenantManifest() {
   let outDir = "dist";
   async function build() {
-    const slug = process.env.VITE_TENANT || "mgt";
-    // An ABSOLUTE file URL, and it has to be. Vite bundles this config into
-    // `node_modules/.vite-temp/` before running it, so a relative specifier
-    // resolves against THAT directory and the import fails with a
-    // `.vite-temp/src/tenants/mgt.js` that has never existed. `process.cwd()` is
-    // the project root during both `serve` and `build`, which is also what makes
-    // the readFileSync below correct.
-    const root = process.cwd();
-    const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+    const { root, profile } = await loadTenant();
     const src = JSON.parse(readFileSync(join(root, "public", "manifest.webmanifest"), "utf8"));
     // Appended, never replaced: the neutral sentence is the one thing this
     // cannot get wrong, and a tenant with no `name` still gets a usable card.
@@ -167,8 +177,8 @@ function tenantManifest() {
 // WhatsApp app, served at `/privacy` (a rewrite in `vercel.json`). Its
 // restaurant name and legal owner are tokens filled from the tenant's
 // `profile`, by the same shape as `tenantManifest()` above and for the same
-// three reasons: one loader for dev and build, `closeBundle` so the generated
-// file wins over the copy of `public/`, an absolute file URL for the tenant.
+// reasons: one loader for dev and build, and `closeBundle` so the generated
+// file wins over the copy of `public/`.
 // The fill itself is `scripts/privacy-page.mjs`, so a test can call it.
 //
 // The dev middleware answers BOTH spellings, because the dev server has no
@@ -177,9 +187,7 @@ function tenantManifest() {
 function tenantPrivacy() {
   let outDir = "dist";
   async function build() {
-    const slug = process.env.VITE_TENANT || "mgt";
-    const root = process.cwd();
-    const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+    const { root, profile } = await loadTenant();
     return renderPrivacy(readFileSync(join(root, "public", "privacy.html"), "utf8"), profile);
   }
   return {
