@@ -35182,3 +35182,13 @@ notice has no blank left and the ROADMAP entry is removed. The English sentence 
 "the operator of" where it read "which operates", so it is right for a person and
 for a company. The "fill `profile.privacy`" deploy step above no longer applies.
 
+### 4. `/code-review` of the branch (2026-10-13)
+
+Five findings. Four confirmed and fixed, one acted on without proof (item 3).
+
+1. **The notice promised to delete a customer's bookings; the app anonymises them.**
+   "Delete customer" keeps the booking row for statistics as "Data removed", with
+   the phone, notes and history wiped (`src/lib/booking-fields.js`, the `anonymized`
+   row). The notice now says what happens, in both languages: the name, the phone
+   number, the booking notes and the messages are deleted, and a record that a table
+   was booked that day stays with nothing in it that identifies the guest.
