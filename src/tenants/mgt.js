@@ -78,8 +78,9 @@ export const profile = {
   //
   //   controller — the LEGAL name of whoever runs the restaurant (the data
   //                controller). Not `name` above: that is the sign over the door.
-  //   updated    — the date the TEXT last changed, as it should be printed.
-  //                Change it when the notice's promises change, not on a deploy.
+  //   updated    — the date the TEXT last changed, as YYYY-MM-DD. The page
+  //                prints it in each section's own language. Change it when the
+  //                notice's promises change, not on a deploy.
   //
   // There is no contact address, by Patryk's decision (2026-10-13): a customer
   // asks about their data the way they booked, by WhatsApp, by phone or in
@@ -90,6 +91,6 @@ export const profile = {
   // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
   privacy: {
     controller: "Tomasz Uzarowski",
-    updated: "13 October 2026"
+    updated: "2026-10-13"
   }
 };

@@ -24,7 +24,7 @@ const VERCEL = JSON.parse(read("vercel.json"));
 
 const FULL = {
   name: "Casa Prueba",
-  privacy: { controller: "Prueba Hostelería S.L.", updated: "1 January 2027" },
+  privacy: { controller: "Prueba Hostelería S.L.", updated: "2027-01-01" },
 };
 
 describe("the privacy notice — the template", () => {
@@ -63,7 +63,8 @@ describe("the privacy notice — the template", () => {
       h2: (s.match(/<h2>/g) || []).length,
       li: (s.match(/<li>/g) || []).length,
       p: (s.match(/<p[ >]/g) || []).length,
-      tokens: (s.match(/\{\{\w+\}\}/g) || []).sort(),
+      // The date token is per language, and the same token otherwise.
+      tokens: (s.match(/\{\{\w+\}\}/g) || []).map((t) => t.replace(/_(en|es)\}\}$/, "}}")).sort(),
     });
     expect(shape(section("es"))).toEqual(shape(section("en")));
   });
@@ -78,7 +79,8 @@ describe("the privacy notice — the generator", () => {
     expect(out.startsWith("<!doctype html>")).toBe(true);
     expect(out).toContain("Prueba Hostelería S.L.");
     expect(out).toContain("<title>Privacy notice · Casa Prueba</title>");
-    expect(out).toContain("1 January 2027");
+    expect(out).toContain("last updated 1 January 2027");
+    expect(out).toContain("última actualización: 1 de enero de 2027");
   });
 
   // An empty value must be SEEN. A sentence that closes cleanly around nothing
@@ -92,6 +94,12 @@ describe("the privacy notice — the generator", () => {
   it("escapes what it is given", () => {
     const out = renderPrivacy("<p>{{controller}}</p>", { privacy: { controller: 'A & B <S.L.> "x"' } });
     expect(out).toBe("<p>A &amp; B &lt;S.L.&gt; &quot;x&quot;</p>");
+  });
+
+  it("refuses a date that is not one, rather than printing it", () => {
+    for (const bad of ["13 October 2026", "2026-02-30", "2026-13-01"]) {
+      expect(() => renderPrivacy(TEMPLATE, { privacy: { updated: bad } })).toThrow(/YYYY-MM-DD/);
+    }
   });
 
   it("refuses a token it does not know, rather than shipping it", () => {

@@ -31,7 +31,23 @@ function val(v) {
 
 // The tokens the template may carry. A token outside this list is a typo in the
 // template, and `renderPrivacy` throws on it rather than shipping `{{…}}`.
-export const PRIVACY_TOKENS = ["restaurant", "controller", "updated"];
+export const PRIVACY_TOKENS = ["restaurant", "controller", "updated_en", "updated_es"];
+
+// `privacy.updated` is stored once, as YYYY-MM-DD, and printed in the language of
+// the section it sits in. A date typed out in words is one language's date, and
+// the notice has two. UTC throughout: a date has no time zone to drift across.
+function longDate(iso, locale) {
+  const s = iso == null ? "" : String(iso).trim();
+  if (!s) return TBC;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  const d = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  if (!d || d.getUTCMonth() !== +m[2] - 1) {
+    throw new Error("privacy.updated must be a real date as YYYY-MM-DD, got: " + s);
+  }
+  return esc(new Intl.DateTimeFormat(locale, {
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  }).format(d));
+}
 
 export function renderPrivacy(template, profile) {
   const p = profile || {};
@@ -39,7 +55,8 @@ export function renderPrivacy(template, profile) {
   const values = {
     restaurant: val(p.name),
     controller: val(priv.controller),
-    updated: val(priv.updated),
+    updated_en: longDate(priv.updated, "en-GB"),
+    updated_es: longDate(priv.updated, "es-ES"),
   };
   // The template's HTML comments are notes for whoever edits it. They come off
   // first: they are not for the public, and they mention tokens by name.

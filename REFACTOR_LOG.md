@@ -35192,3 +35192,7 @@ Five findings. Four confirmed and fixed, one acted on without proof (item 3).
    row). The notice now says what happens, in both languages: the name, the phone
    number, the booking notes and the messages are deleted, and a record that a table
    was booked that day stays with nothing in it that identifies the guest.
+2. **The Spanish half printed an English date** ("última actualización: 13 October
+   2026"): `privacy.updated` was one string in words. It is `YYYY-MM-DD` now and
+   `renderPrivacy` prints it per section (`updated_en`, `updated_es`, through
+   `Intl.DateTimeFormat` in UTC), and throws on anything that is not a real date.
