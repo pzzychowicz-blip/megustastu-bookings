@@ -165,7 +165,7 @@ function tenantManifest() {
 //
 // `public/privacy.html` is the page Meta asks for before it will publish a
 // WhatsApp app, served at `/privacy` (a rewrite in `vercel.json`). Its
-// restaurant name, legal owner and contact are tokens filled from the tenant's
+// restaurant name and legal owner are tokens filled from the tenant's
 // `profile`, by the same shape as `tenantManifest()` above and for the same
 // three reasons: one loader for dev and build, `closeBundle` so the generated
 // file wins over the copy of `public/`, an absolute file URL for the tenant.

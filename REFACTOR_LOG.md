@@ -35161,3 +35161,17 @@ after `npm run build` is the filled page too.
 
 Gate: main bundle 165.11 kB gz (165.07 with `profile.privacy` taken out, same
 worktree, same command) · 3,195 tests · lint 63 problems, 0 errors · style OK.
+
+### 2. The text, after Patryk's read (2026-10-13)
+
+- **No contact address.** A customer asks about their data, or for its deletion,
+  **by WhatsApp message, by phone or in person at the restaurant** (Patryk). The
+  `contact` token, its `profile.privacy` field and its blank are gone; the one blank
+  left is the controller's legal name. Patryk: no other edits needed from the owner.
+- **A pass with the humanizer skill.** The four processors lost their bold labels
+  and read as sentences; "take, manage and confirm" is "take and manage"; the
+  `<title>` separator is a middle dot, as in the line under the heading. Both
+  languages, same changes.
+- This section supersedes the list above where it says four tokens and names
+  `contact`. On the dev server: two "[to be confirmed]", no token left.
+

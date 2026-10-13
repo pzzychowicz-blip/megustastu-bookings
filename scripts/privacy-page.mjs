@@ -7,8 +7,8 @@
 // it is written for are the restaurant's customers, who never sign in. It is a
 // static file because it must load with no bundle, no Firebase and no script.
 //
-// A static file imports nothing, so the three facts that belong to a RESTAURANT
-// (its name, who legally runs it, where to write) are tokens in the source and
+// A static file imports nothing, so the facts that belong to a RESTAURANT (its
+// name, who legally runs it) are tokens in the source and
 // are filled here from `src/tenants/<slug>.js`, the same way `tenantManifest()`
 // in `vite.config.js` fills the install card. One function, called by the dev
 // middleware and by `closeBundle`, and by `tests/privacy.test.js`.
@@ -31,7 +31,7 @@ function val(v) {
 
 // The tokens the template may carry. A token outside this list is a typo in the
 // template, and `renderPrivacy` throws on it rather than shipping `{{…}}`.
-export const PRIVACY_TOKENS = ["restaurant", "controller", "contact", "updated"];
+export const PRIVACY_TOKENS = ["restaurant", "controller", "updated"];
 
 export function renderPrivacy(template, profile) {
   const p = profile || {};
@@ -39,7 +39,6 @@ export function renderPrivacy(template, profile) {
   const values = {
     restaurant: val(p.name),
     controller: val(priv.controller),
-    contact: val(priv.contact),
     updated: val(priv.updated),
   };
   // The template's HTML comments are notes for whoever edits it. They come off
@@ -58,5 +57,5 @@ export function renderPrivacy(template, profile) {
 // that keeps ROADMAP honest about it, and nothing else.
 export function privacyIncomplete(profile) {
   const priv = (profile && profile.privacy) || {};
-  return !String(priv.controller || "").trim() || !String(priv.contact || "").trim();
+  return !String(priv.controller || "").trim();
 }

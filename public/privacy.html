@@ -9,7 +9,7 @@
      dev server. tests/privacy.test.js holds this.
   2. The {{tokens}} are filled from src/tenants/<slug>.js by
      scripts/privacy-page.mjs, in dev and in the build. Never type a
-     restaurant's name, its legal owner or a contact into this file.
+     restaurant's name or its legal owner into this file.
   3. It does not name the app. The app's name is pinned by count in
      tests/stylesheet.test.js, and a customer has no use for it.
 
@@ -21,7 +21,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Privacy notice — {{restaurant}}</title>
+<title>Privacy notice · {{restaurant}}</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
 html{background:#eef1f6;color:#1a1d24}
@@ -54,7 +54,8 @@ a{color:#0062cc}
 
 <h2>Who is responsible</h2>
 <p>The data controller is {{controller}}, which operates {{restaurant}}.
-You can write to us about your data at {{contact}}.</p>
+You can reach us about your data by WhatsApp, by phone or in person at the
+restaurant.</p>
 
 <h2>What we keep</h2>
 <ul>
@@ -67,20 +68,20 @@ you exchange with us.</li>
 <p>We do not ask for payment card details and we do not keep them.</p>
 
 <h2>Why we use it</h2>
-<p>Only to take, manage and confirm your booking and to answer your messages.
-We use it because you asked us for a booking. We do not use it for advertising
+<p>We use it to take and manage your booking and to answer your messages,
+because you asked us for a booking. We do not use it for advertising
 and we do not sell or share it for anyone else's purposes.</p>
 
 <h2>Who processes it for us</h2>
 <ul>
-<li><strong>Meta (WhatsApp Business Platform)</strong> delivers the WhatsApp
-messages between you and us.</li>
-<li><strong>Google (Firebase)</strong> stores our bookings and messages, in a
-data centre in the European Union.</li>
-<li><strong>Google (Gemini)</strong> reads a WhatsApp booking request so that it
-can suggest the date, time and party size to our staff. A member of staff
-checks every booking.</li>
-<li><strong>Vercel</strong> hosts our booking system.</li>
+<li>Meta delivers the WhatsApp messages between you and us, through its
+WhatsApp Business Platform.</li>
+<li>Google stores our bookings and messages in its Firebase service, in a data
+centre in the European Union.</li>
+<li>Google's Gemini service reads a WhatsApp booking request so that it can
+suggest the date, time and party size to our staff. A member of staff checks
+every booking.</li>
+<li>Vercel hosts our booking system.</li>
 </ul>
 <p>Some of these companies are based in the United States and may process data
 there under the safeguards European law requires.</p>
@@ -91,9 +92,9 @@ with us. We delete them when you ask us to, unless the law requires us to keep
 something.</p>
 
 <h2>Your rights and how to delete your data</h2>
-<p>You can ask us for a copy of your data, to correct it, or to delete it. Write
-to {{contact}}, or send the request to the restaurant's WhatsApp number, and
-tell us the phone number you used. We will delete your details, your bookings
+<p>You can ask us for a copy of your data, to correct it, or to delete it. Send
+us a WhatsApp message, phone us, or ask in person at the restaurant, and tell us
+the phone number you booked with. We will delete your details, your bookings
 and your messages from our system and confirm it to you within one month.</p>
 <p>If you are not satisfied with our answer, you may complain to the Spanish data
 protection authority, the Agencia Española de Protección de Datos
@@ -113,7 +114,8 @@ en persona.</p>
 
 <h2>Responsable</h2>
 <p>El responsable del tratamiento es {{controller}}, que gestiona {{restaurant}}.
-Puede escribirnos sobre sus datos a {{contact}}.</p>
+Puede contactarnos sobre sus datos por WhatsApp, por teléfono o en persona en el
+restaurante.</p>
 
 <h2>Qué datos guardamos</h2>
 <ul>
@@ -126,20 +128,20 @@ que intercambia con nosotros.</li>
 <p>No pedimos ni guardamos datos de tarjetas de pago.</p>
 
 <h2>Para qué los usamos</h2>
-<p>Únicamente para tomar, gestionar y confirmar su reserva y para responder a
-sus mensajes. Los usamos porque usted nos ha pedido una reserva. No los usamos
+<p>Los usamos para tomar y gestionar su reserva y para responder a sus
+mensajes, porque usted nos ha pedido una reserva. No los usamos
 con fines publicitarios y no los vendemos ni los cedemos para fines de terceros.</p>
 
 <h2>Quién los trata por nuestra cuenta</h2>
 <ul>
-<li><strong>Meta (WhatsApp Business Platform)</strong> entrega los mensajes de
-WhatsApp entre usted y nosotros.</li>
-<li><strong>Google (Firebase)</strong> almacena nuestras reservas y mensajes, en
-un centro de datos de la Unión Europea.</li>
-<li><strong>Google (Gemini)</strong> lee una solicitud de reserva recibida por
+<li>Meta entrega los mensajes de WhatsApp entre usted y nosotros, a través de
+su WhatsApp Business Platform.</li>
+<li>Google almacena nuestras reservas y mensajes en su servicio Firebase, en un
+centro de datos de la Unión Europea.</li>
+<li>El servicio Gemini de Google lee una solicitud de reserva recibida por
 WhatsApp para proponer a nuestro personal la fecha, la hora y el número de
 comensales. Una persona del equipo revisa cada reserva.</li>
-<li><strong>Vercel</strong> aloja nuestro sistema de reservas.</li>
+<li>Vercel aloja nuestro sistema de reservas.</li>
 </ul>
 <p>Algunas de estas empresas tienen su sede en Estados Unidos y pueden tratar
 datos allí con las garantías que exige la normativa europea.</p>
@@ -151,8 +153,8 @@ conservar algo.</p>
 
 <h2>Sus derechos y cómo eliminar sus datos</h2>
 <p>Puede pedirnos una copia de sus datos, su rectificación o su supresión.
-Escriba a {{contact}}, o envíe la solicitud al número de WhatsApp del
-restaurante, e indíquenos el número de teléfono que utilizó. Eliminaremos sus
+Envíenos un mensaje de WhatsApp, llámenos o pídalo en persona en el
+restaurante, e indíquenos el número de teléfono con el que reservó. Eliminaremos sus
 datos, sus reservas y sus mensajes de nuestro sistema y se lo confirmaremos en
 el plazo de un mes.</p>
 <p>Si no queda conforme con nuestra respuesta, puede presentar una reclamación

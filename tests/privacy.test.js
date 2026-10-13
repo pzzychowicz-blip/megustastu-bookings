@@ -24,7 +24,7 @@ const VERCEL = JSON.parse(read("vercel.json"));
 
 const FULL = {
   name: "Casa Prueba",
-  privacy: { controller: "Prueba Hostelería S.L.", contact: "datos@example.com", updated: "1 January 2027" },
+  privacy: { controller: "Prueba Hostelería S.L.", updated: "1 January 2027" },
 };
 
 describe("the privacy notice — the template", () => {
@@ -77,8 +77,7 @@ describe("the privacy notice — the generator", () => {
     expect(out.includes("<!--")).toBe(false);
     expect(out.startsWith("<!doctype html>")).toBe(true);
     expect(out).toContain("Prueba Hostelería S.L.");
-    expect(out).toContain("datos@example.com");
-    expect(out).toContain("<title>Privacy notice — Casa Prueba</title>");
+    expect(out).toContain("<title>Privacy notice · Casa Prueba</title>");
     expect(out).toContain("1 January 2027");
   });
 
@@ -87,7 +86,7 @@ describe("the privacy notice — the generator", () => {
   it("prints a visible blank for a missing value, never nothing", () => {
     const out = renderPrivacy(TEMPLATE, { name: "Casa Prueba" });
     expect(out).toContain("The data controller is [to be confirmed], which operates Casa Prueba.");
-    expect(out).toContain("Write\nto [to be confirmed],");
+    expect(out).toContain("El responsable del tratamiento es [to be confirmed], que gestiona Casa Prueba.");
   });
 
   it("escapes what it is given", () => {
@@ -116,11 +115,11 @@ describe("the privacy notice — the route", () => {
 });
 
 describe("the privacy notice — what is still owed", () => {
-  // The owner's legal name and a contact are not ours to invent. While either
+  // The owner's legal name is not ours to invent. While it
   // is blank the page says "[to be confirmed]" in public, so ROADMAP must keep
-  // saying so; the day both are filled, this fails until the entry is removed.
+  // saying so; the day it is filled, this fails until the entry is removed.
   it("ROADMAP lists the missing legal details exactly as long as they are missing", () => {
-    const listed = read("ROADMAP.md").includes("`profile.privacy`");
+    const listed = read("ROADMAP.md").includes("`profile.privacy.controller`");
     expect(listed).toBe(privacyIncomplete(profile));
   });
 });

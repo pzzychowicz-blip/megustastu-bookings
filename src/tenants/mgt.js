@@ -72,25 +72,25 @@ export const profile = {
   // `api/_lib/gemini.js`, and ROADMAP for the alternative that was left.
   waContext: "a small restaurant in the Canary Islands",
 
-  // v18.7.0 — the three facts the public privacy notice (`public/privacy.html`,
+  // v18.7.0 — the two facts the public privacy notice (`public/privacy.html`,
   // served at `/privacy`) cannot be written without, filled in at build by
   // `scripts/privacy-page.mjs`:
   //
   //   controller — the LEGAL name of whoever runs the restaurant (the data
   //                controller). Not `name` above: that is the sign over the door.
-  //   contact    — where a customer writes about their data. An address the
-  //                owner reads; it is published.
   //   updated    — the date the TEXT last changed, as it should be printed.
   //                Change it when the notice's promises change, not on a deploy.
   //
-  // `controller` and `contact` are EMPTY ON PURPOSE (Patryk, 2026-10-13): they
-  // are the owner's to give, and the page prints "[to be confirmed]" for an
-  // empty one rather than leaving a gap that reads as finished. Fill both before
-  // the PRODUCTION Meta app is published; `tests/privacy.test.js` keeps the
-  // ROADMAP entry alive until they are.
+  // There is no contact address, by Patryk's decision (2026-10-13): a customer
+  // asks about their data the way they booked, by WhatsApp, by phone or in
+  // person, and the notice says so.
+  //
+  // `controller` is EMPTY ON PURPOSE: it is the owner's to give, and the page
+  // prints "[to be confirmed]" for it rather than leaving a gap that reads as
+  // finished. Fill it before the PRODUCTION Meta app is published;
+  // `tests/privacy.test.js` keeps the ROADMAP entry alive until it is.
   privacy: {
     controller: "",
-    contact: "",
     updated: "13 October 2026"
   }
 };

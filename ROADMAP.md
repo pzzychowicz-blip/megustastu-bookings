@@ -29,10 +29,10 @@ session and keeping it in sync.
   shipped in v18.3.1; set the Meta app's WEBHOOK version to v26.0 in the dashboard at
   go-live, since the code cannot.)
 
-- **The privacy notice still has two blanks** (v18.7.0). `/privacy` prints
-  "[to be confirmed]" for the data controller's legal name and for the contact address,
-  because both are the owner's to give: fill `profile.privacy` in `src/tenants/mgt.js`
-  and have the owner approve the text **before the PRODUCTION Meta app is published**
+- **The privacy notice still has one blank** (v18.7.0). `/privacy` prints
+  "[to be confirmed]" for the data controller's legal name, which is the owner's to
+  give: fill `profile.privacy.controller` in `src/tenants/mgt.js`
+  **before the PRODUCTION Meta app is published**
   (the sandbox app only needs the URL to exist). Remove this entry in the same commit;
   `tests/privacy.test.js` fails until it is gone.
 
