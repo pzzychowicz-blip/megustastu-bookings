@@ -35070,3 +35070,94 @@ party of 2 moves 10 → 13 → 10; a party of 8 is refused 10+13, builds 10+11+1
 is refused taking 12 out, and may take 13 out.
 
 Gate: main bundle 134.07 kB gz · 3,173 tests · lint 63 problems, 0 errors · style OK.
+
+---
+
+## v18.7.0 — a public privacy notice at `/privacy`
+
+**Date:** 2026-10-13 · **Branch:** `feat/v18.7.0-privacy-page` ·
+**Behavioural change:** the deployment serves one new PUBLIC page, `/privacy`. Nothing
+in the app changes and nothing links to it. The service worker no longer answers a
+navigation to any page but the app's own (`/` and `/index.html`); for the app's page
+it behaves exactly as before.
+**Rules change:** none. **`SCHEMA`:** unchanged (nothing is stored).
+**Deploy steps (Patryk):** (1) merge; (2) open
+`https://megustastu-bookings.vercel.app/privacy` and the sandbox's `/privacy` and
+check both show the notice; (3) paste the sandbox URL into the sandbox Meta app's
+App settings → Basic → Privacy policy URL. **Before the PRODUCTION Meta app is
+published:** fill `profile.privacy` (ROADMAP), with the owner's approval of the text.
+
+### Why
+
+Meta delivers no real WhatsApp message to an unpublished app, and will not publish
+one without a privacy-policy URL. Measured on the sandbox app on 2026-10-13: the
+dashboard's test sample reached the inbox, a message sent from a phone to the test
+number did not, and the webhook page states the rule. This was go-live plan § A4-2
+and half of a ROADMAP entry.
+
+### What shipped
+
+- **`public/privacy.html`** — a static page, English then Spanish: who is
+  responsible, what is kept, why, who processes it (Meta, Google Firebase, Google
+  Gemini, Vercel), how long, and how to have it deleted (which is also the "data
+  deletion instructions" Meta may ask for). No script, nothing loaded from another
+  origin, its own light and dark palette (the offline page's). `noindex`.
+- **`scripts/privacy-page.mjs`** — `renderPrivacy(template, profile)` fills four
+  tokens from the tenant: `restaurant`, `controller`, `contact`, `updated`. It strips
+  the template's editing notes, escapes what it is given, throws on a token it does
+  not know, and prints **"[to be confirmed]"** for an empty value.
+- **`vite.config.js` → `tenantPrivacy()`** — the same shape as `tenantManifest()`:
+  one loader, a dev middleware (answering `/privacy` and `/privacy.html`) and
+  `closeBundle`.
+- **`src/tenants/mgt.js` → `profile.privacy`** — `controller` and `contact` are
+  empty on purpose (Patryk, 2026-10-13): they are the owner's to give. The page says
+  so in public rather than naming nobody.
+- **`vercel.json`** — one rewrite, `/privacy` → `/privacy.html`. The file's first.
+- **`public/sw.js` → `APP_NAV_RE`** — see below.
+
+### The finding that made this more than a page
+
+Both navigation writes in the worker are `put("/", …)`: whatever page was asked
+for, the response is filed as the app's shell. That was harmless while `/` was the
+only document this origin served. With `/privacy` it is not: a staff device that
+opened the notice would have had its offline copy of the app replaced by it, and
+would have been shown the notice on its next start without a network, until it next
+opened the app online. The worker now returns before `respondWith` for any
+navigation whose path is not `/` or `/index.html`, so such a page is the browser's
+alone, like every other request the worker does not own. The four properties in the
+`mgt-service-worker` skill are untouched: nothing new is answered, nothing is
+answered sooner, there is still no `skipWaiting`, and the cache name is the same.
+
+**Not verified on a device.** The guard is a regex and an early return, and both are
+under test; the worker's lifecycle with it in place was not run on the tablet. A
+device picks the new worker up on its next online navigation and uses it from the
+one after.
+
+### Decisions
+
+- **The page does not name the app.** A customer has no use for the name, and it is
+  pinned by count in `tests/stylesheet.test.js`; `tests/privacy.test.js` refuses it
+  here.
+- **Photos are not mentioned**, because the inbox stores none yet. The ROADMAP's
+  photos entry now carries "add the line when it ships".
+- **Retention is stated as it is**: kept while needed, deleted on request. No
+  conversation is pruned by age today, so no period is promised.
+- **Minor, not patch**: a new page the public can open.
+
+### Tests
+
+`tests/privacy.test.js` (12 cases): no script or inline handler; nothing loaded from
+another origin; only known tokens; no restaurant's name and not the app's; the two
+languages have the same shape; the generator fills, blanks visibly, escapes and
+refuses; the rewrite exists and is not a catch-all; ROADMAP lists the missing legal
+details exactly as long as they are missing. `tests/service-worker.test.js` (+10):
+which paths the worker answers, that the guard sits before `respondWith`, and that
+both navigation writes store under `"/"`.
+
+**On the dev server** (`localhost:5188/privacy`): the notice renders with the
+restaurant's name in the title, six "[to be confirmed]", no token left, no script,
+no sideways scroll; `/privacy.html` returns the same filled page. `dist/privacy.html`
+after `npm run build` is the filled page too.
+
+Gate: main bundle 165.11 kB gz (165.07 with `profile.privacy` taken out, same
+worktree, same command) · 3,195 tests · lint 63 problems, 0 errors · style OK.

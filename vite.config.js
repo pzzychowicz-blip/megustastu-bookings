@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import process from 'node:process'
 import { defineConfig, configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { renderPrivacy } from './scripts/privacy-page.mjs'
 
 // ── v18.0.0 phase 5b/2: the simulator is not DEPLOYED, not merely unreachable ─
 //
@@ -160,6 +161,46 @@ function tenantManifest() {
   };
 }
 
+// ── v18.7.0: the public privacy notice names the RIGHT restaurant too ────────
+//
+// `public/privacy.html` is the page Meta asks for before it will publish a
+// WhatsApp app, served at `/privacy` (a rewrite in `vercel.json`). Its
+// restaurant name, legal owner and contact are tokens filled from the tenant's
+// `profile`, by the same shape as `tenantManifest()` above and for the same
+// three reasons: one loader for dev and build, `closeBundle` so the generated
+// file wins over the copy of `public/`, an absolute file URL for the tenant.
+// The fill itself is `scripts/privacy-page.mjs`, so a test can call it.
+//
+// The dev middleware answers BOTH spellings, because the dev server has no
+// `vercel.json`: `/privacy` is the address that is published, `/privacy.html`
+// the file Vite would otherwise serve with its tokens showing.
+function tenantPrivacy() {
+  let outDir = "dist";
+  async function build() {
+    const slug = process.env.VITE_TENANT || "mgt";
+    const root = process.cwd();
+    const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+    return renderPrivacy(readFileSync(join(root, "public", "privacy.html"), "utf8"), profile);
+  }
+  return {
+    name: "mgt-tenant-privacy",
+    configResolved(cfg) { outDir = cfg.build.outDir || "dist"; },
+    configureServer(server) {
+      server.middlewares.use(function (req, res, next) {
+        const path = (req.url || "").split("?")[0];
+        if (path !== "/privacy" && path !== "/privacy.html") return next();
+        build().then(function (body) {
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.end(body);
+        }, next);
+      });
+    },
+    async closeBundle() {
+      writeFileSync(join(outDir, "privacy.html"), await build());
+    },
+  };
+}
+
 // /code-review: hoisted out of the manualChunks callback. A regex literal is
 // re-evaluated every time control reaches it, so inline these allocated two
 // RegExp objects per module id inspected, on every build.
@@ -176,7 +217,7 @@ export default defineConfig(function ({ command }) {
   // Exactly `WA_SANDBOX`'s two truthy cases; see the note above the plugin.
   const isSandbox = command === "serve" || process.env.VITE_FB_TARGET === "dev";
   return {
-  plugins: [react(), stripSimulator(isSandbox), tenantManifest()],
+  plugins: [react(), stripSimulator(isSandbox), tenantManifest(), tenantPrivacy()],
 
   // v18.6.0: which Vercel environment built this ("production", "preview", or
   // "" anywhere else). One reader, the schema gate: a PREVIEW build talks to the

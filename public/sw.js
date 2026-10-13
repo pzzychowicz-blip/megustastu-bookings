@@ -33,7 +33,9 @@
 // So this one is not near it. It calls respondWith() for exactly two kinds of
 // request, both same-origin GET:
 //
-//   1. NAVIGATIONS — network-first, cache as a fallback. Network-first is the
+//   1. NAVIGATIONS to the app's own page (APP_NAV_RE, v18.7.0; any other page
+//      of this origin is not answered at all) — network-first, cache as a
+//      fallback. Network-first is the
 //      whole safety argument: an online device always gets fresh HTML, so this
 //      worker can never pin the app to a stale build. The cache is consulted
 //      only when the network has already failed.
@@ -53,6 +55,15 @@ const CACHE = "mgt-shell-v1";
 // on purpose: the shell is the thing you are waiting for, and it is already on
 // the device. See the race in the navigate branch.
 const NAV_TIMEOUT_MS = 3000;
+// v18.7.0: the ONE document this worker may answer for, and so the only one it
+// may store. Both writes below file the response under the key "/", whatever
+// was asked for, which was harmless while "/" was the only page this origin
+// served. `/privacy` is a second one: a device that opened it would have had
+// its offline copy of the app replaced by the privacy notice, and would have
+// been shown that notice the next time it started without a network. Any other
+// navigation now falls through with no respondWith, like every other request
+// this worker does not own.
+const APP_NAV_RE = /^\/(index\.html)?$/;
 // /code-review: the icon names are ANCHORED, not prefix-matched. `|icon` also
 // matched any future top-level path starting with those letters, and cache-first
 // is only safe for names that are content-hashed or genuinely immutable.
@@ -126,6 +137,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === "navigate") {
+    if (!APP_NAV_RE.test(url.pathname)) return;   // not the app's page — see APP_NAV_RE
     event.respondWith((async () => {
       try {
         // /code-review: network-FIRST, not network-FOREVER. `fetch` only

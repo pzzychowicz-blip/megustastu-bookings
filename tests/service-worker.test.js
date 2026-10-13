@@ -81,6 +81,53 @@ describe("service worker — routing predicate", () => {
   });
 });
 
+// v18.7.0. Both navigation writes store under the key "/", so the worker may
+// only answer for the page that IS "/": the day the origin got a second document
+// (`/privacy`), opening it would have replaced a device's offline copy of the
+// app. Rebuilt from the worker's own source, like ASSET_RE.
+describe("service worker — which navigations it answers", () => {
+  function navRe() {
+    const m = /const APP_NAV_RE = (\/.+\/);/.exec(SW);
+    if (!m) throw new Error("APP_NAV_RE not found in public/sw.js — did it change shape?");
+    return new Function("return " + m[1])();
+  }
+  const NAV = navRe();
+
+  it.each(["/", "/index.html"])("answers for the app's own page: %s", (p) => {
+    expect(NAV.test(p)).toBe(true);
+  });
+
+  it.each([
+    "/privacy",
+    "/privacy.html",
+    "/privacy/",
+    "/api/wa-inbound",
+    "/index.html/x",
+    "/anything-else",
+  ])("leaves %s to the browser", (p) => {
+    expect(NAV.test(p)).toBe(false);
+  });
+
+  // The guard is only worth its regex if it runs BEFORE respondWith, inside the
+  // navigate branch. An early return placed after it would be dead code that
+  // every test above still passes.
+  it("is asked before the navigation is answered", () => {
+    const branch = SW.indexOf('if (req.mode === "navigate")');
+    const guard = SW.indexOf("if (!APP_NAV_RE.test(url.pathname)) return;", branch);
+    const respond = SW.indexOf("event.respondWith(", branch);
+    expect(branch).toBeGreaterThan(-1);
+    expect(guard).toBeGreaterThan(branch);
+    expect(respond).toBeGreaterThan(guard);
+  });
+
+  // And the reason it exists: every stored navigation is filed under "/".
+  it("stores a navigation under \"/\" and nothing else", () => {
+    const navPuts = SW.match(/\.put\("([^"]*)"/g) || [];
+    expect(navPuts.length).toBe(2);
+    for (const p of navPuts) expect(p).toBe('.put("/"');
+  });
+});
+
 describe("service worker — the safety properties are still in the file", () => {
   // Each of these is load-bearing and documented in CLAUDE.md's architecture
   // section. They fail SILENTLY if removed: the worker keeps working, and gets
