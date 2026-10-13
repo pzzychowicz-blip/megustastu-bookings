@@ -70,5 +70,27 @@ export const profile = {
   // somebody deliberately sets the variable, and a wrong value there degrades a
   // prompt rather than breaking anything. See `waContext()` in
   // `api/_lib/gemini.js`, and ROADMAP for the alternative that was left.
-  waContext: "a small restaurant in the Canary Islands"
+  waContext: "a small restaurant in the Canary Islands",
+
+  // v18.7.0 — the two facts the public privacy notice (`public/privacy.html`,
+  // served at `/privacy`) cannot be written without, filled in at build by
+  // `scripts/privacy-page.mjs`:
+  //
+  //   controller — the LEGAL name of whoever runs the restaurant (the data
+  //                controller). Not `name` above: that is the sign over the door.
+  //   updated    — the date the TEXT last changed, as YYYY-MM-DD. The page
+  //                prints it in each section's own language. Change it when the
+  //                notice's promises change, not on a deploy.
+  //
+  // There is no contact address, by Patryk's decision (2026-10-13): a customer
+  // asks about their data the way they booked, by WhatsApp, by phone or in
+  // person, and the notice says so.
+  //
+  // `controller` is the owner's name as he gave it through Patryk (2026-10-13).
+  // A tenant that leaves it empty gets a visible "[to be confirmed]" on the
+  // page, and `tests/privacy.test.js` then wants a ROADMAP entry saying so.
+  privacy: {
+    controller: "Tomasz Uzarowski",
+    updated: "2026-10-13"
+  }
 };

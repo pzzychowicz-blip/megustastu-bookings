@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import process from 'node:process'
 import { defineConfig, configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { renderPrivacy } from './scripts/privacy-page.mjs'
 
 // ── v18.0.0 phase 5b/2: the simulator is not DEPLOYED, not merely unreachable ─
 //
@@ -121,18 +122,28 @@ function stripSimulator(isSandbox) {
 // `generateBundle` — Vite copies `public/` AFTER the bundle is emitted, so an
 // emitted asset of the same name is overwritten by the source file; writing last
 // is what makes the generated one win.
+// The tenant this build is for, and the project root it was read from. ONE
+// loader for every plugin that fills a static file from the profile (v18.7.0
+// /code-review: the privacy notice had its own copy of these four lines, and
+// two copies of "which restaurant is this" is two restaurants waiting to happen).
+//
+// An ABSOLUTE file URL, and it has to be. Vite bundles this config into
+// `node_modules/.vite-temp/` before running it, so a relative specifier
+// resolves against THAT directory and the import fails with a
+// `.vite-temp/src/tenants/mgt.js` that has never existed. `process.cwd()` is
+// the project root during both `serve` and `build`, which is also what makes
+// the callers' readFileSync correct.
+async function loadTenant() {
+  const slug = process.env.VITE_TENANT || "mgt";
+  const root = process.cwd();
+  const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+  return { root, profile };
+}
+
 function tenantManifest() {
   let outDir = "dist";
   async function build() {
-    const slug = process.env.VITE_TENANT || "mgt";
-    // An ABSOLUTE file URL, and it has to be. Vite bundles this config into
-    // `node_modules/.vite-temp/` before running it, so a relative specifier
-    // resolves against THAT directory and the import fails with a
-    // `.vite-temp/src/tenants/mgt.js` that has never existed. `process.cwd()` is
-    // the project root during both `serve` and `build`, which is also what makes
-    // the readFileSync below correct.
-    const root = process.cwd();
-    const { profile } = await import(pathToFileURL(join(root, "src", "tenants", slug + ".js")).href);
+    const { root, profile } = await loadTenant();
     const src = JSON.parse(readFileSync(join(root, "public", "manifest.webmanifest"), "utf8"));
     // Appended, never replaced: the neutral sentence is the one thing this
     // cannot get wrong, and a tenant with no `name` still gets a usable card.
@@ -160,6 +171,44 @@ function tenantManifest() {
   };
 }
 
+// ── v18.7.0: the public privacy notice names the RIGHT restaurant too ────────
+//
+// `public/privacy.html` is the page Meta asks for before it will publish a
+// WhatsApp app, served at `/privacy` (a rewrite in `vercel.json`). Its
+// restaurant name and legal owner are tokens filled from the tenant's
+// `profile`, by the same shape as `tenantManifest()` above and for the same
+// reasons: one loader for dev and build, and `closeBundle` so the generated
+// file wins over the copy of `public/`.
+// The fill itself is `scripts/privacy-page.mjs`, so a test can call it.
+//
+// The dev middleware answers BOTH spellings, because the dev server has no
+// `vercel.json`: `/privacy` is the address that is published, `/privacy.html`
+// the file Vite would otherwise serve with its tokens showing.
+function tenantPrivacy() {
+  let outDir = "dist";
+  async function build() {
+    const { root, profile } = await loadTenant();
+    return renderPrivacy(readFileSync(join(root, "public", "privacy.html"), "utf8"), profile);
+  }
+  return {
+    name: "mgt-tenant-privacy",
+    configResolved(cfg) { outDir = cfg.build.outDir || "dist"; },
+    configureServer(server) {
+      server.middlewares.use(function (req, res, next) {
+        const path = (req.url || "").split("?")[0];
+        if (path !== "/privacy" && path !== "/privacy.html") return next();
+        build().then(function (body) {
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.end(body);
+        }, next);
+      });
+    },
+    async closeBundle() {
+      writeFileSync(join(outDir, "privacy.html"), await build());
+    },
+  };
+}
+
 // /code-review: hoisted out of the manualChunks callback. A regex literal is
 // re-evaluated every time control reaches it, so inline these allocated two
 // RegExp objects per module id inspected, on every build.
@@ -176,7 +225,7 @@ export default defineConfig(function ({ command }) {
   // Exactly `WA_SANDBOX`'s two truthy cases; see the note above the plugin.
   const isSandbox = command === "serve" || process.env.VITE_FB_TARGET === "dev";
   return {
-  plugins: [react(), stripSimulator(isSandbox), tenantManifest()],
+  plugins: [react(), stripSimulator(isSandbox), tenantManifest(), tenantPrivacy()],
 
   // v18.6.0: which Vercel environment built this ("production", "preview", or
   // "" anywhere else). One reader, the schema gate: a PREVIEW build talks to the

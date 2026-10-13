@@ -1,0 +1,169 @@
+<!doctype html>
+<!--
+  v18.7.0: the public privacy notice, served at /privacy (vercel.json rewrites
+  it here). The only page of this deployment a customer can open.
+
+  THREE RULES, each of which fails silently if broken:
+  1. NO <script>. vercel.json's CSP allows one inline script by hash, and it is
+     index.html's; anything here would be blocked in production and work on the
+     dev server. tests/privacy.test.js holds this.
+  2. The {{tokens}} are filled from src/tenants/<slug>.js by
+     scripts/privacy-page.mjs, in dev and in the build. Never type a
+     restaurant's name or its legal owner into this file.
+  3. It does not name the app. The app's name is pinned by count in
+     tests/stylesheet.test.js, and a customer has no use for it.
+
+  The text is the data controller's to approve. Change what it PROMISES only
+  with the owner; change `privacy.updated` in the tenant file when you do.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy notice · {{restaurant}}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+html{background:#eef1f6;color:#1a1d24}
+@media (prefers-color-scheme:dark){html{background:#15171c;color:#e8eaf0}a{color:#6cb0ff}}
+body{margin:0;padding:32px 20px 64px;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+font-size:16px;line-height:1.6}
+main{max-width:40rem;margin:0 auto}
+h1{font-size:26px;line-height:1.25;font-weight:600;margin:0 0 4px;text-wrap:balance}
+h2{font-size:18px;font-weight:600;margin:32px 0 8px}
+p,ul{margin:0 0 12px}
+ul{padding-left:20px}
+li{margin:0 0 6px}
+.meta{opacity:.7;font-size:14px;margin:0 0 24px}
+.lang{font-size:14px;margin:0 0 24px}
+hr{border:0;border-top:1px solid currentColor;opacity:.2;margin:48px 0}
+a{color:#0062cc}
+</style>
+</head>
+<body>
+<main>
+
+<section id="en" lang="en">
+<h1>Privacy notice</h1>
+<p class="meta">{{restaurant}} · last updated {{updated_en}}</p>
+<p class="lang"><a href="#es">Leer en español</a></p>
+
+<p>This notice explains what happens to your personal data when you contact
+{{restaurant}} to book a table, by WhatsApp, by phone or in person.</p>
+
+<h2>Who is responsible</h2>
+<p>The data controller is {{controller}}, the operator of {{restaurant}}.
+You can reach us about your data by WhatsApp, by phone or in person at the
+restaurant.</p>
+
+<h2>What we keep</h2>
+<ul>
+<li>Your name and phone number.</li>
+<li>Your booking details: date, time, number of guests, and anything you tell
+us about the visit, such as an allergy or an occasion.</li>
+<li>If you write to us on WhatsApp: your WhatsApp profile name and the messages
+you exchange with us.</li>
+</ul>
+<p>We do not ask for payment card details and we do not keep them.</p>
+
+<h2>Why we use it</h2>
+<p>We use it to take and manage your booking and to answer your messages,
+because you asked us for a booking. We do not use it for advertising
+and we do not sell or share it for anyone else's purposes.</p>
+
+<h2>Who processes it for us</h2>
+<ul>
+<li>Meta delivers the WhatsApp messages between you and us, through its
+WhatsApp Business Platform.</li>
+<li>Google stores our bookings and messages in its Firebase service, in a data
+centre in the European Union.</li>
+<li>Google's Gemini service reads a WhatsApp booking request so that it can
+suggest the date, time and party size to our staff. A member of staff checks
+every booking.</li>
+<li>Vercel hosts our booking system.</li>
+</ul>
+<p>Some of these companies are based in the United States and may process data
+there under the safeguards European law requires.</p>
+
+<h2>How long we keep it</h2>
+<p>We keep your details for as long as we need them to manage your bookings
+with us. We delete them when you ask us to, unless the law requires us to keep
+something.</p>
+
+<h2>Your rights and how to delete your data</h2>
+<p>You can ask us for a copy of your data, to correct it, or to delete it. Send
+us a WhatsApp message, phone us, or ask in person at the restaurant, and tell us
+the phone number you booked with. We will delete your name, your
+phone number, your booking notes and your messages from our system, and confirm
+it to you within one month. A record that a table was booked that day stays,
+with nothing in it that identifies you.</p>
+<p>If you are not satisfied with our answer, you may complain to the Spanish data
+protection authority, the Agencia Española de Protección de Datos
+(<a href="https://www.aepd.es" rel="noopener">www.aepd.es</a>).</p>
+</section>
+
+<hr>
+
+<section id="es" lang="es">
+<h1>Aviso de privacidad</h1>
+<p class="meta">{{restaurant}} · última actualización: {{updated_es}}</p>
+<p class="lang"><a href="#en">Read in English</a></p>
+
+<p>Este aviso explica qué ocurre con sus datos personales cuando se pone en
+contacto con {{restaurant}} para reservar una mesa, por WhatsApp, por teléfono o
+en persona.</p>
+
+<h2>Responsable</h2>
+<p>El responsable del tratamiento es {{controller}}, que gestiona {{restaurant}}.
+Puede contactarnos sobre sus datos por WhatsApp, por teléfono o en persona en el
+restaurante.</p>
+
+<h2>Qué datos guardamos</h2>
+<ul>
+<li>Su nombre y su número de teléfono.</li>
+<li>Los datos de su reserva: fecha, hora, número de comensales y lo que nos
+indique sobre la visita, como una alergia o una celebración.</li>
+<li>Si nos escribe por WhatsApp: su nombre de perfil de WhatsApp y los mensajes
+que intercambia con nosotros.</li>
+</ul>
+<p>No pedimos ni guardamos datos de tarjetas de pago.</p>
+
+<h2>Para qué los usamos</h2>
+<p>Los usamos para tomar y gestionar su reserva y para responder a sus
+mensajes, porque usted nos ha pedido una reserva. No los usamos
+con fines publicitarios y no los vendemos ni los cedemos para fines de terceros.</p>
+
+<h2>Quién los trata por nuestra cuenta</h2>
+<ul>
+<li>Meta entrega los mensajes de WhatsApp entre usted y nosotros, a través de
+su WhatsApp Business Platform.</li>
+<li>Google almacena nuestras reservas y mensajes en su servicio Firebase, en un
+centro de datos de la Unión Europea.</li>
+<li>El servicio Gemini de Google lee una solicitud de reserva recibida por
+WhatsApp para proponer a nuestro personal la fecha, la hora y el número de
+comensales. Una persona del equipo revisa cada reserva.</li>
+<li>Vercel aloja nuestro sistema de reservas.</li>
+</ul>
+<p>Algunas de estas empresas tienen su sede en Estados Unidos y pueden tratar
+datos allí con las garantías que exige la normativa europea.</p>
+
+<h2>Cuánto tiempo los conservamos</h2>
+<p>Conservamos sus datos mientras los necesitemos para gestionar sus reservas
+con nosotros. Los eliminamos cuando nos lo pide, salvo que la ley nos obligue a
+conservar algo.</p>
+
+<h2>Sus derechos y cómo eliminar sus datos</h2>
+<p>Puede pedirnos una copia de sus datos, su rectificación o su supresión.
+Envíenos un mensaje de WhatsApp, llámenos o pídalo en persona en el
+restaurante, e indíquenos el número de teléfono con el que reservó. Eliminaremos su
+nombre, su número de teléfono, las notas de sus reservas y sus mensajes de
+nuestro sistema, y se lo confirmaremos en el plazo de un mes. Queda un registro
+de que ese día se reservó una mesa, sin ningún dato que le identifique.</p>
+<p>Si no queda conforme con nuestra respuesta, puede presentar una reclamación
+ante la Agencia Española de Protección de Datos
+(<a href="https://www.aepd.es" rel="noopener">www.aepd.es</a>).</p>
+</section>
+
+</main>
+</body>
+</html>

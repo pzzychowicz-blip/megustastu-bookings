@@ -19,14 +19,13 @@ session and keeping it in sync.
 
 ## Deferred
 
-- **Two code changes gate the WhatsApp go-live** (2026-09-19 plan, § A4 of
+- **One code change gates the WhatsApp go-live** (2026-09-19 plan, § A4 of
   `megustastu-bookings context/WhatsApp module/MGT_WhatsApp_Cloud_API_Go-Live_Plan.md`).
-  (1) **Photos in the inbox** — staff send the menu as a picture and customers send
+  **Photos in the inbox** — staff send the menu as a picture and customers send
   photos back, while `api/_lib/meta.js` sends text only and `api/wa-inbound.js` stores
   any non-text message as `"[image message]"`; Meta holds the files (7 days received,
-  30 days sent), so nothing new is stored here. (2) **A public `/privacy` page** —
-  Meta will not switch the app to Live, and so will not deliver real webhooks, without
-  a reachable privacy-policy URL. (The Graph v26.0 bump and the stale Gemini comment
+  30 days sent), so nothing new is stored here. **When it ships, the privacy notice
+  gains a line about photos** (`public/privacy.html`, both languages). (The Graph v26.0 bump and the stale Gemini comment
   shipped in v18.3.1; set the Meta app's WEBHOOK version to v26.0 in the dashboard at
   go-live, since the code cannot.)
 
