@@ -35487,7 +35487,67 @@ Open"), and a PDF with a caption, sent with Enter, one bubble with the caption u
 an HTML file and a 4.5 MB PDF were refused with their sentences, no chip and no request; a
 502 (stubbed in the page) kept the file with its sentence and the next Send went through;
 a file picked in one thread was absent from another and back on return, and so were two
-drafts typed in two threads. Still to check on the iOS Simulator: the picker.
+drafts typed in two threads. **On the iOS Simulator** (iPhone 18 Pro Max, iOS 27, the
+signed-in home-screen clip on :5179): the paperclip opens the native picker (Photo Library,
+Take Photo, Choose File); a library photo with a location became a 500 KB chip with its
+thumbnail and the Caption box focused; sent with a caption it made ONE bubble with the
+caption, the chip gone and the box empty; thumbnails load, the viewer opens as a full
+sheet with 44px buttons and Done closes it, and the Ogg/Opus voice note plays to its end
+in WebKit. (The simulator's `text` injection never reached the box; tapping its keyboard
+did, so that was the tool, not the field.) **The metadata goes**, measured in the page: a
+2400×1800 JPEG carrying an Exif APP1 with GPS fields came out of `shrinkPhoto` 1600×1200
+with neither "Exif" nor "GPSLatitude" in its bytes. Not checked: the iPad web clip, as no
+iPad simulator has a signed-in clip and signing one in needs the DEV password; it is the
+same WebKit, and the tablet card layout it would show was measured in Chrome.
 Pre-existing and left alone: a failed TEXT send's banner reads "WhatsApp send failed: send
 failed: …" (the composer's sentence drops the server's prefix).
 Main bundle 137.56 → 139.51 kB gz; 3,295 tests.
+
+### Phase 6 — the simulator's customer sends a photo, a voice note or a PDF
+
+The Sim panel's **Reply as customer** gains **Send a photo**, **Send a voice note** and
+**Send a PDF**, the message box above as the caption (a voice note has none, as on
+WhatsApp). **Backend mode only**: a message's `media` is written by the server alone, so
+there is no client-side path, and with backend mode off the three are disabled and say
+why. They take the real road. On DEV the panel posts a Meta-shaped webhook to the
+harness's `/api/wa-inbound`; on the sandbox it posts to the staff-auth
+`/api/wa-sim-inbound`, which now takes `media: "image" | "audio" | "document"`.
+
+**A KIND, never an id.** The sandbox endpoint mints the `MOCK.<kind>.<random>` id itself
+and refuses anything that is not one of the three kinds with a 400, a `{kind, mediaId}`
+object included: an id taken from a browser would go into a Graph path with the
+restaurant's token on it, which is the one thing `api/wa-media.js` is built not to allow
+(and on a live deployment a MOCK id is 410 anyway). The kind is checked with
+`hasOwnProperty`, so `"toString"` and `"__proto__"` are refused too (mutation-checked: an
+`in` test lets `"toString"` through and fails the case).
+
+**One spelling, one road.** `src/lib/wa-mock-media.js` (new, pure, imports nothing) holds
+what each kind looks like in a webhook (`SIM_MEDIA`: the type, a voice note's flag, a
+document's name), `mockMediaId(kind)`, which `uploadMedia`'s mock now calls too, and
+`simMediaMessage(kind, caption)`. `inboundContent` moved from `api/wa-inbound.js` to
+`api/_lib/inbound-core.js` (the webhook re-exports it), so `injectSimInbound` reads a sim
+photo exactly as the webhook reads Meta's: the caption is the text and is parsed, an
+uncaptioned photo or a voice note is not. In `src/` only the simulator's stubbed
+`wa-backend-sim.js` imports the new module, so none of it reaches a production chunk
+(`dist/` checked for its strings; the main bundle did not move).
+
+**Tests.** `tests/api-handlers.test.js`: `/api/wa-sim-inbound` with a kind stores the media,
+a server-minted id and the caption, and schedules one parse for a caption and none for a
+voice note or an uncaptioned PDF; six things that are not a kind are 400s that write
+nothing; the GET answers the sim voice note with the bundled Ogg; and the webhook stores
+`simMediaMessage`'s photo and voice note as Meta's. `tests/wa-media.test.js`: the builder's
+shapes, null for every non-kind, and `wa-mock-media.js` as the only file under `api/` and
+`src/` that builds a MOCK id. `tests/wa-sim-not-in-prod.test.js`: in `src/`, only
+`wa-backend-sim.js` imports it.
+
+**Verified on DEV** (harness in backend mode, mock send, thread `+34 699000111`): a photo
+with "Así queda la terraza", a voice note and a PDF with "El menú que pedimos" arrived
+through the webhook as three bubbles (the photo's thumbnail, the voice note's player, the
+PDF's chip, each caption under its file). The list read "Document: menu-grupos-2026.pdf · El
+menú que pedimos", the photo's GET answered 200 and the voice note played (7.5 s). The
+harness parsed the two captions and not the voice note. Gemini answered the first with its
+own 503, and the message was kept without a draft as designed. Then the harness was run
+once with `WA_SIM_ENABLED=1` and the page's staff token: `media: "image"` stored a photo
+whose thumbnail rendered with its caption, a forged `{kind, mediaId}` and `"video"` were 400s,
+and without the flag all three were the gate's 404.
+Main bundle unchanged at 139.51 kB gz; 3,306 tests.

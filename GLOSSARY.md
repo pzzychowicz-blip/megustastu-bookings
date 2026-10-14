@@ -431,6 +431,7 @@ Everything here is scaffolding. None of it ships.
 | ✨ Suggest reply | **suggested customer reply** (`generateCustomerReply`) | Gemini writes the customer's next message so a thread can continue. |
 | 🎲 Generate scenario | **generated scenario** (`api/wa-sim-generate.js`) | Gemini invents a message beyond the canned 60. |
 | "Make next staff reply fail" | **forced failure** (`failNextSendRef`) | Makes the failed-bubble + Retry path demonstrable. |
+| "Send a photo" · "Send a voice note" · "Send a PDF" under Reply as customer | **customer media** (`backendInbound({media})`, `simMediaMessage`) | v18.8.0. The customer sends a file, the message above as its caption. Backend mode only, since only the server writes a message's file; the sandbox endpoint takes the KIND and mints the MOCK id itself. |
 | "Sample photo" · a 7-second voice note · "Sample PDF" | **mock media** (`MOCK.<kind>.<id>`, `api/_lib/mock-media/`) | v18.8.0. While `WA_SEND_MODE` is mock, a media id starting `MOCK.` is answered with a bundled sample of its kind, so the bubbles and the viewer can be tried without a Meta token. On a live deployment such an id is 410. |
 | `__waSim.list()` in the console | **sim console API** (`lib/wa-sim.js`) | |
 | "Harness alive on …" | **the harness** (`scripts/wa-backend-dev.mjs`) | Local backend on **:3999**. Re-check needs it running locally or the button reports "backend not running". |

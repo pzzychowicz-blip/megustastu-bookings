@@ -80,6 +80,7 @@ import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inboun
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
 import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
+import { simMediaMessage } from "../src/lib/wa-mock-media.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
 // that records the one answer a handler gives.
@@ -628,6 +629,19 @@ describe("wa-inbound — the handshake, the method, the signature", () => {
 describe("wa-inbound — what a message is stored as", () => {
   beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
 
+  // v18.8.0 phase 6: the DEV simulator posts `simMediaMessage` in a webhook to
+  // the harness, so its photo, voice note and PDF take this handler's road.
+  it("the simulator's media messages are stored as Meta's are", async () => {
+    await deliver({ messages: [
+      inMsg(Object.assign({ id: "wamid.S1" }, simMediaMessage("document", "La carta"))),
+      inMsg(Object.assign({ id: "wamid.S2" }, simMediaMessage("audio", "no caption on audio"))),
+    ] });
+    const [doc, voice] = inbound().sort((a, b) => (a.id < b.id ? -1 : 1));
+    expect(doc).toMatchObject({ text: "La carta", media: { kind: "document", mime: "application/pdf", filename: "menu-grupos-2026.pdf" } });
+    expect(voice).toMatchObject({ text: "Voice message", media: { kind: "audio", voice: true } });
+    expect(doc.media.mediaId).toMatch(/^MOCK\.document\./);
+  });
+
   it("a text is stored as it came, with no media key, and parsed after the response", async () => {
     const res = await deliver({
       contacts: [{ wa_id: "34600111222", profile: { name: "Ana" } }],
@@ -841,6 +855,43 @@ describe("the simulator endpoints, enabled and signed in", () => {
     const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "hola", name: "Sim" } });
     expect([res.statusCode, res.body]).toEqual([200, { ok: true, phoneKey: KEY, skipped: false }]);
     expect(inbound()[0].text).toBe("hola");
+  });
+  // v18.8.0 phase 6: the customer's photo, voice note or PDF, from the panel.
+  it("wa-sim-inbound: a media message is a KIND, with the id minted here and the text as its caption", async () => {
+    const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "  La terraza  ", media: "image" } });
+    expect([res.statusCode, res.body]).toEqual([200, { ok: true, phoneKey: KEY, skipped: false }]);
+    const [m] = inbound();
+    expect(m.text).toBe("La terraza");
+    expect(m.media).toEqual({ kind: "image", mediaId: m.media.mediaId, mime: "image/jpeg" });
+    expect(m.media.mediaId).toMatch(/^MOCK\.image\.[a-z0-9]+$/);
+    // A caption is parsed, as a webhook's is (one job handed to waitUntil).
+    expect(convAt(KEY).lastMessageSnippet).toBe("Photo · La terraza");
+    expect(scheduled).toHaveLength(1);
+  });
+  it("wa-sim-inbound: a voice note needs no text, carries none, and is not parsed", async () => {
+    const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "ignored", media: "audio" } });
+    expect(res.statusCode).toBe(200);
+    const [m] = inbound();
+    expect([m.text, m.media.kind, m.media.voice, m.media.mime]).toEqual(["Voice message", "audio", true, "audio/ogg; codecs=opus"]);
+    expect("parsing" in convAt(KEY)).toBe(false);
+    expect(scheduled).toHaveLength(0);
+    expect((await call(simInboundHandler, { token: "staff", body: { phone: KEY, media: "document" } })).statusCode).toBe(200);
+    expect(inbound().map((x) => x.text)).toContain("Document: menu-grupos-2026.pdf");
+    expect(scheduled).toHaveLength(0);
+  });
+  it("wa-sim-inbound: 400 to a media that is not one of the three kinds, an id included, and writes nothing", async () => {
+    for (const media of ["video", "__proto__", "toString", "", 7, { kind: "image", mediaId: "1234567890" }]) {
+      const res = await call(simInboundHandler, { token: "staff", body: { phone: KEY, text: "x", media } });
+      expect([String(media), res.statusCode]).toEqual([String(media), 400]);
+    }
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("wa-media answers the simulator's voice note with the bundled sample while sending is mock", async () => {
+    await call(simInboundHandler, { token: "staff", body: { phone: KEY, media: "audio" } });
+    const [m] = inbound();
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: m.id } });
+    expect([res.statusCode, res.headers["content-type"]]).toEqual([200, "audio/ogg; codecs=opus"]);
+    expect(res.bytes.subarray(0, 4).toString("latin1")).toBe("OggS");
   });
   it("wa-sim-suggest: 400 without a history, and 400 naming the key when Gemini has none", async () => {
     expect((await call(simSuggestHandler, { token: "staff", body: {} })).statusCode).toBe(400);

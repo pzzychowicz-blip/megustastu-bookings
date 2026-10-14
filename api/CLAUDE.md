@@ -78,6 +78,14 @@ Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 4
 kind (`_lib/mock-media/`: `photo.jpg`, `voice.ogg`, `menu.pdf`, a few kB each), read
 through static `new URL(…, import.meta.url)`s so the deployment's file tracing includes
 them. On a live deployment a MOCK id is 410. The harness routes it (`/api/wa-media`).
+**Phase 6: the simulator's customer sends one too.** Its id has ONE spelling,
+`mockMediaId` in `src/lib/wa-mock-media.js` (pure, shared with the server, imported in
+`src/` by the simulator's stubbed client alone), which `uploadMedia`'s mock calls as well.
+`/api/wa-sim-inbound` takes `media` as a KIND (`image` · `audio` · `document`) and mints the
+id itself; anything else, a `{kind, mediaId}` object included, is 400. A media id from a
+browser is what this function exists not to trust, sandbox or not. `inboundContent` lives in
+`_lib/inbound-core.js` (re-exported by `wa-inbound.js`), so a sim photo is read exactly as
+Meta's is.
 
 **The POST sends a photo or a PDF (phase 5).** The file is the RAW body (`bodyParser` off, so a 4 MB
 PDF costs 4 MB of Vercel's 4.5 MB request cap, not a base64 field's 5.3), its type the Content-Type,

@@ -18,6 +18,7 @@
 
 import crypto from "node:crypto";
 import { env, sendMode, allowUnsigned } from "./env.js";
+import { mockMediaId } from "../../src/lib/wa-mock-media.js";
 
 // v18.3.1: v21.0 → v26.0 (shipped 2026-07-29). Meta removes v21.0 on
 // 21 January 2027. The one call made here (a text message to /messages) has
@@ -86,12 +87,11 @@ export function sendText(phoneE164, text) {
 // sent with the caption INSIDE the message, so a caption never becomes a
 // second message. Meta keeps an uploaded file 30 days.
 //
-// In mock mode nothing leaves: the id is `MOCK.<kind>.<random>`, which
-// api/wa-media.js answers with its bundled sample while the mode is mock.
+// In mock mode nothing leaves: the id is `MOCK.<kind>.<random>` (`mockMediaId`,
+// shared with the simulator), which api/wa-media.js answers with its bundled
+// sample while the mode is mock.
 export async function uploadMedia(bytes, mime, filename, kind) {
-  if (sendMode() === "mock") {
-    return "MOCK." + kind + "." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  }
+  if (sendMode() === "mock") return mockMediaId(kind);
   const { token, phoneNumberId } = liveConfig();
   const form = new FormData();
   form.append("messaging_product", "whatsapp");

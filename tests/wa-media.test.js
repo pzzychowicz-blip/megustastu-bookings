@@ -9,6 +9,10 @@
 // reply composer does with a picked file first (`src/lib/wa-attach.js`): which
 // files it takes, the sentence it shows for one it will not, and the size a
 // photo is drawn at. The canvas itself needs a browser and is checked live.
+//
+// Phase 6 adds the simulator's media (`src/lib/wa-mock-media.js`): the message a
+// customer's photo, voice note or PDF is built as, and the one spelling of a
+// MOCK id. The handlers that store and serve one are run in api-handlers.test.js.
 
 import { describe, it, expect } from "vitest";
 import {
@@ -16,7 +20,9 @@ import {
   WA_MEDIA_KEEP_IN_MS, WA_MEDIA_KEEP_OUT_MS, WA_FILENAME_LEN, WA_SEND_MAX_BYTES,
 } from "../src/lib/whatsapp.js";
 import { attachKind, attachRefusal, fitWithin, PHOTO_MAX_SIDE } from "../src/lib/wa-attach.js";
-import { readFileSync } from "node:fs";
+import { SIM_MEDIA, mockMediaId, simMediaMessage } from "../src/lib/wa-mock-media.js";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { stripComments } from "../scripts/strip-comments.mjs";
 
 const Composer = stripComments(readFileSync(new URL("../src/components/whatsapp/ReplyComposer.jsx", import.meta.url), "utf8")).join("\n");
@@ -157,5 +163,54 @@ describe("the reply composer keeps its text and its file with their thread", () 
   });
   it("a sent caption is cleared in the thread it was sent from, wherever staff are now", () => {
     expect(Composer).toMatch(/setTxt\("", key\);/);
+  });
+});
+
+describe("the simulator's media (wa-mock-media.js)", () => {
+  it("builds each kind as a webhook carries it, with an id sanitizeMedia keeps", () => {
+    const pic = simMediaMessage("image", "  La terraza ");
+    expect(pic).toEqual({ type: "image", image: { id: pic.image.id, mime_type: "image/jpeg", caption: "La terraza" } });
+    const doc = simMediaMessage("document", "menu");
+    expect(doc.document).toMatchObject({ mime_type: "application/pdf", filename: "menu-grupos-2026.pdf", caption: "menu" });
+    for (const kind of Object.keys(SIM_MEDIA)) {
+      const m = simMediaMessage(kind, "");
+      expect(m.type).toBe(kind);
+      expect("caption" in m[kind]).toBe(false);
+      expect(sanitizeMedia({ kind, mediaId: m[kind].id })).not.toBe(null);
+    }
+  });
+  it("a voice note has no caption, whatever text came with it", () => {
+    expect(simMediaMessage("audio", "hola").audio).toEqual({ id: expect.stringMatching(/^MOCK\.audio\./), mime_type: "audio/ogg; codecs=opus", voice: true });
+  });
+  it("is null for anything that is not one of the three kinds, the object's own keys included", () => {
+    for (const k of ["video", "sticker", "", null, undefined, "__proto__", "toString", "constructor", "hasOwnProperty"]) {
+      expect(simMediaMessage(k, "x")).toBe(null);
+    }
+  });
+  it("a MOCK id names its kind and is not the same twice", () => {
+    const a = mockMediaId("image");
+    expect(a).toMatch(/^MOCK\.image\.[a-z0-9]+$/);
+    expect(mockMediaId("image")).not.toBe(a);
+  });
+  // api/wa-media.js serves a sample for any id starting MOCK., so an id built
+  // anywhere else would be a second spelling to keep in step.
+  it("is the one place a MOCK id is built", () => {
+    const root = new URL("..", import.meta.url).pathname;
+    const files = [];
+    (function walk(dir) {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) { if (e.name !== "node_modules" && e.name !== "mock-media") walk(p); } else if (/\.(js|jsx|mjs)$/.test(e.name)) files.push(p);
+      }
+    })(join(root, "api"));
+    (function walk(dir) {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) walk(p); else if (/\.(js|jsx)$/.test(e.name)) files.push(p);
+      }
+    })(join(root, "src"));
+    const builders = files.filter((f) => /["']MOCK\.["']\s*\+/.test(stripComments(readFileSync(f, "utf8")).join("\n")));
+    expect(builders.map((f) => f.slice(root.length))).toEqual(["src/lib/wa-mock-media.js"]);
+    expect(stripComments(readFileSync(join(root, "api/_lib/meta.js"), "utf8")).join("\n")).toMatch(/if \(sendMode\(\) === "mock"\) return mockMediaId\(kind\);/);
   });
 });
