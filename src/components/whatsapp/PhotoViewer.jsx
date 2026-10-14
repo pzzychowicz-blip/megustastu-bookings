@@ -25,12 +25,18 @@ export function PhotoViewer({ photo, onClose }) {
   const m = useWaMedia(photo.phoneKey, msg, true);
   const caption = msg.text && msg.text !== mediaLabel(msg.media) ? msg.text : "";
   const from = msg.direction === "in" ? "From the customer" : "Sent";
+  // `alignItems: center`: a flex row stretches its items to the tallest, so one
+  // control taller than 44 made the other as tall too.
   const footer = (
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: SP.base, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: SP.base, flexWrap: "wrap" }}>
+      {/* A link, because a download needs `href` + `download`. A <button> is
+          border-box by default and a link is not, so without `boxSizing` its
+          44px floor was the CONTENT's and it measured 66px (Patryk: "gigantic"),
+          stretching Done beside it to match. */}
       {m.status === "ready" ? (
         <a className="mgt-hover-scale mgt-press" href={m.url}
           download={"whatsapp-photo-" + msg.id + (PHOTO_EXT[String(m.type || "").split(";")[0].trim()] || ".jpg")}
-          style={mkBtn({ minHeight: 44, padding: "10px 18px", textDecoration: "none", display: "inline-flex", alignItems: "center" })}>Save photo</a>
+          style={mkBtn({ minHeight: 44, padding: "10px 18px", boxSizing: "border-box", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" })}>Save photo</a>
       ) : null}
       <button className="mgt-hover-scale mgt-press" onClick={onClose}
         style={mkBtn({ minHeight: 44, padding: "10px 18px", background: "var(--app-btn-slate)" })}>Done</button>

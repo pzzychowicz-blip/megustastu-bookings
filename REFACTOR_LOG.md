@@ -35402,3 +35402,16 @@ blank tab pointed at it), `object-src 'none'` notwithstanding. Still to measure:
 4.5 MB limit against a streamed response, on the sandbox after merge (A5-6); Safari's
 Ogg/Opus playback and the viewer on the iOS Simulator, with phase 5's picker. Main bundle
 134.40 → 137.56 kB gz.
+
+**Follow-up: the viewer's buttons were 66px tall** (Patryk: "gigantic compared to the
+other ones"). Save photo is a link, because a download needs `href` and `download`, and
+it took mkBtn's 44px floor like the Done beside it. A `<button>` is border-box by the
+browser's default and an `<a>` is not, and nothing in the app sets `box-sizing`
+globally, so the link's floor was its CONTENT's: measured on DEV, 105 × 66 (44 + 2 × 10
+padding + 2 × 1 border), and the footer row, a flex row stretching its items, made Done
+66 beside it. The link is `boxSizing: border-box` and centres its text, and the row
+centres its items. Measured after: both 44 (Save photo 105 × 44, Done 69.1 × 44, the
+same as Find a booking's Done), on the tablet card and on the 375px sheet, where Done
+sits 18px from the edge. `tests/link-buttons.test.js` finds every `<a>` styled with a
+button maker and fails one that is not border-box (mutation-checked: dropping the
+property fails it); Save photo is the only one today.
