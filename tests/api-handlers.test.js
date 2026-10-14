@@ -396,12 +396,43 @@ describe("processInbound", () => {
     expect(convAt(KEY).lastMessageSnippet.length).toBe(200);
   });
 
-  it("a failed auto-ack does not lose the customer's message", async () => {
+  it("a failed auto-ack does not lose the customer's message, and hands its claim back", async () => {
     vi.stubEnv("WA_SEND_MODE", "live"); // live with no token: sendText throws
     const r = await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.G" });
     expect(r.skipped).toBe(false);
     expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
+    expect(convAt(KEY).autoAckSent).toBe(false);
+    // The claim is written BEFORE the send (two quick inbounds must not both
+    // ack), then released: the order of the two writes is the contract.
+    const claims = fake.state.writes.filter((w) => w.op === "update" && "autoAckSent" in w.value).map((w) => w.value.autoAckSent);
+    expect(claims).toEqual([true, false]);
+  });
+
+  it("the next inbound after a failed auto-ack sends it, once", async () => {
+    vi.stubEnv("WA_SEND_MODE", "live");
+    await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.H1" });
+    vi.stubEnv("WA_SEND_MODE", "mock"); // the provider is back
+    await processInbound({ phone: KEY, text: "¿Hola?", ts: TS + 60000, wamid: "wamid.H2" });
+    expect(msgsAt(KEY).map((m) => [m.direction, !!m.isAutoAck])).toEqual([["in", false], ["in", false], ["out", true]]);
     expect(convAt(KEY).autoAckSent).toBe(true);
+    await processInbound({ phone: KEY, text: "gracias", ts: TS + 120000, wamid: "wamid.H3" });
+    expect(msgsAt(KEY).filter((m) => m.isAutoAck).length).toBe(1);
+  });
+
+  it("an auto-ack that was sent keeps its claim even if its bubble cannot be stored", async () => {
+    const realSet = fake.db.ref;
+    fake.db.ref = (path) => {
+      const r = realSet(path);
+      if (/\/ack/.test(path)) r.set = async () => { throw new Error("write refused"); };
+      return r;
+    };
+    try {
+      await processInbound({ phone: KEY, text: "Hola", ts: TS, wamid: "wamid.I" });
+    } finally {
+      fake.db.ref = realSet;
+    }
+    expect(convAt(KEY).autoAckSent).toBe(true);
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
   });
 });
 

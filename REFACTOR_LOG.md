@@ -35258,3 +35258,19 @@ open on a thread → `/conversations` + `/messages/+34604378189`; another thread
 animated; inbox closed → `/conversations` only. The client-mode simulator wrote an
 inbound and its auto-ack to a thread nobody had open, and a client-mode reply on the
 open thread was appended and flipped to `delivered`.
+
+### Phase 2 — a failed auto-reply is retried
+
+`processInbound` writes `autoAckSent: true` in the conversation patch BEFORE the send,
+which is a claim: two inbounds arriving together must not both ack. But a send that then
+failed left the claim standing, so the auto-reply was never retried. A failed send now
+writes `autoAckSent: false` back (its own try, so a failed release cannot fail the
+inbound), and the next inbound sends it. A send that succeeded keeps the claim even when
+storing the ack's bubble fails afterwards: the customer has the message, and a second
+one is the duplicate the claim exists for. **Tests:** the existing failed-ack case now
+expects `false` and the two writes in order (`[true, false]`); new cases send on the
+next inbound exactly once, and keep the claim when only the bubble's write fails. The
+first two fail against the previous `inbound-core.js` (run). **Verified on DEV**
+(`processInbound` run against the DEV database with `WA_SEND_MODE=live` and no token,
+then mock): `autoAckSent` false after the failed send, true after the next inbound, and
+the thread holds two inbounds and one auto-ack.

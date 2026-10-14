@@ -167,23 +167,42 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   });
 
   // ── One-time auto-ack (after the inbound so the thread reads naturally) ───
+  // v18.8.0: `autoAckSent: true` in the patch above is a CLAIM, written before
+  // the send so two inbounds arriving together do not both ack. A send that
+  // FAILS hands the claim back (`autoAckSent: false`), so the next inbound
+  // tries again; before, a failed auto-reply was never retried, because the
+  // flag said it had been sent. A send that succeeded keeps the claim even if
+  // storing the ack's bubble then fails: the customer has the message, and a
+  // second one would be the duplicate the claim exists to prevent.
   if (firstEver) {
     const ackText = AUTO_ACK_TEXT[lang] || AUTO_ACK_TEXT.es;
+    let sent = null;
     try {
-      const sent = await sendText(phoneKey, ackText);
-      await appendMessage(phoneKey, {
-        id: "ack" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        direction: "out",
-        text: ackText,
-        ts: ts + 1500,
-        status: sent.status,
-        isAutoAck: true,
-        channel: "whatsapp",
-        providerMsgId: sent.wamid || null,
-      });
+      sent = await sendText(phoneKey, ackText);
     } catch (e) {
-      // Auto-ack failure must never fail the inbound — log and move on.
+      // Auto-ack failure must never fail the inbound — log, release, move on.
       console.warn("[wa-inbound] auto-ack send failed: " + e.message);
+      try {
+        await upsertConversation(phoneKey, { autoAckSent: false });
+      } catch (e2) {
+        console.warn("[wa-inbound] could not release the auto-ack claim: " + e2.message);
+      }
+    }
+    if (sent) {
+      try {
+        await appendMessage(phoneKey, {
+          id: "ack" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          direction: "out",
+          text: ackText,
+          ts: ts + 1500,
+          status: sent.status,
+          isAutoAck: true,
+          channel: "whatsapp",
+          providerMsgId: sent.wamid || null,
+        });
+      } catch (e) {
+        console.warn("[wa-inbound] auto-ack sent but not stored: " + e.message);
+      }
     }
   }
 
