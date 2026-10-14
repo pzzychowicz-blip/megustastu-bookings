@@ -152,7 +152,8 @@ function sanitisers() {
 }
 
 const PINNED = {
-  schema: 2,
+  // 3: v18.8.0, `settings/admin.waRetentionDays` (sanitizeAdminSettings).
+  schema: 3,
   prints: {
       "hooks/useBookingDefaults.js:sanitizeTiers": "8d1b9808c9",
       "hooks/useBookingDefaults.js:sanitizeBookingDefaults": "7a6d45c5c4",
@@ -165,7 +166,7 @@ const PINNED = {
       "hooks/useOptimizerSettings.js:sanitizeOptimizer": "74794693a2",
       "hooks/useRecurring.js:sanitizeRule": "b047ce1ebe",
       "hooks/useRecurring.js:sanitizeRecurring": "9f3c9986fd",
-      "hooks/useRoles.js:sanitizeAdminSettings": "97b57e7524",
+      "hooks/useRoles.js:sanitizeAdminSettings": "42a2f8f352",
       "hooks/useUserPrefs.js:sanitizeUserPrefs": "fb820d1b7b",
       "hooks/useVoucherDefaults.js:sanitizeVoucherDefaults": "7abe4b008f",
       "hooks/useWaSettings.js:sanitizeWa": "2cbe5d8113",

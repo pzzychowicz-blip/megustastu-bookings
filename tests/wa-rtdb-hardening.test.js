@@ -169,6 +169,8 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
     expect(raw).toEqual([]);
     // …and the sanitized form really is present at every one of them.
     // 8 since v18.8.0: `getMessage`, the message api/wa-media.js reads a media id from.
-    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(8);
+    // 11 since phase 7: the prune's `readMessageNode`, `removeConversationIf` and
+    // `removeMessages` (its keys come from the stored node, which they leave as is).
+    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(11);
   });
 });

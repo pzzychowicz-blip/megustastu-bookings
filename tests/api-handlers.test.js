@@ -49,6 +49,17 @@ const fake = vi.hoisted(() => {
         state.writes.push({ op: "update", path, value: patch });
         Object.keys(patch).forEach((k) => write(path + "/" + k, patch[k]));
       },
+      // v18.8.0 phase 7 (api/wa-prune.js). The real SDK may first call `fn`
+      // with null and retry with the stored value; this calls it once, with
+      // the stored value, which is the call that decides.
+      transaction: async (fn) => {
+        const cur = read(path);
+        const next = fn(cur === undefined ? null : cur);
+        if (next === undefined) return { committed: false, snapshot: { exists: () => cur != null, val: () => cur } };
+        state.writes.push({ op: "transaction", path, value: next });
+        write(path, next);
+        return { committed: true, snapshot: { exists: () => next != null, val: () => next } };
+      },
     }),
   };
   const TOKENS = {
@@ -76,6 +87,8 @@ import simInboundHandler from "../api/wa-sim-inbound.js";
 import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
 import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
+import pruneHandler, { conversationExpired, mayHoldOld, staleMessageIds } from "../api/wa-prune.js";
+import { removeConversationIf } from "../api/_lib/rtdb.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
@@ -100,6 +113,7 @@ beforeEach(() => {
   vi.stubEnv("FIREBASE_SERVICE_ACCOUNT", '{"project_id":"test"}');
   ["WA_STAFF_EMAILS", "WA_SEND_MODE", "WA_LLM_MODE", "WA_DB_URL", "WA_ALLOW_UNSIGNED", "WA_SIM_ENABLED",
     "META_APP_SECRET", "META_WA_TOKEN", "META_PHONE_NUMBER_ID", "META_VERIFY_TOKEN", "GEMINI_API_KEY", "GEMINI_MODEL", "TENANT_WA_CONTEXT",
+    "CRON_SECRET",
   ].forEach((k) => vi.stubEnv(k, ""));
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -336,7 +350,7 @@ describe("wa-config", () => {
     vi.stubEnv("META_VERIFY_TOKEN", "   "); // present: a blank-looking value is still a value
     const res = await config();
     expect(res.statusCode).toBe(200);
-    expect(res.body.set).toMatchObject({ GEMINI_API_KEY: true, FIREBASE_SERVICE_ACCOUNT: true, META_WA_TOKEN: false, META_VERIFY_TOKEN: true, WA_STAFF_EMAILS: false });
+    expect(res.body.set).toMatchObject({ GEMINI_API_KEY: true, FIREBASE_SERVICE_ACCOUNT: true, META_WA_TOKEN: false, META_VERIFY_TOKEN: true, WA_STAFF_EMAILS: false, CRON_SECRET: false });
     expect(Object.values(res.body.set).every((v) => typeof v === "boolean")).toBe(true);
     expect(JSON.stringify(res.body)).not.toContain("secret-key-value");
   });
@@ -1235,5 +1249,98 @@ describe("A4-5 — one message per send, the caption inside it", () => {
     const sent = await sendFile();
     expect([sent.statusCode, sent.body.error]).toEqual([502, "send failed: Recipient not allowed"]);
     expect(fake.state.writes).toEqual([]);
+  });
+});
+
+// ── api/wa-prune.js — the nightly message prune (v18.8.0 phase 7) ────────────
+describe("wa-prune", () => {
+  const DAY = 86400000;
+  const CRON = "c".repeat(64);
+  const prune = ({ auth = "Bearer " + CRON, method = "GET" } = {}) => {
+    const res = { statusCode: null, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+    return pruneHandler({ method, headers: auth == null ? {} : { authorization: auth } }, res).then(() => res);
+  };
+  const ago = (days) => Date.now() - days * DAY;
+  const msg = (id, ts) => (ts === undefined ? { id, direction: "in", text: id } : { id, direction: "in", text: id, ts });
+
+  it("503 with no CRON_SECRET, whatever is sent, and writes nothing", async () => {
+    expect((await prune()).statusCode).toBe(503);
+    expect((await prune({ auth: "Bearer " })).statusCode).toBe(503);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("401 to a missing, wrong, or almost-right token, before the method is asked, and writes nothing", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    for (const auth of [null, "", CRON, "Bearer " + CRON.slice(1), "Bearer " + CRON + " ", "bearer " + CRON, "Basic " + CRON]) {
+      expect([auth, (await prune({ auth })).statusCode]).toEqual([auth, 401]);
+    }
+    expect((await prune({ auth: "nope", method: "POST" })).statusCode).toBe(401);
+    expect((await prune({ method: "POST" })).statusCode).toBe(405);
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("deletes an old conversation with its messages, and old messages in a live one, and leaves the rest", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    fake.state.tree = {
+      settings: { admin: { waRetentionDays: 90 } },
+      conversations: {
+        "+34600000001": { phoneKey: "+34600000001", createdAt: ago(300), lastMessageAt: ago(120) },
+        "+34600000002": { phoneKey: "+34600000002", createdAt: ago(200), lastMessageAt: ago(1) },
+        "+34600000003": { phoneKey: "+34600000003", createdAt: ago(10), lastMessageAt: ago(2) },
+        "+34600000004": { phoneKey: "+34600000004", createdAt: ago(200) }, // no lastMessageAt: never deleted
+      },
+      messages: {
+        "+34600000001": { a: msg("a", ago(300)), b: msg("b", ago(120)), c: msg("c") },
+        "+34600000002": { d: msg("d", ago(150)), e: msg("e", ago(91)), f: msg("f", ago(89)), g: msg("g", ago(1)), h: msg("h") },
+        "+34600000003": { i: msg("i", ago(10)) },
+        "+34600000004": { j: msg("j", ago(150)), k: msg("k", ago(5)) },
+      },
+    };
+    const res = await prune();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, days: 90, conversations: 1, messages: 6, read: 3, errors: 0 });
+    const t = fake.state.tree;
+    expect(Object.keys(t.conversations).sort()).toEqual(["+34600000002", "+34600000003", "+34600000004"]);
+    expect(t.messages["+34600000001"]).toEqual({});
+    expect(Object.keys(t.messages["+34600000002"]).sort()).toEqual(["f", "g", "h"]); // a message with no ts stays in a live thread
+    expect(Object.keys(t.messages["+34600000003"])).toEqual(["i"]);
+    expect(Object.keys(t.messages["+34600000004"])).toEqual(["k"]);
+    expect(t.conversations["+34600000004"]).toBeTruthy();
+    // Per key and per message, never a whole node.
+    for (const w of fake.state.writes) {
+      expect(w.path).toMatch(/^(conversations|messages)\/\+346000000\d\d$/);
+      expect(w.op === "transaction" ? w.value : Object.values(w.value).every((v) => v === null)).toBe(w.op === "transaction" ? null : true);
+    }
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/^\[wa-prune\] kept 90 days .*removed 1 conversation\(s\) and 6 message\(s\), read 3 thread\(s\), 0 error\(s\)$/));
+  });
+
+  it("reads the setting through the one normaliser: absent, null, 0 or junk is a year, and a tiny number is the 30-day floor", async () => {
+    vi.stubEnv("CRON_SECRET", CRON);
+    for (const [v, days] of [[undefined, 365], [null, 365], [0, 365], ["x", 365], [-5, 365], [7, 30], [730, 730]]) {
+      fake.state.tree = v === undefined ? {} : { settings: { admin: { waRetentionDays: v } } };
+      expect([v, (await prune()).body.days]).toEqual([v, days]);
+    }
+  });
+
+  it("a conversation that came alive after the read keeps its thread (the delete re-checks what is stored)", async () => {
+    const cutoff = ago(90);
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, lastMessageAt: ago(1) } } };
+    expect(await removeConversationIf(KEY, (cur) => conversationExpired(cur, cutoff))).toBe(false);
+    expect(fake.state.tree.conversations[KEY]).toBeTruthy();
+    fake.state.tree.conversations[KEY].lastMessageAt = ago(100);
+    expect(await removeConversationIf(KEY, (cur) => conversationExpired(cur, cutoff))).toBe(true);
+    expect(fake.state.tree.conversations[KEY]).toBeUndefined();
+  });
+
+  it("the three pure questions", () => {
+    const cut = 1000;
+    expect(conversationExpired({ lastMessageAt: 999 }, cut)).toBe(true);
+    for (const c of [{ lastMessageAt: 1000 }, { lastMessageAt: "1" }, {}, null]) expect(conversationExpired(c, cut)).toBe(false);
+    expect(mayHoldOld({ createdAt: 1000, lastMessageAt: 2000 }, cut)).toBe(false);
+    expect(mayHoldOld({ createdAt: 999, lastMessageAt: 2000 }, cut)).toBe(true);
+    expect(mayHoldOld({ lastMessageAt: 2000 }, cut)).toBe(true);
+    const node = { a: { ts: 999 }, b: { ts: 1000 }, c: {}, d: { ts: "5" }, e: null };
+    expect(staleMessageIds(node, cut, false)).toEqual(["a"]);
+    expect(staleMessageIds(node, cut, true)).toEqual(["a", "c", "d", "e"]);
+    expect(staleMessageIds(null, cut, true)).toEqual([]);
   });
 });

@@ -22,8 +22,8 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-FIVE functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media`, the
-last since v18.8.0) and the `sandbox`
+SIX functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media` ·
+`wa-prune`, the last two since v18.8.0) and the `sandbox`
 branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
 branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
 it is never written on main and never by hand. The runtime gate stays: two independent answers, and
@@ -101,6 +101,30 @@ and `sendMedia`: **ONE `/messages` call, the caption inside it** (checklist A4-5
 stored with `media` (through `sanitizeMedia`, so a sent name is cleaned before it is SENT too) and
 `authorEmail`, the snippet updated and the conversation un-archived, as `wa-send` does. In mock mode
 the upload returns `MOCK.<kind>.<random>`, which the GET above answers with the sample.
+
+**`wa-prune.js` — the nightly message prune (v18.8.0 phase 7).** Vercel Cron calls it at
+04:00 UTC (`vercel.json`'s `crons`, the first cron in the repo; `tests/sandbox-branch.test.js`
+fails a cron naming a function `main` does not deploy). It deletes WhatsApp messages older than
+`settings/admin.waRetentionDays` (a year by default), read through `retentionDaysOf`
+(`src/lib/retention.js`, a leaf, so Node ESM can import it), the function the Admin tab uses.
+Four rules:
+- **The secret first.** `CRON_SECRET` unset → 503 before anything is read. A wrong bearer → 401,
+  constant-time, before the method. Vercel sends the variable as a bearer token when the project
+  has it, so it is also what makes the cron work. It goes on BOTH projects; the Integrations panel
+  shows whether it is set.
+- **Per key, never a node.** A conversation goes on its own and a thread's old messages go as one
+  update of nulls under its key (`removeConversationIf`, `removeMessages`, `_lib/rtdb.js`).
+  firebase-admin bypasses the rules, so this code is the only limit on what it deletes.
+- **Re-check at the delete.** The conversation delete is a transaction asking "still expired?" of
+  what is stored, so a message that arrived mid-run keeps its thread.
+- **Age is the message's own `ts`.** In a live thread, no readable `ts` means keep. In a thread
+  being deleted it means go. No readable `lastMessageAt` means the conversation is never deleted.
+  Only a conversation created before the cutoff (or with no `createdAt`) is read at all
+  (`mayHoldOld`).
+
+It answers the counts and logs one line; an error in any thread makes it 500. Its tests are their own
+block in `tests/api-handlers.test.js`, outside the staff-gate `describe.each`, since its gate is the
+cron secret.
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules

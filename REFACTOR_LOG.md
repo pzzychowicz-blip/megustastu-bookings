@@ -35551,3 +35551,100 @@ once with `WA_SIM_ENABLED=1` and the page's staff token: `media: "image"` stored
 whose thumbnail rendered with its caption, a forged `{kind, mediaId}` and `"video"` were 400s,
 and without the flag all three were the gate's 404.
 Main bundle unchanged at 139.51 kB gz; 3,306 tests.
+
+### Phase 7 — WhatsApp messages are kept 12 months, then deleted every night
+
+**What was missing.** A customer's messages were kept for ever. The privacy notice named no
+period, and SECURITY.md §3 listed "a retention period for messages" as open. The decision
+(2026-10-14): 12 months by default, the restaurant can change it, and a nightly job deletes
+what is older. Files are not ours to delete: Meta holds them (7 days for one received, 30 for
+one sent), and the app shows them through the proxy without keeping a copy.
+
+**The setting.** `settings/admin.waRetentionDays`, beside the activity log's
+`activityRetentionDays` and built the same way. It has the same choices (Settings → Admin,
+under **WhatsApp messages**, shown only while the module is on: "Keep messages for") and the
+same normaliser, `retentionDaysOf`. That function moved to a new leaf, `src/lib/retention.js`,
+because the prune imports it under Node ESM and `activity.js` reaches `./day` without an
+extension. `activity.js` re-exports all four names, so no caller changed. An absent, null, 0
+or junk value reads as the shipped year and never as the 30-day floor. `useRoles`' whitelist
+gained the key, so **`SCHEMA` went 2 → 3**: a build without it rewrites `settings/admin` whole
+and would drop the setting. The rules needed nothing, since `settings/admin` validates no keys
+and its write grant and `adminRev` CAS already cover a new one (checked against
+`database.rules.json`).
+
+**The prune.** `api/wa-prune.js`, a GET that Vercel Cron calls at 04:00 UTC every day
+(`vercel.json`'s new `crons`). Each project's production deployment runs it: the sandbox's
+prunes DEV, the restaurant's prunes PROD.
+- **The secret is the only gate, and it is asked first.** With `CRON_SECRET` unset the answer
+  is 503 and nothing is read: an endpoint that deletes must not run open because a variable was
+  forgotten. A wrong or missing bearer gets 401, compared in constant time, before the method is
+  asked. Integrations gained a "Nightly message cleanup" group so the Admin tab shows whether
+  the secret is set (a boolean, as for every key; `api/wa-config.js` lists it).
+- **What goes**, against `cutoff = now − days`:
+  - a conversation whose `lastMessageAt` is older than the cutoff, with all its messages;
+  - in a live conversation, each message whose own `ts` is older.
+
+  A message with no readable `ts` stays in a live thread, because its age is unknown, and goes
+  with a deleted one, because it then belongs to nothing. A conversation with no readable
+  `lastMessageAt` is never deleted.
+- **A thread that came alive keeps itself.** The conversation delete is a transaction
+  (`removeConversationIf`) that re-asks "still expired?" against what is stored at that moment.
+  So a message that arrived while the prune ran saves the thread, and its own message is kept
+  because its `ts` is inside the window. A customer who writes again a year later gets the
+  one-time auto-reply again, which was accepted.
+- **Only threads that can hold an old message are read** (`mayHoldOld`). A conversation created
+  inside the window cannot hold one, so most nights read almost nothing.
+- **Deletes go per key.** Each conversation goes on its own, and each thread's old messages go
+  as one update of nulls under its own key. Nothing deletes a whole node: firebase-admin bypasses
+  the rules, so this code is the only limit on what it can remove.
+- **It reports what it did.** One log line ("kept 365 days (before …): removed X
+  conversation(s) and Y message(s), read Z thread(s), E error(s)") and the same counts as JSON.
+  A thread that fails is counted and skipped, and any error makes the answer 500, so Vercel's cron
+  log shows a failed night.
+
+The dev harness routes `/api/wa-prune` and sets no secret, so it answers 503 until one is given.
+
+**The privacy notice says so** (EN and ES, "How long we keep it" / "Cuánto tiempo los
+conservamos"). It now states that each WhatsApp message is deleted automatically 12 months after
+it was sent, and the conversation with its last message. It also states that a photo, voice note
+or document stays with Meta (7 days received, 30 sent), and that the booking system shows it
+from Meta without storing a copy. The tenant's `privacy.updated` is 2026-10-14.
+SECURITY.md §3's conversations/messages row reads "12 months, daily prune", and the open item is
+gone from its list.
+
+**Tests** (3,306 → 3,316):
+- `tests/api-handlers.test.js` gains a `wa-prune` block, with `transaction` added to the
+  in-memory firebase-admin:
+  - 503 with no secret, writing nothing;
+  - 401 to a missing, wrong or almost-right token, before a POST is told 405;
+  - a deletion scenario that asserts each write is per key, plus the log line;
+  - the setting through the normaliser (absent, null, 0 and junk are a year; 3 is the 30-day
+    floor);
+  - the transaction re-check (a conversation that came alive between the read and the delete is
+    kept, with its new message);
+  - the three pure questions.
+- `tests/sandbox-branch.test.js`: every cron names a function `main` deploys, so a cron can't
+  point at a file `.vercelignore` drops.
+- `tests/privacy.test.js`: the notice's periods equal `DEFAULT_RETENTION_DAYS` and the
+  `WA_MEDIA_KEEP_*` numbers, in both languages.
+- `tests/activity.test.js`: `waRetentionDays` reads like the log's and is kept apart from it.
+- `tests/schema.test.js` is re-pinned at 3 with `sanitizeAdminSettings`' new print.
+- `tests/wa-rtdb-hardening.test.js` counts 11 `sanitizeKey(phoneKey)` sites (three new).
+
+Mutation-checked:
+- with the transaction's re-check removed, the came-alive case fails;
+- with the secret check moved after the method, the 401-before-405 case fails.
+
+**Verified on DEV** (the harness run once with a `CRON_SECRET`, the page signed in on the persisted
+session):
+- The first run removed 2 conversations and 5 messages and read 3 threads. One of the two was the
+  2017 Meta test sample that had sat on DEV since the sandbox's first webhook. The sandbox's own
+  cron would remove it on its first night anyway.
+- A second run removed nothing.
+- Setting "Keep messages for" to 2 years, then back to 1, showed in the next run's `days` (730,
+  then 365), so the screen and the delete read the same value.
+- With no secret, the answer was 503.
+- On the local dev server, the Integrations panel shows its "couldn't check" state, as designed
+  (no `/api` there).
+
+Main bundle 139.57 kB gz (+0.06, the Admin section); 3,316 tests; lint 63 warnings; style OK.

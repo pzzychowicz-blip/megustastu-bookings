@@ -165,6 +165,8 @@ const INTEGRATION_KEYS = [
   { group: "WhatsApp (Meta Cloud API)", keys: ["META_WA_TOKEN", "META_APP_SECRET", "META_VERIFY_TOKEN", "META_PHONE_NUMBER_ID"] },
   { group: "Message understanding (Gemini)", keys: ["GEMINI_API_KEY", "GEMINI_MODEL"] },
   { group: "Server-side database access", keys: ["FIREBASE_SERVICE_ACCOUNT", "WA_DB_URL"] },
+  // v18.8.0 phase 7: the nightly WhatsApp prune runs only when this is set.
+  { group: "Nightly message cleanup", keys: ["CRON_SECRET"] },
 ];
 
 // v18.0.0 phase 5: the status this section used to say was "coming". THREE
@@ -221,7 +223,8 @@ function IntegrationsSection() {
         Integrations
       </div>
       <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: 2 }}>
-        Keys the server uses to reach WhatsApp and Google. They are <strong>not
+        Keys the server uses to reach WhatsApp and Google, and to run the nightly
+        message cleanup. They are <strong>not
         stored in this app</strong> and never will be: everyone who can sign in
         here can read this restaurant&rsquo;s whole database, so a key kept here
         would be a key every member of staff could take. They live in the
@@ -683,6 +686,9 @@ export function AdminTabContent({
   onOpenActivity,
   retentionDays,
   onSetRetention,
+  // v18.8.0 phase 7: how long WhatsApp messages are kept.
+  waRetentionDays,
+  onSetWaRetention,
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("staff");
@@ -955,6 +961,38 @@ export function AdminTabContent({
           Older entries are removed the next time an admin opens the log.
         </div>
       </Section>
+
+      {/* v18.8.0 phase 7: how long WhatsApp messages are kept, beside the log's
+          own window and built the same way (the same choices, the same
+          normaliser, so never 0 and a year by default). Unlike the log it is
+          pruned on a SCHEDULE: api/wa-prune.js runs every night at 04:00 UTC.
+          Shown only while the module is on, because it is about the module's
+          data. The privacy notice states the period, so the hint says so. */}
+      {moduleOn(modules, "whatsapp") ? (
+        <Section>
+          <div style={{ fontWeight: FW.bold, fontSize: T.body, color: "var(--text-primary)" }}>
+            WhatsApp messages
+          </div>
+          <label style={{ display: "flex", gap: SP.base, alignItems: "center", flexWrap: "wrap", marginTop: SP.base }}>
+            <span style={{ fontSize: T.body, color: "var(--text-secondary)" }}>Keep messages for</span>
+            <select
+              value={waRetentionDays}
+              onChange={function (e) { onSetWaRetention(Number(e.target.value)); }}
+              className="mgt-hover-scale"
+              style={{ ...mkSel(), width: "auto" }}
+            >
+              {RETENTION_CHOICES.map(function (c) {
+                return <option key={c.days} value={c.days}>{c.label}</option>;
+              })}
+            </select>
+          </label>
+          <div style={{ fontSize: T.micro, color: "var(--text-muted)", marginTop: SP.tight }}>
+            Every night, messages older than this are deleted, and so is a
+            conversation whose last message is. The privacy notice tells customers
+            12&nbsp;months: change it there too if you change this.
+          </div>
+        </Section>
+      ) : null}
 
       <Collapsible title="What the server actually enforces" defaultOpen={false}>
         <p style={{ margin: 0, marginBottom: SP.base, color: "var(--text-secondary)", fontSize: T.body }}>

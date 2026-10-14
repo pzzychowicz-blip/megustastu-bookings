@@ -236,3 +236,51 @@ export async function readOperatingHours() {
     return null; // prompt falls back to the default hours line
   }
 }
+
+// ── Retention (v18.8.0 phase 7, api/wa-prune.js) ─────────────────────────────
+// What the nightly prune reads and deletes. Deletes go PER KEY (a conversation)
+// and PER MESSAGE (a multi-path update of nulls under one conversation), never
+// a whole-node wipe: firebase-admin bypasses the rules, so nothing but this
+// code stands between the prune and every thread at once.
+
+// The stored setting, raw: the caller normalises it (`retentionDaysOf`, the
+// same function the Admin tab reads it through).
+export async function readWaRetentionDays() {
+  const snap = await getDb().ref("settings/admin/waRetentionDays").get();
+  return snap.exists() ? snap.val() : null;
+}
+
+export async function readAllConversations() {
+  const snap = await getDb().ref("conversations").get();
+  return snap.exists() ? snap.val() || {} : {};
+}
+
+// One conversation's messages as stored, keyed by their child keys (an array
+// node's keys are its indices, which delete the same way).
+export async function readMessageNode(phoneKey) {
+  const snap = await getDb().ref("messages/" + sanitizeKey(phoneKey)).get();
+  return snap.exists() ? snap.val() || {} : {};
+}
+
+// Deletes the conversation only if `stillOld(stored)` holds at the moment of
+// the write, so a message that arrived after the prune read the list keeps its
+// thread. Resolves true when it was deleted.
+export async function removeConversationIf(phoneKey, stillOld) {
+  let decided = false;
+  const r = await getDb().ref("conversations/" + sanitizeKey(phoneKey)).transaction(function (cur) {
+    // The first call may see null (nothing cached yet); returning it asks the
+    // server, which re-runs this with what is stored.
+    if (cur == null) { decided = false; return cur; }
+    decided = stillOld(cur);
+    return decided ? null : undefined; // undefined aborts: leave it as it is
+  });
+  return !!(r && r.committed && decided);
+}
+
+// Deletes the listed messages of one conversation in one write.
+export async function removeMessages(phoneKey, ids) {
+  if (!ids.length) return;
+  const patch = {};
+  ids.forEach(function (id) { patch[id] = null; });
+  await getDb().ref("messages/" + sanitizeKey(phoneKey)).update(patch);
+}

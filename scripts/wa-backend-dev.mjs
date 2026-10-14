@@ -26,6 +26,10 @@
 //                                       (v18.8.0; the bundled samples for a
 //                                       MOCK. id while WA_SEND_MODE is mock)
 //              POST /api/wa-media       send a photo or a PDF (raw body)
+//              GET  /api/wa-prune       the nightly message prune (v18.8.0),
+//                                       refused unless CRON_SECRET is set in
+//                                       the environment; the harness gives it
+//                                       no default, since it deletes
 //
 // This file is dev-tooling only: it is NOT deployed, and the api/ handlers do
 // not know it exists (they run identically under Vercel's runtime at ship).
@@ -70,6 +74,7 @@ const { default: waSimSuggest } = await import("../api/wa-sim-suggest.js");
 const { default: waSimGenerate } = await import("../api/wa-sim-generate.js");
 const { default: waRecheck } = await import("../api/wa-recheck.js");
 const { default: waMedia } = await import("../api/wa-media.js");
+const { default: waPrune } = await import("../api/wa-prune.js");
 const { llmMode, sendMode, env } = await import("../api/_lib/env.js");
 // ✨ Suggest generator is shared with api/wa-sim-suggest.js (one source of truth).
 const { generateCustomerReply } = await import("../api/_lib/gemini.js");
@@ -152,7 +157,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === "/api/wa-sim-generate") { await waSimGenerate(req, res); return; }
     if (pathname === "/api/wa-recheck") { await waRecheck(req, res); return; }
     if (pathname === "/api/wa-media") { await waMedia(req, res); return; }
-    res.status(404).json({ error: "not found", routes: ["/health", "/dev/models", "/dev/customer-reply", "/api/wa-inbound", "/api/wa-send", "/api/wa-sim-inbound", "/api/wa-sim-suggest", "/api/wa-sim-generate", "/api/wa-recheck", "/api/wa-media"] });
+    if (pathname === "/api/wa-prune") { await waPrune(req, res); return; }
+    res.status(404).json({ error: "not found", routes: ["/health", "/dev/models", "/dev/customer-reply", "/api/wa-inbound", "/api/wa-send", "/api/wa-sim-inbound", "/api/wa-sim-suggest", "/api/wa-sim-generate", "/api/wa-recheck", "/api/wa-media", "/api/wa-prune"] });
   } catch (e) {
     console.error("[wa-backend] handler error:", e);
     if (!res.headersSent) res.status(500).json({ error: e.code === "NO_SERVICE_ACCOUNT" ? e.message : "internal error: " + e.message });

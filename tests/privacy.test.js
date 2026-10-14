@@ -13,6 +13,8 @@ import { dirname, join } from "node:path";
 import { renderPrivacy, privacyIncomplete, PRIVACY_TOKENS } from "../scripts/privacy-page.mjs";
 import { profile } from "../src/tenants/mgt.js";
 import { APP_NAME } from "../src/lib/constants.js";
+import { DEFAULT_RETENTION_DAYS } from "../src/lib/retention.js";
+import { WA_MEDIA_KEEP_IN_MS, WA_MEDIA_KEEP_OUT_MS } from "../src/lib/whatsapp.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (...p) => readFileSync(join(ROOT, ...p), "utf8");
@@ -74,6 +76,27 @@ describe("the privacy notice — the template", () => {
       tokens: (s.match(/\{\{\w+\}\}/g) || []).map((t) => t.replace(/_(en|es)\}\}$/, "}}")).sort(),
     });
     expect(shape(section("es"))).toEqual(shape(section("en")));
+  });
+});
+
+// v18.8.0 phase 7: the notice states two periods the code decides, so each is
+// held to the number it describes: the WhatsApp prune's default
+// (`settings/admin.waRetentionDays`, api/wa-prune.js) and how long Meta keeps a
+// file (`mediaExpired`). Changing either number fails here until the notice says
+// the new one, in both languages.
+describe("the privacy notice — the periods it promises", () => {
+  const section = (id) => new RegExp('<section id="' + id + '"[\\s\\S]*?</section>').exec(BODY)[0].replace(/\s+/g, " ");
+  it("deletes WhatsApp messages after the prune's default, 12 months", () => {
+    expect(DEFAULT_RETENTION_DAYS).toBe(365);
+    expect(section("en")).toContain("We delete each WhatsApp message automatically 12 months after it was sent.");
+    expect(section("es")).toContain("Eliminamos automáticamente cada mensaje de WhatsApp 12 meses después de su envío.");
+  });
+  it("says Meta keeps a file 7 days received and 30 sent, and that we keep no copy", () => {
+    expect([WA_MEDIA_KEEP_IN_MS, WA_MEDIA_KEEP_OUT_MS].map((ms) => ms / 86400000)).toEqual([7, 30]);
+    expect(section("en")).toContain("keeps it for 7 days (one you send us) or 30 days (one we send you)");
+    expect(section("en")).toContain("does not store a copy");
+    expect(section("es")).toContain("durante 7 días (los que usted nos envía) o 30 días (los que le enviamos nosotros)");
+    expect(section("es")).toContain("no guarda una copia");
   });
 });
 

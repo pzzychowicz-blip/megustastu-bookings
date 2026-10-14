@@ -1304,6 +1304,7 @@ function BookingApp({uid}){
   const {
     can, isAdmin, enforceRoles, setEnforceRoles, rows: roleRows,
     activityRetentionDays, setActivityRetention,
+    waRetentionDays, setWaRetention,
     // v18.0.0 phase 4 — the module registry. `hasModule` is the gate every
     // module-owned surface asks, and it is checked BEFORE `can`: a module that
     // is off is hidden from everybody including an admin.
@@ -4755,6 +4756,8 @@ function BookingApp({uid}){
             customerSeek={customerSeek}
             activityRetentionDays={activityRetentionDays}
             onSetActivityRetention={setActivityRetention}
+            waRetentionDays={waRetentionDays}
+            onSetWaRetention={setWaRetention}
             reminders={reminders}
             onAddReminder={openNewReminder}
             onEditReminder={openEditReminder}
