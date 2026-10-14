@@ -35210,3 +35210,51 @@ Five findings. Four confirmed and fixed, one acted on without proof (item 3).
 `tests/privacy.test.js` is 14 cases. Gate after the fixes: main bundle 165.11 kB gz
 · 3,197 tests · lint 63 problems, 0 errors · style OK.
 
+
+## v18.8.0 — WhatsApp photos, voice notes and documents; message retention; the draft checks the request
+
+**Date:** 2026-10-14 · **Branch:** `feat/v18.8.0-wa-media-retention` ·
+**Plan:** `~/.claude/plans/in-referrance-to-whatsapp-quirky-peacock.md` (every decision
+in it made with Patryk on 2026-10-14). Closes go-live checklist **A4-1** (photos) and
+**A4-5** (one outbound = one message), and ROADMAP's "Before WhatsApp goes live (#8)".
+Coexistence (R-3) is v18.9.0, with its own plan.
+
+### Phase 1 — each conversation loads only its own messages (#8)
+
+`useWhatsApp` had one permanent `onValue(ref(db, "messages"))`: every device downloaded
+every message of every conversation at open and on each change, to show the one thread
+on screen. It now listens to **one conversation at a time**. `watchMessages(phoneKey)`
+attaches `onValue(messages/<key>)` on the first watcher and detaches it on the last
+(reference-counted: the inbox and the simulator can watch one key, and StrictMode mounts
+every effect twice), and returns the unwatch. `InboxPanel` watches the open thread in an
+effect on `activeKey`, so selecting another thread, Back to the list, or closing the
+inbox detaches it; `WaSimulator` watches its customer's thread through the same seam
+(✨ Suggest reads its history). It is a `useCallback` on `[on]`, so the effect does not
+re-attach per render. `messagesMap` keeps its shape and holds only the watched keys.
+
+- **The write guard is per key.** `appendMessage` and `patchMessage` refuse until THAT
+  key's first snapshot has landed (`messagesLoadedKeys`); both callers write to the open
+  thread. `removeMessages` takes the conversations guard instead, because bulk delete
+  removes threads nobody has open, and a per-key delete cannot write stale data over
+  real data (`eraseConversation`'s argument).
+- **The simulator writes through its own writer**, `simAppendMessage`: in client mode
+  `wa-sim.js` is the mock server and writes to any conversation, so it writes the way
+  `api/_lib/rtdb.js` does (a child-set of a fresh id, no local mirror). App passes it
+  under the `appendMessage` name `wa-sim.js` already calls, so the simulator is
+  unchanged. Dead in a production build (`WA_SANDBOX`).
+- **A loading thread is `undefined`, an empty one `[]`.** The thread now arrives a moment
+  after it opens, and `ConversationView`'s new-bubble animation read the snapshot that
+  brings it as a message that had just landed, so every open animated the last bubble in.
+  `baselineRef` takes the baseline from the first LOADED render.
+- **`clearAllWaData`** (the simulator's hard reset) still deletes every conversation key
+  plus every watched key; a message subtree whose conversation row is already gone is no
+  longer seen there. Every delete in the app removes both halves in one write, and the
+  daily prune (phase 7) clears such a subtree once it is old.
+
+**Verified on DEV** (the Firebase connection's own listen table,
+`db._repo.persistentConnection_.listens`): inbox closed → `/conversations` only; inbox
+open on a thread → `/conversations` + `/messages/+34604378189`; another thread selected
+→ the first detached, `/messages/+34612202359` attached, 8 bubbles drawn and none
+animated; inbox closed → `/conversations` only. The client-mode simulator wrote an
+inbound and its auto-ack to a thread nobody had open, and a client-mode reply on the
+open thread was appended and flipped to `delivered`.

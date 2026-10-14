@@ -414,7 +414,7 @@ const __APP_SIGNATURE__={
   // (`18.4.4-sandbox`). The suffix is the boot banner's only way to say which
   // deployment you are looking at; SANDBOX_DEPLOY folds to false in production,
   // so the restaurant's bundle holds the bare number.
-  version:"18.7.0"+(SANDBOX_DEPLOY?"-sandbox":""),
+  version:"18.8.0"+(SANDBOX_DEPLOY?"-sandbox":""),
   author:"Patryk Zychowicz",
   contact:"pz.zychowicz@gmail.com",
   copyright:"© 2026 Patryk Zychowicz. All rights reserved.",
@@ -1410,10 +1410,14 @@ function BookingApp({uid}){
   // Sandbox-only console helpers: window.__waSim.*. The ctx is read through a ref
   // so the helpers always see live savers/conversations without rebinding. The
   // whole effect is dead-code-eliminated in a real prod build (WA_SANDBOX false).
+  // v18.8.0: the simulator writes messages through `simAppendMessage`, the
+  // hook's server-shaped writer, under the `appendMessage` name wa-sim.js
+  // calls: it writes to conversations nobody has open, which the guarded
+  // saver now refuses (its guard is per key, and only an open thread is read).
   const waSimCtxRef=useRef(null);
   waSimCtxRef.current={
     conversations:wa.conversations, messagesMap:wa.messagesMap, upsertConversation:wa.upsertConversation,
-    appendMessage:wa.appendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
+    appendMessage:wa.simAppendMessage, saveBookings:saveBookings, clearAllWaData:wa.clearAllWaData,
   };
   useEffect(function(){
     if(!WA_SANDBOX) return;
@@ -4778,6 +4782,7 @@ function BookingApp({uid}){
           Delete controls, for a module the restaurant has turned off. */}<ModalPresence show={whatsappOn&&showInbox}>{whatsappOn&&showInbox?<InboxPanel
           conversations={wa.conversations}
           messages={wa.messagesMap}
+          watchMessages={wa.watchMessages}
           templates={wa.templates}
           bookings={bookings}
           initialActiveKey={returnToInboxKey}
@@ -4819,7 +4824,7 @@ function BookingApp({uid}){
               onClick={function(){wa.doDeleteConversation(confirmDeleteConv);}}
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
-          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.appendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
+          ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
           onClose={function(){setShowSim(false);}} /></Suspense>:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree

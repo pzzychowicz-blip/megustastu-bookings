@@ -105,6 +105,14 @@ export function WaSimulator({ ctx, onClose }) {
     ? custKey
     : (custList.length ? custList[0].phoneKey : "");
   const custConv = custList.find((c) => c.phoneKey === effectiveKey) || null;
+  // v18.8.0: messages are listened to per conversation, so the panel watches
+  // its customer's thread itself (✨ Suggest reads its history), through the
+  // seam the inbox uses. `ctx.watchMessages` is stable while the module is on.
+  const watchMessages = ctx.watchMessages;
+  useEffect(() => {
+    if (!effectiveKey || !watchMessages) return undefined;
+    return watchMessages(effectiveKey);
+  }, [effectiveKey, watchMessages]);
 
   function custLabel(c) {
     const who = c.profileName || c.phone || c.phoneKey;

@@ -46,6 +46,10 @@ export function ConversationView({
   const [histOpen, setHistOpen] = useState(false);
   const win = formatWindow(conv.windowExpiresAt);
   const threadRef = useRef(null);
+  // v18.8.0: a thread is listened to only while it is open, so `messages` is
+  // `undefined` until its first snapshot lands (InboxPanel), and `[]` means
+  // the thread is known to be empty.
+  const loaded = messages !== undefined;
   const msgsForConv = messages || [];
   // v18.4.0: `atEnd` is "the thread is showing its last message", kept by the
   // thread's own scroll handler. It decides whether a RESIZE follows the end.
@@ -91,11 +95,21 @@ export function ConversationView({
   const prevConvRef = useRef(conv.phoneKey);
   const lastId = msgsForConv.length ? msgsForConv[msgsForConv.length - 1].id : null;
   const prevLastIdRef = useRef(lastId);
+  // v18.8.0: whether `prevLastIdRef` was taken from a LOADED thread. The
+  // thread now arrives a moment after it opens, and the snapshot that brings
+  // it is the baseline, not a message that just landed: without this, every
+  // open animated the last bubble in.
+  const baselineRef = useRef(loaded);
   useEffect(() => {
     if (prevConvRef.current !== conv.phoneKey) {
       prevConvRef.current = conv.phoneKey;     // switched threads — reset baseline, no animation
       prevLastIdRef.current = lastId;
+      baselineRef.current = loaded;
       setAnimateId(null);
+      return;
+    }
+    if (!baselineRef.current) {
+      if (loaded) { baselineRef.current = true; prevLastIdRef.current = lastId; }
       return;
     }
     if (lastId && lastId !== prevLastIdRef.current) {
@@ -105,7 +119,7 @@ export function ConversationView({
     // v18.3.2: keyed on `lastId`, the value it compares, where it was keyed on
     // the message COUNT. An appended message moves both; a snapshot that swaps
     // the last message for a new one moves only the id, and now animates it.
-  }, [conv.phoneKey, lastId]);
+  }, [conv.phoneKey, lastId, loaded]);
 
   // ── "Booking confirmed" banner auto-dismiss ─────────────────────────────────
   // The big accepted banner used to sit in the thread until someone hit its ✕.
