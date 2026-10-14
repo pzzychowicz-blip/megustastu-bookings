@@ -23,7 +23,7 @@ import { guestsLabel } from "../../lib/booking-logic";
 const AT_END_SLACK = 24;
 
 export function ConversationView({
-  conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack, phone,
+  conv, messages, onBack, onSend, onSendMedia, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
   onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
@@ -391,7 +391,7 @@ export function ConversationView({
       <Reveal show={draftCardShows && !kbFold} style={{ padding: "0 14px" }}>
         <DraftCard conv={conv} onAccept={onAccept} onDismiss={onDismiss} onDismissAcceptedBadge={onDismissAcceptedBadge} compact={compact} />
       </Reveal>
-      <ReplyComposer onSend={onSend} disabled={disabled} templates={templates} convLang={conv.language} />
+      <ReplyComposer onSend={onSend} onSendMedia={onSendMedia} threadKey={conv.phoneKey} disabled={disabled} templates={templates} convLang={conv.language} />
     </div>
   );
 }

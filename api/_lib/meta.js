@@ -38,28 +38,32 @@ export function verifySignature(rawBody, signatureHeader) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// sendText(phoneE164, text) → { wamid, status }
-// phoneE164: "+34600..." (Cloud API wants digits without "+", handled here).
-export async function sendText(phoneE164, text) {
-  if (sendMode() === "mock") {
-    const wamid = "wamid.MOCK." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    return { wamid, status: "delivered" };
-  }
+function liveConfig() {
   const token = env("META_WA_TOKEN", null);
   const phoneNumberId = env("META_PHONE_NUMBER_ID", null);
   if (!token || !phoneNumberId) {
     throw new Error("WA_SEND_MODE=live but META_WA_TOKEN / META_PHONE_NUMBER_ID are not configured.");
   }
+  return { token, phoneNumberId };
+}
+
+// The ONE call that puts a message in front of a customer: POST /messages.
+// A text and a photo with its caption each make exactly one (checklist A4-5,
+// pinned in tests/api-handlers.test.js); an upload is not a message.
+async function postMessage(phoneE164, payload) {
+  if (sendMode() === "mock") {
+    const wamid = "wamid.MOCK." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return { wamid, status: "delivered" };
+  }
+  const { token, phoneNumberId } = liveConfig();
   const url = "https://graph.facebook.com/" + GRAPH_VERSION + "/" + phoneNumberId + "/messages";
   const res = await fetch(url, {
     method: "POST",
     headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-    body: JSON.stringify({
+    body: JSON.stringify(Object.assign({
       messaging_product: "whatsapp",
       to: String(phoneE164).replace(/^\+/, ""),
-      type: "text",
-      text: { body: text },
-    }),
+    }, payload)),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -68,6 +72,47 @@ export async function sendText(phoneE164, text) {
   }
   const wamid = data && data.messages && data.messages[0] && data.messages[0].id;
   return { wamid: wamid || null, status: "sent" };
+}
+
+// sendText(phoneE164, text) → { wamid, status }
+// phoneE164: "+34600..." (Cloud API wants digits without "+", handled here).
+export function sendText(phoneE164, text) {
+  return postMessage(phoneE164, { type: "text", text: { body: text } });
+}
+
+// ── Media the restaurant sends (v18.8.0) ─────────────────────────────────────
+// Two calls, one message: the file is uploaded to the number's media store
+// (`POST /{phone-number-id}/media`, multipart), and the id that comes back is
+// sent with the caption INSIDE the message, so a caption never becomes a
+// second message. Meta keeps an uploaded file 30 days.
+//
+// In mock mode nothing leaves: the id is `MOCK.<kind>.<random>`, which
+// api/wa-media.js answers with its bundled sample while the mode is mock.
+export async function uploadMedia(bytes, mime, filename, kind) {
+  if (sendMode() === "mock") {
+    return "MOCK." + kind + "." + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  const { token, phoneNumberId } = liveConfig();
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mime);
+  form.append("file", new Blob([bytes], { type: mime }), filename || (kind === "document" ? "document.pdf" : "photo.jpg"));
+  const res = await fetch("https://graph.facebook.com/" + GRAPH_VERSION + "/" + phoneNumberId + "/media", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token },
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data || typeof data.id !== "string") throw graphError(res, data);
+  return data.id;
+}
+
+// sendMedia(phoneE164, {kind, mediaId, caption, filename}) → { wamid, status }
+export function sendMedia(phoneE164, { kind, mediaId, caption, filename }) {
+  const body = { id: mediaId };
+  if (caption) body.caption = caption;
+  if (kind === "document" && filename) body.filename = filename;
+  return postMessage(phoneE164, { type: kind, [kind]: body });
 }
 
 // ── Media a customer sent (v18.8.0) ──────────────────────────────────────────

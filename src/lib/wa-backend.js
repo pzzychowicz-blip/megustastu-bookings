@@ -102,6 +102,30 @@ export async function sendViaBackend(phoneKey, text) {
 }
 
 
+// A photo or a PDF through `POST /api/wa-media` (v18.8.0): the file is the raw
+// body and its type the Content-Type; the caption and a document's name go in
+// two percent-encoded headers, so neither lands in a URL. Resolves the server's
+// answer once the message is SENT and stored (the listener then echoes it);
+// rejects with a readable message, which the composer shows beside the file it
+// kept, so sending again is one tap.
+export async function sendMediaViaBackend(phoneKey, blob, { mime, filename, caption }) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("not signed in");
+  const idToken = await user.getIdToken();
+  const headers = { "Content-Type": mime, Authorization: "Bearer " + idToken };
+  if (caption) headers["X-Caption"] = encodeURIComponent(caption);
+  if (filename) headers["X-Filename"] = encodeURIComponent(filename);
+  let res;
+  try {
+    res = await fetch(WA_BACKEND_URL + "/api/wa-media?phoneKey=" + encodeURIComponent(phoneKey), { method: "POST", headers, body: blob });
+  } catch {
+    throw new Error(import.meta.env.DEV ? "backend not running (npm run wa:backend)" : "could not reach the server");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
 // Manual re-check — ask the server to re-read the conversation's recent thread
 // and re-run the LLM classification (api/wa-recheck). Unlike every other seam
 // here this is NOT a simulator affordance: it is a real staff feature, so it

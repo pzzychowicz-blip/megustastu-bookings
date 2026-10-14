@@ -35415,3 +35415,79 @@ same as Find a booking's Done), on the tablet card and on the 375px sheet, where
 sits 18px from the edge. `tests/link-buttons.test.js` finds every `<a>` styled with a
 button maker and fails one that is not border-box (mutation-checked: dropping the
 property fails it); Save photo is the only one today.
+
+### Phase 5 — sending a photo or a PDF (A4-1 send, A4-5)
+
+**`POST /api/wa-media?phoneKey`** (the same function as the GET). The file is the RAW body
+(`bodyParser` off), so a 4 MB PDF costs 4 MB of Vercel's 4.5 MB request body and not the
+5.3 MB a base64 field would; its type is the Content-Type, and the caption and a
+document's name ride in `X-Caption` / `X-Filename`, percent-encoded (a header carries
+bytes, not text), which keeps both out of URLs and request logs. Guards in order: 405 →
+the staff gate → 400 (phoneKey, a header that does not decode, a caption over
+`WA_CAPTION_MAX` 1,024) → 415 (only `WA_SEND_TYPES`: JPEG, PNG, PDF) → 413 (over
+`WA_SEND_MAX_BYTES`, 4.2 MiB, by Content-Length and again while reading) → 400 (an
+empty body, or first bytes that are not what the Content-Type says: `sniffType`) → 404 →
+410 (the window) → 502. The body is read before the conversation, so no refusal leaves a
+request half-read. Then **two calls, one message**: `uploadMedia` (`POST
+/{phone-number-id}/media`, multipart) and `sendMedia`, ONE `/messages` call carrying the
+id and the caption. `sendText` and `sendMedia` now share `postMessage`, the one function
+that POSTs a message, so A4-5 has one place to hold. The outbound message is stored with
+`media` (through `sanitizeMedia`, so a document's name is cleaned before it is sent too)
+and `authorEmail`; the snippet reads "Photo · <caption>" or "Document: <name>"; an archived
+conversation is un-archived, as `wa-send` does. **The mock upload moved here from phase
+6**: in mock mode `uploadMedia` returns `MOCK.<kind>.<random>`, which the GET answers
+with the sample, so a sent photo can be seen on DEV. The harness's CORS allows the two
+headers.
+
+**The composer** (`ReplyComposer.jsx`, `src/lib/wa-attach.js`). A paperclip (shown only
+where `sendMedia` exists, i.e. `sendsViaServer()`) opens a hidden file input. A photo is
+redrawn on a canvas, longest side 1,600px, JPEG at 0.8, over white, honouring its
+rotation, which also drops its metadata and the place it was taken; a PDF over the cap,
+or anything that is not a photo or a PDF, is refused with a sentence and attaches
+nothing. The file waits in a chip (a thumbnail, or the name and size, and a ✕) that
+eases in and out on a `Reveal`, the box becomes its **Caption**, and Send or Enter sends
+it; the button reads "Sending…" meanwhile. A failure keeps the file attached and says
+why ("Couldn’t send: Recipient not allowed. The file is still attached."); the sentence
+leaves when you type, as `InlineAlert` does in a form. **Everything the composer holds is
+keyed to its thread**, because ConversationView is not remounted per conversation: the
+file, its sentence, a send in flight, a photo being prepared, and (found while writing
+these notes) the TEXT, which had always been one string for every thread and is now the
+caption. Measured on DEV before: a caption typed beside a PDF for one customer sat in the
+next customer's box as a reply, one Enter from being sent to them. Each thread now keeps
+its own draft, as WhatsApp does, and a sent caption is cleared in its own thread
+wherever staff are by then. Focus goes to the caption after a photo or a PDF is picked
+(the PDF path skipped it at first). `MessageBubble` offers no Retry on a failed media
+message and `handleResend` skips one: its text is the stored label, and a resend would
+have sent the word "Photo".
+
+**Tests.** `tests/api-handlers.test.js`: the POST joins the shared gate's `describe.each`;
+its 400s, 415s, 413s (declared, streamed past the cap, exactly at the cap) and sniff
+mismatches; 404 and 410; the stored message and conversation; a PNG; un-archiving; a sent
+photo then opened through the GET; and **A4-5 as assertions**: one Graph call for a
+`wa-send` (to `/messages`), and for a `wa-media` POST one upload then exactly one
+`/messages` with the id and caption inside it, a PDF's carrying its name and no caption key
+when there is none, and 502 with nothing stored when the upload or the send fails (and no
+`/messages` call after a failed upload). Mutation-checked: sending the caption as a second
+text message fails the A4-5 case, and dropping the sniff fails the mismatch case.
+`tests/wa-media.test.js`: `sendKindOf`, `attachKind`, `attachRefusal`, `fitWithin`, and the
+composer's thread keying. Writing `attachRefusal`'s test found a sentence that contradicted
+itself: a PDF a few kB over the cap rounds to the cap's own label and read "This PDF is
+4.2 MB. The most that can be sent from here is 4.2 MB."; it says "just over" now.
+`tests/list-columns.test.js` names `wa-attach.js` as the one canvas beside `textWidth`'s, on
+the ground that it draws a picture, and fails it if it ever measures text.
+
+**Verified on DEV** (harness in backend mode, mock send, thread `+34 699000555`): a
+3000×2000 transparent PNG became an 11 KB JPEG in the chip, its transparent half white;
+the chip eased in (0 → 66px over ~530ms) and out on ✕ (66 → 0 over ~480ms); a photo sent
+with "Vuestra mesa en la terraza ☀️" made ONE outbound bubble with the caption, emoji
+intact, "delivered", the list reading "Photo · Vuestra mesa en la terraza ☀️", and the
+network showed one POST (no `wa-send`, the caption in no URL) then one GET for the new
+thumbnail; a PDF with no caption made one bubble ("Carta de grupos – otoño.pdf · 1 KB ·
+Open"), and a PDF with a caption, sent with Enter, one bubble with the caption under it;
+an HTML file and a 4.5 MB PDF were refused with their sentences, no chip and no request; a
+502 (stubbed in the page) kept the file with its sentence and the next Send went through;
+a file picked in one thread was absent from another and back on return, and so were two
+drafts typed in two threads. Still to check on the iOS Simulator: the picker.
+Pre-existing and left alone: a failed TEXT send's banner reads "WhatsApp send failed: send
+failed: …" (the composer's sentence drops the server's prefix).
+Main bundle 137.56 → 139.51 kB gz; 3,295 tests.

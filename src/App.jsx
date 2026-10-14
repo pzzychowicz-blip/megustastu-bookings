@@ -4793,6 +4793,7 @@ function BookingApp({uid}){
           query={waQuery} setQuery={setWaQuery} needsAction={waNeedsAction} setNeedsAction={setWaNeedsAction}
           onClose={closeInbox}
           onSend={wa.handleSendReply}
+          onSendMedia={wa.sendMedia}
           onAccept={wa.handleAcceptDraft}
           onDismiss={wa.handleDismissDraft}
           onSaveTemplates={wa.saveTemplates}

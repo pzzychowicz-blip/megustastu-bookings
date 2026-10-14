@@ -105,7 +105,7 @@ export function InboxPanel({
   // v18.8.0: `watchMessages(phoneKey)` from useWhatsApp — the open thread's
   // listener. `messages` holds only the watched conversations.
   watchMessages,
-  onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
+  onClose, onSend, onSendMedia, onAccept, onDismiss, onSaveTemplates, onMarkRead,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck, onOpenPhoto,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
@@ -453,7 +453,7 @@ export function InboxPanel({
     <div onFocus={onViewFocus} onBlur={onViewBlur} onPointerDown={onViewPointerDown} style={{ flex: 1, minWidth: 0, display: twoPane || activeKey ? "flex" : "none", flexDirection: "column", height: "100%" }}>
       <ConversationView
         conv={activeConv} messages={activeMessages} onBack={() => setActiveKey(null)}
-        onSend={(t) => onSend(activeConv.phoneKey, t)} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
+        onSend={(t) => onSend(activeConv.phoneKey, t)} onSendMedia={onSendMedia ? (blob, meta) => onSendMedia(activeConv.phoneKey, blob, meta) : null} onAccept={() => onAccept(activeConv)} onDismiss={() => onDismiss(activeConv.phoneKey)}
         templates={templates} bookings={bookings} showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
         onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}

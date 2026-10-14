@@ -25,6 +25,7 @@
 //              GET  /api/wa-media       a message's photo / voice note / PDF
 //                                       (v18.8.0; the bundled samples for a
 //                                       MOCK. id while WA_SEND_MODE is mock)
+//              POST /api/wa-media       send a photo or a PDF (raw body)
 //
 // This file is dev-tooling only: it is NOT deployed, and the api/ handlers do
 // not know it exists (they run identically under Vercel's runtime at ship).
@@ -104,7 +105,7 @@ function cors(req, res) {
   const origin = req.headers.origin || "";
   if (/^http:\/\/localhost:\d+$/.test(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
+    res.setHeader("Access-Control-Allow-Headers", "authorization, content-type, x-caption, x-filename");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   }
 }

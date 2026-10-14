@@ -79,6 +79,21 @@ kind (`_lib/mock-media/`: `photo.jpg`, `voice.ogg`, `menu.pdf`, a few kB each), 
 through static `new URL(…, import.meta.url)`s so the deployment's file tracing includes
 them. On a live deployment a MOCK id is 410. The harness routes it (`/api/wa-media`).
 
+**The POST sends a photo or a PDF (phase 5).** The file is the RAW body (`bodyParser` off, so a 4 MB
+PDF costs 4 MB of Vercel's 4.5 MB request cap, not a base64 field's 5.3), its type the Content-Type,
+and the caption and a document's name ride in `X-Caption` / `X-Filename`, percent-encoded, so neither
+lands in a URL or a request log (the harness's CORS allows both headers). Guards in order: 405 → the
+staff gate → 400 (phoneKey, a header that does not decode, a caption over `WA_CAPTION_MAX`) → 415
+(only `WA_SEND_TYPES`: JPEG, PNG, PDF) → 413 (over `WA_SEND_MAX_BYTES`, 4.2 MiB, by Content-Length
+and again while reading) → 400 (empty, or the first bytes are not what the Content-Type says:
+`sniffType`) → 404 → 410 (the window) → 502. The body is read BEFORE the conversation, so a refusal
+never leaves a request half-read. Then `uploadMedia` (`POST /{phone-number-id}/media`, multipart)
+and `sendMedia`: **ONE `/messages` call, the caption inside it** (checklist A4-5; `sendText` and
+`sendMedia` share `postMessage`, the one function that POSTs a message). The outbound message is
+stored with `media` (through `sanitizeMedia`, so a sent name is cleaned before it is SENT too) and
+`authorEmail`, the snippet updated and the conversation un-archived, as `wa-send` does. In mock mode
+the upload returns `MOCK.<kind>.<random>`, which the GET above answers with the sample.
+
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules
 with an in-memory tree, so `_lib/rtdb.js` itself runs, and calls each handler with a
@@ -87,7 +102,10 @@ method and staff-auth gate. **v18.8.0 runs the other four**: `wa-inbound` from a
 stream (`rawCall`, since `bodyParser` is off and the HMAC needs Meta's exact bytes), with a
 stub request context collecting what `waitUntil` was handed so a test can wait for the parse;
 and the three `wa-sim-*` handlers, whose 404 is swept over five env values, two methods and
-three tokens before their own gate is asked anything.
+three tokens before their own gate is asked anything. **And `wa-media` both ways**: the GET joins the
+shared gate, and the POST's own refusals, the stored shape, and A4-5 as an assertion: one Graph
+`/messages` call per `wa-send` and per `wa-media` POST, an upload that is not one, and a caption that
+never becomes a second message (mutation-checked: a caption sent as its own text fails it).
 
 **A timestamp taken from a remote party** (the root `CLAUDE.md`'s Gotchas row, moved
 here verbatim on 2026-10-09; root keeps the rule in two sentences). **Clamp it to facts, not policies:** not finite or not positive → now; in the future → now (a delivery cannot be timestamped after it arrived, so this only absorbs clock skew); an OLD one is left alone, because a redelivery after an outage is real. The trap was `m.timestamp ? … : Date.now()` guarding `parseInt(m.timestamp, 10) * 1000` on a Meta webhook field (Meta sends SECONDS) — a ternary covering ABSENT, the one case that was never a problem. Measured with correctly-signed payloads (CT-WA-02): `"abc"` → `NaN` → **RTDB refuses the write** → 500 → **Meta redelivers for up to SEVEN DAYS**, so the customer's message is never stored and the function runs on a schedule for a week; `"-1"` → `windowExpiresAt` in 1970, so `api/wa-send.js` answers 410 forever and staff can never reply to that customer, with nothing on screen saying why; `99999999999` → a window in the year 5138. **Correct retry semantics plus a permanently-failing input is a retry loop**, and an input the database REFUSES is what turns a bad field into a bad week

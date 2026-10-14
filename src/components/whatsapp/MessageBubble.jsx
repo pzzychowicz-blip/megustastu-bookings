@@ -232,8 +232,10 @@ export function MessageBubble({ msg, isLast, onRetry, phoneKey, onOpenPhoto }) {
   }
 
   // Retry affordance for a failed outgoing send (client mock path — see
-  // useWhatsApp.handleResend). Only shown when a resend handler is wired.
-  const retryEl = (!incoming && msg.status === "failed" && onRetry) ? (
+  // useWhatsApp.handleResend). Only shown when a resend handler is wired, and
+  // never on a photo or a PDF (v18.8.0): a resend posts the message's TEXT,
+  // which for media is its caption or the word "Photo".
+  const retryEl = (!incoming && msg.status === "failed" && onRetry && !media) ? (
     <OutlineChip
       as="button"
       tone="danger"

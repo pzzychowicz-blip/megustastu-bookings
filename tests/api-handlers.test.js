@@ -19,6 +19,10 @@
 // read from a raw byte stream so its HMAC sees what Meta signed) and the three
 // `wa-sim-*` endpoints (the 404 kill switch, then the shared method and auth
 // gate, then their own 400s).
+//
+// And `wa-media` both ways: viewing a stored file (phase 4) and sending a photo
+// or a PDF (phase 5), the second also against checklist A4-5 — one Graph
+// `/messages` call per send, the caption inside it.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import crypto from "node:crypto";
@@ -71,11 +75,11 @@ import inboundHandler, { inboundContent } from "../api/wa-inbound.js";
 import simInboundHandler from "../api/wa-sim-inbound.js";
 import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
-import mediaHandler, { MEDIA_VIEW_MAX, servedType } from "../api/wa-media.js";
+import mediaHandler, { MEDIA_VIEW_MAX, servedType, sniffType } from "../api/wa-media.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
-import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT } from "../src/lib/whatsapp.js";
+import { WA_WINDOW_MS, WA_MAX_TEXT_LEN, WA_RECHECK_HISTORY, AUTO_ACK_TEXT, WA_SEND_MAX_BYTES, WA_CAPTION_MAX } from "../src/lib/whatsapp.js";
 
 // A request as Vercel hands it over (the body already parsed) and a response
 // that records the one answer a handler gives.
@@ -109,6 +113,7 @@ describe.each([
   ["wa-recheck", recheckHandler, "POST", "GET"],
   ["wa-config", configHandler, "GET", "POST"],
   ["wa-media", mediaHandler, "GET", "PUT"],
+  ["wa-media (send)", mediaHandler, "POST", "PUT"],
 ])("%s — method and staff auth", (name, handler, method, wrong) => {
   it("answers 405 to the wrong method, before anything else", async () => {
     const res = await call(handler, { method: wrong, token: "staff" });
@@ -964,5 +969,220 @@ describe("wa-media GET", () => {
     vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
     expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// ── api/wa-media.js — sending a photo or a PDF (v18.8.0, phase 5) ─────────────
+// The request is a byte stream (`bodyParser` is off), the file its body, the
+// caption and a document's name in two percent-encoded headers.
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("IHDR")]);
+const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n");
+function sendFile({ token = "staff", phoneKey = KEY, bytes = JPEG, type = "image/jpeg", caption, filename, headers } = {}) {
+  const h = Object.assign({ "content-type": type }, token ? { authorization: "Bearer " + token } : {});
+  if (caption !== undefined) h["x-caption"] = encodeURIComponent(caption);
+  if (filename !== undefined) h["x-filename"] = encodeURIComponent(filename);
+  return rawCall(mediaHandler, { body: bytes, headers: Object.assign(h, headers), query: phoneKey === null ? {} : { phoneKey } });
+}
+const goLive = () => {
+  vi.stubEnv("WA_SEND_MODE", "live");
+  vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
+  vi.stubEnv("META_WA_TOKEN", "tok");
+  vi.stubEnv("META_PHONE_NUMBER_ID", "555");
+};
+// Meta's two answers to a send: the upload (`/media`) and the message (`/messages`).
+const graphFetch = ({ uploadStatus = 200, upload = { id: "1122334455" }, sendStatus = 200 } = {}) => vi.fn(async (url) => {
+  if (url.endsWith("/media")) return new Response(JSON.stringify(uploadStatus === 200 ? upload : { error: { message: "Upload refused" } }), { status: uploadStatus });
+  if (url.endsWith("/messages")) return new Response(JSON.stringify(sendStatus === 200 ? { messages: [{ id: "wamid.OUT" }] } : { error: { message: "Recipient not allowed" } }), { status: sendStatus });
+  throw new Error("unexpected call to " + url);
+});
+const messageCalls = (f) => f.mock.calls.filter((c) => c[0].endsWith("/messages"));
+
+describe("wa-media POST — what is refused, before anything is sent or stored", () => {
+  beforeEach(() => {
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  it("400 without a usable phone key, with a header that does not decode, and with a caption over WA_CAPTION_MAX", async () => {
+    expect((await sendFile({ phoneKey: null })).statusCode).toBe(400);
+    expect((await sendFile({ phoneKey: "+" })).statusCode).toBe(400);
+    expect((await sendFile({ headers: { "x-caption": "%E0%A4%A" } })).statusCode).toBe(400);
+    expect((await sendFile({ type: "application/pdf", bytes: PDF, headers: { "x-filename": "%" } })).statusCode).toBe(400);
+    const long = await sendFile({ caption: "x".repeat(WA_CAPTION_MAX + 1) });
+    expect([long.statusCode, long.body.error]).toEqual([400, "a caption can be up to " + WA_CAPTION_MAX + " characters"]);
+    expect(fake.state.writes).toEqual([]);
+    // The cap is on the caption as sent, so spaces around it do not count.
+    expect((await sendFile({ caption: "  " + "x".repeat(WA_CAPTION_MAX) + "  " })).statusCode).toBe(200);
+  });
+
+  it("415 for anything but a JPEG, a PNG or a PDF, whatever its bytes are", async () => {
+    for (const type of ["text/html", "image/gif", "image/svg+xml", "application/octet-stream", ""]) {
+      const res = await sendFile({ type });
+      expect([type, res.statusCode]).toEqual([type, 415]);
+    }
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("413 when the declared length is over the cap, and when the body runs past it without one", async () => {
+    expect((await sendFile({ headers: { "content-length": String(WA_SEND_MAX_BYTES + 1) } })).statusCode).toBe(413);
+    const over = Buffer.concat([JPEG, Buffer.alloc(WA_SEND_MAX_BYTES + 1 - JPEG.length)]);
+    expect((await sendFile({ bytes: over })).statusCode).toBe(413);
+    expect(fake.state.writes).toEqual([]);
+    const atCap = Buffer.concat([JPEG, Buffer.alloc(WA_SEND_MAX_BYTES - JPEG.length)]);
+    expect((await sendFile({ bytes: atCap })).statusCode).toBe(200);
+  });
+
+  it("the cap fits under Vercel's 4.5 MB request body, which a raw body is all of", () => {
+    expect(WA_SEND_MAX_BYTES).toBeLessThan(4.5 * 1000 * 1000);
+  });
+
+  it("400 for an empty body, and for bytes that are not what the Content-Type says", async () => {
+    const empty = await sendFile({ bytes: Buffer.alloc(0) });
+    expect([empty.statusCode, empty.body.error]).toEqual([400, "no file"]);
+    expect((await sendFile({ bytes: PNG, type: "image/jpeg" })).body.error).toBe("the file is not a photo");
+    expect((await sendFile({ bytes: JPEG, type: "image/png" })).statusCode).toBe(400);
+    const html = await sendFile({ bytes: Buffer.from("<html><script>"), type: "application/pdf" });
+    expect([html.statusCode, html.body.error]).toEqual([400, "the file is not a PDF"]);
+    expect(fake.state.writes).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("404 for a conversation that does not exist, 410 once its window has shut", async () => {
+    expect((await sendFile({ phoneKey: "+34600999888" })).statusCode).toBe(404);
+    fake.state.tree = { conversations: { [KEY]: openConv({ windowExpiresAt: Date.now() - 1 }) } };
+    expect((await sendFile()).statusCode).toBe(410);
+    expect(fake.state.writes).toEqual([]);
+  });
+
+  it("sniffType names the three by their first bytes, and nothing else", () => {
+    expect(sniffType(JPEG)).toBe("image/jpeg");
+    expect(sniffType(PNG)).toBe("image/png");
+    expect(sniffType(PDF)).toBe("application/pdf");
+    for (const b of [Buffer.alloc(0), Buffer.from([0xff, 0xd8]), Buffer.from("GIF89a"), Buffer.from("%PDF"), Buffer.from("<svg")]) {
+      expect(sniffType(b)).toBe(null);
+    }
+  });
+});
+
+describe("wa-media POST — a photo or a PDF sent", () => {
+  beforeEach(() => { fake.state.tree = { conversations: { [KEY]: openConv() } }; });
+
+  it("mock: stores an outbound message with its caption, its author and its media, and touches no network", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const conv = convAt(KEY);
+    const res = await sendFile({ caption: "  Your table on the terrace  ", filename: "ignored.jpg" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, status: "delivered" });
+    expect(res.body.wamid).toMatch(/^wamid\.MOCK\./);
+    expect(res.body.mediaId).toMatch(/^MOCK\.image\./);
+    const [m] = msgsAt(KEY);
+    expect(m).toEqual({
+      id: res.body.msgId, direction: "out", text: "Your table on the terrace", ts: m.ts, status: "delivered",
+      isAutoAck: false, channel: "whatsapp", providerMsgId: res.body.wamid, authorEmail: "ana@example.com",
+      media: { kind: "image", mediaId: res.body.mediaId, mime: "image/jpeg", size: JPEG.length },
+    });
+    expect(convAt(KEY)).toMatchObject({ lastMessageAt: m.ts, lastMessageSnippet: "Photo · Your table on the terrace", windowExpiresAt: conv.windowExpiresAt });
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("a PDF keeps its name, cleaned of control characters, or is document.pdf; with no caption its text is the label", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    await sendFile({ bytes: PDF, type: "application/pdf", filename: "Menú\u0007 otoño.pdf" });
+    const [named] = msgsAt(KEY);
+    expect(named.media).toMatchObject({ kind: "document", mime: "application/pdf", filename: "Menú otoño.pdf" });
+    expect(named.text).toBe("Document: Menú otoño.pdf");
+    expect(convAt(KEY).lastMessageSnippet).toBe("Document: Menú otoño.pdf");
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+    await sendFile({ bytes: PDF, type: "application/pdf", caption: "   " });
+    expect(msgsAt(KEY)[0].media.filename).toBe("document.pdf");
+    expect(msgsAt(KEY)[0].text).toBe("Document: document.pdf");
+  });
+
+  it("a PNG is sent as a photo, with its own type", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const res = await sendFile({ bytes: PNG, type: "image/png" });
+    expect(res.statusCode).toBe(200);
+    expect(msgsAt(KEY)[0].media).toMatchObject({ kind: "image", mime: "image/png" });
+    expect(msgsAt(KEY)[0].text).toBe("Photo");
+  });
+
+  it("a send to an archived conversation un-archives it", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    fake.state.tree = { conversations: { [KEY]: openConv({ archived: true, archivedAt: 5 }) } };
+    await sendFile();
+    expect(convAt(KEY).archived).toBe(false);
+    expect("archivedAt" in convAt(KEY)).toBe(false);
+  });
+
+  it("the photo it stored opens: in mock mode the GET answers the bundled sample for the stored id", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const sent = await sendFile();
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: sent.body.msgId } });
+    expect([res.statusCode, res.headers["content-type"]]).toEqual([200, "image/jpeg"]);
+    expect(res.bytes.equals(readFileSync(new URL("../api/_lib/mock-media/photo.jpg", import.meta.url)))).toBe(true);
+  });
+});
+
+// Checklist A4-5: every send to a customer is ONE Graph `/messages` call. A
+// caption never becomes a second message, and the upload is not one.
+describe("A4-5 — one message per send, the caption inside it", () => {
+  beforeEach(() => {
+    goLive();
+    fake.state.tree = { conversations: { [KEY]: openConv() } };
+  });
+
+  it("wa-send: exactly one Graph call, and it is /messages", async () => {
+    const f = graphFetch();
+    vi.stubGlobal("fetch", f);
+    expect((await call(sendHandler, { token: "staff", body: { phoneKey: KEY, text: "hola" } })).statusCode).toBe(200);
+    expect(f.mock.calls.map((c) => c[0])).toEqual(["https://graph.facebook.com/v26.0/555/messages"]);
+  });
+
+  it("wa-media: one upload to /media, then exactly one /messages, with the file's id and the caption inside it", async () => {
+    const f = graphFetch();
+    vi.stubGlobal("fetch", f);
+    const res = await sendFile({ caption: "Mesa 4 a las 21:00" });
+    expect(res.statusCode).toBe(200);
+    expect(f.mock.calls.map((c) => c[0])).toEqual([
+      "https://graph.facebook.com/v26.0/555/media",
+      "https://graph.facebook.com/v26.0/555/messages",
+    ]);
+    const [, up] = f.mock.calls[0];
+    expect(up.headers).toEqual({ Authorization: "Bearer tok" }); // the multipart boundary is fetch's to write
+    expect(up.body.get("messaging_product")).toBe("whatsapp");
+    expect(up.body.get("type")).toBe("image/jpeg");
+    const file = up.body.get("file");
+    expect([file.name, file.type, file.size]).toEqual(["photo.jpg", "image/jpeg", JPEG.length]);
+    expect(Buffer.from(await file.arrayBuffer()).equals(JPEG)).toBe(true);
+    expect(JSON.parse(messageCalls(f)[0][1].body)).toEqual({
+      messaging_product: "whatsapp", to: "34600111222", type: "image", image: { id: "1122334455", caption: "Mesa 4 a las 21:00" },
+    });
+    expect(msgsAt(KEY)).toHaveLength(1);
+    expect(msgsAt(KEY)[0]).toMatchObject({ text: "Mesa 4 a las 21:00", status: "sent", providerMsgId: "wamid.OUT", media: { kind: "image", mediaId: "1122334455" } });
+  });
+
+  it("a PDF's one message carries its name; with no caption there is no caption key at all", async () => {
+    const f = graphFetch({ upload: { id: "9988" } });
+    vi.stubGlobal("fetch", f);
+    await sendFile({ bytes: PDF, type: "application/pdf", filename: "carta.pdf", caption: "  " });
+    expect(f.mock.calls[0][1].body.get("file").name).toBe("carta.pdf");
+    expect(messageCalls(f)).toHaveLength(1);
+    expect(JSON.parse(messageCalls(f)[0][1].body)).toEqual({
+      messaging_product: "whatsapp", to: "34600111222", type: "document", document: { id: "9988", filename: "carta.pdf" },
+    });
+  });
+
+  it("502 when the upload fails (and then no message is sent) or the send fails; nothing is stored either way", async () => {
+    const f = graphFetch({ uploadStatus: 400 });
+    vi.stubGlobal("fetch", f);
+    const up = await sendFile();
+    expect([up.statusCode, up.body.error]).toEqual([502, "send failed: Upload refused"]);
+    expect(messageCalls(f)).toHaveLength(0);
+    vi.stubGlobal("fetch", graphFetch({ sendStatus: 400 }));
+    const sent = await sendFile();
+    expect([sent.statusCode, sent.body.error]).toEqual([502, "send failed: Recipient not allowed"]);
+    expect(fake.state.writes).toEqual([]);
   });
 });

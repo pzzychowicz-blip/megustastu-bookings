@@ -122,6 +122,22 @@ export function fileSizeLabel(bytes) {
   return countLabel(Math.round(n / (1024 * 1024) * 10) / 10, "MB");
 }
 
+// ── Sending a photo or a PDF (v18.8.0) ─────────────────────────────────────
+// What staff may send, by its type, and the kind each becomes. The composer
+// sends every photo as a JPEG it has shrunk (so its location data is gone too);
+// the server also takes a PNG, and nothing else.
+export const WA_SEND_TYPES = { "image/jpeg": "image", "image/png": "image", "application/pdf": "document" };
+export function sendKindOf(mime) {
+  const base = String(mime || "").split(";")[0].trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(WA_SEND_TYPES, base) ? WA_SEND_TYPES[base] : null;
+}
+// Vercel refuses a request body over 4.5 MB before the function runs, so the
+// file is held under it with room to spare. In binary units, as `fileSizeLabel`
+// prints it: "4.2 MB".
+export const WA_SEND_MAX_BYTES = Math.floor(4.2 * 1024 * 1024);
+// Meta's limit on a photo's or a document's caption.
+export const WA_CAPTION_MAX = 1024;
+
 // How a media message's file can still be fetched: Meta keeps a RECEIVED file
 // 7 days and one the business SENT 30 (the go-live plan's § A4). Computed from
 // the message's own `ts`, so an expired bubble says so without a request.

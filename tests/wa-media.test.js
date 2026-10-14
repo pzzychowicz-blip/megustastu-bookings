@@ -4,12 +4,22 @@
 // (`sanitizeMedia`), what it is called where no picture is drawn
 // (`mediaLabel`, `mediaSnippet`), and when Meta no longer has the file
 // (`mediaExpired`). The webhook that stores it is run in api-handlers.test.js.
+//
+// Phase 5 adds what may be SENT (`sendKindOf`, the server's list) and what the
+// reply composer does with a picked file first (`src/lib/wa-attach.js`): which
+// files it takes, the sentence it shows for one it will not, and the size a
+// photo is drawn at. The canvas itself needs a browser and is checked live.
 
 import { describe, it, expect } from "vitest";
 import {
-  sanitizeMedia, mediaLabel, mediaSnippet, mediaExpired,
-  WA_MEDIA_KEEP_IN_MS, WA_MEDIA_KEEP_OUT_MS, WA_FILENAME_LEN,
+  sanitizeMedia, mediaLabel, mediaSnippet, mediaExpired, sendKindOf,
+  WA_MEDIA_KEEP_IN_MS, WA_MEDIA_KEEP_OUT_MS, WA_FILENAME_LEN, WA_SEND_MAX_BYTES,
 } from "../src/lib/whatsapp.js";
+import { attachKind, attachRefusal, fitWithin, PHOTO_MAX_SIDE } from "../src/lib/wa-attach.js";
+import { readFileSync } from "node:fs";
+import { stripComments } from "../scripts/strip-comments.mjs";
+
+const Composer = stripComments(readFileSync(new URL("../src/components/whatsapp/ReplyComposer.jsx", import.meta.url), "utf8")).join("\n");
 
 describe("sanitizeMedia", () => {
   it("keeps the three kinds with an id, and refuses anything else", () => {
@@ -81,5 +91,71 @@ describe("mediaExpired", () => {
     expect(mediaExpired({ direction: "in", ts: 1, text: "hola" }, NOW)).toBe(false);
     expect(mediaExpired({ direction: "in", media: { kind: "image", mediaId: "1" } }, NOW)).toBe(true);
     expect(mediaExpired(null, NOW)).toBe(false);
+  });
+});
+
+describe("sendKindOf", () => {
+  it("a JPEG or a PNG is a photo, a PDF a document, by the type's base, in any case", () => {
+    expect(sendKindOf("image/jpeg")).toBe("image");
+    expect(sendKindOf("IMAGE/PNG")).toBe("image");
+    expect(sendKindOf("application/pdf; charset=binary")).toBe("document");
+  });
+  it("nothing else can be sent, and an inherited key is not a type", () => {
+    for (const t of ["image/gif", "image/webp", "image/svg+xml", "text/html", "audio/ogg", "", null, undefined, "constructor", "__proto__"]) {
+      expect(sendKindOf(t)).toBe(null);
+    }
+  });
+});
+
+describe("the composer's attachment (wa-attach)", () => {
+  const file = (type, size = 1000) => ({ type, size });
+
+  it("a picture of any type but SVG is a photo, since it is re-drawn as a JPEG; a PDF is a PDF", () => {
+    for (const t of ["image/jpeg", "image/png", "image/heic", "image/webp", "IMAGE/GIF"]) expect(attachKind(file(t))).toBe("photo");
+    expect(attachKind(file("application/pdf"))).toBe("pdf");
+    for (const t of ["image/svg+xml", "text/html", "application/zip", "", undefined]) expect(attachKind(file(t))).toBe(null);
+    expect(attachKind(null)).toBe(null);
+  });
+
+  it("refuses anything else, and a PDF over the cap, in a sentence that says what to do", () => {
+    expect(attachRefusal(file("application/zip"))).toBe("Only a photo or a PDF can be sent from here.");
+    // The number and its unit never break apart (fileSizeLabel's no-break space).
+    const mb = (n) => n + "\u00a0MB";
+    expect(attachRefusal(file("application/pdf", 9 * 1024 * 1024))).toBe("This PDF is " + mb(9) + ". The most that can be sent from here is " + mb(4.2) + ".");
+    // Just over the cap rounds to the cap's own label; it must not read as equal to it.
+    expect(attachRefusal(file("application/pdf", WA_SEND_MAX_BYTES + 1))).toBe("This PDF is just over " + mb(4.2) + ". The most that can be sent from here is " + mb(4.2) + ".");
+    expect(attachRefusal(file("application/pdf", WA_SEND_MAX_BYTES))).toBe(null);
+    // A photo is never too large here: it is about to be drawn smaller.
+    expect(attachRefusal(file("image/jpeg", 40 * 1024 * 1024))).toBe(null);
+  });
+
+  it("a photo is drawn with its longest side at most PHOTO_MAX_SIDE, keeping its shape, in whole pixels", () => {
+    expect(PHOTO_MAX_SIDE).toBe(1600);
+    expect(fitWithin(4032, 3024, 1600)).toEqual({ w: 1600, h: 1200 });
+    expect(fitWithin(3024, 4032, 1600)).toEqual({ w: 1200, h: 1600 });
+    expect(fitWithin(1600, 900, 1600)).toEqual({ w: 1600, h: 900 });
+    expect(fitWithin(640, 480, 1600)).toEqual({ w: 640, h: 480 });
+    expect(fitWithin(10000, 3, 1600)).toEqual({ w: 1600, h: 1 });
+    expect(fitWithin(0, 0, 1600)).toEqual({ w: 1, h: 1 });
+  });
+});
+
+// The composer is not remounted when the conversation changes, so anything it
+// holds in plain state follows staff to the next customer. Measured on DEV
+// before: a caption typed beside a PDF for one customer sat in the next
+// customer's box as a reply, one Enter from being sent to them.
+describe("the reply composer keeps its text and its file with their thread", () => {
+  it("the text is a draft per thread, never one string", () => {
+    expect(Composer).toMatch(/const \[drafts, setDrafts\] = useState\(\{\}\);\s*const txt = drafts\[threadKey\] \|\| "";/);
+    expect(Composer).not.toMatch(/const \[txt, setTxt\] = useState/);
+  });
+  it("the file, its sentence, a send in flight and a photo being prepared each name their thread", () => {
+    expect(Composer).toMatch(/const att = attState && attState\.key === threadKey \? attState : null;/);
+    expect(Composer).toMatch(/const note = noteState && noteState\.key === threadKey \? noteState\.text : "";/);
+    expect(Composer).toMatch(/const busy = busyKey !== null && busyKey === threadKey;/);
+    expect(Composer).toMatch(/const preparing = readyKey !== null && readyKey === threadKey;/);
+  });
+  it("a sent caption is cleared in the thread it was sent from, wherever staff are now", () => {
+    expect(Composer).toMatch(/setTxt\("", key\);/);
   });
 });

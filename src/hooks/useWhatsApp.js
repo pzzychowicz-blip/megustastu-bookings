@@ -42,7 +42,7 @@ import { EMPTY_FORM } from "../lib/constants";
 // surface uses the LOCAL one — see the three call sites below.
 import { todayStr } from "../lib/day";
 import { matchCustomerByPhone, normalizePhone, isPhoneKey, DEFAULT_TEMPLATES, intentBannerVisible, capOutbound, snippet } from "../lib/whatsapp";
-import { sendsViaServer, sendViaBackend, recheckViaBackend } from "../lib/wa-backend";
+import { sendsViaServer, sendViaBackend, sendMediaViaBackend, recheckViaBackend } from "../lib/wa-backend";
 import { attachRev, writeWithRev } from "../lib/revGuard";
 import { clearCollapseSection } from "./useCollapseState";
 import { WA_SANDBOX } from "../lib/waSandbox";
@@ -432,7 +432,10 @@ export function useWhatsApp({
     if (sendsViaServer()) {
       const list = messagesMapRef.current[phoneKey] || [];
       const prev = list.find(function (m) { return m && m.id === msgId; });
-      if (!prev || !prev.text) return;
+      // A photo or a PDF is not re-sent from here: its `text` is the caption
+      // or the label "Photo", and re-posting that would send the WORD to the
+      // customer. MessageBubble offers no Retry on one; staff attach it again.
+      if (!prev || !prev.text || prev.media) return;
       sendViaBackend(phoneKey, prev.text).catch(function (e) {
         console.warn("[wa] backend resend failed:", e.message);
         if (setWriteWarning) setWriteWarning("WhatsApp resend failed: " + e.message);
@@ -443,6 +446,16 @@ export function useWhatsApp({
     setTimeout(() => { patchMessage(phoneKey, msgId, { status: "delivered" }); }, 800);
   }
   function simFailNextSend() { failNextSendRef.current = true; }
+
+  // handleSendMedia — a photo or a PDF, with the typed text as its caption
+  // (v18.8.0). Server-only: the client-side mock has no file store, so the
+  // composer offers the paperclip only where `sendsViaServer()` (see the
+  // returned `sendMedia`). Returns the promise, unlike a text send: the
+  // composer keeps the file and shows the failure beside it, so sending again
+  // is one tap, where a text's failure goes to the write-warning banner.
+  function handleSendMedia(phoneKey, blob, meta) {
+    return sendMediaViaBackend(phoneKey, blob, meta);
+  }
 
   // handleAcceptDraft: close inbox, pre-fill the booking form from the draft,
   // flag draftSourceRef so doSave flips the conversation on success, and set
@@ -817,6 +830,9 @@ export function useWhatsApp({
     draftSourceRef, takeDraftSource, completeDraftAccept, linkBookingByPhone,
     // handlers
     handleSendReply, handleResend, simFailNextSend,
+    // null where a send does not go through the server (the sandbox's client
+    // mock), which is what hides the paperclip there.
+    sendMedia: sendsViaServer() ? handleSendMedia : null,
     handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
     recheckConversation,

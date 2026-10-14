@@ -4,7 +4,7 @@
 // (v18.8.0). ONE function for both directions, to keep the function count low:
 //
 //   GET  ?phoneKey&msgId   the file of a stored message, streamed back
-//   POST                   send a photo or a PDF (phase 5)
+//   POST ?phoneKey         send a photo or a PDF, the file as the raw body
 //
 // Authorization: Bearer <Firebase ID token>, as every staff endpoint.
 //
@@ -39,6 +39,23 @@
 // `application/octet-stream` with `attachment`, which the client saves instead
 // of opening (MessageBubble asks `opensInline` too).
 //
+// ── POST: sending ────────────────────────────────────────────────────────────
+// The file is the RAW body (`bodyParser` is off), so a 4 MB PDF costs 4 MB of
+// Vercel's 4.5 MB request cap and not the 5.3 MB a base64 JSON field would.
+// Its type is the Content-Type; the caption and a document's name ride in
+// `X-Caption` and `X-Filename`, percent-encoded (a header carries bytes, not
+// text), so neither reaches a URL or the request log. Guards, in order:
+//   405 · 401 / 403 / 503 (the staff gate) · 400 (no usable phoneKey, a header
+//   that does not decode, a caption over WA_CAPTION_MAX) · 415 (not a JPEG, PNG
+//   or PDF) · 413 (over WA_SEND_MAX_BYTES) · 400 (empty, or the bytes are not
+//   what the Content-Type says) · 404 (no conversation) · 410 (the 24-hour
+//   window is shut) · 502 (Meta refused the upload or the send).
+// The body is read before the conversation is, so a refusal never leaves a
+// half-sent request behind it. Then ONE upload and ONE /messages call
+// (`sendMedia`: the caption is inside the message), and the outbound message is
+// stored with `media` and `authorEmail`, the snippet updated and the
+// conversation un-archived, as api/wa-send.js does for a text.
+//
 // ── Mock media ───────────────────────────────────────────────────────────────
 // The simulator's ids are `MOCK.<kind>.<id>`. While WA_SEND_MODE is mock, a
 // MOCK id is answered with a bundled sample (`_lib/mock-media/`: a photo, an
@@ -49,9 +66,12 @@ import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { readFile } from "node:fs/promises";
 import { sendMode } from "./_lib/env.js";
-import { verifyStaffToken, staffAuthError, getMessage } from "./_lib/rtdb.js";
-import { mediaInfo, downloadMedia } from "./_lib/meta.js";
-import { isPhoneKey, sanitizeMedia } from "../src/lib/whatsapp.js";
+import { verifyStaffToken, staffAuthError, getMessage, getConversation, appendMessage, upsertConversation } from "./_lib/rtdb.js";
+import { mediaInfo, downloadMedia, uploadMedia, sendMedia } from "./_lib/meta.js";
+import {
+  isPhoneKey, sanitizeMedia, sendKindOf, mediaLabel, mediaSnippet, snippet,
+  WA_SEND_MAX_BYTES, WA_CAPTION_MAX,
+} from "../src/lib/whatsapp.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -169,7 +189,117 @@ async function view(req, res) {
   }
 }
 
+// ── POST: sending a photo or a PDF ──────────────────────────────────────────
+// What the first bytes say a file is. The Content-Type is the browser's claim;
+// a file is sent only when its bytes agree with it.
+export function sniffType(bytes) {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (bytes.length >= 5 && bytes.subarray(0, 5).toString("latin1") === "%PDF-") return "application/pdf";
+  return null;
+}
+
+// The raw body, or `{over: true}` once it passes `max` (the rest is drained,
+// not kept, so the response still goes out after the request has ended).
+function readCapped(req, max) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let n = 0;
+    let over = false;
+    req.on("data", (c) => {
+      n += c.length;
+      if (n > max) { over = true; chunks.length = 0; return; }
+      if (!over) chunks.push(c);
+    });
+    req.on("end", () => resolve(over ? { over: true } : { bytes: Buffer.concat(chunks) }));
+    req.on("error", reject);
+  });
+}
+
+// A percent-encoded header: "" when absent, null when it does not decode.
+function textHeader(req, name) {
+  const raw = req.headers[name];
+  if (raw === undefined) return "";
+  try { return decodeURIComponent(String(raw)); } catch { return null; }
+}
+
+async function send(req, res) {
+  const staff = await staffFrom(req, res);
+  if (!staff) return;
+  const q = req.query || {};
+  const phoneKey = typeof q.phoneKey === "string" ? q.phoneKey : "";
+  const caption = textHeader(req, "x-caption");
+  const rawName = textHeader(req, "x-filename");
+  if (!isPhoneKey(phoneKey)) { res.status(400).json({ error: "phoneKey is required" }); return; }
+  if (caption === null || rawName === null) { res.status(400).json({ error: "a caption or a file name that does not decode" }); return; }
+  const text = caption.trim();
+  if (text.length > WA_CAPTION_MAX) { res.status(400).json({ error: "a caption can be up to " + WA_CAPTION_MAX + " characters" }); return; }
+  const mime = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+  const kind = sendKindOf(mime);
+  if (!kind) { res.status(415).json({ error: "only a JPEG or PNG photo, or a PDF, can be sent" }); return; }
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > WA_SEND_MAX_BYTES) {
+    req.resume();
+    res.status(413).json({ error: "too large to send from here" });
+    return;
+  }
+
+  const body = await readCapped(req, WA_SEND_MAX_BYTES);
+  if (body.over) { res.status(413).json({ error: "too large to send from here" }); return; }
+  const bytes = body.bytes;
+  if (!bytes.length) { res.status(400).json({ error: "no file" }); return; }
+  if (sniffType(bytes) !== mime) { res.status(400).json({ error: "the file is not a " + (kind === "image" ? "photo" : "PDF") }); return; }
+
+  const conv = await getConversation(phoneKey);
+  if (!conv) { res.status(404).json({ error: "conversation not found" }); return; }
+  if (!conv.windowExpiresAt || conv.windowExpiresAt <= Date.now()) {
+    res.status(410).json({ error: "24h window expired — wait for the customer to message again" });
+    return;
+  }
+
+  // The stored shape is decided by the same function an inbound one is read by,
+  // so a name with a control character in it is cleaned before it is SENT too.
+  const name = kind === "document" ? (rawName.trim() || "document.pdf") : "";
+  const draft = sanitizeMedia({ kind, mediaId: "pending", mime, filename: name || undefined, size: bytes.length });
+  const filename = draft && draft.filename ? draft.filename : name;
+
+  let mediaId;
+  let sent;
+  try {
+    mediaId = await uploadMedia(bytes, mime, filename, kind);
+    sent = await sendMedia(conv.phone || phoneKey, { kind, mediaId, caption: text, filename });
+  } catch (e) {
+    console.error("[wa-media] provider send failed:", e.message);
+    res.status(502).json({ error: "send failed: " + e.message });
+    return;
+  }
+  const media = sanitizeMedia(Object.assign({}, draft, { mediaId }));
+  const ts = Date.now();
+  const msgId = "m" + ts.toString(36) + Math.random().toString(36).slice(2, 6);
+  const msg = {
+    id: msgId,
+    direction: "out",
+    text: text || mediaLabel(media || { kind }),
+    ts,
+    status: sent.status,
+    isAutoAck: false,
+    channel: "whatsapp",
+    providerMsgId: sent.wamid || null,
+    authorEmail: staff.email || staff.uid,
+  };
+  // An id Meta answers in a shape the stored check refuses is still SENT; the
+  // message is kept without `media` rather than not at all.
+  if (media) msg.media = media;
+  else console.error("[wa-media] Meta's media id did not pass the stored check; kept the message without it");
+  await appendMessage(phoneKey, msg);
+  const patch = { lastMessageAt: ts, lastMessageSnippet: snippet(mediaSnippet(media || { kind }, text)) };
+  if (conv.archived) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on send
+  await upsertConversation(phoneKey, patch);
+  res.status(200).json({ ok: true, msgId, wamid: sent.wamid || null, status: sent.status, mediaId });
+}
+
 export default async function handler(req, res) {
   if (req.method === "GET") { await view(req, res); return; }
+  if (req.method === "POST") { await send(req, res); return; }
   res.status(405).json({ error: "method not allowed" });
 }
