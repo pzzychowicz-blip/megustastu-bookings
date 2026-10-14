@@ -23,7 +23,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
+import { readFileSync } from "node:fs";
 
 const fake = vi.hoisted(() => {
   const state = { tree: {}, writes: [] };
@@ -70,6 +71,7 @@ import inboundHandler, { inboundContent } from "../api/wa-inbound.js";
 import simInboundHandler from "../api/wa-sim-inbound.js";
 import simSuggestHandler from "../api/wa-sim-suggest.js";
 import simGenerateHandler from "../api/wa-sim-generate.js";
+import mediaHandler, { MEDIA_VIEW_MAX, servedType } from "../api/wa-media.js";
 import { processInbound, applyParse, injectSimInbound } from "../api/_lib/inbound-core.js";
 import { verifySignature, sendText } from "../api/_lib/meta.js";
 import { parseThread } from "../api/_lib/gemini.js";
@@ -106,6 +108,7 @@ describe.each([
   ["wa-send", sendHandler, "POST", "GET"],
   ["wa-recheck", recheckHandler, "POST", "GET"],
   ["wa-config", configHandler, "GET", "POST"],
+  ["wa-media", mediaHandler, "GET", "PUT"],
 ])("%s — method and staff auth", (name, handler, method, wrong) => {
   it("answers 405 to the wrong method, before anything else", async () => {
     const res = await call(handler, { method: wrong, token: "staff" });
@@ -843,5 +846,123 @@ describe("the simulator endpoints, enabled and signed in", () => {
     const res = await call(simGenerateHandler, { token: "staff", body: { hint: "x" } });
     expect([res.statusCode, res.body.error]).toEqual([400, "GEMINI_API_KEY not set"]);
     expect(fake.state.writes).toEqual([]);
+  });
+});
+
+// ── api/wa-media.js — viewing a photo, a voice note, a document (v18.8.0) ─────
+// A response that is a real Writable, so the handler can stream into it.
+function mediaCall({ token = "staff", query } = {}) {
+  const chunks = [];
+  const res = new Writable({ write(c, e, cb) { chunks.push(Buffer.from(c)); cb(); } });
+  Object.assign(res, {
+    statusCode: null, body: null, headers: {},
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; this.end(); return this; },
+    setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
+  });
+  const req = { method: "GET", headers: token ? { authorization: "Bearer " + token } : {}, query: query || {} };
+  return mediaHandler(req, res).then(() => Object.assign(res, { bytes: Buffer.concat(chunks) }));
+}
+const MEDIA_MSG = (media, extra) => Object.assign({ id: "wamid_P", direction: "in", text: "Photo", ts: Date.now(), media }, extra);
+const seedMedia = (msg) => { fake.state.tree = { messages: { [KEY]: { [msg.id]: msg } } }; };
+const PIC = Buffer.from("\xff\xd8\xff\xe0 a jpeg", "binary");
+// Meta's two answers: the lookup (JSON) and the file (bytes).
+const metaFetch = ({ info = {}, infoStatus = 200, file = PIC, fileStatus = 200, fileHeaders } = {}) => vi.fn(async (url) => {
+  if (url.startsWith("https://graph.facebook.com/")) {
+    return new Response(JSON.stringify(Object.assign({ url: "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1", mime_type: "image/jpeg", file_size: file.length }, info)), { status: infoStatus });
+  }
+  return new Response(fileStatus === 200 ? file : "nope", { status: fileStatus, headers: Object.assign({ "content-type": "image/jpeg", "content-length": String(file.length) }, fileHeaders) });
+});
+
+describe("wa-media GET", () => {
+  beforeEach(() => vi.stubEnv("META_WA_TOKEN", "tok"));
+
+  it("400 without a usable phone key or message id, and writes nothing", async () => {
+    expect((await mediaCall({ query: { msgId: "wamid_P" } })).statusCode).toBe(400);
+    expect((await mediaCall({ query: { phoneKey: KEY } })).statusCode).toBe(400);
+    expect((await mediaCall({ query: { phoneKey: "+", msgId: "wamid_P" } })).statusCode).toBe(400);
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "../x" } })).statusCode).toBe(400);
+    expect(fake.state.writes).toEqual([]);
+  });
+  it("404 for a message nobody has, and for one with no media", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(404);
+    seedMedia({ id: "wamid_P", direction: "in", text: "hola", ts: 1 });
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+    expect([res.statusCode, res.body.error]).toEqual([404, "this message has no media"]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("streams the file Meta holds, asked with the id STORED on the message, never one from the request", async () => {
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890", mime: "image/jpeg" }));
+    const f = metaFetch();
+    vi.stubGlobal("fetch", f);
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P", mediaId: "999" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.bytes.equals(PIC)).toBe(true);
+    expect(res.headers).toMatchObject({ "content-type": "image/jpeg", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff", "content-disposition": "inline" });
+    expect(f.mock.calls.map((c) => c[0])).toEqual([
+      "https://graph.facebook.com/v26.0/1234567890",
+      "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1",
+    ]);
+    expect(f.mock.calls.every((c) => c[1].headers.Authorization === "Bearer tok")).toBe(true);
+  });
+  it("410 when Meta no longer has the file, at either call; 502 when Meta fails otherwise", async () => {
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890" }));
+    vi.stubGlobal("fetch", metaFetch({ infoStatus: 404 }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
+    vi.stubGlobal("fetch", metaFetch({ fileStatus: 404 }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
+    vi.stubGlobal("fetch", metaFetch({ infoStatus: 500 }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(502);
+  });
+  it("413 for a file larger than the browser is handed, before the download starts", async () => {
+    seedMedia(MEDIA_MSG({ kind: "document", mediaId: "555", filename: "big.pdf" }));
+    const f = metaFetch({ info: { file_size: MEDIA_VIEW_MAX + 1 } });
+    vi.stubGlobal("fetch", f);
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+    expect(res.statusCode).toBe(413);
+    expect(f).toHaveBeenCalledTimes(1);
+    // …and when only the download says how big it is.
+    vi.stubGlobal("fetch", metaFetch({ info: { file_size: undefined }, fileHeaders: { "content-length": String(MEDIA_VIEW_MAX + 1) } }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(413);
+  });
+  it("a type that could run as the app is served as a download, never inline", async () => {
+    seedMedia(MEDIA_MSG({ kind: "document", mediaId: "555", filename: "menú carta.html" }));
+    vi.stubGlobal("fetch", metaFetch({ info: { mime_type: "text/html" } }));
+    const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+    expect(res.headers["content-type"]).toBe("application/octet-stream");
+    expect(res.headers["content-disposition"]).toBe("attachment; filename*=UTF-8''men%C3%BA%20carta.html");
+    expect(servedType("image/svg+xml")).toBe("application/octet-stream");
+    expect(servedType("audio/ogg; codecs=opus")).toBe("audio/ogg; codecs=opus");
+    expect(servedType("application/PDF")).toBe("application/PDF");
+  });
+  it("sends the token only to a host Meta serves media from", async () => {
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890" }));
+    const f = metaFetch({ info: { url: "https://evil.example.com/x" } });
+    vi.stubGlobal("fetch", f);
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(502);
+    expect(f).toHaveBeenCalledTimes(1);
+    vi.stubGlobal("fetch", metaFetch({ info: { url: "http://lookaside.fbsbx.com/x" } }));
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(502);
+  });
+  it("503 when the deployment has no Meta token", async () => {
+    vi.stubEnv("META_WA_TOKEN", "");
+    seedMedia(MEDIA_MSG({ kind: "image", mediaId: "1234567890" }));
+    vi.stubGlobal("fetch", vi.fn());
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(503);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("a simulator id is answered with the bundled sample in mock mode, and is gone in live mode", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    for (const [kind, file, type] of [["image", "photo.jpg", "image/jpeg"], ["audio", "voice.ogg", "audio/ogg; codecs=opus"], ["document", "menu.pdf", "application/pdf"]]) {
+      seedMedia(MEDIA_MSG({ kind, mediaId: "MOCK." + kind + ".abc" }));
+      const res = await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } });
+      expect([kind, res.statusCode, res.headers["content-type"]]).toEqual([kind, 200, type]);
+      expect(res.bytes.equals(readFileSync(new URL("../api/_lib/mock-media/" + file, import.meta.url)))).toBe(true);
+    }
+    vi.stubEnv("WA_SEND_MODE", "live");
+    vi.stubEnv("WA_STAFF_EMAILS", "ana@example.com");
+    expect((await mediaCall({ query: { phoneKey: KEY, msgId: "wamid_P" } })).statusCode).toBe(410);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

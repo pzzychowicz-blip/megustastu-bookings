@@ -112,6 +112,16 @@ export function mediaSnippet(media, caption) {
   return c ? label + " · " + c : label;
 }
 
+// A file's size as a person reads it: "820 KB", "2.4 MB". Bytes under a KB
+// read "1 KB"; an unknown size reads "". Through `countLabel`, so the number
+// and its unit never break apart.
+export function fileSizeLabel(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n < 1024 * 1024) return countLabel(Math.max(1, Math.round(n / 1024)), "KB");
+  return countLabel(Math.round(n / (1024 * 1024) * 10) / 10, "MB");
+}
+
 // How a media message's file can still be fetched: Meta keeps a RECEIVED file
 // 7 days and one the business SENT 30 (the go-live plan's § A4). Computed from
 // the message's own `ts`, so an expired bubble says so without a request.

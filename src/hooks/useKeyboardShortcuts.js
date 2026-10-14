@@ -91,6 +91,8 @@ function escapeAction(K,id){
     // — the same reason `form`/`walkin`/`manual` name a requestClose* here.
     case "wadelete":    return function(){K.setConfirmDeleteConv(null);};
     case "waarchive":   return function(){K.setConfirmArchive(null);};
+    // v18.8.0: Escape is Done. A photo has nothing to decide.
+    case "waphoto":     return function(){K.setWaPhoto(null);};
     case "sim":         return function(){K.setShowSim(false);};
     case "inbox":       return K.closeInbox;
     case "week":        return function(){K.setShowWeek(false);};

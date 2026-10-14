@@ -26,7 +26,7 @@ export function ConversationView({
   conv, messages, onBack, onSend, onAccept, onDismiss, templates, bookings, showBack, phone,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
-  onRecheck, regularMin, kbFold = false, onUnfold,
+  onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
 }) {
   // NO excludeBookingId. This used to pass conv.acceptedBookingId, which made the
   // header chip disagree with the booking form's for the same customer (Patryk:
@@ -370,7 +370,7 @@ export function ConversationView({
       ) : null}
       </Reveal>
       <div ref={threadRef} onScroll={onThreadScroll} style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px" }}>
-        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} />)}
+        {msgsForConv.map((m) => <MessageBubble key={m.id} msg={m} isLast={m.id === animateId} onRetry={onResend} phoneKey={conv.phoneKey} onOpenPhoto={onOpenPhoto} />)}
       </div>
       {/* Parsing/typing indicator — eased in while the inbound is being parsed
           (conv.parsing, set by the sandbox inbound path; cleared when the draft

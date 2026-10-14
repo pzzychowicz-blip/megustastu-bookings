@@ -61,6 +61,10 @@ export const MODAL_Z=[
   "del",
   "waarchive",   // WA sandbox: archive-conversation confirm
   "wadelete",    // WA sandbox: delete-conversation confirm
+  // v18.8.0: the photo viewer, opened from a thumbnail in the inbox's thread.
+  // Above the inbox and the simulator it can be opened beside; below the
+  // app's confirms, none of which it can raise.
+  "waphoto",
   "cancel",
   "reshuffle",
   "kitchen",     // the kitchen-load confirm, raised BY a save

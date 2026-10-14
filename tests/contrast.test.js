@@ -728,6 +728,7 @@ describe("registry coverage", () => {
     "--wa-shimmer": "the parsing sweep, a moving gradient stop",
     "--wa-unread-ring": "a box-shadow, not a fill",
     "--wa-row-active-glow": "a box-shadow, not a fill",
+    "--wa-media-wait": "the box a loading photo stands in (v18.8.0): an icon, never text",
   };
   // v17.14.0: tokens matching the fill prefixes that are INK, not fill. Listing
   // one here is not an exemption — the assertion below requires it to be some

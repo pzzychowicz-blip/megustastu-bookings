@@ -107,7 +107,7 @@ export function InboxPanel({
   watchMessages,
   onClose, onSend, onAccept, onDismiss, onSaveTemplates, onMarkRead,
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
-  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck,
+  onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck, onOpenPhoto,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
   query, setQuery, needsAction, setNeedsAction,
   // settings/general — the "Regular" threshold, so the conversation header's chip
@@ -460,6 +460,7 @@ export function InboxPanel({
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
         onResend={onResend ? (msgId) => onResend(activeConv.phoneKey, msgId) : undefined}
+        onOpenPhoto={onOpenPhoto ? (msg) => onOpenPhoto(activeConv.phoneKey, msg) : undefined}
         onApplyModify={onApplyModify}
         onRecheck={onRecheck}
         regularMin={regularMin}

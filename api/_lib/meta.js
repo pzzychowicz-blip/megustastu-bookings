@@ -69,3 +69,57 @@ export async function sendText(phoneE164, text) {
   const wamid = data && data.messages && data.messages[0] && data.messages[0].id;
   return { wamid: wamid || null, status: "sent" };
 }
+
+// ── Media a customer sent (v18.8.0) ──────────────────────────────────────────
+// Meta keeps the FILE, this app keeps only its id (a message's `media`). To
+// show it: `GET /{media-id}` answers a short-lived URL plus the type and size,
+// and that URL answers the bytes, asked with the SAME bearer. Both calls need
+// the token whatever WA_SEND_MODE says: viewing a real customer's photo is not
+// a send, and in mock mode there is no real id to view (api/wa-media.js serves
+// its bundled samples for the simulator's `MOCK.` ids instead).
+//
+// A failed call throws with `.status` = Meta's HTTP status, so the caller can
+// tell "gone" (4xx: Meta keeps a received file 7 days) from "Meta is down".
+function mediaToken() {
+  const token = env("META_WA_TOKEN", null);
+  if (!token) { const e = new Error("META_WA_TOKEN is not configured."); e.status = 503; e.config = true; throw e; }
+  return token;
+}
+function graphError(res, data) {
+  const e = new Error((data && data.error && data.error.message) || ("Graph API error " + res.status));
+  e.status = res.status;
+  return e;
+}
+export async function mediaInfo(mediaId) {
+  const token = mediaToken();
+  const res = await fetch("https://graph.facebook.com/" + GRAPH_VERSION + "/" + encodeURIComponent(mediaId), {
+    headers: { Authorization: "Bearer " + token },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw graphError(res, data);
+  const size = Number(data.file_size);
+  return {
+    url: typeof data.url === "string" ? data.url : "",
+    mime: typeof data.mime_type === "string" ? data.mime_type : "",
+    size: Number.isFinite(size) && size > 0 ? size : null,
+  };
+}
+// The bearer goes only to a host Meta serves media from. The URL comes out of
+// Meta's own answer, so this is belt and braces: a token sent to a host taken
+// from a response is a token handed to whoever controls that response. If Meta
+// moves its media hosts, viewing fails loudly (502) and this list is the fix.
+const MEDIA_HOSTS = ["fbsbx.com", "facebook.com", "fbcdn.net", "whatsapp.net"];
+export function isMediaHost(url) {
+  let u;
+  try { u = new URL(url); } catch { return false; }
+  if (u.protocol !== "https:") return false;
+  return MEDIA_HOSTS.some((h) => u.hostname === h || u.hostname.endsWith("." + h));
+}
+// The Response itself, so the caller can stream its body without holding it.
+export async function downloadMedia(url) {
+  const token = mediaToken();
+  if (!isMediaHost(url)) { const e = new Error("unexpected media host"); e.status = 502; throw e; }
+  const res = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  if (!res.ok) throw graphError(res, null);
+  return res;
+}

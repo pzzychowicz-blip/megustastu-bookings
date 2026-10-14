@@ -59,6 +59,11 @@ describe("service worker — routing predicate", () => {
     "/some/other/thing.json",
     "/iconography.svg",        // the over-matching case the anchoring fixed
     "/icon-legend.json",
+    // v18.8.0: a WhatsApp photo is a staff-token GET under /api. Cached by the
+    // worker it would outlive the token and Meta's own keep, so it must stay
+    // the browser's (its `Cache-Control: private` is the only cache it gets).
+    "/api/wa-media?phoneKey=%2B34600111222&msgId=wamid_P",
+    "/api/wa-media",
   ])("does NOT cache-first %s", (path) => {
     expect(RE.test(path)).toBe(false);
   });

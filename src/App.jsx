@@ -384,6 +384,7 @@ import { activityWindow, retentionMs, retentionLabel } from "./lib/activity";
 import { useWhatsApp } from "./hooks/useWhatsApp";
 import { useWaSettings } from "./hooks/useWaSettings";
 import { InboxPanel } from "./components/whatsapp/InboxPanel";
+import { PhotoViewer } from "./components/whatsapp/PhotoViewer";
 // v18.0.0 phase 5b — the simulator does not reach production through a STATIC
 // import. Measured on the phase-5a build: `WA_SANDBOX` folds to `false` and
 // Rollup did strip the WaSimulator COMPONENT (none of its UI strings survive),
@@ -1172,6 +1173,8 @@ function BookingApp({uid}){
   const setConfirmArchive = setModalFns.waarchive;
   const confirmDeleteConv = modalOpen.wadelete || null;     // phoneKey pending delete-confirm
   const setConfirmDeleteConv = setModalFns.wadelete;
+  const waPhoto = modalOpen.waphoto || null;                // v18.8.0: {phoneKey, msg} in the photo viewer
+  const setWaPhoto = setModalFns.waphoto;
   const showSim = !!modalOpen.sim;                          // sandbox-only simulator panel
   const setShowSim = setModalFns.sim;
   const [returnToInboxKey, setReturnToInboxKey] = useState(null);   // reopen the inbox here when an overlay closes
@@ -3085,7 +3088,7 @@ function BookingApp({uid}){
     // `escapeAction` names. `showInbox` is still read directly — the I key must
     // not re-open a panel that is already up.
     showInbox:showInbox,setShowInbox:setShowInbox,closeInbox:closeInbox,
-    setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,
+    setConfirmArchive:setConfirmArchive,setConfirmDeleteConv:setConfirmDeleteConv,setWaPhoto:setWaPhoto,
     showSim:showSim,setShowSim:setShowSim,
     // v17.14.0 (/code-review): the waitlist panel's Escape close. It is here and
     // not merely in `escapeAction` because the OLD chain had no waitlist branch,
@@ -4807,6 +4810,7 @@ function BookingApp({uid}){
           onResend={wa.handleResend}
           onApplyModify={wa.handleApplyModify}
           onRecheck={wa.recheckConversation}
+          onOpenPhoto={function(phoneKey,msg){setWaPhoto({phoneKey:phoneKey,msg:msg});}}
           onOpenSim={WA_SANDBOX?function(){setShowSim(true);}:null} />:null}</ModalPresence>{confirmArchive?(function(){
           const conv=wa.conversations.find(function(c){return c.phoneKey===confirmArchive;});
           const bk=conv&&conv.acceptedBookingId?bookings.find(function(b){return b.id===conv.acceptedBookingId;}):null;
@@ -4825,7 +4829,7 @@ function BookingApp({uid}){
               className="mgt-hover-scale"
               style={mkDangerConfirm()}><TrashIcon size={IC.control} />Delete</button></div>}><div style={{fontSize: T.title,fontWeight: FW.bold,marginBottom:8,color:S.text}}>Delete conversation?</div><div style={{fontSize: T.lead,color:S.text,marginBottom:18}}>This permanently removes the conversation and its messages. This cannot be undone.</div></Overlay>:null}{WA_SANDBOX?(showSim?<Suspense fallback={null}><WaSimulator
           ctx={{conversations:wa.conversations,messagesMap:wa.messagesMap,watchMessages:wa.watchMessages,upsertConversation:wa.upsertConversation,patchConversation:wa.patchConversation,appendMessage:wa.simAppendMessage,saveBookings:saveBookings,clearAllWaData:wa.clearAllWaData,simFailNextSend:wa.simFailNextSend}}
-          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}<ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
+          onClose={function(){setShowSim(false);}} /></Suspense>:null):null}{/* v18.8.0: the photo viewer, after the simulator so it paints above it (MODAL_Z ranks it so) */}<ModalPresence show={!!waPhoto}>{waPhoto?<PhotoViewer photo={waPhoto} onClose={function(){setWaPhoto(null);}} />:null}</ModalPresence><ModalPresence show={!!rolesFor}>{// v18.0.0 phase 3: the capability grid — opened from the Admin tab, so it
         // must sit above the Settings overlay. Same idiom as ReminderEditor:
         // `position` + `z-index` makes a stacking context and the subtree
         // stacks there whatever its fixed children declare, so `Overlay` is

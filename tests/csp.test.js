@@ -106,3 +106,32 @@ describe("CSP ↔ inline boot script", () => {
     }
   );
 });
+
+// v18.8.0: a WhatsApp photo or voice note reaches the page as a BLOB URL (the
+// file needs the staff token, so the page fetches it and hands <img> / <audio>
+// the bytes). Without `blob:` the browser refuses both, silently and in
+// production only: the dev server sends no CSP. The pins say exactly what was
+// widened, so a later edit cannot widen it further by accident.
+function directive(name) {
+  for (const entry of vercel.headers || []) {
+    for (const h of entry.headers || []) {
+      if (/content-security-policy/i.test(h.key)) {
+        const m = new RegExp("(?:^|;\\s*)" + name + " ([^;]+)").exec(h.value);
+        if (m) return m[1].trim().split(/\s+/);
+      }
+    }
+  }
+  return null;
+}
+describe("CSP ↔ WhatsApp media", () => {
+  it("lets a photo be drawn from a blob URL, and nothing remote", () => {
+    expect(directive("img-src")).toEqual(["'self'", "data:", "blob:"]);
+  });
+  it("lets a voice note play from a blob URL, and nothing remote", () => {
+    expect(directive("media-src")).toEqual(["'self'", "blob:"]);
+  });
+  it("keeps plugins and remote scripts out, which a document opened from a blob would inherit", () => {
+    expect(directive("object-src")).toEqual(["'none'"]);
+    expect(directive("script-src").filter((v) => !v.startsWith("'sha256-"))).toEqual(["'self'"]);
+  });
+});

@@ -192,6 +192,13 @@ export async function readMessages(phoneKey, limit) {
   return limit > 0 ? list.slice(-limit) : list;
 }
 
+// v18.8.0: one stored message, or null — what api/wa-media.js reads a media id
+// from, so the id is never one a browser supplied.
+export async function getMessage(phoneKey, msgId) {
+  const snap = await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + sanitizeKey(msgId)).get();
+  return snap.exists() ? snap.val() : null;
+}
+
 export async function messageExists(phoneKey, msgId) {
   const snap = await getDb().ref("messages/" + sanitizeKey(phoneKey) + "/" + sanitizeKey(msgId)).get();
   return snap.exists();

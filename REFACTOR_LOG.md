@@ -35324,3 +35324,81 @@ caption reached the parser (its logged length is the caption's) and the message 
 without a draft, which is the designed failure; the same handler with the mock parser
 turned a photo captioned "Mesa para 4 mañana a las 21:00" into a draft for 4 at 21:00
 tomorrow. The inbox draws the list line "Photo · …" and each bubble's text.
+
+### Phase 4 — viewing a photo, a voice note or a document
+
+**`GET /api/wa-media?phoneKey&msgId`** (new `api/wa-media.js`, which takes the send as
+POST in phase 5, so production gains one function, not two). The staff gate, then the
+message is read from the database and **its stored id is the only one used**: the
+browser names a message, never a media id, because the id goes into a Graph path with
+the restaurant's token on it. Then `GET /{media-id}` for Meta's short-lived URL, type and
+size (`mediaInfo`, `_lib/meta.js`), and the bytes fetched with the same bearer
+(`downloadMedia`, only on Meta's media hosts and https, `isMediaHost`) and **streamed**
+to the browser (`pipeline(Readable.fromWeb(…), res)`), since Vercel's guide says a
+streamed response is not held to its 4.5 MB body limit. Answers: 405, 401 / 403 / 503
+(the shared staff gate), 400, 404 (no message, or no media on it), 410 (Meta answers
+4xx: the file is gone), 413 over 16 MB (`MEDIA_VIEW_MAX`, the browser holds the whole
+file: "open WhatsApp on the phone"), 502 otherwise. Only `INLINE_TYPES` keep their type
+(pictures without SVG, audio, PDF, plain text); anything else is
+`application/octet-stream` with `attachment` and `nosniff`, because the client opens a
+document from a blob URL on this origin, where an HTML or SVG file would run as the app.
+A file name reaches `Content-Disposition` as RFC 5987 `filename*=UTF-8''…`.
+
+**Mock media moved here from phase 6**, because nothing in this phase could be seen
+without it: while `WA_SEND_MODE` is mock, a `MOCK.<kind>.<id>` id is answered with a
+bundled sample (`api/_lib/mock-media/`: a 960×720 photo, a 7.5 s Ogg/Opus voice note, a
+one-page PDF, 46 kB together), read through static `new URL(…, import.meta.url)`s so the
+deployment's file tracing includes them; on a live deployment a MOCK id is 410. The
+harness routes `/api/wa-media`. Phase 6 keeps the simulator buttons and the mock upload.
+
+**The client.** `fetchMedia` (`src/lib/wa-backend.js`) downloads with the staff token
+(an `<img src>` cannot carry one) into a blob URL, one per message, shared by the bubble
+and the viewer, reference-counted and revoked 60 s after the last release. `useWaMedia`
+gives a bubble its state: none · expired (computed from the message's time: 7 days
+received, 30 sent, no request) · idle · loading (derived, never set) · ready · toolarge ·
+error with Retry. **The bubble** (`MessageBubble.jsx`): a 240px thumbnail fetched once an
+IntersectionObserver sees it, a grey `--wa-media-wait` square while it loads (a new
+token, registered DECORATIVE: no text sits on it); a voice note's Play button, then
+`<audio controls autoPlay>`; a document row (icon, name, size) that opens a blank tab AT
+THE PRESS and points it at the file when it lands (a tab opened after the download is a
+popup the browser blocks), and saves instead for a type that is not safe to open, a
+refused tab, or an installed iPhone/iPad app. The caption shows under the media only when
+it is a real caption, not the stored fallback. **`PhotoViewer`** (new): an `Overlay` card
+on a tablet and the full-screen sheet on a phone, "Photo · From the customer · 17:11",
+the photo at up to 70dvh, its caption, **Save photo** (named after the message, with the
+type's extension) and **Done**. Modal id `waphoto` in `MODAL_Z` after `wadelete`, with
+its `escapeAction` case; App mounts it in `ModalPresence` after the simulator. Done and
+not a ✕, as the plan had it: Done is the house word for a dismissal with no decision in
+it (the waitlist, Find a booking, the seat note). Icons: `PaperclipIcon` (phase 5),
+`FileIcon`, `PlayIcon`, `PhotoIcon` in `WaIcons.jsx`, on its `Svg` helper.
+
+**CSP** (`vercel.json`): `img-src 'self' data: blob:` and `media-src 'self' blob:`, pinned
+in `tests/csp.test.js` with `object-src 'none'` and `script-src` unchanged.
+`public/sw.js` already leaves `/api/*` to the network; `tests/service-worker.test.js` now
+names two `/api/wa-media` paths among those it must not cache.
+
+**Tests.** `tests/api-handlers.test.js` runs the GET through its stubbed Graph and
+download: the id taken from the database whatever the query says, 400 / 404 / 410 / 413
+/ 502 / 503, the token sent only to Meta's media hosts, MOCK samples in mock mode and 410
+live, a non-inline type served as an attachment, and the stream's bytes. It joins the shared method and staff-gate
+`describe.each`. Mutation-checked: reading the id from the query fails one case, keeping
+every type inline fails another. `tests/wa-rtdb-hardening.test.js`' count of
+`sanitizeKey(phoneKey)` calls is 8 (`getMessage`).
+
+**Verified on DEV** (harness in mock mode, four MOCK messages posted to one thread: a
+photo eight days old, a captioned photo, a voice note, `menu-grupos.pdf`): a request
+without a token is 401; the thumbnail draws the 960×720 sample at 240×240 with its
+caption, the old photo reads "Photo — no longer on WhatsApp", and a clean reload fetched
+the one image in view and nothing else; Play played the voice note (7.52 s, a blob URL);
+a real (non-MOCK) id with no token configured locally shows Couldn't load and Retry. The
+viewer plays `mgt-card-in` / `mgt-scrim-in` on open and `mgt-card-out` /
+`mgt-scrim-out` on Escape before it unmounts, and on a 375px phone opens as the
+full-screen sheet above the inbox. The browser pane refuses popups, so the PDF took its
+designed fallback there (`window.open` → null → save); **the PDF itself was checked in
+Chrome (Playwright, `channel: chrome`) against a scratch page served with `vercel.json`'s
+exact headers**: the blob photo and the voice note load with no CSP violation, and the
+PDF renders in Chrome's viewer by both of the app's paths (straight to the blob, and a
+blank tab pointed at it), `object-src 'none'` notwithstanding. Still to measure: Vercel's
+4.5 MB limit against a streamed response, on the sandbox after merge (A5-6); Safari's
+Ogg/Opus playback and the viewer on the iOS Simulator, with phase 5's picker. Main bundle
+134.40 → 137.56 kB gz.

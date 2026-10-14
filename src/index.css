@@ -554,6 +554,11 @@
   --wa-divider: rgba(200, 210, 225, 0.7);
   --wa-bubble-in: rgba(255, 255, 255, 0.85);   --wa-bubble-in-border: rgba(200, 210, 225, 0.7);
   --wa-bubble-out: rgb(0, 114, 238);           --wa-bubble-out-border: rgba(0, 90, 190, 0.55);
+  /* v18.8.0: the box a photo stands in while it loads, inside EITHER bubble.
+     A mid grey at low alpha darkens the white bubble and the blue one alike,
+     in both themes, so it is stated once and not redefined for dark. It
+     carries an icon and no text. */
+  --wa-media-wait: rgba(128, 128, 128, 0.2);
   /* v17.8.0-wa-sandbox: the draft card joined the notification-pane idiom
      (soft tint, 1px --border-card, hue carried by the mark and the text),
      so this fill drops from a 0.8-alpha CHIP wash to a PANE wash at

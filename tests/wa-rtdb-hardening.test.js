@@ -168,6 +168,7 @@ describe("WA hardening — phoneKey is sanitized at the path boundary", () => {
       .filter((name) => name === "phoneKey");
     expect(raw).toEqual([]);
     // …and the sanitized form really is present at every one of them.
-    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(7);
+    // 8 since v18.8.0: `getMessage`, the message api/wa-media.js reads a media id from.
+    expect((src.match(/sanitizeKey\(phoneKey\)/g) || []).length).toBe(8);
   });
 });

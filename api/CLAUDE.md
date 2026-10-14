@@ -22,7 +22,8 @@ indistinguishable from "no such endpoint": a 405 or a 401 would both confirm the
 is there. Fail-closed, and measured across five env values — absent, empty, `"0"`,
 `"true"` and `"1"` — where only the last opens it. **Since the phase-5 review those
 three are also excluded from a deployment by `.vercelignore`**, so PRODUCTION routes
-FOUR functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config`) and the `sandbox`
+FIVE functions (`wa-inbound` · `wa-send` · `wa-recheck` · `wa-config` · `wa-media`, the
+last since v18.8.0) and the `sandbox`
 branch gets its three back through one appended `!api/wa-sim-*.js`. Since v18.4.3 that
 branch is GENERATED from main by `.github/workflows/sandbox.yml`, which writes the line;
 it is never written on main and never by hand. The runtime gate stays: two independent answers, and
@@ -50,6 +51,33 @@ because it supports `require(esm)`, so a green local run proves nothing about th
 shows 5.x. The override can go when Vercel's runtime loads ESM through `require()`,
 or when `jwks-rsa` stops requiring `jose` synchronously. Before deleting it, show one
 of those is true on a deployment, not locally.
+
+**`wa-media.js` — the media proxy (v18.8.0).** One function for both directions of a
+conversation's files, to keep the count low: GET views (phase 4), POST sends (phase 5).
+Three rules, each the reason for a line of it:
+- **Never trust a client media id.** The browser names a MESSAGE (`phoneKey` + `msgId`);
+  the id is read from the database (`getMessage`). It goes into a Graph path with the
+  restaurant's token on it, so one taken from a query string would let any signed-in
+  account fetch any media that token can reach. The id was checked when it was stored
+  (`sanitizeMedia`), and the URL Meta hands back is fetched with the token only on Meta's
+  hosts, over https (`isMediaHost`, `_lib/meta.js`).
+- **Streamed, never buffered.** Vercel caps a function's request and response body at
+  4.5 MB, and its guide says a streamed response does not have the cap; the bytes are
+  piped as they arrive (`pipeline(Readable.fromWeb(…), res)`). The cap here is the
+  browser's: over `MEDIA_VIEW_MAX` (16 MB) is 413, "open WhatsApp on the phone". The real
+  measurement needs a deployment (the plan's A5-6, after merge).
+- **Only harmless types keep their type.** A customer chooses what they send, and the
+  client opens a document from a blob URL on this origin, so an HTML or SVG file would run
+  as the app there. `INLINE_TYPES` (pictures without SVG, audio, PDF, plain text) keep
+  theirs; anything else is `application/octet-stream` with `attachment`, plus `nosniff`.
+  The client asks the same question (`opensInline`, `src/lib/wa-backend.js`).
+
+Guards in order: 405 → the staff gate (`staffAuthError`) → 400 → 404 → 410 (Meta answers
+4xx: it keeps a received file 7 days, a sent one 30) → 413 → 502. **Mock media:** while
+`WA_SEND_MODE` is mock, an id starting `MOCK.` is answered with a bundled sample of its
+kind (`_lib/mock-media/`: `photo.jpg`, `voice.ogg`, `menu.pdf`, a few kB each), read
+through static `new URL(…, import.meta.url)`s so the deployment's file tracing includes
+them. On a live deployment a MOCK id is 410. The harness routes it (`/api/wa-media`).
 
 **Tests (v18.4.5).** `tests/api-handlers.test.js` RUNS `wa-send`, `wa-recheck`, `wa-config`,
 `_lib/inbound-core.js` and `_lib/meta.js`: it replaces the three `firebase-admin` modules
