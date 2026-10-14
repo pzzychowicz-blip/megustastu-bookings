@@ -183,6 +183,11 @@ const PINNED = {
       "lib/tags.js:sanitizeTagList": "5efb78d18b",
       "lib/vouchers.js:sanitizeVoucher": "ef3e67ad4b",
       "lib/vouchers.js:sanitizeVouchers": "371d5b2c85",
+      // v18.8.0: added WITHOUT a SCHEMA raise, the one case the note above does
+      // not cover. It is the server's check on what it WRITES (a message's
+      // `media`), never a reader's whitelist: messages are read whole and the
+      // client only update()s a status, so no build can drop the key.
+      "lib/whatsapp.js:sanitizeMedia": "a8c7408304",
       "lib/whatsapp.js:sanitizeParse": "b8f1f1273a",
       "BOOKING_FIELDS": "id,name,phone,date,time,scheduledTime,size,duration,originalDuration,preference,notes,status,tables,customDur,_manual,_locked,_conflict,preferredTables,returnOf,history,noShow,deposit,voucherCode,recurringId,recurringDate,anonymized,guestId,stayedMin,updatedAt,tags,guestTags,guestTagsAt"
   },

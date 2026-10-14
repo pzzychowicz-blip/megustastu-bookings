@@ -35274,3 +35274,53 @@ first two fail against the previous `inbound-core.js` (run). **Verified on DEV**
 (`processInbound` run against the DEV database with `WA_SEND_MODE=live` and no token,
 then mock): `autoAckSent` false after the failed send, true after the next inbound, and
 the thread holds two inbounds and one auto-ack.
+
+### Phase 3 — a photo, a voice note or a document is stored as what it is
+
+`api/wa-inbound.js` stored anything that was not text as `"[image message]"`. It now asks
+`inboundContent(m)` (exported, beside `inboundTs`) what a message becomes:
+
+- **image / audio / document** → the message gains `media: {kind, mediaId, mime?,
+  filename?, voice?}` (`sanitizeMedia`, `src/lib/whatsapp.js`). `text` is the caption, or
+  a fallback a build that knows nothing of `media` still shows: "Photo", "Voice message",
+  "Audio", "Document: menu.pdf". The conversation list's line is the fallback plus the
+  caption ("Photo · Somos 3, mejor a las 21:00"), through `processInbound`'s new
+  `snippetText`. **A caption is parsed like a text**; a photo without one, and any audio,
+  is not parsed at all, so the "analyzing…" flag is not raised for it.
+- **Anything else** (video, sticker, location, contact card, reaction, a media message
+  whose id is not one) → one line, "Video — open WhatsApp on the phone to see it"
+  (decided 2026-10-14), and no `media`.
+- **The id is checked, because it goes into a Graph path in phase 4**: letters, digits,
+  `.`, `_`, `-`, starting with a letter or digit (the first version allowed `..`, a
+  segment that climbs). A mime type must read as one (codec parameters kept). A file name
+  loses its control characters, since it ends up in a `Content-Disposition` header.
+  Optional keys are omitted, never `undefined` (the root CLAUDE.md row).
+- **No `SCHEMA` raise**, and the reason is recorded in `src/hooks/CLAUDE.md`'s `messages`
+  line for the next field: messages are read without a whitelist, the server writes them
+  whole, and the client only `update()`s a message's `status`, so an older build cannot
+  delete a key it does not know. `tests/schema.test.js` found `sanitizeMedia` (its walker
+  fingerprints every `sanitize*`): it is pinned with that reason beside it, SCHEMA left at
+  2. `tests/wa-parse-guard.test.js`' source pin on `if (isText) parseJobs.push` now reads
+  `willParse`, still after the skipped branch.
+
+**Tests.** `tests/api-handlers.test.js` now RUNS the webhook and the three simulator
+handlers (ROADMAP #8's test clause, gone from ROADMAP): the GET handshake (and that no
+configured token refuses even an empty one); 401 for a missing signature, a wrong secret
+and bytes changed after signing, writing nothing; 400 for signed bytes that are not JSON;
+each kind's stored shape and line; the caption's draft landing after the response (a stub
+request context collects what `waitUntil` was handed); a redelivery skipped; `messages`
+that is a string manufacturing nothing (CT-WA-04); the timestamp clamp through the
+handler (CT-WA-02); receipts moving a status forward and never back (CT-WA-05); and 500
+only when everything in the payload failed, 200 when one message of two was stored. The
+`wa-sim-*` handlers answer 404 over five env values × two methods × three tokens, then
+405 / 401 / 403, then their own 400s. `tests/wa-media.test.js` holds the pure helpers.
+Mutation-checked: with the line that stores `media` removed, five of the new cases fail.
+
+**Verified on DEV** through the harness (`:3999`, restarted on this code): one
+Meta-shaped payload carrying a captioned photo, a voice note, a PDF and a video stored
+four messages with the shapes above, plus a Spanish auto-ack (its language read from the
+caption). Gemini answered every parse with 503 "high demand" that afternoon, so the
+caption reached the parser (its logged length is the caption's) and the message was kept
+without a draft, which is the designed failure; the same handler with the mock parser
+turned a photo captioned "Mesa para 4 mañana a las 21:00" into a draft for 4 at 21:00
+tomorrow. The inbox draws the list line "Photo · …" and each bubble's text.

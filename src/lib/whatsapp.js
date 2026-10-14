@@ -52,6 +52,77 @@ export function snippet(text) {
   return String(text == null ? "" : text).slice(0, WA_SNIPPET_LEN);
 }
 
+// ── Media on a message (v18.8.0) ──────────────────────────────────────────
+// A photo, a voice note or a document is stored as METADATA beside the
+// message's text, never as bytes: `media: { kind, mediaId, mime, filename?,
+// voice? }`. Meta holds the file (7 days received, 30 days sent) and
+// /api/wa-media fetches it on demand, reading the id from the STORED message,
+// never from a request. `text` keeps the caption, or a readable fallback
+// (`mediaLabel`), so a device on an older build still shows something.
+//
+// Messages are read without a whitelist and written whole by the server, and
+// the client only ever update()s a message's status, so an older build never
+// deletes this key: no SCHEMA raise (src/lib/schema.js says when one is owed).
+export const WA_MEDIA_KINDS = ["image", "audio", "document"];
+// The line every other kind gets: a video, a sticker, a location, a contact
+// card. Decided 2026-10-14: those stay on the phone.
+export const WA_OPEN_ON_PHONE = "open WhatsApp on the phone to see it";
+// Meta's media ids are digits; the simulator's are "MOCK.<kind>.<id>". The id
+// goes into a Graph API path, so anything else is not an id, and it must START
+// with a letter or digit, or ".." would be a path segment that climbs.
+const MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+// "type/subtype", optionally with parameters ("audio/ogg; codecs=opus").
+const MIME_RE = /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*(\s*;.*)?$/i;
+export const WA_FILENAME_LEN = 200;
+
+// sanitizeMedia(raw) — the stored shape, or null when it is not one. Optional
+// keys are OMITTED rather than undefined: RTDB refuses an undefined property
+// (the root CLAUDE.md row), on both the Admin SDK and the client.
+export function sanitizeMedia(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (!WA_MEDIA_KINDS.includes(raw.kind)) return null;
+  if (typeof raw.mediaId !== "string" || !MEDIA_ID_RE.test(raw.mediaId)) return null;
+  const out = { kind: raw.kind, mediaId: raw.mediaId };
+  if (typeof raw.mime === "string" && raw.mime.length <= 100 && MIME_RE.test(raw.mime)) out.mime = raw.mime;
+  // A file name is a customer's text and ends up in a response header (the
+  // download's Content-Disposition), so control characters go before it is kept.
+  const name = raw.kind === "document" && typeof raw.filename === "string"
+    ? Array.from(raw.filename).filter((ch) => ch.charCodeAt(0) > 31 && ch !== "\u007f").join("").trim().slice(0, WA_FILENAME_LEN)
+    : "";
+  if (name) out.filename = name;
+  if (raw.kind === "audio" && raw.voice === true) out.voice = true;
+  if (Number.isFinite(raw.size) && raw.size > 0) out.size = Math.round(raw.size);
+  return out;
+}
+
+// What a media message is called when there is no picture to show: the
+// fallback text, the snippet's lead, and the bubble's line once it expired.
+export function mediaLabel(media) {
+  if (!media) return "";
+  if (media.kind === "image") return "Photo";
+  if (media.kind === "audio") return media.voice ? "Voice message" : "Audio";
+  if (media.kind === "document") return media.filename ? "Document: " + media.filename : "Document";
+  return "";
+}
+// The conversation list's line for a media message: the label, then the
+// caption when there is one.
+export function mediaSnippet(media, caption) {
+  const label = mediaLabel(media);
+  const c = String(caption == null ? "" : caption).trim();
+  return c ? label + " · " + c : label;
+}
+
+// How a media message's file can still be fetched: Meta keeps a RECEIVED file
+// 7 days and one the business SENT 30 (the go-live plan's § A4). Computed from
+// the message's own `ts`, so an expired bubble says so without a request.
+export const WA_MEDIA_KEEP_IN_MS = 7 * 24 * 60 * 60 * 1000;
+export const WA_MEDIA_KEEP_OUT_MS = 30 * 24 * 60 * 60 * 1000;
+export function mediaExpired(msg, now) {
+  if (!msg || !msg.media) return false;
+  const keep = msg.direction === "out" ? WA_MEDIA_KEEP_OUT_MS : WA_MEDIA_KEEP_IN_MS;
+  return !(Number(msg.ts) > 0) || (now == null ? Date.now() : now) - msg.ts > keep;
+}
+
 // How long the big "✓ Booking confirmed" banner stays before it dismisses
 // itself (ConversationView's timer). The ✕ still dismisses it immediately, and
 // a new inbound message clears acceptedBadgeDismissedAt so it re-surfaces —

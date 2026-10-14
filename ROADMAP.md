@@ -121,11 +121,7 @@ evidence for each.
   reached at about 22 MB, roughly three years off at this rate. `REFACTOR_LOG.md`
   v18.5.0 has the table and DEV's node-by-node sizes. Not read: the peak-load graph.
 
-- **Before WhatsApp goes live (#8):** set a retention period (SECURITY.md §3 lists the retention as open). Still without a
-  test that runs them: `api/wa-inbound.js` (the public webhook: its raw-body read, the
-  signature gate, the `statuses[]` branch, the timestamp clamp) and the three
-  `api/wa-sim-*.js` handlers. (#4's five files are run by `tests/api-handlers.test.js`
-  since v18.4.5.)
+- **Before WhatsApp goes live (#8):** set a retention period (SECURITY.md §3 lists the retention as open).
 
 - **The public repository (#12): restrict the browser API keys by HTTP referrer**
   (decided 2026-10-08: the DEV key first, PROD after a week on DEV shows nothing). The

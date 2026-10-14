@@ -10,7 +10,8 @@
 //          separate /api/wa-status function (deviation from the Phase 1a list,
 //          documented in the sandbox summary): Meta only ever calls ONE url.
 //
-// Flow per inbound text message (TWO PHASES since the async-parse change):
+// Flow per inbound message (TWO PHASES since the async-parse change; a photo,
+// voice note or document since v18.8.0 too — see inboundContent):
 //   PHASE A (before the response): raw body → HMAC verify (X-Hub-Signature-256;
 //   WA_ALLOW_UNSIGNED=1 skips it on the local harness) → normalize → wamid
 //   dedupe → inbound-core.processInbound with parse=null (conversation upsert +
@@ -38,7 +39,7 @@ import { verifySignature } from "./_lib/meta.js";
 import { parseMessage, mockParse } from "./_lib/gemini.js";
 import { processInbound, applyParse } from "./_lib/inbound-core.js";
 import { updateMessageStatusByWamid, readOperatingHours, getConversation } from "./_lib/rtdb.js";
-import { normalizePhone, isPhoneKey } from "../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, WA_MEDIA_KINDS, WA_OPEN_ON_PHONE, sanitizeMedia, mediaLabel, mediaSnippet } from "../src/lib/whatsapp.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -94,6 +95,42 @@ export function inboundTs(raw) {
   const ms = parseInt(raw, 10) * 1000;
   if (!Number.isFinite(ms) || ms <= 0) return now;
   return Math.min(ms, now);
+}
+
+// inboundContent(m) — what one webhook message becomes (v18.8.0): the text to
+// store, the media to store beside it, the conversation list's line, and the
+// text to hand the parser (null = no parse). EXPORTED for the reason
+// `inboundTs` is: it decides what staff see of a customer's message.
+//
+//   text      → the body; parsed.
+//   image / document → `media` + the caption as text, or the fallback
+//               ("Photo", "Document: menu.pdf"); the caption is parsed like a
+//               text, a photo without one is not parsed at all.
+//   audio     → `media` (`voice: true` for a voice note) + "Voice message" /
+//               "Audio"; never parsed (no caption exists).
+//   anything else, or a media message whose id is not one → one line naming
+//               the kind and saying it stays on the phone (decided
+//               2026-10-14). It used to be "[image message]".
+const OTHER_LABEL = {
+  image: "Photo", audio: "Audio", document: "Document", video: "Video", sticker: "Sticker",
+  location: "Location", contacts: "Contact card", reaction: "Reaction", interactive: "Reply", button: "Reply",
+};
+export function inboundContent(m) {
+  const type = m && typeof m.type === "string" ? m.type : "";
+  if (type === "text" && m.text && typeof m.text.body === "string") {
+    const body = m.text.body;
+    return { text: body, media: null, snippet: body, parseText: body.trim() ? body : null };
+  }
+  if (WA_MEDIA_KINDS.includes(type) && m[type] && typeof m[type] === "object") {
+    const src = m[type];
+    const media = sanitizeMedia({ kind: type, mediaId: src.id, mime: src.mime_type, filename: src.filename, voice: src.voice });
+    if (media) {
+      const caption = type !== "audio" && typeof src.caption === "string" ? src.caption.trim() : "";
+      return { text: caption || mediaLabel(media), media, snippet: mediaSnippet(media, caption), parseText: caption || null };
+    }
+  }
+  const line = (OTHER_LABEL[type] || "Message") + " — " + WA_OPEN_ON_PHONE;
+  return { text: line, media: null, snippet: line, parseText: null };
 }
 
 function readRawBody(req) {
@@ -170,10 +207,10 @@ export default async function handler(req, res) {
         // ── Inbound messages (phase A: store fast, parse later) ───────────
         for (const m of Array.isArray(value.messages) ? value.messages : []) {
           try {
-            // Text only for now (Phase 3 covers media); non-text becomes a
-            // placeholder message with no draft (and no parse job).
-            const isText = m.type === "text" && m.text;
-            const text = isText ? m.text.body : "[" + (m.type || "unsupported") + " message]";
+            // v18.8.0: a photo, a voice note or a document is stored with its
+            // media; a caption is parsed like a text (see inboundContent).
+            const content = inboundContent(m);
+            const willParse = content.parseText !== null;
             const phone = "+" + String(m.from || "").replace(/^\+/, "");
             const ts = inboundTs(m.timestamp);
             // Read the conversation ONCE: a PENDING draft (draftStatus "parsed")
@@ -184,20 +221,22 @@ export default async function handler(req, res) {
             const conv = await getConversation(normalizePhone(phone));
             const existingDraft = conv && conv.draftStatus === "parsed" ? conv.draftData : null;
             const r = await processInbound({
-              phone, text, ts,
+              phone, text: content.text, ts,
+              media: content.media,
+              snippetText: content.snippet,
               wamid: m.id || null,
               profileName: profileByWaId[m.from] || null,
               parse: null, // the LLM runs in phase B, after the response
               // Auto-ack language before the LLM has run: the mock parser's
               // regex detection is free and good enough for a two-line ack.
-              langHint: isText ? mockParse(text).language : null,
+              langHint: willParse ? mockParse(content.parseText).language : null,
               preloadedConv: conv,
-              willParse: isText, // flag "analyzing…" only for messages we'll parse
+              willParse, // flag "analyzing…" only for messages we'll parse
             });
             if (r.skipped) results.skipped++;
             else {
               results.messages++;
-              if (isText) parseJobs.push({ phoneKey: r.phoneKey, text, existingDraft, ts });
+              if (willParse) parseJobs.push({ phoneKey: r.phoneKey, text: content.parseText, existingDraft, ts });
             }
           } catch (e) {
             results.errors++;

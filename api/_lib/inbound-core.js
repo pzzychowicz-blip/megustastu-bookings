@@ -27,7 +27,7 @@
 // message id is the sanitized wamid, so a redelivery targets the same RTDB
 // path; we additionally skip the whole upsert when the message already exists.
 
-import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse } from "../../src/lib/whatsapp.js";
+import { normalizePhone, isPhoneKey, WA_WINDOW_MS, AUTO_ACK_TEXT, WA_MAX_TEXT_LEN, clampConfidence, sanitizeParse, sanitizeMedia, snippet } from "../../src/lib/whatsapp.js";
 import { getConversation, upsertConversation, appendMessage, messageExists, sanitizeKey, readOperatingHours } from "./rtdb.js";
 import { sendText } from "./meta.js";
 import { parseMessage, mockParse } from "./gemini.js";
@@ -100,8 +100,13 @@ export async function applyParse(phoneKey, parse, ts) {
 //                  (the async flow acks before the LLM answers).
 //   preloadedConv— the conversation the caller (wa-inbound) already read for
 //                  the draft-aware parse; passing it avoids a duplicate read.
+//   media        — v18.8.0: `{ kind, mediaId, mime, filename?, voice? }` for a
+//                  photo, a voice note or a document (wa-inbound's
+//                  inboundContent); stored on the message, re-checked here.
+//   snippetText  — the conversation list's line when it is not `text` itself
+//                  (a media message's "Photo · caption").
 // Returns { phoneKey, skipped } — skipped=true when the wamid was seen before.
-export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse }) {
+export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText }) {
   const phoneKey = normalizePhone(phone);
   // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
   // is a legal RTDB key and is nobody. api/wa-recheck.js had already refused it
@@ -128,7 +133,7 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     phone: phone || phoneKey,
     channel: "whatsapp",
     lastMessageAt: ts,
-    lastMessageSnippet: String(text || "").slice(0, 200),
+    lastMessageSnippet: snippet(snippetText != null ? snippetText : text),
     unread: true,
     windowExpiresAt: ts + WA_WINDOW_MS,
     language: lang,
@@ -155,7 +160,7 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   await upsertConversation(phoneKey, patch);
 
   // ── The inbound message itself ────────────────────────────────────────────
-  await appendMessage(phoneKey, {
+  const inbound = {
     id: msgId,
     direction: "in",
     text: String(text || ""),
@@ -164,7 +169,11 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     isAutoAck: false,
     channel: "whatsapp",
     providerMsgId: wamid || null,
-  });
+  };
+  // Omitted, not null, when absent: a text message keeps the shape it had.
+  const m = sanitizeMedia(media);
+  if (m) inbound.media = m;
+  await appendMessage(phoneKey, inbound);
 
   // ── One-time auto-ack (after the inbound so the thread reads naturally) ───
   // v18.8.0: `autoAckSent: true` in the patch above is a CLAIM, written before
