@@ -181,6 +181,21 @@ export function RetryIcon({ size = IC.chrome, color = "currentColor" }) {
   return <Rotate size={size} color={color} />;
 }
 
+// MuteIcon (v18.9.0) — the app's bell (BellIcon, Icons.jsx), struck through:
+// "Not a customer", a conversation whose messages are kept and announce
+// nothing. The bell's own path, so the two cannot drift; the slash runs
+// corner to corner, past the bell's outline, so at the 14px it ships at it
+// reads as a struck bell and not as a bell with a clapper.
+export function MuteIcon({ size = IC.chrome, color = "currentColor" }) {
+  return (
+    <Svg size={size} color={color}>
+      <path d="M18 8a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7" />
+      <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+      <line x1="3" y1="3" x2="21" y2="21" />
+    </Svg>
+  );
+}
+
 // ── Dev-simulator chrome (sandbox only) ───────────────────────────────────────
 // FlaskIcon (was 🧪) heads the panel button and the modal title; DiceIcon
 // (was 🎲) heads the Generate-scenario section.

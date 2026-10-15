@@ -4827,6 +4827,7 @@ function BookingApp({uid}){
           onMarkRead={wa.handleMarkRead}
           onArchive={wa.handleArchive}
           onUnarchive={wa.handleUnarchive}
+          onMute={wa.handleMute}
           onDelete={wa.handleDeleteConversation}
           onBulkArchive={wa.bulkArchive}
           onBulkUnarchive={wa.bulkUnarchive}

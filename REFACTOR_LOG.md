@@ -36198,3 +36198,40 @@ only), an old thread archived, a resent chunk, an import into a live conversatio
 (`createdAt` back, nothing else back), the placeholder and its media, media before its
 thread and the restaurant's own, a declined share, skipped kinds, a failed thread
 answered 500 and recovered by the resend; the planners. The hardening pin is 15.
+
+### Phase 6 — "Not a customer"
+
+A supplier, the gestor, a friend: under coexistence every chat on the restaurant phone
+reaches MGT, and a conversation that is nobody's booking should neither be answered
+nor ask for attention. **"Not a customer"** (a header button, beside Archive in the
+Inbox and beside Restore and Delete in Archived, with a struck bell, `MuteIcon`, drawn
+from the app's own bell path) sets `muted: true`, archives the conversation and marks
+it read (`useWhatsApp.handleMute`).
+
+A muted conversation's next message (`processInbound`, and `simulateInbound` for the
+sandbox's client mode, the same rule twice for the two writers): the message is
+stored, the time, line and 24h window move as for anyone (the window is a fact, and
+staff may still write to a supplier), and nothing else happens: no auto-reply, no
+draft from a parse handed in, no "reading the message" flag, `unread: false`, and it
+stays in Archived. `processInbound` returns `muted`, so `api/wa-inbound.js` queues no
+parse and `injectSimInbound` schedules none (the one place that pays Gemini).
+
+**Undo is Restore.** `handleUnarchive` clears `muted` with `archived`, whichever door
+it comes through: the header (where Restore reads **"Customer again"** on a muted
+conversation), the R key, a bulk Restore. A muted conversation sitting in the Inbox
+would take messages and never say so, so there is no way to restore one without
+unmuting it. A phone reply (phase 3) leaves a muted conversation in Archived.
+
+On screen: the header's status chip reads "Not a customer" in the Archived chip's
+place; the row wears the struck bell in the archive mark's place; the spoken label
+adds "not a customer"; the needs-action filter never counts a muted thread (a draft
+from before the mute included); both unread counts exclude it. The header's action
+group now wraps, right-aligned: an archived thread has four buttons, wider than a
+phone. No `SCHEMA` raise (conversations are read raw, patched with `update()`;
+`tests/schema.test.js` agrees).
+
+Tests: `processInbound` for a muted conversation (stored, no ack, no draft, no flag,
+read, still archived, the window moved), the webhook (no parse queued) and the sim's
+inbound (none scheduled), the client mode (`tests/wa-sim-feedback.test.js`), and the
+parse-guard pin, which now reads `willParse && !r.muted`. **Not checked live yet**
+(phase 9's pass: the header at phone width, the icon at 14px).

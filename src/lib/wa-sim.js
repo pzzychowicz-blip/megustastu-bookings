@@ -80,7 +80,10 @@ export function simulateInbound(params, ctx) {
 
   // First-ever inbound for this number → fire the one-time auto-ack.
   const existing = (conversations || []).find((c) => c.phoneKey === phoneKey) || null;
-  const firstEver = !existing || !existing.autoAckSent;
+  // v18.9.0: the server's rule (processInbound) — a "Not a customer"
+  // conversation stores the message and does nothing else.
+  const muted = !!(existing && existing.muted);
+  const firstEver = !muted && (!existing || !existing.autoAckSent);
 
   const inboundMsg = { id: genMsgId(), direction: "in", text, ts, status: "delivered", isAutoAck: false, channel: "whatsapp" };
   const autoAckMsg = firstEver
@@ -116,14 +119,14 @@ export function simulateInbound(params, ctx) {
   const patch = {
     lastMessageAt: ts,
     lastMessageSnippet: text,
-    unread: true,
+    unread: !muted,
     windowExpiresAt: ts + WA_WINDOW_MS,
     language: lang,
     acceptedBadgeDismissedAt: null, // inbound re-shows the "confirmed" banner
-    archived: false, archivedAt: null, // auto-unarchive on inbound
     autoAckSent: true,
     _waSim: true,
   };
+  if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
   if (params.acceptedBookingId !== undefined) patch.acceptedBookingId = params.acceptedBookingId;
 
   // A draft intent sets/UPDATES the draft; question/other leave any existing
@@ -134,7 +137,7 @@ export function simulateInbound(params, ctx) {
   // draftUpdatedAt: the intent-banner re-show gate (intentBannerVisible) —
   // stamped ONLY where a parse sets/updates the draft, so "thank you" can't
   // re-raise a handled banner. Mirrors the server's draftPatchFromParse.
-  const draftPatch = isDraftIntent ? {
+  const draftPatch = isDraftIntent && !muted ? {
     draftStatus: "parsed",
     draftUpdatedAt: ts,
     draftData: ex && ex.draftStatus === "parsed" && ex.draftData ? mergeDraft(ex.draftData, draftData) : draftData,

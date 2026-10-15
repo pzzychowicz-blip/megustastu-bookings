@@ -171,7 +171,8 @@ async function handleMessagesChange(value, results, parseJobs) {
       if (r.skipped) results.skipped++;
       else {
         results.messages++;
-        if (willParse) parseJobs.push({ phoneKey: r.phoneKey, text: content.parseText, existingDraft, ts });
+        // v18.9.0: a muted conversation ("Not a customer") is never parsed.
+        if (willParse && !r.muted) parseJobs.push({ phoneKey: r.phoneKey, text: content.parseText, existingDraft, ts });
       }
     } catch (e) {
       results.errors++;

@@ -106,7 +106,9 @@ export async function applyParse(phoneKey, parse, ts) {
 //                  stored on the message, re-checked here.
 //   snippetText  — the conversation list's line when it is not `text` itself
 //                  (a media message's "Photo · caption").
-// Returns { phoneKey, skipped } — skipped=true when the wamid was seen before.
+// Returns { phoneKey, skipped, muted } — skipped=true when the wamid was seen
+// before; muted=true when the conversation is "Not a customer" (v18.9.0), so
+// the caller must not parse it.
 export async function processInbound({ phone, text, ts, wamid, profileName, parse, langHint, preloadedConv, willParse, media, snippetText }) {
   const phoneKey = normalizePhone(phone);
   // v18.0.0 phase 6 (CT-WA-04): `!phoneKey` is not the question — "+" is truthy,
@@ -126,7 +128,12 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
   const isDraftIntent = intent === "new_booking" || intent === "cancel" || intent === "modify";
 
   const existing = preloadedConv !== undefined ? preloadedConv : await getConversation(phoneKey);
-  const firstEver = !existing || !existing.autoAckSent;
+  // v18.9.0: a conversation staff marked "Not a customer" (a supplier, the
+  // gestor) is MUTED: its messages are stored, and nothing else happens — no
+  // auto-reply, no parse, it stays in Archived and does not count as unread.
+  // Staff undo it from Archived ("Customer again").
+  const muted = !!(existing && existing.muted);
+  const firstEver = !muted && (!existing || !existing.autoAckSent);
 
   // ── Conversation upsert (per-key update(); see rtdb.js on the keyed shape) ──
   const patch = {
@@ -135,14 +142,13 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     channel: "whatsapp",
     lastMessageAt: ts,
     lastMessageSnippet: snippet(snippetText != null ? snippetText : text),
-    unread: true,
+    unread: !muted,
     windowExpiresAt: ts + WA_WINDOW_MS,
     language: lang,
     acceptedBadgeDismissedAt: null, // inbound re-shows the "confirmed" banner
-    archived: false,
-    archivedAt: null,               // auto-unarchive on inbound
     autoAckSent: true,
   };
+  if (!muted) { patch.archived = false; patch.archivedAt = null; } // auto-unarchive on inbound
   if (!existing) {
     patch.createdAt = ts;
     patch.acceptedBookingId = null;
@@ -150,14 +156,14 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     patch.draftData = null;
   }
   if (profileName && (!existing || !existing.profileName)) patch.profileName = profileName;
-  if (isDraftIntent) Object.assign(patch, draftPatchFromParse(parse, ts));
+  if (isDraftIntent && !muted) Object.assign(patch, draftPatchFromParse(parse, ts));
   // Async path (parse runs after the response): flag "analyzing…" so the inbox
   // shows the LLM route in progress; applyParse clears it when the draft lands.
   // `parsingAt` bounds the flag: if nothing ever clears it (the process dies
   // mid-parse, a client tab closes mid-re-check), the client's isParsing()
   // stops believing it after WA_PARSING_STALE_MS instead of showing "Reading
   // the message…" on every device forever.
-  if (parse == null && willParse) { patch.parsing = true; patch.parsingAt = Date.now(); }
+  if (parse == null && willParse && !muted) { patch.parsing = true; patch.parsingAt = Date.now(); }
   await upsertConversation(phoneKey, patch);
 
   // ── The inbound message itself ────────────────────────────────────────────
@@ -216,7 +222,8 @@ export async function processInbound({ phone, text, ts, wamid, profileName, pars
     }
   }
 
-  return { phoneKey, skipped: false };
+  // `muted`: the caller schedules no parse (the webhook's phase B, the sim's).
+  return { phoneKey, skipped: false, muted };
 }
 
 // inboundContent(m) — what one webhook message becomes (v18.8.0): the text to
@@ -303,7 +310,7 @@ export async function injectSimInbound({ phone, text, name, agoMs = 0, media }, 
   // result `applyParse` then discarded on the null key. The rule applied at one
   // of the two places that schedule a parse. v18.8.0: and a voice note or a
   // photo without a caption has nothing to parse, as in the webhook.
-  if (r.skipped || !r.phoneKey || !parseText) return r;
+  if (r.skipped || !r.phoneKey || !parseText || r.muted) return r;
   afterResponse((async () => {
     try {
       const hours = await readOperatingHours();

@@ -577,8 +577,20 @@ export function useWhatsApp({
   function doArchive(phoneKey) {
     patchConversation(phoneKey, { archived: true, archivedAt: Date.now() });
   }
+  // v18.9.0: Restore also undoes "Not a customer", whichever door it comes
+  // through (the header's Customer again, the R key, a bulk Restore): a muted
+  // conversation in the Inbox would take messages and never say so.
   function handleUnarchive(phoneKey) {
-    patchConversation(phoneKey, { archived: false, archivedAt: null });
+    patchConversation(phoneKey, { archived: false, archivedAt: null, muted: null });
+  }
+  // v18.9.0 — "Not a customer" (a supplier, the gestor, a friend): archived and
+  // MUTED, so its next message is stored and nothing else happens (no
+  // auto-reply, no parse, no unread, it stays in Archived; processInbound on
+  // the server, simulateInbound in the sandbox). Read too, so it leaves the
+  // unread count at once. Undone by Restore, which the header names "Customer
+  // again" for a muted conversation.
+  function handleMute(phoneKey) {
+    patchConversation(phoneKey, { muted: true, archived: true, archivedAt: Date.now(), unread: false });
   }
   function handleDeleteConversation(phoneKey) { setConfirmDeleteConv(phoneKey); }
   // Auto-archive on completion (settings/whatsapp.autoArchiveOnComplete, default
@@ -840,7 +852,7 @@ export function useWhatsApp({
     update(ref(db), conversationDeletePatch([phoneKey], { contacts: true })).catch(function (err) { console.error("[wa] erase failed for one guest", err); });
   }
 
-  const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
+  const unreadCount = conversations.filter((c) => c.unread && !c.archived && !c.muted).length;
 
   return {
     // data
@@ -864,7 +876,7 @@ export function useWhatsApp({
     handleAcceptDraft, handleDismissDraft, handleMarkRead,
     handleDismissAcceptedBadge, handleMarkIntentHandled, autoHandleCancelIntent,
     recheckConversation,
-    handleArchive, doArchive, handleUnarchive,
+    handleArchive, doArchive, handleUnarchive, handleMute,
     handleDeleteConversation, doDeleteConversation,
     bulkArchive, bulkUnarchive, bulkDeleteConversations,
     handleCancelLinkedBooking, handleOpenLinkedBooking, handleApplyModify, completeModifyApply,

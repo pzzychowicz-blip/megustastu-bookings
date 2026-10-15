@@ -52,6 +52,9 @@ const LIST_W = 320;
 const INBOX_PANEL = { maxWidth: 1200, height: "min(900px, 90dvh)", background: "var(--wa-panel-bg)", blur: 16 };
 
 function isActionable(c) {
+  // v18.9.0: "Not a customer" needs nothing from staff, a draft left from
+  // before the mute included.
+  if (c.muted) return false;
   const intent = c.draftData && c.draftData.intent;
   if (intent === "cancel" || intent === "modify") return intentBannerVisible(c);
   return !!(c.unread || c.draftStatus === "parsed");
@@ -112,6 +115,8 @@ export function InboxPanel({
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, onRecheck, onOpenPhoto,
   onBulkArchive, onBulkUnarchive, onBulkDelete,
+  // v18.9.0: "Not a customer".
+  onMute,
   query, setQuery, needsAction, setNeedsAction,
   // v18.8.0 phase 8: the draft check's inputs, and the waitlist it can add to.
   liveBookings, tableBlocks, autoOptimizer, waitlist, onAddToWaitlist,
@@ -440,7 +445,7 @@ export function InboxPanel({
   // ConversationView's `loaded`), `[]` once it is known to be empty.
   const activeMessages = activeConv ? messages[activeConv.phoneKey] : undefined;
   const kbFold = !!activeConv && typing === activeConv.phoneKey && short && !shown;
-  const unreadCount = conversations.filter((c) => c.unread && !c.archived).length;
+  const unreadCount = conversations.filter((c) => c.unread && !c.archived && !c.muted).length;
   const archivedCount = conversations.filter((c) => c.archived).length;
 
   const listEl = (
@@ -464,7 +469,7 @@ export function InboxPanel({
         contactsSynced={!!(waLink && waLink.contacts && waLink.contacts.firstAt)}
         showBack={!twoPane} phone={winW < 600} compact={compact}
         kbFold={kbFold} onUnfold={unfold}
-        onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete}
+        onArchive={onArchive} onUnarchive={onUnarchive} onDelete={onDelete} onMute={onMute}
         onCancelLinkedBooking={onCancelLinkedBooking} onOpenLinkedBooking={onOpenLinkedBooking}
         onDismissAcceptedBadge={onDismissAcceptedBadge} onMarkIntentHandled={onMarkIntentHandled}
         onResend={onResend ? (msgId) => onResend(activeConv.phoneKey, msgId) : undefined}

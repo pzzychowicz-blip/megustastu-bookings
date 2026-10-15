@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from "react";
 import { matchCustomerByPhone, regularChipLabel, conversationName, formatWindow, intentBannerVisible, isParsing, WA_ACCEPTED_BANNER_MS } from "../../lib/whatsapp";
 import { Reveal, mkSolidBtn, mkDangerBtn, OutlineChip, InlineAlert, ALERT_TONES } from "../atoms";
 import { AlertPanel, AlertRow } from "../AlertPanel";
-import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon } from "./WaIcons";
+import { RecheckIcon, ArchiveIcon, DraftIcon, RestoreIcon, MuteIcon } from "./WaIcons";
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon, TrashIcon } from "../Icons";
 import { MessageBubble } from "./MessageBubble";
 import { DraftCard } from "./DraftCard";
@@ -34,6 +34,8 @@ export function ConversationView({
   onArchive, onUnarchive, onDelete, onCancelLinkedBooking, onOpenLinkedBooking,
   onDismissAcceptedBadge, onMarkIntentHandled, onResend, onApplyModify, compact,
   onRecheck, regularMin, kbFold = false, onUnfold, onOpenPhoto,
+  // v18.9.0: "Not a customer" (useWhatsApp.handleMute).
+  onMute,
   // v18.9.0: the phone's synced contacts, and whether the first sync landed.
   contacts, contactsSynced = false,
   // v18.8.0 phase 8: what the draft check needs, from App through InboxPanel.
@@ -293,19 +295,32 @@ export function ConversationView({
     </button>
   ) : null;
 
+  // v18.9.0 — "Not a customer": a supplier, the gestor, a friend. Archives the
+  // conversation and mutes it (no auto-reply, no parse, no unread, it stays in
+  // Archived when they write again). Offered wherever the conversation is not
+  // muted already; undone by Restore, which reads "Customer again" on a muted
+  // conversation (useWhatsApp.handleUnarchive clears both).
+  const muteBtn = onMute && !conv.muted ? (
+    <button onClick={() => onMute(conv.phoneKey)} title="Not a customer: archive it, and stop replying to and reading its messages" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })}><MuteIcon size={IC.inline} />Not a customer</button>
+  ) : null;
+
+  // The actions WRAP (v18.9.0): with "Not a customer" an archived thread has
+  // four, wider than a phone's header. They wrap as one group, right-aligned.
   let headerActionBtns;
   if (conv.archived) {
     headerActionBtns = (
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {recheckBtn}
-        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title="Restore conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />Restore</button>
+        <button onClick={() => { if (onUnarchive) onUnarchive(conv.phoneKey); }} title={conv.muted ? "A customer after all: back to the inbox, and replied to and read again" : "Restore conversation"} className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--wa-btn-handled)", { padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, boxShadow: "var(--shadow-btn)", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4 })}><RestoreIcon size={IC.inline} />{conv.muted ? "Customer again" : "Restore"}</button>
+        {muteBtn}
         <button onClick={() => { if (onDelete) onDelete(conv.phoneKey); }} title="Delete conversation" className="mgt-hover-scale mgt-press" style={mkDangerBtn({ gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small })} ><TrashIcon size={IC.inline} />Delete</button>
       </div>
     );
   } else {
     headerActionBtns = (
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
         {recheckBtn}
+        {muteBtn}
         <button onClick={() => { if (onArchive) onArchive(conv.phoneKey); }} title="Archive conversation" className="mgt-hover-scale mgt-press" style={mkSolidBtn("var(--btn-default)", { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 12px", minHeight: H.chrome, fontSize: T.small, flexShrink: 0, boxShadow: "var(--shadow-btn)" })} ><ArchiveIcon size={IC.inline} />Archive</button>
       </div>
     );
@@ -361,7 +376,9 @@ export function ConversationView({
         {regularChip}
         {notOnPhone ? <OutlineChip tone="neutral" size="small" title="Save this number in the WhatsApp Business app's contacts and its name shows here">Not saved on the restaurant phone</OutlineChip> : null}
         {acceptedBadge}
-        {conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
+        {conv.muted
+          ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }} title="Its messages are kept, not answered or read, and stay in Archived"><MuteIcon size={IC.inline} />Not a customer</OutlineChip>
+          : conv.archived ? <OutlineChip tone="neutral" size="small" style={{ justifyContent: "center" }}><ArchiveIcon size={IC.inline} />Archived</OutlineChip> : null}
         {windowEl}
         <div style={{ marginLeft: "auto", flexShrink: 0 }}>{headerActionBtns}</div>
       </div>

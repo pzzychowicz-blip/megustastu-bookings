@@ -97,3 +97,26 @@ describe("simErrorText", () => {
     expect(simErrorText(null, false)).toBe("unknown error");
   });
 });
+
+// v18.9.0 — the sandbox's client mode follows the server's mute rule
+// (processInbound): a "Not a customer" conversation stores the message and
+// does nothing else.
+describe("simulateInbound in client mode — a muted conversation", () => {
+  beforeEach(() => { state.on = false; });
+
+  it("no auto-reply, no draft, read, and it stays archived", () => {
+    const writes = { conv: [], msgs: [] };
+    const ctx = {
+      conversations: [{ phoneKey: "+34600111222", autoAckSent: true, muted: true, archived: true, archivedAt: 9 }],
+      upsertConversation: (k, c) => writes.conv.push(c),
+      patchConversation: (k, p) => writes.conv.push(p),
+      appendMessage: (k, m) => writes.msgs.push(m),
+    };
+    simulateInbound({ phone: "+34600111222", text: "mesa para 4", parse: { intent: "new_booking", size: 4, language: "es" } }, ctx);
+    expect(writes.msgs.map((m) => m.direction)).toEqual(["in"]);
+    expect(writes.conv).toHaveLength(1);
+    expect(writes.conv[0]).toMatchObject({ muted: true, archived: true, archivedAt: 9, unread: false });
+    expect(writes.conv[0].draftStatus).toBeUndefined();
+    expect(writes.conv[0].parsing).toBeUndefined();
+  });
+});

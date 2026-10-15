@@ -650,6 +650,7 @@ export function describeConversation(conv, opts) {
   if (named.phoneLine) parts.push(named.phoneLine);
   if (conv.unread) parts.push("unread");
   if (conv.archived) parts.push("archived");
+  if (conv.muted) parts.push("not a customer"); // v18.9.0
   const intent = (conv.draftData && conv.draftData.intent) || null;
   if (isParsing(conv)) parts.push("reading the message");
   else if (intent === "cancel") parts.push("requesting to cancel");

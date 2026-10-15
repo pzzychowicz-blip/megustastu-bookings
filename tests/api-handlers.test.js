@@ -412,7 +412,7 @@ describe("processInbound", () => {
 
   it("a first message opens the conversation, stores the message and sends the one-time auto-ack", async () => {
     const r = await processInbound({ phone: "+34 600 111 222", text: "Hola", ts: TS, wamid: "wamid.A1", profileName: "Juan", langHint: "es" });
-    expect(r).toEqual({ phoneKey: KEY, skipped: false });
+    expect(r).toEqual({ phoneKey: KEY, skipped: false, muted: false });
     expect(convAt(KEY)).toMatchObject({ phoneKey: KEY, channel: "whatsapp", lastMessageAt: TS, lastMessageSnippet: "Hola", unread: true,
       windowExpiresAt: TS + WA_WINDOW_MS, language: "es", archived: false, autoAckSent: true, createdAt: TS, profileName: "Juan" });
     const [inbound, ack] = msgsAt(KEY);
@@ -438,6 +438,19 @@ describe("processInbound", () => {
     expect(await processInbound({ phone: KEY, text: "Hola", ts: TS + 5000, wamid: "wamid.DUP" })).toEqual({ phoneKey: KEY, skipped: true });
     expect(fake.state.writes.length).toBe(count);
     expect(convAt(KEY).lastMessageAt).toBe(TS);
+  });
+
+  // v18.9.0 — "Not a customer".
+  it("a muted conversation stores the message and does nothing else: no ack, no draft, no flag, read, still archived", async () => {
+    fake.state.tree = { conversations: { [KEY]: { phoneKey: KEY, muted: true, archived: true, archivedAt: 9, createdAt: 5 } } };
+    const r = await processInbound({ phone: KEY, text: "mesa para 4", ts: TS, wamid: "wamid.M",
+      parse: { intent: "new_booking", language: "es", size: 4 }, willParse: true });
+    expect(r).toEqual({ phoneKey: KEY, skipped: false, muted: true });
+    const c = convAt(KEY);
+    expect(c).toMatchObject({ muted: true, archived: true, archivedAt: 9, unread: false, lastMessageAt: TS, windowExpiresAt: TS + WA_WINDOW_MS });
+    expect("draftStatus" in c).toBe(false);
+    expect("parsing" in c).toBe(false);
+    expect(msgsAt(KEY).map((m) => m.direction)).toEqual(["in"]);
   });
 
   it("a draft intent stores a draft the app can use: an unusable time or size becomes null and the confidence drops", async () => {
@@ -523,7 +536,7 @@ describe("injectSimInbound", () => {
   it("stores the message at once with the indicator on, and lands the parse afterwards", async () => {
     let later;
     const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
-    expect(r).toEqual({ phoneKey: KEY, skipped: false });
+    expect(r).toEqual({ phoneKey: KEY, skipped: false, muted: false });
     expect(convAt(KEY)).toMatchObject({ parsing: true, profileName: "Sim" });
     expect(msgsAt(KEY)[0].direction).toBe("in");
     await later;
@@ -1287,6 +1300,28 @@ describe("historyConvPatch / historyProgress / historyStatus", () => {
     expect(historyStatus({ history_context: { status: "error" } }, false)).toBe("failed");
     expect(historyStatus({}, false)).toBe("sent");
     expect(historyStatus({ history_context: { status: "READ" } }, true)).toBe("delivered");
+  });
+});
+
+// ── Phase 6: "Not a customer" ───────────────────────────────────────────────
+describe("wa-inbound and the simulator — a muted conversation (v18.9.0)", () => {
+  beforeEach(() => vi.stubEnv("META_APP_SECRET", SECRET));
+  const muted = () => ({ conversations: { [KEY]: { phoneKey: KEY, autoAckSent: true, muted: true, archived: true, archivedAt: 9, createdAt: 5 } } });
+
+  it("the webhook stores the message and schedules no parse", async () => {
+    fake.state.tree = muted();
+    const res = await deliver({ messages: [inMsg({ type: "text", text: { body: "Mesa para 4 mañana" } })] });
+    expect(res.body).toMatchObject({ messages: 1 });
+    expect(inbound()).toHaveLength(1);
+    expect(scheduled).toEqual([]);
+    expect(convAt(KEY)).toMatchObject({ archived: true, unread: false });
+  });
+  it("the simulator's inbound schedules no parse either", async () => {
+    fake.state.tree = muted();
+    let later = null;
+    const r = await injectSimInbound({ phone: KEY, text: "Mesa para 4 personas mañana a las 21:00", name: "Sim" }, (p) => { later = p; });
+    expect(r).toMatchObject({ skipped: false, muted: true });
+    expect(later).toBeNull();
   });
 });
 
