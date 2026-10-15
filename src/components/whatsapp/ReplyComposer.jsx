@@ -14,7 +14,9 @@
 // The file belongs to the THREAD it was picked in (`threadKey`). This component
 // is not remounted when another conversation is opened, so a file kept in plain
 // state would follow the user to the next customer and be sent there. Every
-// piece of attachment state carries its key and is read only for its own.
+// piece of attachment state carries its key and is read only for its own, and
+// the files themselves are kept per thread, as the text is (/code-review: one
+// slot meant a file picked for a second customer dropped the first one's).
 
 import { useState, useRef, useEffect, useImperativeHandle } from "react";
 import { Reveal, mkSolidBtn, InlineAlert } from "../atoms";
@@ -146,7 +148,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
   }
   const [tplOpen, setTplOpen] = useState(false);
   // Attachment state, each piece keyed to the thread it belongs to.
-  const [attState, setAttState] = useState(null);   // {key, blob, url?, name, size, mime, kind}
+  const [atts, setAtts] = useState({});             // {threadKey: {blob, url?, name, size, mime, kind}}
   const [noteState, setNoteState] = useState(null); // {key, text}: a refusal or a failed send
   const [busyKey, setBusyKey] = useState(null);     // the thread a send is in flight for
   const [readyKey, setReadyKey] = useState(null);   // the thread a photo is being shrunk for
@@ -154,17 +156,32 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
   const fileRef = useRef(null);
   const threadRef = useRef(threadKey);
   useEffect(() => { threadRef.current = threadKey; }, [threadKey]);
-  const att = attState && attState.key === threadKey ? attState : null;
+  const att = atts[threadKey] || null;
+  // `null` takes the thread's file away; `key` is the thread it belongs to.
+  function setAtt(key, value) {
+    setAtts((d) => {
+      const out = Object.assign({}, d);
+      if (value) out[key] = value; else delete out[key];
+      return out;
+    });
+  }
   const note = noteState && noteState.key === threadKey ? noteState.text : "";
   const busy = busyKey !== null && busyKey === threadKey;
   const preparing = readyKey !== null && readyKey === threadKey;
   const canAttach = !!onSendMedia && !disabled;
-  // A photo's preview URL is given back once the chip has folded away.
+  // A photo's preview URL is given back once nothing shows it: its chip has
+  // folded away (removed, sent or replaced), or the composer itself is gone.
+  // Diffed, because each thread keeps its own file.
+  const previewUrls = useRef([]);
   useEffect(() => {
-    const url = attState && attState.url;
-    if (!url) return undefined;
-    return () => { setTimeout(() => URL.revokeObjectURL(url), REVEAL_EXIT_MS); };
-  }, [attState]);
+    const live = Object.values(atts).map((a) => a.url).filter(Boolean);
+    previewUrls.current.filter((u) => !live.includes(u)).forEach((u) => { setTimeout(() => URL.revokeObjectURL(u), REVEAL_EXIT_MS); });
+    previewUrls.current = live;
+  }, [atts]);
+  useEffect(() => {
+    const held = previewUrls;
+    return () => { held.current.forEach((u) => { setTimeout(() => URL.revokeObjectURL(u), REVEAL_EXIT_MS); }); };
+  }, []);
 
   const caption = txt.trim();
   const captionLong = !!att && caption.length > WA_CAPTION_MAX;
@@ -181,7 +198,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
       setNoteState(null);
       try {
         const r = await onSendMedia(att.blob, { mime: att.mime, filename: att.kind === "document" ? att.name : "", caption });
-        setAttState((cur) => (cur && cur.key === key ? null : cur));
+        setAtt(key, null);
         // The text was this thread's caption, wherever you are now.
         setTxt((cur) => (cur.startsWith(sent) ? cur.slice(sent.length).replace(/^\s+/, "") : cur), key);
         // The customer has it, and the thread does not (the server could not
@@ -222,7 +239,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     if (refusal) { setNoteState({ key, text: refusal }); return; }
     setNoteState(null);
     if (attachKind(f) === "pdf") {
-      setAttState({ key, blob: f, name: f.name || "document.pdf", size: f.size, mime: "application/pdf", kind: "document" });
+      setAtt(key, { blob: f, name: f.name || "document.pdf", size: f.size, mime: "application/pdf", kind: "document" });
       // The caption is what comes next, as after a photo.
       if (areaRef.current) areaRef.current.focus();
       return;
@@ -230,7 +247,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     setReadyKey(key);
     try {
       const blob = await shrinkPhoto(f);
-      setAttState({ key, blob, url: URL.createObjectURL(blob), name: f.name || "photo.jpg", size: blob.size, mime: "image/jpeg", kind: "image" });
+      setAtt(key, { blob, url: URL.createObjectURL(blob), name: f.name || "photo.jpg", size: blob.size, mime: "image/jpeg", kind: "image" });
     } catch {
       setNoteState({ key, text: "This photo could not be read. Try another, or send it from WhatsApp on the phone." });
     } finally {
@@ -239,7 +256,7 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
     if (threadRef.current === key && areaRef.current) areaRef.current.focus();
   }
   function removeAtt() {
-    setAttState(null);
+    setAtt(threadKey, null);
     setNoteState(null);
   }
   // E → toggle the quick-reply template chips (handled here so the composer owns
@@ -281,12 +298,15 @@ export function ReplyComposer({ onSend, disabled, templates, convLang, onSendMed
       </Reveal>
       {/* v18.8.0: the picked file, and why one was refused or failed. The
           alert region is always mounted, so a sentence arriving in it is read
-          out (the live-region rule); its contents ease in and out. */}
-      <Reveal show={!!att}>
+          out (the live-region rule); its contents ease in and out. Both are
+          keyed to the thread: opening another conversation REPLACES them, or
+          one customer's file folded away over the next one's box (DraftCheck's
+          reason, ConversationView). */}
+      <Reveal key={threadKey} show={!!att}>
         {att ? <div style={{ paddingBottom: SP.base, minWidth: 0 }}><AttachChip att={att} busy={busy} onRemove={removeAtt} /></div> : null}
       </Reveal>
       <div role="alert">
-        <Reveal show={!!alertText}>
+        <Reveal key={threadKey} show={!!alertText}>
           {alertText ? <InlineAlert style={{ marginBottom: SP.base }}>{alertText}</InlineAlert> : null}
         </Reveal>
       </div>

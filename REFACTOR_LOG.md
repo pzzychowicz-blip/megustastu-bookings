@@ -35886,6 +35886,21 @@ its own commit.
    holding "Shall I book you?". A draft edited in the middle during the upload is kept
    whole: what was sent can no longer be told apart from it.
 
+7. **A file attached in one conversation was dropped by attaching one in another.** The
+   composer stays mounted when the two-pane inbox opens another thread, and it held one
+   attachment slot, keyed to its thread: a PDF picked for customer B replaced customer A's,
+   while A's caption, kept per thread since phase 5, stayed. Measured on DEV at 1280px, the
+   old code: attach in A, attach in B, back to A, and A had no file. Attachments are now kept
+   per thread the way the text is (`atts[threadKey]`), and a photo's preview URL is given
+   back when nothing shows it any more (a diff of the URLs still held, plus the unmount).
+   Same run, new code: A kept `a-menu.pdf` and "caption A", B kept `b-menu.pdf`. The same
+   measurement found the chip and the refusal sentence were one `Reveal` across threads, so
+   opening a thread with no file left the previous customer's file folding away over the new
+   box (the reason `DraftCheck` is keyed to the conversation). Both are keyed to the thread
+   now, and the other customer's chip is gone 50 ms after the switch. At phone width a thread
+   unmounts on Back and its text and file go with it, as before; my first reading of this
+   finding was taken there, at 526px, and measured that rather than the slot.
+
 ### Deploy steps (Patryk)
 
 1. **`CRON_SECRET` on both Vercel projects** (the restaurant's and the sandbox's): a random

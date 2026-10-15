@@ -157,7 +157,15 @@ describe("the reply composer keeps its text and its file with their thread", () 
     expect(Composer).not.toMatch(/const \[txt, setTxt\] = useState/);
   });
   it("the file, its sentence, a send in flight and a photo being prepared each name their thread", () => {
-    expect(Composer).toMatch(/const att = attState && attState\.key === threadKey \? attState : null;/);
+    // /code-review: kept per thread, as the text is; one slot meant a file
+    // picked for a second customer silently dropped the first one's.
+    expect(Composer).toMatch(/const \[atts, setAtts\] = useState\(\{\}\);/);
+    expect(Composer).toMatch(/const att = atts\[threadKey\] \|\| null;/);
+    expect(Composer).not.toMatch(/attState/);
+    // …and another conversation's chip or sentence is replaced, not folded
+    // away over the box that is open now.
+    expect(Composer).toMatch(/<Reveal key=\{threadKey\} show=\{!!att\}>/);
+    expect(Composer).toMatch(/<Reveal key=\{threadKey\} show=\{!!alertText\}>/);
     expect(Composer).toMatch(/const note = noteState && noteState\.key === threadKey \? noteState\.text : "";/);
     expect(Composer).toMatch(/const busy = busyKey !== null && busyKey === threadKey;/);
     expect(Composer).toMatch(/const preparing = readyKey !== null && readyKey === threadKey;/);
